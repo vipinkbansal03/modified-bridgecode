@@ -90,17 +90,48 @@ export const useAdminQuotes = (params?: { page?: number; status?: string }) =>
 export const useAdminQuote = (id: string) =>
   useQuery({ queryKey: ["admin-quote", id], queryFn: () => adminApi.get(`/quotes/${id}`).then((r) => r.data.data), enabled: !!id });
 
+export const useUpdateQuoteStatus = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) => adminApi.put(`/quotes/${id}/status`, { status }),
+    onSuccess: (_d, { id }) => { qc.invalidateQueries({ queryKey: ["admin-quotes"] }); qc.invalidateQueries({ queryKey: ["admin-quote", id] }); },
+  });
+};
+
 // ─── Orders ──────────────────────────────────────────────
 
 export const useAdminOrders = (params?: { page?: number; status?: string; paymentStatus?: string }) =>
   useQuery({ queryKey: ["admin-orders", params], queryFn: () => adminApi.get("/orders", { params }).then((r) => r.data) });
+
+export const useOrderAnalytics = () =>
+  useQuery({ queryKey: ["admin-order-analytics"], queryFn: () => adminApi.get("/orders/analytics").then((r) => r.data.data), staleTime: 5 * 60 * 1000 });
 
 export const useAdminOrder = (id: string) =>
   useQuery({ queryKey: ["admin-order", id], queryFn: () => adminApi.get(`/orders/${id}`).then((r) => r.data.data), enabled: !!id });
 
 export const useUpdateOrderStatus = () => {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: ({ id, status }: { id: string; status: string }) => adminApi.put(`/orders/${id}/status`, { status }), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-orders"] }) });
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) => adminApi.put(`/orders/${id}/status`, { status }),
+    onSuccess: (_d, { id }) => { qc.invalidateQueries({ queryKey: ["admin-orders"] }); qc.invalidateQueries({ queryKey: ["admin-order", id] }); },
+  });
+};
+
+export const useShipOrder = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, shippingProvider, trackingNumber }: { id: string; shippingProvider: string; trackingNumber: string }) =>
+      adminApi.post(`/orders/${id}/ship`, { shippingProvider, trackingNumber }),
+    onSuccess: (_d, { id }) => { qc.invalidateQueries({ queryKey: ["admin-orders"] }); qc.invalidateQueries({ queryKey: ["admin-order", id] }); },
+  });
+};
+
+export const useDeliverOrder = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.post(`/orders/${id}/deliver`),
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["admin-orders"] }); qc.invalidateQueries({ queryKey: ["admin-order", id] }); },
+  });
 };
 
 // ─── Media ───────────────────────────────────────────────

@@ -6,6 +6,8 @@ import { ChevronDown, Search, User, ShoppingCart, Menu, X } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { MegaMenu } from "@/components/layout/MegaMenu";
 import { MobileMenu } from "@/components/layout/MobileMenu";
+import { CurrencySwitcher } from "@/components/ui/CurrencySwitcher";
+import { SearchOverlay } from "@/components/ui/SearchOverlay";
 import navigation from "@/data/navigation.json";
 import { cn } from "@/utils/cn";
 import type { NavigationData } from "@/types/common.types";
@@ -17,6 +19,7 @@ export function Header() {
   const [megaOpen, setMegaOpen] = useState(false);
   const [capsOpen, setCapsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -78,7 +81,8 @@ export function Header() {
           </ul>
 
           <div className="hidden items-center gap-5 lg:flex">
-            <button aria-label="Search" className="text-ink">
+            <CurrencySwitcher />
+            <button aria-label="Search" className="text-ink hover:text-brand" onClick={() => setSearchOpen(true)}>
               <Search size={18} />
             </button>
             <button aria-label="Account" className="text-ink">
@@ -122,6 +126,8 @@ export function Header() {
         ctaHref={nav.ctaHref}
         onLinkClick={() => setMobileOpen(false)}
       />
+
+      <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
     </header>
   );
 }

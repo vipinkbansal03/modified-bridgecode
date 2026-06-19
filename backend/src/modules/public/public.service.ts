@@ -1,5 +1,6 @@
 import { prisma } from "../../config/database";
 import { AppError, getPagination, slugify } from "../../utils/apiResponse";
+import { sendQuoteNotification, sendContactNotification } from "../../utils/email";
 
 // ─── Products ─────────────────────────────────────────────
 
@@ -131,7 +132,7 @@ export async function submitPublicQuote(input: QuoteSubmitInput) {
   const subtotal = input.items.reduce((sum, i) => sum + (i.unitPrice || 0) * i.quantity, 0);
   const quoteNumber = `QUO-${Date.now()}`;
 
-  return prisma.quote.create({
+  const quote = await prisma.quote.create({
     data: {
       quoteNumber,
       customerName: input.customerName,
@@ -158,6 +159,24 @@ export async function submitPublicQuote(input: QuoteSubmitInput) {
     },
     include: { items: true },
   });
+
+  void sendQuoteNotification({
+    quoteNumber,
+    customerName: input.customerName,
+    customerEmail: input.customerEmail,
+    customerPhone: input.customerPhone,
+    companyName: input.companyName,
+    items: input.items.map((i) => ({
+      productTitle: i.productTitle,
+      sku: i.sku,
+      quantity: i.quantity,
+      unitPrice: i.unitPrice || 0,
+    })),
+    subtotal,
+    notes: input.message,
+  });
+
+  return quote;
 }
 
 // ─── Contact form ─────────────────────────────────────────
@@ -204,6 +223,8 @@ export async function submitContact(input: ContactInput) {
       },
     });
   }
+
+  void sendContactNotification(input);
 
   return { success: true, message: "Your message has been received. We'll respond within 24 hours." };
 }

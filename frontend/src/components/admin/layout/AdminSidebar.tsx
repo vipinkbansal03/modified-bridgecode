@@ -9,27 +9,27 @@ import { cn } from "@/utils/cn";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 const navItems = [
-  { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
-  { label: "Products", href: "/admin/products", icon: Package },
-  { label: "Categories", href: "/admin/categories", icon: Tag },
-  { label: "Attributes", href: "/admin/attributes", icon: Sliders },
-  { label: "Variants", href: "/admin/variants", icon: Layers },
-  { label: "Inventory", href: "/admin/inventory", icon: Warehouse },
-  { label: "Pricing", href: "/admin/pricing", icon: DollarSign },
-  { label: "Currencies", href: "/admin/currencies", icon: Globe },
-  { label: "Countries", href: "/admin/countries", icon: Map },
-  { label: "Coupons", href: "/admin/coupons", icon: Ticket },
-  { label: "Quote Requests", href: "/admin/quotes", icon: MessageSquare },
-  { label: "Orders", href: "/admin/orders", icon: ShoppingCart },
-  { label: "Shipping", href: "/admin/shipping", icon: Truck },
-  { label: "Payments", href: "/admin/payments", icon: CreditCard },
-  { label: "Media", href: "/admin/media", icon: Image },
-  { label: "Translations", href: "/admin/translations", icon: Languages },
-  { label: "AI Tools", href: "/admin/ai-tools", icon: Sparkles },
-  { label: "Users", href: "/admin/users", icon: Users },
-  { label: "Roles", href: "/admin/roles", icon: Shield },
-  { label: "Settings", href: "/admin/settings", icon: Settings },
-  { label: "Activity Logs", href: "/admin/logs", icon: FileText },
+  { label: "Dashboard",       href: "/admin/dashboard",    icon: LayoutDashboard },
+  { label: "Products",        href: "/admin/products",     icon: Package,      permission: "products.view" },
+  { label: "Categories",      href: "/admin/categories",   icon: Tag,          permission: "categories.view" },
+  { label: "Attributes",      href: "/admin/attributes",   icon: Sliders,      permission: "attributes.view" },
+  { label: "Variants",        href: "/admin/variants",     icon: Layers,       permission: "products.view" },
+  { label: "Inventory",       href: "/admin/inventory",    icon: Warehouse,    permission: "inventory.view" },
+  { label: "Pricing",         href: "/admin/pricing",      icon: DollarSign,   permission: "pricing.view" },
+  { label: "Currencies",      href: "/admin/currencies",   icon: Globe,        permission: "currencies.view" },
+  { label: "Countries",       href: "/admin/countries",    icon: Map,          permission: "countries.view" },
+  { label: "Coupons",         href: "/admin/coupons",      icon: Ticket,       permission: "coupons.view" },
+  { label: "Quote Requests",  href: "/admin/quotes",       icon: MessageSquare, permission: "quotes.view" },
+  { label: "Orders",          href: "/admin/orders",       icon: ShoppingCart, permission: "orders.view" },
+  { label: "Shipping",        href: "/admin/shipping",     icon: Truck,        permission: "shipping.view" },
+  { label: "Payments",        href: "/admin/payments",     icon: CreditCard,   permission: "payments.view" },
+  { label: "Media",           href: "/admin/media",        icon: Image,        permission: "media.view" },
+  { label: "Translations",    href: "/admin/translations", icon: Languages,    permission: "translations.view" },
+  { label: "AI Tools",        href: "/admin/ai-tools",     icon: Sparkles,     permission: "ai.view" },
+  { label: "Users",           href: "/admin/users",        icon: Users,        permission: "users.view" },
+  { label: "Roles",           href: "/admin/roles",        icon: Shield,       permission: "roles.view" },
+  { label: "Settings",        href: "/admin/settings",     icon: Settings,     permission: "settings.view" },
+  { label: "Activity Logs",   href: "/admin/logs",         icon: FileText,     permission: "logs.view" },
 ];
 
 interface AdminSidebarProps {
@@ -39,7 +39,11 @@ interface AdminSidebarProps {
 
 export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
-  const { user } = useAdminAuth();
+  const { user, hasPermission } = useAdminAuth();
+
+  const visibleItems = navItems.filter((item) =>
+    !item.permission || hasPermission(item.permission)
+  );
 
   return (
     <>
@@ -73,7 +77,7 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-3">
-          {navItems.map((item) => {
+          {visibleItems.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href || (item.href !== "/admin/dashboard" && pathname.startsWith(item.href));
             return (

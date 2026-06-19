@@ -19,4 +19,6 @@ router.post("/:id/attributes", requirePermission("products.update"), C.assignAtt
 router.post("/:id/generate-variants", requirePermission("products.update"), C.genVariants);
 router.get("/:id/variants", C.getVariants);
 
+router.post("/import", requirePermission("products.create"), upload.single("file"), C.importCsv);
+
 export default router;

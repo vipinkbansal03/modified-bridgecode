@@ -1,8 +1,11 @@
+import fs from "fs";
+import Papa from "papaparse";
 import { Response } from "express";
 import { asyncHandler, ApiResponse } from "../../utils/apiResponse";
 import { AuthRequest } from "../../middleware/auth.middleware";
 import * as ProductService from "./products.service";
 import { prisma } from "../../config/database";
+import { slugify } from "../../utils/apiResponse";
 
 export const list = asyncHandler(async (req: AuthRequest, res: Response) => {
   const result = await ProductService.listProducts(req.query as never);
@@ -68,4 +71,69 @@ export const genVariants = asyncHandler(async (req: AuthRequest, res: Response) 
 export const getVariants = asyncHandler(async (req: AuthRequest, res: Response) => {
   const product = await ProductService.getProduct(req.params.id);
   return ApiResponse.success(res, "Variants fetched.", product.variants);
+});
+
+export const importCsv = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const file = req.file as Express.Multer.File | undefined;
+  if (!file) return ApiResponse.success(res, "No file uploaded.", { created: 0, updated: 0, errors: ["No CSV file provided."] });
+
+  const csvText = fs.readFileSync(file.path, "utf-8");
+  fs.unlinkSync(file.path);
+
+  const { data, errors: parseErrors } = Papa.parse<Record<string, string>>(csvText, {
+    header: true,
+    skipEmptyLines: true,
+  });
+
+  if (parseErrors.length) {
+    return ApiResponse.success(res, "CSV parse error.", { created: 0, updated: 0, errors: parseErrors.map((e) => e.message) });
+  }
+
+  let created = 0;
+  let updated = 0;
+  const errors: string[] = [];
+
+  for (const row of data) {
+    try {
+      const { title, productCode, categoryId, sku, brand, shortDescription, description, status, isFeatured } = row;
+      if (!title || !categoryId) {
+        errors.push(`Row missing title or categoryId: ${JSON.stringify(row)}`);
+        continue;
+      }
+
+      const existing = productCode
+        ? await prisma.product.findFirst({ where: { productCode, deletedAt: null } })
+        : null;
+
+      if (existing) {
+        await prisma.product.update({
+          where: { id: existing.id },
+          data: { title, sku: sku || undefined, brand: brand || undefined, shortDescription: shortDescription || undefined, description: description || undefined, status: (status as never) || "DRAFT", isFeatured: isFeatured === "true" },
+        });
+        updated++;
+      } else {
+        const slug = slugify(title);
+        const existing2 = await prisma.product.findUnique({ where: { slug } });
+        await prisma.product.create({
+          data: {
+            title,
+            slug: existing2 ? `${slug}-${Date.now()}` : slug,
+            productCode: productCode || undefined,
+            categoryId,
+            sku: sku || undefined,
+            brand: brand || "Modern Orthodontics",
+            shortDescription: shortDescription || undefined,
+            description: description || undefined,
+            status: (status as never) || "DRAFT",
+            isFeatured: isFeatured === "true",
+          },
+        });
+        created++;
+      }
+    } catch (err) {
+      errors.push(`Row failed: ${(err as Error).message}`);
+    }
+  }
+
+  return ApiResponse.success(res, `Import complete: ${created} created, ${updated} updated.`, { created, updated, errors });
 });

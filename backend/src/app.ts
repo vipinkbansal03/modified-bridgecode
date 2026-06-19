@@ -9,6 +9,7 @@ import { errorMiddleware } from "./middleware/error.middleware";
 import { logger } from "./config/logger";
 
 // Module routes
+import webhookRoutes from "./modules/webhooks/webhooks.routes";
 import publicRoutes from "./modules/public/public.routes";
 import authRoutes from "./modules/auth/auth.routes";
 import productRoutes from "./modules/products/products.routes";
@@ -39,6 +40,9 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || "http://localhost:3000",
   credentials: true,
 }));
+
+// ─── Payment webhooks (raw body — must be before express.json()) ────────────
+app.use("/api/webhooks", webhookRoutes);
 
 // ─── Rate limiting ───────────────────────────────────────
 const limiter = rateLimit({

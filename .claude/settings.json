@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(rm -rf \"/Users/bridgestonetec/Codebase/files 2/backend/src/modules/{auth,users,roles,categories,products,attributes,variants,inventory,pricing,currencies,countries,coupons,quotes,orders,shipping,payments,media,translations,ai,settings,logs}\")"
+      "Bash(rm -rf \"/Users/bridgestonetec/Codebase/files 2/backend/src/modules/{auth,users,roles,categories,products,attributes,variants,inventory,pricing,currencies,countries,coupons,quotes,orders,shipping,payments,media,translations,ai,settings,logs}\")",
+      "Bash(mkdir -p \"/Users/bridgestonetec/Codebase/files 2/frontend/src/app/admin/quotes/[id]\")",
+      "Bash(mkdir -p \"/Users/bridgestonetec/Codebase/files 2/frontend/src/app/admin/orders/[id]\")"
     ],
     "additionalDirectories": [
       "/Users/bridgestonetec/Codebase/files 2/backend/src/modules/{auth,users,roles,categories,products,attributes,variants,inventory,pricing,currencies,countries,coupons,quotes,orders,shipping,payments,media,translations,ai,settings,logs}"
