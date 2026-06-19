@@ -1,0 +1,53 @@
+{
+  "slug": "design-and-engineering",
+  "kicker": "Capabilities",
+  "title": "A complete in-house design and engineering team.",
+  "lede": "Direct supervision over product quality and functionality starts at the design stage. Our team brings over 20 years of collective orthodontic design experience across multiple 3D modelling platforms, working under the guidance of our founder, an orthodontist with more than two decades of clinical practice.",
+  "heroImage": "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?fm=jpg&q=80&w=1600&auto=format&fit=crop",
+  "subnav": [
+    { "label": "In-House Tooling", "anchor": "tooling" },
+    { "label": "CAD & Mold Design", "anchor": "cad" },
+    { "label": "Why It Matters", "anchor": "why" },
+    { "label": "FAQs", "anchor": "faqs" }
+  ],
+  "sections": [
+    {
+      "id": "tooling",
+      "heading": "In-house tooling, start to finish",
+      "paragraphs": [
+        "Design and engineering is the foundation every later manufacturing step builds on. Our tool room is equipped to design and manufacture our own molds and sheet metal tools using multiple CAD platforms, so we never depend on outside vendors for mold design or tooling.",
+        "That in-house control is what lets a product move from paper to market quickly and at a competitive price, without losing precision along the way."
+      ]
+    },
+    {
+      "id": "cad",
+      "heading": "What modern CAD catches before a tool is cut",
+      "paragraphs": [
+        "Current-generation 3D modelling software does more than draw a part — draft analysis, wall-thickness checks, undercut detection, geometry verification and parting-line recognition all happen before any metal is machined. The same software can flag sink marks, knit lines and other cosmetic defects in advance, which saves both time and tooling cost."
+      ],
+      "capabilityGrid": [
+        { "icon": "Ruler", "title": "Draft & Thickness Analysis", "description": "Wall thickness and draft angles checked before a mold is ever cut." },
+        { "icon": "ScanSearch", "title": "Undercut Detection", "description": "Geometry and parting-line issues caught at the design stage, not during a failed first run." },
+        { "icon": "Gauge", "title": "Moldability Forecasting", "description": "Sink marks, knit lines and cosmetic defects predicted and designed around in advance." }
+      ]
+    },
+    {
+      "id": "why",
+      "heading": "Why this shortens your lead time",
+      "paragraphs": [
+        "The mold design stage is usually the most time-consuming and costly part of bringing a plastic or metal-injection-molded part to production. By forecasting problems and confirming moldability upfront, revisions happen on screen instead of on a finished tool — which is a large part of why our lead times run shorter than most of the industry."
+      ]
+    }
+  ],
+  "faqs": [
+    { "question": "Does Modern Orthodontics design tools and molds in-house, or outsource them?", "answer": "Fully in-house. Our tool room designs and manufactures its own molds and sheet metal tools using multiple CAD platforms, so we don't depend on outside vendors for tooling." },
+    { "question": "Who leads the design team?", "answer": "The design team works under the direct guidance of our founder, an orthodontist with more than two decades of clinical practice, alongside a design team with 20+ years of combined orthodontic design experience." },
+    { "question": "How does CAD software reduce project risk before tooling starts?", "answer": "Modern 3D modelling tools check draft angles, wall thickness, undercuts and parting lines, and can forecast tooling problems like sink marks before a mold is cut — catching issues on screen instead of on a finished tool." },
+    { "question": "Can your design team work from our own product concept?", "answer": "Yes — we offer concurrent engineering and design assistance from the earliest stage, which is part of why our lead times are among the shortest in the industry." }
+  ],
+  "seo": {
+    "title": "Design & Engineering — Modern Orthodontics",
+    "description": "In-house product design, CAD modelling and tooling capabilities behind every Modern Orthodontics product.",
+    "robots": "index,follow"
+  }
+}

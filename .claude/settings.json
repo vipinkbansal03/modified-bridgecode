@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -rf \"/Users/bridgestonetec/Codebase/files 2/backend/src/modules/{auth,users,roles,categories,products,attributes,variants,inventory,pricing,currencies,countries,coupons,quotes,orders,shipping,payments,media,translations,ai,settings,logs}\")"
+    ],
+    "additionalDirectories": [
+      "/Users/bridgestonetec/Codebase/files 2/backend/src/modules/{auth,users,roles,categories,products,attributes,variants,inventory,pricing,currencies,countries,coupons,quotes,orders,shipping,payments,media,translations,ai,settings,logs}"
+    ]
+  }
+}

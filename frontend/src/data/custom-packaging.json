@@ -1,0 +1,55 @@
+{
+  "slug": "custom-packaging",
+  "kicker": "Capabilities",
+  "title": "A full-service assembly and packaging facility.",
+  "lede": "From raw material coordination through final packaging and shipping, we run complete and partial product assembly under one roof — built for high-volume, labour-intensive work with assured on-time delivery.",
+  "heroImage": "https://images.unsplash.com/photo-1565793298595-6a879b1d9492?fm=jpg&q=80&w=1600&auto=format&fit=crop",
+  "subnav": [
+    { "label": "What We Handle", "anchor": "handle" },
+    { "label": "Assembly & Finishing", "anchor": "finishing" },
+    { "label": "Cost Benefits", "anchor": "benefits" },
+    { "label": "FAQs", "anchor": "faqs" }
+  ],
+  "sections": [
+    {
+      "id": "handle",
+      "heading": "What we handle",
+      "paragraphs": [
+        "Our packaging and assembly capability covers raw material coordination, inventory management, assembly line production, inspection, final packaging and shipping — combining modern equipment with staff attention to detail to keep both cost and turnaround predictable."
+      ]
+    },
+    {
+      "id": "finishing",
+      "heading": "Assembly and finishing services",
+      "capabilityGrid": [
+        { "icon": "Flame", "title": "Tack & Custom Welding", "description": "Precision welding for component assembly, including custom configurations." },
+        { "icon": "Beaker", "title": "Brazing", "description": "Joining processes for components that need a stronger bond than welding alone." },
+        { "icon": "Palette", "title": "Color Coding", "description": "Visual identification systems applied across product lines." },
+        { "icon": "Sparkles", "title": "Finishing", "description": "Surface finishing for a consistent final appearance." },
+        { "icon": "Zap", "title": "Laser Etching & Engraving", "description": "Permanent marking for traceability and branding." },
+        { "icon": "SearchCheck", "title": "Inspection, Sorting & Rework", "description": "Detailed process analysis to catch and correct non-conforming parts before they ship." }
+      ]
+    },
+    {
+      "id": "benefits",
+      "heading": "What partnering with us saves you",
+      "capabilityGrid": [
+        { "icon": "Building2", "title": "Lower Staffing Overhead", "description": "Reduced need for in-house assembly and packaging teams." },
+        { "icon": "Warehouse", "title": "Lower Warehousing Cost", "description": "Less space tied up holding partially assembled inventory." },
+        { "icon": "Truck", "title": "Lower Transport Cost", "description": "Fewer shipping legs between assembly and final delivery." },
+        { "icon": "ClipboardCheck", "title": "Centralised Control", "description": "One location accountable for the full assembly and packaging run." }
+      ]
+    }
+  ],
+  "faqs": [
+    { "question": "Does Modern Orthodontics offer full or partial product assembly?", "answer": "Both — our facility is built for complete and partial product assembly depending on what a project needs." },
+    { "question": "What finishing services are available alongside packaging?", "answer": "Tack and custom welding, brazing, colour coding, surface finishing, laser etching and engraving, plus inspection, sorting and rework." },
+    { "question": "Can packaging be customised for our brand?", "answer": "Yes, custom labelling and packaging are part of the standard assembly and packaging service." },
+    { "question": "What cost savings come from outsourcing assembly and packaging to MO?", "answer": "Most partners reduce in-house assembly and packaging staffing, cut warehousing and transport costs, and gain centralised inventory control." }
+  ],
+  "seo": {
+    "title": "Custom Packaging — Modern Orthodontics",
+    "description": "Full and partial product assembly, welding, finishing, laser etching and custom packaging services.",
+    "robots": "index,follow"
+  }
+}

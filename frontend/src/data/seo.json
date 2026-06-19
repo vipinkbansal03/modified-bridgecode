@@ -1,0 +1,20 @@
+{
+  "siteName": "Modern Orthodontics",
+  "defaultOgImage": "https://images.unsplash.com/photo-1738162837438-92ff852619a1?fm=jpg&q=80&w=1200&auto=format&fit=crop",
+  "home": {
+    "title": "Modern Orthodontics — Precision Orthodontic Manufacturing Since 1994",
+    "description": "In-house manufacturer of brackets, wires, bands and tubes since 1994. Exporting to 42 countries across six continents from Ludhiana, India.",
+    "keywords": ["orthodontic manufacturer", "orthodontic brackets", "NiTi wires", "MIM bracket manufacturer", "Ludhiana orthodontics"],
+    "robots": "index,follow"
+  },
+  "products": {
+    "title": "Metal Brackets — Modern Orthodontics",
+    "description": "Precision metal bracket systems manufactured in-house — MBT and Roth, loose bracket or full case.",
+    "robots": "index,follow"
+  },
+  "contact": {
+    "title": "Contact Us — Modern Orthodontics",
+    "description": "Get in touch with Modern Orthodontics for product enquiries, dealer applications and bulk order quotes.",
+    "robots": "index,follow"
+  }
+}

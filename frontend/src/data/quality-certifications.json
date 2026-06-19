@@ -1,0 +1,61 @@
+{
+  "slug": "quality-certifications",
+  "kicker": "Quality Certifications",
+  "title": "Certified to the standards global orthodontic brands require.",
+  "lede": "We aim to deliver a best-in-class experience — high-quality orthodontic appliances, on time, without defects and competitively priced — backed by a quality management system our team maintains and improves continuously.",
+  "heroImage": "https://images.unsplash.com/photo-1758873263563-5ba4aa330799?fm=jpg&q=80&w=1600&auto=format&fit=crop",
+  "subnav": [
+    { "label": "Quality Management", "anchor": "management" },
+    { "label": "Our Certifications", "anchor": "certifications" },
+    { "label": "Product Label Symbols", "anchor": "symbols" },
+    { "label": "FAQs", "anchor": "faqs" }
+  ],
+  "sections": [
+    {
+      "id": "management",
+      "heading": "Quality management system",
+      "paragraphs": [
+        "Our dedicated team of professionals is trained to maintain and continually improve the effectiveness of our quality management system, while ensuring compliance with applicable standards, regulatory requirements and customer requirements. That gives our customer base the confidence that they'll receive consistently high-quality products, with individual needs and expectations met.",
+        "MO's quality management system is certified by Underwriters Laboratories (UL) to ISO 13485:2016. ISO standards make the development, manufacturing and supply of products more efficient, safer and cleaner, ease trade between countries, and help safeguard consumers and users of medical devices everywhere."
+      ]
+    },
+    {
+      "id": "certifications",
+      "heading": "Our certifications",
+      "capabilityGrid": [
+        { "icon": "BadgeCheck", "title": "ISO 13485:2016", "description": "The international standard recognised for medical device quality management systems, compatible with FDA QSR and a base for EU CE marking.", "linkLabel": "View certificate", "linkHref": "https://www.modortho.com/public/img/iso-13485-latest.pdf" },
+        { "icon": "ShieldCheck", "title": "CE Mark", "description": "The official marking required across EU member countries, confirming our products meet essential European safety and environmental requirements.", "linkLabel": "View certificate", "linkHref": "https://www.modortho.com/public/img/ce-certificate-latest.pdf" },
+        { "icon": "Stamp", "title": "US FDA Registered", "description": "Compliant with FDA quality system regulation 21 CFR Parts 808, 812 and 820 (cGMP). Modern Orthodontics is registered with the FDA as a manufacturer.", "linkLabel": "View FDA registration", "linkHref": "https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfRL/rl.cfm?rid=73615" },
+        { "icon": "FlaskConical", "title": "Material Safety Data Sheets", "description": "Full chemical identity and hazard information for every relevant material, in line with OSHA's Hazard Communication Standard.", "linkLabel": "View MSDS", "linkHref": "https://www.modortho.com/material-safety-sheets" }
+      ]
+    },
+    {
+      "id": "symbols",
+      "heading": "Product label symbols",
+      "paragraphs": ["A quick reference for the most common symbols you'll find on Modern Orthodontics product labels and packaging."],
+      "symbolGrid": [
+        { "icon": "Hash", "title": "Catalog Number", "description": "Precedes the part number of the product." },
+        { "icon": "Layers", "title": "LOT / Batch Code", "description": "Precedes the lot number — used by MO for part traceability." },
+        { "icon": "Factory", "title": "Manufacturer", "description": "Identifies the manufacturer, may include the date of manufacture (YYYY-MM)." },
+        { "icon": "Ban", "title": "Do Not Reuse", "description": "Devices marked with this symbol are intended for single use only." },
+        { "icon": "Hourglass", "title": "Use By", "description": "The part should be used before the date next to this symbol (YYYY-MM)." },
+        { "icon": "BookOpen", "title": "Consult Instructions for Use", "description": "For products that include additional instructions inside the package." },
+        { "icon": "Sun", "title": "Keep Away From Sunlight", "description": "Used on elastics — performance may reduce with sunlight exposure." },
+        { "icon": "TriangleAlert", "title": "Nickel / Chromium Warning", "description": "Flags the potential for allergic reactions to these known allergens." },
+        { "icon": "Stethoscope", "title": "Rx Only", "description": "For use or distribution by orthodontic professionals only." }
+      ]
+    }
+  ],
+  "faqs": [
+    { "question": "Is Modern Orthodontics ISO certified?", "answer": "Yes — our quality management system is certified to ISO 13485:2016 by Underwriters Laboratories (UL)." },
+    { "question": "Are your products CE marked for the European market?", "answer": "Yes, our quality management has been certified to CE by UL, confirming compliance with European Medical Device Directives." },
+    { "question": "Is Modern Orthodontics FDA registered?", "answer": "Yes, we're registered with the FDA as a manufacturer and compliant with 21 CFR Parts 808, 812 and 820 (cGMP)." },
+    { "question": "Where can I get your Material Safety Data Sheets?", "answer": "You can view them directly via the MSDS link above, or email orders@modortho.com for a specific sheet." },
+    { "question": "How do I read the symbols on a product label?", "answer": "See the Product Label Symbols reference above for the most common marks — catalogue number, lot code, use-by date and more." }
+  ],
+  "seo": {
+    "title": "Quality Certifications — Modern Orthodontics",
+    "description": "ISO 13485:2016, CE marking, FDA registration and Material Safety Data Sheets for Modern Orthodontics products.",
+    "robots": "index,follow"
+  }
+}

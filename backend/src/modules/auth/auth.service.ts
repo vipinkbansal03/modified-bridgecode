@@ -1,0 +1,75 @@
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { prisma } from "../../config/database";
+import { AppError } from "../../utils/apiResponse";
+import { LoginInput } from "./auth.validation";
+
+export async function loginService(input: LoginInput) {
+  const user = await prisma.user.findUnique({
+    where: { email: input.email },
+    include: { role: true },
+  });
+
+  if (!user || !(await bcrypt.compare(input.password, user.password))) {
+    throw new AppError("Invalid email or password.", 401);
+  }
+
+  if (user.status !== "ACTIVE") {
+    throw new AppError("Your account is inactive. Contact an administrator.", 401);
+  }
+
+  const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET!, {
+    expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+  });
+
+  // Update last login
+  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+
+  return {
+    token,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role.name,
+      permissions: user.role.permissions,
+    },
+  };
+}
+
+export async function getMeService(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId, deletedAt: null },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      status: true,
+      lastLoginAt: true,
+      createdAt: true,
+      updatedAt: true,
+      role: {
+        select: {
+          name: true,
+          permissions: true,
+        },
+      },
+    },
+  });
+  if (!user) throw new AppError("User not found.", 404);
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role.name,
+    permissions: user.role.permissions as string[],
+    status: user.status,
+    lastLoginAt: user.lastLoginAt,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+}
+
+export async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 12);
+}

@@ -1,0 +1,78 @@
+{
+  "slug": "manufacturing-services",
+  "kicker": "Capabilities",
+  "title": "Manufacturing services built for OEM partners.",
+  "lede": "Having served the OEM market for many years, we manufacture orthodontic parts of every kind — MIM components, sheet metal parts and the full range of wires — for some of the industry's most prestigious brands.",
+  "heroImage": "https://images.unsplash.com/photo-1769152683420-f4eff91cb30b?fm=jpg&q=80&w=1600&auto=format&fit=crop",
+  "subnav": [
+    { "label": "Manufacturing Expertise", "anchor": "expertise" },
+    { "label": "What is MIM", "anchor": "mim" },
+    { "label": "Benefits of MIM", "anchor": "benefits" },
+    { "label": "The MIM Process", "anchor": "process" },
+    { "label": "NiTi Wire Drawing", "anchor": "niti" },
+    { "label": "FAQs", "anchor": "faqs" }
+  ],
+  "sections": [
+    {
+      "id": "expertise",
+      "heading": "Manufacturing expertise",
+      "paragraphs": [
+        "By partnering with MO, you get access to expert engineering and design assistance, with the peace of mind that the job will be done right at a price you can afford. Our lead times are among the shortest in the industry, so your project turns around as quickly as possible.",
+        "Our management team has extensive experience in mould making, MIM manufacturing, sheet metal components and wire products — experience that benefits you through higher-quality parts produced on time. We operate under a single-tier management system, giving customers a quick response to their needs, with no hidden adaptation costs."
+      ]
+    },
+    {
+      "id": "mim",
+      "heading": "What is Metal Injection Molding?",
+      "paragraphs": [
+        "Metal Injection Molding (MIM) is a specialised process that combines plastic injection moulding with powder metallurgy to produce the intricately-shaped, highly accurate orthodontic parts MO is known for.",
+        "Fine metal powders are mixed with thermoplastic binders to form a feedstock, which is injection moulded. The binders are then chemically or thermally extracted so the part can be sintered to high density — the individual particles metallurgically bond together as material diffusion removes most of the porosity left behind. Sintering shrinks the part to a net shape that can be used as-is or worked further, resulting in a near-full-density, high-strength metal component."
+      ]
+    },
+    {
+      "id": "benefits",
+      "heading": "Benefits of the MIM process",
+      "paragraphs": [
+        "MIM offers mechanical properties that exceed plastic injection moulded or die-cast materials, at a cost-effective, automated alternative to labour-intensive investment casting — especially for the small, complex components common in orthodontic hardware."
+      ],
+      "capabilityGrid": [
+        { "icon": "Shapes", "title": "Design Flexibility", "description": "Geometrically complex parts that conventional powder metal processes can't produce without secondary machining." },
+        { "icon": "Gem", "title": "Intricate Details", "description": "Dovetails, slots, undercuts, threads and complex curved surfaces, including high length-to-diameter cylindrical parts." },
+        { "icon": "Layers", "title": "Reduced Assemblies", "description": "Two or more simpler shapes combined into a single, more complex component to cut assembly costs." },
+        { "icon": "Recycle", "title": "Reduced Waste & Machining", "description": "Net-shape components that eliminate many secondary machining operations." },
+        { "icon": "TrendingUp", "title": "Improved Physical Properties", "description": "95–98% density, approaching wrought material strength, corrosion resistance and magnetic properties." }
+      ]
+    },
+    {
+      "id": "process",
+      "heading": "The MIM process",
+      "capabilityGrid": [
+        { "icon": "FlaskConical", "title": "1. Mixing", "description": "Micron-sized metal powders are hot-mixed with thermoplastics chosen for moulding, handling and binder-removal properties." },
+        { "icon": "Factory", "title": "2. Molding", "description": "The feedstock is heated to a toothpaste consistency, injected into a closed mould, cooled and ejected — typically with robotic pick-off." },
+        { "icon": "Wind", "title": "3. Debinding", "description": "Thermoplastic binders are removed in two stages, opening a pore network without creating internal cracks or voids." },
+        { "icon": "Flame", "title": "4. Sintering", "description": "Parts are heated to 2200–2550°F (1200–1400°C), shrinking 15–20% to reach 96–98% of full density." }
+      ]
+    },
+    {
+      "id": "niti",
+      "heading": "Nickel Titanium wire drawing",
+      "paragraphs": [
+        "We're one of the few orthodontic manufacturers with an in-house wire drawing facility, drawing all Nitinol and stainless-steel wires ourselves. Our NiTi archwire is the result of years of research into the material science, with manufacturing processes refined to deliver consistent force, elasticity and memory in every wire.",
+        "NiTi wire provides lower initial load forces and increased residual forces as full shape recovery progresses — easier wire deflection and delivery to the bracket, less stress on bonds, and increased patient comfort, while staying active through complete archform development."
+      ],
+      "callout": { "text": "100% final inspection. Every NiTi archwire undergoes intense scientific testing during manufacturing and a full final inspection before packaging." }
+    }
+  ],
+  "faqs": [
+    { "question": "What is Metal Injection Molding, and why does MO use it?", "answer": "MIM combines plastic injection moulding with powder metallurgy to produce small, intricately-shaped, high-strength parts — ideal for the complex geometries common in orthodontic hardware." },
+    { "question": "Do you manufacture NiTi and stainless-steel wires in-house?", "answer": "Yes. We operate our own wire drawing facility and draw all Nitinol and stainless-steel wires ourselves, with 100% final inspection before packaging." },
+    { "question": "What lead times can OEM partners expect?", "answer": "Our lead times are among the shortest in the industry, supported by a single-tier management structure built for quick response." },
+    { "question": "Can you manufacture against our own design, or only catalogue parts?", "answer": "Both. Our team provides engineering and design assistance from the earliest stage, factoring MIM manufacturing into the design itself for the best result." },
+    { "question": "Is there a minimum order quantity for OEM or private-label work?", "answer": "MIM economics favour higher annual volumes, but we work with OEM partners individually — email orders@modortho.com with your requirement and we'll advise on the best fit." }
+  ],
+  "seo": {
+    "title": "Manufacturing Services — Modern Orthodontics",
+    "description": "MIM, sheet metal and in-house NiTi wire drawing capabilities for OEM and private-label orthodontic manufacturing partners.",
+    "robots": "index,follow"
+  }
+}

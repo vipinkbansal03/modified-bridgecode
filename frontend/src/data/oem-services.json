@@ -1,0 +1,55 @@
+{
+  "slug": "oem-services",
+  "kicker": "Capabilities",
+  "title": "A preferred OEM partner for orthodontic brands worldwide.",
+  "lede": "We've built our OEM business on the same things our own product line is judged on: product quality, end-to-end production control, and the ability to customise to a partner's exact specification — backed by an in-house tooling facility that keeps every step under one roof.",
+  "heroImage": "https://images.unsplash.com/photo-1581093588401-fbb62a02f120?fm=jpg&q=80&w=1600&auto=format&fit=crop",
+  "subnav": [
+    { "label": "What We Offer", "anchor": "offer" },
+    { "label": "Why Partner With Us", "anchor": "why" },
+    { "label": "Cost Benefits", "anchor": "benefits" },
+    { "label": "FAQs", "anchor": "faqs" }
+  ],
+  "sections": [
+    {
+      "id": "offer",
+      "heading": "What our OEM service covers",
+      "paragraphs": [
+        "Our OEM work specialises in high-volume, labour-intensive operations: assembly line production, inspection, final packaging, custom labelling and shipping, all under the same roof as our own tooling facility. That single-site setup is what lets us hold consistent quality across every product we manufacture, for our own catalogue and for partner brands alike.",
+        "Orthodontist feedback from across the more than 40 countries we ship to has shaped that production discipline over time, and our R&D team continues working to shorten turnaround on every new OEM project."
+      ]
+    },
+    {
+      "id": "why",
+      "heading": "Why partner with us",
+      "capabilityGrid": [
+        { "icon": "SlidersHorizontal", "title": "Production Flexibility", "description": "Direct input into production design rather than a fixed catalogue of options." },
+        { "icon": "Users", "title": "Direct Access to Leadership", "description": "Communication with senior management, not layers of account management." },
+        { "icon": "Clock", "title": "Real-Time Schedule Visibility", "description": "Live updates on where your production run actually stands." },
+        { "icon": "PackageOpen", "title": "Packaging Freedom", "description": "Custom labelling and packaging built around your brand, not ours." }
+      ]
+    },
+    {
+      "id": "benefits",
+      "heading": "The cost case for partnering with us",
+      "paragraphs": ["Beyond product quality, OEM partners typically see savings across several parts of their operation at once:"],
+      "capabilityGrid": [
+        { "icon": "Building2", "title": "Lower In-House Overhead", "description": "Reduced or eliminated need for your own assembly and packaging staff." },
+        { "icon": "Warehouse", "title": "Lower Warehousing Cost", "description": "Less inventory sitting in your own facility waiting to be assembled." },
+        { "icon": "Truck", "title": "Lower Transport Cost", "description": "Fewer shipping legs between raw material, assembly and final delivery." },
+        { "icon": "ClipboardCheck", "title": "Centralised Control", "description": "One manufacturing location accountable for the full production run." }
+      ]
+    }
+  ],
+  "faqs": [
+    { "question": "How long has Modern Orthodontics worked as an OEM manufacturer?", "answer": "Over 20 years, alongside our own product line, specialising in high-volume orthodontic hardware production." },
+    { "question": "Can OEM partners customise packaging and labelling?", "answer": "Yes — custom labelling, packaging and assembly are part of the core OEM service, not an add-on." },
+    { "question": "Will I have a single point of contact for an OEM project?", "answer": "Partnering with us means direct communication with senior management and real-time visibility into your production schedule, rather than working through multiple account layers." },
+    { "question": "What cost savings can an OEM partner expect?", "answer": "Most partners see reduced in-house assembly and warehouse staffing needs, lower transport costs from centralised production, and tighter inventory control overall." }
+  ],
+  "seo": {
+    "title": "OEM Services — Modern Orthodontics",
+    "description": "OEM manufacturing, assembly, inspection, custom labelling and packaging for orthodontic industry partners worldwide.",
+    "robots": "index,follow"
+  }
+}

@@ -1,0 +1,158 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { Share2 } from "lucide-react";
+import { Container } from "@/components/ui/Container";
+import { ProductGallery } from "@/components/sections/ProductGallery";
+import { ProductInfoAccordion } from "@/components/sections/ProductInfoAccordion";
+import { BulkOrderPanel } from "@/components/sections/BulkOrderPanel";
+import { SimpleInquiryPanel } from "@/components/sections/SimpleInquiryPanel";
+import { BundleSection } from "@/components/sections/BundleSection";
+import { RecentlySeenSection } from "@/components/sections/RecentlySeenSection";
+import { ContactCTASection } from "@/components/sections/ContactCTASection";
+import { buildMetadata } from "@/lib/seo";
+import productsData from "@/data/products.json";
+import homeContent from "@/data/home.json";
+import type { ProductDetail } from "@/types/product.types";
+import type { ApiProductDetail } from "@/types/api.types";
+
+export const revalidate = 300;
+
+const staticProducts = productsData as ProductDetail[];
+
+async function fetchProductFromApi(slug: string): Promise<ApiProductDetail | null> {
+  try {
+    const res = await fetch(`${process.env.API_BASE_URL}/api/products/${slug}`, {
+      next: { revalidate: 300 },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchSlugsFromApi(): Promise<string[]> {
+  try {
+    const res = await fetch(`${process.env.API_BASE_URL}/api/products?limit=500`, {
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return (json.data?.data ?? []).map((p: { slug: string }) => p.slug);
+  } catch {
+    return [];
+  }
+}
+
+function mergeProduct(api: ApiProductDetail, staticProduct: ProductDetail | undefined): ProductDetail {
+  return {
+    slug: api.slug,
+    title: api.title,
+    category: api.category.name,
+    categorySlug: api.category.slug,
+    productCode: api.productCode ?? staticProduct?.productCode ?? "",
+    images: api.images.map((img) => (typeof img === "string" ? img : img.url)),
+    information: api.shortDescription ?? staticProduct?.information ?? "",
+    tagline: staticProduct?.tagline,
+    highlights: staticProduct?.highlights ?? [],
+    technicalSpecs: staticProduct?.technicalSpecs ?? [],
+    warranty: staticProduct?.warranty ?? [],
+    primaryFeatures: staticProduct?.primaryFeatures ?? [],
+    prescriptionOptions: staticProduct?.prescriptionOptions,
+    slotOptions: staticProduct?.slotOptions,
+    packagingOptions: staticProduct?.packagingOptions,
+    discountTiers: staticProduct?.discountTiers,
+    catalogueUrl: staticProduct?.catalogueUrl ?? "#",
+    bundle: staticProduct?.bundle ?? [],
+    seo: {
+      title: api.seoTitle ?? staticProduct?.seo?.title ?? api.title,
+      description: api.seoDescription ?? staticProduct?.seo?.description ?? api.shortDescription ?? "",
+      keywords: api.seoKeywords ?? staticProduct?.seo?.keywords ?? "",
+    },
+  };
+}
+
+export async function generateStaticParams() {
+  const apiSlugs = await fetchSlugsFromApi();
+  const allSlugs = new Set([...staticProducts.map((p) => p.slug), ...apiSlugs]);
+  return Array.from(allSlugs).map((slug) => ({ slug }));
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const staticProduct = staticProducts.find((p) => p.slug === slug);
+  const apiProduct = await fetchProductFromApi(slug);
+
+  if (!apiProduct && !staticProduct) return {};
+  const product = apiProduct ? mergeProduct(apiProduct, staticProduct) : staticProduct!;
+  return buildMetadata(product.seo, `/products/${product.slug}`);
+}
+
+export default async function ProductDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const staticProduct = staticProducts.find((p) => p.slug === slug);
+  const apiProduct = await fetchProductFromApi(slug);
+
+  if (!apiProduct && !staticProduct) notFound();
+
+  const product = apiProduct ? mergeProduct(apiProduct, staticProduct) : staticProduct!;
+  const recentlySeen = staticProducts.filter((p) => p.slug !== slug);
+
+  return (
+    <>
+      <section className="pt-6.5">
+        <Container>
+          <nav className="mb-6.5 text-[13px] text-steel-2">
+            <Link href="/" className="hover:text-brand">
+              Home
+            </Link>{" "}
+            /{" "}
+            <Link href="/products" className="hover:text-brand">
+              Products
+            </Link>{" "}
+            /{" "}
+            <Link href={`/products?category=${product.categorySlug}`} className="hover:text-brand">
+              {product.category}
+            </Link>{" "}
+            / {product.title}
+          </nav>
+
+          <div className="mb-8.5 flex items-center justify-between border-b border-line pb-4.5">
+            <h6 className="text-[14.5px] font-medium text-ink">{product.title}</h6>
+            <button aria-label="Share" className="text-steel">
+              <Share2 size={16} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-9 border-b border-line pb-12 sm:grid-cols-[1.1fr_1fr]">
+            <ProductGallery images={product.images} title={product.title} />
+
+            <div>
+              <h1 className="mb-5.5 text-[30px] font-normal tracking-tight text-ink">{product.title}</h1>
+
+              <div>
+                <span className="mb-2 block text-xs uppercase tracking-wide text-steel-2">Information</span>
+                <p className="text-[14.5px] leading-relaxed text-steel">{product.information}</p>
+                <span className="mt-4 block text-xs uppercase tracking-wide text-steel-2">Product Code: {product.productCode}</span>
+              </div>
+
+              <ProductInfoAccordion product={product} />
+            </div>
+          </div>
+
+          {product.prescriptionOptions && product.slotOptions && product.packagingOptions && product.discountTiers ? (
+            <BulkOrderPanel product={product as Required<typeof product>} productId={apiProduct?.id} />
+          ) : (
+            <SimpleInquiryPanel product={product} />
+          )}
+        </Container>
+      </section>
+
+      <BundleSection product={product} />
+      <RecentlySeenSection products={recentlySeen} />
+      <ContactCTASection data={homeContent.contactCta} />
+    </>
+  );
+}

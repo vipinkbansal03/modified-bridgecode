@@ -1,0 +1,59 @@
+{
+  "slug": "about",
+  "kicker": "About Modern Orthodontics",
+  "title": "Engineering precision orthodontic hardware, since 1994.",
+  "lede": "Our mission is to provide high-quality orthodontic products throughout the world — on time, competitively priced, and backed by support our customers can rely on.",
+  "heroImage": "https://images.unsplash.com/photo-1738162837438-92ff852619a1?fm=jpg&q=80&w=1600&auto=format&fit=crop",
+  "subnav": [
+    { "label": "Our Mission", "anchor": "mission" },
+    { "label": "What We Manufacture", "anchor": "manufacture" },
+    { "label": "What Makes Us Different", "anchor": "different" },
+    { "label": "FAQs", "anchor": "faqs" }
+  ],
+  "sections": [
+    {
+      "id": "mission",
+      "heading": "Our mission",
+      "paragraphs": [
+        "Our mission is to provide high quality orthodontic products throughout the world, on time, competitively priced and with unparalleled customer support. In doing so, we continue to forge new relationships within our growing customer base and distribution network, while building our reputation as a trusted source of quality orthodontic design, production and manufacturing.",
+        "We are manufacturers. Modern Orthodontics is a leading manufacturer of high quality, competitively priced orthodontic products. Founded in 1994, we have been doing OEM work for many orthodontic companies, and we remain one of the very few companies in the industry with in-house manufacturing across the complete range of products below."
+      ]
+    },
+    {
+      "id": "manufacture",
+      "heading": "What we manufacture in-house",
+      "capabilityGrid": [
+        { "icon": "Pyramid", "title": "Brackets", "description": "Aesthetic and metal bracket systems, designed and produced end-to-end at our Ludhiana facility." },
+        { "icon": "CircleDot", "title": "Molar Bands", "description": "Plain and pre-welded molar bands manufactured to a consistent fit and finish." },
+        { "icon": "Disc", "title": "Molar Tubes", "description": "Bondable and weldable molar tubes built for reliable anchorage." },
+        { "icon": "Waves", "title": "NiTi Wires & Springs", "description": "Including three force-level wires, drawn and heat-treated in-house." },
+        { "icon": "Spline", "title": "SS & TMA Wires", "description": "Stainless steel and titanium-molybdenum alloy wires across the clinical range." },
+        { "icon": "Link2", "title": "Coated & Pre-Torqued Wires", "description": "Tooth-coloured and pre-torqued archwire options for aesthetic cases." }
+      ]
+    },
+    {
+      "id": "different",
+      "heading": "What makes us different",
+      "paragraphs": [
+        "We use a powerful blend of the latest design software, ultra-modern manufacturing equipment and precise engineering techniques. It positions Modern Orthodontics apart from the competition as a true innovator in the design and manufacture of orthodontic products — committed to developing products for the real benefit of the science of orthodontics and the orthodontic community as a whole."
+      ],
+      "capabilityGrid": [
+        { "icon": "PenTool", "title": "Design Software", "description": "Modern CAD and engineering tools used from the earliest stage of every new product." },
+        { "icon": "Factory", "title": "Manufacturing Equipment", "description": "Ultra-modern machinery across brackets, wires, bands and tubes — all on one site." },
+        { "icon": "Compass", "title": "Engineering Precision", "description": "Tight tolerances held consistently across every batch we ship." }
+      ]
+    }
+  ],
+  "faqs": [
+    { "question": "How long has Modern Orthodontics been manufacturing?", "answer": "Since 1994 — over 30 years of in-house orthodontic manufacturing at our Ludhiana, India facility." },
+    { "question": "Do you manufacture everything in-house, or outsource parts?", "answer": "In-house. We're one of the few orthodontic companies with complete in-house manufacturing of brackets, molar tubes, molar bands, NiTi wires and springs, SS and TMA wires, and coated and pre-torqued wires." },
+    { "question": "Does Modern Orthodontics offer OEM or private-label manufacturing?", "answer": "Yes. We've done OEM work for many orthodontic companies for years, alongside our own product range." },
+    { "question": "Where is Modern Orthodontics based, and where do you ship?", "answer": "We're based in Ludhiana, Punjab, India, and supply orthodontists and dealers directly in 42 countries across six continents." },
+    { "question": "How can I get a product catalogue or place a bulk order?", "answer": "Email us at orders@modortho.com — for India, you can also call 1800 890 8022." }
+  ],
+  "seo": {
+    "title": "About Us — Modern Orthodontics",
+    "description": "Modern Orthodontics has manufactured orthodontic hardware in-house since 1994 — brackets, wires, bands, tubes and more from one Ludhiana facility.",
+    "robots": "index,follow"
+  }
+}

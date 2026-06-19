@@ -1,0 +1,146 @@
+{
+  "primary": [
+    { "label": "Products", "href": "/products" },
+    { "label": "Quality Certifications", "href": "/quality-certifications" },
+    { "label": "Contact Us", "href": "/contact" }
+  ],
+  "capabilitiesMenu": [
+    { "label": "Design & Engineering", "href": "/design-and-engineering" },
+    { "label": "Manufacturing Services", "href": "/manufacturing-services" },
+    { "label": "OEM Services", "href": "/oem-services" },
+    { "label": "Custom Packaging", "href": "/custom-packaging" }
+  ],
+  "productMegaMenu": [
+    {
+      "label": "Aesthetic Brackets",
+      "href": "/products?category=aesthetic-brackets",
+      "children": [
+        { "label": "Curio Mono-Crystalline Ceramic", "href": "/products/curio-mono-crystalline-ceramic" },
+        { "label": "Purity-MS Metal Slot Ceramic", "href": "/products?category=aesthetic-brackets" },
+        { "label": "Purity Ceramic", "href": "/products?category=aesthetic-brackets" },
+        { "label": "d'art Mini Ceramic", "href": "/products?category=aesthetic-brackets" },
+        { "label": "Elegant Composite", "href": "/products?category=aesthetic-brackets" }
+      ]
+    },
+    {
+      "label": "Metal Brackets",
+      "href": "/products?category=metal-brackets",
+      "children": [
+        { "label": "Sapphire True Twin", "href": "/products/sapphire-true-twin" },
+        { "label": "Sapphire Plus Low-Profile", "href": "/products/sapphire-plus-low-profile" },
+        { "label": "At-Ease Self Ligating", "href": "/products/at-ease-self-ligating" },
+        { "label": "Micro-LP Mini", "href": "/products?category=metal-brackets" },
+        { "label": "Sapphire Brackets (Bio-Progressive)", "href": "/products?category=metal-brackets" },
+        { "label": "Sapphire Brackets (Standard Edgewise)", "href": "/products?category=metal-brackets" }
+      ]
+    },
+    {
+      "label": "NiTi Wires",
+      "href": "/products?category=niti-wires",
+      "children": [
+        { "label": "NiTi Super Elastic", "href": "/products/niti-super-elastic" },
+        { "label": "NiTi Thermal", "href": "/products?category=niti-wires" },
+        { "label": "NiTi RCS", "href": "/products?category=niti-wires" },
+        { "label": "Spooled NiTi Wire", "href": "/products?category=niti-wires" },
+        { "label": "NiTi Springs", "href": "/products?category=niti-wires" }
+      ]
+    },
+    {
+      "label": "SS Wires",
+      "href": "/products?category=ss-wires",
+      "children": [
+        { "label": "Acti-4S Stainless Steel Archwire", "href": "/products?category=ss-wires" },
+        { "label": "Ligature Wires", "href": "/products?category=ss-wires" },
+        { "label": "Co-Axial Wire", "href": "/products?category=ss-wires" },
+        { "label": "Fixed Retainer Wire", "href": "/products?category=ss-wires" }
+      ]
+    },
+    {
+      "label": "Special Wires",
+      "href": "/products?category=special-wires",
+      "children": [
+        { "label": "Posted SS Wire", "href": "/products?category=special-wires" },
+        { "label": "Beta Titanium", "href": "/products?category=special-wires" },
+        { "label": "Pre-Torqued Archwire", "href": "/products?category=special-wires" },
+        { "label": "Three Force Arch Wire", "href": "/products?category=special-wires" }
+      ]
+    },
+    {
+      "label": "Molar Bands",
+      "href": "/products?category=molar-bands",
+      "children": [
+        { "label": "Plain Bands", "href": "/products?category=molar-bands" },
+        { "label": "Pre-welded Bands", "href": "/products?category=molar-bands" }
+      ]
+    },
+    {
+      "label": "Molar Tubes",
+      "href": "/products?category=molar-tubes",
+      "children": [
+        { "label": "Elfin Bondable Molar Tube", "href": "/products?category=molar-tubes" },
+        { "label": "Afix Bondable Molar Tube", "href": "/products?category=molar-tubes" },
+        { "label": "Elfin Weldable Molar Tube", "href": "/products?category=molar-tubes" }
+      ]
+    },
+    {
+      "label": "Elastomerics",
+      "href": "/products?category=elastomerics",
+      "children": [
+        { "label": "Elastic Ties", "href": "/products?category=elastomerics" },
+        { "label": "Elastomeric Chain", "href": "/products?category=elastomerics" },
+        { "label": "Elastomeric Separators", "href": "/products?category=elastomerics" },
+        { "label": "Elastomeric Thread", "href": "/products?category=elastomerics" },
+        { "label": "Elastomeric Tissue Guard", "href": "/products?category=elastomerics" },
+        { "label": "Archwire Sleeve", "href": "/products?category=elastomerics" }
+      ]
+    },
+    {
+      "label": "Tooth Color Wire",
+      "href": "/products?category=tooth-color-wire",
+      "children": [
+        { "label": "Micro-KOT NiTi", "href": "/products?category=tooth-color-wire" },
+        { "label": "Micro-KOT SS", "href": "/products?category=tooth-color-wire" }
+      ]
+    },
+    {
+      "label": "Begg Appliances",
+      "href": "/products?category=begg-appliances",
+      "children": [
+        { "label": "Begg Brackets (Bondable)", "href": "/products?category=begg-appliances" },
+        { "label": "Begg Brackets (Weldable)", "href": "/products?category=begg-appliances" },
+        { "label": "Begg Molar Tubes (Bondable)", "href": "/products?category=begg-appliances" },
+        { "label": "Lock Pins", "href": "/products?category=begg-appliances" }
+      ]
+    },
+    {
+      "label": "Miscellaneous Items",
+      "href": "/products?category=miscellaneous-items",
+      "children": [
+        { "label": "Micro Implants", "href": "/products?category=miscellaneous-items" },
+        { "label": "Stainless Steel Lab Wire", "href": "/products?category=miscellaneous-items" },
+        { "label": "Diamond Proximal Strips", "href": "/products?category=miscellaneous-items" },
+        { "label": "Lip & Cheek Retractor", "href": "/products?category=miscellaneous-items" },
+        { "label": "Hyrex RME Screw", "href": "/products?category=miscellaneous-items" },
+        { "label": "Base Former", "href": "/products?category=miscellaneous-items" }
+      ]
+    }
+  ],
+  "subNav": [
+    { "label": "Aesthetic Brackets", "href": "/products?category=aesthetic-brackets" },
+    { "label": "Metal Brackets", "href": "/products?category=metal-brackets" },
+    { "label": "Molar Bands", "href": "/products?category=molar-bands" },
+    { "label": "NiTi Wires", "href": "/products?category=niti-wires" },
+    { "label": "SS Wires", "href": "/products?category=ss-wires" },
+    { "label": "Special Wires", "href": "/products?category=special-wires" },
+    { "label": "Molar Tubes", "href": "/products?category=molar-tubes" },
+    { "label": "Elastomerics", "href": "/products?category=elastomerics" },
+    { "label": "Tooth Color Wire", "href": "/products?category=tooth-color-wire" },
+    { "label": "Begg Appliances", "href": "/products?category=begg-appliances" },
+    { "label": "Miscellaneous Items", "href": "/products?category=miscellaneous-items" },
+    { "label": "Instruments", "href": "/products?category=instruments" },
+    { "label": "Accessories", "href": "/products?category=accessories" },
+    { "label": "Adhesives", "href": "/products?category=adhesives" }
+  ],
+  "ctaLabel": "Become a Dealer",
+  "ctaHref": "/contact"
+}

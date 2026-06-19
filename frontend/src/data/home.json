@@ -1,0 +1,82 @@
+{
+  "hero": {
+    "slides": [
+      {
+        "image": "https://images.unsplash.com/photo-1738162837438-92ff852619a1?fm=jpg&q=80&w=1920&auto=format&fit=crop",
+        "kicker": "Since 1994",
+        "title": "Committed to precision.",
+        "ctaLabel": "Shop by category",
+        "ctaHref": "/products"
+      },
+      {
+        "image": "https://images.unsplash.com/photo-1769152683420-f4eff91cb30b?fm=jpg&q=80&w=1920&auto=format&fit=crop",
+        "kicker": "In-house manufacturing",
+        "title": "Every bracket. One source.",
+        "ctaLabel": "Shop by category",
+        "ctaHref": "/products"
+      },
+      {
+        "image": "https://images.unsplash.com/photo-1759272840712-c7e5ea852367?fm=jpg&q=80&w=1920&auto=format&fit=crop",
+        "kicker": "42 countries",
+        "title": "Trusted far beyond Ludhiana.",
+        "ctaLabel": "Become a dealer",
+        "ctaHref": "/#dealers"
+      },
+      {
+        "image": "https://images.unsplash.com/photo-1758873263563-5ba4aa330799?fm=jpg&q=80&w=1920&auto=format&fit=crop",
+        "kicker": "ISO 13485:2016",
+        "title": "Certified. Not just claimed.",
+        "ctaLabel": "View certifications",
+        "ctaHref": "/quality-certifications"
+      }
+    ]
+  },
+  "about": {
+    "heading": "Engineering precision orthodontic hardware, since 1994.",
+    "lede": "Our mission is to provide high-quality orthodontic products throughout the world — on time, competitively priced, and backed by support our customers can rely on.",
+    "ctaLabel": "Know more",
+    "ctaHref": "/about"
+  },
+  "featuredProductSlugs": ["sapphire-true-twin", "niti-super-elastic", "curio-mono-crystalline-ceramic"],
+  "featuredCaptions": {
+    "sapphire-true-twin": "Our highest-volume MBT system — engineered in-house for consistent tip, torque and in-out expression, batch after batch.",
+    "niti-super-elastic": "Drawn in-house from raw Nitinol, for lower initial load and full shape recovery through the whole archform.",
+    "curio-mono-crystalline-ceramic": "High-translucency, stain-resistant ceramic for cases where visibility is the deciding factor."
+  },
+  "stats": [
+    { "label": "Since 1994", "value": "30+", "description": "Years manufacturing" },
+    { "label": "Global Reach", "value": "42", "description": "Countries served" },
+    { "label": "Direct Export", "value": "6", "description": "Continents" },
+    { "label": "Catalog Depth", "value": "500+", "description": "SKUs" }
+  ],
+  "locations": {
+    "subtitle": "Find us around the globe",
+    "pins": [
+      { "id": "hq", "xPct": 70.0, "yPct": 58.71, "category": "hq", "label": "Manufacturing Facility — Ludhiana, India" },
+      { "id": "us", "xPct": 22.21, "yPct": 51.37, "category": "export", "label": "Direct Export — United States" },
+      { "id": "de", "xPct": 49.87, "yPct": 44.71, "category": "export", "label": "Direct Export — Germany" },
+      { "id": "gb", "xPct": 46.13, "yPct": 42.27, "category": "export", "label": "Direct Export — United Kingdom" },
+      { "id": "za", "xPct": 53.78, "yPct": 81.85, "category": "export", "label": "Direct Export — South Africa" },
+      { "id": "au", "xPct": 84.30, "yPct": 79.68, "category": "export", "label": "Direct Export — Australia" },
+      { "id": "br", "xPct": 31.38, "yPct": 74.01, "category": "dealer", "label": "Dealer Network — Brazil" },
+      { "id": "mx", "xPct": 18.44, "yPct": 59.08, "category": "dealer", "label": "Dealer Network — Mexico" },
+      { "id": "ae", "xPct": 62.16, "yPct": 59.07, "category": "dealer", "label": "Dealer Network — United Arab Emirates" },
+      { "id": "ke", "xPct": 57.46, "yPct": 69.22, "category": "dealer", "label": "Dealer Network — Kenya" },
+      { "id": "id", "xPct": 78.77, "yPct": 69.37, "category": "dealer", "label": "Dealer Network — Indonesia" },
+      { "id": "vn", "xPct": 76.50, "yPct": 62.43, "category": "dealer", "label": "Dealer Network — Vietnam" }
+    ]
+  },
+  "certifications": [
+    { "title": "ISO 13485:2016", "description": "Quality management system certified by Underwriters Laboratories.", "icon": "BadgeCheck", "href": "/quality-certifications" },
+    { "title": "EU CE Marked", "description": "Compliant with European Medical Device Directives.", "icon": "ShieldCheck", "href": "/quality-certifications" },
+    { "title": "US FDA Registered", "description": "Registered manufacturer under 21 CFR Parts 808, 812 and 820.", "icon": "Stamp", "href": "/quality-certifications" },
+    { "title": "MDSAP & India CDSCO", "description": "Multi-jurisdiction audit program and Indian regulatory compliance.", "icon": "Globe", "href": "/quality-certifications" }
+  ],
+  "contactCta": {
+    "heading": "Get in touch",
+    "body": "Have any questions about products, pricing or becoming a dealer? Our team is ready to assist you.",
+    "ctaLabel": "Contact us",
+    "ctaHref": "mailto:orders@modortho.com",
+    "image": "https://images.unsplash.com/photo-1769152683420-f4eff91cb30b?fm=jpg&q=80&w=1920&auto=format&fit=crop"
+  }
+}
