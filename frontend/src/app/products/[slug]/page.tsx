@@ -7,6 +7,7 @@ import { ProductGallery } from "@/components/sections/ProductGallery";
 import { ProductInfoAccordion } from "@/components/sections/ProductInfoAccordion";
 import { BulkOrderPanel } from "@/components/sections/BulkOrderPanel";
 import { SimpleInquiryPanel } from "@/components/sections/SimpleInquiryPanel";
+import { BulkOrderBuilder } from "@/components/product/BulkOrderBuilder";
 import { BundleSection } from "@/components/sections/BundleSection";
 import { RecentlySeenSection } from "@/components/sections/RecentlySeenSection";
 import { ContactCTASection } from "@/components/sections/ContactCTASection";
@@ -69,7 +70,7 @@ function mergeProduct(api: ApiProductDetail, staticProduct: ProductDetail | unde
     seo: {
       title: api.seoTitle ?? staticProduct?.seo?.title ?? api.title,
       description: api.seoDescription ?? staticProduct?.seo?.description ?? api.shortDescription ?? "",
-      keywords: api.seoKeywords ?? staticProduct?.seo?.keywords ?? "",
+      keywords: api.seoKeywords ? api.seoKeywords.split(",").map((s) => s.trim()) : staticProduct?.seo?.keywords,
     },
   };
 }
@@ -142,7 +143,10 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             </div>
           </div>
 
-          {product.prescriptionOptions && product.slotOptions && product.packagingOptions && product.discountTiers ? (
+          {/* B2B Bulk Order Builder — shown when backend variants are available */}
+          {apiProduct && apiProduct.variants.length > 0 ? (
+            <BulkOrderBuilder apiProduct={apiProduct} />
+          ) : product.prescriptionOptions && product.slotOptions && product.packagingOptions && product.discountTiers ? (
             <BulkOrderPanel product={product as Required<typeof product>} productId={apiProduct?.id} />
           ) : (
             <SimpleInquiryPanel product={product} />

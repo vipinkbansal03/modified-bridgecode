@@ -47,7 +47,7 @@ export default function AttributesPage() {
       return;
     }
     const attribute = attributes.find((attr: Attribute) => attr.id === attributeId);
-    const exists = attribute?.values.some((item) => normalize(item.value) === normalize(value));
+    const exists = attribute?.values.some((item: { value: string }) => normalize(item.value) === normalize(value));
     if (exists) {
       showToast("This value already exists for the selected attribute.", "error");
       return;

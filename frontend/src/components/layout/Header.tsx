@@ -8,6 +8,7 @@ import { MegaMenu } from "@/components/layout/MegaMenu";
 import { MobileMenu } from "@/components/layout/MobileMenu";
 import { CurrencySwitcher } from "@/components/ui/CurrencySwitcher";
 import { SearchOverlay } from "@/components/ui/SearchOverlay";
+import { useQuoteCart } from "@/contexts/QuoteCartContext";
 import navigation from "@/data/navigation.json";
 import { cn } from "@/utils/cn";
 import type { NavigationData } from "@/types/common.types";
@@ -20,6 +21,7 @@ export function Header() {
   const [capsOpen, setCapsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const { totals } = useQuoteCart();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -88,8 +90,13 @@ export function Header() {
             <button aria-label="Account" className="text-ink">
               <User size={18} />
             </button>
-            <button aria-label="Cart" className="text-ink">
+            <button aria-label="Quote Cart" className="relative text-ink hover:text-brand">
               <ShoppingCart size={18} />
+              {totals.itemCount > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#E31E24] text-[9px] font-bold text-white">
+                  {totals.itemCount}
+                </span>
+              )}
             </button>
             <Link
               href={nav.ctaHref}

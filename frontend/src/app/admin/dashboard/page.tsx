@@ -64,7 +64,7 @@ export default function DashboardPage() {
                   <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#9A9A9A" }} />
                   <YAxis tick={{ fontSize: 11, fill: "#9A9A9A" }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
                   <Tooltip
-                    formatter={(v: number) => [`$${v.toLocaleString()}`, "Revenue"]}
+                    formatter={(v: unknown) => [`$${Number(v).toLocaleString()}`, "Revenue"]}
                     contentStyle={{ fontSize: 12, borderRadius: 6, border: "1px solid #E6E6E6" }}
                   />
                   <Bar dataKey="revenue" fill="#E31E24" radius={[3, 3, 0, 0]} />
@@ -82,13 +82,13 @@ export default function DashboardPage() {
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
                   <Pie
-                    data={analytics.ordersByCountry}
+                    data={analytics.ordersByCountry.map((r: { country: string; orders: number }) => ({ name: r.country, orders: r.orders }))}
                     dataKey="orders"
-                    nameKey="country"
+                    nameKey="name"
                     cx="50%"
                     cy="50%"
                     outerRadius={80}
-                    label={({ country, percent }) => `${country} ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`}
                     labelLine={false}
                   >
                     {analytics.ordersByCountry.map((_: unknown, index: number) => (
@@ -96,7 +96,7 @@ export default function DashboardPage() {
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(v: number) => [v, "Orders"]}
+                    formatter={(v: unknown) => [Number(v), "Orders"]}
                     contentStyle={{ fontSize: 12, borderRadius: 6, border: "1px solid #E6E6E6" }}
                   />
                 </PieChart>
