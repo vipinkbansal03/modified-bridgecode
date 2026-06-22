@@ -49,7 +49,7 @@ export function CertificationsSection({ data }: CertificationsSectionProps) {
                 <Link
                   key={cert.title}
                   href={cert.href ?? "#"}
-                  className="group flex w-[280px] flex-none flex-col rounded-md border border-line bg-white px-6.5 pt-7.5 transition-[padding] duration-200 hover:pt-6 snap-start"
+                  className="group flex w-[320px] flex-none flex-col rounded-md border border-line bg-white px-6.5 pt-7.5 transition-[padding] duration-200 hover:pt-6 snap-start"
                   style={{ minHeight: 300 }}
                 >
                   <h4 className="max-w-[200px] text-[19px] font-medium leading-snug text-ink">{cert.title}</h4>

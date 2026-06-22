@@ -14,10 +14,10 @@ export function BlogSection() {
   const scrollBy = (delta: number) => viewportRef.current?.scrollBy({ left: delta, behavior: "smooth" });
 
   return (
-    <section id="resources" className="py-24 sm:py-32">
+    <section id="resources" className="border-t border-line py-24 sm:py-32">
       <Container>
         <SectionHeading
-          title="From the blog"
+          title="From the resource center"
           action={
             <div className="flex gap-2.5">
               <button aria-label="Previous" onClick={() => scrollBy(-300)} className="flex h-9.5 w-9.5 items-center justify-center rounded-full border border-line hover:border-steel-2">

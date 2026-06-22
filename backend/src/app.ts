@@ -31,6 +31,7 @@ import settingsRoutes from "./modules/settings/settings.routes";
 import logRoutes from "./modules/logs/logs.routes";
 import userRoutes from "./modules/users/users.routes";
 import roleRoutes from "./modules/roles/roles.routes";
+import cmsRoutes from "./modules/cms/cms.routes";
 
 const app = express();
 
@@ -72,6 +73,7 @@ app.get("/health", (_req, res) => {
 
 // ─── Public API Routes (no auth) ─────────────────────────
 app.use("/api", publicRoutes);
+app.use("/api/settings", settingsRoutes); // public tracking/robots/sitemap sub-routes
 
 // ─── API Routes ──────────────────────────────────────────
 const API = "/api/admin";
@@ -96,6 +98,7 @@ app.use(`${API}/settings`, settingsRoutes);
 app.use(`${API}/logs`, logRoutes);
 app.use(`${API}/users`, userRoutes);
 app.use(`${API}/roles`, roleRoutes);
+app.use(`${API}/cms`, cmsRoutes);
 
 // ─── 404 ─────────────────────────────────────────────────
 app.use((_req, res) => {

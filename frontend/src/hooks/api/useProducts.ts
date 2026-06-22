@@ -41,6 +41,7 @@ async function loadStaticProduct(slug: string): Promise<ApiProductDetail | null>
     category: { name: p.category as string, slug: p.categorySlug as string },
     images: ((p.images as string[]) ?? []).map((url) => ({ url, alt: p.title as string })),
     documents: [],
+    packages: [],
     thumbnail: ((p.images as string[]) ?? [])[0] ?? null,
     isFeatured: false,
     hasVariants: false,

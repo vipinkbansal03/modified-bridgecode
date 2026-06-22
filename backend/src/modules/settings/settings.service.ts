@@ -1,8 +1,208 @@
 import { prisma } from "../../config/database";
-export async function getSettings(group?: string) {
-  const settings = await prisma.setting.findMany({ where: group ? { group } : {}, orderBy: { key: "asc" } });
-  return settings.map(s => ({ ...s, value: s.isSecret ? "***" : s.value }));
+import { encrypt, decrypt } from "../../utils/encrypt";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type SettingInput = {
+  key: string;
+  value: string;
+  group?: string;
+  label?: string;
+  type?: string;
+  isSecret?: boolean;
+  isEnabled?: boolean;
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function mask(s: { value: string; isSecret: boolean }) {
+  if (!s.isSecret || !s.value) return s.value;
+  return "***";
 }
-export async function updateSettings(updates: { key: string; value: string }[]) {
-  return Promise.all(updates.map(({ key, value }) => prisma.setting.upsert({ where: { key }, create: { key, value }, update: { value } })));
+
+function read(s: { value: string; isSecret: boolean }): string {
+  if (s.isSecret && s.value && s.value !== "***") return decrypt(s.value);
+  return s.value;
+}
+
+// ─── Admin reads ──────────────────────────────────────────────────────────────
+
+export async function getSettings(group?: string) {
+  const rows = await prisma.setting.findMany({
+    where: group ? { group } : {},
+    orderBy: [{ group: "asc" }, { key: "asc" }],
+  });
+  return rows.map((s) => ({ ...s, value: mask(s) }));
+}
+
+export async function getSettingValue(key: string): Promise<string> {
+  const s = await prisma.setting.findUnique({ where: { key } });
+  if (!s) return "";
+  return read(s);
+}
+
+// ─── Admin writes ─────────────────────────────────────────────────────────────
+
+export async function upsertSetting(input: SettingInput) {
+  const isSecret = input.isSecret ?? false;
+  const raw = input.value ?? "";
+  const value = isSecret && raw && raw !== "***" ? encrypt(raw) : raw;
+
+  return prisma.setting.upsert({
+    where: { key: input.key },
+    create: {
+      key: input.key,
+      value,
+      group: input.group ?? "general",
+      label: input.label,
+      type: input.type ?? "string",
+      isSecret,
+      isEnabled: input.isEnabled ?? true,
+    },
+    update: {
+      ...(raw !== "***" && { value }),
+      ...(input.group !== undefined && { group: input.group }),
+      ...(input.label !== undefined && { label: input.label }),
+      ...(input.type !== undefined && { type: input.type }),
+      ...(input.isEnabled !== undefined && { isEnabled: input.isEnabled }),
+    },
+  });
+}
+
+export async function upsertMany(inputs: SettingInput[]) {
+  return Promise.all(inputs.map(upsertSetting));
+}
+
+// ─── Public tracking endpoint ─────────────────────────────────────────────────
+
+function val(map: Map<string, { value: string; isEnabled: boolean; isSecret: boolean }>, key: string): string {
+  const s = map.get(key);
+  if (!s) return "";
+  if (s.isSecret) return decrypt(s.value);
+  return s.value;
+}
+
+function enabled(map: Map<string, { value: string; isEnabled: boolean; isSecret: boolean }>, key: string): boolean {
+  const s = map.get(key);
+  if (!s) return false;
+  if (s.value === "true") return true;
+  return s.isEnabled;
+}
+
+function str(map: Map<string, { value: string; isEnabled: boolean; isSecret: boolean }>, key: string): string | null {
+  const v = val(map, key);
+  return v || null;
+}
+
+export async function getPublicTrackingSettings() {
+  const rows = await prisma.setting.findMany({
+    where: {
+      group: {
+        in: ["analytics", "pixels", "marketing", "social", "verification", "scripts", "cookies", "whatsapp", "seo", "general"],
+      },
+    },
+  });
+
+  const m = new Map(rows.map((r) => [r.key, { value: r.value, isEnabled: r.isEnabled, isSecret: r.isSecret }]));
+
+  return {
+    ga4: {
+      enabled: enabled(m, "analytics.ga4_enabled"),
+      measurementId: str(m, "analytics.ga4_measurement_id"),
+    },
+    gtm: {
+      enabled: enabled(m, "analytics.gtm_enabled"),
+      containerId: str(m, "analytics.gtm_container_id"),
+    },
+    clarity: {
+      enabled: enabled(m, "analytics.clarity_enabled"),
+      projectId: str(m, "analytics.clarity_project_id"),
+    },
+    hotjar: {
+      enabled: enabled(m, "analytics.hotjar_enabled"),
+      siteId: str(m, "analytics.hotjar_site_id"),
+    },
+    hubspot: {
+      enabled: enabled(m, "analytics.hubspot_enabled"),
+      trackingCode: str(m, "analytics.hubspot_tracking_code"),
+    },
+    metaPixel: {
+      enabled: enabled(m, "pixels.meta_pixel_enabled"),
+      pixelId: str(m, "pixels.meta_pixel_id"),
+    },
+    linkedin: {
+      enabled: enabled(m, "pixels.linkedin_enabled"),
+      partnerId: str(m, "pixels.linkedin_partner_id"),
+    },
+    twitter: {
+      enabled: enabled(m, "pixels.twitter_enabled"),
+      pixelId: str(m, "pixels.twitter_pixel_id"),
+    },
+    pinterest: {
+      enabled: enabled(m, "pixels.pinterest_enabled"),
+      tagId: str(m, "pixels.pinterest_tag_id"),
+    },
+    tiktok: {
+      enabled: enabled(m, "pixels.tiktok_enabled"),
+      pixelId: str(m, "pixels.tiktok_pixel_id"),
+    },
+    verification: {
+      google: str(m, "verification.google"),
+      bing: str(m, "verification.bing"),
+      pinterest: str(m, "verification.pinterest"),
+      facebookDomain: str(m, "verification.facebook_domain"),
+      custom: str(m, "verification.custom"),
+    },
+    scripts: {
+      header: str(m, "scripts.header"),
+      footer: str(m, "scripts.footer"),
+    },
+    cookies: {
+      enabled: enabled(m, "cookies.enabled"),
+      bannerTitle: val(m, "cookies.banner_title") || "We use cookies",
+      bannerDescription: val(m, "cookies.banner_description") || "We use cookies to improve your experience on our site.",
+      privacyPolicyUrl: val(m, "cookies.privacy_policy_url") || "/privacy-policy",
+    },
+    whatsapp: {
+      number: str(m, "whatsapp.number"),
+      defaultMessage: str(m, "whatsapp.default_message"),
+      floatingButtonEnabled: enabled(m, "whatsapp.floating_button_enabled"),
+    },
+    social: {
+      facebook: str(m, "social.facebook_url"),
+      instagram: str(m, "social.instagram_url"),
+      linkedin: str(m, "social.linkedin_url"),
+      youtube: str(m, "social.youtube_url"),
+      twitter: str(m, "social.twitter_url"),
+      pinterest: str(m, "social.pinterest_url"),
+    },
+    seo: {
+      defaultTitle: val(m, "seo.default_title") || "Modern Orthodontics",
+      defaultDescription: val(m, "seo.default_description") || "",
+      defaultKeywords: str(m, "seo.default_keywords"),
+      ogTitle: str(m, "seo.og_title"),
+      ogDescription: str(m, "seo.og_description"),
+      ogImage: str(m, "seo.og_image"),
+      twitterImage: str(m, "seo.twitter_image"),
+      canonicalDomain: str(m, "seo.canonical_domain"),
+    },
+    general: {
+      siteName: val(m, "general.site_name") || "Modern Orthodontics",
+      siteUrl: str(m, "general.site_url"),
+      logoUrl: str(m, "general.logo"),
+      faviconUrl: str(m, "general.favicon"),
+    },
+  };
+}
+
+export async function getSitemapSettings() {
+  const rows = await prisma.setting.findMany({ where: { group: "seo" } });
+  const m = new Map(rows.map((r) => [r.key, r.value]));
+  return {
+    includeProducts: m.get("seo.sitemap_include_products") !== "false",
+    includeCategories: m.get("seo.sitemap_include_categories") !== "false",
+    includeBlogs: m.get("seo.sitemap_include_blogs") === "true",
+    includeCmsPages: m.get("seo.sitemap_include_cms_pages") !== "false",
+    robotsTxt: m.get("seo.robots_txt") ?? null,
+  };
 }

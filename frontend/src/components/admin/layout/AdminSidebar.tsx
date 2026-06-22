@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Package, Tag, Sliders, Layers, Warehouse, DollarSign, Globe, Map, Ticket, MessageSquare, ShoppingCart, Truck, CreditCard, Image, Languages, Sparkles, Users, Shield, Settings, FileText, ChevronRight, X,
+  LayoutDashboard, Package, Tag, Sliders, Layers, Warehouse, DollarSign, Globe, Map, Ticket, MessageSquare, ShoppingCart, Truck, CreditCard, Image, Languages, Sparkles, Users, Shield, Settings, FileText, ChevronRight, X, Newspaper, Menu, AlignLeft,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -30,6 +30,12 @@ const navItems = [
   { label: "Roles",           href: "/admin/roles",        icon: Shield,       permission: "roles.view" },
   { label: "Settings",        href: "/admin/settings",     icon: Settings,     permission: "settings.view" },
   { label: "Activity Logs",   href: "/admin/logs",         icon: FileText,     permission: "logs.view" },
+];
+
+const cmsItems = [
+  { label: "Pages",   href: "/admin/cms/pages",  icon: Newspaper },
+  { label: "Menus",   href: "/admin/cms/menus",  icon: Menu },
+  { label: "Footer",  href: "/admin/cms/footer", icon: AlignLeft },
 ];
 
 interface AdminSidebarProps {
@@ -90,6 +96,25 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
                   active
                     ? "bg-white/10 text-white font-medium"
                     : "text-white/60 hover:bg-white/5 hover:text-white"
+                )}
+              >
+                <Icon size={16} className="flex-none" />
+                {item.label}
+                {active && <ChevronRight size={12} className="ml-auto opacity-60" />}
+              </Link>
+            );
+          })}
+
+          {/* CMS section */}
+          <div className="mt-3 mb-1 px-5 text-[10px] font-semibold uppercase tracking-widest text-white/25">Content (CMS)</div>
+          {cmsItems.map((item) => {
+            const Icon = item.icon;
+            const active = pathname.startsWith(item.href);
+            return (
+              <Link key={item.href} href={item.href} onClick={onClose}
+                className={cn(
+                  "flex items-center gap-3 px-5 py-2.5 text-[13.5px] transition-colors",
+                  active ? "bg-white/10 text-white font-medium" : "text-white/60 hover:bg-white/5 hover:text-white"
                 )}
               >
                 <Icon size={16} className="flex-none" />

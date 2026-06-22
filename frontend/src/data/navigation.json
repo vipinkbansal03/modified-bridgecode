@@ -126,6 +126,7 @@
     }
   ],
   "subNav": [
+    { "label": "Quick Order", "href": "/quick-order" },
     { "label": "Aesthetic Brackets", "href": "/products?category=aesthetic-brackets" },
     { "label": "Metal Brackets", "href": "/products?category=metal-brackets" },
     { "label": "Molar Bands", "href": "/products?category=molar-bands" },

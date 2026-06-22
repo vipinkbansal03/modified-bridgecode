@@ -1,7 +1,8 @@
 import { Resend } from "resend";
 import { logger } from "../config/logger";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 const FROM = process.env.EMAIL_FROM || "orders@modortho.com";
 const NOTIFY = process.env.EMAIL_NOTIFY || "team@modortho.com";
 
@@ -28,7 +29,7 @@ export interface ContactEmailData {
 }
 
 export async function sendQuoteNotification(data: QuoteEmailData): Promise<void> {
-  if (!process.env.RESEND_API_KEY) return;
+  if (!resend) return;
 
   const itemRows = data.items
     .map((i) => `  • ${i.productTitle}${i.sku ? ` [${i.sku}]` : ""} × ${i.quantity} @ ₹${i.unitPrice}`)
@@ -80,7 +81,7 @@ export async function sendQuoteNotification(data: QuoteEmailData): Promise<void>
 }
 
 export async function sendContactNotification(data: ContactEmailData): Promise<void> {
-  if (!process.env.RESEND_API_KEY) return;
+  if (!resend) return;
 
   try {
     await resend.emails.send({

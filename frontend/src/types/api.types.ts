@@ -30,6 +30,9 @@ export interface ApiAttributeValue {
   value: string;
   slug: string;
   sortOrder: number;
+  image?: string | null;
+  note?: string | null;
+  priceAdjustment?: number;
 }
 
 export interface ApiAttribute {
@@ -50,9 +53,19 @@ export interface ApiVariant {
   title: string;
   sku: string | null;
   variantKey: string;
+  package: { id: string; title: string; slug: string } | null;
   attributeCombination: Record<string, string>; // { "Prescription": "MBT", "Slot Size": ".022\"" }
   prices: ApiProductPrice[];
   inventory: ApiVariantInventory | null;
+}
+
+export interface ApiProductPackage {
+  id: string;
+  title: string;
+  slug: string;
+  image: string | null;
+  description: string | null;
+  sortOrder: number;
 }
 
 export interface ApiProductSummary {
@@ -78,6 +91,7 @@ export interface ApiProductDetail extends Omit<ApiProductSummary, "images"> {
   seoKeywords: string | null;
   images: { url: string; alt: string }[];
   documents: { url: string; label: string }[];
+  packages: ApiProductPackage[];
   attributes: ApiAttribute[];
   variants: ApiVariant[];
 }

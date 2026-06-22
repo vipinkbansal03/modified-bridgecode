@@ -1,3 +1,31 @@
-import { Response } from "express"; import { asyncHandler, ApiResponse } from "../../utils/apiResponse"; import { AuthRequest } from "../../middleware/auth.middleware"; import * as S from "./settings.service";
-export const get = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Settings.", await S.getSettings(req.query.group as string)));
-export const update = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Settings updated.", await S.updateSettings(req.body.settings)));
+import { Response } from "express";
+import { asyncHandler, ApiResponse } from "../../utils/apiResponse";
+import { AuthRequest } from "../../middleware/auth.middleware";
+import * as S from "./settings.service";
+
+// Admin
+export const get = asyncHandler(async (req: AuthRequest, res: Response) =>
+  ApiResponse.success(res, "Settings.", await S.getSettings(req.query.group as string | undefined))
+);
+
+export const upsertMany = asyncHandler(async (req: AuthRequest, res: Response) =>
+  ApiResponse.success(res, "Settings saved.", await S.upsertMany(req.body.settings))
+);
+
+// Public
+export const publicTracking = asyncHandler(async (_req: AuthRequest, res: Response) => {
+  // Cache 5 minutes
+  res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
+  return ApiResponse.success(res, "Tracking settings.", await S.getPublicTrackingSettings());
+});
+
+export const publicSitemap = asyncHandler(async (_req: AuthRequest, res: Response) =>
+  ApiResponse.success(res, "Sitemap settings.", await S.getSitemapSettings())
+);
+
+export const publicRobots = asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const { robotsTxt } = await S.getSitemapSettings();
+  const content = robotsTxt ?? `User-agent: *\nAllow: /\nDisallow: /admin/\nSitemap: ${process.env.FRONTEND_URL ?? ""}/sitemap.xml`;
+  res.setHeader("Content-Type", "text/plain");
+  res.send(content);
+});

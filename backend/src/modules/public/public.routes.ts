@@ -1,6 +1,7 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import * as C from "./public.controller";
+import * as CMS from "../cms/cms.controller";
 
 const router = Router();
 
@@ -10,6 +11,12 @@ const formLimiter = rateLimit({
   max: 10,
   message: { success: false, message: "Too many submissions. Please wait and try again." },
 });
+
+// ─── CMS public endpoints ─────────────────────────────────
+router.get("/cms/pages/key/:pageKey", CMS.publicPageByKey);
+router.get("/cms/pages/:slug", CMS.publicPageBySlug);
+router.get("/cms/menus/:location", CMS.publicMenu);
+router.get("/cms/footer", CMS.publicFooter);
 
 // ─── Read endpoints ───────────────────────────────────────
 router.get("/products", C.listProducts);

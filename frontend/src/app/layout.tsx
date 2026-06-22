@@ -3,6 +3,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { ReactQueryProvider } from "@/lib/reactQueryProvider";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { QuoteCartProvider } from "@/contexts/QuoteCartContext";
+import { TrackingProvider } from "@/providers/TrackingProvider";
 import { buildMetadata } from "@/lib/seo";
 import seoData from "@/data/seo.json";
 import "@/styles/globals.css";
@@ -21,7 +22,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ReactQueryProvider>
           <CurrencyProvider>
             <QuoteCartProvider>
-              <AppShell>{children}</AppShell>
+              <TrackingProvider>
+                <AppShell>{children}</AppShell>
+              </TrackingProvider>
             </QuoteCartProvider>
           </CurrencyProvider>
         </ReactQueryProvider>

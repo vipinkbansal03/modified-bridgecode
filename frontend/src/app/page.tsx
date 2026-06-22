@@ -10,25 +10,81 @@ import { BlogSection } from "@/components/sections/BlogSection";
 import { ContactCTASection } from "@/components/sections/ContactCTASection";
 import homeContent from "@/data/home.json";
 import type { LocationPin } from "@/types/common.types";
+import type { CmsPage, CmsSection } from "@/hooks/api/useCmsContent";
+import { transformHeroSlides, transformStats, transformCertifications, transformAboutIntro, transformContactCta } from "@/utils/cmsTransform";
 
-const locationsData = homeContent.locations as { subtitle: string; pins: LocationPin[] };
+export const revalidate = 300;
 
-// Header and Footer are rendered globally by src/app/layout.tsx — this page
-// only composes the homepage-specific sections, each fed by data/home.json
-// (or, for the API-driven sections, their own React Query hook).
-export default function HomePage() {
+const staticLocations = homeContent.locations as { subtitle: string; pins: LocationPin[] };
+
+async function fetchCmsHomePage(): Promise<CmsPage | null> {
+  try {
+    const apiBase = process.env.API_BASE_URL ?? "http://localhost:4000";
+    const res = await fetch(`${apiBase}/api/cms/pages/key/home`, { next: { revalidate: 300 } });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function findSection(cms: CmsPage, key: string): CmsSection | null {
+  return cms.sections.find((s) => s.sectionKey === key) ?? null;
+}
+
+export default async function HomePage() {
+  const cms = await fetchCmsHomePage();
+
+  // Resolve each section from CMS or fall back to static JSON
+  const heroSlides = cms
+    ? transformHeroSlides(findSection(cms, "home.hero") ?? { id: "", sectionKey: "", sortOrder: 0, blocks: [] })
+    : homeContent.hero.slides;
+
+  const heroData = heroSlides.length > 0
+    ? { slides: heroSlides }
+    : homeContent.hero;
+
+  const aboutData = (() => {
+    if (!cms) return homeContent.about;
+    const t = transformAboutIntro(findSection(cms, "home.about") ?? { id: "", sectionKey: "", sortOrder: 0, blocks: [] });
+    if (!t) return homeContent.about;
+    return { ...homeContent.about, title: t.title, description: t.description };
+  })();
+
+  const statsData = cms
+    ? (() => {
+        const t = transformStats(findSection(cms, "home.stats") ?? { id: "", sectionKey: "", sortOrder: 0, blocks: [] });
+        return t.length > 0 ? { ...homeContent.stats, items: t.map((s) => ({ value: s.value, label: s.label })) } : homeContent.stats;
+      })()
+    : homeContent.stats;
+
+  const certsData = cms
+    ? (() => {
+        const t = transformCertifications(findSection(cms, "home.certifications") ?? { id: "", sectionKey: "", sortOrder: 0, blocks: [] });
+        return t.length > 0 ? { ...homeContent.certifications, items: t } : homeContent.certifications;
+      })()
+    : homeContent.certifications;
+
+  const contactCtaData = (() => {
+    if (!cms) return homeContent.contactCta;
+    const t = transformContactCta(findSection(cms, "home.contactCta") ?? { id: "", sectionKey: "", sortOrder: 0, blocks: [] });
+    if (!t) return homeContent.contactCta;
+    return { ...homeContent.contactCta, title: t.title, description: t.description, ctaLabel: t.ctaLabel, ctaHref: t.ctaHref, image: t.image || homeContent.contactCta.image };
+  })();
+
   return (
     <>
-      <HeroSection data={homeContent.hero} />
-      <AboutSection data={homeContent.about} />
+      <HeroSection data={heroData} />
+      <AboutSection data={aboutData} />
       <FeaturedProductsSection slugs={homeContent.featuredProductSlugs} captions={homeContent.featuredCaptions} />
       <CategoriesSection />
-      <StatsSection data={homeContent.stats} />
-      <LocationsSection data={locationsData} />
-      <CertificationsSection data={homeContent.certifications} />
+      <StatsSection data={statsData} />
+      <LocationsSection data={staticLocations} />
+      <CertificationsSection data={certsData} />
       <TestimonialsSection />
       <BlogSection />
-      <ContactCTASection data={homeContent.contactCta} />
+      <ContactCTASection data={contactCtaData} />
     </>
   );
 }

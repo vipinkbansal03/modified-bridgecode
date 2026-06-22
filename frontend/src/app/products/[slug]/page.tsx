@@ -7,7 +7,7 @@ import { ProductGallery } from "@/components/sections/ProductGallery";
 import { ProductInfoAccordion } from "@/components/sections/ProductInfoAccordion";
 import { BulkOrderPanel } from "@/components/sections/BulkOrderPanel";
 import { SimpleInquiryPanel } from "@/components/sections/SimpleInquiryPanel";
-import { BulkOrderBuilder } from "@/components/product/BulkOrderBuilder";
+import { VariantConfigurator } from "@/components/product/VariantConfigurator";
 import { BundleSection } from "@/components/sections/BundleSection";
 import { RecentlySeenSection } from "@/components/sections/RecentlySeenSection";
 import { ContactCTASection } from "@/components/sections/ContactCTASection";
@@ -143,9 +143,9 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             </div>
           </div>
 
-          {/* B2B Bulk Order Builder — shown when backend variants are available */}
+          {/* Variant PDP uses the premium configurator. Spreadsheet ordering lives in /quick-order. */}
           {apiProduct && apiProduct.variants.length > 0 ? (
-            <BulkOrderBuilder apiProduct={apiProduct} />
+            <VariantConfigurator apiProduct={apiProduct} />
           ) : product.prescriptionOptions && product.slotOptions && product.packagingOptions && product.discountTiers ? (
             <BulkOrderPanel product={product as Required<typeof product>} productId={apiProduct?.id} />
           ) : (

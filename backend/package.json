@@ -10,7 +10,8 @@
     "prisma:generate": "prisma generate --schema src/prisma/schema.prisma",
     "prisma:migrate": "prisma migrate dev --schema src/prisma/schema.prisma",
     "prisma:studio": "prisma studio --schema src/prisma/schema.prisma",
-    "prisma:seed": "ts-node src/prisma/seed.ts"
+    "prisma:seed": "ts-node src/prisma/seed.ts",
+    "verify:product-architecture": "ts-node-dev --exit-child --transpile-only src/prisma/verify-product-architecture.ts"
   },
   "prisma": {
     "schema": "src/prisma/schema.prisma"

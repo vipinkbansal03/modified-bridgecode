@@ -1,0 +1,90 @@
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "@/lib/apiClient";
+import { STALE } from "@/lib/queryConfig";
+
+export type CmsBlock = {
+  id: string;
+  blockType: string;
+  title?: string | null;
+  subtitle?: string | null;
+  description?: string | null;
+  image?: string | null;
+  icon?: string | null;
+  linkLabel?: string | null;
+  linkUrl?: string | null;
+  dataJson?: unknown;
+  sortOrder: number;
+};
+
+export type CmsSection = {
+  id: string;
+  sectionKey: string;
+  title?: string | null;
+  subtitle?: string | null;
+  description?: string | null;
+  layoutType?: string | null;
+  settingsJson?: unknown;
+  sortOrder: number;
+  blocks: CmsBlock[];
+};
+
+export type CmsPage = {
+  id: string;
+  title: string;
+  slug: string;
+  pageKey: string;
+  status: string;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  seoKeywords?: string | null;
+  ogTitle?: string | null;
+  ogDescription?: string | null;
+  ogImage?: string | null;
+  sections: CmsSection[];
+};
+
+export function useCmsPage(pageKey: string) {
+  return useQuery<CmsPage | null>({
+    queryKey: ["cms-page", pageKey],
+    queryFn: async () => {
+      try {
+        const r = await apiClient.get(`/cms/pages/key/${pageKey}`);
+        return r.data.data ?? null;
+      } catch {
+        return null;
+      }
+    },
+    staleTime: STALE.medium,
+    enabled: !!pageKey,
+  });
+}
+
+export function useCmsMenu(location: string) {
+  return useQuery({
+    queryKey: ["cms-menu", location],
+    queryFn: async () => {
+      try {
+        const r = await apiClient.get(`/cms/menus/${location}`);
+        return r.data.data ?? null;
+      } catch {
+        return null;
+      }
+    },
+    staleTime: STALE.long,
+  });
+}
+
+export function useCmsFooter() {
+  return useQuery({
+    queryKey: ["cms-footer"],
+    queryFn: async () => {
+      try {
+        const r = await apiClient.get("/cms/footer");
+        return r.data.data ?? null;
+      } catch {
+        return null;
+      }
+    },
+    staleTime: STALE.long,
+  });
+}

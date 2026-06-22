@@ -1,6 +1,7 @@
 import { prisma } from "../../config/database";
-import { AppError, getPagination, slugify } from "../../utils/apiResponse";
+import { AppError, getPagination } from "../../utils/apiResponse";
 import { sendQuoteNotification, sendContactNotification } from "../../utils/email";
+import type { Prisma } from "@prisma/client";
 
 // ─── Products ─────────────────────────────────────────────
 
@@ -66,14 +67,17 @@ export async function publicGetProduct(slug: string) {
     include: {
       category: true,
       media: { orderBy: { sortOrder: "asc" } },
+      packages: { where: { status: "ACTIVE" }, orderBy: { sortOrder: "asc" } },
       attributes: {
         include: {
           attribute: { include: { values: { where: { status: "ACTIVE" }, orderBy: { sortOrder: "asc" } } } },
+          allowedValues: { include: { attributeValue: true }, orderBy: { attributeValue: { sortOrder: "asc" } } },
         },
       },
       variants: {
         where: { status: "ACTIVE" },
         include: {
+          package: true,
           attributeValues: { include: { attribute: true, attributeValue: true } },
           prices: { include: { country: true, currency: true } },
           inventory: true,
@@ -287,14 +291,22 @@ export async function checkInventory(variantIds: string[]) {
 
 // ─── Shape mappers ────────────────────────────────────────
 
-type PrismaProduct = Awaited<ReturnType<typeof prisma.product.findFirst>> & {
-  category?: { name: string; slug: string } | null;
-  media?: { url: string; altText: string | null; type: string }[];
-  prices?: { mrp: number | string; sellingPrice: number | string; country: { code: string; name: string }; currency: { code: string; symbol: string } }[];
+type PublicProductRecord = Prisma.ProductGetPayload<{
+  include: {
+    category: { select: { name: true; slug: true } };
+    media: true;
+  };
+}> & {
+  prices?: Array<{
+    mrp: Prisma.Decimal | number;
+    sellingPrice: Prisma.Decimal | number;
+    country: { code: string; name: string };
+    currency: { code: string; symbol: string };
+  }>;
   _count?: { variants: number };
 };
 
-function toPublicProduct(p: NonNullable<PrismaProduct>) {
+function toPublicProduct(p: PublicProductRecord) {
   return {
     id: p.id,
     slug: p.slug,
@@ -322,35 +334,30 @@ function toPublicProduct(p: NonNullable<PrismaProduct>) {
   };
 }
 
-function toPublicProductDetail(p: NonNullable<Awaited<ReturnType<typeof prisma.product.findFirst>> & {
-  category: { name: string; slug: string } | null;
-  media: { url: string; altText: string | null; type: string; sortOrder: number }[];
-  attributes: {
-    attribute: {
-      id: string; name: string; slug: string;
-      values: { id: string; value: string; slug: string; sortOrder: number }[];
+type PublicProductDetailRecord = Prisma.ProductGetPayload<{
+  include: {
+    category: true;
+    media: true;
+    packages: true;
+    attributes: {
+      include: {
+        attribute: { include: { values: true } };
+        allowedValues: { include: { attributeValue: true } };
+      };
     };
-    required: boolean;
-  }[];
-  variants: {
-    id: string; title: string; sku: string | null; variantKey: string; status: string;
-    attributeValues: {
-      attribute: { id: string; name: string };
-      attributeValue: { id: string; value: string };
-    }[];
-    prices: {
-      mrp: number | string; sellingPrice: number | string;
-      country: { code: string; name: string };
-      currency: { code: string; symbol: string };
-    }[];
-    inventory: { stock: number; reservedStock: number; status: string } | null;
-  }[];
-  prices: {
-    mrp: number | string; sellingPrice: number | string; dealerPrice: number | string | null;
-    country: { code: string; name: string };
-    currency: { code: string; symbol: string };
-  }[];
-}>) {
+    variants: {
+      include: {
+        package: true;
+        attributeValues: { include: { attribute: true; attributeValue: true } };
+        prices: { include: { country: true; currency: true } };
+        inventory: true;
+      };
+    };
+    prices: { include: { country: true; currency: true } };
+  };
+}>;
+
+function toPublicProductDetail(p: PublicProductDetailRecord) {
   return {
     id: p.id,
     slug: p.slug,
@@ -370,28 +377,53 @@ function toPublicProductDetail(p: NonNullable<Awaited<ReturnType<typeof prisma.p
     seoTitle: p.seoTitle,
     seoDescription: p.seoDescription,
     seoKeywords: p.seoKeywords,
+    packages: p.packages.map((pkg) => ({
+      id: pkg.id,
+      title: pkg.title,
+      slug: pkg.slug,
+      image: pkg.image,
+      description: pkg.description,
+      sortOrder: pkg.sortOrder,
+    })),
     attributes: p.attributes.map((pa) => ({
       id: pa.attribute.id,
       name: pa.attribute.name,
       slug: pa.attribute.slug,
       required: pa.required,
-      values: pa.attribute.values,
+      values: (pa.allowedValues.length ? pa.allowedValues.map((selection) => selection.attributeValue) : pa.attribute.values).map((value) => ({
+        id: value.id,
+        value: value.value,
+        slug: value.slug,
+        sortOrder: value.sortOrder,
+        image: value.image,
+        note: value.note,
+        priceAdjustment: Number(value.priceAdjustment),
+      })),
     })),
     variants: p.variants.map((v) => ({
       id: v.id,
       title: v.title,
       sku: v.sku,
       variantKey: v.variantKey,
+      package: v.package
+        ? {
+            id: v.package.id,
+            title: v.package.title,
+            slug: v.package.slug,
+          }
+        : null,
       attributeCombination: v.attributeValues.reduce<Record<string, string>>((acc, av) => {
         acc[av.attribute.name] = av.attributeValue.value;
         return acc;
       }, {}),
       prices: v.prices.map((pr) => ({
         countryCode: pr.country.code,
+        countryName: pr.country.name,
         currencyCode: pr.currency.code,
         currencySymbol: pr.currency.symbol,
         mrp: Number(pr.mrp),
         sellingPrice: Number(pr.sellingPrice),
+        dealerPrice: pr.dealerPrice ? Number(pr.dealerPrice) : null,
       })),
       inventory: v.inventory
         ? {

@@ -161,3 +161,72 @@ export const useAdminSettings = (group?: string) =>
 
 export const useAdminLogs = (params?: { page?: number; entityType?: string; action?: string }) =>
   useQuery({ queryKey: ["admin-logs", params], queryFn: () => adminApi.get("/logs", { params }).then((r) => r.data) });
+
+// ─── CMS ─────────────────────────────────────────────────
+
+export const useAdminCmsPages = (params?: { page?: number; status?: string }) =>
+  useQuery({ queryKey: ["admin-cms-pages", params], queryFn: () => adminApi.get("/cms/pages", { params }).then((r) => r.data) });
+
+export const useAdminCmsPage = (id: string) =>
+  useQuery({ queryKey: ["admin-cms-page", id], queryFn: () => adminApi.get(`/cms/pages/${id}`).then((r) => r.data.data), enabled: !!id });
+
+export const useCreateCmsPage = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (data: unknown) => adminApi.post("/cms/pages", data).then((r) => r.data.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-cms-pages"] }) });
+};
+
+export const useUpdateCmsPage = (id: string) => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (data: unknown) => adminApi.put(`/cms/pages/${id}`, data).then((r) => r.data.data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-cms-pages"] }); qc.invalidateQueries({ queryKey: ["admin-cms-page", id] }); } });
+};
+
+export const useDeleteCmsPage = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => adminApi.delete(`/cms/pages/${id}`), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-cms-pages"] }) });
+};
+
+export const useCreateCmsSection = (pageId: string) => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (data: unknown) => adminApi.post(`/cms/pages/${pageId}/sections`, data).then((r) => r.data.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-cms-page", pageId] }) });
+};
+
+export const useUpdateCmsSection = (pageId: string) => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => adminApi.put(`/cms/sections/${id}`, data).then((r) => r.data.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-cms-page", pageId] }) });
+};
+
+export const useDeleteCmsSection = (pageId: string) => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => adminApi.delete(`/cms/sections/${id}`), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-cms-page", pageId] }) });
+};
+
+export const useReorderCmsSections = (pageId: string) => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (orderedIds: string[]) => adminApi.put(`/cms/pages/${pageId}/sections/reorder`, { orderedIds }), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-cms-page", pageId] }) });
+};
+
+export const useCreateCmsBlock = (pageId: string, sectionId: string) => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (data: unknown) => adminApi.post(`/cms/sections/${sectionId}/blocks`, data).then((r) => r.data.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-cms-page", pageId] }) });
+};
+
+export const useUpdateCmsBlock = (pageId: string) => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => adminApi.put(`/cms/blocks/${id}`, data).then((r) => r.data.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-cms-page", pageId] }) });
+};
+
+export const useDeleteCmsBlock = (pageId: string) => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => adminApi.delete(`/cms/blocks/${id}`), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-cms-page", pageId] }) });
+};
+
+export const useAdminCmsFooter = () =>
+  useQuery({ queryKey: ["admin-cms-footer"], queryFn: () => adminApi.get("/cms/footer").then((r) => r.data.data) });
+
+export const useUpsertCmsFooter = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (data: unknown) => adminApi.put("/cms/footer", data).then((r) => r.data.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-cms-footer"] }) });
+};
+
+export const useAdminCmsMenus = () =>
+  useQuery({ queryKey: ["admin-cms-menus"], queryFn: () => adminApi.get("/cms/menus").then((r) => r.data.data) });
