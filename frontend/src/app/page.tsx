@@ -55,14 +55,14 @@ export default async function HomePage() {
   const statsData = cms
     ? (() => {
         const t = transformStats(findSection(cms, "home.stats") ?? { id: "", sectionKey: "", sortOrder: 0, blocks: [] });
-        return t.length > 0 ? { ...homeContent.stats, items: t.map((s) => ({ value: s.value, label: s.label })) } : homeContent.stats;
+        return t.length > 0 ? t : homeContent.stats;
       })()
     : homeContent.stats;
 
   const certsData = cms
     ? (() => {
         const t = transformCertifications(findSection(cms, "home.certifications") ?? { id: "", sectionKey: "", sortOrder: 0, blocks: [] });
-        return t.length > 0 ? { ...homeContent.certifications, items: t } : homeContent.certifications;
+        return t.length > 0 ? t : homeContent.certifications;
       })()
     : homeContent.certifications;
 
