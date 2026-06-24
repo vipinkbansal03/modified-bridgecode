@@ -124,9 +124,9 @@ export function Footer() {
           <Logo variant="light" />
         </div>
 
-        <div className="mb-14 grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="mb-14 grid grid-cols-2 gap-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-5">
           {footerColumns.map((col) => (
-            <div key={col.heading}>
+            <div key={col.heading} className="min-w-0">
               <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label(col.heading)}</h6>
               {col.links.map((link) => {
                 const isExternal = link.href.startsWith("http");
@@ -136,7 +136,7 @@ export function Footer() {
                     href={link.href}
                     target={isExternal ? "_blank" : undefined}
                     rel={isExternal ? "noopener noreferrer" : undefined}
-                    className="block py-1.5 text-[13.5px] text-white/80 hover:text-white"
+                    className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white"
                   >
                     {label(link.label)}
                   </Link>
@@ -144,56 +144,53 @@ export function Footer() {
               })}
             </div>
           ))}
-        </div>
-
-        <div className="mb-14 grid max-w-[560px] grid-cols-1 gap-6 sm:grid-cols-2">
-          <div>
+          <div className="min-w-0">
             <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label("Export & Trade")}</h6>
-            <Link href="/contact" className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
+            <Link href="/contact" className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
               {label("Export Enquiries")}
             </Link>
-            <Link href="/contact" className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
+            <Link href="/contact" className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
               {label("Global Distributors")}
             </Link>
-            <Link href="/contact" className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
+            <Link href="/contact" className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
               {label("Shipping & Logistics")}
             </Link>
-            <Link href="/quality-certifications" className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
+            <Link href="/quality-certifications" className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
               {label("Compliance Documents")}
             </Link>
           </div>
-          <div>
+          <div className="min-w-0">
             <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label("India Office")}</h6>
-            <a href={`mailto:${ORDERS_EMAIL}`} className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
+            <a href={`mailto:${ORDERS_EMAIL}`} className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
               {ORDERS_EMAIL}
             </a>
-            <a href={`mailto:${INFO_EMAIL}`} className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
+            <a href={`mailto:${INFO_EMAIL}`} className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
               {INFO_EMAIL}
             </a>
             <span className="block py-1.5 text-[13.5px] text-white/70">{INDIA_PHONE}</span>
-            <span className="block py-1.5 text-[13.5px] text-white/70">{COMPANY_ADDRESS}</span>
+            <span className="block break-words py-1.5 text-[13.5px] text-white/70">{COMPANY_ADDRESS}</span>
           </div>
-          <div>
+          <div className="min-w-0">
             <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label("USA Office")}</h6>
-            <a href={`mailto:${USA_EMAIL}`} className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
+            <a href={`mailto:${USA_EMAIL}`} className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
               {USA_EMAIL}
             </a>
             <span className="block py-1.5 text-[13.5px] text-white/70">{USA_PHONE}</span>
-            <span className="block py-1.5 text-[13.5px] text-white/70">{USA_ADDRESS}</span>
+            <span className="block break-words py-1.5 text-[13.5px] text-white/70">{USA_ADDRESS}</span>
           </div>
         </div>
 
         <div className="flex flex-wrap items-start justify-between gap-9 border-t border-white/20 py-8">
           <div>
             <div className="mb-5 flex gap-5">
-              {socialIcons.map(({ href, label }) => (
-                <a key={label} href={href} aria-label={label} target="_blank" rel="noopener noreferrer" className="text-white">
-                  <SocialIcon label={label} />
+              {socialIcons.map(({ href, label: socialLabel }) => (
+                <a key={socialLabel} href={href} aria-label={socialLabel} target="_blank" rel="noopener noreferrer" className="text-white">
+                  <SocialIcon label={socialLabel} />
                 </a>
               ))}
             </div>
             <div className="mb-2.5 text-[13px] text-white/80">© {new Date().getFullYear()} {t("ui.footer.copyright")}</div>
-            <div className="flex gap-2 text-[13px] text-white/80">
+            <div className="flex flex-wrap gap-2 text-[13px] text-white/80">
               <Link href="/contact">{label("Legal")}</Link>
               <span>|</span>
               <Link href="/contact">{label("Privacy Policy")}</Link>
@@ -202,8 +199,8 @@ export function Footer() {
             </div>
           </div>
 
-          <div className="text-right">
-            <p className="mb-3.5 text-sm text-white">{t("ui.footer.newsletter")}</p>
+          <div className="sm:text-right">
+            <p className="mb-3.5 text-[13px] text-white sm:text-sm">{t("ui.footer.newsletter")}</p>
             <NewsletterForm tone="light" />
           </div>
         </div>

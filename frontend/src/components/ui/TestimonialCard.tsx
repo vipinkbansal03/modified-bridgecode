@@ -13,7 +13,7 @@ export function TestimonialCard({ name, quote }: TestimonialCardProps) {
     <motion.div
       whileHover={{ y: -3 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
-      className="flex h-full w-[320px] flex-none snap-start flex-col overflow-hidden rounded-md border border-line"
+      className="flex h-full w-full sm:w-[320px] flex-none snap-start flex-col overflow-hidden rounded-md border border-line"
     >
       <div className="flex h-[240px] items-center justify-center bg-ink">
         <Quote size={48} className="text-white/45" />

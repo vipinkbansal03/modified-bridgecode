@@ -1,6 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { Reveal } from "@/components/ui/Reveal";
+import { PillCTA } from "../ui/PillCTA";
 
 export interface AboutSectionData {
   heading: string;
@@ -15,20 +16,15 @@ interface AboutSectionProps {
 
 export function AboutSection({ data }: AboutSectionProps) {
   return (
-    <section className="py-24 sm:py-32">
+    <section className="py-16 lg:py-20">
       <Container>
         <Reveal>
           <div className="grid gap-12 sm:grid-cols-[0.9fr_1.1fr]">
-            <div aria-hidden="true" />
+            <div aria-hidden="true" className="hidden sm: block" />
             <div>
               <h2 className="text-[clamp(28px,3.6vw,46px)] font-light leading-[1.22] text-ink">{data.heading}</h2>
               <p className="mt-[26px] max-w-[520px] text-[16.5px] text-steel">{data.lede}</p>
-              <a href={data.ctaHref} className="pill-cta mt-8">
-                <span>{data.ctaLabel}</span>
-                <span className="arrow">
-                  <ArrowRight size={16} color="#fff" />
-                </span>
-              </a>
+              <PillCTA href={data.ctaHref} label={data.ctaLabel} className="mt-8" />
             </div>
           </div>
         </Reveal>
