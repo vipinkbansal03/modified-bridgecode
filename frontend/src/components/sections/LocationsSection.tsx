@@ -35,7 +35,7 @@ export function LocationsSection({ data }: LocationsSectionProps) {
   );
 
   return (
-    <section className="border-t border-line py-24 sm:py-32">
+    <section className="border-t border-line py-16 lg:py-20">
       <Container>
         <Reveal>
           <div className="mb-9 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-7">

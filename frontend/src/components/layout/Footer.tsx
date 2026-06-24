@@ -96,9 +96,9 @@ export function Footer() {
           <Logo variant="light" />
         </div>
 
-        <div className="mb-14 grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="mb-14 grid grid-cols-2 gap-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-5">
           {footerColumns.map((col) => (
-            <div key={col.heading}>
+            <div key={col.heading} className="min-w-0">
               <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{col.heading}</h6>
               {col.links.map((link) => {
                 const isExternal = link.href.startsWith("http");
@@ -108,7 +108,7 @@ export function Footer() {
                     href={link.href}
                     target={isExternal ? "_blank" : undefined}
                     rel={isExternal ? "noopener noreferrer" : undefined}
-                    className="block py-1.5 text-[13.5px] text-white/80 hover:text-white"
+                    className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white"
                   >
                     {link.label}
                   </Link>
@@ -116,38 +116,35 @@ export function Footer() {
               })}
             </div>
           ))}
-        </div>
-
-        <div className="mb-14 grid max-w-[560px] grid-cols-1 gap-6 sm:grid-cols-2">
-          <div>
+          <div className="min-w-0">
             <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">Export &amp; Trade</h6>
-            <Link href="/contact" className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
+            <Link href="/contact" className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
               Export Enquiries
             </Link>
-            <Link href="/contact" className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
+            <Link href="/contact" className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
               Global Distributors
             </Link>
-            <Link href="/contact" className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
+            <Link href="/contact" className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
               Shipping &amp; Logistics
             </Link>
-            <Link href="/quality-certifications" className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
+            <Link href="/quality-certifications" className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
               Compliance Documents
             </Link>
           </div>
-          <div>
+          <div className="min-w-0">
             <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">India Office</h6>
-            <a href={`mailto:${ORDERS_EMAIL}`} className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
+            <a href={`mailto:${ORDERS_EMAIL}`} className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
               {ORDERS_EMAIL}
             </a>
-            <a href={`mailto:${INFO_EMAIL}`} className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
+            <a href={`mailto:${INFO_EMAIL}`} className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
               {INFO_EMAIL}
             </a>
             <span className="block py-1.5 text-[13.5px] text-white/70">{INDIA_PHONE}</span>
             <span className="block py-1.5 text-[13.5px] text-white/70">{COMPANY_ADDRESS}</span>
           </div>
-          <div>
+          <div className="min-w-0">
             <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">USA Office</h6>
-            <a href={`mailto:${USA_EMAIL}`} className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
+            <a href={`mailto:${USA_EMAIL}`} className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
               {USA_EMAIL}
             </a>
             <span className="block py-1.5 text-[13.5px] text-white/70">{USA_PHONE}</span>
@@ -174,8 +171,8 @@ export function Footer() {
             </div>
           </div>
 
-          <div className="text-right">
-            <p className="mb-3.5 text-sm text-white">Stay up to date on the latest news and more.</p>
+          <div className="sm:text-right">
+            <p className="mb-3.5 text-[13px] sm:text-sm text-white">Stay up to date on the latest news and more.</p>
             <NewsletterForm tone="light" />
           </div>
         </div>

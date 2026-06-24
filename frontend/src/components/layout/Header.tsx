@@ -33,7 +33,8 @@ export function Header() {
     <header
       className={cn(
         "sticky top-0 z-50 bg-white transition-shadow duration-300",
-        scrolled && "shadow-[0_1px_0_rgba(0,0,0,0.03),0_12px_28px_-8px_rgba(0,0,0,0.08)]"
+        scrolled &&
+          "shadow-[0_1px_0_rgba(0,0,0,0.03),0_12px_28px_-8px_rgba(0,0,0,0.08)]",
       )}
     >
       <div className="border-b border-line">
@@ -66,7 +67,11 @@ export function Header() {
               {capsOpen && (
                 <div className="absolute left-0 top-full z-50 w-[260px] rounded-md border border-line bg-white p-3 shadow-[0_16px_32px_rgba(0,0,0,0.07)]">
                   {nav.capabilitiesMenu.map((link) => (
-                    <Link key={link.label} href={link.href} className="block rounded-md px-3 py-2.5 text-[14.5px] text-ink hover:bg-grey hover:text-brand">
+                    <Link
+                      key={link.label}
+                      href={link.href}
+                      className="block rounded-md px-3 py-2.5 text-[14.5px] text-ink hover:bg-grey hover:text-brand"
+                    >
                       {link.label}
                     </Link>
                   ))}
@@ -84,13 +89,20 @@ export function Header() {
 
           <div className="hidden items-center gap-5 lg:flex">
             <CurrencySwitcher />
-            <button aria-label="Search" className="text-ink hover:text-brand" onClick={() => setSearchOpen(true)}>
+            <button
+              aria-label="Search"
+              className="text-ink hover:text-brand"
+              onClick={() => setSearchOpen(true)}
+            >
               <Search size={18} />
             </button>
             <button aria-label="Account" className="text-ink">
               <User size={18} />
             </button>
-            <button aria-label="Quote Cart" className="relative text-ink hover:text-brand">
+            <button
+              aria-label="Quote Cart"
+              className="relative text-ink hover:text-brand"
+            >
               <ShoppingCart size={18} />
               {totals.itemCount > 0 && (
                 <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#E31E24] text-[9px] font-bold text-white">
@@ -117,18 +129,36 @@ export function Header() {
       </div>
 
       <div className="hidden border-b border-line bg-offwhite lg:block">
-        <div className="mx-auto flex h-[46px] max-w-wrap items-center gap-7 overflow-x-auto px-5 sm:px-10">
-          {nav.subNav.map((link) => (
-            <Link key={link.label} href={link.href} className="whitespace-nowrap text-[13.5px] text-steel hover:text-brand">
-              {link.label}
-            </Link>
-          ))}
+        <div className="mx-auto h-[50px] max-w-wrap px-5 sm:px-10">
+          <div className="subnav-scrollbar flex h-full items-center gap-7 overflow-x-auto pb-1">
+            {nav.subNav.map((link) => (
+              <Link
+                key={link.label}
+                href={link.href}
+                className="whitespace-nowrap text-[13.5px] text-steel hover:text-brand"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
 
+      {mobileOpen && (
+        <button
+          aria-label="Close menu overlay"
+          onClick={() => setMobileOpen(false)}
+          className="fixed inset-0 top-20 z-40 bg-black/45 backdrop-blur-[2px] lg:hidden"
+        />
+      )}
+
       <MobileMenu
         open={mobileOpen}
-        links={[nav.primary[0], ...nav.capabilitiesMenu, ...nav.primary.slice(1)]}
+        links={[
+          nav.primary[0],
+          ...nav.capabilitiesMenu,
+          ...nav.primary.slice(1),
+        ]}
         ctaLabel={nav.ctaLabel}
         ctaHref={nav.ctaHref}
         onLinkClick={() => setMobileOpen(false)}

@@ -11,7 +11,7 @@ export function ContactPageClient() {
   const [tab, setTab] = useState<"general" | "dealer">("general");
 
   return (
-    <Container className="py-16 sm:py-20">
+    <Container className="py-16 lg:py-20">
       <span className="mb-4 block text-[12.5px] font-semibold uppercase tracking-wide text-brand">Contact</span>
       <h1 className="max-w-[640px] text-[clamp(30px,4vw,44px)] font-light leading-tight text-ink">
         Get in touch with our team

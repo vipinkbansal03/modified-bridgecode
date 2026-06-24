@@ -119,9 +119,11 @@ svg {
   color: var(--ink);
   transition: border-color 0.2s ease;
 }
+
 .pill-cta:hover {
   border-color: var(--steel-2);
 }
+
 .pill-cta .arrow {
   width: 38px;
   height: 38px;
@@ -133,6 +135,7 @@ svg {
   flex: none;
   transition: background 0.2s ease;
 }
+
 .pill-cta:hover .arrow {
   background: var(--red-deep);
 }
@@ -141,12 +144,58 @@ svg {
 .slider-viewport {
   overflow-x: auto;
   scroll-behavior: smooth;
-  scroll-snap-type: x mandatory;
+  scroll-snap-type: x proximity;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
+
 .slider-viewport::-webkit-scrollbar {
   display: none;
+}
+
+.subnav-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #b8b8b8 transparent;
+}
+
+.subnav-scrollbar::-webkit-scrollbar {
+  height: 4px;
+}
+
+.subnav-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.subnav-scrollbar::-webkit-scrollbar-thumb {
+  background: #b8b8b8;
+  border-radius: 999px;
+}
+
+.subnav-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #777;
+}
+
+/* Css for Megamenu Scrollbar */
+.mega-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #bdbdbd transparent;
+}
+
+.mega-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.mega-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mega-scrollbar::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 999px;
+}
+
+.mega-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
 }
 
 @media (prefers-reduced-motion: reduce) {

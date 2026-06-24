@@ -18,7 +18,7 @@ export function CertificationsSection({ data }: CertificationsSectionProps) {
   const scrollBy = (delta: number) => viewportRef.current?.scrollBy({ left: delta, behavior: "smooth" });
 
   return (
-    <section className="py-24 sm:py-32">
+    <section className="py-12 lg:py-20">
       <Container>
         <SectionHeading
           title="Certifications"
@@ -49,12 +49,12 @@ export function CertificationsSection({ data }: CertificationsSectionProps) {
                 <Link
                   key={cert.title}
                   href={cert.href ?? "#"}
-                  className="group flex w-[320px] flex-none flex-col rounded-md border border-line bg-white px-6.5 pt-7.5 transition-[padding] duration-200 hover:pt-6 snap-start"
+                  className="group flex w-full sm:w-[320px] flex-none flex-col rounded-md border border-line bg-white px-5 sm:px-6.5 pt-7.5 transition-[padding] duration-200 hover:pt-6 snap-start"
                   style={{ minHeight: 300 }}
                 >
                   <h4 className="max-w-[200px] text-[19px] font-medium leading-snug text-ink">{cert.title}</h4>
                   <p className="mt-2 text-[13.5px] text-steel">{cert.description}</p>
-                  <div className="mt-auto -mx-6.5 flex h-[140px] items-center justify-center rounded-b-[5px] bg-grey">
+                  <div className="mt-auto -mx-5 sm:-mx-6.5 flex h-[140px] items-center justify-center rounded-b-[5px] bg-grey">
                     <Icon size={42} className="text-brand" />
                   </div>
                 </Link>

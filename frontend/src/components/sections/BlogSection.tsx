@@ -14,7 +14,7 @@ export function BlogSection() {
   const scrollBy = (delta: number) => viewportRef.current?.scrollBy({ left: delta, behavior: "smooth" });
 
   return (
-    <section id="resources" className="border-t border-line py-24 sm:py-32">
+    <section id="resources" className="border-t border-line py-16 lg:py-20">
       <Container>
         <SectionHeading
           title="From the resource center"

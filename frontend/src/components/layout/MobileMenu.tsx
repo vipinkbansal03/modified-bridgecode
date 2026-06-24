@@ -12,7 +12,13 @@ interface MobileMenuProps {
   onLinkClick: () => void;
 }
 
-export function MobileMenu({ open, links, ctaLabel, ctaHref, onLinkClick }: MobileMenuProps) {
+export function MobileMenu({
+  open,
+  links,
+  ctaLabel,
+  ctaHref,
+  onLinkClick,
+}: MobileMenuProps) {
   return (
     <AnimatePresence>
       {open && (
@@ -21,9 +27,9 @@ export function MobileMenu({ open, links, ctaLabel, ctaHref, onLinkClick }: Mobi
           animate={{ opacity: 1, height: "auto" }}
           exit={{ opacity: 0, height: 0 }}
           transition={{ duration: 0.22, ease: "easeOut" }}
-          className="absolute left-0 right-0 top-full overflow-hidden border-b border-line bg-white lg:hidden"
+          className="absolute left-0 right-0 top-full z-50 overflow-hidden border-b border-line bg-white lg:hidden"
         >
-          <div className="flex flex-col gap-1 px-5 py-4">
+          <div className="flex flex-col gap-1 px-5 py-8">
             {links.map((link) => (
               <Link
                 key={link.label}
@@ -37,7 +43,7 @@ export function MobileMenu({ open, links, ctaLabel, ctaHref, onLinkClick }: Mobi
             <Link
               href={ctaHref}
               onClick={onLinkClick}
-              className="mt-2 rounded-pill border border-ink px-4 py-2.5 text-center text-sm font-semibold text-ink"
+              className="mt-10 rounded-pill border border-ink px-4 py-2.5 text-center text-sm font-semibold text-ink"
             >
               {ctaLabel}
             </Link>
