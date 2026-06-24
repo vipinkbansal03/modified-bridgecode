@@ -118,6 +118,13 @@ export interface ApiCountry {
   isDefault: boolean;
 }
 
+export interface ApiLanguage {
+  id: string;
+  name: string;
+  code: string;
+  isDefault: boolean;
+}
+
 export interface ApiInventoryCheck {
   variantId: string;
   available: number;

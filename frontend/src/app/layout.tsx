@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AppShell } from "@/components/layout/AppShell";
 import { ReactQueryProvider } from "@/lib/reactQueryProvider";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 import { QuoteCartProvider } from "@/contexts/QuoteCartContext";
 import { TrackingProvider } from "@/providers/TrackingProvider";
 import { buildMetadata } from "@/lib/seo";
@@ -20,13 +21,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="font-sans text-ink antialiased">
         <ReactQueryProvider>
-          <CurrencyProvider>
-            <QuoteCartProvider>
-              <TrackingProvider>
-                <AppShell>{children}</AppShell>
-              </TrackingProvider>
-            </QuoteCartProvider>
-          </CurrencyProvider>
+          <LanguageProvider>
+            <CurrencyProvider>
+              <QuoteCartProvider>
+                <TrackingProvider>
+                  <AppShell>{children}</AppShell>
+                </TrackingProvider>
+              </QuoteCartProvider>
+            </CurrencyProvider>
+          </LanguageProvider>
         </ReactQueryProvider>
       </body>
     </html>

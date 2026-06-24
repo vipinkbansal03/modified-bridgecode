@@ -1,15 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { Upload, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { AdminInput, AdminTextarea, AdminSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminTextarea, AdminSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column, toastMessages } from "@/components/admin/AdminComponents";
 import { useAdminProduct, useUpdateProduct, useAdminCategories, useAdminAttributes, useAdminLanguages } from "@/hooks/admin/useAdminHooks";
-import { adminApi } from "@/services/adminApi";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { cn } from "@/utils/cn";
+import {
+  filterTranslationLanguages,
+  TranslationBlurField,
+  TranslationBlurInput,
+  TranslationEditorBanner,
+  NoTranslationLanguagesMessage,
+} from "@/components/admin/TranslationEditorUi";
 
 const TABS = ["Basic Info", "Media", "Packages", "Variants", "Pricing", "Inventory", "Translations", "SEO"];
 
@@ -68,6 +75,7 @@ type GenerateModeMap = Record<string, GenerateAttributeMode>;
 type ManualAttributeMode = "single" | "specific" | "all";
 type ManualModeMap = Record<string, ManualAttributeMode>;
 type SingleSelectionMap = Record<string, string>;
+type ProductTranslationField = "title" | "shortDescription" | "description" | "seoTitle" | "seoDescription";
 
 export default function EditProductPage() {
   const { id } = useParams<{ id: string }>();
@@ -108,6 +116,7 @@ export default function EditProductPage() {
   const [editVariantTitle, setEditVariantTitle] = useState("");
   const [editVariantMoq, setEditVariantMoq] = useState(1);
   const [editVariantStatus, setEditVariantStatus] = useState("ACTIVE");
+  const [translationLanguageId, setTranslationLanguageId] = useState("");
   const { showToast, ToastComponent } = useToast();
 
   const { data: product, isLoading, refetch } = useAdminProduct(id);
@@ -115,6 +124,15 @@ export default function EditProductPage() {
   const { data: attributes = [] } = useAdminAttributes();
   const { data: languages = [] } = useAdminLanguages();
   const updateProduct = useUpdateProduct(id);
+
+  const translationLanguages = useMemo(() => filterTranslationLanguages(languages), [languages]);
+  const activeTranslationLang = translationLanguages.find((lang) => lang.id === translationLanguageId) ?? translationLanguages[0];
+
+  useEffect(() => {
+    if (translationLanguages.length && !translationLanguageId) {
+      setTranslationLanguageId(translationLanguages[0].id);
+    }
+  }, [translationLanguages, translationLanguageId]);
 
   const attributeCatalog = useMemo(() => attributes as GlobalAttribute[], [attributes]);
   const packageRows = useMemo(() => (product?.packages ?? []) as PackageRow[], [product?.packages]);
@@ -212,6 +230,17 @@ export default function EditProductPage() {
     { key: "sellingPrice", label: "Selling Price", render: (r) => `${r.currency.symbol}${r.sellingPrice}` },
     { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} /> },
   ];
+
+  const saveProductTranslation = async (languageId: string, field: ProductTranslationField, value: string) => {
+    const trimmed = value.trim();
+    try {
+      await adminApi.put(`/translations/products/${id}/${languageId}`, { [field]: trimmed });
+      showToast(toastMessages.translationSaved);
+      refetch();
+    } catch {
+      showToast(toastMessages.translationFailed, "error");
+    }
+  };
 
   const resetPackageForm = () => {
     setEditingPackage(null);
@@ -944,69 +973,143 @@ export default function EditProductPage() {
 
         {activeTab === 6 && (
           <div className="p-6">
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Translations</h3>
-              <button
-                onClick={async () => {
-                  try {
-                    await adminApi.post("/translations/generate", { productId: id });
-                    showToast("AI generation started.");
-                    refetch();
-                  } catch {
-                    showToast("Failed.", "error");
-                  }
-                }}
-                className="flex items-center gap-1.5 rounded-md bg-[#1A1A1A] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#333]"
-              >
-                <Zap size={14} /> AI Generate All
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                {translationLanguages.length > 0 && (
+                  <div className="w-[220px]">
+                    <AdminSelect
+                      label=""
+                      value={translationLanguageId}
+                      onChange={(e) => setTranslationLanguageId(e.target.value)}
+                      options={translationLanguages.map((lang) => ({
+                        value: lang.id,
+                        label: `${lang.name} (${lang.code.toUpperCase()})`,
+                      }))}
+                    />
+                  </div>
+                )}
+                <button
+                  onClick={async () => {
+                    try {
+                      const result = await adminApi.post("/translations/generate", { productId: id });
+                      showToast(`Generated ${result.data.data.generated} translation${result.data.data.generated === 1 ? "" : "s"}.`);
+                      refetch();
+                    } catch (error) {
+                      showToast(getAdminErrorMessage(error, "Failed to generate translations."), "error");
+                    }
+                  }}
+                  className="flex items-center gap-1.5 rounded-md bg-[#1A1A1A] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#333]"
+                >
+                  <Zap size={14} /> AI Generate All
+                </button>
+              </div>
             </div>
-            <div className="space-y-4">
-              {languages.map((lang: { id: string; name: string; code: string }) => {
-                const t = product.translations?.find((tr: { languageId: string }) => tr.languageId === lang.id);
-                return (
-                  <details key={lang.id} className="overflow-hidden rounded-lg border border-[#E6E6E6]">
-                    <summary className="flex cursor-pointer items-center justify-between bg-[#F8F8F8] px-4 py-3 hover:bg-[#F2F2F2]">
-                      <span className="text-[13.5px] font-medium text-[#1A1A1A]">{lang.name} ({lang.code.toUpperCase()})</span>
-                      {t?.isAiGenerated && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] text-blue-600">AI Generated</span>}
-                    </summary>
-                    <div className="space-y-3 p-4">
-                      <AdminInput
+
+            {translationLanguages.length === 0 ? (
+              <NoTranslationLanguagesMessage />
+            ) : activeTranslationLang && product ? (
+              <div className="space-y-4">
+                <TranslationEditorBanner language={activeTranslationLang} />
+                {(() => {
+                  const t = product.translations?.find((tr: { languageId: string }) => tr.languageId === activeTranslationLang.id) as {
+                    id?: string;
+                    languageId: string;
+                    title?: string | null;
+                    shortDescription?: string | null;
+                    description?: string | null;
+                    seoTitle?: string | null;
+                    seoDescription?: string | null;
+                    isAiGenerated?: boolean;
+                    status?: string;
+                  } | undefined;
+
+                  return (
+                    <>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {t?.status && <StatusBadge status={t.status} />}
+                        {t?.isAiGenerated && (
+                          <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] text-blue-600">AI Generated</span>
+                        )}
+                      </div>
+
+                      {t?.status === "PENDING_REVIEW" && t.id && (
+                        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                          <span className="text-[12.5px] text-amber-800">This translation is pending review and is not live on the storefront yet.</span>
+                          <button
+                            onClick={async () => {
+                              try {
+                                await adminApi.put(`/translations/products/translations/${t.id}/approve`);
+                                showToast("Translation approved.");
+                                refetch();
+                              } catch {
+                                showToast("Failed to approve translation.", "error");
+                              }
+                            }}
+                            className="rounded-md border border-green-200 bg-green-50 px-3 py-1 text-[12px] font-medium text-green-700 hover:bg-green-100"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                await adminApi.put(`/translations/products/translations/${t.id}/reject`);
+                                showToast("Translation rejected.");
+                                refetch();
+                              } catch {
+                                showToast("Failed to reject translation.", "error");
+                              }
+                            }}
+                            className="rounded-md border border-red-200 bg-red-50 px-3 py-1 text-[12px] font-medium text-red-700 hover:bg-red-100"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      )}
+
+                      <TranslationBlurInput
+                        key={`title-${activeTranslationLang.id}-${t?.title ?? ""}`}
                         label="Title"
                         defaultValue={t?.title || ""}
-                        placeholder={product.title}
-                        onBlur={async (e) => {
-                          if (!t?.id) return;
-                          await adminApi.put(`/translations/${t.id}`, { title: e.target.value });
-                          showToast("Saved.");
-                        }}
+                        englishReference={product.title}
+                        onSave={(value) => saveProductTranslation(activeTranslationLang.id, "title", value)}
                       />
-                      <AdminTextarea
+                      <TranslationBlurField
+                        key={`shortDescription-${activeTranslationLang.id}-${t?.shortDescription ?? ""}`}
                         label="Short Description"
                         rows={2}
                         defaultValue={t?.shortDescription || ""}
-                        onBlur={async (e) => {
-                          if (!t?.id) return;
-                          await adminApi.put(`/translations/${t.id}`, { shortDescription: e.target.value });
-                        }}
+                        englishReference={product.shortDescription || ""}
+                        onSave={(value) => saveProductTranslation(activeTranslationLang.id, "shortDescription", value)}
                       />
-                      <AdminTextarea
+                      <TranslationBlurField
+                        key={`description-${activeTranslationLang.id}-${t?.description ?? ""}`}
                         label="Description"
                         rows={5}
                         defaultValue={t?.description || ""}
-                        onBlur={async (e) => {
-                          if (!t?.id) return;
-                          await adminApi.put(`/translations/${t.id}`, { description: e.target.value });
-                        }}
+                        englishReference={product.description || ""}
+                        onSave={(value) => saveProductTranslation(activeTranslationLang.id, "description", value)}
                       />
-                    </div>
-                  </details>
-                );
-              })}
-              {languages.length === 0 && (
-                <p className="text-[13.5px] text-[#9A9A9A]">No languages configured. Add languages in the Translations module.</p>
-              )}
-            </div>
+                      <TranslationBlurInput
+                        key={`seoTitle-${activeTranslationLang.id}-${t?.seoTitle ?? ""}`}
+                        label="SEO Title (max 60 chars)"
+                        defaultValue={t?.seoTitle || ""}
+                        englishReference={product.seoTitle || product.title}
+                        onSave={(value) => saveProductTranslation(activeTranslationLang.id, "seoTitle", value)}
+                      />
+                      <TranslationBlurField
+                        key={`seoDescription-${activeTranslationLang.id}-${t?.seoDescription ?? ""}`}
+                        label="SEO Description (max 160 chars)"
+                        rows={3}
+                        defaultValue={t?.seoDescription || ""}
+                        englishReference={product.seoDescription || product.shortDescription || ""}
+                        onSave={(value) => saveProductTranslation(activeTranslationLang.id, "seoDescription", value)}
+                      />
+                    </>
+                  );
+                })()}
+              </div>
+            ) : null}
           </div>
         )}
 

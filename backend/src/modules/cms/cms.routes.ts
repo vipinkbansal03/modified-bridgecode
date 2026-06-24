@@ -25,6 +25,7 @@ router.post("/sections/:sectionId/blocks", C.createBlock);
 router.put("/sections/:sectionId/blocks/reorder", C.reorderBlocks);
 router.put("/blocks/:id", C.updateBlock);
 router.delete("/blocks/:id", C.deleteBlock);
+router.put("/translations/:entityType/:entityId/:languageId", C.upsertCmsTranslation);
 
 // ─── Footer ───────────────────────────────────────────────────────────────────
 router.get("/footer", C.getFooter);

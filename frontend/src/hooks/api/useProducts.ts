@@ -3,6 +3,7 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { apiClient, HAS_LIVE_API, unwrapPaginated, unwrapData } from "@/lib/apiClient";
 import { qk, STALE } from "@/lib/queryConfig";
+import { useLanguageContext } from "@/contexts/LanguageContext";
 import type { ApiProductSummary, ApiProductDetail } from "@/types/api.types";
 
 // ─── Static fallbacks ─────────────────────────────────────
@@ -64,6 +65,7 @@ export interface ProductListParams {
   search?: string;
   featured?: boolean;
   sort?: "newest" | "name_asc" | "name_desc";
+  lang?: string;
 }
 
 async function fetchProducts(params: ProductListParams = {}) {
@@ -78,36 +80,41 @@ async function fetchProducts(params: ProductListParams = {}) {
     const start = (page - 1) * limit;
     return { data: searched.slice(start, start + limit), pagination: { page, limit, total: searched.length, totalPages: Math.ceil(searched.length / limit) } };
   }
-  const res = await apiClient.get("/products", { params: { page: params.page, limit: params.limit, category: params.category, search: params.search, featured: params.featured, sort: params.sort } });
+  const res = await apiClient.get("/products", { params: { page: params.page, limit: params.limit, category: params.category, search: params.search, featured: params.featured, sort: params.sort, lang: params.lang } });
   return unwrapPaginated<ApiProductSummary>(res);
 }
 
-async function fetchProduct(slug: string): Promise<ApiProductDetail | null> {
+async function fetchProduct(slug: string, lang?: string): Promise<ApiProductDetail | null> {
   if (!HAS_LIVE_API) return loadStaticProduct(slug);
-  const res = await apiClient.get(`/products/${slug}`);
+  const res = await apiClient.get(`/products/${slug}`, { params: { lang } });
   return unwrapData<ApiProductDetail>(res);
 }
 
-async function fetchFeaturedProducts() {
+async function fetchFeaturedProducts(lang?: string) {
   if (!HAS_LIVE_API) { const all = await loadStaticProducts(); return all.slice(0, 6); }
-  const res = await apiClient.get("/products", { params: { featured: true, limit: 6 } });
+  const res = await apiClient.get("/products", { params: { featured: true, limit: 6, lang } });
   return unwrapPaginated<ApiProductSummary>(res).data;
 }
 
 // ─── Hooks ────────────────────────────────────────────────
 
 export function useProducts(params: ProductListParams = {}) {
-  return useQuery({ queryKey: qk.products.list(params), queryFn: () => fetchProducts(params), staleTime: STALE.medium, placeholderData: keepPreviousData });
+  const { selectedLanguage } = useLanguageContext();
+  const localizedParams = { ...params, lang: selectedLanguage };
+  return useQuery({ queryKey: qk.products.list(localizedParams), queryFn: () => fetchProducts(localizedParams), staleTime: STALE.medium, placeholderData: keepPreviousData });
 }
 
 export function useProductsByCategory(categorySlug?: string) {
-  return useQuery({ queryKey: qk.products.byCategory(categorySlug ?? ""), queryFn: () => fetchProducts({ category: categorySlug }), enabled: Boolean(categorySlug), staleTime: STALE.medium });
+  const { selectedLanguage } = useLanguageContext();
+  return useQuery({ queryKey: qk.products.byCategory(categorySlug ?? "", selectedLanguage), queryFn: () => fetchProducts({ category: categorySlug, lang: selectedLanguage }), enabled: Boolean(categorySlug), staleTime: STALE.medium });
 }
 
 export function useProduct(slug: string) {
-  return useQuery({ queryKey: qk.products.detail(slug), queryFn: () => fetchProduct(slug), enabled: Boolean(slug), staleTime: STALE.medium });
+  const { selectedLanguage } = useLanguageContext();
+  return useQuery({ queryKey: qk.products.detail(slug, selectedLanguage), queryFn: () => fetchProduct(slug, selectedLanguage), enabled: Boolean(slug), staleTime: STALE.medium });
 }
 
 export function useFeaturedProducts() {
-  return useQuery({ queryKey: qk.products.featured(), queryFn: fetchFeaturedProducts, staleTime: STALE.long });
+  const { selectedLanguage } = useLanguageContext();
+  return useQuery({ queryKey: qk.products.featured(selectedLanguage), queryFn: () => fetchFeaturedProducts(selectedLanguage), staleTime: STALE.long });
 }

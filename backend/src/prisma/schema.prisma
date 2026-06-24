@@ -574,38 +574,51 @@ model Language {
 }
 
 model ProductTranslation {
-  id               String   @id @default(cuid())
+  id               String            @id @default(cuid())
   productId        String
-  product          Product  @relation(fields: [productId], references: [id])
+  product          Product           @relation(fields: [productId], references: [id])
   languageId       String
-  language         Language @relation(fields: [languageId], references: [id])
+  language         Language          @relation(fields: [languageId], references: [id])
   title            String?
   shortDescription String?
   description      String?
   seoTitle         String?
   seoDescription   String?
-  isAiGenerated    Boolean  @default(false)
+  isAiGenerated    Boolean           @default(false)
+  status           TranslationStatus @default(APPROVED)
   reviewedAt       DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@unique([productId, languageId])
   @@map("product_translations")
 }
 
 model CategoryTranslation {
-  id          String   @id @default(cuid())
+  id          String            @id @default(cuid())
   categoryId  String
-  category    Category @relation(fields: [categoryId], references: [id])
+  category    Category          @relation(fields: [categoryId], references: [id])
   languageId  String
-  language    Language @relation(fields: [languageId], references: [id])
+  language    Language          @relation(fields: [languageId], references: [id])
   name        String?
   description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status      TranslationStatus @default(APPROVED)
+  reviewedAt  DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
   @@unique([categoryId, languageId])
   @@map("category_translations")
+}
+
+model ProtectedKeyword {
+  id        String   @id @default(cuid())
+  term      String   @unique
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("protected_keywords")
 }
 
 model TranslationKeyword {
@@ -711,6 +724,13 @@ enum PaymentProvider {
 enum DiscountType {
   PERCENTAGE
   FIXED
+}
+
+enum TranslationStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
 }
 
 enum MediaType {

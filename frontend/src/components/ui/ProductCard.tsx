@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 
 export interface ProductCardProps {
-  image: string;
+  image?: string | null;
   title: string;
   slug: string;
   category?: string;
@@ -18,12 +18,18 @@ export interface ProductCardProps {
 }
 
 export function ProductCard({ image, title, slug, category, shortDescription, price, badge }: ProductCardProps) {
+  const imageSrc = image?.trim() || null;
+
   return (
     <motion.div whileHover={{ y: -4 }} transition={{ duration: 0.2, ease: "easeOut" }}>
       <Link href={`/products/${slug}`} className="block">
         <Card className="h-full">
           <div className="relative h-[230px] w-full bg-offwhite">
-            <Image src={image} alt={title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />
+            {imageSrc ? (
+              <Image src={imageSrc} alt={title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-steel-2">No image</div>
+            )}
             {badge && (
               <span className="absolute top-3 left-3">
                 <Badge tone="brand">{badge}</Badge>

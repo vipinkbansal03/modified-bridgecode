@@ -1,8 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import { Logo } from "@/components/ui/Logo";
 import { Container } from "@/components/ui/Container";
 import { NewsletterForm } from "@/components/forms/NewsletterForm";
+import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import { COMPANY_ADDRESS, INFO_EMAIL, ORDERS_EMAIL, USA_ADDRESS, USA_EMAIL, USA_PHONE, INDIA_PHONE, SOCIAL_LINKS } from "@/utils/constants";
+import type { StaticMessageKey } from "@/i18n/staticMessages";
 
 function SocialIcon({ label }: { label: "Facebook" | "LinkedIn" | "X" | "Instagram" }) {
   const common = { width: 19, height: 19, viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": true as const };
@@ -88,7 +92,31 @@ const socialIcons = [
   { href: SOCIAL_LINKS.instagram, label: "Instagram" as const },
 ];
 
+const footerLabelKeys: Record<string, StaticMessageKey> = {
+  "About Us": "ui.footer.about",
+  Manufacturing: "ui.footer.manufacturing",
+  "Quality Certifications": "ui.footer.qualityCertifications",
+  Mission: "ui.footer.mission",
+  Products: "ui.footer.products",
+  Capabilities: "ui.footer.capabilities",
+  "Dealers & Bulk Orders": "ui.footer.dealersBulkOrders",
+  Resources: "ui.footer.resources",
+  "Export & Trade": "ui.footer.exportTrade",
+  "Export Enquiries": "ui.footer.exportEnquiries",
+  "Global Distributors": "ui.footer.globalDistributors",
+  "Shipping & Logistics": "ui.footer.shippingLogistics",
+  "Compliance Documents": "ui.footer.complianceDocuments",
+  "India Office": "ui.footer.indiaOffice",
+  "USA Office": "ui.footer.usaOffice",
+  Legal: "ui.footer.legal",
+  "Privacy Policy": "ui.footer.privacyPolicy",
+  Sitemap: "ui.footer.sitemap",
+};
+
 export function Footer() {
+  const { t } = useStaticTranslations();
+  const label = (value: string) => footerLabelKeys[value] ? t(footerLabelKeys[value]) : value;
+
   return (
     <footer className="bg-brand text-white">
       <Container className="border-t border-white/20 pt-16">
@@ -99,7 +127,7 @@ export function Footer() {
         <div className="mb-14 grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-6">
           {footerColumns.map((col) => (
             <div key={col.heading}>
-              <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{col.heading}</h6>
+              <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label(col.heading)}</h6>
               {col.links.map((link) => {
                 const isExternal = link.href.startsWith("http");
                 return (
@@ -110,7 +138,7 @@ export function Footer() {
                     rel={isExternal ? "noopener noreferrer" : undefined}
                     className="block py-1.5 text-[13.5px] text-white/80 hover:text-white"
                   >
-                    {link.label}
+                    {label(link.label)}
                   </Link>
                 );
               })}
@@ -120,22 +148,22 @@ export function Footer() {
 
         <div className="mb-14 grid max-w-[560px] grid-cols-1 gap-6 sm:grid-cols-2">
           <div>
-            <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">Export &amp; Trade</h6>
+            <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label("Export & Trade")}</h6>
             <Link href="/contact" className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
-              Export Enquiries
+              {label("Export Enquiries")}
             </Link>
             <Link href="/contact" className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
-              Global Distributors
+              {label("Global Distributors")}
             </Link>
             <Link href="/contact" className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
-              Shipping &amp; Logistics
+              {label("Shipping & Logistics")}
             </Link>
             <Link href="/quality-certifications" className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
-              Compliance Documents
+              {label("Compliance Documents")}
             </Link>
           </div>
           <div>
-            <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">India Office</h6>
+            <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label("India Office")}</h6>
             <a href={`mailto:${ORDERS_EMAIL}`} className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
               {ORDERS_EMAIL}
             </a>
@@ -146,7 +174,7 @@ export function Footer() {
             <span className="block py-1.5 text-[13.5px] text-white/70">{COMPANY_ADDRESS}</span>
           </div>
           <div>
-            <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">USA Office</h6>
+            <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label("USA Office")}</h6>
             <a href={`mailto:${USA_EMAIL}`} className="block py-1.5 text-[13.5px] text-white/80 hover:text-white">
               {USA_EMAIL}
             </a>
@@ -164,18 +192,18 @@ export function Footer() {
                 </a>
               ))}
             </div>
-            <div className="mb-2.5 text-[13px] text-white/80">© {new Date().getFullYear()} Modern Orthodontics. All rights reserved.</div>
+            <div className="mb-2.5 text-[13px] text-white/80">© {new Date().getFullYear()} {t("ui.footer.copyright")}</div>
             <div className="flex gap-2 text-[13px] text-white/80">
-              <Link href="/contact">Legal</Link>
+              <Link href="/contact">{label("Legal")}</Link>
               <span>|</span>
-              <Link href="/contact">Privacy Policy</Link>
+              <Link href="/contact">{label("Privacy Policy")}</Link>
               <span>|</span>
-              <Link href="/contact">Sitemap</Link>
+              <Link href="/contact">{label("Sitemap")}</Link>
             </div>
           </div>
 
           <div className="text-right">
-            <p className="mb-3.5 text-sm text-white">Stay up to date on the latest news and more.</p>
+            <p className="mb-3.5 text-sm text-white">{t("ui.footer.newsletter")}</p>
             <NewsletterForm tone="light" />
           </div>
         </div>

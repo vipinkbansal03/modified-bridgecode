@@ -2,6 +2,31 @@ import { prisma } from "../../config/database";
 import { AppError, getPagination } from "../../utils/apiResponse";
 import { sendQuoteNotification, sendContactNotification } from "../../utils/email";
 import type { Prisma } from "@prisma/client";
+import { TranslationStatus } from "@prisma/client";
+
+function approvedProductTranslationInclude(languageCode: string) {
+  return {
+    translations: {
+      where: {
+        language: { code: languageCode, isEnabled: true },
+        status: TranslationStatus.APPROVED,
+      },
+      take: 1,
+    },
+  };
+}
+
+function approvedCategoryTranslationInclude(languageCode: string) {
+  return {
+    translations: {
+      where: {
+        language: { code: languageCode, isEnabled: true },
+        status: TranslationStatus.APPROVED,
+      },
+      take: 1,
+    },
+  };
+}
 
 // ─── Products ─────────────────────────────────────────────
 
@@ -12,7 +37,7 @@ export async function publicListProducts(query: {
   search?: string;
   featured?: string;
   sort?: string;       // "newest" | "name_asc" | "name_desc"
-}) {
+}, languageCode?: string) {
   const { page, limit, skip } = getPagination(query);
 
   const where = {
@@ -22,11 +47,7 @@ export async function publicListProducts(query: {
       category: { slug: query.category },
     }),
     ...(query.search && {
-      OR: [
-        { title: { contains: query.search, mode: "insensitive" as const } },
-        { productCode: { contains: query.search, mode: "insensitive" as const } },
-        { shortDescription: { contains: query.search, mode: "insensitive" as const } },
-      ],
+      OR: buildProductTextSearchOr(query.search, languageCode),
     }),
     ...(query.featured === "true" && { isFeatured: true }),
   };
@@ -45,8 +66,19 @@ export async function publicListProducts(query: {
       take: limit,
       orderBy,
       include: {
-        category: { select: { id: true, name: true, slug: true } },
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            description: true,
+            ...(languageCode && {
+              translations: approvedCategoryTranslationInclude(languageCode).translations,
+            }),
+          },
+        },
         media: { where: { type: "IMAGE" }, orderBy: { sortOrder: "asc" }, take: 3 },
+        ...(languageCode ? approvedProductTranslationInclude(languageCode) : {}),
         prices: {
           where: { status: "ACTIVE" },
           include: { country: true, currency: true },
@@ -61,12 +93,17 @@ export async function publicListProducts(query: {
   return { data: products.map(toPublicProduct), total, page, limit };
 }
 
-export async function publicGetProduct(slug: string) {
+export async function publicGetProduct(slug: string, languageCode?: string) {
   const product = await prisma.product.findFirst({
     where: { slug, status: "ACTIVE", deletedAt: null },
     include: {
-      category: true,
+      category: languageCode
+        ? {
+            include: approvedCategoryTranslationInclude(languageCode),
+          }
+        : true,
       media: { orderBy: { sortOrder: "asc" } },
+      ...(languageCode ? approvedProductTranslationInclude(languageCode) : {}),
       packages: { where: { status: "ACTIVE" }, orderBy: { sortOrder: "asc" } },
       attributes: {
         include: {
@@ -96,15 +133,47 @@ export async function publicGetProduct(slug: string) {
 
 // ─── Categories ───────────────────────────────────────────
 
-export async function publicListCategories() {
+export async function publicListCategories(languageCode?: string) {
   const cats = await prisma.category.findMany({
     where: { status: "ACTIVE", deletedAt: null },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     include: {
+      ...(languageCode ? approvedCategoryTranslationInclude(languageCode) : {}),
       _count: { select: { products: { where: { status: "ACTIVE", deletedAt: null } } } },
     },
   });
   return cats.map(toPublicCategory);
+}
+
+export async function getPublicLanguages() {
+  return prisma.language.findMany({
+    where: { isEnabled: true },
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    select: { id: true, name: true, code: true, isDefault: true },
+  });
+}
+
+export async function getPublicStaticTranslations(languageCode?: string) {
+  if (!languageCode) return {};
+
+  const language = await prisma.language.findFirst({
+    where: { code: languageCode, isEnabled: true },
+    select: { id: true },
+  });
+  if (!language) return {};
+
+  const rows = await prisma.translationKeyword.findMany({
+    where: {
+      languageId: language.id,
+      key: { startsWith: "ui." },
+    },
+    select: { key: true, value: true },
+  });
+
+  return rows.reduce<Record<string, string>>((acc, row) => {
+    if (row.value) acc[row.key] = row.value;
+    return acc;
+  }, {});
 }
 
 // ─── Quote submit ─────────────────────────────────────────
@@ -235,7 +304,56 @@ export async function submitContact(input: ContactInput) {
 
 // ─── Search ───────────────────────────────────────────────
 
-export async function publicSearch(query: string) {
+function buildProductTextSearchOr(query: string, languageCode?: string): Prisma.ProductWhereInput[] {
+  const textMatch = { contains: query, mode: "insensitive" as const };
+  const matches: Prisma.ProductWhereInput[] = [
+    { title: textMatch },
+    { productCode: textMatch },
+    { shortDescription: textMatch },
+  ];
+
+  if (languageCode) {
+    matches.push({
+      translations: {
+        some: {
+          status: TranslationStatus.APPROVED,
+          language: { code: languageCode, isEnabled: true },
+          OR: [
+            { title: textMatch },
+            { shortDescription: textMatch },
+            { description: textMatch },
+          ],
+        },
+      },
+    });
+  }
+
+  return matches;
+}
+
+function buildCategoryTextSearchOr(query: string, languageCode?: string): Prisma.CategoryWhereInput[] {
+  const textMatch = { contains: query, mode: "insensitive" as const };
+  const matches: Prisma.CategoryWhereInput[] = [
+    { name: textMatch },
+    { description: textMatch },
+  ];
+
+  if (languageCode) {
+    matches.push({
+      translations: {
+        some: {
+          status: TranslationStatus.APPROVED,
+          language: { code: languageCode, isEnabled: true },
+          OR: [{ name: textMatch }, { description: textMatch }],
+        },
+      },
+    });
+  }
+
+  return matches;
+}
+
+export async function publicSearch(query: string, languageCode?: string) {
   if (!query || query.length < 2) return { products: [], categories: [] };
 
   const [products, categories] = await Promise.all([
@@ -243,22 +361,39 @@ export async function publicSearch(query: string) {
       where: {
         status: "ACTIVE",
         deletedAt: null,
-        OR: [
-          { title: { contains: query, mode: "insensitive" } },
-          { productCode: { contains: query, mode: "insensitive" } },
-          { shortDescription: { contains: query, mode: "insensitive" } },
-        ],
+        OR: buildProductTextSearchOr(query, languageCode),
       },
       take: 8,
-      include: { media: { take: 1 }, category: { select: { name: true, slug: true } } },
+      include: {
+        media: { take: 1 },
+        ...(languageCode ? approvedProductTranslationInclude(languageCode) : {}),
+        category: {
+          select: {
+            name: true,
+            slug: true,
+            description: true,
+            ...(languageCode && {
+              translations: approvedCategoryTranslationInclude(languageCode).translations,
+            }),
+          },
+        },
+      },
     }),
     prisma.category.findMany({
-      where: { status: "ACTIVE", deletedAt: null, name: { contains: query, mode: "insensitive" } },
+      where: {
+        status: "ACTIVE",
+        deletedAt: null,
+        OR: buildCategoryTextSearchOr(query, languageCode),
+      },
       take: 4,
+      include: {
+        ...(languageCode ? approvedCategoryTranslationInclude(languageCode) : {}),
+        _count: { select: { products: { where: { status: "ACTIVE", deletedAt: null } } } },
+      },
     }),
   ]);
 
-  return { products: products.map(toPublicProduct), categories };
+  return { products: products.map(toPublicProduct), categories: categories.map(toPublicCategory) };
 }
 
 // ─── Currency / country detection ────────────────────────
@@ -291,9 +426,58 @@ export async function checkInventory(variantIds: string[]) {
 
 // ─── Shape mappers ────────────────────────────────────────
 
+type ProductTranslationSnapshot = {
+  title: string | null;
+  shortDescription: string | null;
+  description: string | null;
+  seoTitle: string | null;
+  seoDescription: string | null;
+};
+
+type CategoryTranslationSnapshot = {
+  name: string | null;
+  description: string | null;
+};
+
+type CategoryTextSource = {
+  name: string;
+  description?: string | null;
+  translations?: CategoryTranslationSnapshot[];
+};
+
+function getCategoryText(category: CategoryTextSource) {
+  const translation = category.translations?.[0];
+
+  return {
+    name: translation?.name || category.name,
+    description: translation?.description || category.description || null,
+  };
+}
+
+type ProductTextSource = {
+  title: string;
+  shortDescription: string | null;
+  description?: string | null;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  translations?: ProductTranslationSnapshot[];
+};
+
+function getProductText(product: ProductTextSource) {
+  const translation = product.translations?.[0];
+
+  return {
+    title: translation?.title || product.title,
+    shortDescription: translation?.shortDescription || product.shortDescription,
+    description: translation?.description || product.description || null,
+    seoTitle: translation?.seoTitle || product.seoTitle || null,
+    seoDescription: translation?.seoDescription || product.seoDescription || null,
+  };
+}
+
 type PublicProductRecord = Prisma.ProductGetPayload<{
   include: {
-    category: { select: { name: true; slug: true } };
+    category: { select: { name: true; slug: true; description: true } };
     media: true;
   };
 }> & {
@@ -304,18 +488,22 @@ type PublicProductRecord = Prisma.ProductGetPayload<{
     currency: { code: string; symbol: string };
   }>;
   _count?: { variants: number };
+  translations?: ProductTranslationSnapshot[];
 };
 
 function toPublicProduct(p: PublicProductRecord) {
+  const text = getProductText(p);
+  const categoryText = getCategoryText(p.category);
+
   return {
     id: p.id,
     slug: p.slug,
-    title: p.title,
+    title: text.title,
     productCode: p.productCode,
     brand: p.brand,
-    shortDescription: p.shortDescription,
+    shortDescription: text.shortDescription,
     category: {
-      name: p.category?.name ?? "",
+      name: categoryText.name,
       slug: p.category?.slug ?? "",
     },
     images: p.media?.filter((m) => m.type === "IMAGE").map((m) => m.url) ?? [],
@@ -355,27 +543,32 @@ type PublicProductDetailRecord = Prisma.ProductGetPayload<{
     };
     prices: { include: { country: true; currency: true } };
   };
-}>;
+}> & {
+  translations?: ProductTranslationSnapshot[];
+};
 
 function toPublicProductDetail(p: PublicProductDetailRecord) {
+  const text = getProductText(p);
+  const categoryText = getCategoryText(p.category);
+
   return {
     id: p.id,
     slug: p.slug,
-    title: p.title,
+    title: text.title,
     productCode: p.productCode,
     brand: p.brand,
-    shortDescription: p.shortDescription,
-    description: p.description,
+    shortDescription: text.shortDescription,
+    description: text.description,
     category: {
-      name: p.category?.name ?? "",
+      name: categoryText.name,
       slug: p.category?.slug ?? "",
     },
-    images: p.media.filter((m) => m.type === "IMAGE").map((m) => ({ url: m.url, alt: m.altText ?? p.title })),
+    images: p.media.filter((m) => m.type === "IMAGE").map((m) => ({ url: m.url, alt: m.altText ?? text.title })),
     documents: p.media.filter((m) => m.type === "PDF").map((m) => ({ url: m.url, label: m.altText ?? "Document" })),
     isFeatured: p.isFeatured,
     hasVariants: p.hasVariants,
-    seoTitle: p.seoTitle,
-    seoDescription: p.seoDescription,
+    seoTitle: text.seoTitle,
+    seoDescription: text.seoDescription,
     seoKeywords: p.seoKeywords,
     packages: p.packages.map((pkg) => ({
       id: pkg.id,
@@ -444,12 +637,14 @@ function toPublicProductDetail(p: PublicProductDetailRecord) {
   };
 }
 
-function toPublicCategory(c: { id: string; name: string; slug: string; description: string | null; image: string | null; _count: { products: number } }) {
+function toPublicCategory(c: { id: string; name: string; slug: string; description: string | null; image: string | null; translations?: CategoryTranslationSnapshot[]; _count: { products: number } }) {
+  const text = getCategoryText(c);
+
   return {
     id: c.id,
-    name: c.name,
+    name: text.name,
     slug: c.slug,
-    description: c.description,
+    description: text.description,
     image: c.image,
     productCount: c._count.products,
   };

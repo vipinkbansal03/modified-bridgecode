@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Search, X, ArrowRight } from "lucide-react";
 import { useSearch } from "@/hooks/api/useSearch";
+import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import { cn } from "@/utils/cn";
 
 interface SearchOverlayProps {
@@ -25,6 +26,7 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedQuery = useDebounce(query, 300);
   const { data, isFetching } = useSearch(debouncedQuery);
+  const { t } = useStaticTranslations();
 
   useEffect(() => {
     if (open) {
@@ -52,13 +54,13 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search products, categories…"
+            placeholder={t("ui.search.placeholder")}
             className="flex-1 border-0 bg-transparent text-[15px] text-ink outline-none placeholder:text-steel-2"
           />
           {isFetching && (
-            <span className="flex-none text-[12px] text-steel-2">Searching…</span>
+            <span className="flex-none text-[12px] text-steel-2">{t("ui.search.searching")}</span>
           )}
-          <button onClick={onClose} aria-label="Close search" className="flex-none text-steel-2 hover:text-ink">
+          <button onClick={onClose} aria-label={t("ui.search.close")} className="flex-none text-steel-2 hover:text-ink">
             <X size={18} />
           </button>
         </div>
@@ -67,13 +69,13 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
           <div className="mt-3 max-h-[70vh] overflow-y-auto rounded-xl border border-line bg-white shadow-[0_8px_32px_rgba(0,0,0,0.08)]">
             {!hasResults && !isFetching && (
               <p className="px-5 py-8 text-center text-[14px] text-steel">
-                No results for &ldquo;{debouncedQuery}&rdquo;
+                {t("ui.search.noResults", { query: debouncedQuery })}
               </p>
             )}
 
             {(data?.categories.length ?? 0) > 0 && (
               <div className="border-b border-line px-5 py-3">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-steel-2">Categories</p>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-steel-2">{t("ui.search.categories")}</p>
                 {data!.categories.map((cat) => (
                   <Link
                     key={cat.id}
@@ -90,7 +92,7 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
 
             {(data?.products.length ?? 0) > 0 && (
               <div className="px-5 py-3">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-steel-2">Products</p>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-steel-2">{t("ui.search.products")}</p>
                 {data!.products.map((product) => (
                   <Link
                     key={product.id}
@@ -120,7 +122,7 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
                   onClick={onClose}
                   className="flex items-center gap-1.5 text-[13.5px] font-medium text-brand hover:underline"
                 >
-                  See all results for &ldquo;{debouncedQuery}&rdquo; <ArrowRight size={13} />
+                  {t("ui.search.seeAll", { query: debouncedQuery })} <ArrowRight size={13} />
                 </Link>
               </div>
             )}
@@ -128,11 +130,11 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
         )}
 
         {debouncedQuery.length < 2 && (
-          <p className="mt-8 text-center text-[13.5px] text-steel">Type at least 2 characters to search</p>
+          <p className="mt-8 text-center text-[13.5px] text-steel">{t("ui.search.minChars")}</p>
         )}
       </div>
 
-      <button className="mt-auto flex-1" onClick={onClose} aria-label="Close" />
+      <button className="mt-auto flex-1" onClick={onClose} aria-label={t("ui.search.close")} />
     </div>
   );
 }

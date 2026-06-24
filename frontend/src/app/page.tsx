@@ -1,4 +1,5 @@
 import { HeroSection } from "@/components/sections/HeroSection";
+import { cookies } from "next/headers";
 import { AboutSection } from "@/components/sections/AboutSection";
 import { FeaturedProductsSection } from "@/components/sections/FeaturedProductsSection";
 import { CategoriesSection } from "@/components/sections/CategoriesSection";
@@ -20,7 +21,9 @@ const staticLocations = homeContent.locations as { subtitle: string; pins: Locat
 async function fetchCmsHomePage(): Promise<CmsPage | null> {
   try {
     const apiBase = process.env.API_BASE_URL ?? "http://localhost:4000";
-    const res = await fetch(`${apiBase}/api/cms/pages/key/home`, { next: { revalidate: 300 } });
+    const language = (await cookies()).get("language")?.value;
+    const query = language ? `?lang=${encodeURIComponent(language)}` : "";
+    const res = await fetch(`${apiBase}/api/cms/pages/key/home${query}`, { next: { revalidate: 300 } });
     if (!res.ok) return null;
     const json = await res.json();
     return json.data ?? null;
@@ -49,20 +52,25 @@ export default async function HomePage() {
     if (!cms) return homeContent.about;
     const t = transformAboutIntro(findSection(cms, "home.about") ?? { id: "", sectionKey: "", sortOrder: 0, blocks: [] });
     if (!t) return homeContent.about;
-    return { ...homeContent.about, title: t.title, description: t.description };
+    return {
+      heading: t.title,
+      lede: t.description,
+      ctaLabel: t.ctaLabel,
+      ctaHref: t.ctaHref,
+    };
   })();
 
   const statsData = cms
     ? (() => {
         const t = transformStats(findSection(cms, "home.stats") ?? { id: "", sectionKey: "", sortOrder: 0, blocks: [] });
-        return t.length > 0 ? { ...homeContent.stats, items: t.map((s) => ({ value: s.value, label: s.label })) } : homeContent.stats;
+        return t.length > 0 ? t : homeContent.stats;
       })()
     : homeContent.stats;
 
   const certsData = cms
     ? (() => {
         const t = transformCertifications(findSection(cms, "home.certifications") ?? { id: "", sectionKey: "", sortOrder: 0, blocks: [] });
-        return t.length > 0 ? { ...homeContent.certifications, items: t } : homeContent.certifications;
+        return t.length > 0 ? t : homeContent.certifications;
       })()
     : homeContent.certifications;
 
@@ -70,7 +78,13 @@ export default async function HomePage() {
     if (!cms) return homeContent.contactCta;
     const t = transformContactCta(findSection(cms, "home.contactCta") ?? { id: "", sectionKey: "", sortOrder: 0, blocks: [] });
     if (!t) return homeContent.contactCta;
-    return { ...homeContent.contactCta, title: t.title, description: t.description, ctaLabel: t.ctaLabel, ctaHref: t.ctaHref, image: t.image || homeContent.contactCta.image };
+    return {
+      heading: t.title,
+      body: t.description,
+      ctaLabel: t.ctaLabel,
+      ctaHref: t.ctaHref,
+      image: t.image || homeContent.contactCta.image,
+    };
   })();
 
   return (

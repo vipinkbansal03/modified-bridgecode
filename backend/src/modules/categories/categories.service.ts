@@ -5,7 +5,7 @@ export async function listCategories() {
   return prisma.category.findMany({
     where: { deletedAt: null },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    include: { children: { where: { deletedAt: null } }, _count: { select: { products: true } } },
+    include: { children: { where: { deletedAt: null } }, translations: { include: { language: true } }, _count: { select: { products: true } } },
   });
 }
 

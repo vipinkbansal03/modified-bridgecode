@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
+import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 import type { NavLink } from "@/types/common.types";
 
 interface MobileMenuProps {
@@ -41,6 +42,9 @@ export function MobileMenu({ open, links, ctaLabel, ctaHref, onLinkClick }: Mobi
             >
               {ctaLabel}
             </Link>
+            <div className="mt-3 flex items-center border-t border-line pt-3">
+              <LanguageSwitcher />
+            </div>
           </div>
         </motion.div>
       )}
