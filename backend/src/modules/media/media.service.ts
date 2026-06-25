@@ -10,24 +10,28 @@ export async function listMedia(query: { page?: string; limit?: string }) {
 
 export async function uploadMedia(files: Express.Multer.File[], folder = "modortho/media") {
   const results = await Promise.all(files.map((f) => uploadFile(f.path, folder)));
-  return prisma.media.createMany({
-    data: files.map((f, i) => ({
-      filename: results[i].publicId || f.filename,
-      originalName: f.originalname,
-      url: results[i].url,
-      publicId: results[i].publicId,
-      mimeType: f.mimetype,
-      size: f.size,
-      type: f.mimetype.startsWith("image") ? "IMAGE" as const : f.mimetype.includes("pdf") ? "PDF" as const : "DOCUMENT" as const,
-      storageProvider: results[i].storageProvider,
-      folder,
-    })),
-  });
+  return prisma.$transaction(
+    files.map((f, i) =>
+      prisma.media.create({
+        data: {
+          filename: results[i].publicId || f.filename,
+          originalName: f.originalname,
+          url: results[i].url,
+          publicId: results[i].publicId,
+          mimeType: f.mimetype,
+          size: f.size,
+          type: f.mimetype.startsWith("image") ? "IMAGE" as const : f.mimetype.includes("pdf") ? "PDF" as const : "DOCUMENT" as const,
+          storageProvider: results[i].storageProvider,
+          folder,
+        },
+      })
+    )
+  );
 }
 
 export async function deleteMedia(id: string) {
   const media = await prisma.media.findUnique({ where: { id } });
   if (!media) throw new AppError("Media not found.", 404);
-  await deleteFile(media.publicId || media.url, media.storageProvider);
+  await deleteFile(media.storageProvider === "LOCAL" ? media.url : media.publicId || media.url, media.storageProvider);
   return prisma.media.delete({ where: { id } });
 }

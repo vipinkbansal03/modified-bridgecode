@@ -1,5 +1,6 @@
 import { prisma } from "../../config/database";
 import { AppError, slugify } from "../../utils/apiResponse";
+import type { Status } from "@prisma/client";
 
 export const listAttributes = () =>
   prisma.attribute.findMany({
@@ -17,7 +18,7 @@ export async function createAttribute(data: { name: string }) {
   if (existing) throw new AppError("An attribute with this name already exists.", 409);
   return prisma.attribute.create({ data: { name: data.name, slug } });
 }
-export async function updateAttribute(id: string, data: { name?: string; status?: string }) {
+export async function updateAttribute(id: string, data: { name?: string; status?: Status }) {
   const e = await prisma.attribute.findUnique({ where: { id } });
   if (!e) throw new AppError("Attribute not found.", 404);
   if (data.name) {
@@ -27,7 +28,7 @@ export async function updateAttribute(id: string, data: { name?: string; status?
   }
   return prisma.attribute.update({ where: { id }, data: { ...data, ...(data.name && { slug: slugify(data.name) }) } });
 }
-export const deleteAttribute = (id: string) => prisma.attribute.update({ where: { id }, data: { status: "INACTIVE" } });
+export const deleteAttribute = (id: string) => prisma.attribute.update({ where: { id }, data: { status: "INACTIVE" as Status } });
 export async function addAttributeValue(attributeId: string, data: { value: string; sortOrder?: number }) {
   const slug = slugify(data.value);
   const existing = await prisma.attributeValue.findFirst({ where: { attributeId, slug } });
@@ -40,7 +41,7 @@ export async function addAttributeValue(attributeId: string, data: { value: stri
   }
   return prisma.attributeValue.create({ data: { attributeId, value: data.value, slug, sortOrder: data.sortOrder ?? 0 } });
 }
-export async function updateAttributeValue(id: string, data: { value?: string; sortOrder?: number; status?: string }) {
+export async function updateAttributeValue(id: string, data: { value?: string; sortOrder?: number; status?: Status }) {
   const current = await prisma.attributeValue.findUnique({ where: { id } });
   if (!current) throw new AppError("Attribute value not found.", 404);
   if (data.value) {
@@ -55,5 +56,5 @@ export async function updateAttributeValue(id: string, data: { value?: string; s
 export async function deleteAttributeValue(id: string) {
   const current = await prisma.attributeValue.findUnique({ where: { id } });
   if (!current) throw new AppError("Attribute value not found.", 404);
-  return prisma.attributeValue.update({ where: { id }, data: { status: "INACTIVE" } });
+  return prisma.attributeValue.update({ where: { id }, data: { status: "INACTIVE" as Status } });
 }

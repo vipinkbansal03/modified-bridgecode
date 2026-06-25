@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, Plus, Trash2, GripVertical, Edit2, Save, X, Languages } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Trash2, GripVertical, Edit2, Save, X, Languages, Upload } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminTextarea, AdminSelect, useToast, ConfirmModal, toastMessages } from "@/components/admin/AdminComponents";
 import {
-  useAdminCmsPage, useUpdateCmsPage, useCreateCmsSection, useUpdateCmsSection, useDeleteCmsSection,
+  useAdminCmsPage, useAdminCmsPages, useUpdateCmsPage, useCreateCmsSection, useUpdateCmsSection, useDeleteCmsSection,
   useCreateCmsBlock, useUpdateCmsBlock, useDeleteCmsBlock, useAdminLanguages,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi } from "@/services/adminApi";
@@ -100,6 +100,7 @@ function BlockRow({
     linkLabel: block.linkLabel ?? "",
     linkUrl: block.linkUrl ?? "",
   });
+  const [uploadingImage, setUploadingImage] = useState(false);
   const updateBlock = useUpdateCmsBlock(pageId);
   const { showToast } = useToast();
 
@@ -113,6 +114,34 @@ function BlockRow({
     }
   }
 
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("files", file);
+    try {
+      setUploadingImage(true);
+      const response = await adminApi.post("/media", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      const uploaded = response.data?.data;
+      const uploadedImage = Array.isArray(uploaded) ? uploaded.find((mediaItem: { url?: string }) => !!mediaItem?.url) : null;
+      if (uploadedImage?.url) {
+        setForm((f) => ({ ...f, image: uploadedImage.url }));
+        showToast("Image uploaded and set.");
+      } else {
+        showToast("Uploaded. Please copy URL from Media library.", "error");
+      }
+    } catch {
+      showToast("Upload failed.", "error");
+    } finally {
+      setUploadingImage(false);
+      e.target.value = "";
+    }
+  }
+
   return (
     <div className="rounded-lg border border-gray-100 bg-white p-3">
       <div className="mb-2 flex items-center justify-between">
@@ -120,6 +149,13 @@ function BlockRow({
           <GripVertical size={14} className="text-gray-300" />
           <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">{block.blockType}</code>
           {block.title && <span className="max-w-[220px] truncate text-sm font-medium text-gray-700">{block.title}</span>}
+          {form.image && (
+            <img
+              src={form.image}
+              alt={block.title ?? "Block image"}
+              className="h-8 w-12 rounded object-cover ring-1 ring-[#E6E6E6]"
+            />
+          )}
         </div>
         <div className="flex items-center gap-1">
           <button onClick={() => setEditing((e) => !e)} className="p-1.5 text-gray-400 transition-colors hover:text-blue-600"><Edit2 size={13} /></button>
@@ -132,7 +168,27 @@ function BlockRow({
           <AdminInput label="Title" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
           <AdminInput label="Subtitle" value={form.subtitle} onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value }))} />
           <AdminTextarea label="Description" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} rows={2} />
-          <AdminInput label="Image URL" value={form.image} onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))} />
+          <AdminInput
+            label="Image URL"
+            value={form.image}
+            onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))}
+          />
+          <div className="flex items-center gap-2">
+            <label className={cn("inline-flex cursor-pointer items-center gap-1.5 rounded bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:opacity-90", uploadingImage ? "opacity-60" : "")}>
+              <Upload size={12} />
+              {uploadingImage ? "Uploading…" : "Upload image"}
+              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploadingImage} />
+            </label>
+            {form.image && (
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, image: "" }))}
+                className="rounded border border-gray-200 px-2.5 py-1.5 text-xs text-gray-500 hover:bg-gray-50"
+              >
+                Remove
+              </button>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <AdminInput label="Icon" value={form.icon} onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))} placeholder="e.g. BadgeCheck" />
             <AdminInput label="Link Label" value={form.linkLabel} onChange={(e) => setForm((f) => ({ ...f, linkLabel: e.target.value }))} />
@@ -350,8 +406,10 @@ function CmsTranslationEditor({
 export default function CmsPageEditorPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const router = useRouter();
   const { data: page, isLoading } = useAdminCmsPage(id);
   const { data: languages = [] } = useAdminLanguages();
+  const { data: pageListData } = useAdminCmsPages({ page: 1 });
   const updatePage = useUpdateCmsPage(id);
   const createSection = useCreateCmsSection(id);
   const deleteSection = useDeleteCmsSection(id);
@@ -363,11 +421,30 @@ export default function CmsPageEditorPage() {
   const [addingSection, setAddingSection] = useState(false);
   const [newSectionKey, setNewSectionKey] = useState("");
   const [deleteSectionId, setDeleteSectionId] = useState<string | null>(null);
+  const [selectedSectionId, setSelectedSectionId] = useState("");
+  const allPages = pageListData?.data ?? [];
 
   const p = page as Page | undefined;
   const languageList = languages as Language[];
   const translationLanguages = languageList.filter((lang) => !lang.isDefault);
   const activeLanguage = translationLanguages.find((lang) => lang.id === selectedLanguageId) ?? translationLanguages[0];
+  const selectedSection = p?.sections.find((section) => section.id === selectedSectionId) ?? p?.sections[0];
+
+  useEffect(() => {
+    if (!p) return;
+    setSelectedSectionId((current) => {
+      if (!p.sections.length) return "";
+      return p.sections.some((s) => s.id === current) ? current : p.sections[0]?.id || "";
+    });
+  }, [p?.id, p?.sections.length]);
+
+  useEffect(() => {
+    if (allPages.length === 0) return;
+    const exists = allPages.some((pageOption: { id: string }) => pageOption.id === id);
+    if (!exists && allPages[0]?.id) {
+      router.replace(`/admin/cms/pages/${allPages[0].id}`);
+    }
+  }, [allPages, id, router]);
 
   function refetchPage() {
     queryClient.invalidateQueries({ queryKey: ["admin-cms-page", id] });
@@ -386,12 +463,12 @@ export default function CmsPageEditorPage() {
   }
 
   async function handleAddSection() {
-    if (!newSectionKey.trim()) return;
-    try {
-      await createSection.mutateAsync({ sectionKey: newSectionKey.trim(), sortOrder: (p?.sections.length ?? 0) });
-      showToast("Section added.", "success");
-      setAddingSection(false);
-      setNewSectionKey("");
+      if (!newSectionKey.trim()) return;
+      try {
+        await createSection.mutateAsync({ sectionKey: newSectionKey.trim(), sortOrder: (p?.sections.length ?? 0) });
+        showToast("Section added.", "success");
+        setAddingSection(false);
+        setNewSectionKey("");
     } catch {
       showToast("Failed to add section.", "error");
     }
@@ -422,6 +499,38 @@ export default function CmsPageEditorPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {editorTab === "content" && allPages.length > 0 && (
+            <div className="w-full md:w-56">
+              <AdminSelect
+                label="Page"
+                value={p.id}
+                onChange={(e) => {
+                  const pageId = e.target.value;
+                  if (pageId && pageId !== p.id) {
+                    router.push(`/admin/cms/pages/${pageId}`);
+                  }
+                }}
+                options={allPages.map((pageItem: { id: string; title: string }) => ({
+                  value: pageItem.id,
+                  label: pageItem.title,
+                }))}
+              />
+            </div>
+          )}
+          {editorTab === "content" && p.sections.length > 0 && (
+            <div className="w-full md:w-56">
+              <AdminSelect
+                label="Section"
+                value={selectedSectionId}
+                onChange={(e) => setSelectedSectionId(e.target.value)}
+                options={p.sections.map((section) => ({
+                  value: section.id,
+                  label: section.title || section.sectionKey,
+                }))}
+              />
+            </div>
+          )}
+
           <div className="inline-flex rounded-lg border border-[#E6E6E6] bg-white p-1">
             <button
               type="button"
@@ -484,9 +593,13 @@ export default function CmsPageEditorPage() {
           )}
 
           <div className="space-y-4">
-            {p.sections.map((s) => (
-              <SectionPanel key={s.id} section={s} pageId={p.id} onDelete={setDeleteSectionId} />
-            ))}
+            {selectedSection ? (
+              <SectionPanel key={selectedSection.id} section={selectedSection} pageId={p.id} onDelete={setDeleteSectionId} />
+            ) : (
+              <div className="rounded-lg border border-dashed border-[#E6E6E6] bg-white px-4 py-10 text-center text-sm text-[#9A9A9A]">
+                No section selected. Use + Add Section to create one.
+              </div>
+            )}
           </div>
 
           {addingSection ? (

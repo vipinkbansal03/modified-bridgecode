@@ -54,7 +54,7 @@ type VariantRow = {
   moq?: number | null;
   packageId?: string | null;
   package?: { id: string; title: string } | null;
-  inventory?: { stock: number } | null;
+  inventory?: { id?: string; stock: number; lowStockThreshold?: number; status?: string } | null;
   attributeValues?: {
     attributeId: string;
     attributeValueId: string;
@@ -932,7 +932,7 @@ export default function EditProductPage() {
           <div className="p-6">
             <h3 className="mb-4 text-[14px] font-semibold text-[#1A1A1A]">Inventory</h3>
             <div className="space-y-3">
-              {(variantRows.length ? variantRows : [{ id: "main", title: "Main Stock", inventory: null }]).map((v: { id: string; title: string; inventory: { id: string; stock: number; lowStockThreshold: number; status: string } | null }) => (
+              {(variantRows.length ? variantRows : [{ id: "main", title: "Main Stock", inventory: null }]).map((v) => (
                 <div key={v.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-[#E6E6E6] p-4">
                   <span className="min-w-[160px] text-[13.5px] font-medium text-[#1A1A1A]">{v.title}</span>
                   <div className="ml-auto flex items-center gap-2">
@@ -963,7 +963,7 @@ export default function EditProductPage() {
                         }}
                       />
                     </div>
-                    {v.inventory && <StatusBadge status={v.inventory.status} />}
+                    {v.inventory && <StatusBadge status={v.inventory.status || "INACTIVE"} />}
                   </div>
                 </div>
               ))}

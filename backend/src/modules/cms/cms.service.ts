@@ -3,7 +3,25 @@ import { AppError, getPagination } from "../../utils/apiResponse";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type PageBody = { title: string; slug: string; pageKey: string; status?: string; seoTitle?: string; seoDescription?: string; seoKeywords?: string; ogTitle?: string; ogDescription?: string; ogImage?: string };
+type PageBody = {
+  title: string;
+  slug: string;
+  pageKey: string;
+  status?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  seoKeywords?: string;
+  robotsTag?: string;
+  canonicalUrl?: string;
+  favicon?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImage?: string;
+  twitterTitle?: string;
+  twitterDescription?: string;
+  twitterImage?: string;
+  faqSchemaJson?: object;
+};
 type SectionBody = { sectionKey: string; title?: string; subtitle?: string; description?: string; layoutType?: string; sortOrder?: number; status?: string; settingsJson?: object };
 type BlockBody = { blockType: string; title?: string; subtitle?: string; description?: string; image?: string; icon?: string; linkLabel?: string; linkUrl?: string; sortOrder?: number; status?: string; dataJson?: object };
 type FooterBody = { title?: string; description?: string; logo?: string; address?: string; email?: string; phone?: string; socialLinksJson?: object; newsletterEnabled?: boolean; status?: string };

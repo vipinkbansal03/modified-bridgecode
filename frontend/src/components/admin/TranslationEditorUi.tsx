@@ -121,7 +121,6 @@ export function TranslationBlurField({
   rows = 1,
   defaultValue,
   englishReference,
-  fieldKey,
   onSave,
 }: {
   label: string;

@@ -61,7 +61,7 @@ export function FeaturedProductsSection({
           prices: [],
         };
       })
-      .filter(Boolean) as NonNullable<(typeof allProducts.data)[number]>[];
+      .filter(Boolean) as NonNullable<(typeof liveProducts)[number]>[];
   }, [allProducts, slugs]);
 
   if (isLoading) {
