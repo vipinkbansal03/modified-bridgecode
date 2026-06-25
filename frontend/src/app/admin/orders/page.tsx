@@ -4,7 +4,7 @@ import Link from "next/link";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { DataTable, Column, StatusBadge, Pagination, AdminSelect } from "@/components/admin/AdminComponents";
 import { useAdminOrders } from "@/hooks/admin/useAdminHooks";
-import { Eye } from "lucide-react";
+import { Eye, Plus } from "lucide-react";
 interface Order { id: string; orderNumber: string; customerName: string; customerEmail: string; total: number; status: string; paymentStatus: string; createdAt: string }
 export default function OrdersPage() {
   const [page, setPage] = useState(1);
@@ -22,9 +22,12 @@ export default function OrdersPage() {
   ];
   return (
     <AdminLayout title="Orders" breadcrumb={[{ label: "Orders" }]}>
-      <div className="mb-5 flex gap-2.5">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-2.5">
+        <div className="flex gap-2.5">
         <div className="w-[180px]"><AdminSelect label="" options={[{ value: "", label: "All Status" }, { value: "PENDING", label: "Pending" }, { value: "CONFIRMED", label: "Confirmed" }, { value: "SHIPPED", label: "Shipped" }, { value: "DELIVERED", label: "Delivered" }, { value: "CANCELLED", label: "Cancelled" }]} value={status} onChange={(e) => setStatus(e.target.value)} /></div>
         <div className="w-[180px]"><AdminSelect label="" options={[{ value: "", label: "All Payments" }, { value: "PENDING", label: "Pending" }, { value: "PAID", label: "Paid" }, { value: "FAILED", label: "Failed" }, { value: "REFUNDED", label: "Refunded" }]} value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)} /></div>
+        </div>
+        <Link href="/admin/orders/create" className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"><Plus size={14} /> Create Order</Link>
       </div>
       <DataTable<Order> columns={columns} data={data?.data || []} rowKey="id" isLoading={isLoading} emptyMessage="No orders yet." />
       <Pagination page={page} totalPages={data?.pagination?.totalPages || 1} onPageChange={setPage} />

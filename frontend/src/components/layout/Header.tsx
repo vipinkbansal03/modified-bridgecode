@@ -9,7 +9,8 @@ import { MobileMenu } from "@/components/layout/MobileMenu";
 import { CurrencySwitcher } from "@/components/ui/CurrencySwitcher";
 import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 import { SearchOverlay } from "@/components/ui/SearchOverlay";
-import { useQuoteCart } from "@/contexts/QuoteCartContext";
+import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
+import { useCart } from "@/contexts/CartContext";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import navigation from "@/data/navigation.json";
 import { cn } from "@/utils/cn";
@@ -35,7 +36,9 @@ export function Header() {
   const [capsOpen, setCapsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const { totals } = useQuoteCart();
+  const [accountOpen, setAccountOpen] = useState(false);
+  const { totals, openCart } = useCart();
+  const { currentCustomer, logout } = useCustomerAuth();
   const { t } = useStaticTranslations();
   const label = (value: string) => navLabelKeys[value] ? t(navLabelKeys[value]) : value;
 
@@ -113,12 +116,55 @@ export function Header() {
             >
               <Search size={18} />
             </button>
-            <button aria-label={t("ui.nav.account")} className="text-ink">
-              <User size={18} />
-            </button>
+            <div className="relative">
+              {currentCustomer ? (
+                <>
+                  <button
+                    aria-label={t("ui.nav.account")}
+                    className="flex items-center gap-1.5 text-ink hover:text-brand"
+                    onClick={() => setAccountOpen((value) => !value)}
+                  >
+                    <User size={18} />
+                    <ChevronDown size={11} className={cn("opacity-60 transition-transform", accountOpen && "rotate-180")} />
+                  </button>
+                  {accountOpen && (
+                    <div className="absolute right-0 top-full z-50 mt-4 w-[230px] rounded-md border border-line bg-white p-3 shadow-[0_16px_32px_rgba(0,0,0,0.07)]">
+                      <div className="border-b border-line pb-3">
+                        <p className="truncate text-[13.5px] font-semibold text-ink">
+                          {currentCustomer.firstName} {currentCustomer.lastName}
+                        </p>
+                        <p className="mt-0.5 truncate text-[12px] text-steel">{currentCustomer.email}</p>
+                      </div>
+                      <Link
+                        href="/account"
+                        onClick={() => setAccountOpen(false)}
+                        className="mt-2 block rounded-md px-3 py-2 text-[13.5px] text-ink hover:bg-grey hover:text-brand"
+                      >
+                        My Account
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAccountOpen(false);
+                          logout();
+                        }}
+                        className="mt-2 w-full rounded-md px-3 py-2 text-left text-[13.5px] text-ink hover:bg-grey hover:text-brand"
+                      >
+                        Log out
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <Link aria-label={t("ui.nav.account")} href="/login" className="text-ink hover:text-brand">
+                  <User size={18} />
+                </Link>
+              )}
+            </div>
             <button
-              aria-label={t("ui.nav.quoteCart")}
+              aria-label="Open cart"
               className="relative text-ink hover:text-brand"
+              onClick={openCart}
             >
               <ShoppingCart size={18} />
               {totals.itemCount > 0 && (

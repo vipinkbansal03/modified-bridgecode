@@ -4,9 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient, HAS_LIVE_API, unwrapData } from "@/lib/apiClient";
 import { qk, STALE } from "@/lib/queryConfig";
 import { useLanguageContext } from "@/contexts/LanguageContext";
+import { useCurrencyContext } from "@/contexts/CurrencyContext";
 import type { ApiCategory } from "@/types/api.types";
 
-async function fetchCategories(lang?: string): Promise<ApiCategory[]> {
+async function fetchCategories(lang?: string, countryCode?: string): Promise<ApiCategory[]> {
   if (!HAS_LIVE_API) {
     const { default: raw } = await import("@/data/categories.json");
     return (raw as Record<string, unknown>[]).map((c) => {
@@ -24,7 +25,7 @@ async function fetchCategories(lang?: string): Promise<ApiCategory[]> {
       };
     });
   }
-  const res = await apiClient.get("/categories", { params: { lang } });
+  const res = await apiClient.get("/categories", { params: { lang, countryCode } });
   // Backend returns { name } — add title alias for component compat
   const cats = unwrapData<ApiCategory[]>(res);
   return cats.map((c) => ({ ...c, title: c.name }));
@@ -33,5 +34,6 @@ async function fetchCategories(lang?: string): Promise<ApiCategory[]> {
 /** All active categories. Stale time: 30 min (categories change rarely). */
 export function useCategories() {
   const { selectedLanguage } = useLanguageContext();
-  return useQuery({ queryKey: qk.categories.all(selectedLanguage), queryFn: () => fetchCategories(selectedLanguage), staleTime: STALE.long });
+  const { selectedCountryCode } = useCurrencyContext();
+  return useQuery({ queryKey: qk.categories.all(selectedLanguage, selectedCountryCode), queryFn: () => fetchCategories(selectedLanguage, selectedCountryCode), staleTime: STALE.long });
 }

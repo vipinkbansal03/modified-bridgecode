@@ -4,9 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient, HAS_LIVE_API, unwrapData } from "@/lib/apiClient";
 import { qk, STALE } from "@/lib/queryConfig";
 import { useLanguageContext } from "@/contexts/LanguageContext";
+import { useCurrencyContext } from "@/contexts/CurrencyContext";
 import type { ApiSearchResult } from "@/types/api.types";
 
-async function fetchSearch(q: string, lang?: string): Promise<ApiSearchResult> {
+async function fetchSearch(q: string, lang?: string, countryCode?: string): Promise<ApiSearchResult> {
   if (!HAS_LIVE_API || q.length < 2) {
     // Client-side search over static data when no backend
     const { default: products } = await import("@/data/products.json");
@@ -24,16 +25,17 @@ async function fetchSearch(q: string, lang?: string): Promise<ApiSearchResult> {
       }));
     return { products: matched, categories: [] };
   }
-  const res = await apiClient.get("/search", { params: { q, lang } });
+  const res = await apiClient.get("/search", { params: { q, lang, countryCode } });
   return unwrapData<ApiSearchResult>(res);
 }
 
 /** Live site search. Enabled only when query is at least 2 characters. */
 export function useSearch(query: string) {
   const { selectedLanguage } = useLanguageContext();
+  const { selectedCountryCode } = useCurrencyContext();
   return useQuery({
-    queryKey: qk.search.query(query, selectedLanguage),
-    queryFn: () => fetchSearch(query, selectedLanguage),
+    queryKey: qk.search.query(query, selectedLanguage, selectedCountryCode),
+    queryFn: () => fetchSearch(query, selectedLanguage, selectedCountryCode),
     enabled: query.length >= 2,
     staleTime: STALE.short,
   });

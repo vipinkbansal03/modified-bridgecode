@@ -22,6 +22,7 @@ router.get("/cms/footer", CMS.publicFooter);
 router.get("/products", C.listProducts);
 router.get("/products/:slug", C.getProduct);
 router.get("/categories", C.listCategories);
+router.get("/categories/:slug", C.getCategory);
 router.get("/languages", C.getLanguages);
 router.get("/translations/static", C.getStaticTranslations);
 router.get("/search", C.search);

@@ -105,6 +105,23 @@ async function main() {
     create: { provider: "STRIPE", displayName: "Stripe", isEnabled: false, countries: [] },
   });
 
+  // Default customer pricing tiers. Country/pricing mappings are intentionally empty until admins enable them.
+  await prisma.tier.upsert({
+    where: { name: "Silver" },
+    update: { status: "ACTIVE", sortOrder: 1 },
+    create: { name: "Silver", status: "ACTIVE", sortOrder: 1 },
+  });
+  await prisma.tier.upsert({
+    where: { name: "Gold" },
+    update: { status: "ACTIVE", sortOrder: 2 },
+    create: { name: "Gold", status: "ACTIVE", sortOrder: 2 },
+  });
+  await prisma.tier.upsert({
+    where: { name: "Platinum" },
+    update: { status: "ACTIVE", sortOrder: 3 },
+    create: { name: "Platinum", status: "ACTIVE", sortOrder: 3 },
+  });
+
   const molarTubeCategory = await prisma.category.upsert({
     where: { slug: "molar-tubes" },
     update: { name: "Molar Tubes", status: "ACTIVE" },
@@ -181,13 +198,30 @@ async function main() {
   ] as const;
 
   const attributesByName = new Map<string, { id: string; valuesByValue: Map<string, { id: string; attributeId: string; value: string }> }>();
+  const duplicateSeedAttributeNames = attributeCatalog
+    .map((attribute) => attribute.name)
+    .filter((name, index, names) => names.indexOf(name) !== index);
+  if (duplicateSeedAttributeNames.length) {
+    throw new Error(`Duplicate seeded attribute names: ${duplicateSeedAttributeNames.join(", ")}`);
+  }
 
   for (const attributeData of attributeCatalog) {
-    const attribute = await prisma.attribute.upsert({
-      where: { slug: slugify(attributeData.name) },
-      update: { name: attributeData.name, sortOrder: attributeData.sortOrder, status: "ACTIVE" },
-      create: { name: attributeData.name, slug: slugify(attributeData.name), sortOrder: attributeData.sortOrder, status: "ACTIVE" },
+    const existingAttributes = await prisma.attribute.findMany({
+      where: { name: attributeData.name },
+      orderBy: { createdAt: "asc" },
     });
+    if (existingAttributes.length > 1) {
+      throw new Error(`Multiple existing attributes found with name "${attributeData.name}". Resolve duplicates before seeding.`);
+    }
+
+    const attribute = existingAttributes[0]
+      ? await prisma.attribute.update({
+          where: { id: existingAttributes[0].id },
+          data: { name: attributeData.name, sortOrder: attributeData.sortOrder, status: "ACTIVE" },
+        })
+      : await prisma.attribute.create({
+          data: { name: attributeData.name, role: "DROPDOWN", sortOrder: attributeData.sortOrder, status: "ACTIVE" },
+        });
 
     const valuesByValue = new Map<string, { id: string; attributeId: string; value: string }>();
     for (let i = 0; i < attributeData.values.length; i++) {

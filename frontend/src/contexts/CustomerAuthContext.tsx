@@ -1,0 +1,115 @@
+"use client";
+
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { customerApi } from "@/services/customerApi";
+
+export interface CustomerSession {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone?: string | null;
+  status?: string;
+  tierId?: string | null;
+  defaultCountryId?: string | null;
+}
+
+type RegisterPayload = {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  phone?: string;
+};
+
+interface CustomerAuthContextType {
+  currentCustomer: CustomerSession | null;
+  token: string | null;
+  isLoading: boolean;
+  login: (email: string, password: string, redirectTo?: string) => Promise<void>;
+  register: (payload: RegisterPayload, redirectTo?: string) => Promise<void>;
+  logout: () => void;
+}
+
+const CustomerAuthContext = createContext<CustomerAuthContextType | null>(null);
+
+function isUsableCustomerToken(token: string) {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1] ?? "")) as { scope?: string; exp?: number };
+    if (payload.scope !== "customer") return false;
+    if (payload.exp && payload.exp * 1000 < Date.now()) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function storeCustomerSession(token: string, customer: CustomerSession) {
+  localStorage.setItem("customer_token", token);
+  localStorage.setItem("customer_profile", JSON.stringify(customer));
+}
+
+export function CustomerAuthProvider({ children }: { children: ReactNode }) {
+  const [currentCustomer, setCurrentCustomer] = useState<CustomerSession | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    const storedToken = localStorage.getItem("customer_token");
+    const storedProfile = localStorage.getItem("customer_profile");
+
+    if (storedToken && storedProfile && isUsableCustomerToken(storedToken)) {
+      try {
+        setToken(storedToken);
+        setCurrentCustomer(JSON.parse(storedProfile) as CustomerSession);
+      } catch {
+        localStorage.removeItem("customer_token");
+        localStorage.removeItem("customer_profile");
+      }
+    } else {
+      localStorage.removeItem("customer_token");
+      localStorage.removeItem("customer_profile");
+    }
+    setIsLoading(false);
+  }, []);
+
+  const login = async (email: string, password: string, redirectTo = "/") => {
+    const res = await customerApi.post("/auth/login", { email, password });
+    const { token: jwt, customer } = res.data.data as { token: string; customer: CustomerSession };
+    storeCustomerSession(jwt, customer);
+    setToken(jwt);
+    setCurrentCustomer(customer);
+    router.push(redirectTo);
+  };
+
+  const register = async (payload: RegisterPayload, redirectTo = "/") => {
+    const res = await customerApi.post("/auth/register", payload);
+    const { token: jwt, customer } = res.data.data as { token: string; customer: CustomerSession };
+    storeCustomerSession(jwt, customer);
+    setToken(jwt);
+    setCurrentCustomer(customer);
+    router.push(redirectTo);
+  };
+
+  const logout = () => {
+    localStorage.removeItem("customer_token");
+    localStorage.removeItem("customer_profile");
+    setToken(null);
+    setCurrentCustomer(null);
+    router.push("/login");
+  };
+
+  return (
+    <CustomerAuthContext.Provider value={{ currentCustomer, token, isLoading, login, register, logout }}>
+      {children}
+    </CustomerAuthContext.Provider>
+  );
+}
+
+export function useCustomerAuth() {
+  const ctx = useContext(CustomerAuthContext);
+  if (!ctx) throw new Error("useCustomerAuth must be used inside CustomerAuthProvider");
+  return ctx;
+}

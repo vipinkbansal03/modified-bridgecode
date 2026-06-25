@@ -9,13 +9,13 @@ export const qk = {
   products: {
     all: ["products"] as const,
     list: (params?: object) => ["products", "list", params] as const,
-    detail: (slug: string, language?: string) => ["products", "detail", slug, language] as const,
-    featured: (language?: string) => ["products", "featured", language] as const,
-    byCategory: (slug: string, language?: string) => ["products", "category", slug, language] as const,
+    detail: (slug: string, language?: string, countryCode?: string) => ["products", "detail", slug, language, countryCode] as const,
+    featured: (language?: string, countryCode?: string) => ["products", "featured", language, countryCode] as const,
+    byCategory: (slug: string, language?: string, countryCode?: string) => ["products", "category", slug, language, countryCode] as const,
     search: (q: string) => ["products", "search", q] as const,
   },
   categories: {
-    all: (language?: string) => ["categories", language] as const,
+    all: (language?: string, countryCode?: string) => ["categories", language, countryCode] as const,
   },
   currencies: {
     all: ["currencies"] as const,
@@ -33,7 +33,7 @@ export const qk = {
     check: (ids: string[]) => ["inventory", ...ids] as const,
   },
   search: {
-    query: (q: string, language?: string) => ["search", q, language] as const,
+    query: (q: string, language?: string, countryCode?: string) => ["search", q, language, countryCode] as const,
   },
 } as const;
 

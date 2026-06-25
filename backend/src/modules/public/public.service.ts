@@ -37,15 +37,19 @@ export async function publicListProducts(query: {
   search?: string;
   featured?: string;
   sort?: string;       // "newest" | "name_asc" | "name_desc"
+  countryCode?: string;
 }, languageCode?: string) {
   const { page, limit, skip } = getPagination(query);
+  const country = await resolvePublicCountry(query.countryCode);
 
-  const where = {
+  const where: Prisma.ProductWhereInput = {
     status: "ACTIVE" as const,
     deletedAt: null as null,
-    ...(query.category && {
-      category: { slug: query.category },
-    }),
+    countries: { some: { countryId: country.id, enabled: true } },
+    category: {
+      ...(query.category ? { slug: query.category } : {}),
+      countries: { some: { countryId: country.id, enabled: true } },
+    },
     ...(query.search && {
       OR: buildProductTextSearchOr(query.search, languageCode),
     }),
@@ -80,11 +84,17 @@ export async function publicListProducts(query: {
         media: { where: { type: "IMAGE" }, orderBy: { sortOrder: "asc" }, take: 3 },
         ...(languageCode ? approvedProductTranslationInclude(languageCode) : {}),
         prices: {
-          where: { status: "ACTIVE" },
+          where: { status: "ACTIVE", countryId: country.id },
           include: { country: true, currency: true },
           take: 5,
         },
-        _count: { select: { variants: true } },
+        _count: {
+          select: {
+            variants: {
+              where: { status: "ACTIVE", countries: { some: { countryId: country.id, enabled: true } } },
+            },
+          },
+        },
       },
     }),
     prisma.product.count({ where }),
@@ -93,9 +103,16 @@ export async function publicListProducts(query: {
   return { data: products.map(toPublicProduct), total, page, limit };
 }
 
-export async function publicGetProduct(slug: string, languageCode?: string) {
+export async function publicGetProduct(slug: string, languageCode?: string, countryCode?: string) {
+  const country = await resolvePublicCountry(countryCode);
   const product = await prisma.product.findFirst({
-    where: { slug, status: "ACTIVE", deletedAt: null },
+    where: {
+      slug,
+      status: "ACTIVE",
+      deletedAt: null,
+      countries: { some: { countryId: country.id, enabled: true } },
+      category: { countries: { some: { countryId: country.id, enabled: true } } },
+    },
     include: {
       category: languageCode
         ? {
@@ -112,16 +129,16 @@ export async function publicGetProduct(slug: string, languageCode?: string) {
         },
       },
       variants: {
-        where: { status: "ACTIVE" },
+        where: { status: "ACTIVE", countries: { some: { countryId: country.id, enabled: true } } },
         include: {
           package: true,
           attributeValues: { include: { attribute: true, attributeValue: true } },
-          prices: { include: { country: true, currency: true } },
+          prices: { where: { status: "ACTIVE", countryId: country.id }, include: { country: true, currency: true } },
           inventory: true,
         },
       },
       prices: {
-        where: { status: "ACTIVE" },
+        where: { status: "ACTIVE", countryId: country.id },
         include: { country: true, currency: true },
       },
     },
@@ -133,16 +150,59 @@ export async function publicGetProduct(slug: string, languageCode?: string) {
 
 // ─── Categories ───────────────────────────────────────────
 
-export async function publicListCategories(languageCode?: string) {
+export async function publicListCategories(languageCode?: string, countryCode?: string) {
+  const country = await resolvePublicCountry(countryCode);
   const cats = await prisma.category.findMany({
-    where: { status: "ACTIVE", deletedAt: null },
+    where: {
+      status: "ACTIVE",
+      deletedAt: null,
+      countries: { some: { countryId: country.id, enabled: true } },
+    },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     include: {
       ...(languageCode ? approvedCategoryTranslationInclude(languageCode) : {}),
-      _count: { select: { products: { where: { status: "ACTIVE", deletedAt: null } } } },
+      _count: {
+        select: {
+          products: {
+            where: {
+              status: "ACTIVE",
+              deletedAt: null,
+              countries: { some: { countryId: country.id, enabled: true } },
+            },
+          },
+        },
+      },
     },
   });
   return cats.map(toPublicCategory);
+}
+
+export async function publicGetCategory(slug: string, languageCode?: string, countryCode?: string) {
+  const country = await resolvePublicCountry(countryCode);
+  const category = await prisma.category.findFirst({
+    where: {
+      slug,
+      status: "ACTIVE",
+      deletedAt: null,
+      countries: { some: { countryId: country.id, enabled: true } },
+    },
+    include: {
+      ...(languageCode ? approvedCategoryTranslationInclude(languageCode) : {}),
+      _count: {
+        select: {
+          products: {
+            where: {
+              status: "ACTIVE",
+              deletedAt: null,
+              countries: { some: { countryId: country.id, enabled: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!category) throw new AppError("Category not found.", 404);
+  return toPublicCategory(category);
 }
 
 export async function getPublicLanguages() {
@@ -353,14 +413,17 @@ function buildCategoryTextSearchOr(query: string, languageCode?: string): Prisma
   return matches;
 }
 
-export async function publicSearch(query: string, languageCode?: string) {
+export async function publicSearch(query: string, languageCode?: string, countryCode?: string) {
   if (!query || query.length < 2) return { products: [], categories: [] };
+  const country = await resolvePublicCountry(countryCode);
 
   const [products, categories] = await Promise.all([
     prisma.product.findMany({
       where: {
         status: "ACTIVE",
         deletedAt: null,
+        countries: { some: { countryId: country.id, enabled: true } },
+        category: { countries: { some: { countryId: country.id, enabled: true } } },
         OR: buildProductTextSearchOr(query, languageCode),
       },
       take: 8,
@@ -383,12 +446,23 @@ export async function publicSearch(query: string, languageCode?: string) {
       where: {
         status: "ACTIVE",
         deletedAt: null,
+        countries: { some: { countryId: country.id, enabled: true } },
         OR: buildCategoryTextSearchOr(query, languageCode),
       },
       take: 4,
       include: {
         ...(languageCode ? approvedCategoryTranslationInclude(languageCode) : {}),
-        _count: { select: { products: { where: { status: "ACTIVE", deletedAt: null } } } },
+        _count: {
+          select: {
+            products: {
+              where: {
+                status: "ACTIVE",
+                deletedAt: null,
+                countries: { some: { countryId: country.id, enabled: true } },
+              },
+            },
+          },
+        },
       },
     }),
   ]);
@@ -411,6 +485,22 @@ export async function getPublicCountries() {
 }
 
 // ─── Inventory availability check ────────────────────────
+
+async function resolvePublicCountry(countryCode?: string) {
+  const normalizedCode = countryCode?.trim().toUpperCase();
+  const country = normalizedCode
+    ? await prisma.country.findFirst({
+        where: { code: normalizedCode, status: "ACTIVE" },
+        select: { id: true, code: true },
+      })
+    : await prisma.country.findFirst({
+        where: { isDefault: true, status: "ACTIVE" },
+        select: { id: true, code: true },
+      });
+
+  if (!country) throw new AppError("Selected country is not available.", 400);
+  return country;
+}
 
 export async function checkInventory(variantIds: string[]) {
   const records = await prisma.inventory.findMany({
@@ -581,7 +671,6 @@ function toPublicProductDetail(p: PublicProductDetailRecord) {
     attributes: p.attributes.map((pa) => ({
       id: pa.attribute.id,
       name: pa.attribute.name,
-      slug: pa.attribute.slug,
       required: pa.required,
       values: (pa.allowedValues.length ? pa.allowedValues.map((selection) => selection.attributeValue) : pa.attribute.values).map((value) => ({
         id: value.id,

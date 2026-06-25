@@ -4,6 +4,8 @@ import { ReactQueryProvider } from "@/lib/reactQueryProvider";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { QuoteCartProvider } from "@/contexts/QuoteCartContext";
+import { CustomerAuthProvider } from "@/contexts/CustomerAuthContext";
+import { CartProvider } from "@/contexts/CartContext";
 import { TrackingProvider } from "@/providers/TrackingProvider";
 import { buildMetadata } from "@/lib/seo";
 import seoData from "@/data/seo.json";
@@ -24,9 +26,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <LanguageProvider>
             <CurrencyProvider>
               <QuoteCartProvider>
-                <TrackingProvider>
-                  <AppShell>{children}</AppShell>
-                </TrackingProvider>
+                <CustomerAuthProvider>
+                  <CartProvider>
+                    <TrackingProvider>
+                      <AppShell>{children}</AppShell>
+                    </TrackingProvider>
+                  </CartProvider>
+                </CustomerAuthProvider>
               </QuoteCartProvider>
             </CurrencyProvider>
           </LanguageProvider>

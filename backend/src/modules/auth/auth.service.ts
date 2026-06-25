@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import type { SignOptions } from "jsonwebtoken";
 import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
 import { LoginInput } from "./auth.validation";
@@ -18,8 +19,10 @@ export async function loginService(input: LoginInput) {
     throw new AppError("Your account is inactive. Contact an administrator.", 401);
   }
 
+  const jwtExpiresIn = (process.env.JWT_EXPIRES_IN || "7d") as SignOptions["expiresIn"];
+
   const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET!, {
-    expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+    expiresIn: jwtExpiresIn,
   });
 
   // Update last login

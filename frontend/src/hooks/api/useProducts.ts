@@ -4,6 +4,7 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { apiClient, HAS_LIVE_API, unwrapPaginated, unwrapData } from "@/lib/apiClient";
 import { qk, STALE } from "@/lib/queryConfig";
 import { useLanguageContext } from "@/contexts/LanguageContext";
+import { useCurrencyContext } from "@/contexts/CurrencyContext";
 import type { ApiProductSummary, ApiProductDetail } from "@/types/api.types";
 
 // ─── Static fallbacks ─────────────────────────────────────
@@ -66,6 +67,7 @@ export interface ProductListParams {
   featured?: boolean;
   sort?: "newest" | "name_asc" | "name_desc";
   lang?: string;
+  countryCode?: string;
 }
 
 async function fetchProducts(params: ProductListParams = {}) {
@@ -80,19 +82,19 @@ async function fetchProducts(params: ProductListParams = {}) {
     const start = (page - 1) * limit;
     return { data: searched.slice(start, start + limit), pagination: { page, limit, total: searched.length, totalPages: Math.ceil(searched.length / limit) } };
   }
-  const res = await apiClient.get("/products", { params: { page: params.page, limit: params.limit, category: params.category, search: params.search, featured: params.featured, sort: params.sort, lang: params.lang } });
+  const res = await apiClient.get("/products", { params: { page: params.page, limit: params.limit, category: params.category, search: params.search, featured: params.featured, sort: params.sort, lang: params.lang, countryCode: params.countryCode } });
   return unwrapPaginated<ApiProductSummary>(res);
 }
 
-async function fetchProduct(slug: string, lang?: string): Promise<ApiProductDetail | null> {
+async function fetchProduct(slug: string, lang?: string, countryCode?: string): Promise<ApiProductDetail | null> {
   if (!HAS_LIVE_API) return loadStaticProduct(slug);
-  const res = await apiClient.get(`/products/${slug}`, { params: { lang } });
+  const res = await apiClient.get(`/products/${slug}`, { params: { lang, countryCode } });
   return unwrapData<ApiProductDetail>(res);
 }
 
-async function fetchFeaturedProducts(lang?: string) {
+async function fetchFeaturedProducts(lang?: string, countryCode?: string) {
   if (!HAS_LIVE_API) { const all = await loadStaticProducts(); return all.slice(0, 6); }
-  const res = await apiClient.get("/products", { params: { featured: true, limit: 6, lang } });
+  const res = await apiClient.get("/products", { params: { featured: true, limit: 6, lang, countryCode } });
   return unwrapPaginated<ApiProductSummary>(res).data;
 }
 
@@ -100,21 +102,25 @@ async function fetchFeaturedProducts(lang?: string) {
 
 export function useProducts(params: ProductListParams = {}) {
   const { selectedLanguage } = useLanguageContext();
-  const localizedParams = { ...params, lang: selectedLanguage };
+  const { selectedCountryCode } = useCurrencyContext();
+  const localizedParams = { ...params, lang: selectedLanguage, countryCode: selectedCountryCode };
   return useQuery({ queryKey: qk.products.list(localizedParams), queryFn: () => fetchProducts(localizedParams), staleTime: STALE.medium, placeholderData: keepPreviousData });
 }
 
 export function useProductsByCategory(categorySlug?: string) {
   const { selectedLanguage } = useLanguageContext();
-  return useQuery({ queryKey: qk.products.byCategory(categorySlug ?? "", selectedLanguage), queryFn: () => fetchProducts({ category: categorySlug, lang: selectedLanguage }), enabled: Boolean(categorySlug), staleTime: STALE.medium });
+  const { selectedCountryCode } = useCurrencyContext();
+  return useQuery({ queryKey: qk.products.byCategory(categorySlug ?? "", selectedLanguage, selectedCountryCode), queryFn: () => fetchProducts({ category: categorySlug, lang: selectedLanguage, countryCode: selectedCountryCode }), enabled: Boolean(categorySlug), staleTime: STALE.medium });
 }
 
 export function useProduct(slug: string) {
   const { selectedLanguage } = useLanguageContext();
-  return useQuery({ queryKey: qk.products.detail(slug, selectedLanguage), queryFn: () => fetchProduct(slug, selectedLanguage), enabled: Boolean(slug), staleTime: STALE.medium });
+  const { selectedCountryCode } = useCurrencyContext();
+  return useQuery({ queryKey: qk.products.detail(slug, selectedLanguage, selectedCountryCode), queryFn: () => fetchProduct(slug, selectedLanguage, selectedCountryCode), enabled: Boolean(slug), staleTime: STALE.medium });
 }
 
 export function useFeaturedProducts() {
   const { selectedLanguage } = useLanguageContext();
-  return useQuery({ queryKey: qk.products.featured(selectedLanguage), queryFn: () => fetchFeaturedProducts(selectedLanguage), staleTime: STALE.long });
+  const { selectedCountryCode } = useCurrencyContext();
+  return useQuery({ queryKey: qk.products.featured(selectedLanguage, selectedCountryCode), queryFn: () => fetchFeaturedProducts(selectedLanguage, selectedCountryCode), staleTime: STALE.long });
 }

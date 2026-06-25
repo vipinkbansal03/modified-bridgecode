@@ -10,8 +10,9 @@ export async function listMedia(query: { page?: string; limit?: string }) {
 
 export async function uploadMedia(files: Express.Multer.File[], folder = "modortho/media") {
   const results = await Promise.all(files.map((f) => uploadFile(f.path, folder)));
-  return prisma.media.createMany({
-    data: files.map((f, i) => ({
+  return prisma.$transaction(
+    files.map((f, i) => prisma.media.create({
+      data: {
       filename: results[i].publicId || f.filename,
       originalName: f.originalname,
       url: results[i].url,
@@ -21,8 +22,9 @@ export async function uploadMedia(files: Express.Multer.File[], folder = "modort
       type: f.mimetype.startsWith("image") ? "IMAGE" as const : f.mimetype.includes("pdf") ? "PDF" as const : "DOCUMENT" as const,
       storageProvider: results[i].storageProvider,
       folder,
+      },
     })),
-  });
+  );
 }
 
 export async function deleteMedia(id: string) {

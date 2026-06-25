@@ -65,18 +65,23 @@ function cmsTranslationKey(entityType: CmsEntityType, entityId: string, field: s
   return `cms.${entityType}.${entityId}.${field}`;
 }
 
+function getStringField(source: Record<string, unknown> | null | undefined, field: string) {
+  const value = source?.[field];
+  return typeof value === "string" ? value : null;
+}
+
 function collectMissingFields(
-  source: Record<string, string | null | undefined>,
-  translation: Record<string, string | null | undefined> | null | undefined,
+  source: Record<string, unknown>,
+  translation: Record<string, unknown> | null | undefined,
   fields: readonly string[],
   getTranslationValue: (field: string) => string | null | undefined,
 ) {
   const missing: CoverageMissingField[] = [];
 
   for (const field of fields) {
-    const englishValue = source[field];
+    const englishValue = getStringField(source, field);
     if (!hasValue(englishValue)) continue;
-    const translated = translation?.[field] ?? getTranslationValue(field);
+    const translated = getStringField(translation, field) ?? getTranslationValue(field);
     if (!hasValue(translated)) {
       missing.push({
         field,

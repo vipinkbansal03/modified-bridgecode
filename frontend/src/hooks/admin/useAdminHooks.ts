@@ -9,6 +9,13 @@ export const useAdminProducts = (params?: { page?: number; limit?: number; searc
 export const useAdminProduct = (id: string) =>
   useQuery({ queryKey: ["admin-product", id], queryFn: () => adminApi.get(`/products/${id}`).then((r) => r.data.data), enabled: !!id });
 
+export const useAdminProductCountries = (productId?: string) =>
+  useQuery({
+    queryKey: ["admin-product-countries", productId],
+    queryFn: () => adminApi.get(`/products/${productId}/countries`).then((r) => r.data.data),
+    enabled: !!productId,
+  });
+
 export const useCreateProduct = () => {
   const qc = useQueryClient();
   return useMutation({ mutationFn: (data: unknown) => adminApi.post("/products", data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }) });
@@ -24,6 +31,109 @@ export const useDeleteProduct = () => {
   return useMutation({ mutationFn: (id: string) => adminApi.delete(`/products/${id}`).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }) });
 };
 
+export const useUpdateProductCountries = (productId?: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (items: { countryId: string; enabled: boolean }[]) =>
+      adminApi.put(`/products/${productId}/countries`, { items }).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product-countries", productId] }),
+  });
+};
+
+export const useAdminProductAttributes = (productId?: string) =>
+  useQuery({
+    queryKey: ["admin-product-attributes", productId],
+    queryFn: () => adminApi.get(`/products/${productId}/attributes`).then((r) => r.data.data),
+    enabled: !!productId,
+  });
+
+export const useAdminProductTierPricing = (productId?: string) =>
+  useQuery({
+    queryKey: ["admin-product-tier-pricing", productId],
+    queryFn: () => adminApi.get(`/products/${productId}/tier-pricing`).then((r) => r.data.data),
+    enabled: !!productId,
+  });
+
+export const useCreateProductTierPricing = (productId?: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: unknown) => adminApi.post(`/products/${productId}/tier-pricing`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product-tier-pricing", productId] }),
+  });
+};
+
+export const useUpdateProductTierPricing = (productId?: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) =>
+      adminApi.put(`/products/${productId}/tier-pricing/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product-tier-pricing", productId] }),
+  });
+};
+
+export const useDeleteProductTierPricing = (productId?: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.delete(`/products/${productId}/tier-pricing/${id}`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product-tier-pricing", productId] }),
+  });
+};
+
+export const useAdminProductMoqPricing = (productId?: string) =>
+  useQuery({
+    queryKey: ["admin-product-moq-pricing", productId],
+    queryFn: () => adminApi.get(`/products/${productId}/moq-pricing`).then((r) => r.data.data),
+    enabled: !!productId,
+  });
+
+export const useCreateProductMoqPricing = (productId?: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: unknown) => adminApi.post(`/products/${productId}/moq-pricing`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product-moq-pricing", productId] }),
+  });
+};
+
+export const useUpdateProductMoqPricing = (productId?: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) =>
+      adminApi.put(`/products/${productId}/moq-pricing/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product-moq-pricing", productId] }),
+  });
+};
+
+export const useDeleteProductMoqPricing = (productId?: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.delete(`/products/${productId}/moq-pricing/${id}`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product-moq-pricing", productId] }),
+  });
+};
+
+export const useAssignProductAttributes = (productId?: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (attributes: { attributeId: string; required: boolean; gridAxis?: "ROW" | "COLUMN" | null; allowedValueIds: string[] }[]) =>
+      adminApi.post(`/products/${productId}/attributes`, { attributes }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-product-attributes", productId] });
+      qc.invalidateQueries({ queryKey: ["admin-product", productId] });
+    },
+  });
+};
+
+export const useRemoveProductAttribute = (productId?: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (attributeId: string) => adminApi.delete(`/products/${productId}/attributes/${attributeId}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-product-attributes", productId] });
+      qc.invalidateQueries({ queryKey: ["admin-product", productId] });
+    },
+  });
+};
+
 export const useGenerateVariants = (productId: string) => {
   const qc = useQueryClient();
   return useMutation({ mutationFn: () => adminApi.post(`/products/${productId}/generate-variants`).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product", productId] }) });
@@ -33,6 +143,13 @@ export const useGenerateVariants = (productId: string) => {
 
 export const useAdminCategories = () =>
   useQuery({ queryKey: ["admin-categories"], queryFn: () => adminApi.get("/categories").then((r) => r.data.data) });
+
+export const useAdminCategoryCountries = (categoryId?: string) =>
+  useQuery({
+    queryKey: ["admin-category-countries", categoryId],
+    queryFn: () => adminApi.get(`/categories/${categoryId}/countries`).then((r) => r.data.data),
+    enabled: !!categoryId,
+  });
 
 export const useCreateCategory = () => {
   const qc = useQueryClient();
@@ -44,10 +161,177 @@ export const useUpdateCategory = () => {
   return useMutation({ mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => adminApi.put(`/categories/${id}`, data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-categories"] }) });
 };
 
+export const useReorderCategories = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (items: { id: string; sortOrder: number }[]) =>
+      adminApi.put("/categories/reorder", { items }).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-categories"] }),
+  });
+};
+
+export const useUpdateCategoryCountries = (categoryId?: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (items: { countryId: string; enabled: boolean }[]) =>
+      adminApi.put(`/categories/${categoryId}/countries`, { items }).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-category-countries", categoryId] }),
+  });
+};
+
+export const useAdminCollections = (params?: { page?: number; status?: string }) =>
+  useQuery({ queryKey: ["admin-collections", params], queryFn: () => adminApi.get("/collections", { params }).then((r) => r.data) });
+
+export const useAdminCollection = (id?: string) =>
+  useQuery({ queryKey: ["admin-collection", id], queryFn: () => adminApi.get(`/collections/${id}`).then((r) => r.data.data), enabled: !!id });
+
+export const useCreateCollection = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (data: unknown) => adminApi.post("/collections", data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-collections"] }) });
+};
+
+export const useUpdateCollection = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => adminApi.put(`/collections/${id}`, data).then((r) => r.data),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["admin-collections"] });
+      qc.invalidateQueries({ queryKey: ["admin-collection", vars.id] });
+    },
+  });
+};
+
+export const useDeleteCollection = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => adminApi.delete(`/collections/${id}`).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-collections"] }) });
+};
+
+export const useAdminCollectionCountries = (collectionId?: string) =>
+  useQuery({
+    queryKey: ["admin-collection-countries", collectionId],
+    queryFn: () => adminApi.get(`/collections/${collectionId}/countries`).then((r) => r.data.data),
+    enabled: !!collectionId,
+  });
+
+export const useUpdateCollectionCountries = (collectionId?: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (items: { countryId: string; enabled: boolean }[]) => adminApi.put(`/collections/${collectionId}/countries`, { items }).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-collection-countries", collectionId] }),
+  });
+};
+
 // ─── Attributes ───────────────────────────────────────────
 
 export const useAdminAttributes = () =>
-  useQuery({ queryKey: ["admin-attributes"], queryFn: () => adminApi.get("/attributes").then((r) => r.data.data) });
+  useQuery({
+    queryKey: ["admin-attributes"],
+    queryFn: () => adminApi.get("/attributes").then((r) => r.data.data),
+  });
+
+export const useAdminAttribute = (id: string) =>
+  useQuery({
+    queryKey: ["admin-attribute", id],
+    queryFn: () => adminApi.get(`/attributes/${id}`).then((r) => r.data.data),
+    enabled: !!id,
+  });
+
+export const useCreateAttribute = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: unknown) => adminApi.post("/attributes", data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-attributes"] }),
+  });
+};
+
+export const useUpdateAttribute = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) =>
+      adminApi.put(`/attributes/${id}`, data).then((r) => r.data),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["admin-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-attribute", vars.id] });
+    },
+  });
+};
+
+export const useDeleteAttribute = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.delete(`/attributes/${id}`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-attributes"] }),
+  });
+};
+
+export const useReorderAttributes = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (items: { id: string; sortOrder: number }[]) =>
+      adminApi.put("/attributes/reorder", { items }).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-attributes"] }),
+  });
+};
+
+export const useCreateAttributeValue = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ attributeId, ...data }: { attributeId: string } & Record<string, unknown>) =>
+      adminApi.post(`/attributes/${attributeId}/values`, data).then((r) => r.data),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["admin-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-attribute", vars.attributeId] });
+    },
+  });
+};
+
+export const useUpdateAttributeValue = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      attributeId,
+      valueId,
+      ...data
+    }: {
+      attributeId: string;
+      valueId: string;
+    } & Record<string, unknown>) =>
+      adminApi.put(`/attributes/${attributeId}/values/${valueId}`, data).then((r) => r.data),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["admin-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-attribute", vars.attributeId] });
+    },
+  });
+};
+
+export const useDeleteAttributeValue = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ attributeId, valueId }: { attributeId: string; valueId: string }) =>
+      adminApi.delete(`/attributes/${attributeId}/values/${valueId}`).then((r) => r.data),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["admin-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-attribute", vars.attributeId] });
+    },
+  });
+};
+
+export const useReorderAttributeValues = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      attributeId,
+      items,
+    }: {
+      attributeId: string;
+      items: { id: string; sortOrder: number }[];
+    }) => adminApi.put(`/attributes/${attributeId}/values/reorder`, { items }).then((r) => r.data),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["admin-attribute", vars.attributeId] });
+      qc.invalidateQueries({ queryKey: ["admin-attributes"] });
+    },
+  });
+};
 
 // ─── Inventory ────────────────────────────────────────────
 
@@ -72,6 +356,27 @@ export const useAdminCurrencies = () =>
 export const useAdminCountries = () =>
   useQuery({ queryKey: ["admin-countries"], queryFn: () => adminApi.get("/countries").then((r) => r.data.data) });
 
+export const useAdminTiers = () =>
+  useQuery({ queryKey: ["admin-tiers"], queryFn: () => adminApi.get("/tiers").then((r) => r.data.data) });
+
+export const useAdminCustomers = (params?: { page?: number; limit?: number; search?: string }) =>
+  useQuery({ queryKey: ["admin-customers", params], queryFn: () => adminApi.get("/customers", { params }).then((r) => r.data) });
+
+export const useAdminCustomer = (id?: string) =>
+  useQuery({ queryKey: ["admin-customer", id], queryFn: () => adminApi.get(`/customers/${id}`).then((r) => r.data.data), enabled: !!id });
+
+export const useUpdateCustomerTier = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, tierId }: { id: string; tierId: string | null }) =>
+      adminApi.put(`/customers/${id}/tier`, { tierId }).then((r) => r.data),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["admin-customers"] });
+      qc.invalidateQueries({ queryKey: ["admin-customer", vars.id] });
+    },
+  });
+};
+
 // ─── Coupons ─────────────────────────────────────────────
 
 export const useAdminCoupons = (params?: { page?: number }) =>
@@ -83,6 +388,27 @@ export const useCreateCoupon = () => {
 };
 
 // ─── Quotes ──────────────────────────────────────────────
+
+export const useAdminDiscounts = (params?: { page?: number; type?: string; status?: string }) =>
+  useQuery({ queryKey: ["admin-discounts", params], queryFn: () => adminApi.get("/discounts", { params }).then((r) => r.data) });
+
+export const useCreateDiscount = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (data: unknown) => adminApi.post("/discounts", data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-discounts"] }) });
+};
+
+export const useUpdateDiscount = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => adminApi.put(`/discounts/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-discounts"] }),
+  });
+};
+
+export const useDeleteDiscount = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => adminApi.delete(`/discounts/${id}`).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-discounts"] }) });
+};
 
 export const useAdminQuotes = (params?: { page?: number; status?: string }) =>
   useQuery({ queryKey: ["admin-quotes", params], queryFn: () => adminApi.get("/quotes", { params }).then((r) => r.data) });
@@ -98,10 +424,38 @@ export const useUpdateQuoteStatus = () => {
   });
 };
 
+export const useUpdateQuoteReview = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => adminApi.put(`/quotes/${id}/review`, data).then((r) => r.data),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["admin-quotes"] });
+      qc.invalidateQueries({ queryKey: ["admin-quote", vars.id] });
+    },
+  });
+};
+
+export const useConvertQuoteToOrder = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.post(`/quotes/${id}/convert-to-order`).then((r) => r.data),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["admin-quotes"] });
+      qc.invalidateQueries({ queryKey: ["admin-quote", id] });
+      qc.invalidateQueries({ queryKey: ["admin-orders"] });
+    },
+  });
+};
+
 // ─── Orders ──────────────────────────────────────────────
 
 export const useAdminOrders = (params?: { page?: number; status?: string; paymentStatus?: string }) =>
   useQuery({ queryKey: ["admin-orders", params], queryFn: () => adminApi.get("/orders", { params }).then((r) => r.data) });
+
+export const useCreateAdminOrder = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (data: unknown) => adminApi.post("/orders", data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-orders"] }) });
+};
 
 export const useOrderAnalytics = () =>
   useQuery({ queryKey: ["admin-order-analytics"], queryFn: () => adminApi.get("/orders/analytics").then((r) => r.data.data), staleTime: 5 * 60 * 1000 });

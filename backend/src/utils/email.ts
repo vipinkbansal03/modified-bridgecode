@@ -28,6 +28,36 @@ export interface ContactEmailData {
   type?: string;
 }
 
+export async function sendCustomerPasswordResetEmail(data: { email: string; firstName: string; resetToken: string }): Promise<void> {
+  if (!resend) return;
+
+  const resetBaseUrl = process.env.CUSTOMER_PASSWORD_RESET_URL || `${process.env.FRONTEND_URL || "http://localhost:3000"}/reset-password`;
+  const separator = resetBaseUrl.includes("?") ? "&" : "?";
+  const resetUrl = `${resetBaseUrl}${separator}token=${encodeURIComponent(data.resetToken)}`;
+
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to: [data.email],
+      subject: "Reset your Modern Orthodontics password",
+      text: [
+        `Dear ${data.firstName},`,
+        "",
+        "We received a request to reset your Modern Orthodontics account password.",
+        "Use the link below to choose a new password. This link expires in 1 hour.",
+        "",
+        resetUrl,
+        "",
+        "If you did not request this, you can ignore this email.",
+        "",
+        "Modern Orthodontics Team",
+      ].join("\n"),
+    });
+  } catch (err) {
+    logger.error("Failed to send customer password reset email:", err);
+  }
+}
+
 export async function sendQuoteNotification(data: QuoteEmailData): Promise<void> {
   if (!resend) return;
 
@@ -77,6 +107,39 @@ export async function sendQuoteNotification(data: QuoteEmailData): Promise<void>
     });
   } catch (err) {
     logger.error("Failed to send quote email:", err);
+  }
+}
+
+export async function sendQuoteConvertedEmail(data: {
+  customerEmail: string;
+  customerName: string;
+  quoteNumber: string;
+  orderNumber: string;
+  total: number;
+}): Promise<void> {
+  if (!resend) return;
+
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to: [data.customerEmail],
+      subject: `Your quote was approved - ${data.quoteNumber}`,
+      text: [
+        `Dear ${data.customerName},`,
+        "",
+        "Your quote has been approved and converted into an order.",
+        "",
+        `Quote Reference: ${data.quoteNumber}`,
+        `Order Number: ${data.orderNumber}`,
+        `Order Total: ₹${data.total}`,
+        "",
+        "Our team will follow up with the next steps.",
+        "",
+        "Modern Orthodontics Team",
+      ].join("\n"),
+    });
+  } catch (err) {
+    logger.error("Failed to send quote conversion email:", err);
   }
 }
 

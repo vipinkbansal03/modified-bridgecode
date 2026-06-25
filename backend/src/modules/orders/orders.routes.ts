@@ -6,6 +6,7 @@ const router = Router();
 router.use(protect);
 
 router.get("/", C.list);
+router.post("/", C.create);
 router.get("/analytics", C.analytics);
 router.get("/:id", C.getOne);
 router.put("/:id/status", C.updateStatus);

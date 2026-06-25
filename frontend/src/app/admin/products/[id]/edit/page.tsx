@@ -1,13 +1,33 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useFormik } from "formik";
 import * as Yup from "yup";
-import { Upload, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil } from "lucide-react";
+import { Upload, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminTextarea, AdminSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column, toastMessages } from "@/components/admin/AdminComponents";
-import { useAdminProduct, useUpdateProduct, useAdminCategories, useAdminAttributes, useAdminLanguages } from "@/hooks/admin/useAdminHooks";
+import {
+  useAdminProduct,
+  useUpdateProduct,
+  useAdminCategories,
+  useAdminAttributes,
+  useAdminAttribute,
+  useAdminLanguages,
+  useAdminProductCountries,
+  useUpdateProductCountries,
+  useAdminProductAttributes,
+  useAdminProductTierPricing,
+  useCreateProductTierPricing,
+  useDeleteProductTierPricing,
+  useAdminProductMoqPricing,
+  useCreateProductMoqPricing,
+  useDeleteProductMoqPricing,
+  useAssignProductAttributes,
+  useRemoveProductAttribute,
+  useAdminCountries,
+  useAdminTiers,
+} from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { cn } from "@/utils/cn";
 import {
@@ -18,7 +38,7 @@ import {
   NoTranslationLanguagesMessage,
 } from "@/components/admin/TranslationEditorUi";
 
-const TABS = ["Basic Info", "Media", "Packages", "Variants", "Pricing", "Inventory", "Translations", "SEO"];
+const TABS = ["Basic Info", "Media", "Packages", "Variants", "Pricing", "Inventory", "Translations", "Product Attributes", "Country Availability", "SEO"];
 
 const basicSchema = Yup.object({
   title: Yup.string().required("Required"),
@@ -54,7 +74,15 @@ type VariantRow = {
   moq?: number | null;
   packageId?: string | null;
   package?: { id: string; title: string } | null;
-  inventory?: { stock: number } | null;
+  inventory?: { id?: string; stock: number; lowStockThreshold?: number | null; status?: string | null } | null;
+  prices?: {
+    id: string;
+    countryId?: string | null;
+    country?: { id: string; name: string; code: string } | null;
+    mrp?: string | number | null;
+    sellingPrice?: string | number | null;
+    currency?: { symbol?: string | null; code?: string | null } | null;
+  }[];
   attributeValues?: {
     attributeId: string;
     attributeValueId: string;
@@ -66,8 +94,62 @@ type VariantRow = {
 type GlobalAttribute = {
   id: string;
   name: string;
+  role?: AttributeRole;
   values: { id: string; value: string }[];
 };
+
+type AttributeRole = "DROPDOWN" | "X_GRID" | "Y_GRID";
+type GridRole = "ROW" | "COLUMN" | null;
+type GridAxis = "ROW" | "COLUMN";
+
+type AttributeValueDetail = {
+  id: string;
+  value: string;
+  gridRole?: GridRole;
+  countryId?: string | null;
+  country?: { id: string; name: string; code: string } | null;
+  moq?: number | null;
+  tierPrice?: string | number | null;
+  dealerPrice?: string | number | null;
+};
+
+type ProductAttributeMapping = {
+  id: string;
+  productId: string;
+  attributeId: string;
+  required: boolean;
+  gridAxis?: GridAxis | null;
+  attribute: {
+    id: string;
+    name: string;
+    role: AttributeRole;
+    values: AttributeValueDetail[];
+  };
+  allowedValues: {
+    attributeValueId: string;
+    attributeValue: AttributeValueDetail;
+  }[];
+};
+
+type VariantGridCell = {
+  columnValue: AttributeValueDetail;
+  variant: VariantRow | null;
+};
+
+type VariantGridDisplayRow = {
+  value: AttributeValueDetail;
+  cells: VariantGridCell[];
+};
+
+type VariantGridState =
+  | { mode: "flat"; reasons: string[] }
+  | {
+      mode: "grid";
+      reasons: [];
+      rowAxis: ProductAttributeMapping;
+      columnAxis: ProductAttributeMapping;
+      rows: VariantGridDisplayRow[];
+    };
 
 type SelectionMap = Record<string, string[]>;
 type GenerateAttributeMode = "all" | "specific" | "skip";
@@ -76,6 +158,170 @@ type ManualAttributeMode = "single" | "specific" | "all";
 type ManualModeMap = Record<string, ManualAttributeMode>;
 type SingleSelectionMap = Record<string, string>;
 type ProductTranslationField = "title" | "shortDescription" | "description" | "seoTitle" | "seoDescription";
+
+type CountryAvailability = {
+  id: string;
+  name: string;
+  code: string;
+  status: string;
+  enabled: boolean;
+  currency?: { symbol?: string | null; code?: string | null } | null;
+};
+
+type BulkVariantDraft = {
+  price?: string;
+  stock?: string;
+};
+
+type BulkCountryOption = {
+  id: string;
+  label: string;
+  currencySymbol?: string | null;
+};
+
+type TierRow = { id: string; name: string; status: string };
+type PricingRuleRow = {
+  id: string;
+  tier?: { id: string; name: string } | null;
+  country?: { id: string; name: string; code: string } | null;
+  variant?: { id: string; title: string; sku?: string | null } | null;
+  minQuantity?: number | null;
+  discountPercent?: string | number | null;
+  fixedPrice?: string | number | null;
+};
+
+type RuleDraft = {
+  tierId: string;
+  countryId: string;
+  variantId: string;
+  minQuantity: string;
+  mode: "discount" | "fixed";
+  discountPercent: string;
+  fixedPrice: string;
+};
+
+const emptyRuleDraft: RuleDraft = {
+  tierId: "",
+  countryId: "",
+  variantId: "",
+  minQuantity: "10",
+  mode: "discount",
+  discountPercent: "",
+  fixedPrice: "",
+};
+
+const formatVariantPrice = (variant: VariantRow) => {
+  const price = variant.prices?.[0];
+  const amount = price?.sellingPrice ?? price?.mrp;
+  if (amount === null || amount === undefined || amount === "") return "No price";
+  return `${price?.currency?.symbol ?? ""}${amount}`;
+};
+
+const getVariantPriceForCountry = (variant: VariantRow, countryId?: string) =>
+  countryId ? variant.prices?.find((price) => price.countryId === countryId || price.country?.id === countryId) ?? null : variant.prices?.[0] ?? null;
+
+function VariantGridMatrix({
+  gridState,
+  onEditVariant,
+  bulkEditMode,
+  bulkCountryId,
+  rowErrors,
+  getDraft,
+  onDraftChange,
+}: {
+  gridState: Extract<VariantGridState, { mode: "grid" }>;
+  onEditVariant: (variant: VariantRow) => void;
+  bulkEditMode?: boolean;
+  bulkCountryId?: string;
+  rowErrors?: Record<string, string>;
+  getDraft?: (variant: VariantRow) => Required<BulkVariantDraft>;
+  onDraftChange?: (variantId: string, patch: BulkVariantDraft) => void;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-lg border border-[#E6E6E6]">
+      <table className="min-w-full border-collapse text-left text-[13px]">
+        <thead className="bg-[#FAFAFA] text-[12px] font-semibold text-[#6B6B6B]">
+          <tr>
+            <th className="min-w-[180px] border-b border-r border-[#E6E6E6] px-4 py-3">
+              {gridState.rowAxis.attribute.name} / {gridState.columnAxis.attribute.name}
+            </th>
+            {gridState.rows[0]?.cells.map((cell) => (
+              <th key={cell.columnValue.id} className="min-w-[220px] border-b border-[#E6E6E6] px-4 py-3">
+                {cell.columnValue.value}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {gridState.rows.map((row) => (
+            <tr key={row.value.id} className="border-b border-[#F0F0F0] last:border-b-0">
+              <th className="border-r border-[#E6E6E6] bg-[#FAFAFA] px-4 py-3 text-[13px] font-semibold text-[#1A1A1A]">
+                {row.value.value}
+              </th>
+              {row.cells.map((cell) => (
+                <td key={cell.columnValue.id} className="align-top px-4 py-3">
+                  {cell.variant ? (
+                    <div className="space-y-2">
+                      <div>
+                        <div className="font-medium text-[#1A1A1A]">{cell.variant.title}</div>
+                        <div className="mt-0.5 text-[12px] text-[#6B6B6B]">{cell.variant.sku || "No SKU"}</div>
+                      </div>
+                      {bulkEditMode && getDraft && onDraftChange ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          <label className="text-[11px] font-medium text-[#6B6B6B]">
+                            Price
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={getDraft(cell.variant).price}
+                              onChange={(e) => onDraftChange(cell.variant!.id, { price: e.target.value })}
+                              className="mt-1 w-full rounded border border-[#E6E6E6] px-2 py-1.5 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                            />
+                          </label>
+                          <label className="text-[11px] font-medium text-[#6B6B6B]">
+                            Stock
+                            <input
+                              type="number"
+                              min="0"
+                              value={getDraft(cell.variant).stock}
+                              onChange={(e) => onDraftChange(cell.variant!.id, { stock: e.target.value })}
+                              className="mt-1 w-full rounded border border-[#E6E6E6] px-2 py-1.5 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                            />
+                          </label>
+                          {rowErrors?.[cell.variant.id] && (
+                            <p className="col-span-2 text-[11.5px] text-red-600">{rowErrors[cell.variant.id]}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#555]">
+                          <span>Stock: {cell.variant.inventory?.stock ?? "No stock"}</span>
+                          <span>Price: {bulkCountryId ? `${getVariantPriceForCountry(cell.variant, bulkCountryId)?.currency?.symbol ?? ""}${getVariantPriceForCountry(cell.variant, bulkCountryId)?.sellingPrice ?? "No price"}` : formatVariantPrice(cell.variant)}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between gap-3">
+                        <StatusBadge status={cell.variant.status} />
+                        <button
+                          type="button"
+                          onClick={() => onEditVariant(cell.variant!)}
+                          className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-[12px] text-[#9A9A9A]">No variant</span>
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 export default function EditProductPage() {
   const { id } = useParams<{ id: string }>();
@@ -117,26 +363,107 @@ export default function EditProductPage() {
   const [editVariantMoq, setEditVariantMoq] = useState(1);
   const [editVariantStatus, setEditVariantStatus] = useState("ACTIVE");
   const [translationLanguageId, setTranslationLanguageId] = useState("");
+  const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
+  const [selectedMappingAttributeId, setSelectedMappingAttributeId] = useState("");
+  const [newMappingRequired, setNewMappingRequired] = useState(true);
+  const [newMappingValueIds, setNewMappingValueIds] = useState<string[]>([]);
+  const [bulkEditMode, setBulkEditMode] = useState(false);
+  const [bulkCountryId, setBulkCountryId] = useState("");
+  const [bulkDrafts, setBulkDrafts] = useState<Record<string, BulkVariantDraft>>({});
+  const [bulkRowErrors, setBulkRowErrors] = useState<Record<string, string>>({});
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [tierRuleDraft, setTierRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
+  const [moqRuleDraft, setMoqRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
   const { showToast, ToastComponent } = useToast();
 
   const { data: product, isLoading, refetch } = useAdminProduct(id);
+  const { data: productCountries = [], isLoading: countriesLoading } = useAdminProductCountries(id);
+  const { data: productAttributeMappings = [], isLoading: productAttributesLoading } = useAdminProductAttributes(id);
+  const { data: tierPricingRules = [] } = useAdminProductTierPricing(id);
+  const { data: moqPricingRules = [] } = useAdminProductMoqPricing(id);
   const { data: categories = [] } = useAdminCategories();
   const { data: attributes = [] } = useAdminAttributes();
+  const { data: countries = [] } = useAdminCountries();
+  const { data: tiers = [] } = useAdminTiers();
+  const { data: selectedAttributeDetail } = useAdminAttribute(selectedMappingAttributeId);
   const { data: languages = [] } = useAdminLanguages();
   const updateProduct = useUpdateProduct(id);
+  const updateProductCountries = useUpdateProductCountries(id);
+  const createTierPricing = useCreateProductTierPricing(id);
+  const deleteTierPricing = useDeleteProductTierPricing(id);
+  const createMoqPricing = useCreateProductMoqPricing(id);
+  const deleteMoqPricing = useDeleteProductMoqPricing(id);
+  const assignProductAttributes = useAssignProductAttributes(id);
+  const removeProductAttribute = useRemoveProductAttribute(id);
 
   const translationLanguages = useMemo(() => filterTranslationLanguages(languages), [languages]);
   const activeTranslationLang = translationLanguages.find((lang) => lang.id === translationLanguageId) ?? translationLanguages[0];
 
-  useEffect(() => {
-    if (translationLanguages.length && !translationLanguageId) {
-      setTranslationLanguageId(translationLanguages[0].id);
-    }
-  }, [translationLanguages, translationLanguageId]);
-
   const attributeCatalog = useMemo(() => attributes as GlobalAttribute[], [attributes]);
+  const mappedAttributeRows = useMemo(() => productAttributeMappings as ProductAttributeMapping[], [productAttributeMappings]);
+  const mappedAttributeIds = useMemo(() => new Set(mappedAttributeRows.map((mapping) => mapping.attributeId)), [mappedAttributeRows]);
+  const selectedAttributeValues = useMemo(
+    () => ((selectedAttributeDetail?.values ?? []) as AttributeValueDetail[]),
+    [selectedAttributeDetail]
+  );
+  const availableMappingAttributes = useMemo(
+    () => attributeCatalog.filter((attribute) => !mappedAttributeIds.has(attribute.id)),
+    [attributeCatalog, mappedAttributeIds]
+  );
+  const hasMappedProductAttributes = mappedAttributeRows.length > 0;
+  const variantGenerationCatalog = useMemo(
+    () =>
+      hasMappedProductAttributes
+        ? mappedAttributeRows.map((mapping) => ({
+            id: mapping.attributeId,
+            name: mapping.attribute.name,
+            role: mapping.attribute.role,
+            values: mapping.allowedValues.map((allowedValue) => ({
+              id: allowedValue.attributeValueId,
+              value: allowedValue.attributeValue.value,
+            })),
+          }))
+        : attributeCatalog,
+    [attributeCatalog, hasMappedProductAttributes, mappedAttributeRows]
+  );
   const packageRows = useMemo(() => (product?.packages ?? []) as PackageRow[], [product?.packages]);
   const variantRows = useMemo(() => (product?.variants ?? []) as VariantRow[], [product?.variants]);
+  const bulkCountryOptions = useMemo(() => {
+    const countries = new Map<string, BulkCountryOption>();
+    (productCountries as CountryAvailability[]).forEach((country) => {
+      countries.set(country.id, {
+        id: country.id,
+        label: `${country.name} (${country.code})`,
+        currencySymbol: country.currency?.symbol,
+      });
+    });
+    (product?.prices ?? []).forEach((price: { countryId?: string; country?: { id: string; name: string; code: string }; currency?: { symbol?: string | null } }) => {
+      const countryId = price.countryId ?? price.country?.id;
+      if (!countryId || countries.has(countryId)) return;
+      countries.set(countryId, {
+        id: countryId,
+        label: price.country ? `${price.country.name} (${price.country.code})` : countryId,
+        currencySymbol: price.currency?.symbol,
+      });
+    });
+    variantRows.forEach((variant) => {
+      variant.prices?.forEach((price) => {
+        const countryId = price.countryId ?? price.country?.id;
+        if (!countryId || countries.has(countryId)) return;
+        countries.set(countryId, {
+          id: countryId,
+          label: price.country ? `${price.country.name} (${price.country.code})` : countryId,
+          currencySymbol: price.currency?.symbol,
+        });
+      });
+    });
+    return Array.from(countries.values());
+  }, [product?.prices, productCountries, variantRows]);
+  const selectedBulkCountryId = bulkCountryId || product?.defaultCountryId || bulkCountryOptions[0]?.id || "";
+  const tierRows = useMemo(() => tiers as TierRow[], [tiers]);
+  const countryRows = useMemo(() => countries as { id: string; name: string; code: string }[], [countries]);
+  const tierPricingRows = useMemo(() => tierPricingRules as PricingRuleRow[], [tierPricingRules]);
+  const moqPricingRows = useMemo(() => moqPricingRules as PricingRuleRow[], [moqPricingRules]);
 
   const formik = useFormik({
     enableReinitialize: true,
@@ -160,8 +487,8 @@ export default function EditProductPage() {
       try {
         await updateProduct.mutateAsync(values);
         showToast("Product saved.");
-      } catch {
-        showToast("Save failed.", "error");
+      } catch (error) {
+        showToast(getAdminErrorMessage(error, "Save failed."), "error");
       } finally {
         setSubmitting(false);
       }
@@ -224,12 +551,311 @@ export default function EditProductPage() {
     },
   ];
 
+  const variantGridState: VariantGridState = useMemo(() => {
+    const rowAxisMappings = mappedAttributeRows.filter((mapping) => mapping.gridAxis === "ROW");
+    const columnAxisMappings = mappedAttributeRows.filter((mapping) => mapping.gridAxis === "COLUMN");
+    const reasons: string[] = [];
+
+    if (rowAxisMappings.length !== 1 || columnAxisMappings.length !== 1) {
+      reasons.push("exactly one ROW axis and one COLUMN axis must be configured in Product Attributes");
+    }
+
+    const rowAxis = rowAxisMappings[0];
+    const columnAxis = columnAxisMappings[0];
+
+    if (rowAxis && rowAxis.attribute.role !== "X_GRID") {
+      reasons.push(`${rowAxis.attribute.name} is marked as the row axis but is not an X_GRID attribute`);
+    }
+    if (columnAxis && columnAxis.attribute.role !== "X_GRID") {
+      reasons.push(`${columnAxis.attribute.name} is marked as the column axis but is not an X_GRID attribute`);
+    }
+
+    const rowValues = rowAxis?.allowedValues.map((allowedValue) => allowedValue.attributeValue) ?? [];
+    const columnValues = columnAxis?.allowedValues.map((allowedValue) => allowedValue.attributeValue) ?? [];
+
+    if (rowAxis && rowValues.length === 0) {
+      reasons.push(`${rowAxis.attribute.name} has no allowed row values`);
+    }
+    if (columnAxis && columnValues.length === 0) {
+      reasons.push(`${columnAxis.attribute.name} has no allowed column values`);
+    }
+
+    if (rowAxis && columnAxis) {
+      const extraVariableMappings = mappedAttributeRows.filter(
+        (mapping) =>
+          mapping.attributeId !== rowAxis.attributeId &&
+          mapping.attributeId !== columnAxis.attributeId &&
+          mapping.allowedValues.length > 1
+      );
+      if (extraVariableMappings.length) {
+        reasons.push(`extra variant dimensions are not fixed: ${extraVariableMappings.map((mapping) => mapping.attribute.name).join(", ")}`);
+      }
+    }
+
+    const variantPackageKeys = new Set(variantRows.map((variant) => variant.packageId ?? "default"));
+    if (variantPackageKeys.size > 1) {
+      reasons.push("more than one package is present, so each row/column cell would match multiple package variants");
+    }
+
+    const rows = rowValues.map((rowValue) => ({
+      value: rowValue,
+      cells: columnValues.map((columnValue) => {
+        const matches = variantRows.filter((variant) => {
+          const selectedValueIds = new Set((variant.attributeValues ?? []).map((attributeValue) => attributeValue.attributeValueId));
+          return selectedValueIds.has(rowValue.id) && selectedValueIds.has(columnValue.id);
+        });
+        if (matches.length === 0) {
+          reasons.push(`missing variant for ${rowValue.value} / ${columnValue.value}`);
+        }
+        if (matches.length > 1) {
+          reasons.push(`multiple variants match ${rowValue.value} / ${columnValue.value}`);
+        }
+        return { columnValue, variant: matches.length === 1 ? matches[0] : null };
+      }),
+    }));
+
+    const uniqueReasons = Array.from(new Set(reasons));
+    if (uniqueReasons.length || !rowAxis || !columnAxis) {
+      return { mode: "flat" as const, reasons: uniqueReasons };
+    }
+
+    return { mode: "grid" as const, reasons: [], rowAxis, columnAxis, rows };
+  }, [mappedAttributeRows, variantRows]);
+  const variantDisplayMode = variantGridState.mode;
+
   const pricingCols: Column<{ id: string; country: { name: string; code: string }; currency: { symbol: string }; mrp: number; sellingPrice: number; status: string }>[] = [
     { key: "country", label: "Country", render: (r) => `${r.country.name} (${r.country.code})` },
     { key: "mrp", label: "MRP", render: (r) => `${r.currency.symbol}${r.mrp}` },
     { key: "sellingPrice", label: "Selling Price", render: (r) => `${r.currency.symbol}${r.sellingPrice}` },
     { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} /> },
   ];
+
+  const enabledCountryCount = (productCountries as CountryAvailability[]).filter((country) => countryOverrides[country.id] ?? country.enabled).length;
+
+  const saveCountryAvailability = async () => {
+    try {
+      await updateProductCountries.mutateAsync((productCountries as CountryAvailability[]).map((country) => ({
+        countryId: country.id,
+        enabled: countryOverrides[country.id] ?? country.enabled,
+      })));
+      setCountryOverrides({});
+      showToast("Country availability saved.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to save country availability."), "error");
+    }
+  };
+
+  const getBulkVariantDraft = (variant: VariantRow): Required<BulkVariantDraft> => {
+    const price = getVariantPriceForCountry(variant, selectedBulkCountryId);
+    return {
+      price: bulkDrafts[variant.id]?.price ?? (price?.sellingPrice !== undefined && price?.sellingPrice !== null ? `${price.sellingPrice}` : ""),
+      stock: bulkDrafts[variant.id]?.stock ?? (variant.inventory?.stock !== undefined && variant.inventory?.stock !== null ? `${variant.inventory.stock}` : ""),
+    };
+  };
+
+  const updateBulkDraft = (variantId: string, patch: BulkVariantDraft) => {
+    setBulkDrafts((current) => ({
+      ...current,
+      [variantId]: { ...(current[variantId] ?? {}), ...patch },
+    }));
+    setBulkRowErrors((current) => {
+      if (!current[variantId]) return current;
+      const next = { ...current };
+      delete next[variantId];
+      return next;
+    });
+  };
+
+  const saveBulkVariantEdits = async () => {
+    const updates = variantRows
+      .map((variant) => {
+        const draft = bulkDrafts[variant.id];
+        if (!draft) return null;
+        const currentPrice = getVariantPriceForCountry(variant, selectedBulkCountryId);
+        const currentPriceValue = currentPrice?.sellingPrice !== undefined && currentPrice?.sellingPrice !== null ? `${currentPrice.sellingPrice}` : "";
+        const currentStockValue = variant.inventory?.stock !== undefined && variant.inventory?.stock !== null ? `${variant.inventory.stock}` : "";
+        const priceChanged = draft.price !== undefined && draft.price !== currentPriceValue;
+        const stockChanged = draft.stock !== undefined && draft.stock !== currentStockValue;
+        if (!priceChanged && !stockChanged) return null;
+        return {
+          variantId: variant.id,
+          ...(priceChanged ? { countryId: selectedBulkCountryId || undefined, price: { sellingPrice: draft.price } } : {}),
+          ...(stockChanged ? { stock: draft.stock } : {}),
+        };
+      })
+      .filter(Boolean);
+
+    if (!updates.length) {
+      showToast("No bulk changes to save.");
+      return;
+    }
+
+    setBulkSaving(true);
+    try {
+      const response = await adminApi.put(`/products/${id}/variants/bulk`, { updates });
+      const results = response.data.data.results as { index: number; variantId?: string; success: boolean; error?: string }[];
+      const nextErrors: Record<string, string> = {};
+      results.forEach((result) => {
+        if (!result.success && result.variantId) nextErrors[result.variantId] = result.error || "Failed to save this variant.";
+      });
+      setBulkRowErrors(nextErrors);
+      const failed = Object.keys(nextErrors).length;
+      const succeeded = results.filter((result) => result.success).length;
+      showToast(failed ? `Saved ${succeeded}; ${failed} row${failed === 1 ? "" : "s"} failed.` : `Saved ${succeeded} variant update${succeeded === 1 ? "" : "s"}.`, failed ? "error" : "success");
+      await refetch();
+      if (!failed) setBulkDrafts({});
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Bulk update failed."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  const buildRulePayload = (draft: RuleDraft, includeMoq: boolean) => ({
+    ...(draft.tierId ? { tierId: draft.tierId } : {}),
+    countryId: draft.countryId,
+    variantId: draft.variantId || null,
+    ...(includeMoq ? { minQuantity: Number(draft.minQuantity) } : {}),
+    discountPercent: draft.mode === "discount" ? draft.discountPercent : null,
+    fixedPrice: draft.mode === "fixed" ? draft.fixedPrice : null,
+  });
+
+  const handleCreateTierRule = async () => {
+    if (!tierRuleDraft.tierId || !tierRuleDraft.countryId) {
+      showToast("Choose tier and country.", "error");
+      return;
+    }
+    try {
+      await createTierPricing.mutateAsync(buildRulePayload(tierRuleDraft, false));
+      setTierRuleDraft(emptyRuleDraft);
+      showToast("Tier pricing rule created.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to create tier pricing rule."), "error");
+    }
+  };
+
+  const handleCreateMoqRule = async () => {
+    if (!moqRuleDraft.countryId) {
+      showToast("Choose country.", "error");
+      return;
+    }
+    try {
+      await createMoqPricing.mutateAsync(buildRulePayload(moqRuleDraft, true));
+      setMoqRuleDraft(emptyRuleDraft);
+      showToast("MOQ pricing rule created.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to create MOQ pricing rule."), "error");
+    }
+  };
+
+  const handleDeleteTierRule = async (ruleId: string) => {
+    try {
+      await deleteTierPricing.mutateAsync(ruleId);
+      showToast("Tier pricing rule deleted.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to delete tier pricing rule."), "error");
+    }
+  };
+
+  const handleDeleteMoqRule = async (ruleId: string) => {
+    try {
+      await deleteMoqPricing.mutateAsync(ruleId);
+      showToast("MOQ pricing rule deleted.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to delete MOQ pricing rule."), "error");
+    }
+  };
+
+  const toProductAttributePayload = (rows: ProductAttributeMapping[]) =>
+    rows.map((mapping) => ({
+      attributeId: mapping.attributeId,
+      required: mapping.required,
+      gridAxis: mapping.gridAxis ?? null,
+      allowedValueIds: mapping.allowedValues.map((allowedValue) => allowedValue.attributeValueId),
+    }));
+
+  const resetAttributeMappingForm = () => {
+    setSelectedMappingAttributeId("");
+    setNewMappingRequired(true);
+    setNewMappingValueIds([]);
+  };
+
+  const toggleNewMappingValue = (valueId: string) => {
+    setNewMappingValueIds((current) =>
+      current.includes(valueId) ? current.filter((id) => id !== valueId) : [...current, valueId]
+    );
+  };
+
+  const handleAddProductAttribute = async () => {
+    if (!selectedMappingAttributeId) {
+      showToast("Choose an attribute to map.", "error");
+      return;
+    }
+    if (!newMappingValueIds.length) {
+      showToast("Choose at least one allowed value for this product.", "error");
+      return;
+    }
+
+    try {
+      await assignProductAttributes.mutateAsync([
+        ...toProductAttributePayload(mappedAttributeRows),
+        {
+          attributeId: selectedMappingAttributeId,
+          required: newMappingRequired,
+          gridAxis: null,
+          allowedValueIds: newMappingValueIds,
+        },
+      ]);
+      resetAttributeMappingForm();
+      showToast("Product attribute mapped.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to map product attribute."), "error");
+    }
+  };
+
+  const handleToggleMappedRequired = async (attributeId: string, required: boolean) => {
+    try {
+      await assignProductAttributes.mutateAsync(
+        toProductAttributePayload(mappedAttributeRows).map((mapping) =>
+          mapping.attributeId === attributeId ? { ...mapping, required } : mapping
+        )
+      );
+      showToast("Attribute requirement updated.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to update attribute requirement."), "error");
+    }
+  };
+
+  const handleSetMappedGridAxis = async (attributeId: string, gridAxis: GridAxis | null) => {
+    try {
+      await assignProductAttributes.mutateAsync(
+        toProductAttributePayload(mappedAttributeRows).map((mapping) =>
+          mapping.attributeId === attributeId ? { ...mapping, gridAxis } : mapping
+        )
+      );
+      showToast("Grid axis updated.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to update grid axis."), "error");
+    }
+  };
+
+  const handleRemoveProductAttribute = async (attributeId: string) => {
+    try {
+      await removeProductAttribute.mutateAsync(attributeId);
+      showToast("Attribute unmapped.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to unmap attribute."), "error");
+    }
+  };
+
+  const roleBadgeClass = (role: AttributeRole) =>
+    role === "DROPDOWN"
+      ? "border-blue-200 bg-blue-50 text-blue-700"
+      : role === "X_GRID"
+        ? "border-purple-200 bg-purple-50 text-purple-700"
+        : "border-emerald-200 bg-emerald-50 text-emerald-700";
+
+  const formatPriceValue = (value?: string | number | null) => (value === null || value === undefined || value === "" ? "Not set" : `${value}`);
 
   const saveProductTranslation = async (languageId: string, field: ProductTranslationField, value: string) => {
     const trimmed = value.trim();
@@ -352,7 +978,7 @@ export default function EditProductPage() {
     setGenerateAttributeIds([]);
     setGenerateSelectionMap({});
     setGenerateModeMap(
-      Object.fromEntries(attributeCatalog.map((attribute) => [attribute.id, "skip"])) as GenerateModeMap
+      Object.fromEntries(variantGenerationCatalog.map((attribute) => [attribute.id, "skip"])) as GenerateModeMap
     );
     setGenerateAttributePicker("");
     setGenerateValuePickerMap({});
@@ -452,8 +1078,8 @@ export default function EditProductPage() {
       }
       setManualVariantOpen(false);
       refetch();
-    } catch {
-      showToast("Failed to create variant.", "error");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to create variant."), "error");
     }
   };
 
@@ -487,7 +1113,7 @@ export default function EditProductPage() {
   };
 
   const handleGenerateVariants = async () => {
-    const selectedAttributes = attributeCatalog
+    const selectedAttributes = variantGenerationCatalog
       .filter((attribute) => generateAttributeIds.includes(attribute.id))
       .map((attribute) => {
         const mode = generateModeMap[attribute.id] ?? "skip";
@@ -512,7 +1138,7 @@ export default function EditProductPage() {
       return;
     }
 
-    const specificMissing = attributeCatalog
+    const specificMissing = variantGenerationCatalog
       .filter((attribute) => generateAttributeIds.includes(attribute.id))
       .some((attribute) => {
       const mode = generateModeMap[attribute.id] ?? "skip";
@@ -532,8 +1158,8 @@ export default function EditProductPage() {
       showToast(result.data.message || "Variants generated.");
       setGenerateVariantOpen(false);
       refetch();
-    } catch (err: unknown) {
-      showToast((err as { response?: { data?: { message?: string } } })?.response?.data?.message || "Failed to generate variants.", "error");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to generate variants."), "error");
     } finally {
       setGeneratingVariants(false);
     }
@@ -719,6 +1345,64 @@ export default function EditProductPage() {
     setGenerateValuePickerMap((current) => ({ ...current, [attributeId]: valueId }));
   };
 
+  const renderBulkFlatVariantTable = () => (
+    <div className="overflow-x-auto rounded-lg border border-[#E6E6E6]">
+      <table className="min-w-full border-collapse text-left text-[13px]">
+        <thead className="bg-[#FAFAFA] text-[12px] font-semibold text-[#6B6B6B]">
+          <tr>
+            <th className="border-b border-[#E6E6E6] px-4 py-3">Variant</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3">Package</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3">SKU</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3">Price</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3">Stock</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3">Status</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {variantRows.map((variant) => {
+            const draft = getBulkVariantDraft(variant);
+            return (
+              <tr key={variant.id} className="border-b border-[#F0F0F0] last:border-b-0">
+                <td className="px-4 py-3">
+                  <div className="font-medium text-[#1A1A1A]">{variant.title}</div>
+                  {bulkRowErrors[variant.id] && <div className="mt-1 text-[11.5px] text-red-600">{bulkRowErrors[variant.id]}</div>}
+                </td>
+                <td className="px-4 py-3 text-[#555]">{variant.package?.title ?? "Default"}</td>
+                <td className="px-4 py-3 text-[#555]">{variant.sku || "No SKU"}</td>
+                <td className="px-4 py-3">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={draft.price}
+                    onChange={(e) => updateBulkDraft(variant.id, { price: e.target.value })}
+                    className="w-28 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
+                  />
+                </td>
+                <td className="px-4 py-3">
+                  <input
+                    type="number"
+                    min="0"
+                    value={draft.stock}
+                    onChange={(e) => updateBulkDraft(variant.id, { stock: e.target.value })}
+                    className="w-24 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
+                  />
+                </td>
+                <td className="px-4 py-3"><StatusBadge status={variant.status} /></td>
+                <td className="px-4 py-3">
+                  <button onClick={() => openEditVariantModal(variant)} className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]">
+                    <Pencil size={12} />
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+
   if (isLoading) {
     return (
       <AdminLayout title="Edit Product">
@@ -751,7 +1435,7 @@ export default function EditProductPage() {
             </button>
           ))}
         </div>
-        {activeTab === 0 || activeTab === 7 ? (
+        {activeTab === 0 || activeTab === 9 ? (
           <button
             type="button"
             onClick={() => formik.handleSubmit()}
@@ -856,6 +1540,48 @@ export default function EditProductPage() {
                 <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Variants are created from package + selected attribute values.</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                {bulkEditMode && bulkCountryOptions.length > 0 && (
+                  <select
+                    value={selectedBulkCountryId}
+                    onChange={(e) => {
+                      setBulkCountryId(e.target.value);
+                      setBulkDrafts({});
+                      setBulkRowErrors({});
+                    }}
+                    className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                  >
+                    {bulkCountryOptions.map((country) => (
+                      <option key={country.id} value={country.id}>{country.label}</option>
+                    ))}
+                  </select>
+                )}
+                {bulkEditMode && (
+                  <button
+                    type="button"
+                    onClick={saveBulkVariantEdits}
+                    disabled={bulkSaving}
+                    className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#B5151B] disabled:opacity-50"
+                  >
+                    <Save size={14} />
+                    {bulkSaving ? "Saving..." : "Save All"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBulkEditMode((current) => !current);
+                    setBulkDrafts({});
+                    setBulkRowErrors({});
+                  }}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-md border px-4 py-2 text-[13px] font-medium",
+                    bulkEditMode
+                      ? "border-[#F2C9C9] bg-red-50 text-[#B5151B] hover:bg-red-100"
+                      : "border-[#E6E6E6] bg-white text-[#1A1A1A] hover:bg-[#F5F5F5]"
+                  )}
+                >
+                  {bulkEditMode ? "Exit Bulk Edit" : "Bulk Edit"}
+                </button>
                 <button
                   onClick={openGenerateVariantModal}
                   disabled={generatingVariants || !product.hasVariants}
@@ -880,10 +1606,16 @@ export default function EditProductPage() {
               </div>
             )}
             <div className="mb-5 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
-              <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">Global Attribute Catalog</h4>
-              <p className="mt-1 text-[12.5px] text-[#6B6B6B]">Attributes are not assigned to the product. They are selected directly when creating or generating a variant.</p>
+              <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">
+                {hasMappedProductAttributes ? "Mapped Attribute Catalog" : "Global Attribute Catalog"}
+              </h4>
+              <p className="mt-1 text-[12.5px] text-[#6B6B6B]">
+                {hasMappedProductAttributes
+                  ? "Showing attributes mapped to this product. Future generated variants are limited to these mapped values."
+                  : "This product has no mapped attributes yet. Generation can still use the full global catalog; map attributes first in Product Attributes when you want product-specific controls."}
+              </p>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {attributeCatalog.map((attribute) => (
+                {variantGenerationCatalog.map((attribute) => (
                   <div key={attribute.id} className="rounded-lg border border-[#E6E6E6] bg-white p-3.5">
                     <div className="text-[13px] font-medium text-[#1A1A1A]">{attribute.name}</div>
                     <div className="mt-2 flex flex-wrap gap-1">
@@ -896,35 +1628,117 @@ export default function EditProductPage() {
                 ))}
               </div>
             </div>
-            <DataTable columns={variantCols} data={variantRows} rowKey="id" emptyMessage="No variants created yet." />
+            {variantDisplayMode === "flat" && variantGridState.reasons.length > 0 && (
+              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] leading-relaxed text-amber-800">
+                <span className="font-semibold">Flat list active:</span> {variantGridState.reasons[0]}.
+              </div>
+            )}
+
+            {variantDisplayMode === "grid" ? (
+              <VariantGridMatrix
+                gridState={variantGridState}
+                onEditVariant={openEditVariantModal}
+                bulkEditMode={bulkEditMode}
+                bulkCountryId={selectedBulkCountryId}
+                rowErrors={bulkRowErrors}
+                getDraft={getBulkVariantDraft}
+                onDraftChange={updateBulkDraft}
+              />
+            ) : bulkEditMode ? (
+              renderBulkFlatVariantTable()
+            ) : (
+              <DataTable columns={variantCols} data={variantRows} rowKey="id" emptyMessage="No variants created yet." />
+            )}
           </div>
         )}
 
         {activeTab === 4 && (
-          <div className="p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Country-wise Pricing</h3>
-                <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Set prices per country. Use Generate to auto-convert from base price.</p>
+          <div className="space-y-6 p-6">
+            <section>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Country-wise Pricing</h3>
+                  <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Set prices per country. Use Generate to auto-convert from base price.</p>
+                </div>
+                <button
+                  onClick={async () => {
+                    const base = prompt("Enter base price in USD:");
+                    if (!base) return;
+                    try {
+                      await adminApi.post("/pricing/generate-country-prices", { productId: id, basePrice: parseFloat(base), baseCurrencyId: "usd" });
+                      showToast("Country prices generated.");
+                      refetch();
+                    } catch {
+                      showToast("Failed.", "error");
+                    }
+                  }}
+                  className="flex items-center gap-1.5 rounded-md bg-[#1A1A1A] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#333]"
+                >
+                  <RefreshCw size={14} /> Generate All Country Prices
+                </button>
               </div>
-              <button
-                onClick={async () => {
-                  const base = prompt("Enter base price in USD:");
-                  if (!base) return;
-                  try {
-                    await adminApi.post("/pricing/generate-country-prices", { productId: id, basePrice: parseFloat(base), baseCurrencyId: "usd" });
-                    showToast("Country prices generated.");
-                    refetch();
-                  } catch {
-                    showToast("Failed.", "error");
-                  }
-                }}
-                className="flex items-center gap-1.5 rounded-md bg-[#1A1A1A] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#333]"
-              >
-                <RefreshCw size={14} /> Generate All Country Prices
-              </button>
-            </div>
-            <DataTable columns={pricingCols} data={product.prices || []} rowKey="id" emptyMessage="No pricing set. Use Generate to auto-fill all countries." />
+              <DataTable columns={pricingCols} data={product.prices || []} rowKey="id" emptyMessage="No pricing set. Use Generate to auto-fill all countries." />
+            </section>
+
+            <section className="rounded-lg border border-[#E6E6E6] bg-white p-4">
+              <div className="mb-4">
+                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Tier Pricing</h3>
+                <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Create product or variant-specific tier rules. Checkout pricing resolver is a later step.</p>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-6">
+                <AdminSelect label="Tier" value={tierRuleDraft.tierId} onChange={(e) => setTierRuleDraft((d) => ({ ...d, tierId: e.target.value }))} options={[{ value: "", label: "Select tier" }, ...tierRows.map((tier) => ({ value: tier.id, label: tier.name }))]} />
+                <AdminSelect label="Country" value={tierRuleDraft.countryId} onChange={(e) => setTierRuleDraft((d) => ({ ...d, countryId: e.target.value }))} options={[{ value: "", label: "Select country" }, ...countryRows.map((country) => ({ value: country.id, label: `${country.name} (${country.code})` }))]} />
+                <AdminSelect label="Variant" value={tierRuleDraft.variantId} onChange={(e) => setTierRuleDraft((d) => ({ ...d, variantId: e.target.value }))} options={[{ value: "", label: "Product-level" }, ...variantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]} />
+                <AdminSelect label="Mode" value={tierRuleDraft.mode} onChange={(e) => setTierRuleDraft((d) => ({ ...d, mode: e.target.value as "discount" | "fixed" }))} options={[{ value: "discount", label: "% Discount" }, { value: "fixed", label: "Fixed Price" }]} />
+                <AdminInput label={tierRuleDraft.mode === "discount" ? "Discount %" : "Fixed Price"} type="number" min={0} step="0.01" value={tierRuleDraft.mode === "discount" ? tierRuleDraft.discountPercent : tierRuleDraft.fixedPrice} onChange={(e) => setTierRuleDraft((d) => ({ ...d, [d.mode === "discount" ? "discountPercent" : "fixedPrice"]: e.target.value }))} />
+                <div className="flex items-end">
+                  <button type="button" onClick={handleCreateTierRule} disabled={createTierPricing.isPending} className="w-full rounded-md bg-[#E31E24] px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">Add Rule</button>
+                </div>
+              </div>
+              <div className="mt-4 divide-y divide-[#E6E6E6] rounded-md border border-[#E6E6E6]">
+                {tierPricingRows.length === 0 ? (
+                  <div className="px-4 py-6 text-center text-[13px] text-[#9A9A9A]">No tier pricing rules yet.</div>
+                ) : tierPricingRows.map((rule) => (
+                  <div key={rule.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-[13px]">
+                    <span className="font-medium text-[#1A1A1A]">{rule.tier?.name ?? "Tier"}</span>
+                    <span className="text-[#6B6B6B]">{rule.country ? `${rule.country.name} (${rule.country.code})` : "Country"}</span>
+                    <span className="text-[#6B6B6B]">{rule.variant ? rule.variant.title : "Product-level"}</span>
+                    <span className="ml-auto font-semibold text-[#1A1A1A]">{rule.discountPercent ? `${rule.discountPercent}% off` : `${rule.fixedPrice} fixed`}</span>
+                    <button type="button" onClick={() => handleDeleteTierRule(rule.id)} className="rounded border border-[#F2C9C9] px-2 py-1 text-red-600 hover:bg-red-50"><Trash2 size={13} /></button>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-[#E6E6E6] bg-white p-4">
+              <div className="mb-4">
+                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">MOQ Pricing</h3>
+                <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Create quantity price-break rules. Existing variant MOQ remains a minimum-quantity gate only.</p>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-6">
+                <AdminSelect label="Country" value={moqRuleDraft.countryId} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, countryId: e.target.value }))} options={[{ value: "", label: "Select country" }, ...countryRows.map((country) => ({ value: country.id, label: `${country.name} (${country.code})` }))]} />
+                <AdminSelect label="Variant" value={moqRuleDraft.variantId} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, variantId: e.target.value }))} options={[{ value: "", label: "Product-level" }, ...variantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]} />
+                <AdminInput label="Min Qty" type="number" min={1} value={moqRuleDraft.minQuantity} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, minQuantity: e.target.value }))} />
+                <AdminSelect label="Mode" value={moqRuleDraft.mode} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, mode: e.target.value as "discount" | "fixed" }))} options={[{ value: "discount", label: "% Discount" }, { value: "fixed", label: "Fixed Price" }]} />
+                <AdminInput label={moqRuleDraft.mode === "discount" ? "Discount %" : "Fixed Price"} type="number" min={0} step="0.01" value={moqRuleDraft.mode === "discount" ? moqRuleDraft.discountPercent : moqRuleDraft.fixedPrice} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, [d.mode === "discount" ? "discountPercent" : "fixedPrice"]: e.target.value }))} />
+                <div className="flex items-end">
+                  <button type="button" onClick={handleCreateMoqRule} disabled={createMoqPricing.isPending} className="w-full rounded-md bg-[#E31E24] px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">Add Rule</button>
+                </div>
+              </div>
+              <div className="mt-4 divide-y divide-[#E6E6E6] rounded-md border border-[#E6E6E6]">
+                {moqPricingRows.length === 0 ? (
+                  <div className="px-4 py-6 text-center text-[13px] text-[#9A9A9A]">No MOQ pricing rules yet.</div>
+                ) : moqPricingRows.map((rule) => (
+                  <div key={rule.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-[13px]">
+                    <span className="font-medium text-[#1A1A1A]">{rule.minQuantity}+ units</span>
+                    <span className="text-[#6B6B6B]">{rule.country ? `${rule.country.name} (${rule.country.code})` : "Country"}</span>
+                    <span className="text-[#6B6B6B]">{rule.variant ? rule.variant.title : "Product-level"}</span>
+                    <span className="ml-auto font-semibold text-[#1A1A1A]">{rule.discountPercent ? `${rule.discountPercent}% off` : `${rule.fixedPrice} fixed`}</span>
+                    <button type="button" onClick={() => handleDeleteMoqRule(rule.id)} className="rounded border border-[#F2C9C9] px-2 py-1 text-red-600 hover:bg-red-50"><Trash2 size={13} /></button>
+                  </div>
+                ))}
+              </div>
+            </section>
           </div>
         )}
 
@@ -932,7 +1746,7 @@ export default function EditProductPage() {
           <div className="p-6">
             <h3 className="mb-4 text-[14px] font-semibold text-[#1A1A1A]">Inventory</h3>
             <div className="space-y-3">
-              {(variantRows.length ? variantRows : [{ id: "main", title: "Main Stock", inventory: null }]).map((v: { id: string; title: string; inventory: { id: string; stock: number; lowStockThreshold: number; status: string } | null }) => (
+              {(variantRows.length ? variantRows : [{ id: "main", title: "Main Stock", inventory: null }]).map((v: { id: string; title: string; inventory?: { id?: string; stock: number; lowStockThreshold?: number | null; status?: string | null } | null }) => (
                 <div key={v.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-[#E6E6E6] p-4">
                   <span className="min-w-[160px] text-[13.5px] font-medium text-[#1A1A1A]">{v.title}</span>
                   <div className="ml-auto flex items-center gap-2">
@@ -963,7 +1777,7 @@ export default function EditProductPage() {
                         }}
                       />
                     </div>
-                    {v.inventory && <StatusBadge status={v.inventory.status} />}
+                    {v.inventory && <StatusBadge status={v.inventory.status ?? "ACTIVE"} />}
                   </div>
                 </div>
               ))}
@@ -980,7 +1794,7 @@ export default function EditProductPage() {
                   <div className="w-[220px]">
                     <AdminSelect
                       label=""
-                      value={translationLanguageId}
+                      value={translationLanguageId || activeTranslationLang?.id || ""}
                       onChange={(e) => setTranslationLanguageId(e.target.value)}
                       options={translationLanguages.map((lang) => ({
                         value: lang.id,
@@ -1114,6 +1928,264 @@ export default function EditProductPage() {
         )}
 
         {activeTab === 7 && (
+          <div className="p-6">
+            <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Product Attributes</h3>
+                <p className="mt-1 max-w-[760px] text-[12.5px] leading-relaxed text-[#6B6B6B]">
+                  Mapping attributes here defines which values are valid for this product. Future variant generation uses these mapped attributes by default; products with no mappings can still use the global catalog.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <div className="space-y-3">
+                {productAttributesLoading ? (
+                  <div className="h-28 animate-pulse rounded-lg bg-[#F2F2F2]" />
+                ) : mappedAttributeRows.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-[#E6E6E6] py-12 text-center text-[13.5px] text-[#9A9A9A]">
+                    No attributes mapped to this product yet.
+                  </div>
+                ) : (
+                  mappedAttributeRows.map((mapping) => (
+                    <div key={mapping.id} className="rounded-lg border border-[#E6E6E6] p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">{mapping.attribute.name}</h4>
+                            <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", roleBadgeClass(mapping.attribute.role))}>
+                              {mapping.attribute.role}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {mapping.allowedValues.length ? (
+                              mapping.allowedValues.map((allowedValue) => (
+                                <span key={allowedValue.attributeValueId} className="rounded-full bg-[#F2F2F2] px-2 py-0.5 text-[11.5px] text-[#555]">
+                                  {allowedValue.attributeValue.value}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-[12px] text-[#9A9A9A]">No allowed values selected.</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-end gap-3">
+                          <label className="flex items-center gap-2 text-[12.5px] text-[#555]">
+                            Grid axis
+                            <select
+                              value={mapping.gridAxis ?? ""}
+                              onChange={(e) => handleSetMappedGridAxis(mapping.attributeId, (e.target.value || null) as GridAxis | null)}
+                              disabled={mapping.attribute.role !== "X_GRID" || assignProductAttributes.isPending}
+                              className="rounded-md border border-[#E6E6E6] bg-white px-2 py-1.5 text-[12px] text-[#1A1A1A] disabled:bg-[#F5F5F5] disabled:text-[#9A9A9A]"
+                            >
+                              <option value="">None</option>
+                              <option value="ROW">Row</option>
+                              <option value="COLUMN">Column</option>
+                            </select>
+                          </label>
+                          <label className="flex items-center gap-2 text-[12.5px] text-[#555]">
+                            <input
+                              type="checkbox"
+                              checked={mapping.required}
+                              onChange={(e) => handleToggleMappedRequired(mapping.attributeId, e.target.checked)}
+                              className="h-4 w-4 accent-[#E31E24]"
+                              disabled={assignProductAttributes.isPending}
+                            />
+                            Required
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveProductAttribute(mapping.attributeId)}
+                            disabled={removeProductAttribute.isPending}
+                            className="rounded-md border border-[#F2C9C9] px-2.5 py-1.5 text-[12px] text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="rounded-lg border border-[#E6E6E6] p-4">
+                <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">Add Attribute</h4>
+                <div className="mt-4 space-y-4">
+                  <AdminSelect
+                    label="Attribute"
+                    value={selectedMappingAttributeId}
+                    onChange={(e) => {
+                      setSelectedMappingAttributeId(e.target.value);
+                      setNewMappingValueIds([]);
+                    }}
+                    options={[
+                      { value: "", label: "Select attribute..." },
+                      ...availableMappingAttributes.map((attribute) => ({ value: attribute.id, label: attribute.name })),
+                    ]}
+                  />
+                  <label className="flex items-center gap-2 text-[13px] text-[#555]">
+                    <input
+                      type="checkbox"
+                      checked={newMappingRequired}
+                      onChange={(e) => setNewMappingRequired(e.target.checked)}
+                      className="h-4 w-4 accent-[#E31E24]"
+                    />
+                    Required for this product
+                  </label>
+
+                  {selectedMappingAttributeId && selectedAttributeDetail ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", roleBadgeClass(selectedAttributeDetail.role as AttributeRole))}>
+                          {selectedAttributeDetail.role}
+                        </span>
+                        <span className="text-[12px] text-[#9A9A9A]">{newMappingValueIds.length} selected</span>
+                      </div>
+
+                      {selectedAttributeDetail.role === "X_GRID" ? (
+                        (["ROW", "COLUMN", "OTHER"] as const).map((group) => {
+                          const values = selectedAttributeValues.filter((value) =>
+                            group === "OTHER" ? !value.gridRole : value.gridRole === group
+                          );
+                          if (!values.length) return null;
+                          return (
+                            <div key={group}>
+                              <p className="mb-2 text-[11.5px] font-semibold uppercase text-[#9A9A9A]">
+                                {group === "ROW" ? "Row Values" : group === "COLUMN" ? "Column Values" : "Ungrouped Values"}
+                              </p>
+                              <div className="space-y-1.5">
+                                {values.map((value) => (
+                                  <label key={value.id} className="flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[12.5px]">
+                                    <input
+                                      type="checkbox"
+                                      checked={newMappingValueIds.includes(value.id)}
+                                      onChange={() => toggleNewMappingValue(value.id)}
+                                      className="h-4 w-4 accent-[#E31E24]"
+                                    />
+                                    {value.value}
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : selectedAttributeDetail.role === "Y_GRID" ? (
+                        Object.entries(
+                          selectedAttributeValues.reduce<Record<string, AttributeValueDetail[]>>((groups, value) => {
+                            const key = value.country ? `${value.country.name} (${value.country.code})` : "No country";
+                            groups[key] = [...(groups[key] ?? []), value];
+                            return groups;
+                          }, {})
+                        ).map(([countryLabel, values]) => (
+                          <div key={countryLabel}>
+                            <p className="mb-2 text-[11.5px] font-semibold uppercase text-[#9A9A9A]">{countryLabel}</p>
+                            <div className="space-y-1.5">
+                              {values.map((value) => (
+                                <label key={value.id} className="block rounded-md border border-[#E6E6E6] px-3 py-2 text-[12.5px]">
+                                  <span className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={newMappingValueIds.includes(value.id)}
+                                      onChange={() => toggleNewMappingValue(value.id)}
+                                      className="h-4 w-4 accent-[#E31E24]"
+                                    />
+                                    <span className="font-medium text-[#1A1A1A]">{value.value}</span>
+                                  </span>
+                                  <span className="mt-1 block text-[11.5px] text-[#6B6B6B]">
+                                    MOQ: {value.moq ?? "Not set"} | Tier: {formatPriceValue(value.tierPrice)} | Dealer: {formatPriceValue(value.dealerPrice)}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="space-y-1.5">
+                          {selectedAttributeValues.map((value) => (
+                            <label key={value.id} className="flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[12.5px]">
+                              <input
+                                type="checkbox"
+                                checked={newMappingValueIds.includes(value.id)}
+                                onChange={() => toggleNewMappingValue(value.id)}
+                                className="h-4 w-4 accent-[#E31E24]"
+                              />
+                              {value.value}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleAddProductAttribute}
+                        disabled={assignProductAttributes.isPending}
+                        className="w-full rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
+                      >
+                        {assignProductAttributes.isPending ? "Saving..." : "Map Attribute"}
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="rounded-md border border-dashed border-[#E6E6E6] px-3 py-6 text-center text-[12.5px] text-[#9A9A9A]">
+                      Select an attribute to choose allowed values.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 8 && (
+          <div className="p-6">
+            <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Country Availability</h3>
+                <p className="mt-1 max-w-[760px] text-[12.5px] leading-relaxed text-[#6B6B6B]">
+                  Availability controls where this product is visible. New products start invisible everywhere until countries are enabled here.
+                  This is separate from default country/currency fallback values, which are not edited on this screen.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-[12px] text-[#9A9A9A]">{enabledCountryCount} enabled</span>
+                <button
+                  type="button"
+                  onClick={saveCountryAvailability}
+                  disabled={updateProductCountries.isPending || countriesLoading}
+                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
+                >
+                  {updateProductCountries.isPending ? "Saving..." : "Save Availability"}
+                </button>
+              </div>
+            </div>
+
+            {countriesLoading ? (
+              <div className="h-24 animate-pulse rounded-lg bg-[#F2F2F2]" />
+            ) : (productCountries as CountryAvailability[]).length === 0 ? (
+              <div className="rounded-lg border border-dashed border-[#E6E6E6] py-12 text-center text-[13.5px] text-[#9A9A9A]">
+                No countries found.
+              </div>
+            ) : (
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {(productCountries as CountryAvailability[]).map((country) => (
+                  <label key={country.id} className="flex items-center justify-between gap-3 rounded-md border border-[#E6E6E6] px-3 py-2">
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13px] font-medium text-[#1A1A1A]">{country.name}</span>
+                      <span className="text-[11.5px] text-[#9A9A9A]">{country.code}{country.status !== "ACTIVE" ? ` · ${country.status}` : ""}</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-[#E31E24]"
+                      checked={countryOverrides[country.id] ?? country.enabled}
+                      onChange={(e) => setCountryOverrides((current) => ({ ...current, [country.id]: e.target.checked }))}
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 9 && (
           <div className="p-6 space-y-4">
             <AdminInput label="SEO Title (max 60 chars)" maxLength={60} {...formik.getFieldProps("seoTitle")} error={formik.touched.seoTitle ? (formik.errors.seoTitle as string) : ""} />
             <div className="text-[12px] text-[#9A9A9A]">{formik.values.seoTitle.length}/60 characters</div>
@@ -1170,7 +2242,11 @@ export default function EditProductPage() {
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-[18px] font-semibold text-[#1A1A1A]">Generate Variants</h3>
-                <p className="mt-1 text-[13px] text-[#6B6B6B]">Select packages and attribute values. The system will generate every combination.</p>
+                <p className="mt-1 text-[13px] text-[#6B6B6B]">
+                  {hasMappedProductAttributes
+                    ? "Showing attributes mapped to this product. Add values in Product Attributes before using them here."
+                    : "No product attribute mappings found, so this uses the full global catalog exactly as before."}
+                </p>
               </div>
               <button onClick={() => setGenerateVariantOpen(false)} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
                 <X size={18} />
@@ -1203,7 +2279,7 @@ export default function EditProductPage() {
                     onChange={(e) => setGenerateAttributePicker(e.target.value)}
                     options={[
                       { value: "", label: "Select attribute…" },
-                      ...attributeCatalog
+                      ...variantGenerationCatalog
                         .filter((attribute) => !generateAttributeIds.includes(attribute.id))
                         .map((attribute) => ({ value: attribute.id, label: attribute.name })),
                     ]}
@@ -1217,7 +2293,7 @@ export default function EditProductPage() {
 
             <div className="space-y-4">
               {generateAttributeIds.map((attributeId) => {
-                const attribute = attributeCatalog.find((item) => item.id === attributeId);
+                const attribute = variantGenerationCatalog.find((item) => item.id === attributeId);
                 if (!attribute) return null;
                 const mode = generateModeMap[attribute.id] ?? "specific";
                 const selectedValueIds = generateSelectionMap[attribute.id] ?? [];

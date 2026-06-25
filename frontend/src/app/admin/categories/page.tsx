@@ -1,21 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useFormik } from "formik";
 import * as Yup from "yup";
+import { Image as ImageIcon, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { DataTable, Column, StatusBadge, ConfirmModal, AdminInput, AdminTextarea, useToast, toastMessages } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminTextarea, ConfirmModal, StatusBadge, toastMessages, useToast } from "@/components/admin/AdminComponents";
 import {
   filterTranslationLanguages,
+  NoTranslationLanguagesMessage,
   TranslationBlurField,
   TranslationBlurInput,
   TranslationEditorBanner,
   TranslationModeBar,
-  NoTranslationLanguagesMessage,
 } from "@/components/admin/TranslationEditorUi";
-import { useAdminCategories, useCreateCategory, useUpdateCategory, useAdminLanguages } from "@/hooks/admin/useAdminHooks";
-import { adminApi } from "@/services/adminApi";
-import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { SortableList, toSortOrderPayload } from "@/components/admin/SortableList";
+import {
+  useAdminCategories,
+  useAdminCategoryCountries,
+  useAdminLanguages,
+  useCreateCategory,
+  useReorderCategories,
+  useUpdateCategory,
+  useUpdateCategoryCountries,
+} from "@/hooks/admin/useAdminHooks";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
+import { slugify } from "@/utils/slugify";
 
 interface CategoryTranslation {
   id: string;
@@ -24,9 +34,73 @@ interface CategoryTranslation {
   description: string | null;
 }
 
-interface Category { id: string; name: string; slug: string; description: string; status: string; translations?: CategoryTranslation[]; _count: { products: number }; parent?: { name: string } }
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  parentId: string | null;
+  parent?: { id: string; name: string } | null;
+  image: string | null;
+  status: "ACTIVE" | "INACTIVE";
+  sortOrder: number;
+  translations?: CategoryTranslation[];
+  _count: { products: number };
+}
 
-const schema = Yup.object({ name: Yup.string().required("Name is required"), description: Yup.string() });
+interface CountryAvailability {
+  id: string;
+  name: string;
+  code: string;
+  status: string;
+  enabled: boolean;
+}
+
+type CategoryRow = Category & { depth: number };
+
+const schema = Yup.object({
+  name: Yup.string().trim().required("Name is required"),
+  slug: Yup.string().trim().required("Slug is required"),
+  description: Yup.string(),
+  image: Yup.string(),
+  parentId: Yup.string(),
+  status: Yup.string().oneOf(["ACTIVE", "INACTIVE"]).required("Status is required"),
+});
+
+function flattenCategories(categories: Category[]) {
+  const byParent = new Map<string | null, Category[]>();
+  categories.forEach((category) => {
+    const key = category.parentId ?? null;
+    byParent.set(key, [...(byParent.get(key) ?? []), category]);
+  });
+  byParent.forEach((items) => items.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)));
+
+  const rows: CategoryRow[] = [];
+  const visit = (parentId: string | null, depth: number, seen = new Set<string>()) => {
+    for (const category of byParent.get(parentId) ?? []) {
+      if (seen.has(category.id)) continue;
+      rows.push({ ...category, depth });
+      visit(category.id, depth + 1, new Set([...seen, category.id]));
+    }
+  };
+  visit(null, 0);
+  categories
+    .filter((category) => !rows.some((row) => row.id === category.id))
+    .forEach((category) => rows.push({ ...category, depth: 0 }));
+  return rows;
+}
+
+function collectDescendantIds(categories: Category[], id: string) {
+  const descendants = new Set<string>();
+  const visit = (parentId: string) => {
+    categories.filter((category) => category.parentId === parentId).forEach((child) => {
+      descendants.add(child.id);
+      visit(child.id);
+    });
+  };
+  visit(id);
+  return descendants;
+}
 
 export default function CategoriesPage() {
   const [editing, setEditing] = useState<Category | null>(null);
@@ -34,41 +108,116 @@ export default function CategoriesPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [categoryEditorTab, setCategoryEditorTab] = useState<"content" | "translations">("content");
   const [translationLanguageId, setTranslationLanguageId] = useState("");
+  const [slugEdited, setSlugEdited] = useState(false);
+  const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
+  const [uploadingImage, setUploadingImage] = useState(false);
   const { showToast, ToastComponent } = useToast();
 
   const { data: categories = [], isLoading, refetch } = useAdminCategories();
   const { data: languages = [] } = useAdminLanguages();
-  const translationLanguages = filterTranslationLanguages(languages);
-  const activeTranslationLang = translationLanguages.find((lang) => lang.id === translationLanguageId) ?? translationLanguages[0];
-
-  useEffect(() => {
-    if (translationLanguages.length && !translationLanguageId) {
-      setTranslationLanguageId(translationLanguages[0].id);
-    }
-  }, [translationLanguages, translationLanguageId]);
+  const { data: countries = [], isLoading: countriesLoading } = useAdminCategoryCountries(editing?.id);
   const createCategory = useCreateCategory();
   const updateCategory = useUpdateCategory();
+  const reorderCategories = useReorderCategories();
+  const updateCountries = useUpdateCategoryCountries(editing?.id);
+
+  const translationLanguages = filterTranslationLanguages(languages);
+  const activeTranslationLang = translationLanguages.find((lang) => lang.id === translationLanguageId) ?? translationLanguages[0];
+  const rows = useMemo(() => flattenCategories(categories), [categories]);
+  const excludedParentIds = useMemo(() => editing ? collectDescendantIds(categories, editing.id) : new Set<string>(), [categories, editing]);
+  const parentOptions = useMemo(() => [
+    { value: "", label: "No parent" },
+    ...flattenCategories(categories)
+      .filter((category) => category.id !== editing?.id && !excludedParentIds.has(category.id))
+      .map((category) => ({ value: category.id, label: `${"  ".repeat(category.depth)}${category.depth ? "- " : ""}${category.name}` })),
+  ], [categories, editing?.id, excludedParentIds]);
 
   const formik = useFormik({
     enableReinitialize: true,
-    initialValues: { name: editing?.name || "", description: editing?.description || "" },
+    initialValues: {
+      name: editing?.name || "",
+      slug: editing?.slug || "",
+      description: editing?.description || "",
+      image: editing?.image || "",
+      parentId: editing?.parentId || "",
+      status: editing?.status || "ACTIVE",
+    },
     validationSchema: schema,
-    onSubmit: async (values, { setSubmitting, resetForm }) => {
+    onSubmit: async (values, { setSubmitting, resetForm, setStatus }) => {
+      setStatus("");
       try {
+        const payload = {
+          ...values,
+          name: values.name.trim(),
+          slug: values.slug.trim(),
+          description: values.description.trim() || null,
+          image: values.image.trim() || null,
+          parentId: values.parentId || null,
+        };
         if (editing) {
-          await updateCategory.mutateAsync({ id: editing.id, ...values });
+          await updateCategory.mutateAsync({ id: editing.id, ...payload });
+          await updateCountries.mutateAsync((countries as CountryAvailability[]).map((country) => ({
+            countryId: country.id,
+            enabled: countryOverrides[country.id] ?? country.enabled,
+          })));
           showToast("Category updated.");
           setEditing(null);
         } else {
-          await createCategory.mutateAsync(values);
-          showToast("Category created.");
+          await createCategory.mutateAsync(payload);
+          showToast("Category created. It is hidden in every country until enabled on edit.");
           setShowCreate(false);
         }
+        setSlugEdited(false);
         resetForm();
-      } catch { showToast("Failed.", "error"); }
-      finally { setSubmitting(false); }
+      } catch (error) {
+        const message = getAdminErrorMessage(error, "Failed to save category.");
+        setStatus(message);
+        showToast(message, "error");
+      } finally {
+        setSubmitting(false);
+      }
     },
   });
+
+  const openEditor = (category: Category) => {
+    setEditing(category);
+    setShowCreate(false);
+    setCategoryEditorTab("content");
+    setSlugEdited(false);
+    setCountryOverrides({});
+  };
+
+  const closeEditor = () => {
+    setEditing(null);
+    setShowCreate(false);
+    setCategoryEditorTab("content");
+    setSlugEdited(false);
+    setCountryOverrides({});
+    formik.resetForm();
+  };
+
+  const handleNameChange = (value: string) => {
+    formik.setFieldValue("name", value);
+    if (!slugEdited) formik.setFieldValue("slug", slugify(value));
+  };
+
+  const handleImageUpload = async (file: File | undefined) => {
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("files", file);
+    formData.append("folder", "modortho/categories");
+    setUploadingImage(true);
+    try {
+      const response = await adminApi.post("/media", formData, { headers: { "Content-Type": "multipart/form-data" } });
+      const uploaded = response.data?.data?.[0];
+      if (uploaded?.url) formik.setFieldValue("image", uploaded.url);
+      else throw new Error("Upload completed, but no image URL was returned.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Image upload failed."), "error");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!deleting) return;
@@ -76,8 +225,20 @@ export default function CategoriesPage() {
       await adminApi.delete(`/categories/${deleting}`);
       showToast("Category deleted.");
       refetch();
-    } catch { showToast("Failed.", "error"); }
-    finally { setDeleting(null); }
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to delete category."), "error");
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handleReorder = async (next: CategoryRow[]) => {
+    try {
+      await reorderCategories.mutateAsync(toSortOrderPayload(next));
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to reorder categories."), "error");
+      refetch();
+    }
   };
 
   const saveCategoryTranslation = async (categoryId: string, languageId: string, field: "name" | "description", value: string) => {
@@ -85,58 +246,110 @@ export default function CategoriesPage() {
       await adminApi.put(`/translations/categories/${categoryId}/${languageId}`, { [field]: value.trim() });
       showToast(toastMessages.translationSaved);
       refetch();
-    } catch {
-      showToast(toastMessages.translationFailed, "error");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, toastMessages.translationFailed), "error");
     }
   };
-
-  const columns: Column<Category>[] = [
-    { key: "name", label: "Name", render: (r) => <span className="font-medium text-[#1A1A1A]">{r.name}</span> },
-    { key: "slug", label: "Slug", render: (r) => <span className="font-mono text-[12px] text-[#6B6B6B]">{r.slug}</span> },
-    { key: "products", label: "Products", render: (r) => r._count.products },
-    { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} /> },
-    {
-      key: "actions", label: "", width: "80px",
-      render: (r) => (
-        <div className="flex gap-1.5">
-          <button onClick={() => { setEditing(r); setShowCreate(false); setCategoryEditorTab("content"); }} className="flex items-center justify-center h-7 w-7 rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"><Pencil size={13} /></button>
-          <button onClick={() => setDeleting(r.id)} className="flex items-center justify-center h-7 w-7 rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"><Trash2 size={13} /></button>
-        </div>
-      ),
-    },
-  ];
 
   const showForm = showCreate || !!editing;
 
   return (
     <AdminLayout title="Categories" breadcrumb={[{ label: "Categories" }]}>
-      <div className="flex justify-end mb-5">
-        <button onClick={() => { setShowCreate(!showCreate); setEditing(null); formik.resetForm(); }}
-          className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <p className="text-[13.5px] text-[#6B6B6B]">Drag rows to reorder. Child categories are indented under their parent.</p>
+        <button
+          type="button"
+          onClick={() => { setShowCreate(!showCreate); setEditing(null); setSlugEdited(false); formik.resetForm(); }}
+          className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
+        >
           {showCreate ? <X size={14} /> : <Plus size={14} />}
-          {showCreate ? "Cancel" : "New Category"}
+          {showCreate ? "Cancel" : "Add category"}
         </button>
       </div>
 
       {showForm && (
-        <form onSubmit={formik.handleSubmit} className="mb-5 rounded-xl border border-[#E6E6E6] bg-white p-5 space-y-4">
-          <h3 className="text-[14px] font-semibold text-[#1A1A1A]">{editing ? `Edit: ${editing.name}` : "New Category"}</h3>
+        <form onSubmit={formik.handleSubmit} className="mb-5 rounded-xl border border-[#E6E6E6] bg-white p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h3 className="text-[14px] font-semibold text-[#1A1A1A]">{editing ? `Edit: ${editing.name}` : "New category"}</h3>
+            {editing && (
+              <TranslationModeBar
+                editorTab={categoryEditorTab}
+                onTabChange={setCategoryEditorTab}
+                translationLanguages={translationLanguages}
+                selectedLanguageId={translationLanguageId || activeTranslationLang?.id || ""}
+                onLanguageChange={setTranslationLanguageId}
+              />
+            )}
+          </div>
 
-          {editing && (
-            <TranslationModeBar
-              editorTab={categoryEditorTab}
-              onTabChange={setCategoryEditorTab}
-              translationLanguages={translationLanguages}
-              selectedLanguageId={translationLanguageId}
-              onLanguageChange={setTranslationLanguageId}
-            />
-          )}
+          {formik.status && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">{formik.status}</div>}
 
           {(!editing || categoryEditorTab === "content") && (
-            <>
-              <AdminInput label="Category Name *" placeholder="e.g. Metal Brackets" {...formik.getFieldProps("name")} error={formik.touched.name ? (formik.errors.name as string) : ""} />
-              <AdminTextarea label="Description" rows={2} {...formik.getFieldProps("description")} />
-            </>
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <AdminInput label="Name *" placeholder="e.g. Metal Brackets" value={formik.values.name} onChange={(e) => handleNameChange(e.target.value)} onBlur={formik.handleBlur} name="name" error={formik.touched.name ? (formik.errors.name as string) : ""} />
+                <AdminInput label="Slug *" placeholder="metal-brackets" value={formik.values.slug} onChange={(e) => { setSlugEdited(true); formik.setFieldValue("slug", slugify(e.target.value)); }} onBlur={formik.handleBlur} name="slug" error={formik.touched.slug ? (formik.errors.slug as string) : ""} />
+                <AdminSelect label="Parent category" options={parentOptions} {...formik.getFieldProps("parentId")} />
+                <AdminSelect
+                  label="Status"
+                  options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]}
+                  {...formik.getFieldProps("status")}
+                />
+              </div>
+              <AdminTextarea label="Description" rows={3} {...formik.getFieldProps("description")} />
+              <div className="grid gap-4 md:grid-cols-[120px_1fr]">
+                <div className="flex h-[92px] w-[120px] items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
+                  {formik.values.image ? <img src={formik.values.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={22} className="text-[#9A9A9A]" />}
+                </div>
+                <div className="space-y-2">
+                  <AdminInput label="Image URL" placeholder="/uploads/category.jpg" {...formik.getFieldProps("image")} />
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]">
+                    <Upload size={14} /> {uploadingImage ? "Uploading..." : "Upload image"}
+                    <input type="file" accept="image/*" className="hidden" disabled={uploadingImage} onChange={(e) => handleImageUpload(e.target.files?.[0])} />
+                  </label>
+                </div>
+              </div>
+
+              {editing ? (
+                <section className="rounded-lg border border-[#E6E6E6] p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">Country Availability</h4>
+                      <p className="mt-0.5 text-[12.5px] text-[#6B6B6B]">New categories start invisible everywhere until countries are enabled here.</p>
+                    </div>
+                    <span className="text-[12px] text-[#9A9A9A]">
+                      {(countries as CountryAvailability[]).filter((country) => countryOverrides[country.id] ?? country.enabled).length} enabled
+                    </span>
+                  </div>
+                  {countriesLoading ? (
+                    <div className="h-20 animate-pulse rounded-md bg-[#F2F2F2]" />
+                  ) : (countries as CountryAvailability[]).length === 0 ? (
+                    <p className="text-[13px] text-[#9A9A9A]">No countries found.</p>
+                  ) : (
+                    <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                      {(countries as CountryAvailability[]).map((country) => (
+                        <label key={country.id} className="flex items-center justify-between gap-3 rounded-md border border-[#E6E6E6] px-3 py-2">
+                          <span className="min-w-0">
+                            <span className="block truncate text-[13px] font-medium text-[#1A1A1A]">{country.name}</span>
+                            <span className="text-[11.5px] text-[#9A9A9A]">{country.code}{country.status !== "ACTIVE" ? ` · ${country.status}` : ""}</span>
+                          </span>
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-[#E31E24]"
+                            checked={countryOverrides[country.id] ?? country.enabled}
+                            onChange={(e) => setCountryOverrides((current) => ({ ...current, [country.id]: e.target.checked }))}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              ) : (
+                <div className="rounded-md border border-[#E6E6E6] bg-[#F8F8F8] px-3 py-2 text-[13px] text-[#6B6B6B]">
+                  Country Availability appears after creation. New categories are not enabled in any country by default.
+                </div>
+              )}
+            </div>
           )}
 
           {editing && categoryEditorTab === "translations" && (
@@ -170,19 +383,62 @@ export default function CategoriesPage() {
               </div>
             ) : null
           )}
-          <div className="flex gap-2.5">
+
+          <div className="mt-5 flex gap-2.5">
             {(!editing || categoryEditorTab === "content") && (
               <button type="submit" disabled={formik.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
-                {formik.isSubmitting ? "Saving…" : editing ? "Update Category" : "Create Category"}
+                {formik.isSubmitting ? "Saving..." : editing ? "Update category" : "Create category"}
               </button>
             )}
-            <button type="button" onClick={() => { setEditing(null); setShowCreate(false); setCategoryEditorTab("content"); formik.resetForm(); }} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] hover:bg-[#F2F2F2]">Cancel</button>
+            <button type="button" onClick={closeEditor} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] hover:bg-[#F2F2F2]">Cancel</button>
           </div>
         </form>
       )}
 
-      <DataTable<Category> columns={columns} data={categories} rowKey="id" isLoading={isLoading} emptyMessage="No categories yet." />
-      <ConfirmModal open={!!deleting} title="Delete category?" message="Products in this category won't be deleted, but they'll lose their category assignment." onConfirm={handleDelete} onCancel={() => setDeleting(null)} />
+      {isLoading ? (
+        <div className="space-y-3">{[...Array(4)].map((_, index) => <div key={index} className="h-20 animate-pulse rounded-lg bg-[#E6E6E6]" />)}</div>
+      ) : rows.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-[#E6E6E6] py-12 text-center text-[13.5px] text-[#9A9A9A]">No categories yet.</div>
+      ) : (
+        <div className="rounded-lg border border-[#E6E6E6] bg-white p-3">
+          <div className="mb-2 hidden grid-cols-[1fr_160px_90px_100px_80px] gap-3 px-10 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A] md:grid">
+            <span>Name</span><span>Slug</span><span>Products</span><span>Status</span><span />
+          </div>
+          <SortableList
+            items={rows}
+            onReorder={handleReorder}
+            handleAriaLabel="Drag category to reorder"
+            renderItem={(category) => (
+              <div className="grid gap-3 md:grid-cols-[1fr_160px_90px_100px_80px] md:items-center">
+                <div className="flex min-w-0 items-center gap-3" style={{ paddingLeft: `${Math.min(category.depth, 4) * 18}px` }}>
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
+                    {category.image ? <img src={category.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={17} className="text-[#9A9A9A]" />}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-[14px] font-semibold text-[#1A1A1A]">{category.name}</div>
+                    {category.parent && <div className="text-[12px] text-[#9A9A9A]">Child of {category.parent.name}</div>}
+                  </div>
+                </div>
+                <span className="font-mono text-[12px] text-[#6B6B6B]">{category.slug}</span>
+                <span className="text-[13px] text-[#1A1A1A]">{category._count.products}</span>
+                <StatusBadge status={category.status} />
+                <div className="flex gap-1.5 md:justify-end">
+                  <button type="button" onClick={() => openEditor(category)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"><Pencil size={13} /></button>
+                  <button type="button" onClick={() => setDeleting(category.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"><Trash2 size={13} /></button>
+                </div>
+              </div>
+            )}
+          />
+        </div>
+      )}
+
+      <ConfirmModal
+        open={!!deleting}
+        title="Delete category?"
+        message="This soft deletes the category. Products are not deleted."
+        onConfirm={handleDelete}
+        onCancel={() => setDeleting(null)}
+      />
       {ToastComponent}
     </AdminLayout>
   );

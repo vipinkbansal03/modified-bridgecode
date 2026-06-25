@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, LayoutDashboard, TableProperties } from "lucide-react";
 import { BulkOrderBuilder } from "@/components/product/BulkOrderBuilder";
 import { Container } from "@/components/ui/Container";
 import { useProduct } from "@/hooks/api/useProducts";
 
-export default function QuickOrderPage() {
+function QuickOrderContent() {
   const searchParams = useSearchParams();
   const slug = searchParams.get("product") ?? "";
   const { data: product, isLoading } = useProduct(slug);
@@ -66,5 +67,13 @@ export default function QuickOrderPage() {
         </div>
       </Container>
     </section>
+  );
+}
+
+export default function QuickOrderPage() {
+  return (
+    <Suspense fallback={null}>
+      <QuickOrderContent />
+    </Suspense>
   );
 }

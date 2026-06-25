@@ -3,17 +3,21 @@ import { asyncHandler, ApiResponse, ApiResponse as AR } from "../../utils/apiRes
 import * as S from "./public.service";
 
 export const listProducts = asyncHandler(async (req: Request, res: Response) => {
-  const result = await S.publicListProducts(req.query as never, getRequestedLanguage(req));
+  const result = await S.publicListProducts({ ...(req.query as Record<string, string>), countryCode: getRequestedCountry(req) } as never, getRequestedLanguage(req));
   return AR.paginated(res, "Products.", result.data, { page: result.page, limit: result.limit, total: result.total });
 });
 
 export const getProduct = asyncHandler(async (req: Request, res: Response) => {
-  const product = await S.publicGetProduct(String(req.params.slug), getRequestedLanguage(req));
+  const product = await S.publicGetProduct(String(req.params.slug), getRequestedLanguage(req), getRequestedCountry(req));
   return AR.success(res, "Product.", product);
 });
 
 export const listCategories = asyncHandler(async (req: Request, res: Response) => {
-  return AR.success(res, "Categories.", await S.publicListCategories(getRequestedLanguage(req)));
+  return AR.success(res, "Categories.", await S.publicListCategories(getRequestedLanguage(req), getRequestedCountry(req)));
+});
+
+export const getCategory = asyncHandler(async (req: Request, res: Response) => {
+  return AR.success(res, "Category.", await S.publicGetCategory(String(req.params.slug), getRequestedLanguage(req), getRequestedCountry(req)));
 });
 
 export const getLanguages = asyncHandler(async (_req: Request, res: Response) => {
@@ -36,7 +40,7 @@ export const submitContact = asyncHandler(async (req: Request, res: Response) =>
 
 export const search = asyncHandler(async (req: Request, res: Response) => {
   const q = (req.query.q as string) || "";
-  return AR.success(res, "Search results.", await S.publicSearch(q, getRequestedLanguage(req)));
+  return AR.success(res, "Search results.", await S.publicSearch(q, getRequestedLanguage(req), getRequestedCountry(req)));
 });
 
 export const getCurrencies = asyncHandler(async (_req: Request, res: Response) => {
@@ -56,4 +60,10 @@ function getRequestedLanguage(req: Request) {
   const queryLang = typeof req.query.lang === "string" ? req.query.lang : "";
   const headerLang = req.headers["accept-language"]?.split(",")[0]?.split("-")[0] ?? "";
   return (queryLang || headerLang).trim().toLowerCase() || undefined;
+}
+
+function getRequestedCountry(req: Request) {
+  const queryCountry = typeof req.query.countryCode === "string" ? req.query.countryCode : "";
+  const headerCountry = typeof req.headers["x-country-code"] === "string" ? req.headers["x-country-code"] : "";
+  return (queryCountry || headerCountry).trim().toUpperCase() || undefined;
 }

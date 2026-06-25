@@ -8,6 +8,7 @@ import { Container } from "@/components/ui/Container";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useProducts } from "@/hooks/api/useProducts";
 import staticProducts from "@/data/products.json";
+import type { ApiProductSummary } from "@/types/api.types";
 
 interface FeaturedProductsSectionProps {
   slugs: string[];
@@ -61,7 +62,7 @@ export function FeaturedProductsSection({
           prices: [],
         };
       })
-      .filter(Boolean) as NonNullable<(typeof allProducts.data)[number]>[];
+      .filter(Boolean) as ApiProductSummary[];
   }, [allProducts, slugs]);
 
   if (isLoading) {
