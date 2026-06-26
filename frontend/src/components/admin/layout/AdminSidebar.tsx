@@ -82,7 +82,7 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-3">
+        <nav className="admin-sidebar-scrollbar flex-1 overflow-y-auto py-3">
           {visibleItems.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href || (item.href !== "/admin/dashboard" && pathname.startsWith(item.href));

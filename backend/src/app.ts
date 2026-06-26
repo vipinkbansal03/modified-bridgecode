@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import cookieParser from "cookie-parser";
 import path from "path";
 import "dotenv/config";
 
@@ -12,6 +13,7 @@ import { logger } from "./config/logger";
 import webhookRoutes from "./modules/webhooks/webhooks.routes";
 import publicRoutes from "./modules/public/public.routes";
 import authRoutes from "./modules/auth/auth.routes";
+import customerAuthRoutes from "./modules/customer-auth/customer-auth.routes";
 import productRoutes from "./modules/products/products.routes";
 import categoryRoutes from "./modules/categories/categories.routes";
 import attributeRoutes from "./modules/attributes/attributes.routes";
@@ -41,6 +43,7 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || "http://localhost:3000",
   credentials: true,
 }));
+app.use(cookieParser());
 
 // ─── Payment webhooks (raw body — must be before express.json()) ────────────
 app.use("/api/webhooks", webhookRoutes);
@@ -72,6 +75,7 @@ app.get("/health", (_req, res) => {
 });
 
 // ─── Public API Routes (no auth) ─────────────────────────
+app.use("/api/auth", customerAuthRoutes);
 app.use("/api", publicRoutes);
 app.use("/api/settings", settingsRoutes); // public tracking/robots/sitemap sub-routes
 

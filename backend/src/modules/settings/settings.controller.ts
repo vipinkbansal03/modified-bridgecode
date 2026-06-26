@@ -19,6 +19,11 @@ export const publicTracking = asyncHandler(async (_req: AuthRequest, res: Respon
   return ApiResponse.success(res, "Tracking settings.", await S.getPublicTrackingSettings());
 });
 
+export const publicAuth = asyncHandler(async (_req: AuthRequest, res: Response) => {
+  res.setHeader("Cache-Control", "no-store");
+  return ApiResponse.success(res, "Auth page settings.", await S.getPublicAuthSettings());
+});
+
 export const publicSitemap = asyncHandler(async (_req: AuthRequest, res: Response) =>
   ApiResponse.success(res, "Sitemap settings.", await S.getSitemapSettings())
 );

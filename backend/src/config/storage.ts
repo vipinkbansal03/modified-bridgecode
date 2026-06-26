@@ -55,14 +55,15 @@ export async function uploadFile(localFilePath: string, folder = "modortho"): Pr
 /**
  * Delete a file from the configured storage provider.
  */
-export async function deleteFile(publicId: string, provider: StorageProvider): Promise<void> {
+export async function deleteFile(publicId: string, provider: StorageProvider, folder?: string | null): Promise<void> {
   try {
     if (provider === StorageProvider.CLOUDINARY) {
       await cloudinary.uploader.destroy(publicId);
     } else {
       // Local: publicId is the filename
       const uploadDir = path.join(process.cwd(), process.env.LOCAL_UPLOAD_PATH || "uploads");
-      const filePath = path.join(uploadDir, publicId);
+      const safePublicId = publicId.replace(/^\/?uploads[\\/]/, "");
+      const filePath = path.join(uploadDir, folder || "", safePublicId);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
   } catch (err) {

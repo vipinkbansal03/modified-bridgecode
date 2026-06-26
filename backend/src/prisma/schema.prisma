@@ -13,21 +13,23 @@ datasource db {
 // ─── AUTH & USERS ───────────────────────────────────────────────────────────
 
 model User {
-  id           String    @id @default(cuid())
+  id           String     @id @default(cuid())
   name         String
-  email        String    @unique
+  email        String     @unique
   password     String
   roleId       String
-  role         Role      @relation(fields: [roleId], references: [id])
+  role         Role       @relation(fields: [roleId], references: [id])
   status       UserStatus @default(ACTIVE)
   lastLoginAt  DateTime?
   refreshToken String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
   deletedAt    DateTime?
 
-  ActivityLog  ActivityLog[]
-  QuoteNote    QuoteNote[]
+  ActivityLog       ActivityLog[]
+  QuoteNote         QuoteNote[]
+  customerProfile   CustomerProfile?
+  customerAddresses CustomerAddress[]
 
   @@map("users")
 }
@@ -50,6 +52,49 @@ enum UserStatus {
   SUSPENDED
 }
 
+model CustomerProfile {
+  id                    String                 @id @default(cuid())
+  userId                String                 @unique
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone                 String
+  companyName           String?
+  website               String?
+  preferredPrescription PreferredPrescription?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  @@map("customer_profiles")
+}
+
+model CustomerAddress {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  countryId     String
+  country       Country  @relation(fields: [countryId], references: [id])
+  label         String   @default("Primary")
+  recipientName String
+  phone         String?
+  addressLine1  String
+  addressLine2  String?
+  city          String
+  state         String
+  postalCode    String
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@index([countryId])
+  @@map("customer_addresses")
+}
+
+enum PreferredPrescription {
+  MBT
+  ROTH
+  OTHER
+}
+
 // ─── CATEGORIES ─────────────────────────────────────────────────────────────
 
 model Category {
@@ -67,7 +112,7 @@ model Category {
   updatedAt   DateTime   @updatedAt
   deletedAt   DateTime?
 
-  products    Product[]
+  products     Product[]
   translations CategoryTranslation[]
 
   @@map("categories")
@@ -76,38 +121,38 @@ model Category {
 // ─── PRODUCTS ────────────────────────────────────────────────────────────────
 
 model Product {
-  id               String   @id @default(cuid())
-  title            String
-  slug             String   @unique
-  shortDescription String?
-  description      String?
-  categoryId       String
-  category         Category @relation(fields: [categoryId], references: [id])
-  sku              String?  @unique
-  productCode      String?
-  brand            String   @default("Modern Orthodontics")
-  status           ProductStatus @default(DRAFT)
-  isFeatured       Boolean  @default(false)
-  hasVariants      Boolean  @default(false)
-  defaultCountryId String?
-  defaultCountry   Country? @relation(fields: [defaultCountryId], references: [id])
+  id                String        @id @default(cuid())
+  title             String
+  slug              String        @unique
+  shortDescription  String?
+  description       String?
+  categoryId        String
+  category          Category      @relation(fields: [categoryId], references: [id])
+  sku               String?       @unique
+  productCode       String?
+  brand             String        @default("Modern Orthodontics")
+  status            ProductStatus @default(DRAFT)
+  isFeatured        Boolean       @default(false)
+  hasVariants       Boolean       @default(false)
+  defaultCountryId  String?
+  defaultCountry    Country?      @relation(fields: [defaultCountryId], references: [id])
   defaultCurrencyId String?
-  defaultCurrency  Currency? @relation(fields: [defaultCurrencyId], references: [id])
-  seoTitle         String?
-  seoDescription   String?
-  seoKeywords      String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  deletedAt        DateTime?
+  defaultCurrency   Currency?     @relation(fields: [defaultCurrencyId], references: [id])
+  seoTitle          String?
+  seoDescription    String?
+  seoKeywords       String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  deletedAt         DateTime?
 
-  media              ProductMedia[]
-  packages           ProductPackage[]
-  attributes         ProductAttribute[]
-  variants           ProductVariant[]
-  prices             ProductPrice[]
-  translations       ProductTranslation[]
-  QuoteItem          QuoteItem[]
-  OrderItem          OrderItem[]
+  media        ProductMedia[]
+  packages     ProductPackage[]
+  attributes   ProductAttribute[]
+  variants     ProductVariant[]
+  prices       ProductPrice[]
+  translations ProductTranslation[]
+  QuoteItem    QuoteItem[]
+  OrderItem    OrderItem[]
 
   @@map("products")
 }
@@ -132,16 +177,16 @@ model ProductPackage {
 }
 
 model ProductMedia {
-  id              String   @id @default(cuid())
+  id              String          @id @default(cuid())
   productId       String
-  product         Product  @relation(fields: [productId], references: [id])
+  product         Product         @relation(fields: [productId], references: [id])
   url             String
-  publicId        String?  // Cloudinary public ID or local filename
-  type            MediaType @default(IMAGE)
+  publicId        String? // Cloudinary public ID or local filename
+  type            MediaType       @default(IMAGE)
   altText         String?
-  sortOrder       Int      @default(0)
+  sortOrder       Int             @default(0)
   storageProvider StorageProvider @default(LOCAL)
-  createdAt       DateTime @default(now())
+  createdAt       DateTime        @default(now())
 
   @@map("product_media")
 }
@@ -157,28 +202,28 @@ model Attribute {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  values             AttributeValue[]
-  productAttributes  ProductAttribute[]
-  variantValues      ProductVariantAttributeValue[]
+  values            AttributeValue[]
+  productAttributes ProductAttribute[]
+  variantValues     ProductVariantAttributeValue[]
 
   @@map("attributes")
 }
 
 model AttributeValue {
-  id          String    @id @default(cuid())
-  attributeId String
-  attribute   Attribute @relation(fields: [attributeId], references: [id])
-  value       String
-  slug        String
-  image       String?
-  note        String?
-  priceAdjustment Decimal @db.Decimal(12, 2) @default(0)
-  sortOrder   Int       @default(0)
-  status      Status    @default(ACTIVE)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  attributeId     String
+  attribute       Attribute @relation(fields: [attributeId], references: [id])
+  value           String
+  slug            String
+  image           String?
+  note            String?
+  priceAdjustment Decimal   @default(0) @db.Decimal(12, 2)
+  sortOrder       Int       @default(0)
+  status          Status    @default(ACTIVE)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  variantValues ProductVariantAttributeValue[]
+  variantValues     ProductVariantAttributeValue[]
   productSelections ProductAttributeValueSelection[]
 
   @@unique([attributeId, slug])
@@ -201,12 +246,12 @@ model ProductAttribute {
 }
 
 model ProductAttributeValueSelection {
-  id               String           @id @default(cuid())
+  id                 String           @id @default(cuid())
   productAttributeId String
-  productAttribute ProductAttribute @relation(fields: [productAttributeId], references: [id])
-  attributeValueId String
-  attributeValue   AttributeValue   @relation(fields: [attributeValueId], references: [id])
-  createdAt        DateTime         @default(now())
+  productAttribute   ProductAttribute @relation(fields: [productAttributeId], references: [id])
+  attributeValueId   String
+  attributeValue     AttributeValue   @relation(fields: [attributeValueId], references: [id])
+  createdAt          DateTime         @default(now())
 
   @@unique([productAttributeId, attributeValueId])
   @@map("product_attribute_value_selections")
@@ -215,22 +260,22 @@ model ProductAttributeValueSelection {
 // ─── VARIANTS ────────────────────────────────────────────────────────────────
 
 model ProductVariant {
-  id         String        @id @default(cuid())
+  id         String          @id @default(cuid())
   productId  String
-  product    Product       @relation(fields: [productId], references: [id])
+  product    Product         @relation(fields: [productId], references: [id])
   packageId  String?
   package    ProductPackage? @relation(fields: [packageId], references: [id])
-  sku        String?       @unique
+  sku        String?         @unique
   title      String
-  variantKey String        // e.g. "MBT-.022-Full-Case" (combination key)
-  moq        Int           @default(1)
-  weight     Decimal?      @db.Decimal(10, 3)
-  length     Decimal?      @db.Decimal(10, 2)
-  width      Decimal?      @db.Decimal(10, 2)
-  height     Decimal?      @db.Decimal(10, 2)
-  status     Status        @default(ACTIVE)
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
+  variantKey String // e.g. "MBT-.022-Full-Case" (combination key)
+  moq        Int             @default(1)
+  weight     Decimal?        @db.Decimal(10, 3)
+  length     Decimal?        @db.Decimal(10, 2)
+  width      Decimal?        @db.Decimal(10, 2)
+  height     Decimal?        @db.Decimal(10, 2)
+  status     Status          @default(ACTIVE)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
 
   attributeValues ProductVariantAttributeValue[]
   prices          ProductPrice[]
@@ -267,12 +312,13 @@ model Country {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  prices           ProductPrice[]
-  defaultProducts  Product[]
-  ShippingZone     ShippingZone[]
-  Quote            Quote[]
-  Order            Order[]
-  Coupon           Coupon[]
+  prices            ProductPrice[]
+  defaultProducts   Product[]
+  ShippingZone      ShippingZone[]
+  Quote             Quote[]
+  Order             Order[]
+  Coupon            Coupon[]
+  customerAddresses CustomerAddress[]
 
   @@map("countries")
 }
@@ -283,17 +329,17 @@ model Currency {
   code         String   @unique // ISO 3-letter
   symbol       String
   exchangeRate Decimal  @db.Decimal(12, 6) // Rate vs base currency (e.g. 1 USD = 83.5 INR)
-  isBase       Boolean  @default(false)    // Exactly one should be true (e.g. USD)
+  isBase       Boolean  @default(false) // Exactly one should be true (e.g. USD)
   status       Status   @default(ACTIVE)
   updatedAt    DateTime @updatedAt
   createdAt    DateTime @default(now())
 
-  countries Country[]
-  prices    ProductPrice[]
+  countries               Country[]
+  prices                  ProductPrice[]
   defaultCurrencyProducts Product[]
-  Quote     Quote[]
-  Order     Order[]
-  Coupon    Coupon[]
+  Quote                   Quote[]
+  Order                   Order[]
+  Coupon                  Coupon[]
 
   @@map("currencies")
 }
@@ -301,23 +347,23 @@ model Currency {
 // ─── PRICING ─────────────────────────────────────────────────────────────────
 
 model ProductPrice {
-  id                String          @id @default(cuid())
-  productId         String
-  product           Product         @relation(fields: [productId], references: [id])
-  variantId         String?
-  variant           ProductVariant? @relation(fields: [variantId], references: [id])
-  countryId         String
-  country           Country         @relation(fields: [countryId], references: [id])
-  currencyId        String
-  currency          Currency        @relation(fields: [currencyId], references: [id])
-  mrp               Decimal         @db.Decimal(12, 2)
-  sellingPrice      Decimal         @db.Decimal(12, 2)
-  dealerPrice       Decimal?        @db.Decimal(12, 2)
-  distributorPrice  Decimal?        @db.Decimal(12, 2)
-  taxPercentage     Decimal         @db.Decimal(5, 2) @default(0)
-  status            Status          @default(ACTIVE)
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  id               String          @id @default(cuid())
+  productId        String
+  product          Product         @relation(fields: [productId], references: [id])
+  variantId        String?
+  variant          ProductVariant? @relation(fields: [variantId], references: [id])
+  countryId        String
+  country          Country         @relation(fields: [countryId], references: [id])
+  currencyId       String
+  currency         Currency        @relation(fields: [currencyId], references: [id])
+  mrp              Decimal         @db.Decimal(12, 2)
+  sellingPrice     Decimal         @db.Decimal(12, 2)
+  dealerPrice      Decimal?        @db.Decimal(12, 2)
+  distributorPrice Decimal?        @db.Decimal(12, 2)
+  taxPercentage    Decimal         @default(0) @db.Decimal(5, 2)
+  status           Status          @default(ACTIVE)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   @@unique([productId, variantId, countryId])
   @@map("product_prices")
@@ -343,26 +389,26 @@ model Inventory {
 // ─── COUPONS ─────────────────────────────────────────────────────────────────
 
 model Coupon {
-  id             String       @id @default(cuid())
-  code           String       @unique
-  description    String?
-  discountType   DiscountType
-  discountValue  Decimal      @db.Decimal(10, 2)
-  minOrderValue  Decimal?     @db.Decimal(10, 2)
-  maxDiscount    Decimal?     @db.Decimal(10, 2)
-  startDate      DateTime
-  endDate        DateTime
-  usageLimit     Int?
-  usedCount      Int          @default(0)
-  countryId      String?
-  country        Country?     @relation(fields: [countryId], references: [id])
-  currencyId     String?
-  currency       Currency?    @relation(fields: [currencyId], references: [id])
-  status         Status       @default(ACTIVE)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id            String       @id @default(cuid())
+  code          String       @unique
+  description   String?
+  discountType  DiscountType
+  discountValue Decimal      @db.Decimal(10, 2)
+  minOrderValue Decimal?     @db.Decimal(10, 2)
+  maxDiscount   Decimal?     @db.Decimal(10, 2)
+  startDate     DateTime
+  endDate       DateTime
+  usageLimit    Int?
+  usedCount     Int          @default(0)
+  countryId     String?
+  country       Country?     @relation(fields: [countryId], references: [id])
+  currencyId    String?
+  currency      Currency?    @relation(fields: [currencyId], references: [id])
+  status        Status       @default(ACTIVE)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
-  orders         Order[]
+  orders Order[]
 
   @@map("coupons")
 }
@@ -370,47 +416,47 @@ model Coupon {
 // ─── QUOTES ──────────────────────────────────────────────────────────────────
 
 model Quote {
-  id             String      @id @default(cuid())
-  quoteNumber    String      @unique
-  customerName   String
-  customerEmail  String
-  customerPhone  String?
-  companyName    String?
-  countryId      String
-  country        Country     @relation(fields: [countryId], references: [id])
-  currencyId     String
-  currency       Currency    @relation(fields: [currencyId], references: [id])
-  subtotal       Decimal     @db.Decimal(12, 2)
-  discount       Decimal     @db.Decimal(12, 2) @default(0)
-  total          Decimal     @db.Decimal(12, 2)
-  status         QuoteStatus @default(PENDING)
-  notes          String?
-  expiresAt      DateTime?
-  convertedOrderId String?   @unique
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  id               String      @id @default(cuid())
+  quoteNumber      String      @unique
+  customerName     String
+  customerEmail    String
+  customerPhone    String?
+  companyName      String?
+  countryId        String
+  country          Country     @relation(fields: [countryId], references: [id])
+  currencyId       String
+  currency         Currency    @relation(fields: [currencyId], references: [id])
+  subtotal         Decimal     @db.Decimal(12, 2)
+  discount         Decimal     @default(0) @db.Decimal(12, 2)
+  total            Decimal     @db.Decimal(12, 2)
+  status           QuoteStatus @default(PENDING)
+  notes            String?
+  expiresAt        DateTime?
+  convertedOrderId String?     @unique
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
-  items  QuoteItem[]
+  items         QuoteItem[]
   internalNotes QuoteNote[]
-  order  Order?    @relation(fields: [convertedOrderId], references: [id])
+  order         Order?      @relation(fields: [convertedOrderId], references: [id])
 
   @@map("quotes")
 }
 
 model QuoteItem {
-  id         String          @id @default(cuid())
-  quoteId    String
-  quote      Quote           @relation(fields: [quoteId], references: [id])
-  productId  String
-  product    Product         @relation(fields: [productId], references: [id])
-  variantId  String?
-  variant    ProductVariant? @relation(fields: [variantId], references: [id])
-  title      String
-  sku        String?
-  quantity   Int
-  unitPrice  Decimal         @db.Decimal(12, 2)
-  total      Decimal         @db.Decimal(12, 2)
-  createdAt  DateTime        @default(now())
+  id        String          @id @default(cuid())
+  quoteId   String
+  quote     Quote           @relation(fields: [quoteId], references: [id])
+  productId String
+  product   Product         @relation(fields: [productId], references: [id])
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+  title     String
+  sku       String?
+  quantity  Int
+  unitPrice Decimal         @db.Decimal(12, 2)
+  total     Decimal         @db.Decimal(12, 2)
+  createdAt DateTime        @default(now())
 
   @@map("quote_items")
 }
@@ -430,54 +476,54 @@ model QuoteNote {
 // ─── ORDERS ──────────────────────────────────────────────────────────────────
 
 model Order {
-  id              String        @id @default(cuid())
-  orderNumber     String        @unique
-  customerName    String
-  customerEmail   String
-  customerPhone   String?
-  companyName     String?
-  shippingAddress Json
-  countryId       String
-  country         Country       @relation(fields: [countryId], references: [id])
-  currencyId      String
-  currency        Currency      @relation(fields: [currencyId], references: [id])
-  subtotal        Decimal       @db.Decimal(12, 2)
-  discount        Decimal       @db.Decimal(12, 2) @default(0)
-  shippingCharge  Decimal       @db.Decimal(12, 2) @default(0)
-  total           Decimal       @db.Decimal(12, 2)
-  couponId        String?
-  coupon          Coupon?       @relation(fields: [couponId], references: [id])
-  status          OrderStatus   @default(PENDING)
-  paymentStatus   PaymentStatus @default(PENDING)
-  paymentProvider PaymentProvider?
-  paymentId       String?       // Razorpay/Stripe payment ID
-  shippingProvider String?      // e.g. "DHL" | "DTDC"
-  trackingNumber  String?
-  notes           String?
-  fromQuoteId     String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id               String           @id @default(cuid())
+  orderNumber      String           @unique
+  customerName     String
+  customerEmail    String
+  customerPhone    String?
+  companyName      String?
+  shippingAddress  Json
+  countryId        String
+  country          Country          @relation(fields: [countryId], references: [id])
+  currencyId       String
+  currency         Currency         @relation(fields: [currencyId], references: [id])
+  subtotal         Decimal          @db.Decimal(12, 2)
+  discount         Decimal          @default(0) @db.Decimal(12, 2)
+  shippingCharge   Decimal          @default(0) @db.Decimal(12, 2)
+  total            Decimal          @db.Decimal(12, 2)
+  couponId         String?
+  coupon           Coupon?          @relation(fields: [couponId], references: [id])
+  status           OrderStatus      @default(PENDING)
+  paymentStatus    PaymentStatus    @default(PENDING)
+  paymentProvider  PaymentProvider?
+  paymentId        String? // Razorpay/Stripe payment ID
+  shippingProvider String? // e.g. "DHL" | "DTDC"
+  trackingNumber   String?
+  notes            String?
+  fromQuoteId      String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
-  items           OrderItem[]
-  quote           Quote?
+  items OrderItem[]
+  quote Quote?
 
   @@map("orders")
 }
 
 model OrderItem {
-  id         String          @id @default(cuid())
-  orderId    String
-  order      Order           @relation(fields: [orderId], references: [id])
-  productId  String
-  product    Product         @relation(fields: [productId], references: [id])
-  variantId  String?
-  variant    ProductVariant? @relation(fields: [variantId], references: [id])
-  title      String
-  sku        String?
-  quantity   Int
-  unitPrice  Decimal         @db.Decimal(12, 2)
-  total      Decimal         @db.Decimal(12, 2)
-  createdAt  DateTime        @default(now())
+  id        String          @id @default(cuid())
+  orderId   String
+  order     Order           @relation(fields: [orderId], references: [id])
+  productId String
+  product   Product         @relation(fields: [productId], references: [id])
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+  title     String
+  sku       String?
+  quantity  Int
+  unitPrice Decimal         @db.Decimal(12, 2)
+  total     Decimal         @db.Decimal(12, 2)
+  createdAt DateTime        @default(now())
 
   @@map("order_items")
 }
@@ -485,15 +531,15 @@ model OrderItem {
 // ─── SHIPPING ────────────────────────────────────────────────────────────────
 
 model ShippingProvider {
-  id          String  @id @default(cuid())
-  name        String  @unique // "DHL" | "DTDC"
+  id          String   @id @default(cuid())
+  name        String   @unique // "DHL" | "DTDC"
   displayName String
   apiKey      String?
   apiSecret   String?
   baseUrl     String?
   trackingUrl String? // e.g. https://www.dhl.com/en/express/tracking.html?AWB={tracking}
-  isEnabled   Boolean @default(false)
-  config      Json    @default("{}")
+  isEnabled   Boolean  @default(false)
+  config      Json     @default("{}")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -503,17 +549,17 @@ model ShippingProvider {
 }
 
 model ShippingZone {
-  id               String           @id @default(cuid())
-  providerId       String
-  provider         ShippingProvider @relation(fields: [providerId], references: [id])
-  countryId        String
-  country          Country          @relation(fields: [countryId], references: [id])
-  charge           Decimal          @db.Decimal(10, 2)
-  freeAbove        Decimal?         @db.Decimal(10, 2)
-  estimatedDays    String?
-  status           Status           @default(ACTIVE)
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  id            String           @id @default(cuid())
+  providerId    String
+  provider      ShippingProvider @relation(fields: [providerId], references: [id])
+  countryId     String
+  country       Country          @relation(fields: [countryId], references: [id])
+  charge        Decimal          @db.Decimal(10, 2)
+  freeAbove     Decimal?         @db.Decimal(10, 2)
+  estimatedDays String?
+  status        Status           @default(ACTIVE)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
   @@unique([providerId, countryId])
   @@map("shipping_zones")
@@ -522,17 +568,17 @@ model ShippingZone {
 // ─── PAYMENTS ────────────────────────────────────────────────────────────────
 
 model PaymentGateway {
-  id             String   @id @default(cuid())
-  provider       PaymentProvider @unique
-  displayName    String
-  keyId          String?  // Razorpay Key ID / Stripe publishable key
-  keySecret      String?  // Razorpay Key Secret / Stripe secret key (store encrypted)
-  webhookSecret  String?
-  isEnabled      Boolean  @default(false)
-  countries      Json     @default("[]") // country codes this gateway applies to
-  config         Json     @default("{}")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            String          @id @default(cuid())
+  provider      PaymentProvider @unique
+  displayName   String
+  keyId         String? // Razorpay Key ID / Stripe publishable key
+  keySecret     String? // Razorpay Key Secret / Stripe secret key (store encrypted)
+  webhookSecret String?
+  isEnabled     Boolean         @default(false)
+  countries     Json            @default("[]") // country codes this gateway applies to
+  config        Json            @default("{}")
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   @@map("payment_gateways")
 }
@@ -544,9 +590,9 @@ model Media {
   filename        String
   originalName    String
   url             String
-  publicId        String?         // Cloudinary public ID
+  publicId        String? // Cloudinary public ID
   mimeType        String
-  size            Int             // bytes
+  size            Int // bytes
   type            MediaType       @default(IMAGE)
   storageProvider StorageProvider @default(LOCAL)
   folder          String?
@@ -558,11 +604,11 @@ model Media {
 // ─── TRANSLATIONS ────────────────────────────────────────────────────────────
 
 model Language {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   name      String
-  code      String  @unique // ISO 639-1 e.g. "en", "ar", "de"
-  isDefault Boolean @default(false)
-  isEnabled Boolean @default(true)
+  code      String   @unique // ISO 639-1 e.g. "en", "ar", "de"
+  isDefault Boolean  @default(false)
+  isEnabled Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -574,20 +620,20 @@ model Language {
 }
 
 model ProductTranslation {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   productId        String
-  product          Product  @relation(fields: [productId], references: [id])
+  product          Product   @relation(fields: [productId], references: [id])
   languageId       String
-  language         Language @relation(fields: [languageId], references: [id])
+  language         Language  @relation(fields: [languageId], references: [id])
   title            String?
   shortDescription String?
   description      String?
   seoTitle         String?
   seoDescription   String?
-  isAiGenerated    Boolean  @default(false)
+  isAiGenerated    Boolean   @default(false)
   reviewedAt       DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@unique([productId, languageId])
   @@map("product_translations")
@@ -628,10 +674,10 @@ model Setting {
   key       String   @unique
   value     String   @default("")
   group     String   @default("general")
-  label     String?                        // human-readable label shown in admin
-  type      String   @default("string")   // string | boolean | number | json | secret
-  isSecret  Boolean  @default(false)      // if true, value is AES-encrypted at rest
-  isEnabled Boolean  @default(true)       // used for enable/disable toggles
+  label     String? // human-readable label shown in admin
+  type      String   @default("string") // string | boolean | number | json | secret
+  isSecret  Boolean  @default(false) // if true, value is AES-encrypted at rest
+  isEnabled Boolean  @default(true) // used for enable/disable toggles
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -645,8 +691,8 @@ model ActivityLog {
   id         String   @id @default(cuid())
   userId     String?
   user       User?    @relation(fields: [userId], references: [id])
-  action     String   // e.g. "PRODUCT_CREATED", "ORDER_STATUS_UPDATED"
-  entityType String?  // e.g. "Product", "Order"
+  action     String // e.g. "PRODUCT_CREATED", "ORDER_STATUS_UPDATED"
+  entityType String? // e.g. "Product", "Order"
   entityId   String?
   metadata   Json?
   ipAddress  String?
@@ -732,7 +778,7 @@ model CMSPage {
   title          String
   slug           String       @unique
   pageKey        String       @unique
-  status         String       @default("ACTIVE")   // ACTIVE | INACTIVE | DRAFT
+  status         String       @default("ACTIVE") // ACTIVE | INACTIVE | DRAFT
   seoTitle       String?
   seoDescription String?
   seoKeywords    String?
@@ -790,7 +836,7 @@ model CMSMedia {
   id              String   @id @default(cuid())
   title           String?
   url             String
-  type            String   @default("IMAGE")   // IMAGE | VIDEO | PDF | CATALOGUE | CERTIFICATE
+  type            String   @default("IMAGE") // IMAGE | VIDEO | PDF | CATALOGUE | CERTIFICATE
   altText         String?
   storageProvider String?
   size            Int?
@@ -804,7 +850,7 @@ model CMSMedia {
 model CMSMenu {
   id        String        @id @default(cuid())
   name      String
-  location  String        @unique   // header | footer | mobile
+  location  String        @unique // header | footer | mobile
   status    String        @default("ACTIVE")
   items     CMSMenuItem[]
   createdAt DateTime      @default(now())
@@ -814,17 +860,17 @@ model CMSMenu {
 }
 
 model CMSMenuItem {
-  id           String    @id @default(cuid())
+  id           String   @id @default(cuid())
   menuId       String
-  menu         CMSMenu   @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  menu         CMSMenu  @relation(fields: [menuId], references: [id], onDelete: Cascade)
   parentId     String?
   label        String
   url          String
-  sortOrder    Int       @default(0)
-  openInNewTab Boolean   @default(false)
-  status       String    @default("ACTIVE")
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  sortOrder    Int      @default(0)
+  openInNewTab Boolean  @default(false)
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@map("cms_menu_items")
 }

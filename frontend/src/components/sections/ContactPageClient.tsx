@@ -40,7 +40,7 @@ export function ContactPageClient() {
                 tab === "dealer" ? "bg-ink text-white" : "bg-grey text-steel"
               )}
             >
-              Become a Dealer
+              Become a Dealer 
             </button>
           </div>
           {tab === "general" ? <ContactForm /> : <DealerInquiryForm />}

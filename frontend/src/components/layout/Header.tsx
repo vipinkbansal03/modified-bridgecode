@@ -2,13 +2,27 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, Search, User, ShoppingCart, Menu, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  ChevronDown,
+  Search,
+  User,
+  ShoppingCart,
+  Menu,
+  X,
+  Package,
+  Heart,
+  LogOut,
+  Settings,
+} from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { MegaMenu } from "@/components/layout/MegaMenu";
 import { MobileMenu } from "@/components/layout/MobileMenu";
 import { CurrencySwitcher } from "@/components/ui/CurrencySwitcher";
 import { SearchOverlay } from "@/components/ui/SearchOverlay";
 import { useQuoteCart } from "@/contexts/QuoteCartContext";
+import { useCustomerLogout, useCustomerMe } from "@/hooks/api/useCustomerLogin";
 import navigation from "@/data/navigation.json";
 import { cn } from "@/utils/cn";
 import type { NavigationData } from "@/types/common.types";
@@ -16,12 +30,27 @@ import type { NavigationData } from "@/types/common.types";
 const nav = navigation as NavigationData;
 
 export function Header() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const [scrolled, setScrolled] = useState(false);
   const [megaOpen, setMegaOpen] = useState(false);
   const [capsOpen, setCapsOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const { totals } = useQuoteCart();
+  const { data: customer } = useCustomerMe();
+  const logoutMutation = useCustomerLogout();
+
+  function handleLogout() {
+    logoutMutation.mutate(undefined, {
+      onSettled: () => {
+        setAccountOpen(false);
+        queryClient.removeQueries({ queryKey: ["customer", "me"] });
+        router.push("/login");
+      },
+    });
+  }
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -96,9 +125,94 @@ export function Header() {
             >
               <Search size={18} />
             </button>
-            <button aria-label="Account" className="text-ink">
-              <User size={18} />
-            </button>
+            {customer ? (
+              <div
+                className="relative leading-none"
+                onMouseEnter={() => setAccountOpen(true)}
+                onMouseLeave={() => setAccountOpen(false)}
+              >
+                <button
+                  type="button"
+                  onClick={() => setAccountOpen((value) => !value)}
+                  aria-label="My account"
+                  aria-expanded={accountOpen}
+                  className="text-ink hover:text-brand"
+                >
+                  <User size={18} />
+                </button>
+
+                {accountOpen && (
+                  <div className="absolute right-[10%] translate-x-[10%] top-[100%] z-50 w-[285px] overflow-hidden rounded-2xl border border-line bg-white shadow-[0_24px_60px_rgba(0,0,0,0.14)]">
+                    <div className="bg-gradient-to-br from-[#E31E24] to-[#9F1116] p-4 text-white">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/18 text-[15px] font-semibold">
+                          {customer.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-[14px] font-semibold">
+                            {customer.name}
+                          </p>
+                          <p className="truncate text-[12px] text-white/75">
+                            {customer.email}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 inline-flex rounded-full bg-white/16 px-3 py-1 text-[11px] font-medium">
+                        {customer.role.name}
+                      </div>
+                    </div>
+
+                    <div className="p-2">
+                      <Link
+                        href="/account"
+                        onClick={() => setAccountOpen(false)}
+                        className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium text-ink transition-colors hover:bg-offwhite hover:text-brand"
+                      >
+                        <Settings size={16} />
+                        My account
+                      </Link>
+                      <Link
+                        href="/account"
+                        onClick={() => setAccountOpen(false)}
+                        className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium text-ink transition-colors hover:bg-offwhite hover:text-brand"
+                      >
+                        <Package size={16} />
+                        My orders
+                      </Link>
+                      <Link
+                        href="/account"
+                        onClick={() => setAccountOpen(false)}
+                        className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium text-ink transition-colors hover:bg-offwhite hover:text-brand"
+                      >
+                        <Heart size={16} />
+                        Wishlist
+                      </Link>
+                    </div>
+
+                    <div className="border-t border-line p-2">
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        disabled={logoutMutation.isPending}
+                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13.5px] font-medium text-[#B5151B] transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <LogOut size={16} />
+                        {logoutMutation.isPending ? "Logging out..." : "Logout"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link
+                href="/login"
+                aria-label="Login"
+                title="Login"
+                className="text-ink hover:text-brand"
+              >
+                <User size={18} />
+              </Link>
+            )}
             <button
               aria-label="Quote Cart"
               className="relative text-ink hover:text-brand"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, ReactNode } from "react";
+import { useCallback, useState, ReactNode } from "react";
 import { ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
 import { cn } from "@/utils/cn";
 
@@ -276,10 +276,10 @@ interface ToastState {
 export function useToast() {
   const [toast, setToast] = useState<ToastState | null>(null);
 
-  const showToast = (message: string, type: "success" | "error" = "success") => {
+  const showToast = useCallback((message: string, type: "success" | "error" = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
-  };
+  }, []);
 
   const ToastComponent = toast ? (
     <div className={cn("fixed bottom-5 right-5 z-50 rounded-lg px-5 py-3.5 text-[13.5px] font-medium text-white shadow-lg transition-all", toast.type === "success" ? "bg-[#1A1A1A]" : "bg-red-600")}>
