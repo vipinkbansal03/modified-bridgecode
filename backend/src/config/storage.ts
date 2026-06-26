@@ -60,9 +60,14 @@ export async function deleteFile(publicId: string, provider: StorageProvider): P
     if (provider === StorageProvider.CLOUDINARY) {
       await cloudinary.uploader.destroy(publicId);
     } else {
-      // Local: publicId is the filename
-      const uploadDir = path.join(process.cwd(), process.env.LOCAL_UPLOAD_PATH || "uploads");
-      const filePath = path.join(uploadDir, publicId);
+      const uploadRoot = path.resolve(process.cwd(), process.env.LOCAL_UPLOAD_PATH || "uploads");
+      const relativePath = publicId.startsWith("/uploads/")
+        ? publicId.replace(/^\/uploads\//, "")
+        : publicId.replace(/^[/\\]+/, "");
+      const filePath = path.resolve(uploadRoot, relativePath);
+      if (!filePath.startsWith(uploadRoot)) {
+        throw new Error(`Refusing to delete file outside uploads root: ${filePath}`);
+      }
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
   } catch (err) {

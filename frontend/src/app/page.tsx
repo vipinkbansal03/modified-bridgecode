@@ -36,69 +36,92 @@ function findSection(cms: CmsPage, key: string): CmsSection | null {
   return cms.sections.find((s) => s.sectionKey === key) ?? null;
 }
 
+function renderCmsHomeSection(section: CmsSection) {
+  if (section.sectionKey === "home.hero") {
+    const heroSlides = transformHeroSlides(section);
+    const heroData = heroSlides.length > 0 ? { slides: heroSlides } : homeContent.hero;
+    return [
+      <HeroSection key="home.hero" data={heroData} />,
+    ];
+  }
+
+  if (section.sectionKey === "home.about") {
+    const transformed = transformAboutIntro(section);
+    const aboutData = transformed
+      ? {
+          heading: transformed.title,
+          lede: transformed.description,
+          ctaLabel: transformed.ctaLabel,
+          ctaHref: transformed.ctaHref,
+        }
+      : homeContent.about;
+
+    return [
+      <AboutSection key="home.about" data={aboutData} />,
+      <FeaturedProductsSection key="home.featuredProducts" slugs={homeContent.featuredProductSlugs} captions={homeContent.featuredCaptions} />,
+      <CategoriesSection key="home.categories" />,
+    ];
+  }
+
+  if (section.sectionKey === "home.stats") {
+    const stats = transformStats(section);
+    return [
+      <StatsSection key="home.stats" data={stats.length > 0 ? stats : homeContent.stats} />,
+      <LocationsSection key="home.locations" data={staticLocations} />,
+    ];
+  }
+
+  if (section.sectionKey === "home.certifications") {
+    const certifications = transformCertifications(section);
+    return [
+      <CertificationsSection key="home.certifications" data={certifications.length > 0 ? certifications : homeContent.certifications} />,
+      <TestimonialsSection key="home.testimonials" />,
+      <BlogSection key="home.blog" />,
+    ];
+  }
+
+  if (section.sectionKey === "home.contactCta") {
+    const transformed = transformContactCta(section);
+    const contactCtaData = transformed
+      ? {
+          heading: transformed.title,
+          body: transformed.description,
+          ctaLabel: transformed.ctaLabel,
+          ctaHref: transformed.ctaHref,
+          image: transformed.image || homeContent.contactCta.image,
+        }
+      : homeContent.contactCta;
+
+    return [
+      <ContactCTASection key="home.contactCta" data={contactCtaData} />,
+    ];
+  }
+
+  return [];
+}
+
 export default async function HomePage() {
   const cms = await fetchCmsHomePage();
 
-  // Resolve each section from CMS or fall back to static JSON
-  const heroSlides = cms
-    ? transformHeroSlides(findSection(cms, "home.hero") ?? { id: "", sectionKey: "", sortOrder: 0, blocks: [] })
-    : homeContent.hero.slides;
-
-  const heroData = heroSlides.length > 0
-    ? { slides: heroSlides }
-    : homeContent.hero;
-
-  const aboutData = (() => {
-    if (!cms) return homeContent.about;
-    const t = transformAboutIntro(findSection(cms, "home.about") ?? { id: "", sectionKey: "", sortOrder: 0, blocks: [] });
-    if (!t) return homeContent.about;
-    return {
-      heading: t.title,
-      lede: t.description,
-      ctaLabel: t.ctaLabel,
-      ctaHref: t.ctaHref,
-    };
-  })();
-
-  const statsData = cms
-    ? (() => {
-        const t = transformStats(findSection(cms, "home.stats") ?? { id: "", sectionKey: "", sortOrder: 0, blocks: [] });
-        return t.length > 0 ? t : homeContent.stats;
-      })()
-    : homeContent.stats;
-
-  const certsData = cms
-    ? (() => {
-        const t = transformCertifications(findSection(cms, "home.certifications") ?? { id: "", sectionKey: "", sortOrder: 0, blocks: [] });
-        return t.length > 0 ? t : homeContent.certifications;
-      })()
-    : homeContent.certifications;
-
-  const contactCtaData = (() => {
-    if (!cms) return homeContent.contactCta;
-    const t = transformContactCta(findSection(cms, "home.contactCta") ?? { id: "", sectionKey: "", sortOrder: 0, blocks: [] });
-    if (!t) return homeContent.contactCta;
-    return {
-      heading: t.title,
-      body: t.description,
-      ctaLabel: t.ctaLabel,
-      ctaHref: t.ctaHref,
-      image: t.image || homeContent.contactCta.image,
-    };
-  })();
+  if (cms?.sections?.length) {
+    const renderedSections = cms.sections.flatMap((section) => renderCmsHomeSection(section));
+    if (renderedSections.length > 0) {
+      return <>{renderedSections}</>;
+    }
+  }
 
   return (
     <>
-      <HeroSection data={heroData} />
-      <AboutSection data={aboutData} />
+      <HeroSection data={homeContent.hero} />
+      <AboutSection data={homeContent.about} />
       <FeaturedProductsSection slugs={homeContent.featuredProductSlugs} captions={homeContent.featuredCaptions} />
       <CategoriesSection />
-      <StatsSection data={statsData} />
+      <StatsSection data={homeContent.stats} />
       <LocationsSection data={staticLocations} />
-      <CertificationsSection data={certsData} />
+      <CertificationsSection data={homeContent.certifications} />
       <TestimonialsSection />
       <BlogSection />
-      <ContactCTASection data={contactCtaData} />
+      <ContactCTASection data={homeContent.contactCta} />
     </>
   );
 }

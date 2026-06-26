@@ -37,9 +37,16 @@ export type CmsPage = {
   seoTitle?: string | null;
   seoDescription?: string | null;
   seoKeywords?: string | null;
+  robotsTag?: string | null;
+  canonicalUrl?: string | null;
+  favicon?: string | null;
   ogTitle?: string | null;
   ogDescription?: string | null;
   ogImage?: string | null;
+  twitterTitle?: string | null;
+  twitterDescription?: string | null;
+  twitterImage?: string | null;
+  faqSchemaJson?: unknown;
   sections: CmsSection[];
 };
 

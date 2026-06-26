@@ -53,8 +53,8 @@ export type CoverageBucketSummary = {
   fields: number;
 };
 
-function hasValue(value: string | null | undefined) {
-  return Boolean(value?.trim());
+function hasValue(value: unknown): value is string {
+  return typeof value === "string" && Boolean(value.trim());
 }
 
 function fieldLabel(field: string) {
@@ -74,7 +74,7 @@ function collectMissingFields(
   source: Record<string, unknown>,
   translation: Record<string, unknown> | null | undefined,
   fields: readonly string[],
-  getTranslationValue: (field: string) => string | null | undefined,
+  getTranslationValue: (field: string) => unknown,
 ) {
   const missing: CoverageMissingField[] = [];
 
@@ -86,7 +86,7 @@ function collectMissingFields(
       missing.push({
         field,
         fieldLabel: fieldLabel(field),
-        englishValue: englishValue!.trim(),
+        englishValue: englishValue.trim(),
       });
     }
   }

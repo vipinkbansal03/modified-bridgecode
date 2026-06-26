@@ -7,11 +7,13 @@ import { QuoteCartProvider } from "@/contexts/QuoteCartContext";
 import { CustomerAuthProvider } from "@/contexts/CustomerAuthContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { TrackingProvider } from "@/providers/TrackingProvider";
-import { buildMetadata } from "@/lib/seo";
+import { buildCmsMetadata } from "@/lib/seo";
 import seoData from "@/data/seo.json";
 import "@/styles/globals.css";
 
-export const metadata: Metadata = buildMetadata(seoData.home, "/");
+export async function generateMetadata(): Promise<Metadata> {
+  return buildCmsMetadata("home", seoData.home, "/");
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

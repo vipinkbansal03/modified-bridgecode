@@ -1,14 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import { Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, LayoutDashboard, TableProperties } from "lucide-react";
 import { BulkOrderBuilder } from "@/components/product/BulkOrderBuilder";
 import { Container } from "@/components/ui/Container";
 import { useProduct } from "@/hooks/api/useProducts";
 
-function QuickOrderContent() {
+function QuickOrderPageContent() {
   const searchParams = useSearchParams();
   const slug = searchParams.get("product") ?? "";
   const { data: product, isLoading } = useProduct(slug);
@@ -72,8 +72,18 @@ function QuickOrderContent() {
 
 export default function QuickOrderPage() {
   return (
-    <Suspense fallback={null}>
-      <QuickOrderContent />
+    <Suspense
+      fallback={
+        <section className="min-h-[70vh] bg-[linear-gradient(180deg,#F8F4EE_0%,#FFFDFC_28%,#FFFFFF_100%)] py-10 sm:py-14">
+          <Container>
+            <div className="rounded-[28px] border border-[#E6D9CB] bg-white p-6 text-[14px] text-[#6C6258] shadow-[0_24px_80px_rgba(21,16,12,0.08)] sm:p-8">
+              Loading quick-order workspace...
+            </div>
+          </Container>
+        </section>
+      }
+    >
+      <QuickOrderPageContent />
     </Suspense>
   );
 }

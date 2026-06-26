@@ -1067,9 +1067,16 @@ model CMSPage {
   seoTitle       String?
   seoDescription String?
   seoKeywords    String?
+  robotsTag      String?
+  canonicalUrl   String?
+  favicon        String?
   ogTitle        String?
   ogDescription  String?
   ogImage        String?
+  twitterTitle   String?
+  twitterDescription String?
+  twitterImage   String?
+  faqSchemaJson  Json?
   sections       CMSSection[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt

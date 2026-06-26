@@ -1777,7 +1777,7 @@ export default function EditProductPage() {
                         }}
                       />
                     </div>
-                    {v.inventory && <StatusBadge status={v.inventory.status ?? "ACTIVE"} />}
+                    {v.inventory && <StatusBadge status={v.inventory.status || "INACTIVE"} />}
                   </div>
                 </div>
               ))}
