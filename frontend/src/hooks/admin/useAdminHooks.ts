@@ -605,6 +605,100 @@ export const useDeleteDiscount = () => {
   return useMutation({ mutationFn: (id: string) => adminApi.delete(`/discounts/${id}`).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-discounts"] }) });
 };
 
+// ─── Blogs ────────────────────────────────────────────────
+
+export const useAdminBlogs = (params?: { page?: number; limit?: number; status?: string; categoryId?: string; authorId?: string; search?: string }) =>
+  useQuery({ queryKey: ["admin-blogs", params], queryFn: () => adminApi.get("/blogs", { params }).then((r) => r.data) });
+
+export const useAdminBlog = (id?: string) =>
+  useQuery({ queryKey: ["admin-blog", id], queryFn: () => adminApi.get(`/blogs/${id}`).then((r) => r.data.data), enabled: !!id });
+
+export const useCreateBlog = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (data: unknown) => adminApi.post("/blogs", data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-blogs"] }) });
+};
+
+export const useUpdateBlog = (id?: string) => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (data: unknown) => adminApi.put(`/blogs/${id}`, data).then((r) => r.data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-blogs"] }); qc.invalidateQueries({ queryKey: ["admin-blog", id] }); } });
+};
+
+export const useDeleteBlog = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => adminApi.delete(`/blogs/${id}`).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-blogs"] }) });
+};
+
+export const useBulkBlogs = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (data: { ids: string[]; action: string }) => adminApi.post("/blogs/bulk", data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-blogs"] }) });
+};
+
+export const useAdminBlogCategories = () =>
+  useQuery({ queryKey: ["admin-blog-categories"], queryFn: () => adminApi.get("/blogs/categories").then((r) => r.data.data) });
+
+export const useCreateBlogCategory = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (data: unknown) => adminApi.post("/blogs/categories", data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-blog-categories"] }) });
+};
+
+export const useUpdateBlogCategory = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => adminApi.put(`/blogs/categories/${id}`, data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-blog-categories"] }) });
+};
+
+export const useDeleteBlogCategory = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => adminApi.delete(`/blogs/categories/${id}`).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-blog-categories"] }) });
+};
+
+export const useAdminBlogAuthors = () =>
+  useQuery({ queryKey: ["admin-blog-authors"], queryFn: () => adminApi.get("/blogs/authors").then((r) => r.data.data) });
+
+export const useCreateBlogAuthor = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (data: unknown) => adminApi.post("/blogs/authors", data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-blog-authors"] }) });
+};
+
+export const useUpdateBlogAuthor = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => adminApi.put(`/blogs/authors/${id}`, data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-blog-authors"] }) });
+};
+
+export const useDeleteBlogAuthor = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => adminApi.delete(`/blogs/authors/${id}`).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-blog-authors"] }) });
+};
+
+// ─── Banners ──────────────────────────────────────────────
+
+export const useAdminBanners = (params?: { placement?: string; countryId?: string; status?: string }) =>
+  useQuery({ queryKey: ["admin-banners", params], queryFn: () => adminApi.get("/banners", { params }).then((r) => r.data.data) });
+
+export const useCreateBanner = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (data: unknown) => adminApi.post("/banners", data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-banners"] }) });
+};
+
+export const useUpdateBanner = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => adminApi.put(`/banners/${id}`, data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-banners"] }) });
+};
+
+export const useDeleteBanner = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => adminApi.delete(`/banners/${id}`).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-banners"] }) });
+};
+
+export const useReorderBanners = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (ids: string[]) => adminApi.put("/banners/reorder", { ids }).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-banners"] }) });
+};
+
+export const useBulkBanners = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (data: { ids: string[]; action: string }) => adminApi.post("/banners/bulk", data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-banners"] }) });
+};
+
 export const useAdminQuotes = (params?: { page?: number; status?: string }) =>
   useQuery({ queryKey: ["admin-quotes", params], queryFn: () => adminApi.get("/quotes", { params }).then((r) => r.data) });
 

@@ -28,6 +28,7 @@ model User {
 
   ActivityLog ActivityLog[]
   QuoteNote   QuoteNote[]
+  blogAuthors BlogAuthor[]
 
   @@map("users")
 }
@@ -75,6 +76,75 @@ model Category {
   discounts    Discount[]
 
   @@map("categories")
+}
+
+model BlogAuthor {
+  id        String   @id @default(cuid())
+  name      String
+  bio       String?
+  avatar    String?
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  blogs     Blog[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("blog_authors")
+}
+
+model BlogCategory {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  blogs       Blog[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("blog_categories")
+}
+
+model Blog {
+  id             String        @id @default(cuid())
+  title          String
+  slug           String        @unique
+  content        String
+  excerpt        String?
+  featuredImage  String?
+  authorId       String?
+  author         BlogAuthor?   @relation(fields: [authorId], references: [id])
+  categoryId     String?
+  category       BlogCategory? @relation(fields: [categoryId], references: [id])
+  tags           String[]
+  status         BlogStatus    @default(DRAFT)
+  publishedAt    DateTime?
+  scheduledAt    DateTime?
+  seoTitle       String?
+  seoDescription String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@map("blogs")
+}
+
+model Banner {
+  id          String          @id @default(cuid())
+  title       String
+  image       String
+  mobileImage String?
+  linkUrl     String?
+  linkText    String?
+  placement   BannerPlacement
+  countryId   String?
+  country     Country?        @relation(fields: [countryId], references: [id])
+  sortOrder   Int             @default(0)
+  status      Boolean         @default(true)
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@map("banners")
 }
 
 model CategoryCountry {
@@ -338,6 +408,7 @@ model Country {
   tierPricing        TierPricing[]
   moqPricing         MoqPricing[]
   discounts          Discount[]
+  banners            Banner[]
 
   @@map("countries")
 }
@@ -1061,6 +1132,20 @@ enum PaymentStatus {
   PAID
   FAILED
   REFUNDED
+}
+
+enum BlogStatus {
+  DRAFT
+  PUBLISHED
+  SCHEDULED
+}
+
+enum BannerPlacement {
+  HOMEPAGE_HERO
+  HOMEPAGE_PROMO
+  CATEGORY_TOP
+  PRODUCT_TOP
+  SIDEBAR
 }
 
   enum PaymentProvider {

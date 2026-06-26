@@ -13,6 +13,7 @@ import homeContent from "@/data/home.json";
 import type { LocationPin } from "@/types/common.types";
 import type { CmsPage, CmsSection } from "@/hooks/api/useCmsContent";
 import { transformHeroSlides, transformStats, transformCertifications, transformAboutIntro, transformContactCta } from "@/utils/cmsTransform";
+import type { HeroSlide } from "@/components/sections/HeroSection";
 
 export const revalidate = 300;
 
@@ -32,14 +33,35 @@ async function fetchCmsHomePage(): Promise<CmsPage | null> {
   }
 }
 
+async function fetchHomepageHeroBanners(countryCode?: string): Promise<HeroSlide[]> {
+  try {
+    const apiBase = process.env.API_BASE_URL ?? "http://localhost:4000";
+    const params = new URLSearchParams({ placement: "HOMEPAGE_HERO" });
+    if (countryCode) params.set("countryCode", countryCode);
+    const res = await fetch(`${apiBase}/api/banners?${params.toString()}`, { next: { revalidate: 300 } });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const banners = (json.data ?? []) as { image: string; title: string; linkText?: string | null; linkUrl?: string | null }[];
+    return banners.map((banner) => ({
+      image: banner.image,
+      kicker: "Modern Orthodontics",
+      title: banner.title,
+      ctaLabel: banner.linkText || "Explore",
+      ctaHref: banner.linkUrl || "/products",
+    }));
+  } catch {
+    return [];
+  }
+}
+
 function findSection(cms: CmsPage, key: string): CmsSection | null {
   return cms.sections.find((s) => s.sectionKey === key) ?? null;
 }
 
-function renderCmsHomeSection(section: CmsSection) {
+function renderCmsHomeSection(section: CmsSection, bannerSlides: HeroSlide[]) {
   if (section.sectionKey === "home.hero") {
     const heroSlides = transformHeroSlides(section);
-    const heroData = heroSlides.length > 0 ? { slides: heroSlides } : homeContent.hero;
+    const heroData = bannerSlides.length > 0 ? { slides: bannerSlides } : heroSlides.length > 0 ? { slides: heroSlides } : homeContent.hero;
     return [
       <HeroSection key="home.hero" data={heroData} />,
     ];
@@ -101,10 +123,12 @@ function renderCmsHomeSection(section: CmsSection) {
 }
 
 export default async function HomePage() {
+  const cookieStore = await cookies();
   const cms = await fetchCmsHomePage();
+  const bannerSlides = await fetchHomepageHeroBanners(cookieStore.get("country")?.value ?? "IN");
 
   if (cms?.sections?.length) {
-    const renderedSections = cms.sections.flatMap((section) => renderCmsHomeSection(section));
+    const renderedSections = cms.sections.flatMap((section) => renderCmsHomeSection(section, bannerSlides));
     if (renderedSections.length > 0) {
       return <>{renderedSections}</>;
     }
@@ -112,7 +136,7 @@ export default async function HomePage() {
 
   return (
     <>
-      <HeroSection data={homeContent.hero} />
+      <HeroSection data={bannerSlides.length > 0 ? { slides: bannerSlides } : homeContent.hero} />
       <AboutSection data={homeContent.about} />
       <FeaturedProductsSection slugs={homeContent.featuredProductSlugs} captions={homeContent.featuredCaptions} />
       <CategoriesSection />

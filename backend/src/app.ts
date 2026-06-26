@@ -42,6 +42,10 @@ import logRoutes from "./modules/logs/logs.routes";
 import userRoutes from "./modules/users/users.routes";
 import roleRoutes from "./modules/roles/roles.routes";
 import cmsRoutes from "./modules/cms/cms.routes";
+import blogRoutes from "./modules/blogs/blogs.routes";
+import publicBlogRoutes from "./modules/blogs/publicBlogs.routes";
+import bannerRoutes from "./modules/banners/banners.routes";
+import publicBannerRoutes from "./modules/banners/publicBanners.routes";
 
 const app = express();
 
@@ -114,11 +118,15 @@ app.use(`${API}/logs`, logRoutes);
 app.use(`${API}/users`, userRoutes);
 app.use(`${API}/roles`, roleRoutes);
 app.use(`${API}/cms`, cmsRoutes);
+app.use(`${API}/blogs`, blogRoutes);
+app.use(`${API}/banners`, bannerRoutes);
 app.use("/api/customer/auth", customerAuthRoutes);
 app.use("/api/customer/addresses", customerAddressRoutes);
 app.use("/api/customer/orders", customerOrderRoutes);
 app.use("/api/shipping", publicShippingRoutes);
 app.use("/api/coupons", publicCouponRoutes);
+app.use("/api/blogs", publicBlogRoutes);
+app.use("/api/banners", publicBannerRoutes);
 
 // ─── 404 ─────────────────────────────────────────────────
 app.use((_req, res) => {

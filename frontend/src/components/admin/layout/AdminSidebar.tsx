@@ -42,6 +42,10 @@ const cmsItems = [
   { label: "Pages",   href: "/admin/cms/pages",  icon: Newspaper },
   { label: "Menus",   href: "/admin/cms/menus",  icon: Menu },
   { label: "Footer",  href: "/admin/cms/footer", icon: AlignLeft },
+  { label: "Blog Posts", href: "/admin/blogs", icon: FileText },
+  { label: "Blog Categories", href: "/admin/blogs/categories", icon: Tag },
+  { label: "Blog Authors", href: "/admin/blogs/authors", icon: Users },
+  { label: "Banners", href: "/admin/banners", icon: Image },
 ];
 
 interface AdminSidebarProps {
