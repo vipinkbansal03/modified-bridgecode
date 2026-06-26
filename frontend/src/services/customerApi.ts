@@ -12,7 +12,30 @@ export const customerApi = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+const SHIPPING_API_BASE = API_ORIGIN ? `${API_ORIGIN}/api/shipping` : "/api/shipping";
+const COUPON_API_BASE = API_ORIGIN ? `${API_ORIGIN}/api/coupons` : "/api/coupons";
+
+export const shippingApi = axios.create({
+  baseURL: SHIPPING_API_BASE,
+  withCredentials: true,
+  headers: { "Content-Type": "application/json" },
+});
+
+export const couponApi = axios.create({
+  baseURL: COUPON_API_BASE,
+  withCredentials: true,
+  headers: { "Content-Type": "application/json" },
+});
+
 customerApi.interceptors.request.use((config) => {
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("customer_token");
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+couponApi.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
     const token = localStorage.getItem("customer_token");
     if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -83,6 +106,7 @@ export interface CustomerOrderLineItem {
 export interface CreateCustomerOrderPayload {
   items: CustomerOrderItemPayload[];
   shippingAddress: CustomerOrderAddressPayload;
+  couponCode?: string;
   notes?: string;
 }
 
@@ -93,8 +117,13 @@ export interface CustomerOrderSummary {
   paymentStatus: string;
   paymentMethod?: string | null;
   subtotal: string | number;
+  taxAmount?: string | number;
   discount?: string | number;
+  couponCode?: string | null;
+  couponDiscount?: string | number | null;
   shippingCharge?: string | number;
+  shippingProvider?: string | null;
+  shippingZoneId?: string | null;
   total: string | number;
   createdAt: string;
   currency?: { code: string; symbol: string };
@@ -103,14 +132,70 @@ export interface CustomerOrderSummary {
   items: CustomerOrderLineItem[];
 }
 
+export interface CustomerOrderEstimate {
+  subtotal: number;
+  taxAmount: number;
+  shippingCharge: number;
+  shippingProvider?: string | null;
+  shippingZoneId?: string | null;
+  shippingEstimatedDays?: string | null;
+  shippingIsFree?: boolean;
+  discount: number;
+  couponCode?: string | null;
+  couponDiscount?: number;
+  total: number;
+  currency?: { code: string; symbol: string };
+  taxBreakdown: { label: string; taxPercent?: number | null; taxAmount: number }[];
+}
+
+export interface CouponValidationResult {
+  valid: true;
+  code: string;
+  discountType: "PERCENTAGE" | "FIXED";
+  discountValue: number;
+  discountAmount: number;
+  description?: string | null;
+}
+
+export interface ShippingEstimate {
+  available: boolean;
+  charge: number;
+  isFree: boolean;
+  provider: string | null;
+  providerId: string | null;
+  zoneId: string | null;
+  estimatedDays: string | null;
+  message?: string;
+}
+
 export async function createCustomerOrder(payload: CreateCustomerOrderPayload) {
   const res = await customerApi.post("/orders", payload);
   return res.data.data as CustomerOrderSummary;
 }
 
+export async function estimateCustomerOrder(payload: CreateCustomerOrderPayload) {
+  const res = await customerApi.post("/orders/estimate", payload);
+  return res.data.data as CustomerOrderEstimate;
+}
+
+export async function calculateShipping(payload: { countryCode: string; orderValue: number }) {
+  const res = await shippingApi.post("/calculate", payload);
+  return res.data.data as ShippingEstimate;
+}
+
+export async function validateCoupon(payload: { code: string; orderValue: number; countryCode?: string }) {
+  const res = await couponApi.post("/validate", payload);
+  return res.data.data as CouponValidationResult;
+}
+
 export async function listCustomerOrders() {
   const res = await customerApi.get("/orders");
   return res.data.data as CustomerOrderSummary[];
+}
+
+export async function downloadCustomerInvoice(orderId: string) {
+  const res = await customerApi.get(`/orders/${orderId}/invoice`, { responseType: "blob" });
+  return res.data as Blob;
 }
 
 export async function listCustomerAddresses() {

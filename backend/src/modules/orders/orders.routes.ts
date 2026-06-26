@@ -1,18 +1,19 @@
 import { Router } from "express";
-import { protect } from "../../middleware/auth.middleware";
+import { protect, requirePermission } from "../../middleware/auth.middleware";
 import * as C from "./orders.controller";
 
 const router = Router();
 router.use(protect);
 
-router.get("/", C.list);
-router.post("/", C.create);
-router.get("/analytics", C.analytics);
-router.get("/:id", C.getOne);
-router.put("/:id/status", C.updateStatus);
-router.put("/:id/payment-status", C.updatePayment);
-router.put("/:id/shipping", C.updateShipping);
-router.post("/:id/ship", C.ship);
-router.post("/:id/deliver", C.deliver);
+router.get("/", requirePermission("orders.view", "orders.manage"), C.list);
+router.post("/", requirePermission("orders.manage"), C.create);
+router.get("/analytics", requirePermission("orders.view", "orders.manage"), C.analytics);
+router.get("/:id/invoice", requirePermission("orders.manage"), C.invoice);
+router.get("/:id", requirePermission("orders.view", "orders.manage"), C.getOne);
+router.put("/:id/status", requirePermission("orders.manage"), C.updateStatus);
+router.put("/:id/payment-status", requirePermission("orders.manage"), C.updatePayment);
+router.put("/:id/shipping", requirePermission("orders.manage"), C.updateShipping);
+router.post("/:id/ship", requirePermission("orders.manage"), C.ship);
+router.post("/:id/deliver", requirePermission("orders.manage"), C.deliver);
 
 export default router;

@@ -46,6 +46,16 @@ export const remove = asyncHandler(async (req: AuthRequest, res: Response) => {
   return ApiResponse.success(res, "Product deleted.");
 });
 
+export const reorder = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const products = await ProductService.reorderProducts(req.body?.items);
+  return ApiResponse.success(res, "Products reordered.", products);
+});
+
+export const bulkUpdate = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await ProductService.bulkUpdateProducts(req.body);
+  return ApiResponse.success(res, "Bulk product action completed.", result);
+});
+
 export const listCountries = asyncHandler(async (req: AuthRequest, res: Response) => {
   const countries = await ProductService.listProductCountries(req.params.id as string);
   return ApiResponse.success(res, "Product countries fetched.", countries);
@@ -55,6 +65,17 @@ export const updateCountries = asyncHandler(async (req: AuthRequest, res: Respon
   const items = Array.isArray(req.body) ? req.body : req.body?.items;
   const countries = await ProductService.updateProductCountries(req.params.id as string, items);
   return ApiResponse.success(res, "Product countries updated.", countries);
+});
+
+export const listVariantCountries = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const countries = await ProductService.listVariantCountries(req.params.id as string, req.params.variantId as string);
+  return ApiResponse.success(res, "Variant countries fetched.", countries);
+});
+
+export const updateVariantCountries = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const items = Array.isArray(req.body) ? req.body : req.body?.items;
+  const countries = await ProductService.updateVariantCountries(req.params.id as string, req.params.variantId as string, items);
+  return ApiResponse.success(res, "Variant countries updated.", countries);
 });
 
 export const createPackage = asyncHandler(async (req: AuthRequest, res: Response) => {

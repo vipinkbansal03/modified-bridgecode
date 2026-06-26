@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Truck, Package } from "lucide-react";
+import { ArrowLeft, Download, Truck, Package } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { StatusBadge, AdminSelect, AdminInput } from "@/components/admin/AdminComponents";
 import { useAdminOrder, useUpdateOrderStatus, useShipOrder, useDeliverOrder } from "@/hooks/admin/useAdminHooks";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
 const ORDER_STATUS_OPTIONS = [
   { value: "PENDING", label: "Pending" },
@@ -40,13 +41,17 @@ interface OrderDetail {
   currency: { code: string; symbol: string };
   subtotal: number;
   discount: number;
+  couponCode: string | null;
+  couponDiscount: number | null;
   shippingCharge: number;
+  taxAmount: number;
   total: number;
   status: string;
   paymentStatus: string;
   paymentProvider: string | null;
   paymentId: string | null;
   shippingProvider: string | null;
+  shippingZone: { estimatedDays: string | null; provider?: { displayName: string } | null; country?: { name: string; code: string } | null } | null;
   trackingNumber: string | null;
   notes: string | null;
   createdAt: string;
@@ -66,6 +71,7 @@ export default function OrderDetailPage() {
   const [newStatus, setNewStatus] = useState("");
   const [shipProvider, setShipProvider] = useState("");
   const [trackingNumber, setTrackingNumber] = useState("");
+  const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
 
   if (isLoading) {
     return (
@@ -90,6 +96,27 @@ export default function OrderDetailPage() {
 
   const sym = order.currency.symbol;
 
+  async function handleDownloadInvoice() {
+    if (!order) return;
+    setIsDownloadingInvoice(true);
+    try {
+      const res = await adminApi.get(`/orders/${order.id}/invoice`, { responseType: "blob" });
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `invoice-${order.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      alert(getAdminErrorMessage(error, "Invoice generation failed"));
+    } finally {
+      setIsDownloadingInvoice(false);
+    }
+  }
+
   return (
     <AdminLayout
       title={`Order ${order.orderNumber}`}
@@ -100,6 +127,14 @@ export default function OrderDetailPage() {
           <ArrowLeft size={14} /> Back
         </button>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleDownloadInvoice}
+            disabled={isDownloadingInvoice}
+            className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[13px] font-medium text-[#111] hover:bg-[#F8F8F8] disabled:opacity-50"
+          >
+            <Download size={14} />
+            {isDownloadingInvoice ? "Downloading..." : "Download Invoice"}
+          </button>
           <StatusBadge status={order.paymentStatus} />
           <StatusBadge status={order.status} />
         </div>
@@ -136,7 +171,13 @@ export default function OrderDetailPage() {
             </table>
             <div className="border-t border-[#E6E6E6] px-5 py-4 space-y-1.5 text-[13.5px]">
               <div className="flex justify-between text-[#6B6B6B]"><span>Subtotal</span><span>{sym}{Number(order.subtotal).toFixed(2)}</span></div>
-              <div className="flex justify-between text-[#6B6B6B]"><span>Discount</span><span>−{sym}{Number(order.discount).toFixed(2)}</span></div>
+              {Number(order.discount ?? 0) > 0 && !order.couponCode && (
+                <div className="flex justify-between text-[#6B6B6B]"><span>Discount</span><span>−{sym}{Number(order.discount).toFixed(2)}</span></div>
+              )}
+              {order.couponCode && Number(order.couponDiscount ?? 0) > 0 && (
+                <div className="flex justify-between text-[#2A6A40]"><span>Coupon ({order.couponCode})</span><span>−{sym}{Number(order.couponDiscount).toFixed(2)}</span></div>
+              )}
+              <div className="flex justify-between text-[#6B6B6B]"><span>Tax</span><span>{sym}{Number(order.taxAmount ?? 0).toFixed(2)}</span></div>
               <div className="flex justify-between text-[#6B6B6B]"><span>Shipping</span><span>{sym}{Number(order.shippingCharge).toFixed(2)}</span></div>
               <div className="flex justify-between font-semibold text-[#111] text-[15px]"><span>Total</span><span>{sym}{Number(order.total).toFixed(2)}</span></div>
             </div>
@@ -173,11 +214,13 @@ export default function OrderDetailPage() {
           )}
 
           {/* Shipping info */}
-          {order.trackingNumber && (
+          {(order.shippingProvider || order.shippingZone || order.trackingNumber) && (
             <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-2">
-              <h3 className="text-[14px] font-semibold text-[#111]">Tracking</h3>
-              <InfoRow label="Provider" value={order.shippingProvider ?? "—"} />
-              <InfoRow label="Tracking #" value={<span className="font-mono">{order.trackingNumber}</span>} />
+              <h3 className="text-[14px] font-semibold text-[#111]">Shipping</h3>
+              <InfoRow label="Provider" value={order.shippingProvider ?? order.shippingZone?.provider?.displayName ?? "—"} />
+              {order.shippingZone?.country && <InfoRow label="Zone" value={`${order.shippingZone.country.name} (${order.shippingZone.country.code})`} />}
+              {order.shippingZone?.estimatedDays && <InfoRow label="Estimated" value={order.shippingZone.estimatedDays} />}
+              {order.trackingNumber && <InfoRow label="Tracking #" value={<span className="font-mono">{order.trackingNumber}</span>} />}
             </div>
           )}
         </div>

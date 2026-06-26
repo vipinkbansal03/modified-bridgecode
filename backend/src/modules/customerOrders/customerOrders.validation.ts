@@ -19,6 +19,7 @@ export const customerOrderAddressSchema = z.object({
 export const createCustomerOrderSchema = z.object({
   items: z.array(customerOrderItemSchema).min(1, "Cart must contain at least one item"),
   shippingAddress: customerOrderAddressSchema,
+  couponCode: z.string().trim().optional(),
   notes: z.string().trim().optional(),
 });
 

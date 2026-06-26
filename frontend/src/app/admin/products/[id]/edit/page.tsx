@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useFormik } from "formik";
 import * as Yup from "yup";
-import { Upload, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save } from "lucide-react";
+import { Upload, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminTextarea, AdminSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column, toastMessages } from "@/components/admin/AdminComponents";
 import {
@@ -16,6 +16,8 @@ import {
   useAdminLanguages,
   useAdminProductCountries,
   useUpdateProductCountries,
+  useAdminVariantCountries,
+  useUpdateVariantCountries,
   useAdminProductAttributes,
   useAdminProductTierPricing,
   useCreateProductTierPricing,
@@ -223,6 +225,7 @@ const getVariantPriceForCountry = (variant: VariantRow, countryId?: string) =>
 function VariantGridMatrix({
   gridState,
   onEditVariant,
+  onManageCountries,
   bulkEditMode,
   bulkCountryId,
   rowErrors,
@@ -231,6 +234,7 @@ function VariantGridMatrix({
 }: {
   gridState: Extract<VariantGridState, { mode: "grid" }>;
   onEditVariant: (variant: VariantRow) => void;
+  onManageCountries: (variant: VariantRow) => void;
   bulkEditMode?: boolean;
   bulkCountryId?: string;
   rowErrors?: Record<string, string>;
@@ -305,8 +309,17 @@ function VariantGridMatrix({
                           type="button"
                           onClick={() => onEditVariant(cell.variant!)}
                           className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]"
+                          title="Edit variant"
                         >
                           <Pencil size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onManageCountries(cell.variant!)}
+                          className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]"
+                          title="Country availability"
+                        >
+                          <Globe2 size={12} />
                         </button>
                       </div>
                     </div>
@@ -364,6 +377,8 @@ export default function EditProductPage() {
   const [editVariantStatus, setEditVariantStatus] = useState("ACTIVE");
   const [translationLanguageId, setTranslationLanguageId] = useState("");
   const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
+  const [variantCountryModalVariant, setVariantCountryModalVariant] = useState<VariantRow | null>(null);
+  const [variantCountryOverrides, setVariantCountryOverrides] = useState<Record<string, boolean>>({});
   const [selectedMappingAttributeId, setSelectedMappingAttributeId] = useState("");
   const [newMappingRequired, setNewMappingRequired] = useState(true);
   const [newMappingValueIds, setNewMappingValueIds] = useState<string[]>([]);
@@ -378,6 +393,7 @@ export default function EditProductPage() {
 
   const { data: product, isLoading, refetch } = useAdminProduct(id);
   const { data: productCountries = [], isLoading: countriesLoading } = useAdminProductCountries(id);
+  const { data: variantCountries = [], isLoading: variantCountriesLoading } = useAdminVariantCountries(id, variantCountryModalVariant?.id);
   const { data: productAttributeMappings = [], isLoading: productAttributesLoading } = useAdminProductAttributes(id);
   const { data: tierPricingRules = [] } = useAdminProductTierPricing(id);
   const { data: moqPricingRules = [] } = useAdminProductMoqPricing(id);
@@ -389,6 +405,7 @@ export default function EditProductPage() {
   const { data: languages = [] } = useAdminLanguages();
   const updateProduct = useUpdateProduct(id);
   const updateProductCountries = useUpdateProductCountries(id);
+  const updateVariantCountries = useUpdateVariantCountries(id, variantCountryModalVariant?.id);
   const createTierPricing = useCreateProductTierPricing(id);
   const deleteTierPricing = useDeleteProductTierPricing(id);
   const createMoqPricing = useCreateProductMoqPricing(id);
@@ -540,6 +557,9 @@ export default function EditProductPage() {
           <button onClick={() => openEditVariantModal(row)} className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]">
             <Pencil size={12} />
           </button>
+          <button onClick={() => openVariantCountriesModal(row)} className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]" title="Country availability">
+            <Globe2 size={12} />
+          </button>
           <button onClick={() => handleCloneVariant(row.id)} className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]">
             <Copy size={12} />
           </button>
@@ -642,6 +662,30 @@ export default function EditProductPage() {
       showToast("Country availability saved.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to save country availability."), "error");
+    }
+  };
+
+  const openVariantCountriesModal = (variant: VariantRow) => {
+    setVariantCountryModalVariant(variant);
+    setVariantCountryOverrides({});
+  };
+
+  const closeVariantCountriesModal = () => {
+    setVariantCountryModalVariant(null);
+    setVariantCountryOverrides({});
+  };
+
+  const saveVariantCountryAvailability = async () => {
+    if (!variantCountryModalVariant) return;
+    try {
+      await updateVariantCountries.mutateAsync((variantCountries as CountryAvailability[]).map((country) => ({
+        countryId: country.id,
+        enabled: variantCountryOverrides[country.id] ?? country.enabled,
+      })));
+      showToast("Variant country availability saved.");
+      closeVariantCountriesModal();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to save variant country availability."), "error");
     }
   };
 
@@ -1394,6 +1438,9 @@ export default function EditProductPage() {
                   <button onClick={() => openEditVariantModal(variant)} className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]">
                     <Pencil size={12} />
                   </button>
+                  <button onClick={() => openVariantCountriesModal(variant)} className="ml-2 rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]" title="Country availability">
+                    <Globe2 size={12} />
+                  </button>
                 </td>
               </tr>
             );
@@ -1638,6 +1685,7 @@ export default function EditProductPage() {
               <VariantGridMatrix
                 gridState={variantGridState}
                 onEditVariant={openEditVariantModal}
+                onManageCountries={openVariantCountriesModal}
                 bulkEditMode={bulkEditMode}
                 bulkCountryId={selectedBulkCountryId}
                 rowErrors={bulkRowErrors}
@@ -2588,6 +2636,67 @@ export default function EditProductPage() {
                 </>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {variantCountryModalVariant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="max-h-[88vh] w-full max-w-[720px] overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-[18px] font-semibold text-[#1A1A1A]">Variant Country Availability</h3>
+                <p className="mt-1 text-[13px] text-[#6B6B6B]">
+                  Visibility for {variantCountryModalVariant.title}. New variants start hidden in every country until enabled here.
+                </p>
+              </div>
+              <button onClick={closeVariantCountriesModal} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="mb-4 flex items-center justify-between rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2">
+              <span className="text-[13px] font-medium text-[#1A1A1A]">{variantCountryModalVariant.sku || "No SKU"}</span>
+              <span className="text-[12px] text-[#9A9A9A]">
+                {(variantCountries as CountryAvailability[]).filter((country) => variantCountryOverrides[country.id] ?? country.enabled).length} enabled
+              </span>
+            </div>
+
+            {variantCountriesLoading ? (
+              <div className="h-28 animate-pulse rounded-md bg-[#F2F2F2]" />
+            ) : (variantCountries as CountryAvailability[]).length === 0 ? (
+              <p className="rounded-md border border-[#E6E6E6] px-3 py-4 text-[13px] text-[#9A9A9A]">No countries found.</p>
+            ) : (
+              <div className="grid gap-2 md:grid-cols-2">
+                {(variantCountries as CountryAvailability[]).map((country) => (
+                  <label key={country.id} className="flex items-center justify-between gap-3 rounded-md border border-[#E6E6E6] px-3 py-2">
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13px] font-medium text-[#1A1A1A]">{country.name}</span>
+                      <span className="text-[11.5px] text-[#9A9A9A]">
+                        {country.code}{country.currency?.code ? ` - ${country.currency.code}` : ""}{country.status !== "ACTIVE" ? ` - ${country.status}` : ""}
+                      </span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-[#E31E24]"
+                      checked={variantCountryOverrides[country.id] ?? country.enabled}
+                      onChange={(e) => setVariantCountryOverrides((current) => ({ ...current, [country.id]: e.target.checked }))}
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={closeVariantCountriesModal} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]">Cancel</button>
+              <button
+                onClick={saveVariantCountryAvailability}
+                disabled={updateVariantCountries.isPending || variantCountriesLoading}
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
+              >
+                {updateVariantCountries.isPending ? "Saving..." : "Save Availability"}
+              </button>
+            </div>
           </div>
         </div>
       )}

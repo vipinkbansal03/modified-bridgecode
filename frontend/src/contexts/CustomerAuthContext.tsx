@@ -11,6 +11,8 @@ export interface CustomerSession {
   lastName: string;
   phone?: string | null;
   status?: string;
+  customerType?: string;
+  approvalStatus?: string;
   tierId?: string | null;
   defaultCountryId?: string | null;
 }
@@ -21,6 +23,7 @@ type RegisterPayload = {
   firstName: string;
   lastName: string;
   phone?: string;
+  customerType?: "RETAIL" | "DEALER" | "DOCTOR" | "WHOLESALE";
 };
 
 interface CustomerAuthContextType {

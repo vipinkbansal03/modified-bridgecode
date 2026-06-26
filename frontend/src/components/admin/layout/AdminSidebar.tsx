@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Package, Tag, Sliders, Layers, Warehouse, DollarSign, Percent, Globe, Map, Ticket, MessageSquare, ShoppingCart, Truck, CreditCard, Image, Languages, Sparkles, Users, Shield, Settings, FileText, ChevronRight, X, Newspaper, Menu, AlignLeft,
+  LayoutDashboard, Package, Tag, Sliders, Layers, Warehouse, DollarSign, Percent, Globe, Map, Ticket, MessageSquare, ShoppingCart, Truck, CreditCard, Image, Languages, Sparkles, Users, Shield, Settings, FileText, ChevronRight, X, Newspaper, Menu, AlignLeft, Calculator,
+  Award,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -17,6 +18,8 @@ const navItems = [
   { label: "Variants",        href: "/admin/variants",     icon: Layers,       permission: "products.view" },
   { label: "Inventory",       href: "/admin/inventory",    icon: Warehouse,    permission: "inventory.view" },
   { label: "Pricing",         href: "/admin/pricing",      icon: DollarSign,   permission: "pricing.view" },
+  { label: "Tax",             href: "/admin/tax",          icon: Calculator,   permission: "pricing.view" },
+  { label: "Tiers",           href: "/admin/tiers",        icon: Award,        permission: "pricing.view" },
   { label: "Discounts",       href: "/admin/discounts",    icon: Percent,      permission: "pricing.view" },
   { label: "Currencies",      href: "/admin/currencies",   icon: Globe,        permission: "currencies.view" },
   { label: "Countries",       href: "/admin/countries",    icon: Map,          permission: "countries.view" },

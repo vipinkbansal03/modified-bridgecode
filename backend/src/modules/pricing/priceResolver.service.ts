@@ -12,13 +12,16 @@ type ResolvePriceInput = {
 };
 
 export type AppliedPriceLayer = {
-  type: "BASE_PRICE" | "TIER_PRICE" | "MOQ_PRICE" | "PROMOTIONAL_DISCOUNT";
+  type: "BASE_PRICE" | "TIER_PRICE" | "MOQ_PRICE" | "PROMOTIONAL_DISCOUNT" | "TAX";
   label: string;
   amountBefore: number;
   amountAfter: number;
   discountPercent?: number | null;
   fixedPrice?: number | null;
   fixedAmount?: number | null;
+  taxPercent?: number | null;
+  taxAmount?: number | null;
+  taxRuleType?: "CGST" | "SGST" | "VAT" | "SALES_TAX" | "LEGACY_PRODUCT_PRICE_TAX";
   discountRuleType?: "TIER" | "MOQ";
   ruleId?: string;
   warning?: string;
@@ -27,6 +30,8 @@ export type AppliedPriceLayer = {
 export type ResolvedPrice = {
   basePrice: number;
   appliedDiscounts: AppliedPriceLayer[];
+  priceBeforeTax: number;
+  taxAmount: number;
   finalPrice: number;
   currency: {
     id: string;
@@ -38,6 +43,13 @@ export type ResolvedPrice = {
 function money(value: Prisma.Decimal | number | string | null | undefined) {
   return Number(value ?? 0);
 }
+
+type ActiveTaxRule = {
+  id: string;
+  name: string;
+  type: "CGST" | "SGST" | "VAT" | "SALES_TAX";
+  percentage: Prisma.Decimal | number;
+};
 
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -316,10 +328,50 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
   }
 
   // Extension point: code-based coupons can append another PROMOTIONAL_DISCOUNT layer after automatic discounts.
+  const priceBeforeTax = roundMoney(currentPrice);
+  let totalTaxAmount = 0;
+  const activeTaxRules = (await (prisma as unknown as { taxRule: { findMany: (args: unknown) => Promise<ActiveTaxRule[]> } }).taxRule.findMany({
+    where: { countryId: input.countryId, status: "ACTIVE" },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  })) as ActiveTaxRule[];
+
+  if (activeTaxRules.length) {
+    for (const rule of activeTaxRules) {
+      const taxPercent = money(rule.percentage);
+      const taxAmount = roundMoney(priceBeforeTax * (taxPercent / 100));
+      totalTaxAmount = roundMoney(totalTaxAmount + taxAmount);
+      layers.push({
+        type: "TAX",
+        label: `${rule.name} (${taxPercent}%)`,
+        amountBefore: priceBeforeTax,
+        amountAfter: roundMoney(priceBeforeTax + totalTaxAmount),
+        taxPercent,
+        taxAmount,
+        taxRuleType: rule.type,
+        ruleId: rule.id,
+      });
+    }
+    currentPrice = roundMoney(priceBeforeTax + totalTaxAmount);
+  } else if (money(basePrice.taxPercentage) > 0) {
+    const taxPercent = money(basePrice.taxPercentage);
+    totalTaxAmount = roundMoney(priceBeforeTax * (taxPercent / 100));
+    currentPrice = roundMoney(priceBeforeTax + totalTaxAmount);
+    layers.push({
+      type: "TAX",
+      label: `Tax (${taxPercent}%)`,
+      amountBefore: priceBeforeTax,
+      amountAfter: currentPrice,
+      taxPercent,
+      taxAmount: totalTaxAmount,
+      taxRuleType: "LEGACY_PRODUCT_PRICE_TAX",
+    });
+  }
 
   return {
     basePrice: money(basePrice.sellingPrice),
     appliedDiscounts: layers,
+    priceBeforeTax,
+    taxAmount: roundMoney(totalTaxAmount),
     finalPrice: roundMoney(currentPrice),
     currency: {
       id: basePrice.currency.id,

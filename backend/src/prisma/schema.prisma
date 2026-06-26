@@ -57,6 +57,8 @@ model Category {
   name        String
   slug        String     @unique
   description String?
+  seoTitle    String?
+  seoDescription String?
   parentId    String?
   parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
   children    Category[] @relation("CategoryHierarchy")
@@ -103,6 +105,7 @@ model Product {
   productCode       String?
   brand             String        @default("Modern Orthodontics")
   status            ProductStatus @default(DRAFT)
+  sortOrder         Int           @default(0)
   isFeatured        Boolean       @default(false)
   hasVariants       Boolean       @default(false)
   defaultCountryId  String?
@@ -321,11 +324,12 @@ model Country {
   defaultProducts   Product[]
   defaultCustomers  Customer[] @relation("CustomerDefaultCountry")
   customerAddresses CustomerAddress[] @relation("CustomerAddressCountry")
-  ShippingZone      ShippingZone[]
-  Quote             Quote[]
-  Order             Order[]
-  Coupon            Coupon[]
-  attributeValues   AttributeValue[]
+    ShippingZone      ShippingZone[]
+    Quote             Quote[]
+    Order             Order[]
+    Coupon            Coupon[]
+    taxRules          TaxRule[]
+    attributeValues   AttributeValue[]
   categoryCountries CategoryCountry[]
   productCountries  ProductCountry[]
   variantCountries  VariantCountry[]
@@ -433,7 +437,7 @@ model TierPricing {
   @@map("tier_pricing")
 }
 
-model MoqPricing {
+  model MoqPricing {
   id              String          @id @default(uuid())
   productId       String
   product         Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -448,10 +452,26 @@ model MoqPricing {
   updatedAt       DateTime        @updatedAt
 
   @@unique([productId, variantId, countryId, minQuantity])
-  @@map("moq_pricing")
-}
+    @@map("moq_pricing")
+  }
 
-model Discount {
+  model TaxRule {
+    id         String      @id @default(uuid())
+    name       String
+    type       TaxRuleType
+    percentage Decimal     @db.Decimal(5, 2)
+    countryId  String
+    country    Country     @relation(fields: [countryId], references: [id])
+    status     Status      @default(ACTIVE)
+    sortOrder  Int         @default(0)
+    createdAt  DateTime    @default(now())
+    updatedAt  DateTime    @updatedAt
+
+    @@unique([countryId, name])
+    @@map("tax_rules")
+  }
+
+  model Discount {
   id              String           @id @default(uuid())
   name            String
   type            DiscountRuleType
@@ -530,6 +550,8 @@ model Customer {
   lastName         String
   phone            String?
   status           Status    @default(ACTIVE)
+  customerType     CustomerType @default(RETAIL)
+  approvalStatus   ApprovalStatus @default(ACTIVE)
   emailVerifiedAt  DateTime?
   tierId           String?
   tier             Tier?     @relation(fields: [tierId], references: [id])
@@ -720,17 +742,22 @@ model Order {
   currencyId       String
   currency         Currency         @relation(fields: [currencyId], references: [id])
   subtotal         Decimal          @db.Decimal(12, 2)
-  discount         Decimal          @default(0) @db.Decimal(12, 2)
-  shippingCharge   Decimal          @default(0) @db.Decimal(12, 2)
+    discount         Decimal          @default(0) @db.Decimal(12, 2)
+    shippingCharge   Decimal          @default(0) @db.Decimal(12, 2)
+    taxAmount        Decimal          @default(0) @db.Decimal(12, 2)
   total            Decimal          @db.Decimal(12, 2)
   couponId         String?
   coupon           Coupon?          @relation(fields: [couponId], references: [id])
+  couponCode       String?
+  couponDiscount   Decimal?         @default(0) @db.Decimal(12, 2)
   status           OrderStatus      @default(PENDING)
   paymentStatus    PaymentStatus    @default(PENDING)
   paymentMethod    String?
   paymentProvider  PaymentProvider?
   paymentId        String? // Razorpay/Stripe payment ID
   shippingProvider String? // e.g. "DHL" | "DTDC"
+  shippingZoneId   String?
+  shippingZone     ShippingZone?     @relation(fields: [shippingZoneId], references: [id])
   trackingNumber   String?
   notes            String?
   fromQuoteId      String?
@@ -794,6 +821,7 @@ model ShippingZone {
   status        Status           @default(ACTIVE)
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
+  orders        Order[]
 
   @@unique([providerId, countryId])
   @@map("shipping_zones")
@@ -956,6 +984,19 @@ enum Status {
   INACTIVE
 }
 
+enum CustomerType {
+  RETAIL
+  DEALER
+  DOCTOR
+  WHOLESALE
+}
+
+enum ApprovalStatus {
+  ACTIVE
+  PENDING_APPROVAL
+  SUSPENDED
+}
+
 enum ProductStatus {
   DRAFT
   ACTIVE
@@ -1022,12 +1063,19 @@ enum PaymentStatus {
   REFUNDED
 }
 
-enum PaymentProvider {
-  RAZORPAY
-  STRIPE
-}
+  enum PaymentProvider {
+    RAZORPAY
+    STRIPE
+  }
 
-enum DiscountType {
+  enum TaxRuleType {
+    CGST
+    SGST
+    VAT
+    SALES_TAX
+  }
+  
+  enum DiscountType {
   PERCENTAGE
   FIXED
 }

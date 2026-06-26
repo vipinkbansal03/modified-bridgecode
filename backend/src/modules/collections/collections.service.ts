@@ -1,6 +1,7 @@
 import { Prisma, Status } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { AppError, getPagination, slugify } from "../../utils/apiResponse";
+import * as DiscountsService from "../discounts/discounts.service";
 
 type CollectionInput = {
   name?: string;
@@ -124,4 +125,25 @@ export async function updateCollectionCountries(collectionId: string, items: { c
     )
   );
   return listCollectionCountries(collectionId);
+}
+
+export async function listCollectionDiscounts(collectionId: string) {
+  await getCollection(collectionId);
+  return prisma.discount.findMany({
+    where: { collectionId },
+    orderBy: { createdAt: "desc" },
+    include: { tier: true, country: true, collection: true },
+  });
+}
+
+export async function createCollectionDiscount(collectionId: string, input: Record<string, unknown>) {
+  await getCollection(collectionId);
+  return DiscountsService.createDiscount({ ...input, collectionId, productId: null, categoryId: null } as never);
+}
+
+export async function deleteCollectionDiscount(collectionId: string, discountId: string) {
+  await getCollection(collectionId);
+  const discount = await prisma.discount.findFirst({ where: { id: discountId, collectionId } });
+  if (!discount) throw new AppError("Collection discount not found.", 404);
+  await prisma.discount.delete({ where: { id: discountId } });
 }

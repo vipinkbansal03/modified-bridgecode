@@ -6,10 +6,15 @@ import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import {
   useAdminCollectionCountries,
+  useAdminCollectionDiscounts,
   useAdminCollections,
+  useAdminCountries,
   useAdminProducts,
+  useAdminTiers,
   useCreateCollection,
+  useCreateCollectionDiscount,
   useDeleteCollection,
+  useDeleteCollectionDiscount,
   useUpdateCollection,
   useUpdateCollectionCountries,
 } from "@/hooks/admin/useAdminHooks";
@@ -28,23 +33,52 @@ type Collection = {
   _count?: { products: number };
 };
 type CountryToggle = { id: string; name: string; code: string; enabled: boolean };
+type DiscountRow = {
+  id: string;
+  name: string;
+  type: "TIER" | "MOQ";
+  status: string;
+  discountPercent?: string | number | null;
+  fixedAmount?: string | number | null;
+  minQuantity?: number | null;
+  tier?: { name: string } | null;
+  country?: { code: string } | null;
+};
 
 const emptyForm = { id: "", name: "", slug: "", description: "", image: "", status: "ACTIVE", sortOrder: "0", productIds: [] as string[] };
+const emptyDiscountForm = {
+  name: "",
+  type: "TIER",
+  status: "ACTIVE",
+  tierId: "",
+  minQuantity: "",
+  discountPercent: "",
+  fixedAmount: "",
+  countryId: "",
+  startDate: "",
+  endDate: "",
+};
 
 export default function CollectionsPage() {
   const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [discountForm, setDiscountForm] = useState(emptyDiscountForm);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>("");
   const [deleting, setDeleting] = useState<string | null>(null);
   const { showToast, ToastComponent } = useToast();
   const { data, isLoading } = useAdminCollections({ page });
   const { data: productsData } = useAdminProducts({ limit: 200 });
   const { data: countries = [] } = useAdminCollectionCountries(selectedCollectionId);
+  const { data: allCountries = [] } = useAdminCountries();
+  const { data: tiers = [] } = useAdminTiers();
+  const { data: collectionDiscounts = [] } = useAdminCollectionDiscounts(selectedCollectionId);
   const createCollection = useCreateCollection();
   const updateCollection = useUpdateCollection();
   const deleteCollection = useDeleteCollection();
   const updateCountries = useUpdateCollectionCountries(selectedCollectionId);
+  const createCollectionDiscount = useCreateCollectionDiscount(selectedCollectionId);
+  const deleteCollectionDiscount = useDeleteCollectionDiscount(selectedCollectionId);
 
   const collections: Collection[] = data?.data ?? [];
   const products: Product[] = productsData?.data ?? [];
@@ -110,6 +144,35 @@ export default function CollectionsPage() {
       showToast("Country visibility saved.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to save country visibility."), "error");
+    }
+  };
+
+  const createDiscount = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      await createCollectionDiscount.mutateAsync({
+        ...discountForm,
+        tierId: discountForm.type === "TIER" ? discountForm.tierId || null : null,
+        minQuantity: discountForm.type === "MOQ" ? discountForm.minQuantity || null : null,
+        discountPercent: discountForm.discountPercent || null,
+        fixedAmount: discountForm.fixedAmount || null,
+        countryId: discountForm.countryId || null,
+        startDate: discountForm.startDate || null,
+        endDate: discountForm.endDate || null,
+      });
+      setDiscountForm(emptyDiscountForm);
+      showToast("Collection discount created.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to create collection discount."), "error");
+    }
+  };
+
+  const removeDiscount = async (discountId: string) => {
+    try {
+      await deleteCollectionDiscount.mutateAsync(discountId);
+      showToast("Collection discount removed.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to remove collection discount."), "error");
     }
   };
 
@@ -203,6 +266,71 @@ export default function CollectionsPage() {
             ))}
           </div>
           <button onClick={saveCountries} className="mt-4 rounded-md bg-[#111] px-4 py-2 text-[13.5px] font-medium text-white hover:bg-[#222]">Save Visibility</button>
+
+          <div className="mt-6 border-t border-[#E6E6E6] pt-5">
+            <h3 className="mb-3 text-[14px] font-semibold text-[#111]">Discount Rules</h3>
+            <form onSubmit={createDiscount} className="grid gap-3 rounded-md bg-[#FAFAFA] p-4 md:grid-cols-4">
+              <AdminInput label="Name" value={discountForm.name} onChange={(event) => setDiscountForm({ ...discountForm, name: event.target.value })} />
+              <AdminSelect
+                label="Type"
+                value={discountForm.type}
+                onChange={(event) => setDiscountForm({ ...discountForm, type: event.target.value, tierId: "", minQuantity: "" })}
+                options={[{ value: "TIER", label: "Tier" }, { value: "MOQ", label: "MOQ" }]}
+              />
+              {discountForm.type === "TIER" ? (
+                <AdminSelect
+                  label="Tier"
+                  value={discountForm.tierId}
+                  onChange={(event) => setDiscountForm({ ...discountForm, tierId: event.target.value })}
+                  options={[{ value: "", label: "Select tier" }, ...tiers.map((tier: { id: string; name: string }) => ({ value: tier.id, label: tier.name }))]}
+                />
+              ) : (
+                <AdminInput label="Minimum Qty" type="number" value={discountForm.minQuantity} onChange={(event) => setDiscountForm({ ...discountForm, minQuantity: event.target.value })} />
+              )}
+              <AdminSelect
+                label="Country"
+                value={discountForm.countryId}
+                onChange={(event) => setDiscountForm({ ...discountForm, countryId: event.target.value })}
+                options={[{ value: "", label: "All countries" }, ...allCountries.map((country: { id: string; code: string; name: string }) => ({ value: country.id, label: `${country.code} - ${country.name}` }))]}
+              />
+              <AdminInput label="Discount %" type="number" value={discountForm.discountPercent} onChange={(event) => setDiscountForm({ ...discountForm, discountPercent: event.target.value, fixedAmount: "" })} />
+              <AdminInput label="Fixed Amount" type="number" value={discountForm.fixedAmount} onChange={(event) => setDiscountForm({ ...discountForm, fixedAmount: event.target.value, discountPercent: "" })} />
+              <AdminInput label="Start Date" type="date" value={discountForm.startDate} onChange={(event) => setDiscountForm({ ...discountForm, startDate: event.target.value })} />
+              <AdminInput label="End Date" type="date" value={discountForm.endDate} onChange={(event) => setDiscountForm({ ...discountForm, endDate: event.target.value })} />
+              <div className="md:col-span-4">
+                <button type="submit" disabled={createCollectionDiscount.isPending} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
+                  Add Discount
+                </button>
+              </div>
+            </form>
+            <div className="mt-4 divide-y divide-[#EFEFEF] rounded-md border border-[#E6E6E6] bg-white">
+              {(collectionDiscounts as DiscountRow[]).length === 0 ? (
+                <div className="p-4 text-[13px] text-[#9A9A9A]">No discounts assigned to this collection.</div>
+              ) : (
+                (collectionDiscounts as DiscountRow[]).map((discount) => (
+                  <div key={discount.id} className="flex flex-wrap items-center justify-between gap-3 p-3 text-[13px]">
+                    <div>
+                      <div className="font-semibold text-[#111]">{discount.name}</div>
+                      <div className="mt-1 text-[#6B6B6B]">
+                        {discount.type}
+                        {discount.tier ? ` · ${discount.tier.name}` : ""}
+                        {discount.minQuantity ? ` · Qty ${discount.minQuantity}+` : ""}
+                        {discount.country ? ` · ${discount.country.code}` : " · All countries"}
+                        {" · "}
+                        {discount.discountPercent ? `${Number(discount.discountPercent)}% off` : `${Number(discount.fixedAmount ?? 0).toFixed(2)} off`}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status={discount.status} />
+                      <button type="button" onClick={() => removeDiscount(discount.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       )}
 

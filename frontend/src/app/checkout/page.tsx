@@ -11,14 +11,24 @@ import { useCart } from "@/contexts/CartContext";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import {
   createCustomerOrder,
+  calculateShipping,
+  estimateCustomerOrder,
   getCustomerErrorMessage,
   listCustomerAddresses,
+  validateCoupon,
+  type CouponValidationResult,
   type CustomerAddress,
+  type CustomerOrderEstimate,
   type CustomerOrderSummary,
+  type ShippingEstimate,
 } from "@/services/customerApi";
 
-const DEMO_SHIPPING_LABEL = "Free Standard Shipping";
 const DEMO_PAYMENT_LABEL = "Pay on Delivery";
+const SHIPPING_UNAVAILABLE_MESSAGE = "Shipping is not available to your country yet. Please contact support.";
+const APPROVAL_MESSAGES: Record<string, string> = {
+  PENDING_APPROVAL: "Your account is pending approval. You will be notified once approved.",
+  SUSPENDED: "Your account has been suspended. Please contact support.",
+};
 
 function formatMoney(symbol: string, amount: number) {
   return `${symbol}${Math.round(amount || 0).toLocaleString("en-IN")}`;
@@ -31,6 +41,13 @@ export default function CheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<CustomerOrderSummary | null>(null);
+  const [estimate, setEstimate] = useState<CustomerOrderEstimate | null>(null);
+  const [shippingEstimate, setShippingEstimate] = useState<ShippingEstimate | null>(null);
+  const [shippingError, setShippingError] = useState<string | null>(null);
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<CouponValidationResult | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [form, setForm] = useState({
     fullName: "",
@@ -86,30 +103,116 @@ export default function CheckoutPage() {
     );
   }, [form, items.length]);
 
+  const approvalBlockMessage = currentCustomer?.approvalStatus ? APPROVAL_MESSAGES[currentCustomer.approvalStatus] : null;
+  const canPlaceOrder = canSubmit && Boolean(shippingEstimate?.available) && !approvalBlockMessage;
+
+  const orderPayload = useMemo(() => ({
+    items: items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
+    shippingAddress: {
+      fullName: form.fullName.trim(),
+      phone: form.phone.trim(),
+      addressLine1: form.addressLine1.trim(),
+      addressLine2: form.addressLine2.trim() || undefined,
+      city: form.city.trim(),
+      state: form.state.trim(),
+      postalCode: form.postalCode.trim(),
+      countryCode: form.countryCode.trim().toUpperCase() || undefined,
+    },
+    couponCode: appliedCoupon?.code,
+    notes: form.notes.trim() || undefined,
+  }), [appliedCoupon?.code, form, items]);
+
+  useEffect(() => {
+    if (!currentCustomer || !canSubmit) {
+      setEstimate(null);
+      setShippingEstimate(null);
+      setShippingError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setShippingError(null);
+    calculateShipping({ countryCode: form.countryCode.trim().toUpperCase(), orderValue: totals.subtotal })
+      .then((nextShipping) => {
+        if (cancelled) return;
+        setShippingEstimate(nextShipping);
+        setShippingError(nextShipping.available ? null : nextShipping.message ?? SHIPPING_UNAVAILABLE_MESSAGE);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setShippingEstimate(null);
+          setShippingError(getCustomerErrorMessage(err, SHIPPING_UNAVAILABLE_MESSAGE));
+        }
+      });
+    estimateCustomerOrder(orderPayload)
+      .then((nextEstimate) => {
+        if (!cancelled) setEstimate(nextEstimate);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setEstimate(null);
+          if (appliedCoupon) {
+            setCouponError(getCustomerErrorMessage(err, "Coupon could not be applied to this order."));
+          } else {
+            setShippingError(getCustomerErrorMessage(err, SHIPPING_UNAVAILABLE_MESSAGE));
+          }
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [appliedCoupon, canSubmit, currentCustomer, form.countryCode, orderPayload, totals.subtotal]);
+
+  async function handleApplyCoupon() {
+    const code = couponInput.trim();
+    if (!code) {
+      setCouponError("Enter a coupon code.");
+      return;
+    }
+
+    setIsApplyingCoupon(true);
+    setCouponError(null);
+    try {
+      const result = await validateCoupon({
+        code,
+        orderValue: estimate?.subtotal ?? totals.subtotal,
+        countryCode: form.countryCode.trim().toUpperCase() || undefined,
+      });
+      setAppliedCoupon(result);
+      setCouponInput(result.code);
+    } catch (err) {
+      setAppliedCoupon(null);
+      setCouponError(getCustomerErrorMessage(err, "Coupon could not be applied."));
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  }
+
+  function handleRemoveCoupon() {
+    setAppliedCoupon(null);
+    setCouponError(null);
+    setCouponInput("");
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) {
       setError("Complete the shipping address before placing the order.");
       return;
     }
+    if (!shippingEstimate?.available) {
+      setError(shippingError ?? SHIPPING_UNAVAILABLE_MESSAGE);
+      return;
+    }
+    if (approvalBlockMessage) {
+      setError(approvalBlockMessage);
+      return;
+    }
 
     setIsSubmitting(true);
-    setError(null);
+      setError(null);
     try {
-      const created = await createCustomerOrder({
-        items: items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
-        shippingAddress: {
-          fullName: form.fullName.trim(),
-          phone: form.phone.trim(),
-          addressLine1: form.addressLine1.trim(),
-          addressLine2: form.addressLine2.trim() || undefined,
-          city: form.city.trim(),
-          state: form.state.trim(),
-          postalCode: form.postalCode.trim(),
-          countryCode: form.countryCode.trim().toUpperCase() || undefined,
-        },
-        notes: form.notes.trim() || undefined,
-      });
+      const created = await createCustomerOrder(orderPayload);
       setOrder(created);
       clearCart();
     } catch (err) {
@@ -144,6 +247,9 @@ export default function CheckoutPage() {
   if (order) {
     const symbol = order.currency?.symbol ?? totals.currencySymbol;
     const shippingCharge = Number(order.shippingCharge ?? 0);
+    const taxAmount = Number(order.taxAmount ?? 0);
+    const couponDiscount = Number(order.couponDiscount ?? order.discount ?? 0);
+    const shippingLabel = order.shippingProvider || "Shipping";
     return (
       <Container>
         <section className="py-16">
@@ -160,8 +266,18 @@ export default function CheckoutPage() {
               </div>
               <div className="mt-2 flex items-center justify-between text-[14px]">
                 <span className="text-steel">Shipping</span>
-                <strong className="text-ink">{DEMO_SHIPPING_LABEL} ({formatMoney(symbol, shippingCharge)})</strong>
+                <strong className="text-ink">{shippingLabel} ({formatMoney(symbol, shippingCharge)})</strong>
               </div>
+              <div className="mt-2 flex items-center justify-between text-[14px]">
+                <span className="text-steel">Tax</span>
+                <strong className="text-ink">{formatMoney(symbol, taxAmount)}</strong>
+              </div>
+              {order.couponCode && couponDiscount > 0 && (
+                <div className="mt-2 flex items-center justify-between text-[14px]">
+                  <span className="text-steel">Coupon ({order.couponCode})</span>
+                  <strong className="text-[#2A6A40]">-{formatMoney(symbol, couponDiscount)}</strong>
+                </div>
+              )}
               <div className="mt-2 flex items-center justify-between text-[14px]">
                 <span className="text-steel">Payment method</span>
                 <strong className="text-ink">{DEMO_PAYMENT_LABEL}</strong>
@@ -244,10 +360,24 @@ export default function CheckoutPage() {
                 <div className="rounded-md border border-line bg-grey px-4 py-3">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-[14px] font-semibold text-ink">{DEMO_SHIPPING_LABEL}</p>
-                      <p className="mt-1 text-[12.5px] text-steel">Demo checkout uses free standard shipping. Real carrier rates come later.</p>
+                      <p className="text-[14px] font-semibold text-ink">
+                        {shippingEstimate?.available ? shippingEstimate.provider ?? "Shipping" : "Shipping unavailable"}
+                      </p>
+                      <p className="mt-1 text-[12.5px] text-steel">
+                        {shippingEstimate?.available
+                          ? shippingEstimate.estimatedDays
+                            ? `Estimated delivery: ${shippingEstimate.estimatedDays}`
+                            : "Calculated from the selected shipping country."
+                          : shippingError ?? "Complete the address to check shipping availability."}
+                      </p>
                     </div>
-                    <strong className="text-[14px] text-ink">{formatMoney(totals.currencySymbol, 0)}</strong>
+                    <strong className="text-[14px] text-ink">
+                      {shippingEstimate?.available
+                        ? shippingEstimate.isFree
+                          ? "Free"
+                          : formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, estimate?.shippingCharge ?? shippingEstimate.charge)
+                        : "-"}
+                    </strong>
                   </div>
                 </div>
               </div>
@@ -308,11 +438,76 @@ export default function CheckoutPage() {
               <div className="mt-5 space-y-3 border-t border-line pt-4">
                 <div className="flex items-center justify-between text-[14px]">
                   <span className="text-steel">Subtotal</span>
-                  <strong className="text-ink">{formatMoney(totals.currencySymbol, totals.subtotal)}</strong>
+                  <strong className="text-ink">{formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, estimate?.subtotal ?? totals.subtotal)}</strong>
                 </div>
+                <div className="rounded-md border border-line bg-grey/60 p-3">
+                  <label htmlFor="couponCode" className="mb-2 block text-[12px] font-semibold uppercase tracking-wide text-steel-2">
+                    Coupon code
+                  </label>
+                  {appliedCoupon ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[13.5px] font-semibold text-[#2A6A40]">{appliedCoupon.code} applied</p>
+                        <p className="mt-0.5 text-[12px] text-steel">
+                          Discount: {formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, estimate?.couponDiscount ?? appliedCoupon.discountAmount)}
+                        </p>
+                      </div>
+                      <button type="button" onClick={handleRemoveCoupon} className="text-[18px] leading-none text-steel hover:text-brand" aria-label="Remove coupon">
+                        ×
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input
+                        id="couponCode"
+                        value={couponInput}
+                        onChange={(event) => {
+                          setCouponInput(event.target.value.toUpperCase());
+                          setCouponError(null);
+                        }}
+                        className="min-w-0 flex-1 rounded-md border border-line bg-white px-3 py-2 text-[13.5px] text-ink outline-none focus:border-steel-2"
+                        placeholder="Enter code"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleApplyCoupon}
+                        disabled={isApplyingCoupon || !couponInput.trim()}
+                        className="rounded-md bg-ink px-3 py-2 text-[12.5px] font-semibold text-white disabled:opacity-50"
+                      >
+                        {isApplyingCoupon ? "Applying..." : "Apply"}
+                      </button>
+                    </div>
+                  )}
+                  {couponError && <p className="mt-2 text-[12.5px] text-brand">{couponError}</p>}
+                </div>
+                {(estimate?.couponCode || appliedCoupon) && Number(estimate?.couponDiscount ?? appliedCoupon?.discountAmount ?? 0) > 0 && (
+                  <div className="flex items-center justify-between text-[14px]">
+                    <span className="text-steel">Coupon ({estimate?.couponCode ?? appliedCoupon?.code})</span>
+                    <strong className="text-[#2A6A40]">-{formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, Number(estimate?.couponDiscount ?? appliedCoupon?.discountAmount ?? 0))}</strong>
+                  </div>
+                )}
+                {(estimate?.taxBreakdown?.length ?? 0) > 0 ? (
+                  estimate!.taxBreakdown.map((tax) => (
+                    <div key={tax.label} className="flex items-center justify-between text-[14px]">
+                      <span className="text-steel">{tax.label}</span>
+                      <strong className="text-ink">{formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, tax.taxAmount)}</strong>
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex items-center justify-between text-[14px]">
+                    <span className="text-steel">Tax</span>
+                    <strong className="text-ink">{canSubmit ? formatMoney(totals.currencySymbol, estimate?.taxAmount ?? 0) : "Calculated at checkout"}</strong>
+                  </div>
+                )}
                 <div className="flex items-center justify-between text-[14px]">
                   <span className="text-steel">Shipping</span>
-                  <strong className="text-ink">{DEMO_SHIPPING_LABEL}</strong>
+                  <strong className="text-ink">
+                    {shippingEstimate?.available
+                      ? shippingEstimate.isFree
+                        ? "Free"
+                        : formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, estimate?.shippingCharge ?? shippingEstimate.charge)
+                      : "Unavailable"}
+                  </strong>
                 </div>
                 <div className="flex items-center justify-between text-[14px]">
                   <span className="text-steel">Payment</span>
@@ -320,12 +515,12 @@ export default function CheckoutPage() {
                 </div>
                 <div className="flex items-center justify-between border-t border-line pt-3 text-[16px]">
                   <span className="font-semibold text-ink">Total due on delivery</span>
-                  <strong className="text-ink">{formatMoney(totals.currencySymbol, totals.subtotal)}</strong>
+                  <strong className="text-ink">{formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, estimate?.total ?? totals.subtotal)}</strong>
                 </div>
               </div>
 
-              {error && <p className="mt-4 rounded-md border border-brand/20 bg-brand/5 px-3 py-2 text-[13px] text-brand">{error}</p>}
-              <Button type="submit" variant="primary" size="lg" fullWidth className="mt-5" disabled={isSubmitting || !canSubmit}>
+              {(error || approvalBlockMessage || shippingError) && <p className="mt-4 rounded-md border border-brand/20 bg-brand/5 px-3 py-2 text-[13px] text-brand">{error || approvalBlockMessage || shippingError}</p>}
+              <Button type="submit" variant="primary" size="lg" fullWidth className="mt-5" disabled={isSubmitting || !canPlaceOrder}>
                 {isSubmitting ? "Placing order..." : "Place order"}
               </Button>
               <p className="mt-3 text-center text-[12px] leading-relaxed text-steel">

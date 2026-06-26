@@ -58,6 +58,46 @@ export async function sendCustomerPasswordResetEmail(data: { email: string; firs
   }
 }
 
+export async function sendCustomerApprovalEmail(data: { email: string; firstName: string }): Promise<void> {
+  if (!resend) return;
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to: [data.email],
+      subject: "Your Modern Orthodontics account has been approved",
+      text: [
+        `Dear ${data.firstName},`,
+        "",
+        "Your account has been approved. You can now place orders through Modern Orthodontics.",
+        "",
+        "Modern Orthodontics Team",
+      ].join("\n"),
+    });
+  } catch (err) {
+    logger.error("Failed to send customer approval email:", err);
+  }
+}
+
+export async function sendCustomerRejectionEmail(data: { email: string; firstName: string }): Promise<void> {
+  if (!resend) return;
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to: [data.email],
+      subject: "Modern Orthodontics account request update",
+      text: [
+        `Dear ${data.firstName},`,
+        "",
+        "Your account request was not approved at this time. Please contact support if you believe this needs review.",
+        "",
+        "Modern Orthodontics Team",
+      ].join("\n"),
+    });
+  } catch (err) {
+    logger.error("Failed to send customer rejection email:", err);
+  }
+}
+
 export async function sendQuoteNotification(data: QuoteEmailData): Promise<void> {
   if (!resend) return;
 

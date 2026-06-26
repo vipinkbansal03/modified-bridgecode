@@ -2,6 +2,8 @@ import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
 import { decrementVariantStock } from "../inventory/inventory.service";
 import { resolvePrice } from "../pricing/priceResolver.service";
+import { calculateRequiredShipping } from "../shipping/shipping.service";
+import { validateCoupon } from "../coupons/coupons.service";
 import type { CreateCustomerOrderInput } from "./customerOrders.validation";
 
 function generateOrderNumber() {
@@ -10,16 +12,20 @@ function generateOrderNumber() {
 }
 
 const CUSTOMER_CHECKOUT_PAYMENT_METHOD = "PAY_ON_DELIVERY";
-const CUSTOMER_CHECKOUT_SHIPPING_PROVIDER = "FREE_STANDARD";
-const CUSTOMER_CHECKOUT_SHIPPING_CHARGE = 0;
 
-export async function createCustomerOrder(customerId: string, input: CreateCustomerOrderInput) {
+async function calculateCustomerOrder(customerId: string, input: CreateCustomerOrderInput) {
   const customer = await prisma.customer.findUnique({
     where: { id: customerId, deletedAt: null },
     include: { defaultCountry: true },
   });
   if (!customer) throw new AppError("Customer account not found.", 404);
   if (customer.status !== "ACTIVE") throw new AppError("Your customer account is inactive.", 401);
+  if (customer.approvalStatus === "PENDING_APPROVAL") {
+    throw new AppError("Your account is pending approval. You will be notified once approved.", 403);
+  }
+  if (customer.approvalStatus === "SUSPENDED") {
+    throw new AppError("Your account has been suspended. Please contact support.", 403);
+  }
 
   const requestedVariantIds = [...new Set(input.items.map((item) => item.variantId))];
   const variants = await prisma.productVariant.findMany({
@@ -76,12 +82,18 @@ export async function createCustomerOrder(customerId: string, input: CreateCusto
     });
 
     const unitPrice = resolvedPrice.finalPrice;
+    const unitPriceBeforeTax = resolvedPrice.priceBeforeTax;
+    const unitTax = resolvedPrice.taxAmount;
     return {
       variant,
       resolvedPrice,
       quantity: item.quantity,
       unitPrice,
+      unitPriceBeforeTax,
+      unitTax,
       total: unitPrice * item.quantity,
+      subtotal: unitPriceBeforeTax * item.quantity,
+      taxTotal: unitTax * item.quantity,
     };
   }));
 
@@ -91,10 +103,51 @@ export async function createCustomerOrder(customerId: string, input: CreateCusto
     throw new AppError("Cart items resolve to multiple currencies. Please place separate orders.", 400);
   }
 
-  const subtotal = orderItems.reduce((sum, item) => sum + item.total, 0);
-  const shippingCharge = CUSTOMER_CHECKOUT_SHIPPING_CHARGE;
-  const discount = 0;
-  const total = subtotal + shippingCharge - discount;
+  const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
+  const taxAmount = orderItems.reduce((sum, item) => sum + item.taxTotal, 0);
+  const shipping = await calculateRequiredShipping(orderCountry.code, subtotal);
+  const shippingCharge = shipping.charge;
+  const couponValidation = input.couponCode?.trim()
+    ? await validateCoupon(input.couponCode, subtotal, orderCountry.code)
+    : null;
+  const discount = couponValidation?.discount ?? 0;
+  const total = subtotal + taxAmount + shippingCharge - discount;
+
+  return { customer, orderCountry, currencyId, orderItems, subtotal, taxAmount, shipping, shippingCharge, discount, couponValidation, total };
+}
+
+export async function estimateCustomerOrder(customerId: string, input: CreateCustomerOrderInput) {
+  const calculation = await calculateCustomerOrder(customerId, input);
+  const taxBreakdown = calculation.orderItems.reduce((layers, item) => {
+    for (const layer of item.resolvedPrice.appliedDiscounts.filter((entry) => entry.type === "TAX")) {
+      const key = `${layer.label}:${layer.taxPercent ?? ""}`;
+      const existing = layers.get(key) ?? { label: layer.label, taxPercent: layer.taxPercent, taxAmount: 0 };
+      existing.taxAmount += (layer.taxAmount ?? 0) * item.quantity;
+      layers.set(key, existing);
+    }
+    return layers;
+  }, new Map<string, { label: string; taxPercent?: number | null; taxAmount: number }>());
+
+  return {
+    subtotal: calculation.subtotal,
+    taxAmount: calculation.taxAmount,
+    shippingCharge: calculation.shippingCharge,
+    shippingProvider: calculation.shipping.provider,
+    shippingZoneId: calculation.shipping.zoneId,
+    shippingEstimatedDays: calculation.shipping.estimatedDays,
+    shippingIsFree: calculation.shipping.isFree,
+    discount: calculation.discount,
+    couponCode: calculation.couponValidation?.coupon.code ?? null,
+    couponDiscount: calculation.discount,
+    total: calculation.total,
+    currency: calculation.orderItems[0]?.resolvedPrice.currency,
+    taxBreakdown: Array.from(taxBreakdown.values()),
+  };
+}
+
+export async function createCustomerOrder(customerId: string, input: CreateCustomerOrderInput) {
+  const { customer, orderCountry, currencyId, orderItems, subtotal, taxAmount, shipping, shippingCharge, discount, couponValidation, total } =
+    await calculateCustomerOrder(customerId, input);
 
   return prisma.$transaction(async (tx) => {
     const order = await tx.order.create({
@@ -110,11 +163,16 @@ export async function createCustomerOrder(customerId: string, input: CreateCusto
         subtotal,
         discount,
         shippingCharge,
+        taxAmount,
         total,
+        couponId: couponValidation?.coupon.id ?? null,
+        couponCode: couponValidation?.coupon.code ?? null,
+        couponDiscount: discount,
         status: "PENDING",
         paymentStatus: "PENDING",
         paymentMethod: CUSTOMER_CHECKOUT_PAYMENT_METHOD,
-        shippingProvider: CUSTOMER_CHECKOUT_SHIPPING_PROVIDER,
+        shippingProvider: shipping.provider,
+        shippingZoneId: shipping.zoneId,
         notes: input.notes,
         items: {
           create: orderItems.map((item) => ({
@@ -123,8 +181,8 @@ export async function createCustomerOrder(customerId: string, input: CreateCusto
             title: item.variant.title,
             sku: item.variant.sku,
             quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            total: item.total,
+            unitPrice: item.unitPriceBeforeTax,
+            total: item.subtotal,
           })),
         },
       },
@@ -132,6 +190,7 @@ export async function createCustomerOrder(customerId: string, input: CreateCusto
         items: { include: { product: true, variant: true } },
         country: true,
         currency: true,
+        shippingZone: { include: { provider: true, country: true } },
       },
     });
 
@@ -142,6 +201,13 @@ export async function createCustomerOrder(customerId: string, input: CreateCusto
         { reason: "customer_order", adjustedBy: `customer:${customer.id};order:${order.id}` },
         tx
       );
+    }
+
+    if (couponValidation) {
+      await tx.coupon.update({
+        where: { id: couponValidation.coupon.id },
+        data: { usedCount: { increment: 1 } },
+      });
     }
 
     return order;
@@ -159,6 +225,20 @@ export async function listCustomerOrders(customerId: string) {
       items: { include: { product: true, variant: true } },
       country: true,
       currency: true,
+      shippingZone: { include: { provider: true, country: true } },
     },
   });
+}
+
+export async function assertCustomerInvoiceAccess(customerId: string, orderId: string) {
+  const order = await prisma.order.findFirst({
+    where: { id: orderId, customerId },
+    select: { id: true, status: true, paymentStatus: true },
+  });
+  if (!order) throw new AppError("Order not found.", 404);
+  const invoiceStatuses = new Set(["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED"]);
+  if (!invoiceStatuses.has(order.status) && order.paymentStatus !== "PAID") {
+    throw new AppError("Invoice is available after the order is confirmed or paid.", 400);
+  }
+  return order;
 }

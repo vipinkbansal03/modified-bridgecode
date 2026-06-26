@@ -189,7 +189,7 @@ export async function listProducts(query: {
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
       include: {
         category: { select: { id: true, name: true, slug: true } },
         media: { orderBy: { sortOrder: "asc" }, take: 1 },
@@ -297,6 +297,89 @@ export async function deleteProduct(id: string) {
   return prisma.product.update({ where: { id }, data: { deletedAt: new Date() } });
 }
 
+export async function reorderProducts(items: { id: string; sortOrder: number }[]) {
+  if (!Array.isArray(items)) throw new AppError("Reorder payload must include an array of items.", 400);
+  await prisma.$transaction(
+    items.map((item) =>
+      prisma.product.update({
+        where: { id: item.id },
+        data: { sortOrder: Number(item.sortOrder) || 0 },
+      })
+    )
+  );
+  return prisma.product.findMany({
+    where: { deletedAt: null },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+    include: {
+      category: { select: { id: true, name: true, slug: true } },
+      media: { orderBy: { sortOrder: "asc" }, take: 1 },
+      _count: { select: { variants: true } },
+    },
+  });
+}
+
+export async function bulkUpdateProducts(data: {
+  ids?: string[];
+  action?: "delete" | "enable" | "disable" | "assignCategory" | "assignCountries";
+  categoryId?: string;
+  countryIds?: string[];
+}) {
+  const ids = Array.from(new Set(data.ids ?? []));
+  if (!ids.length) throw new AppError("Select at least one product.", 400);
+
+  const products = await prisma.product.findMany({ where: { id: { in: ids }, deletedAt: null }, select: { id: true } });
+  if (products.length !== ids.length) throw new AppError("One or more selected products were not found.", 400);
+
+  if (data.action === "delete") {
+    const activeOrderItemCount = await prisma.orderItem.count({
+      where: {
+        productId: { in: ids },
+        order: { status: { not: "CANCELLED" } },
+      },
+    });
+    if (activeOrderItemCount > 0) throw new AppError("Cannot delete selected products because active orders reference them.", 400);
+    await prisma.product.updateMany({ where: { id: { in: ids } }, data: { deletedAt: new Date() } });
+    return { updated: ids.length };
+  }
+
+  if (data.action === "enable" || data.action === "disable") {
+    await prisma.product.updateMany({
+      where: { id: { in: ids } },
+      data: { status: data.action === "enable" ? "ACTIVE" : "INACTIVE" },
+    });
+    return { updated: ids.length };
+  }
+
+  if (data.action === "assignCategory") {
+    if (!data.categoryId) throw new AppError("categoryId is required.", 400);
+    const category = await prisma.category.findUnique({ where: { id: data.categoryId, deletedAt: null } });
+    if (!category) throw new AppError("Category not found.", 404);
+    await prisma.product.updateMany({ where: { id: { in: ids } }, data: { categoryId: data.categoryId } });
+    return { updated: ids.length };
+  }
+
+  if (data.action === "assignCountries") {
+    const countryIds = Array.from(new Set(data.countryIds ?? []));
+    if (!countryIds.length) throw new AppError("Select at least one country.", 400);
+    const countries = await prisma.country.findMany({ where: { id: { in: countryIds } }, select: { id: true } });
+    if (countries.length !== countryIds.length) throw new AppError("One or more countries were not found.", 400);
+    await prisma.$transaction(
+      ids.flatMap((productId) =>
+        countryIds.map((countryId) =>
+          prisma.productCountry.upsert({
+            where: { productId_countryId: { productId, countryId } },
+            update: { enabled: true },
+            create: { productId, countryId, enabled: true },
+          })
+        )
+      )
+    );
+    return { updated: ids.length };
+  }
+
+  throw new AppError("Unsupported bulk action.", 400);
+}
+
 export async function listProductCountries(productId: string) {
   await getProduct(productId);
   const [countries, mappings] = await Promise.all([
@@ -331,6 +414,46 @@ export async function updateProductCountries(productId: string, items: { country
     ),
   );
   return listProductCountries(productId);
+}
+
+export async function listVariantCountries(productId: string, variantId: string) {
+  await getVariant(productId, variantId);
+  const [countries, mappings] = await Promise.all([
+    prisma.country.findMany({ include: { currency: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    prisma.variantCountry.findMany({ where: { variantId } }),
+  ]);
+  const mappingByCountry = new Map(mappings.map((mapping) => [mapping.countryId, mapping]));
+  return countries.map((country) => {
+    const mapping = mappingByCountry.get(country.id);
+    return {
+      ...country,
+      variantCountryId: mapping?.id ?? null,
+      enabled: mapping?.enabled ?? false,
+    };
+  });
+}
+
+export async function updateVariantCountries(
+  productId: string,
+  variantId: string,
+  items: { countryId: string; enabled: boolean }[]
+) {
+  await getVariant(productId, variantId);
+  if (!Array.isArray(items)) throw new AppError("Country mapping payload must include an array of items.", 400);
+  const countryIds = [...new Set(items.map((item) => item.countryId))];
+  const countries = await prisma.country.findMany({ where: { id: { in: countryIds } }, select: { id: true } });
+  if (countries.length !== countryIds.length) throw new AppError("One or more countries were not found.", 400);
+
+  await prisma.$transaction(
+    items.map((item) =>
+      prisma.variantCountry.upsert({
+        where: { variantId_countryId: { variantId, countryId: item.countryId } },
+        update: { enabled: Boolean(item.enabled) },
+        create: { variantId, countryId: item.countryId, enabled: Boolean(item.enabled) },
+      }),
+    ),
+  );
+  return listVariantCountries(productId, variantId);
 }
 
 export async function createPackage(

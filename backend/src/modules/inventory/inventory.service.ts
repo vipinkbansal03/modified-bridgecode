@@ -1,5 +1,5 @@
 import { prisma } from "../../config/database";
-import { getPagination } from "../../utils/apiResponse";
+import { AppError, getPagination } from "../../utils/apiResponse";
 import type { InventoryStatus, Prisma } from "@prisma/client";
 
 type InventoryClient = typeof prisma | Prisma.TransactionClient;
@@ -21,6 +21,72 @@ export function getInventoryStatus(stock: number, lowStockThreshold: number): In
   if (stock <= 0) return "OUT_OF_STOCK";
   if (stock <= lowStockThreshold) return "LOW_STOCK";
   return "IN_STOCK";
+}
+
+function adjustmentInclude() {
+  return {
+    inventory: true,
+    variant: {
+      include: {
+        product: { select: { id: true, title: true, sku: true } },
+      },
+    },
+  } satisfies Prisma.InventoryAdjustmentInclude;
+}
+
+export async function listInventoryAdjustments(query: {
+  page?: string;
+  limit?: string;
+  reason?: string;
+  startDate?: string;
+  endDate?: string;
+}) {
+  const { page, limit, skip } = getPagination(query);
+  const where: Prisma.InventoryAdjustmentWhereInput = {};
+
+  if (query.reason) where.reason = query.reason;
+  if (query.startDate || query.endDate) {
+    where.createdAt = {
+      ...(query.startDate ? { gte: new Date(query.startDate) } : {}),
+      ...(query.endDate ? { lte: new Date(query.endDate) } : {}),
+    };
+  }
+
+  const [data, total] = await Promise.all([
+    prisma.inventoryAdjustment.findMany({
+      where,
+      skip,
+      take: limit,
+      include: adjustmentInclude(),
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.inventoryAdjustment.count({ where }),
+  ]);
+
+  return { data, total, page, limit };
+}
+
+export async function listVariantInventoryAdjustments(
+  variantId: string,
+  query: { page?: string; limit?: string }
+) {
+  const variant = await prisma.productVariant.findUnique({ where: { id: variantId }, select: { id: true } });
+  if (!variant) throw new AppError("Variant not found.", 404);
+
+  const { page, limit, skip } = getPagination(query);
+  const where: Prisma.InventoryAdjustmentWhereInput = { variantId };
+  const [data, total] = await Promise.all([
+    prisma.inventoryAdjustment.findMany({
+      where,
+      skip,
+      take: limit,
+      include: adjustmentInclude(),
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.inventoryAdjustment.count({ where }),
+  ]);
+
+  return { data, total, page, limit };
 }
 
 export async function updateInventory(id: string, data: { stock?: number; reservedStock?: number; lowStockThreshold?: number; status?: string }) {

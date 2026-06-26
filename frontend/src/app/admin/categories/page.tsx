@@ -39,6 +39,8 @@ interface Category {
   name: string;
   slug: string;
   description: string | null;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
   parentId: string | null;
   parent?: { id: string; name: string } | null;
   image: string | null;
@@ -62,6 +64,8 @@ const schema = Yup.object({
   name: Yup.string().trim().required("Name is required"),
   slug: Yup.string().trim().required("Slug is required"),
   description: Yup.string(),
+  seoTitle: Yup.string(),
+  seoDescription: Yup.string(),
   image: Yup.string(),
   parentId: Yup.string(),
   status: Yup.string().oneOf(["ACTIVE", "INACTIVE"]).required("Status is required"),
@@ -138,6 +142,8 @@ export default function CategoriesPage() {
       name: editing?.name || "",
       slug: editing?.slug || "",
       description: editing?.description || "",
+      seoTitle: editing?.seoTitle || "",
+      seoDescription: editing?.seoDescription || "",
       image: editing?.image || "",
       parentId: editing?.parentId || "",
       status: editing?.status || "ACTIVE",
@@ -151,6 +157,8 @@ export default function CategoriesPage() {
           name: values.name.trim(),
           slug: values.slug.trim(),
           description: values.description.trim() || null,
+          seoTitle: values.seoTitle.trim() || null,
+          seoDescription: values.seoDescription.trim() || null,
           image: values.image.trim() || null,
           parentId: values.parentId || null,
         };
@@ -297,6 +305,13 @@ export default function CategoriesPage() {
                 />
               </div>
               <AdminTextarea label="Description" rows={3} {...formik.getFieldProps("description")} />
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
+                <h4 className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">SEO</h4>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <AdminInput label="Meta Title" placeholder="Browser/search title" {...formik.getFieldProps("seoTitle")} />
+                  <AdminTextarea label="Meta Description" rows={2} placeholder="Short search description" {...formik.getFieldProps("seoDescription")} />
+                </div>
+              </div>
               <div className="grid gap-4 md:grid-cols-[120px_1fr]">
                 <div className="flex h-[92px] w-[120px] items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
                   {formik.values.image ? <img src={formik.values.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={22} className="text-[#9A9A9A]" />}

@@ -1,28 +1,28 @@
 import { Router } from "express";
-import { protect } from "../../middleware/auth.middleware";
+import { protect, requirePermission } from "../../middleware/auth.middleware";
 import * as C from "./translations.controller";
 
 const router = Router();
 router.use(protect);
 
-router.get("/coverage", C.getTranslationCoverage);
-router.get("/languages", C.listLanguages);
-router.post("/languages", C.createLanguage);
-router.get("/review-queue", C.listReviewQueue);
-router.post("/review-queue/approve", C.bulkApproveTranslations);
-router.get("/products/:productId", C.getProductTranslations);
-router.put("/products/:productId/:languageId", C.upsertProductTranslation);
-router.put("/products/translations/:id/approve", C.approveTranslation);
-router.put("/products/translations/:id/reject", C.rejectTranslation);
-router.put("/categories/:categoryId/:languageId", C.upsertCategoryTranslation);
-router.put("/:id", C.updateTranslation);
-router.post("/generate", C.generateTranslations);
-router.get("/keywords", C.listKeywords);
-router.post("/keywords", C.createKeyword);
-router.put("/keywords", C.upsertKeyword);
-router.delete("/keywords/:id", C.deleteKeyword);
-router.get("/protected-keywords", C.listProtectedKeywords);
-router.post("/protected-keywords", C.createProtectedKeyword);
-router.delete("/protected-keywords/:id", C.deleteProtectedKeyword);
+router.get("/coverage", requirePermission("translations.view", "translations.manage"), C.getTranslationCoverage);
+router.get("/languages", requirePermission("translations.view", "translations.manage"), C.listLanguages);
+router.post("/languages", requirePermission("translations.manage"), C.createLanguage);
+router.get("/review-queue", requirePermission("translations.view", "translations.manage"), C.listReviewQueue);
+router.post("/review-queue/approve", requirePermission("translations.manage"), C.bulkApproveTranslations);
+router.get("/products/:productId", requirePermission("translations.view", "translations.manage"), C.getProductTranslations);
+router.put("/products/:productId/:languageId", requirePermission("translations.manage"), C.upsertProductTranslation);
+router.put("/products/translations/:id/approve", requirePermission("translations.manage"), C.approveTranslation);
+router.put("/products/translations/:id/reject", requirePermission("translations.manage"), C.rejectTranslation);
+router.put("/categories/:categoryId/:languageId", requirePermission("translations.manage"), C.upsertCategoryTranslation);
+router.put("/:id", requirePermission("translations.manage"), C.updateTranslation);
+router.post("/generate", requirePermission("translations.manage"), C.generateTranslations);
+router.get("/keywords", requirePermission("translations.view", "translations.manage"), C.listKeywords);
+router.post("/keywords", requirePermission("translations.manage"), C.createKeyword);
+router.put("/keywords", requirePermission("translations.manage"), C.upsertKeyword);
+router.delete("/keywords/:id", requirePermission("translations.manage"), C.deleteKeyword);
+router.get("/protected-keywords", requirePermission("translations.view", "translations.manage"), C.listProtectedKeywords);
+router.post("/protected-keywords", requirePermission("translations.manage"), C.createProtectedKeyword);
+router.delete("/protected-keywords/:id", requirePermission("translations.manage"), C.deleteProtectedKeyword);
 
 export default router;

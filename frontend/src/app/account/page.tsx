@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Home, PackageCheck, UserRound } from "lucide-react";
+import { ChevronDown, Download, Home, PackageCheck, UserRound } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { Button } from "@/components/ui/Button";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import {
+  downloadCustomerInvoice,
   getCustomerErrorMessage,
   listCustomerAddresses,
   listCustomerOrders,
@@ -39,12 +40,17 @@ function StatusBadge({ value }: { value: string }) {
   );
 }
 
+function canDownloadInvoice(order: CustomerOrderSummary) {
+  return order.paymentStatus === "PAID" || ["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED"].includes(order.status);
+}
+
 export default function AccountPage() {
   const router = useRouter();
   const { currentCustomer, isLoading, logout } = useCustomerAuth();
   const [orders, setOrders] = useState<CustomerOrderSummary[]>([]);
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
   const [isFetching, setIsFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,6 +88,26 @@ export default function AccountPage() {
     if (!currentCustomer) return "";
     return `${currentCustomer.firstName} ${currentCustomer.lastName}`.trim() || currentCustomer.email;
   }, [currentCustomer]);
+
+  async function handleInvoiceDownload(order: CustomerOrderSummary) {
+    setError(null);
+    setDownloadingInvoiceId(order.id);
+    try {
+      const blob = await downloadCustomerInvoice(order.id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `invoice-${order.id}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(getCustomerErrorMessage(err, "Invoice download failed."));
+    } finally {
+      setDownloadingInvoiceId(null);
+    }
+  }
 
   if (isLoading || (!currentCustomer && isFetching)) {
     return (
@@ -238,6 +264,19 @@ export default function AccountPage() {
                             <div className="flex justify-between"><span className="text-steel">Discount</span><strong className="text-ink">{money(order, order.discount)}</strong></div>
                             <div className="flex justify-between border-t border-line pt-2 text-[15px]"><span className="font-semibold text-ink">Total</span><strong className="text-ink">{money(order, order.total)}</strong></div>
                           </div>
+                          {canDownloadInvoice(order) ? (
+                            <div className="mt-4 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => handleInvoiceDownload(order)}
+                                disabled={downloadingInvoiceId === order.id}
+                                className="inline-flex h-9 items-center gap-2 rounded-md border border-line bg-white px-3 text-[13px] font-semibold text-ink hover:bg-grey disabled:opacity-60"
+                              >
+                                <Download size={14} />
+                                {downloadingInvoiceId === order.id ? "Downloading..." : "Download invoice"}
+                              </button>
+                            </div>
+                          ) : null}
                         </div>
                       )}
                     </article>

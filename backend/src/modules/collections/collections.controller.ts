@@ -32,3 +32,16 @@ export const listCountries = asyncHandler(async (req: AuthRequest, res: Response
 export const updateCountries = asyncHandler(async (req: AuthRequest, res: Response) =>
   ApiResponse.success(res, "Collection countries updated.", await CollectionsService.updateCollectionCountries(req.params.id, req.body.items))
 );
+
+export const listDiscounts = asyncHandler(async (req: AuthRequest, res: Response) =>
+  ApiResponse.success(res, "Collection discounts fetched.", await CollectionsService.listCollectionDiscounts(req.params.id))
+);
+
+export const createDiscount = asyncHandler(async (req: AuthRequest, res: Response) =>
+  ApiResponse.created(res, "Collection discount created.", await CollectionsService.createCollectionDiscount(req.params.id, req.body))
+);
+
+export const removeDiscount = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await CollectionsService.deleteCollectionDiscount(req.params.id, req.params.discountId);
+  return ApiResponse.success(res, "Collection discount removed.");
+});

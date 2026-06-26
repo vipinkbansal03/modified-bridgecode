@@ -13,6 +13,8 @@ type CategoryInput = {
   name?: string;
   slug?: string;
   description?: string | null;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
   parentId?: string | null;
   image?: string | null;
   status?: Status;
@@ -77,6 +79,8 @@ function cleanCategoryData(data: CategoryInput, id?: string): Prisma.CategoryUnc
   if (data.name !== undefined) next.name = data.name.trim();
   if (data.slug !== undefined || data.name !== undefined) next.slug = slugify(data.slug?.trim() || data.name || "");
   if (data.description !== undefined) next.description = data.description || null;
+  if (data.seoTitle !== undefined) next.seoTitle = data.seoTitle || null;
+  if (data.seoDescription !== undefined) next.seoDescription = data.seoDescription || null;
   if (data.parentId !== undefined) next.parentId = data.parentId || null;
   if (data.image !== undefined) next.image = data.image || null;
   if (data.status !== undefined) next.status = data.status;

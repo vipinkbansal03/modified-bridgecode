@@ -1,10 +1,10 @@
 import { Router } from "express";
-import { protect } from "../../middleware/auth.middleware";
+import { protect, requirePermission } from "../../middleware/auth.middleware";
 import * as C from "./pricing.controller";
 const router = Router();
 router.use(protect);
-router.get("/", C.list);
-router.post("/", C.create);
-router.put("/:id", C.update);
-router.post("/generate-country-prices", C.generateForCountries);
+router.get("/", requirePermission("pricing.view", "pricing.manage"), C.list);
+router.post("/", requirePermission("pricing.manage"), C.create);
+router.put("/:id", requirePermission("pricing.manage"), C.update);
+router.post("/generate-country-prices", requirePermission("pricing.manage"), C.generateForCountries);
 export default router;

@@ -28,6 +28,8 @@ function toCustomerSession(customer: {
   lastName: string;
   phone: string | null;
   status: string;
+  customerType: string;
+  approvalStatus: string;
   tierId: string | null;
   defaultCountryId: string | null;
 }) {
@@ -38,6 +40,8 @@ function toCustomerSession(customer: {
     lastName: customer.lastName,
     phone: customer.phone,
     status: customer.status,
+    customerType: customer.customerType,
+    approvalStatus: customer.approvalStatus,
     tierId: customer.tierId,
     defaultCountryId: customer.defaultCountryId,
   };
@@ -48,6 +52,7 @@ export async function register(input: CustomerRegisterInput) {
   if (existing) throw new AppError("A customer account with this email already exists.", 409);
 
   const passwordHash = await bcrypt.hash(input.password, 12);
+  const customerType = input.customerType ?? "RETAIL";
   const customer = await prisma.customer.create({
     data: {
       email: input.email,
@@ -56,6 +61,8 @@ export async function register(input: CustomerRegisterInput) {
       lastName: input.lastName,
       phone: input.phone || null,
       status: "ACTIVE",
+      customerType,
+      approvalStatus: customerType === "WHOLESALE" ? "PENDING_APPROVAL" : "ACTIVE",
     },
   });
 

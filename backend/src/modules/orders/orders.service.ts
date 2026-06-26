@@ -50,20 +50,44 @@ export async function getAnalytics() {
   };
 }
 
-export async function listOrders(query: { page?: string; limit?: string; status?: string; paymentStatus?: string }) {
+export async function listOrders(query: {
+  page?: string;
+  limit?: string;
+  status?: string;
+  paymentStatus?: string;
+  search?: string;
+  countryId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}) {
   const { page, limit, skip } = getPagination(query);
-  const where: Record<string, unknown> = {};
-  if (query.status) where.status = query.status;
-  if (query.paymentStatus) where.paymentStatus = query.paymentStatus;
+  const where: Prisma.OrderWhereInput = {};
+  if (query.status) where.status = query.status as never;
+  if (query.paymentStatus) where.paymentStatus = query.paymentStatus as never;
+  if (query.countryId) where.countryId = query.countryId;
+  if (query.search?.trim()) {
+    const search = query.search.trim();
+    where.OR = [
+      { orderNumber: { contains: search, mode: "insensitive" } },
+      { customerName: { contains: search, mode: "insensitive" } },
+      { customerEmail: { contains: search, mode: "insensitive" } },
+    ];
+  }
+  if (query.dateFrom || query.dateTo) {
+    where.createdAt = {
+      ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
+      ...(query.dateTo ? { lte: new Date(`${query.dateTo}T23:59:59.999Z`) } : {}),
+    };
+  }
   const [data, total] = await Promise.all([
-    prisma.order.findMany({ where, skip, take: limit, orderBy: { createdAt: "desc" }, include: { country: true, currency: true, _count: { select: { items: true } } } }),
+    prisma.order.findMany({ where, skip, take: limit, orderBy: { createdAt: "desc" }, include: { country: true, currency: true, shippingZone: { include: { provider: true, country: true } }, _count: { select: { items: true } } } }),
     prisma.order.count({ where }),
   ]);
   return { data, total, page, limit };
 }
 
 export async function getOrder(id: string) {
-  const o = await prisma.order.findUnique({ where: { id }, include: { items: { include: { product: true, variant: true } }, country: true, currency: true, coupon: true } });
+  const o = await prisma.order.findUnique({ where: { id }, include: { items: { include: { product: true, variant: true } }, country: true, currency: true, coupon: true, shippingZone: { include: { provider: true, country: true } } } });
   if (!o) throw new AppError("Order not found.", 404);
   return o;
 }

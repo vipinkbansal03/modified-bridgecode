@@ -17,6 +17,40 @@ function buildVariantKey(attributeValueIds: string[], packageId?: string | null)
   return packageId ? `${packageId}::${valueKey}` : valueKey;
 }
 
+const ADMIN_PERMISSIONS = [
+  "products.view",
+  "products.manage",
+  "products.create",
+  "products.update",
+  "products.delete",
+  "categories.view",
+  "categories.manage",
+  "attributes.view",
+  "attributes.manage",
+  "collections.view",
+  "collections.manage",
+  "customers.view",
+  "customers.manage",
+  "orders.view",
+  "orders.manage",
+  "quotes.view",
+  "quotes.manage",
+  "inventory.view",
+  "inventory.manage",
+  "cms.view",
+  "cms.manage",
+  "translations.view",
+  "translations.manage",
+  "pricing.view",
+  "pricing.manage",
+  "tiers.view",
+  "tiers.manage",
+  "discounts.view",
+  "discounts.manage",
+  "coupons.view",
+  "coupons.manage",
+];
+
 async function main() {
   console.log("🌱 Seeding database…");
 
@@ -29,10 +63,10 @@ async function main() {
 
   const adminRole = await prisma.role.upsert({
     where: { name: "Admin" },
-    update: {},
+    update: { permissions: ADMIN_PERMISSIONS },
     create: {
       name: "Admin",
-      permissions: ["products.create", "products.update", "products.delete", "orders.manage", "quotes.manage", "inventory.manage", "settings.manage"],
+      permissions: ADMIN_PERMISSIONS,
     },
   });
 
