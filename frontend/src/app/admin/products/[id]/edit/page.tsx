@@ -115,6 +115,9 @@ type AttributeValueDetail = {
   dealerPrice?: string | number | null;
 };
 
+const getAttributeValues = <T extends { id: string; value: string }>(attribute?: { values?: T[] | null }): T[] =>
+  Array.isArray(attribute?.values) ? attribute.values : [];
+
 type ProductAttributeMapping = {
   id: string;
   productId: string;
@@ -1084,7 +1087,7 @@ export default function EditProductPage() {
 
         if (!attribute) return null;
         if (mode === "all") {
-          return { attributeId, attributeValueIds: attribute.values.map((value) => value.id) };
+          return { attributeId, attributeValueIds: getAttributeValues(attribute).map((value) => value.id) };
         }
         return { attributeId, attributeValueIds: selectedIds };
       })
@@ -1165,7 +1168,7 @@ export default function EditProductPage() {
         if (mode === "all") {
           return {
             attributeId: attribute.id,
-            attributeValueIds: attribute.values.map((value) => value.id),
+            attributeValueIds: getAttributeValues(attribute).map((value) => value.id),
           };
         }
         const selectedIds = generateSelectionMap[attribute.id] ?? [];
@@ -1284,7 +1287,7 @@ export default function EditProductPage() {
       const attribute = attributeCatalog.find((item) => item.id === attributeId);
       setManualVariantSelectionMap((current) => ({
         ...current,
-        [attributeId]: attribute?.values.map((value) => value.id) ?? [],
+        [attributeId]: getAttributeValues(attribute).map((value) => value.id),
       }));
       return;
     }
@@ -1317,7 +1320,7 @@ export default function EditProductPage() {
     if (!attribute) return;
     setManualVariantSelectionMap((current) => ({
       ...current,
-      [attributeId]: attribute.values.map((value) => value.id),
+      [attributeId]: getAttributeValues(attribute).map((value) => value.id),
     }));
   };
 
@@ -1662,17 +1665,20 @@ export default function EditProductPage() {
                   : "This product has no mapped attributes yet. Generation can still use the full global catalog; map attributes first in Product Attributes when you want product-specific controls."}
               </p>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {variantGenerationCatalog.map((attribute) => (
-                  <div key={attribute.id} className="rounded-lg border border-[#E6E6E6] bg-white p-3.5">
-                    <div className="text-[13px] font-medium text-[#1A1A1A]">{attribute.name}</div>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {attribute.values.slice(0, 5).map((value) => (
-                        <span key={value.id} className="rounded-full bg-[#F2F2F2] px-2 py-0.5 text-[11px] text-[#6B6B6B]">{value.value}</span>
-                      ))}
-                      {attribute.values.length > 5 && <span className="text-[11px] text-[#9A9A9A]">+{attribute.values.length - 5}</span>}
+                {variantGenerationCatalog.map((attribute) => {
+                  const values = getAttributeValues(attribute);
+                  return (
+                    <div key={attribute.id} className="rounded-lg border border-[#E6E6E6] bg-white p-3.5">
+                      <div className="text-[13px] font-medium text-[#1A1A1A]">{attribute.name}</div>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {values.slice(0, 5).map((value) => (
+                          <span key={value.id} className="rounded-full bg-[#F2F2F2] px-2 py-0.5 text-[11px] text-[#6B6B6B]">{value.value}</span>
+                        ))}
+                        {values.length > 5 && <span className="text-[11px] text-[#9A9A9A]">+{values.length - 5}</span>}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
             {variantDisplayMode === "flat" && variantGridState.reasons.length > 0 && (
@@ -2345,8 +2351,9 @@ export default function EditProductPage() {
                 if (!attribute) return null;
                 const mode = generateModeMap[attribute.id] ?? "specific";
                 const selectedValueIds = generateSelectionMap[attribute.id] ?? [];
-                const selectedValues = attribute.values.filter((value) => selectedValueIds.includes(value.id));
-                const availableValues = attribute.values.filter((value) => !selectedValueIds.includes(value.id));
+                const values = getAttributeValues(attribute);
+                const selectedValues = values.filter((value) => selectedValueIds.includes(value.id));
+                const availableValues = values.filter((value) => !selectedValueIds.includes(value.id));
 
                 return (
                   <div key={attribute.id} className="rounded-lg border border-[#E6E6E6] p-4">
@@ -2373,7 +2380,7 @@ export default function EditProductPage() {
 
                     {mode === "all" && (
                       <div className="rounded-md bg-[#FAFAFA] px-3 py-2 text-[12px] text-[#6B6B6B]">
-                        All {attribute.values.length} values of {attribute.name} will be used.
+                        All {values.length} values of {attribute.name} will be used.
                       </div>
                     )}
 
@@ -2523,7 +2530,8 @@ export default function EditProductPage() {
                 if (!attribute) return null;
                 const mode = manualVariantModeMap[attribute.id] ?? "single";
                 const selectedValueIds = manualVariantSelectionMap[attribute.id] ?? [];
-                const selectedValues = attribute.values.filter((value) => selectedValueIds.includes(value.id));
+                const values = getAttributeValues(attribute);
+                const selectedValues = values.filter((value) => selectedValueIds.includes(value.id));
 
                 return (
                   <div key={attribute.id} className="rounded-lg border border-[#E6E6E6] p-4">
@@ -2562,7 +2570,7 @@ export default function EditProductPage() {
 
                     {mode === "all" && (
                       <div className="rounded-md bg-[#FAFAFA] px-3 py-2 text-[12px] text-[#6B6B6B]">
-                        All {attribute.values.length} values of {attribute.name} will be used.
+                        All {values.length} values of {attribute.name} will be used.
                       </div>
                     )}
 
@@ -2591,7 +2599,7 @@ export default function EditProductPage() {
                         </div>
 
                         <div className="flex flex-wrap gap-2">
-                          {attribute.values.map((value) => {
+                          {values.map((value) => {
                             const selected = selectedValueIds.includes(value.id);
                             return (
                               <button
@@ -2747,8 +2755,9 @@ export default function EditProductPage() {
               {editVariantAttributeIds.map((attributeId) => {
                 const attribute = attributeCatalog.find((item) => item.id === attributeId);
                 if (!attribute) return null;
-                const selectedValue = attribute.values.find((value) => value.id === editVariantSelections[attribute.id]);
-                const availableValues = attribute.values.filter((value) => value.id !== editVariantSelections[attribute.id]);
+                const values = getAttributeValues(attribute);
+                const selectedValue = values.find((value) => value.id === editVariantSelections[attribute.id]);
+                const availableValues = values.filter((value) => value.id !== editVariantSelections[attribute.id]);
 
                 return (
                   <div key={attribute.id} className="rounded-lg border border-[#E6E6E6] p-4">
@@ -2780,7 +2789,7 @@ export default function EditProductPage() {
                         className="rounded-full border border-dashed border-[#BDBDBD] bg-white px-4 py-2 text-[12px] text-[#6B6B6B] outline-none hover:border-[#9A9A9A]"
                       >
                         <option value="">+ Add value</option>
-                        {(selectedValue ? availableValues : attribute.values).map((value) => (
+                        {(selectedValue ? availableValues : values).map((value) => (
                           <option key={value.id} value={value.id}>
                             {value.value}
                           </option>

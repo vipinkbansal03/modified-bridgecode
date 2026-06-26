@@ -33,11 +33,15 @@ export function FeaturedProductsSection({
 
   const products = useMemo(() => {
     const liveProducts = allProducts?.data ?? [];
+    const liveMatches = slugs
+      .map((slug) => liveProducts.find((p) => p.slug === slug))
+      .filter(Boolean) as ApiProductSummary[];
+
+    if (liveMatches.length) return liveMatches;
+    if (liveProducts.length) return liveProducts.slice(0, Math.max(slugs.length, 3));
+
     return slugs
       .map((slug) => {
-        const live = liveProducts.find((p) => p.slug === slug);
-        if (live) return live;
-
         const fallback = (staticProducts as Record<string, unknown>[]).find(
           (p) => p.slug === slug,
         );
@@ -75,8 +79,8 @@ export function FeaturedProductsSection({
 
   if (!products.length) return null;
   const product = products[index];
-  const imageUrl =
-    FEATURED_STOCK_IMAGES[product.slug] ?? product.images[0] ?? "";
+  const productImage = product.thumbnail?.trim() || product.images.find((image) => image?.trim()) || "";
+  const imageUrl = FEATURED_STOCK_IMAGES[product.slug] ?? productImage;
   const go = (delta: number) =>
     setIndex((i) => (i + delta + products.length) % products.length);
 

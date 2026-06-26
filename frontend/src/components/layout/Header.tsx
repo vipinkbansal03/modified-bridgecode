@@ -48,6 +48,25 @@ export function Header() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  useEffect(() => {
+    const shouldLockScroll = megaOpen || capsOpen || mobileOpen || searchOpen || accountOpen;
+    if (!shouldLockScroll) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+
+    document.body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
+    };
+  }, [accountOpen, capsOpen, megaOpen, mobileOpen, searchOpen]);
+
   return (
     <header
       className={cn(
@@ -188,22 +207,6 @@ export function Header() {
           >
             {mobileOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
-        </div>
-      </div>
-
-      <div className="hidden border-b border-line bg-offwhite lg:block">
-        <div className="mx-auto h-[50px] max-w-wrap px-5 sm:px-10">
-          <div className="subnav-scrollbar flex h-full items-center gap-7 overflow-x-auto pb-1">
-            {nav.subNav.map((link) => (
-              <Link
-                key={link.label}
-                href={link.href}
-                className="whitespace-nowrap text-[13.5px] text-steel hover:text-brand"
-              >
-                {label(link.label)}
-              </Link>
-            ))}
-          </div>
         </div>
       </div>
 

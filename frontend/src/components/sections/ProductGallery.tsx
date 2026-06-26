@@ -11,13 +11,25 @@ interface ProductGalleryProps {
 }
 
 export function ProductGallery({ images, title }: ProductGalleryProps) {
+  const safeImages = images.map((image) => image.trim()).filter(Boolean);
   const [index, setIndex] = useState(0);
-  const go = (delta: number) => setIndex((i) => (i + delta + images.length) % images.length);
+  const go = (delta: number) => {
+    if (!safeImages.length) return;
+    setIndex((i) => (i + delta + safeImages.length) % safeImages.length);
+  };
+
+  if (!safeImages.length) {
+    return (
+      <div className="flex min-h-[440px] items-center justify-center bg-offwhite text-sm text-steel-2">
+        No image
+      </div>
+    );
+  }
 
   return (
     <div className="flex gap-4.5">
       <div className="flex flex-col gap-3.5">
-        {images.map((img, i) => (
+        {safeImages.map((img, i) => (
           <button
             key={img}
             onClick={() => setIndex(i)}
@@ -40,7 +52,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
           <ChevronLeft size={14} />
         </button>
         <div className="relative h-[400px] w-[78%]">
-          <Image src={images[index]} alt={title} fill className="object-contain" sizes="500px" />
+          <Image src={safeImages[index]} alt={title} fill className="object-contain" sizes="500px" />
         </div>
         <button
           aria-label="Next"

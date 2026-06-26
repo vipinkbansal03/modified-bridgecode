@@ -48,8 +48,8 @@ export function MobileMenu({
             >
               {ctaLabel}
             </Link>
-            <div className="mt-3 flex items-center border-t border-line pt-3">
-              <LanguageSwitcher />
+            <div className="mt-3 border-t border-line pt-3">
+              <LanguageSwitcher mobileFullWidth />
             </div>
           </div>
         </motion.div>

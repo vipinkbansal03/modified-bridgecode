@@ -7,7 +7,7 @@ import { useLanguages } from "@/hooks/api/useLanguages";
 import { useLanguageContext } from "@/contexts/LanguageContext";
 import { cn } from "@/utils/cn";
 
-export function LanguageSwitcher() {
+export function LanguageSwitcher({ mobileFullWidth = false }: { mobileFullWidth?: boolean }) {
   const { data: languages = [] } = useLanguages();
   const { selectedLanguage, setSelectedLanguage } = useLanguageContext();
   const [open, setOpen] = useState(false);
@@ -26,17 +26,26 @@ export function LanguageSwitcher() {
   if (!active) return null;
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className={cn("relative", mobileFullWidth && "w-full")}>
       <button
+        type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 text-[13.5px] font-medium text-ink hover:text-brand"
+        className={cn(
+          "flex items-center gap-1 text-[13.5px] font-medium text-ink hover:text-brand",
+          mobileFullWidth && "h-10 w-full justify-between rounded-md border border-line bg-white px-3",
+        )}
       >
         <span>{active.code.toUpperCase()}</span>
         <ChevronDown size={11} className={cn("opacity-60 transition-transform", open && "rotate-180")} />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1.5 w-[148px] rounded-md border border-line bg-white py-1 shadow-[0_8px_24px_rgba(0,0,0,0.08)]">
+        <div
+          className={cn(
+            "z-50 mt-1.5 rounded-md border border-line bg-white py-1 shadow-[0_8px_24px_rgba(0,0,0,0.08)]",
+            mobileFullWidth ? "relative w-full" : "absolute right-0 top-full w-[148px]",
+          )}
+        >
           {languages.map((language) => (
             <button
               key={language.id}

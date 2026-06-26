@@ -123,7 +123,7 @@ export function ProductsListingClient() {
               {products.map((p) => (
                 <ProductCard
                   key={p.slug}
-                  image={p.thumbnail ?? p.images[0] ?? ""}
+                  image={p.thumbnail?.trim() || p.images.find((image) => image?.trim()) || null}
                   title={p.title}
                   slug={p.slug}
                   category={p.category.name}

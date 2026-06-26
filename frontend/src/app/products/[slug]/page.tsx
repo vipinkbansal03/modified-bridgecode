@@ -51,13 +51,18 @@ async function fetchSlugsFromApi(): Promise<string[]> {
 }
 
 function mergeProduct(api: ApiProductDetail, staticProduct: ProductDetail | undefined): ProductDetail {
+  const apiImages = api.images
+    .map((img) => (typeof img === "string" ? img : img.url))
+    .map((url) => url.trim())
+    .filter(Boolean);
+
   return {
     slug: api.slug,
     title: api.title,
     category: api.category.name,
     categorySlug: api.category.slug,
     productCode: api.productCode ?? staticProduct?.productCode ?? "",
-    images: api.images.map((img) => (typeof img === "string" ? img : img.url)),
+    images: apiImages.length ? apiImages : staticProduct?.images ?? [],
     information: api.shortDescription ?? staticProduct?.information ?? "",
     tagline: staticProduct?.tagline,
     highlights: staticProduct?.highlights ?? [],
