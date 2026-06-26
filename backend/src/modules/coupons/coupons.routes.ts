@@ -1,2 +1,2 @@
-import { Router } from "express"; import { protect } from "../../middleware/auth.middleware"; import * as C from "./coupons.controller";
-const router = Router(); router.use(protect); router.get("/", C.list); router.post("/", C.create); router.put("/:id", C.update); router.delete("/:id", C.remove); router.post("/validate", C.validate); export default router;
+import { Router } from "express"; import { protect, requirePermission } from "../../middleware/auth.middleware"; import * as C from "./coupons.controller";
+const router = Router(); router.use(protect); router.get("/", requirePermission("coupons.view", "coupons.manage"), C.list); router.post("/", requirePermission("coupons.manage"), C.create); router.put("/:id", requirePermission("coupons.manage"), C.update); router.delete("/:id", requirePermission("coupons.manage"), C.remove); router.post("/validate", requirePermission("coupons.view", "coupons.manage"), C.validate); export default router;

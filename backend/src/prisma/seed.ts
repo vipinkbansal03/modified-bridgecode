@@ -17,6 +17,40 @@ function buildVariantKey(attributeValueIds: string[], packageId?: string | null)
   return packageId ? `${packageId}::${valueKey}` : valueKey;
 }
 
+const ADMIN_PERMISSIONS = [
+  "products.view",
+  "products.manage",
+  "products.create",
+  "products.update",
+  "products.delete",
+  "categories.view",
+  "categories.manage",
+  "attributes.view",
+  "attributes.manage",
+  "collections.view",
+  "collections.manage",
+  "customers.view",
+  "customers.manage",
+  "orders.view",
+  "orders.manage",
+  "quotes.view",
+  "quotes.manage",
+  "inventory.view",
+  "inventory.manage",
+  "cms.view",
+  "cms.manage",
+  "translations.view",
+  "translations.manage",
+  "pricing.view",
+  "pricing.manage",
+  "tiers.view",
+  "tiers.manage",
+  "discounts.view",
+  "discounts.manage",
+  "coupons.view",
+  "coupons.manage",
+];
+
 async function main() {
   console.log("🌱 Seeding database…");
 
@@ -29,10 +63,10 @@ async function main() {
 
   const adminRole = await prisma.role.upsert({
     where: { name: "Admin" },
-    update: {},
+    update: { permissions: ADMIN_PERMISSIONS },
     create: {
       name: "Admin",
-      permissions: ["products.create", "products.update", "products.delete", "orders.manage", "quotes.manage", "inventory.manage", "settings.manage"],
+      permissions: ADMIN_PERMISSIONS,
     },
   });
 
@@ -40,6 +74,18 @@ async function main() {
     where: { name: "Staff" },
     update: {},
     create: { name: "Staff", permissions: ["products.view", "orders.view", "quotes.view"] },
+  });
+
+  await prisma.role.upsert({
+    where: { name: "Dealer" },
+    update: {},
+    create: { name: "Dealer", permissions: [] },
+  });
+
+  await prisma.role.upsert({
+    where: { name: "Doctor / Retailer" },
+    update: {},
+    create: { name: "Doctor / Retailer", permissions: [] },
   });
 
   // ─── Super admin user ───────────────────────────────────
@@ -103,6 +149,23 @@ async function main() {
     where: { provider: "STRIPE" },
     update: {},
     create: { provider: "STRIPE", displayName: "Stripe", isEnabled: false, countries: [] },
+  });
+
+  // Default customer pricing tiers. Country/pricing mappings are intentionally empty until admins enable them.
+  await prisma.tier.upsert({
+    where: { name: "Silver" },
+    update: { status: "ACTIVE", sortOrder: 1 },
+    create: { name: "Silver", status: "ACTIVE", sortOrder: 1 },
+  });
+  await prisma.tier.upsert({
+    where: { name: "Gold" },
+    update: { status: "ACTIVE", sortOrder: 2 },
+    create: { name: "Gold", status: "ACTIVE", sortOrder: 2 },
+  });
+  await prisma.tier.upsert({
+    where: { name: "Platinum" },
+    update: { status: "ACTIVE", sortOrder: 3 },
+    create: { name: "Platinum", status: "ACTIVE", sortOrder: 3 },
   });
 
   const molarTubeCategory = await prisma.category.upsert({
@@ -181,13 +244,30 @@ async function main() {
   ] as const;
 
   const attributesByName = new Map<string, { id: string; valuesByValue: Map<string, { id: string; attributeId: string; value: string }> }>();
+  const duplicateSeedAttributeNames = attributeCatalog
+    .map((attribute) => attribute.name)
+    .filter((name, index, names) => names.indexOf(name) !== index);
+  if (duplicateSeedAttributeNames.length) {
+    throw new Error(`Duplicate seeded attribute names: ${duplicateSeedAttributeNames.join(", ")}`);
+  }
 
   for (const attributeData of attributeCatalog) {
-    const attribute = await prisma.attribute.upsert({
-      where: { slug: slugify(attributeData.name) },
-      update: { name: attributeData.name, sortOrder: attributeData.sortOrder, status: "ACTIVE" },
-      create: { name: attributeData.name, slug: slugify(attributeData.name), sortOrder: attributeData.sortOrder, status: "ACTIVE" },
+    const existingAttributes = await prisma.attribute.findMany({
+      where: { name: attributeData.name },
+      orderBy: { createdAt: "asc" },
     });
+    if (existingAttributes.length > 1) {
+      throw new Error(`Multiple existing attributes found with name "${attributeData.name}". Resolve duplicates before seeding.`);
+    }
+
+    const attribute = existingAttributes[0]
+      ? await prisma.attribute.update({
+          where: { id: existingAttributes[0].id },
+          data: { name: attributeData.name, sortOrder: attributeData.sortOrder, status: "ACTIVE" },
+        })
+      : await prisma.attribute.create({
+          data: { name: attributeData.name, role: "DROPDOWN", sortOrder: attributeData.sortOrder, status: "ACTIVE" },
+        });
 
     const valuesByValue = new Map<string, { id: string; attributeId: string; value: string }>();
     for (let i = 0; i < attributeData.values.length; i++) {
@@ -734,6 +814,36 @@ async function main() {
     { key: "cookies.banner_title", value: "We use cookies", group: "cookies", label: "Banner Title", type: "string" },
     { key: "cookies.banner_description", value: "We use cookies to improve your experience on our site and to analyse traffic.", group: "cookies", label: "Banner Description", type: "string" },
     { key: "cookies.privacy_policy_url", value: "/privacy-policy", group: "cookies", label: "Privacy Policy URL", type: "string" },
+    // Auth pages
+    { key: "auth.login_heading", value: "Customer Login", group: "auth", label: "Login Heading", type: "string" },
+    { key: "auth.login_sub_heading", value: "Login to access your account", group: "auth", label: "Login Sub Heading", type: "string" },
+    { key: "auth.login_slider_enabled", value: "true", group: "auth", label: "Enable Login Slider", type: "boolean" },
+    { key: "auth.login_slide_1_image", value: "/auth/login1.jpg", group: "auth", label: "Login Slide 1 Image", type: "string" },
+    { key: "auth.login_slide_1_heading", value: "Modern orthodontic care designed for confident smiles.", group: "auth", label: "Login Slide 1 Heading", type: "string" },
+    { key: "auth.login_slide_1_sub_heading", value: "Premium products and account access for dental professionals.", group: "auth", label: "Login Slide 1 Sub Heading", type: "string" },
+    { key: "auth.login_slide_2_image", value: "/auth/login2.jpg", group: "auth", label: "Login Slide 2 Image", type: "string" },
+    { key: "auth.login_slide_2_heading", value: "Track your treatment journey with ease and comfort.", group: "auth", label: "Login Slide 2 Heading", type: "string" },
+    { key: "auth.login_slide_2_sub_heading", value: "Manage orders, quotes, and account details in one secure place.", group: "auth", label: "Login Slide 2 Sub Heading", type: "string" },
+    {
+      key: "auth.login_slides",
+      value: JSON.stringify([
+        {
+          image: "/auth/login1.jpg",
+          heading: "Modern orthodontic care designed for confident smiles.",
+          subHeading: "Premium products and account access for dental professionals.",
+          isVisible: true,
+        },
+        {
+          image: "/auth/login2.jpg",
+          heading: "Track your treatment journey with ease and comfort.",
+          subHeading: "Manage orders, quotes, and account details in one secure place.",
+          isVisible: true,
+        },
+      ]),
+      group: "auth",
+      label: "Login Slides",
+      type: "json",
+    },
     // WhatsApp
     { key: "whatsapp.number", value: "", group: "whatsapp", label: "WhatsApp Number (international format)", type: "string" },
     { key: "whatsapp.default_message", value: "Hello, I have a question about your products.", group: "whatsapp", label: "Default Message", type: "string" },

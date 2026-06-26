@@ -1,2 +1,2 @@
-import { Router } from "express"; import { protect } from "../../middleware/auth.middleware"; import * as C from "./currencies.controller";
-const router = Router(); router.use(protect); router.get("/", C.list); router.post("/", C.create); router.put("/:id", C.update); router.post("/sync-rates", C.syncRates); export default router;
+import { Router } from "express"; import { protect, requirePermission } from "../../middleware/auth.middleware"; import * as C from "./currencies.controller";
+const router = Router(); router.use(protect); router.get("/", requirePermission("currencies.view", "currencies.manage"), C.list); router.post("/", requirePermission("currencies.manage"), C.create); router.put("/:id", requirePermission("currencies.manage"), C.update); router.post("/sync-rates", requirePermission("currencies.manage"), C.syncRates); export default router;

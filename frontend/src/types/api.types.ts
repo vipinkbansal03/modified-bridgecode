@@ -27,20 +27,30 @@ export interface ApiProductPrice {
 
 export interface ApiAttributeValue {
   id: string;
+  attributeId?: string;
   value: string;
   slug: string;
   sortOrder: number;
   image?: string | null;
   note?: string | null;
-  priceAdjustment?: number;
+  priceAdjustment?: number | string;
+  gridRole?: "ROW" | "COLUMN" | null;
+  countryId?: string | null;
+  country?: { id: string; name: string; code: string } | null;
+  moq?: number | null;
+  tierPrice?: number | string | null;
+  dealerPrice?: number | string | null;
+  status?: string;
 }
 
 export interface ApiAttribute {
   id: string;
   name: string;
-  slug: string;
-  required: boolean;
-  values: ApiAttributeValue[];
+  role: "DROPDOWN" | "X_GRID" | "Y_GRID";
+  status: string;
+  sortOrder: number;
+  values?: ApiAttributeValue[];
+  _count?: { values: number };
 }
 
 export interface ApiVariantInventory {
@@ -115,6 +125,13 @@ export interface ApiCountry {
   name: string;
   code: string;
   currency: ApiCurrency;
+  isDefault: boolean;
+}
+
+export interface ApiLanguage {
+  id: string;
+  name: string;
+  code: string;
   isDefault: boolean;
 }
 

@@ -46,6 +46,38 @@ export const remove = asyncHandler(async (req: AuthRequest, res: Response) => {
   return ApiResponse.success(res, "Product deleted.");
 });
 
+export const reorder = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const products = await ProductService.reorderProducts(req.body?.items);
+  return ApiResponse.success(res, "Products reordered.", products);
+});
+
+export const bulkUpdate = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await ProductService.bulkUpdateProducts(req.body);
+  return ApiResponse.success(res, "Bulk product action completed.", result);
+});
+
+export const listCountries = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const countries = await ProductService.listProductCountries(req.params.id as string);
+  return ApiResponse.success(res, "Product countries fetched.", countries);
+});
+
+export const updateCountries = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const items = Array.isArray(req.body) ? req.body : req.body?.items;
+  const countries = await ProductService.updateProductCountries(req.params.id as string, items);
+  return ApiResponse.success(res, "Product countries updated.", countries);
+});
+
+export const listVariantCountries = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const countries = await ProductService.listVariantCountries(req.params.id as string, req.params.variantId as string);
+  return ApiResponse.success(res, "Variant countries fetched.", countries);
+});
+
+export const updateVariantCountries = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const items = Array.isArray(req.body) ? req.body : req.body?.items;
+  const countries = await ProductService.updateVariantCountries(req.params.id as string, req.params.variantId as string, items);
+  return ApiResponse.success(res, "Variant countries updated.", countries);
+});
+
 export const createPackage = asyncHandler(async (req: AuthRequest, res: Response) => {
   const pkg = await ProductService.createPackage(req.params.id as string, req.body);
   return ApiResponse.created(res, "Package created.", pkg);
@@ -73,9 +105,19 @@ export const removeMedia = asyncHandler(async (req: AuthRequest, res: Response) 
   return ApiResponse.success(res, "Media deleted.");
 });
 
+export const listAttribs = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await ProductService.listProductAttributes(req.params.id as string);
+  return ApiResponse.success(res, "Product attributes fetched.", result);
+});
+
 export const assignAttribs = asyncHandler(async (req: AuthRequest, res: Response) => {
   const result = await ProductService.assignAttributes(req.params.id as string, req.body.attributes);
   return ApiResponse.success(res, "Attributes assigned.", result);
+});
+
+export const removeAttrib = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await ProductService.removeProductAttribute(req.params.id as string, req.params.attributeId as string);
+  return ApiResponse.success(res, "Attribute unmapped.");
 });
 
 export const genVariants = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -98,6 +140,15 @@ export const updateVariant = asyncHandler(async (req: AuthRequest, res: Response
   return ApiResponse.success(res, "Variant updated.", variant);
 });
 
+export const bulkUpdateVariants = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await ProductService.bulkUpdateVariants(
+    req.params.id as string,
+    req.body?.updates,
+    req.user?.id ? `admin:${req.user.id}` : "admin"
+  );
+  return ApiResponse.success(res, "Bulk variant update processed.", result);
+});
+
 export const deleteVariant = asyncHandler(async (req: AuthRequest, res: Response) => {
   await ProductService.deleteVariant(req.params.id as string, req.params.variantId as string);
   return ApiResponse.success(res, "Variant deleted.");
@@ -106,6 +157,46 @@ export const deleteVariant = asyncHandler(async (req: AuthRequest, res: Response
 export const cloneVariant = asyncHandler(async (req: AuthRequest, res: Response) => {
   const variant = await ProductService.cloneVariant(req.params.id as string, req.params.variantId as string);
   return ApiResponse.created(res, "Variant cloned.", variant);
+});
+
+export const listTierPricing = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const rules = await ProductService.listTierPricing(req.params.id as string);
+  return ApiResponse.success(res, "Tier pricing rules fetched.", rules);
+});
+
+export const createTierPricing = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const rule = await ProductService.createTierPricing(req.params.id as string, req.body);
+  return ApiResponse.created(res, "Tier pricing rule created.", rule);
+});
+
+export const updateTierPricing = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const rule = await ProductService.updateTierPricing(req.params.id as string, req.params.ruleId as string, req.body);
+  return ApiResponse.success(res, "Tier pricing rule updated.", rule);
+});
+
+export const deleteTierPricing = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await ProductService.deleteTierPricing(req.params.id as string, req.params.ruleId as string);
+  return ApiResponse.success(res, "Tier pricing rule deleted.");
+});
+
+export const listMoqPricing = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const rules = await ProductService.listMoqPricing(req.params.id as string);
+  return ApiResponse.success(res, "MOQ pricing rules fetched.", rules);
+});
+
+export const createMoqPricing = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const rule = await ProductService.createMoqPricing(req.params.id as string, req.body);
+  return ApiResponse.created(res, "MOQ pricing rule created.", rule);
+});
+
+export const updateMoqPricing = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const rule = await ProductService.updateMoqPricing(req.params.id as string, req.params.ruleId as string, req.body);
+  return ApiResponse.success(res, "MOQ pricing rule updated.", rule);
+});
+
+export const deleteMoqPricing = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await ProductService.deleteMoqPricing(req.params.id as string, req.params.ruleId as string);
+  return ApiResponse.success(res, "MOQ pricing rule deleted.");
 });
 
 export const importCsv = asyncHandler(async (req: AuthRequest, res: Response) => {

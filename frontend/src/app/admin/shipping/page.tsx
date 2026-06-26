@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, useToast } from "@/components/admin/AdminComponents";
@@ -33,6 +34,12 @@ export default function ShippingPage() {
   return (
     <AdminLayout title="Shipping" breadcrumb={[{ label: "Shipping" }]}>
       <div className="space-y-4">
+        <div className="flex gap-2 border-b border-[#E6E6E6]">
+          <span className="border-b-2 border-[#E31E24] px-4 py-2 text-[13px] font-semibold text-[#111]">Providers</span>
+          <Link href="/admin/shipping/zones" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
+            Zones
+          </Link>
+        </div>
         {defaultProviders.map((p) => (
           <div key={p.name} className="rounded-xl border border-[#E6E6E6] bg-white p-5">
             <div className="flex items-center justify-between mb-4">

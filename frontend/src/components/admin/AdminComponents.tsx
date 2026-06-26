@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, ReactNode } from "react";
-import { ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
+import { useState, useEffect, useCallback, useRef, createContext, useContext, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, XCircle, Info } from "lucide-react";
 import { cn } from "@/utils/cn";
 
 // ─── DataTable ────────────────────────────────────────────
@@ -119,6 +120,9 @@ const STATUS_STYLES: Record<string, string> = {
   FAILED: "bg-red-50 text-red-700 border-red-200",
   REFUNDED: "bg-purple-50 text-purple-700 border-purple-200",
   CONVERTED: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  PENDING_REVIEW: "bg-amber-50 text-amber-700 border-amber-200",
+  APPROVED: "bg-green-50 text-green-700 border-green-200",
+  REJECTED: "bg-red-50 text-red-700 border-red-200",
 };
 
 export function StatusBadge({ status }: { status: string }) {
@@ -266,26 +270,98 @@ export function StatCard({ title, value, subtitle, icon, color = "bg-[#E31E24]",
 }
 
 // ─── Toast ────────────────────────────────────────────────
-// Simple inline toast — for production use react-hot-toast or sonner
+
+export type ToastType = "success" | "error" | "info";
+
+export const toastMessages = {
+  saved: "Changes saved successfully.",
+  translationSaved: "Translation saved successfully.",
+  staticLabelSaved: "UI label updated successfully.",
+  noChanges: "No changes to save.",
+  saveFailed: "Could not save changes. Please try again.",
+  translationFailed: "Could not save translation. Please try again.",
+  approved: "Translation approved and published.",
+  rejected: "Translation rejected.",
+} as const;
 
 interface ToastState {
   message: string;
-  type: "success" | "error";
+  type: ToastType;
+}
+
+const AdminToastContext = createContext<{ showToast: (message: string, type?: ToastType) => void } | null>(null);
+
+const toastConfig: Record<ToastType, { icon: typeof CheckCircle2; accent: string; iconColor: string }> = {
+  success: { icon: CheckCircle2, accent: "border-l-[#E31E24]", iconColor: "text-[#E31E24]" },
+  error: { icon: XCircle, accent: "border-l-red-500", iconColor: "text-red-500" },
+  info: { icon: Info, accent: "border-l-[#9A9A9A]", iconColor: "text-[#6B6B6B]" },
+};
+
+export function AdminToastProvider({ children }: { children: ReactNode }) {
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [visible, setVisible] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      if (exitTimer.current) clearTimeout(exitTimer.current);
+    };
+  }, []);
+
+  const showToast = useCallback((message: string, type: ToastType = "success") => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    if (exitTimer.current) clearTimeout(exitTimer.current);
+
+    setToast({ message, type });
+    setVisible(true);
+
+    hideTimer.current = setTimeout(() => {
+      setVisible(false);
+      exitTimer.current = setTimeout(() => setToast(null), 220);
+    }, 4000);
+  }, []);
+
+  const Icon = toast ? toastConfig[toast.type].icon : CheckCircle2;
+
+  const toastPortal = mounted && toast
+    ? createPortal(
+        <div
+          role="status"
+          aria-live="polite"
+          className={cn(
+            "fixed top-5 right-5 z-[9999] flex w-[min(360px,calc(100vw-2.5rem))] items-start gap-3 rounded-lg border border-[#E6E6E6] border-l-4 bg-white px-4 py-3.5 shadow-[0_12px_32px_rgba(0,0,0,0.12)] transition-all duration-200",
+            toastConfig[toast.type].accent,
+            visible ? "translate-x-0 opacity-100" : "translate-x-2 opacity-0",
+          )}
+        >
+          <Icon size={18} className={cn("mt-0.5 shrink-0", toastConfig[toast.type].iconColor)} />
+          <div>
+            <p className="text-[13.5px] font-semibold text-[#1A1A1A]">
+              {toast.type === "success" ? "Success" : toast.type === "error" ? "Something went wrong" : "Notice"}
+            </p>
+            <p className="mt-0.5 text-[13px] leading-snug text-[#6B6B6B]">{toast.message}</p>
+          </div>
+        </div>,
+        document.body,
+      )
+    : null;
+
+  return (
+    <AdminToastContext.Provider value={{ showToast }}>
+      {children}
+      {toastPortal}
+    </AdminToastContext.Provider>
+  );
 }
 
 export function useToast() {
-  const [toast, setToast] = useState<ToastState | null>(null);
-
-  const showToast = (message: string, type: "success" | "error" = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3500);
-  };
-
-  const ToastComponent = toast ? (
-    <div className={cn("fixed bottom-5 right-5 z-50 rounded-lg px-5 py-3.5 text-[13.5px] font-medium text-white shadow-lg transition-all", toast.type === "success" ? "bg-[#1A1A1A]" : "bg-red-600")}>
-      {toast.message}
-    </div>
-  ) : null;
-
-  return { showToast, ToastComponent };
+  const context = useContext(AdminToastContext);
+  if (!context) {
+    throw new Error("useToast must be used within AdminToastProvider.");
+  }
+  return { showToast: context.showToast, ToastComponent: null };
 }

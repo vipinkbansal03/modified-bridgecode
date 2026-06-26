@@ -2,36 +2,41 @@
 
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import { cn } from "@/utils/cn";
+import type { StaticMessageKey } from "@/i18n/staticMessages";
 
 interface FilterGroup {
-  label: string;
+  labelKey: StaticMessageKey;
+  fallback: string;
   options: string[];
 }
 
 const FILTER_GROUPS: FilterGroup[] = [
-  { label: "Bracket Type", options: ["True Twin", "Low-Profile", "Self Ligating"] },
-  { label: "Material", options: ["17-4 Low Nickel Stainless", "Ceramic", "Nickel Titanium"] },
-  { label: "Prescription System", options: ["MBT", "Roth"] },
-  { label: "Slot Size", options: [".018\"", ".022\""] },
-  { label: "Order Quantity", options: ["Loose Bracket", "Full Case"] },
-  { label: "Country of Origin", options: ["India"] },
+  { labelKey: "ui.filters.bracketType", fallback: "Bracket Type", options: ["True Twin", "Low-Profile", "Self Ligating"] },
+  { labelKey: "ui.filters.material", fallback: "Material", options: ["17-4 Low Nickel Stainless", "Ceramic", "Nickel Titanium"] },
+  { labelKey: "ui.filters.prescriptionSystem", fallback: "Prescription System", options: ["MBT", "Roth"] },
+  { labelKey: "ui.filters.slotSize", fallback: "Slot Size", options: [".018\"", ".022\""] },
+  { labelKey: "ui.filters.orderQuantity", fallback: "Order Quantity", options: ["Loose Bracket", "Full Case"] },
+  { labelKey: "ui.filters.countryOfOrigin", fallback: "Country of Origin", options: ["India"] },
 ];
 
 export function ProductFilters() {
   const [openGroup, setOpenGroup] = useState<string | null>("Bracket Type");
+  const { t } = useStaticTranslations();
 
   return (
     <aside>
       {FILTER_GROUPS.map((group) => {
-        const open = openGroup === group.label;
+        const label = t(group.labelKey);
+        const open = openGroup === group.fallback;
         return (
-          <div key={group.label} className="border-b border-line">
+          <div key={group.fallback} className="border-b border-line">
             <button
-              onClick={() => setOpenGroup(open ? null : group.label)}
+              onClick={() => setOpenGroup(open ? null : group.fallback)}
               className="flex w-full items-center justify-between py-4.5 text-left text-[15px] font-semibold text-ink"
             >
-              {group.label}
+              {label}
               <ChevronDown size={12} className={cn("text-steel transition-transform duration-200", open && "rotate-180")} />
             </button>
             {open && (

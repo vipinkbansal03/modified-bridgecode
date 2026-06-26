@@ -3,14 +3,20 @@
 import { useState } from "react";
 import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { AdminInput, useToast, ConfirmModal } from "@/components/admin/AdminComponents";
-import { useAdminCmsMenus } from "@/hooks/admin/useAdminHooks";
+import { AdminInput, AdminTextarea, useToast, ConfirmModal } from "@/components/admin/AdminComponents";
+import { useAdminCmsMenus, useAdminLanguages } from "@/hooks/admin/useAdminHooks";
 import { adminApi } from "@/services/adminApi";
 
-type MenuItem = { id: string; label: string; url: string; sortOrder: number };
+type CmsTranslations = Record<string, Array<{ languageId: string; value: string }>>;
+type Language = { id: string; name: string; code: string };
+type MenuItem = { id: string; label: string; url: string; sortOrder: number; translations?: CmsTranslations };
 type Menu = { id: string; name: string; location: string; status: string; items: MenuItem[] };
 
-function MenuCard({ menu, onDeleted }: { menu: Menu; onDeleted: () => void }) {
+function translationValue(translations: CmsTranslations | undefined, field: string, languageId: string) {
+  return translations?.[field]?.find((entry) => entry.languageId === languageId)?.value ?? "";
+}
+
+function MenuCard({ menu, languages, onDeleted }: { menu: Menu; languages: Language[]; onDeleted: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const [addLabel, setAddLabel] = useState("");
   const [addUrl, setAddUrl] = useState("");
@@ -46,6 +52,15 @@ function MenuCard({ menu, onDeleted }: { menu: Menu; onDeleted: () => void }) {
     } catch { showToast("Failed.", "error"); }
   }
 
+  async function saveItemTranslation(itemId: string, languageId: string, value: string) {
+    try {
+      await adminApi.put(`/cms/translations/menuItem/${itemId}/${languageId}`, { label: value });
+      showToast("Translation saved.", "success");
+    } catch {
+      showToast("Failed to save translation.", "error");
+    }
+  }
+
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
@@ -63,12 +78,27 @@ function MenuCard({ menu, onDeleted }: { menu: Menu; onDeleted: () => void }) {
       {expanded && (
         <div className="p-4 space-y-2">
           {items.map((item) => (
-            <div key={item.id} className="flex items-center justify-between py-1.5 px-3 bg-gray-50 rounded-lg">
-              <div>
-                <span className="text-sm font-medium text-gray-700">{item.label}</span>
-                <span className="text-xs text-gray-400 ml-2">{item.url}</span>
+            <div key={item.id} className="py-2 px-3 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-medium text-gray-700">{item.label}</span>
+                  <span className="text-xs text-gray-400 ml-2">{item.url}</span>
+                </div>
+                <button onClick={() => setDeleteItemId(item.id)} className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={13} /></button>
               </div>
-              <button onClick={() => setDeleteItemId(item.id)} className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={13} /></button>
+              {languages.length > 0 && (
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {languages.map((language) => (
+                    <AdminTextarea
+                      key={language.id}
+                      label={`${language.name} (${language.code}) label`}
+                      defaultValue={translationValue(item.translations, "label", language.id)}
+                      rows={1}
+                      onBlur={(e) => saveItemTranslation(item.id, language.id, e.target.value)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           ))}
 
@@ -86,6 +116,7 @@ function MenuCard({ menu, onDeleted }: { menu: Menu; onDeleted: () => void }) {
 
 export default function CmsMenusPage() {
   const { data: menus, isLoading, refetch } = useAdminCmsMenus();
+  const { data: languages = [] } = useAdminLanguages();
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newLocation, setNewLocation] = useState("header");
@@ -121,7 +152,7 @@ export default function CmsMenusPage() {
 
       {isLoading && <div className="text-sm text-gray-500">Loading…</div>}
       <div className="space-y-4">
-        {menuList.map((m) => <MenuCard key={m.id} menu={m} onDeleted={refetch} />)}
+        {menuList.map((m) => <MenuCard key={m.id} menu={m} languages={languages as Language[]} onDeleted={refetch} />)}
       </div>
     </AdminLayout>
   );

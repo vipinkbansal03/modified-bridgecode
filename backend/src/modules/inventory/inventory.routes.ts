@@ -1,9 +1,11 @@
 import { Router } from "express";
-import { protect } from "../../middleware/auth.middleware";
+import { protect, requirePermission } from "../../middleware/auth.middleware";
 import * as C from "./inventory.controller";
 const router = Router();
 router.use(protect);
-router.get("/", C.list);
-router.get("/alerts", C.alerts);
-router.put("/:id", C.update);
+router.get("/", requirePermission("inventory.view", "inventory.manage"), C.list);
+router.get("/alerts", requirePermission("inventory.view", "inventory.manage"), C.alerts);
+router.get("/adjustments", requirePermission("inventory.view", "inventory.manage"), C.listAdjustments);
+router.get("/:variantId/adjustments", requirePermission("inventory.view", "inventory.manage"), C.listVariantAdjustments);
+router.put("/:id", requirePermission("inventory.manage"), C.update);
 export default router;

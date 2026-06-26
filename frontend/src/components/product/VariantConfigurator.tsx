@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { AlertCircle, CheckCircle2, Layers3, Minus, Plus, Sparkles } from "lucide-react";
+import { AlertCircle, CheckCircle2, Layers3, Minus, Plus, ShoppingBag, Sparkles } from "lucide-react";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
 import { useQuoteCart, type QuoteCartItem } from "@/contexts/QuoteCartContext";
+import { useCart } from "@/contexts/CartContext";
 import { applyDiscount, nextDiscountTier } from "@/utils/discountRules";
 import type { ApiAttribute, ApiProductDetail, ApiProductPrice, ApiVariant } from "@/types/api.types";
 
 interface VariantConfiguratorProps {
   apiProduct: ApiProductDetail;
 }
+
+type ProductOptionAttribute = ApiAttribute & { values: NonNullable<ApiAttribute["values"]> };
 
 interface DraftConfiguration {
   variantId: string;
@@ -36,7 +39,7 @@ function formatMoney(symbol: string, amount: number) {
   return `${symbol}${Math.round(amount || 0).toLocaleString("en-IN")}`;
 }
 
-function buildInitialSelections(attributes: ApiAttribute[], variants: ApiVariant[]) {
+function buildInitialSelections(attributes: ProductOptionAttribute[], variants: ApiVariant[]) {
   const seed = variants[0]?.attributeCombination ?? {};
   return attributes.reduce<Record<string, string>>((acc, attribute) => {
     const firstMatch = seed[attribute.name] ?? attribute.values[0]?.value ?? "";
@@ -48,7 +51,11 @@ function buildInitialSelections(attributes: ApiAttribute[], variants: ApiVariant
 export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   const { selectedCurrency } = useCurrencyContext();
   const { addItems } = useQuoteCart();
-  const attributes = apiProduct.attributes;
+  const { addItem, openCart } = useCart();
+  const attributes: ProductOptionAttribute[] = apiProduct.attributes.map((attribute) => ({
+    ...attribute,
+    values: attribute.values ?? [],
+  }));
   const variants = apiProduct.variants;
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>(() => buildInitialSelections(attributes, variants));
   const [quantity, setQuantity] = useState(1);
@@ -118,6 +125,36 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     setQuantity(1);
     setError(null);
     setAdded(false);
+  }
+
+  function handleAddToCart() {
+    if (!currentVariant) {
+      setError("This configuration is not available. Please adjust the selected variant options.");
+      return;
+    }
+    if (!currentPrice) {
+      setError("This configuration does not have an available purchase price yet.");
+      return;
+    }
+
+    addItem({
+      productId: apiProduct.id,
+      productSlug: apiProduct.slug,
+      productTitle: apiProduct.title,
+      variantId: currentVariant.id,
+      variantTitle: currentVariant.title,
+      sku: currentVariant.sku,
+      quantity,
+      unitPrice: currentPrice.sellingPrice,
+      currencyCode,
+      currencySymbol,
+      countryCode: currentPrice.countryCode,
+      countryName: currentPrice.countryName,
+      selectedAttributes: currentVariant.attributeCombination,
+    });
+    setAdded(false);
+    setError(null);
+    openCart();
   }
 
   function updateDraftQuantity(variantId: string, nextQuantity: number) {
@@ -281,6 +318,14 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                   className="inline-flex flex-1 items-center justify-center rounded-full bg-[#A44C17] px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-[#8A3F12]"
                 >
                   Add Configuration
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-[#D8C5B1] bg-white px-5 py-3 text-[13px] font-semibold text-[#4B3A2E] transition hover:border-[#A44C17] hover:text-[#A44C17]"
+                >
+                  <ShoppingBag size={15} />
+                  Add to Cart
                 </button>
                 <Link
                   href={`/quick-order?product=${apiProduct.slug}`}

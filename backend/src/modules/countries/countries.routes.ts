@@ -1,2 +1,2 @@
-import { Router } from "express"; import { protect } from "../../middleware/auth.middleware"; import * as C from "./countries.controller";
-const router = Router(); router.use(protect); router.get("/", C.list); router.post("/", C.create); router.put("/:id", C.update); export default router;
+import { Router } from "express"; import { protect, requirePermission } from "../../middleware/auth.middleware"; import * as C from "./countries.controller";
+const router = Router(); router.use(protect); router.get("/", requirePermission("countries.view", "countries.manage"), C.list); router.post("/", requirePermission("countries.manage"), C.create); router.put("/:id", requirePermission("countries.manage"), C.update); export default router;

@@ -12,7 +12,7 @@ dist/
 .env.production
 
 # Logs
-logs/
+/logs/
 *.log
 
 # Uploaded/generated files

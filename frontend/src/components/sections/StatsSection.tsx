@@ -9,14 +9,29 @@ interface StatsSectionProps {
 export function StatsSection({ data }: StatsSectionProps) {
   return (
     <section className="bg-brand text-white">
-      <Container className="py-20">
+      <Container className="py-16 lg:py-20">
         <Reveal>
-          <div className="grid grid-cols-2 gap-7.5 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-y-10 sm:grid-cols-4 sm:gap-y-0">
             {data.map((stat, i) => (
-              <div key={stat.label} className={`border-l border-white/28 pl-6 ${i === 0 ? "border-l-0 pl-0" : ""} sm:[&:nth-child(odd)]:border-l-0 sm:[&:nth-child(odd)]:pl-0 sm:border-l sm:pl-6 sm:[&:first-child]:border-l-0 sm:[&:first-child]:pl-0`}>
-                <span className="text-[11.5px] font-semibold uppercase tracking-wide text-white/72">{stat.label}</span>
-                <p className="my-2.5 max-w-[200px] text-[14.5px] text-white/85">{stat.description}</p>
-                <p className="text-[clamp(42px,5.4vw,64px)] font-light text-white">{stat.value}</p>
+              <div
+                key={stat.label}
+                className={`pl-5 sm:pl-8 ${
+                  i % 2 === 0 ? "border-l-0 pl-0" : "border-l border-white/28"
+                } ${
+                  i === 0
+                    ? "sm:border-l-0 sm:pl-0"
+                    : "sm:border-l sm:border-white/28"
+                }`}
+              >
+                <span className="text-[11.5px] font-semibold uppercase tracking-wide text-white/72">
+                  {stat.label}
+                </span>
+                <p className="my-2.5 max-w-[200px] text-[14.5px] text-white/85">
+                  {stat.description}
+                </p>
+                <p className="text-[clamp(38px,5vw,64px)] font-light text-white">
+                  {stat.value}
+                </p>
               </div>
             ))}
           </div>

@@ -10,10 +10,10 @@ export function transformHeroSlides(section: CmsSection) {
     const d = blockData(b);
     return {
       image: (d.image as string) ?? b.image ?? "",
-      kicker: (d.kicker as string) ?? b.subtitle ?? "",
+      kicker: b.subtitle ?? (d.kicker as string) ?? "",
       title: b.title ?? "",
-      ctaLabel: (d.ctaLabel as string) ?? b.linkLabel ?? "Learn more",
-      ctaHref: (d.ctaHref as string) ?? b.linkUrl ?? "/",
+      ctaLabel: b.linkLabel ?? (d.ctaLabel as string) ?? "Learn more",
+      ctaHref: b.linkUrl ?? (d.ctaHref as string) ?? "/",
     };
   });
 }

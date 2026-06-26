@@ -3,7 +3,10 @@
 import { useFormik } from "formik";
 import { ArrowRight, Check } from "lucide-react";
 import { useNewsletterSubmit } from "@/hooks/api/useNewsletterSubmit";
-import { newsletterInitialValues, newsletterValidationSchema } from "@/validations/newsletter.validation";
+import {
+  newsletterInitialValues,
+  newsletterValidationSchema,
+} from "@/validations/newsletter.validation";
 import { cn } from "@/utils/cn";
 
 interface NewsletterFormProps {
@@ -29,7 +32,7 @@ export function NewsletterForm({ tone = "light" }: NewsletterFormProps) {
       <div
         className={cn(
           "flex items-center rounded-pill border p-1 max-w-[320px]",
-          isLight ? "border-white/45" : "border-line"
+          isLight ? "border-white/45" : "border-line",
         )}
       >
         <input
@@ -41,7 +44,9 @@ export function NewsletterForm({ tone = "light" }: NewsletterFormProps) {
           onChange={formik.handleChange}
           className={cn(
             "min-w-0 flex-1 bg-transparent px-4 py-2 text-sm outline-none",
-            isLight ? "text-white placeholder:text-white/60" : "text-ink placeholder:text-steel-2"
+            isLight
+              ? "text-white placeholder:text-white/60"
+              : "text-ink placeholder:text-steel-2",
           )}
         />
         <button
@@ -49,20 +54,43 @@ export function NewsletterForm({ tone = "light" }: NewsletterFormProps) {
           aria-label="Subscribe"
           disabled={isPending}
           className={cn(
-            "flex h-8 w-8 flex-none items-center justify-center rounded-full transition-opacity",
+            "group flex h-8 w-8 flex-none items-center justify-center overflow-hidden rounded-full transition-opacity",
             isLight ? "bg-white" : "bg-brand",
-            isPending && "opacity-60"
+            isPending && "opacity-60",
           )}
         >
           {isSuccess ? (
             <Check size={14} color={isLight ? "#E31E24" : "#fff"} />
           ) : (
-            <ArrowRight size={14} color={isLight ? "#E31E24" : "#fff"} />
+            <span className="relative block h-4.5 w-4.5 overflow-hidden">
+              <ArrowRight
+                size={14}
+                className={cn(
+                  "absolute inset-0 transition-transform duration-500 ease-[cubic-bezier(.22,1,.36,1)] group-hover:translate-x-6",
+                  isLight ? "text-brand" : "text-white",
+                )}
+              />
+
+              <ArrowRight
+                size={14}
+                className={cn(
+                  "absolute inset-0 -translate-x-6 transition-transform duration-500 ease-[cubic-bezier(.22,1,.36,1)] group-hover:translate-x-0",
+                  isLight ? "text-brand" : "text-white",
+                )}
+              />
+            </span>
           )}
         </button>
       </div>
       {formik.touched.email && formik.errors.email && (
-        <p className={cn("mt-2 text-xs", isLight ? "text-white/85" : "text-brand")}>{formik.errors.email}</p>
+        <p
+          className={cn(
+            "mt-2 text-xs",
+            isLight ? "text-white/85" : "text-brand",
+          )}
+        >
+          {formik.errors.email}
+        </p>
       )}
     </form>
   );

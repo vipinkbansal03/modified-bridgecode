@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Share2 } from "lucide-react";
@@ -23,7 +24,9 @@ const staticProducts = productsData as ProductDetail[];
 
 async function fetchProductFromApi(slug: string): Promise<ApiProductDetail | null> {
   try {
-    const res = await fetch(`${process.env.API_BASE_URL}/api/products/${slug}`, {
+    const language = (await cookies()).get("language")?.value;
+    const query = language ? `?lang=${encodeURIComponent(language)}` : "";
+    const res = await fetch(`${process.env.API_BASE_URL}/api/products/${slug}${query}`, {
       next: { revalidate: 300 },
     });
     if (!res.ok) return null;

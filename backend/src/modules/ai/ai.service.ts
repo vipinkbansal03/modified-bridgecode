@@ -1,26 +1,158 @@
-/**
- * AI Module — LangChain-ready scaffold.
- *
- * Connect your LangChain chain here. Install:
- *   npm install langchain @langchain/openai
- *
- * Example usage:
- *   import { ChatOpenAI } from "@langchain/openai";
- *   const model = new ChatOpenAI({ openAIApiKey: process.env.OPENAI_API_KEY });
- */
+import { prisma } from "../../config/database";
+import { AppError } from "../../utils/apiResponse";
 
-export async function generateProductContent(productTitle: string, targetLanguage = "English") {
-  // TODO: wire up LangChain
-  return {
-    title: productTitle,
-    shortDescription: `[AI-generated] Short description for ${productTitle} in ${targetLanguage}.`,
-    description: `[AI-generated] Full description for ${productTitle} in ${targetLanguage}.`,
-    seoTitle: `${productTitle} — Modern Orthodontics`,
-    seoDescription: `[AI-generated] SEO description for ${productTitle} in ${targetLanguage}.`,
-  };
+type ProductContentInput = {
+  title: string;
+  shortDescription?: string | null;
+  description?: string | null;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  productCode?: string | null;
+  brand?: string | null;
+};
+
+export type GeneratedProductContent = {
+  title: string;
+  shortDescription: string;
+  description: string;
+  seoTitle: string;
+  seoDescription: string;
+};
+
+const productContentKeys: Array<keyof GeneratedProductContent> = [
+  "title",
+  "shortDescription",
+  "description",
+  "seoTitle",
+  "seoDescription",
+];
+
+export async function generateProductContent(product: ProductContentInput | string, targetLanguage = "English") {
+  const source = typeof product === "string" ? { title: product } : product;
+  const protectedTerms = await prisma.protectedKeyword.findMany({
+    select: { term: true },
+    orderBy: { term: "asc" },
+  });
+  const protectedList = protectedTerms.map((row) => row.term);
+  const brandTerms = [source.brand, source.productCode].filter(Boolean) as string[];
+  const allProtected = Array.from(new Set([...protectedList, ...brandTerms]));
+
+  const generated = await translateJson<GeneratedProductContent>({
+    targetLanguage,
+    fields: {
+      title: source.title,
+      shortDescription: source.shortDescription ?? "",
+      description: source.description ?? "",
+      seoTitle: source.seoTitle ?? source.title,
+      seoDescription: source.seoDescription ?? source.shortDescription ?? "",
+    },
+    requiredKeys: productContentKeys,
+    context: [
+      "This is orthodontic ecommerce product content.",
+      source.brand ? `Brand: ${source.brand}` : "",
+      source.productCode ? `Product code: ${source.productCode}` : "",
+      allProtected.length
+        ? `Never translate these protected terms; keep them exactly as written: ${allProtected.join(", ")}`
+        : "Preserve brand names, product codes, model names, HTML tags, URLs, measurements, and technical orthodontic terms when they should remain unchanged.",
+      "Return concise, natural ecommerce copy in the target language.",
+    ].filter(Boolean).join("\n"),
+  });
+
+  return generated;
 }
 
 export async function translateText(text: string, targetLanguage: string) {
-  // TODO: wire up LangChain translation chain
-  return { translated: `[AI:${targetLanguage}] ${text}`, language: targetLanguage };
+  const protectedTerms = await prisma.protectedKeyword.findMany({
+    select: { term: true },
+    orderBy: { term: "asc" },
+  });
+  const protectedList = protectedTerms.map((row) => row.term).join(", ");
+
+  const result = await translateJson<{ translated: string }>({
+    targetLanguage,
+    fields: { translated: text },
+    requiredKeys: ["translated"],
+    context: [
+      "Translate the text naturally.",
+      protectedList ? `Never translate these protected terms; keep them exactly as written: ${protectedList}` : "",
+      "Preserve brand names, product codes, URLs, HTML tags, and measurements.",
+    ].filter(Boolean).join(" "),
+  });
+
+  return { translated: result.translated, language: targetLanguage };
+}
+
+async function translateJson<T extends Record<string, string>>({
+  targetLanguage,
+  fields,
+  requiredKeys,
+  context,
+}: {
+  targetLanguage: string;
+  fields: Record<string, string>;
+  requiredKeys: string[];
+  context: string;
+}): Promise<T> {
+  if ((process.env.AI_PROVIDER || "openai").toLowerCase() !== "openai") {
+    throw new AppError("Only the OpenAI AI provider is currently supported.", 400);
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new AppError("OPENAI_API_KEY is not configured.", 400);
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: [
+            "You are a professional ecommerce localization specialist.",
+            "Return only valid JSON.",
+            "Use exactly the same JSON keys provided by the user.",
+            "Do not add explanations, markdown, comments, or extra keys.",
+          ].join(" "),
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            task: `Translate these fields into ${targetLanguage}.`,
+            context,
+            fields,
+          }),
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new AppError(`AI request failed: ${body || response.statusText}`, 502);
+  }
+
+  const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+  const content = payload.choices?.[0]?.message?.content;
+  if (!content) throw new AppError("AI response did not include translated content.", 502);
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    throw new AppError("AI response was not valid JSON.", 502);
+  }
+
+  const output: Record<string, string> = {};
+  for (const key of requiredKeys) {
+    const value = parsed[key];
+    output[key] = typeof value === "string" ? value : "";
+  }
+
+  return output as T;
 }

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Package, Tag, Sliders, Layers, Warehouse, DollarSign, Globe, Map, Ticket, MessageSquare, ShoppingCart, Truck, CreditCard, Image, Languages, Sparkles, Users, Shield, Settings, FileText, ChevronRight, X, Newspaper, Menu, AlignLeft,
+  LayoutDashboard, Package, Tag, Sliders, Layers, Warehouse, DollarSign, Percent, Globe, Map, Ticket, MessageSquare, ShoppingCart, Truck, CreditCard, Image, Languages, Sparkles, Users, Shield, Settings, FileText, ChevronRight, X, Newspaper, Menu, AlignLeft, Calculator,
+  Award,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -12,15 +13,20 @@ const navItems = [
   { label: "Dashboard",       href: "/admin/dashboard",    icon: LayoutDashboard },
   { label: "Products",        href: "/admin/products",     icon: Package,      permission: "products.view" },
   { label: "Categories",      href: "/admin/categories",   icon: Tag,          permission: "categories.view" },
+  { label: "Collections",     href: "/admin/collections",  icon: Layers,       permission: "products.view" },
   { label: "Attributes",      href: "/admin/attributes",   icon: Sliders,      permission: "attributes.view" },
   { label: "Variants",        href: "/admin/variants",     icon: Layers,       permission: "products.view" },
   { label: "Inventory",       href: "/admin/inventory",    icon: Warehouse,    permission: "inventory.view" },
   { label: "Pricing",         href: "/admin/pricing",      icon: DollarSign,   permission: "pricing.view" },
+  { label: "Tax",             href: "/admin/tax",          icon: Calculator,   permission: "pricing.view" },
+  { label: "Tiers",           href: "/admin/tiers",        icon: Award,        permission: "pricing.view" },
+  { label: "Discounts",       href: "/admin/discounts",    icon: Percent,      permission: "pricing.view" },
   { label: "Currencies",      href: "/admin/currencies",   icon: Globe,        permission: "currencies.view" },
   { label: "Countries",       href: "/admin/countries",    icon: Map,          permission: "countries.view" },
   { label: "Coupons",         href: "/admin/coupons",      icon: Ticket,       permission: "coupons.view" },
   { label: "Quote Requests",  href: "/admin/quotes",       icon: MessageSquare, permission: "quotes.view" },
   { label: "Orders",          href: "/admin/orders",       icon: ShoppingCart, permission: "orders.view" },
+  { label: "Customers",       href: "/admin/customers",    icon: Users },
   { label: "Shipping",        href: "/admin/shipping",     icon: Truck,        permission: "shipping.view" },
   { label: "Payments",        href: "/admin/payments",     icon: CreditCard,   permission: "payments.view" },
   { label: "Media",           href: "/admin/media",        icon: Image,        permission: "media.view" },
@@ -36,6 +42,10 @@ const cmsItems = [
   { label: "Pages",   href: "/admin/cms/pages",  icon: Newspaper },
   { label: "Menus",   href: "/admin/cms/menus",  icon: Menu },
   { label: "Footer",  href: "/admin/cms/footer", icon: AlignLeft },
+  { label: "Blog Posts", href: "/admin/blogs", icon: FileText },
+  { label: "Blog Categories", href: "/admin/blogs/categories", icon: Tag },
+  { label: "Blog Authors", href: "/admin/blogs/authors", icon: Users },
+  { label: "Banners", href: "/admin/banners", icon: Image },
 ];
 
 interface AdminSidebarProps {
@@ -82,7 +92,7 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-3">
+        <nav className="admin-sidebar-scrollbar flex-1 overflow-y-auto py-3">
           {visibleItems.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href || (item.href !== "/admin/dashboard" && pathname.startsWith(item.href));

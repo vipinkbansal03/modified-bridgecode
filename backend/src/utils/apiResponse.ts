@@ -52,9 +52,9 @@ export class AppError extends Error {
 // ─── Async Handler ───────────────────────────────────────
 
 export const asyncHandler =
-  (fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>) =>
+  <Req extends Request = Request>(fn: (req: Req, res: Response, next: NextFunction) => Promise<unknown>) =>
   (req: Request, res: Response, next: NextFunction) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
+    Promise.resolve(fn(req as Req, res, next)).catch(next);
   };
 
 // ─── Pagination ──────────────────────────────────────────

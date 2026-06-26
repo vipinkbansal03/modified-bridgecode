@@ -9,13 +9,13 @@ export const qk = {
   products: {
     all: ["products"] as const,
     list: (params?: object) => ["products", "list", params] as const,
-    detail: (slug: string) => ["products", "detail", slug] as const,
-    featured: () => ["products", "featured"] as const,
-    byCategory: (slug: string) => ["products", "category", slug] as const,
+    detail: (slug: string, language?: string, countryCode?: string) => ["products", "detail", slug, language, countryCode] as const,
+    featured: (language?: string, countryCode?: string) => ["products", "featured", language, countryCode] as const,
+    byCategory: (slug: string, language?: string, countryCode?: string) => ["products", "category", slug, language, countryCode] as const,
     search: (q: string) => ["products", "search", q] as const,
   },
   categories: {
-    all: ["categories"] as const,
+    all: (language?: string, countryCode?: string) => ["categories", language, countryCode] as const,
   },
   currencies: {
     all: ["currencies"] as const,
@@ -23,11 +23,17 @@ export const qk = {
   countries: {
     all: ["countries"] as const,
   },
+  languages: {
+    all: ["languages"] as const,
+  },
+  translations: {
+    static: (language?: string) => ["translations", "static", language] as const,
+  },
   inventory: {
     check: (ids: string[]) => ["inventory", ...ids] as const,
   },
   search: {
-    query: (q: string) => ["search", q] as const,
+    query: (q: string, language?: string, countryCode?: string) => ["search", q, language, countryCode] as const,
   },
 } as const;
 

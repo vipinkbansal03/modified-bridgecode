@@ -2,13 +2,18 @@ import type { Metadata } from "next";
 import { AppShell } from "@/components/layout/AppShell";
 import { ReactQueryProvider } from "@/lib/reactQueryProvider";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 import { QuoteCartProvider } from "@/contexts/QuoteCartContext";
+import { CustomerAuthProvider } from "@/contexts/CustomerAuthContext";
+import { CartProvider } from "@/contexts/CartContext";
 import { TrackingProvider } from "@/providers/TrackingProvider";
-import { buildMetadata } from "@/lib/seo";
+import { buildCmsMetadata } from "@/lib/seo";
 import seoData from "@/data/seo.json";
 import "@/styles/globals.css";
 
-export const metadata: Metadata = buildMetadata(seoData.home, "/");
+export async function generateMetadata(): Promise<Metadata> {
+  return buildCmsMetadata("home", seoData.home, "/");
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -20,13 +25,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="font-sans text-ink antialiased">
         <ReactQueryProvider>
-          <CurrencyProvider>
-            <QuoteCartProvider>
-              <TrackingProvider>
-                <AppShell>{children}</AppShell>
-              </TrackingProvider>
-            </QuoteCartProvider>
-          </CurrencyProvider>
+          <LanguageProvider>
+            <CurrencyProvider>
+              <QuoteCartProvider>
+                <CustomerAuthProvider>
+                  <CartProvider>
+                    <TrackingProvider>
+                      <AppShell>{children}</AppShell>
+                    </TrackingProvider>
+                  </CartProvider>
+                </CustomerAuthProvider>
+              </QuoteCartProvider>
+            </CurrencyProvider>
+          </LanguageProvider>
         </ReactQueryProvider>
       </body>
     </html>

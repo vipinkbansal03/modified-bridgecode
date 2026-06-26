@@ -1,10 +1,10 @@
 import { Request, Response, NextFunction } from "express";
-import type { ParamsDictionary } from "express-serve-static-core";
+import type { ParamsFlatDictionary } from "express-serve-static-core";
 import jwt from "jsonwebtoken";
 import { prisma } from "../config/database";
 import { AppError } from "../utils/apiResponse";
 
-export interface AuthRequest extends Request<ParamsDictionary> {
+export interface AuthRequest extends Request<ParamsFlatDictionary> {
   user?: {
     id: string;
     email: string;
@@ -26,7 +26,10 @@ export const protect = async (req: AuthRequest, _res: Response, next: NextFuncti
 
     if (!token) throw new AppError("Not authenticated. Please log in.", 401);
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id: string };
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id: string; scope?: string };
+    if (decoded.scope && decoded.scope !== "admin") {
+      throw new AppError("Admin authentication required.", 401);
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.id, deletedAt: null },

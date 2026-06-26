@@ -34,8 +34,9 @@ adminApi.interceptors.response.use(
 );
 
 export function getAdminErrorMessage(error: unknown, fallback = "Something went wrong.") {
-  if (error instanceof Error && error.message) return error.message;
   const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+  if (message) return message;
+  if (error instanceof Error && error.message) return error.message;
   return message || fallback;
 }
 
