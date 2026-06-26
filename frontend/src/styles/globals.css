@@ -198,6 +198,83 @@ svg {
   background: #9ca3af;
 }
 
+/* Admin sidebar scrollbar */
+.admin-sidebar-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+.admin-sidebar-scrollbar:hover {
+  scrollbar-color: rgba(255, 255, 255, 0.34) transparent;
+}
+
+.admin-sidebar-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.admin-sidebar-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.admin-sidebar-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.admin-sidebar-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.admin-sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(227, 30, 36, 0.75);
+}
+
+/* Login image slider pagination */
+.login-slider .swiper-pagination {
+  bottom: 24px !important;
+  display: none;
+  justify-content: center;
+  gap: 10px;
+}
+
+.login-slider .swiper-pagination-bullet {
+  width: 11px;
+  height: 11px;
+  margin: 0 !important;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.5);
+  opacity: 1;
+  transition: width 0.25s ease, background-color 0.25s ease;
+}
+
+.login-slider .swiper-pagination-bullet-active {
+  width: 30px;
+  background: #fff;
+}
+
+.login-slider .swiper-pagination-bullet:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+
+@media (min-width: 1024px) {
+  .login-slider .swiper-pagination {
+    display: flex;
+  }
+
+  .login-slider .swiper-pagination-bullet {
+    background: rgba(255, 255, 255, 0.5);
+  }
+
+  .login-slider .swiper-pagination-bullet-active {
+    background: #fff;
+  }
+
+  .login-slider .swiper-pagination-bullet:focus-visible {
+    outline-color: #fff;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

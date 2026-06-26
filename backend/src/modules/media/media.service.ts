@@ -20,18 +20,32 @@ export async function uploadMedia(files: Express.Multer.File[], folder = "modort
           publicId: results[i].publicId,
           mimeType: f.mimetype,
           size: f.size,
-          type: f.mimetype.startsWith("image") ? "IMAGE" as const : f.mimetype.includes("pdf") ? "PDF" as const : "DOCUMENT" as const,
+          type: f.mimetype.startsWith("image")
+            ? "IMAGE" as const
+            : f.mimetype.includes("pdf")
+              ? "PDF" as const
+              : "DOCUMENT" as const,
           storageProvider: results[i].storageProvider,
           folder,
         },
-      })
-    )
+      }),
+    ),
   );
 }
 
 export async function deleteMedia(id: string) {
   const media = await prisma.media.findUnique({ where: { id } });
   if (!media) throw new AppError("Media not found.", 404);
-  await deleteFile(media.storageProvider === "LOCAL" ? media.url : media.publicId || media.url, media.storageProvider);
+  await deleteFile(media.storageProvider === "LOCAL" ? media.url : media.publicId || media.url, media.storageProvider, media.folder);
   return prisma.media.delete({ where: { id } });
+}
+
+export async function deleteMediaByUrl(url: string) {
+  if (!url) throw new AppError("Media URL is required.", 400);
+
+  const media = await prisma.media.findFirst({ where: { url } });
+  if (!media) return null;
+
+  await deleteFile(media.storageProvider === "LOCAL" ? media.url : media.publicId || media.url, media.storageProvider, media.folder);
+  return prisma.media.delete({ where: { id: media.id } });
 }

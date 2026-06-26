@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { ZodError } from "zod";
 import { AppError } from "../utils/apiResponse";
 import { logger } from "../config/logger";
 
@@ -11,6 +12,16 @@ export function errorMiddleware(err: Error, req: Request, res: Response, _next: 
   if (err instanceof AppError) {
     statusCode = err.statusCode;
     message = err.message;
+  }
+
+  // Request validation errors
+  if (err instanceof ZodError) {
+    statusCode = 400;
+    message = "Please check the submitted information.";
+    errors = err.issues.map((issue) => ({
+      field: issue.path.join("."),
+      message: issue.message,
+    }));
   }
 
   // Prisma: unique constraint violation

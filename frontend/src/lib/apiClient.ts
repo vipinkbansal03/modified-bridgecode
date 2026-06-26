@@ -16,6 +16,7 @@ export const HAS_LIVE_API = process.env.NEXT_PUBLIC_USE_STATIC_DATA !== "true";
 export const apiClient = axios.create({
   baseURL: API_BASE,
   timeout: 12000,
+  withCredentials: true,
   headers: { "Content-Type": "application/json" },
 });
 

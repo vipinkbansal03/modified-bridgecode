@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Globe, Search, BarChart2, Megaphone, Share2, ShieldCheck, Code2, Cookie, MessageCircle, Mail,
-  CheckCircle2, AlertCircle, Eye, EyeOff, Save, RefreshCw,
+  CheckCircle2, AlertCircle, Eye, EyeOff, Save, RefreshCw, Lock, Upload, Plus, Trash2, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminTextarea, AdminSelect, useToast } from "@/components/admin/AdminComponents";
@@ -21,14 +21,58 @@ const TABS = [
   { id: "verification", label: "Verification",      icon: ShieldCheck },
   { id: "scripts",      label: "Custom Scripts",    icon: Code2 },
   { id: "cookies",      label: "Cookie Consent",    icon: Cookie },
+  { id: "auth",         label: "Auth Pages",        icon: Lock },
   { id: "whatsapp",     label: "WhatsApp",          icon: MessageCircle },
   { id: "email",        label: "Email / SMTP",      icon: Mail },
 ];
 
 type Setting = { id: string; key: string; value: string; group: string; label?: string | null; type: string; isSecret: boolean; isEnabled: boolean };
 type SettingMap = Record<string, string>;
+type UploadedMedia = { url: string };
+type LoginSlide = { image: string; heading: string; subHeading: string; isVisible: boolean };
+
+const DEFAULT_LOGIN_SLIDES: LoginSlide[] = [
+  {
+    image: "/auth/login1.jpg",
+    heading: "Modern orthodontic care designed for confident smiles.",
+    subHeading: "Premium products and account access for dental professionals.",
+    isVisible: true,
+  },
+  {
+    image: "/auth/login2.jpg",
+    heading: "Track your treatment journey with ease and comfort.",
+    subHeading: "Manage orders, quotes, and account details in one secure place.",
+    isVisible: true,
+  },
+];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+function parseLoginSlides(map: SettingMap): LoginSlide[] {
+  try {
+    const parsed = JSON.parse(map["auth.login_slides"] || "[]") as LoginSlide[];
+    const validSlides = parsed
+      .map((slide) => ({
+        image: slide.image || "",
+        heading: slide.heading || "",
+        subHeading: slide.subHeading || "",
+        isVisible: slide.isVisible !== false,
+      }))
+      .filter((slide) => slide.image || slide.heading || slide.subHeading);
+    if (validSlides.length) return validSlides;
+  } catch {
+    // Fall back to old fixed setting keys or defaults below.
+  }
+
+  const oldSlides = [1, 2].map((slideNumber) => ({
+    image: map[`auth.login_slide_${slideNumber}_image`] || DEFAULT_LOGIN_SLIDES[slideNumber - 1]?.image || "",
+    heading: map[`auth.login_slide_${slideNumber}_heading`] || DEFAULT_LOGIN_SLIDES[slideNumber - 1]?.heading || "",
+    subHeading: map[`auth.login_slide_${slideNumber}_sub_heading`] || DEFAULT_LOGIN_SLIDES[slideNumber - 1]?.subHeading || "",
+    isVisible: true,
+  }));
+
+  return oldSlides.filter((slide) => slide.image || slide.heading || slide.subHeading);
+}
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -166,6 +210,17 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
   "cookies.banner_title":        { group: "cookies", type: "string" },
   "cookies.banner_description":  { group: "cookies", type: "string" },
   "cookies.privacy_policy_url":  { group: "cookies", type: "string" },
+  // Auth pages
+  "auth.login_heading":             { group: "auth", type: "string" },
+  "auth.login_sub_heading":         { group: "auth", type: "string" },
+  "auth.login_slider_enabled":      { group: "auth", type: "boolean" },
+  "auth.login_slide_1_image":       { group: "auth", type: "string" },
+  "auth.login_slide_1_heading":     { group: "auth", type: "string" },
+  "auth.login_slide_1_sub_heading": { group: "auth", type: "string" },
+  "auth.login_slide_2_image":       { group: "auth", type: "string" },
+  "auth.login_slide_2_heading":     { group: "auth", type: "string" },
+  "auth.login_slide_2_sub_heading": { group: "auth", type: "string" },
+  "auth.login_slides":              { group: "auth", type: "json" },
   // WhatsApp
   "whatsapp.number":                  { group: "whatsapp", type: "string" },
   "whatsapp.default_message":         { group: "whatsapp", type: "string" },
@@ -184,8 +239,13 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("general");
   const [settings, setSettings] = useState<SettingMap>({});
+  const [loginSlides, setLoginSlides] = useState<LoginSlide[]>(DEFAULT_LOGIN_SLIDES);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const shouldScrollToNewSlideRef = useRef(false);
+  const newestSlideRef = useRef<HTMLDivElement | null>(null);
+  const savedLoginSlidesRef = useRef<LoginSlide[]>(DEFAULT_LOGIN_SLIDES);
   const { showToast, ToastComponent } = useToast();
 
   const loadSettings = useCallback(async () => {
@@ -195,22 +255,125 @@ export default function SettingsPage() {
       const rows: Setting[] = r.data.data ?? [];
       const map: SettingMap = {};
       rows.forEach((s) => { map[s.key] = s.value === "***" ? "" : s.value; });
+      const parsedSlides = parseLoginSlides(map);
       setSettings(map);
+      setLoginSlides(parsedSlides);
+      savedLoginSlidesRef.current = parsedSlides;
     } catch { showToast("Failed to load settings.", "error"); }
     finally { setLoading(false); }
   }, [showToast]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadSettings(); }, [loadSettings]);
+
+  useEffect(() => {
+    if (!shouldScrollToNewSlideRef.current) return;
+
+    newestSlideRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+    shouldScrollToNewSlideRef.current = false;
+  }, [loginSlides.length]);
 
   function set(key: string, value: string) { setSettings((s) => ({ ...s, [key]: value })); }
   function tog(key: string, v: boolean)    { set(key, String(v)); }
   const g = (key: string) => settings[key] ?? "";
   const b = (key: string) => settings[key] === "true";
+  const authSliderEnabled = g("auth.login_slider_enabled") !== "false";
+
+  function updateLoginSlide<K extends keyof LoginSlide>(index: number, field: K, value: LoginSlide[K]) {
+    setLoginSlides((slides) =>
+      slides.map((slide, slideIndex) =>
+        slideIndex === index ? { ...slide, [field]: value } : slide,
+      ),
+    );
+  }
+
+  function addLoginSlide() {
+    shouldScrollToNewSlideRef.current = true;
+    setLoginSlides((slides) => [
+      ...slides,
+      { image: "", heading: "", subHeading: "", isVisible: true },
+    ]);
+  }
+
+  function removeLoginSlide(index: number) {
+    setLoginSlides((slides) => slides.filter((_, slideIndex) => slideIndex !== index));
+  }
+
+  function moveLoginSlide(index: number, direction: "up" | "down") {
+    setLoginSlides((slides) => {
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= slides.length) return slides;
+
+      const nextSlides = [...slides];
+      const currentSlide = nextSlides[index];
+      nextSlides[index] = nextSlides[targetIndex]!;
+      nextSlides[targetIndex] = currentSlide!;
+      return nextSlides;
+    });
+  }
+
+  function getLocalAuthSlideUrls(slides: LoginSlide[]) {
+    return slides
+      .map((slide) => slide.image)
+      .filter((url) => url.startsWith("/uploads/modortho/auth/"));
+  }
+
+  async function deleteUnusedAuthSlideImages(previousSlides: LoginSlide[], currentSlides: LoginSlide[]) {
+    const currentUrls = new Set(getLocalAuthSlideUrls(currentSlides));
+    const urlsToDelete = [...new Set(getLocalAuthSlideUrls(previousSlides))]
+      .filter((url) => !currentUrls.has(url));
+
+    await Promise.all(
+      urlsToDelete.map((url) =>
+        adminApi.delete("/media/by-url", { params: { url } }),
+      ),
+    );
+  }
+
+  const handleSlideImageUpload = async (
+    index: number,
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const uploadKey = `auth.login_slide_${index}_image`;
+
+    const formData = new FormData();
+    formData.append("files", file);
+    formData.append("folder", "modortho/auth");
+    setUploadingKey(uploadKey);
+
+    try {
+      const response = await adminApi.post("/media", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const uploaded = response.data.data?.[0] as UploadedMedia | undefined;
+
+      if (!uploaded?.url) {
+        throw new Error("Upload response did not include an image URL.");
+      }
+
+      updateLoginSlide(index, "image", uploaded.url);
+      showToast("Image uploaded.", "success");
+    } catch {
+      showToast("Image upload failed.", "error");
+    } finally {
+      setUploadingKey(null);
+      event.target.value = "";
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const settingsList = Object.entries(settings)
+      const settingsToSave = {
+        ...settings,
+        "auth.login_slides": JSON.stringify(loginSlides),
+      };
+      const settingsList = Object.entries(settingsToSave)
         .filter(([key]) => SETTINGS_META[key])
         .map(([key, value]) => ({
           key,
@@ -219,7 +382,14 @@ export default function SettingsPage() {
           type:     SETTINGS_META[key]!.type,
           isSecret: SETTINGS_META[key]!.isSecret ?? false,
         }));
+      const previousSlides = savedLoginSlidesRef.current;
       await adminApi.put("/settings", { settings: settingsList });
+      try {
+        await deleteUnusedAuthSlideImages(previousSlides, loginSlides);
+      } catch {
+        showToast("Settings saved, but old image cleanup failed.", "error");
+      }
+      savedLoginSlidesRef.current = loginSlides;
       showToast("Settings saved successfully.", "success");
     } catch { showToast("Failed to save settings.", "error"); }
     finally { setSaving(false); }
@@ -260,10 +430,13 @@ export default function SettingsPage() {
 
         {/* ── Content ── */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-[15px] font-semibold text-[#1A1A1A]">{TABS.find((t) => t.id === activeTab)?.label}</h2>
+          <div className="sticky -top-6 z-20 mb-5 flex items-center justify-between rounded-b-xl border border-t-0 border-[#E6E6E6] bg-white/95 px-4 py-3 shadow-[0_14px_35px_rgba(227,30,36,0.10)] backdrop-blur before:absolute before:left-0 before:top-0 before:h-[3px] before:w-full before:bg-[#E31E24] relative">
+            <div>
+              <h2 className="text-[15px] font-semibold text-[#1A1A1A]">{TABS.find((t) => t.id === activeTab)?.label}</h2>
+              <p className="mt-0.5 text-[11.5px] text-[#8B8B8B]">Changes are not applied until you save.</p>
+            </div>
             <button onClick={handleSave} disabled={saving}
-              className="flex items-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50">
+              className="flex items-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white shadow-[0_8px_20px_rgba(227,30,36,0.28)] transition-colors hover:bg-[#B5151B] disabled:opacity-50">
               <Save size={13} />{saving ? "Saving…" : "Save Settings"}
             </button>
           </div>
@@ -454,6 +627,215 @@ export default function SettingsPage() {
                 <FieldRow label="Privacy Policy URL">
                   <AdminInput value={g("cookies.privacy_policy_url")} onChange={(e) => set("cookies.privacy_policy_url", e.target.value)} placeholder="/privacy-policy" />
                 </FieldRow>
+              </div>
+            )}
+
+            {/* ── Auth Pages ── */}
+            {activeTab === "auth" && (
+              <div>
+                <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
+                  Upload slider images here or paste an existing media URL. These settings control the customer login page.
+                </div>
+
+                <FieldRow label="Login Form Heading">
+                  <AdminInput
+                    value={g("auth.login_heading")}
+                    onChange={(e) => set("auth.login_heading", e.target.value)}
+                    placeholder="Customer Login"
+                  />
+                </FieldRow>
+
+                <FieldRow label="Login Form Sub Heading">
+                  <AdminInput
+                    value={g("auth.login_sub_heading")}
+                    onChange={(e) => set("auth.login_sub_heading", e.target.value)}
+                    placeholder="Login to access your account"
+                  />
+                </FieldRow>
+
+                <FieldRow label="Show Login Slider">
+                  <div className="flex items-center gap-3">
+                    <Toggle
+                      value={authSliderEnabled}
+                      onChange={(v) => tog("auth.login_slider_enabled", v)}
+                    />
+                    <span className="text-[13px] text-[#6B6B6B]">
+                      {authSliderEnabled
+                        ? "Slider visible on login page"
+                        : "Slider hidden on login page"}
+                    </span>
+                  </div>
+                </FieldRow>
+
+                <div className="mt-5 flex items-center justify-between">
+                  <div>
+                    <div className="text-[14px] font-semibold text-[#1A1A1A]">
+                      Login Slider Slides
+                    </div>
+                    <div className="text-[12px] text-[#8B8B8B]">
+                      Add as many slides as needed. Empty slides will not be useful on the login page.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addLoginSlide}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#B5151B]"
+                  >
+                    <Plus size={14} />
+                    Add Slide
+                  </button>
+                </div>
+
+                {!authSliderEnabled && (
+                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] leading-relaxed text-amber-700">
+                    The login slider is hidden. Slides will appear only after enabling Show Login Slider and saving
+                  </div>
+                )}
+
+                {loginSlides.length === 0 && (
+                  <div className="mt-4 rounded-xl border border-dashed border-[#D8D8D8] bg-[#FAFAFA] px-4 py-8 text-center text-[13px] text-[#8B8B8B]">
+                    No slides added yet. Click Add Slide to create one.
+                  </div>
+                )}
+
+                {loginSlides.map((slide, index) => {
+                  const uploadKey = `auth.login_slide_${index}_image`;
+                  const isSlideVisibleOnLogin = authSliderEnabled && slide.isVisible;
+
+                  return (
+                    <div
+                      key={index}
+                      ref={index === loginSlides.length - 1 ? newestSlideRef : null}
+                      className={cn(
+                        "mt-5 rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-4 transition-opacity",
+                        !isSlideVisibleOnLogin && "opacity-60",
+                      )}
+                    >
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-[14px] font-semibold text-[#1A1A1A]">
+                            Slide {index + 1}
+                          </div>
+                          <div className="text-[11.5px] text-[#8B8B8B]">
+                            {!authSliderEnabled
+                              ? "Hidden because login slider is turned off"
+                              : slide.isVisible
+                                ? "Visible on login page"
+                                : "Hidden from login page"}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateLoginSlide(index, "isVisible", !slide.isVisible)
+                            }
+                            disabled={!authSliderEnabled}
+                            className={cn(
+                              "rounded-md border bg-white p-2 hover:bg-[#F2F2F2] disabled:cursor-not-allowed disabled:opacity-50",
+                              isSlideVisibleOnLogin
+                                ? "border-emerald-100 text-emerald-600"
+                                : "border-[#E6E6E6] text-[#8B8B8B]",
+                            )}
+                            title={
+                              !authSliderEnabled
+                                ? "Enable login slider to manage slide visibility"
+                                : slide.isVisible
+                                  ? "Hide slide"
+                                  : "Show slide"
+                            }
+                          >
+                            {isSlideVisibleOnLogin ? <Eye size={14} /> : <EyeOff size={14} />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveLoginSlide(index, "up")}
+                            disabled={index === 0}
+                            className="rounded-md border border-[#E6E6E6] bg-white p-2 text-[#6B6B6B] hover:bg-[#F2F2F2] disabled:cursor-not-allowed disabled:opacity-40"
+                            title="Move up"
+                          >
+                            <ArrowUp size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveLoginSlide(index, "down")}
+                            disabled={index === loginSlides.length - 1}
+                            className="rounded-md border border-[#E6E6E6] bg-white p-2 text-[#6B6B6B] hover:bg-[#F2F2F2] disabled:cursor-not-allowed disabled:opacity-40"
+                            title="Move down"
+                          >
+                            <ArrowDown size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeLoginSlide(index)}
+                            className="rounded-md border border-red-100 bg-white p-2 text-red-600 hover:bg-red-50"
+                            title="Remove slide"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <FieldRow
+                        label="Image"
+                        hint="Upload a new image or paste an existing /uploads or Cloudinary URL."
+                      >
+                        <div className="space-y-3">
+                          <div className="flex gap-2">
+                            <AdminInput
+                              value={slide.image}
+                              onChange={(e) =>
+                                updateLoginSlide(index, "image", e.target.value)
+                              }
+                              placeholder="/auth/login1.jpg"
+                            />
+                            <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-[#1A1A1A] px-3.5 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#333]">
+                              <Upload size={14} />
+                              {uploadingKey === uploadKey ? "Uploading…" : "Upload"}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={uploadingKey === uploadKey}
+                                onChange={(event) =>
+                                  handleSlideImageUpload(index, event)
+                                }
+                              />
+                            </label>
+                          </div>
+
+                          {slide.image && (
+                            <div
+                              className="h-28 overflow-hidden rounded-lg border border-[#E6E6E6] bg-cover bg-center"
+                              style={{ backgroundImage: `url(${slide.image})` }}
+                            />
+                          )}
+                        </div>
+                      </FieldRow>
+
+                      <FieldRow label="Heading">
+                        <AdminInput
+                          value={slide.heading}
+                          onChange={(e) =>
+                            updateLoginSlide(index, "heading", e.target.value)
+                          }
+                          placeholder="Slide heading"
+                        />
+                      </FieldRow>
+
+                      <FieldRow label="Sub Heading">
+                        <AdminTextarea
+                          value={slide.subHeading}
+                          onChange={(e) =>
+                            updateLoginSlide(index, "subHeading", e.target.value)
+                          }
+                          rows={2}
+                          placeholder="Short supporting text"
+                        />
+                      </FieldRow>
+                    </div>
+                  );
+                })}
               </div>
             )}
 

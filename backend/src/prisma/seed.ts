@@ -76,6 +76,18 @@ async function main() {
     create: { name: "Staff", permissions: ["products.view", "orders.view", "quotes.view"] },
   });
 
+  await prisma.role.upsert({
+    where: { name: "Dealer" },
+    update: {},
+    create: { name: "Dealer", permissions: [] },
+  });
+
+  await prisma.role.upsert({
+    where: { name: "Doctor / Retailer" },
+    update: {},
+    create: { name: "Doctor / Retailer", permissions: [] },
+  });
+
   // ─── Super admin user ───────────────────────────────────
   const password = await bcrypt.hash("Admin@1234", 12);
   await prisma.user.upsert({
@@ -802,6 +814,36 @@ async function main() {
     { key: "cookies.banner_title", value: "We use cookies", group: "cookies", label: "Banner Title", type: "string" },
     { key: "cookies.banner_description", value: "We use cookies to improve your experience on our site and to analyse traffic.", group: "cookies", label: "Banner Description", type: "string" },
     { key: "cookies.privacy_policy_url", value: "/privacy-policy", group: "cookies", label: "Privacy Policy URL", type: "string" },
+    // Auth pages
+    { key: "auth.login_heading", value: "Customer Login", group: "auth", label: "Login Heading", type: "string" },
+    { key: "auth.login_sub_heading", value: "Login to access your account", group: "auth", label: "Login Sub Heading", type: "string" },
+    { key: "auth.login_slider_enabled", value: "true", group: "auth", label: "Enable Login Slider", type: "boolean" },
+    { key: "auth.login_slide_1_image", value: "/auth/login1.jpg", group: "auth", label: "Login Slide 1 Image", type: "string" },
+    { key: "auth.login_slide_1_heading", value: "Modern orthodontic care designed for confident smiles.", group: "auth", label: "Login Slide 1 Heading", type: "string" },
+    { key: "auth.login_slide_1_sub_heading", value: "Premium products and account access for dental professionals.", group: "auth", label: "Login Slide 1 Sub Heading", type: "string" },
+    { key: "auth.login_slide_2_image", value: "/auth/login2.jpg", group: "auth", label: "Login Slide 2 Image", type: "string" },
+    { key: "auth.login_slide_2_heading", value: "Track your treatment journey with ease and comfort.", group: "auth", label: "Login Slide 2 Heading", type: "string" },
+    { key: "auth.login_slide_2_sub_heading", value: "Manage orders, quotes, and account details in one secure place.", group: "auth", label: "Login Slide 2 Sub Heading", type: "string" },
+    {
+      key: "auth.login_slides",
+      value: JSON.stringify([
+        {
+          image: "/auth/login1.jpg",
+          heading: "Modern orthodontic care designed for confident smiles.",
+          subHeading: "Premium products and account access for dental professionals.",
+          isVisible: true,
+        },
+        {
+          image: "/auth/login2.jpg",
+          heading: "Track your treatment journey with ease and comfort.",
+          subHeading: "Manage orders, quotes, and account details in one secure place.",
+          isVisible: true,
+        },
+      ]),
+      group: "auth",
+      label: "Login Slides",
+      type: "json",
+    },
     // WhatsApp
     { key: "whatsapp.number", value: "", group: "whatsapp", label: "WhatsApp Number (international format)", type: "string" },
     { key: "whatsapp.default_message", value: "Hello, I have a question about your products.", group: "whatsapp", label: "Default Message", type: "string" },

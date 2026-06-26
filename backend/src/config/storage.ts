@@ -55,15 +55,21 @@ export async function uploadFile(localFilePath: string, folder = "modortho"): Pr
 /**
  * Delete a file from the configured storage provider.
  */
-export async function deleteFile(publicId: string, provider: StorageProvider): Promise<void> {
+export async function deleteFile(publicId: string, provider: StorageProvider, folder?: string | null): Promise<void> {
   try {
     if (provider === StorageProvider.CLOUDINARY) {
       await cloudinary.uploader.destroy(publicId);
     } else {
       const uploadRoot = path.resolve(process.cwd(), process.env.LOCAL_UPLOAD_PATH || "uploads");
-      const relativePath = publicId.startsWith("/uploads/")
+      const normalizedFolder = folder ? folder.replace(/^[/\\]+|[/\\]+$/g, "") : "";
+      let relativePath = publicId.startsWith("/uploads/")
         ? publicId.replace(/^\/uploads\//, "")
         : publicId.replace(/^[/\\]+/, "");
+
+      if (normalizedFolder && !relativePath.startsWith(`${normalizedFolder}/`) && !relativePath.startsWith(`${normalizedFolder}\\`)) {
+        relativePath = path.join(normalizedFolder, relativePath);
+      }
+
       const filePath = path.resolve(uploadRoot, relativePath);
       if (!filePath.startsWith(uploadRoot)) {
         throw new Error(`Refusing to delete file outside uploads root: ${filePath}`);

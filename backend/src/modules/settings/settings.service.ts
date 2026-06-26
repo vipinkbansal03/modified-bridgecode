@@ -13,6 +13,28 @@ export type SettingInput = {
   isEnabled?: boolean;
 };
 
+type LoginSlideSetting = {
+  image: string;
+  heading: string;
+  subHeading: string;
+  isVisible: boolean;
+};
+
+const DEFAULT_LOGIN_SLIDES: LoginSlideSetting[] = [
+  {
+    image: "/auth/login1.jpg",
+    heading: "Modern orthodontic care designed for confident smiles.",
+    subHeading: "Premium products and account access for dental professionals.",
+    isVisible: true,
+  },
+  {
+    image: "/auth/login2.jpg",
+    heading: "Track your treatment journey with ease and comfort.",
+    subHeading: "Manage orders, quotes, and account details in one secure place.",
+    isVisible: true,
+  },
+];
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function mask(s: { value: string; isSecret: boolean }) {
@@ -92,6 +114,26 @@ function enabled(map: Map<string, { value: string; isEnabled: boolean; isSecret:
 function str(map: Map<string, { value: string; isEnabled: boolean; isSecret: boolean }>, key: string): string | null {
   const v = val(map, key);
   return v || null;
+}
+
+function parseLoginSlides(value?: string): LoginSlideSetting[] {
+  if (!value) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map((slide) => ({
+        image: typeof slide?.image === "string" ? slide.image.trim() : "",
+        heading: typeof slide?.heading === "string" ? slide.heading.trim() : "",
+        subHeading: typeof slide?.subHeading === "string" ? slide.subHeading.trim() : "",
+        isVisible: slide?.isVisible !== false,
+      }))
+      .filter((slide) => slide.image || slide.heading || slide.subHeading);
+  } catch {
+    return [];
+  }
 }
 
 export async function getPublicTrackingSettings() {
@@ -191,6 +233,39 @@ export async function getPublicTrackingSettings() {
       siteUrl: str(m, "general.site_url"),
       logoUrl: str(m, "general.logo"),
       faviconUrl: str(m, "general.favicon"),
+    },
+  };
+}
+
+export async function getPublicAuthSettings() {
+  const rows = await prisma.setting.findMany({ where: { group: "auth" } });
+  const m = new Map(rows.map((r) => [r.key, r.value]));
+
+  const dynamicSlides = parseLoginSlides(m.get("auth.login_slides"));
+  const legacySlides = [1, 2]
+    .map((slideNumber) => ({
+      image:
+        m.get(`auth.login_slide_${slideNumber}_image`) ||
+        DEFAULT_LOGIN_SLIDES[slideNumber - 1]?.image ||
+        "",
+      heading:
+        m.get(`auth.login_slide_${slideNumber}_heading`) ||
+        DEFAULT_LOGIN_SLIDES[slideNumber - 1]?.heading ||
+        "",
+      subHeading:
+        m.get(`auth.login_slide_${slideNumber}_sub_heading`) ||
+        DEFAULT_LOGIN_SLIDES[slideNumber - 1]?.subHeading ||
+        "",
+      isVisible: true,
+    }))
+    .filter((slide) => slide.image || slide.heading || slide.subHeading);
+
+  return {
+    login: {
+      heading: m.get("auth.login_heading") || "Customer Login",
+      subHeading: m.get("auth.login_sub_heading") || "Login to access your account",
+      sliderEnabled: m.get("auth.login_slider_enabled") !== "false",
+      slides: (dynamicSlides.length ? dynamicSlides : legacySlides).filter((slide) => slide.isVisible),
     },
   };
 }

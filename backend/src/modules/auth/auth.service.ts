@@ -5,6 +5,8 @@ import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
 import { LoginInput } from "./auth.validation";
 
+const CUSTOMER_ROLES = ["Customer", "Dealer", "Doctor / Retailer"];
+
 export async function loginService(input: LoginInput) {
   const user = await prisma.user.findUnique({
     where: { email: input.email },
@@ -17,6 +19,10 @@ export async function loginService(input: LoginInput) {
 
   if (user.status !== "ACTIVE") {
     throw new AppError("Your account is inactive. Contact an administrator.", 401);
+  }
+
+  if (CUSTOMER_ROLES.includes(user.role.name)) {
+    throw new AppError("This account cannot access the admin portal.", 403);
   }
 
   const jwtExpiresIn = (process.env.JWT_EXPIRES_IN || "7d") as SignOptions["expiresIn"];

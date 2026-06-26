@@ -18,6 +18,8 @@ export { useCategories } from "./useCategories";
 export { useSearch } from "./useSearch";
 
 export { useCurrencies, useCountries, useConvertPrice } from "./useCurrencies";
+export { useAuthPageSettings } from "./useAuthPageSettings";
+export type { AuthPageSettings, LoginSlideSetting } from "./useAuthPageSettings";
 
 export { useInventoryCheck } from "./useInventory";
 
