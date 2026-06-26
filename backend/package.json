@@ -13,9 +13,6 @@
     "prisma:seed": "ts-node src/prisma/seed.ts",
     "verify:product-architecture": "ts-node-dev --exit-child --transpile-only src/prisma/verify-product-architecture.ts"
   },
-  "prisma": {
-    "schema": "src/prisma/schema.prisma"
-  },
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "@types/cookie-parser": "^1.4.10",
