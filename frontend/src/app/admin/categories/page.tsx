@@ -114,6 +114,7 @@ export default function CategoriesPage() {
   const [translationLanguageId, setTranslationLanguageId] = useState("");
   const [slugEdited, setSlugEdited] = useState(false);
   const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
+  const [countrySearch, setCountrySearch] = useState("");
   const [uploadingImage, setUploadingImage] = useState(false);
   const { showToast, ToastComponent } = useToast();
 
@@ -128,6 +129,16 @@ export default function CategoriesPage() {
   const translationLanguages = filterTranslationLanguages(languages);
   const activeTranslationLang = translationLanguages.find((lang) => lang.id === translationLanguageId) ?? translationLanguages[0];
   const rows = useMemo(() => flattenCategories(categories), [categories]);
+  const categoryGridClass = "grid gap-4 md:grid-cols-[minmax(360px,1fr)_220px_110px_130px_72px] md:items-center";
+  const countryRows = useMemo(() => countries as CountryAvailability[], [countries]);
+  const visibleCountries = useMemo(() => {
+    const query = countrySearch.trim().toLowerCase();
+    if (!query) return countryRows;
+    return countryRows.filter((country) =>
+      `${country.name} ${country.code} ${country.status}`.toLowerCase().includes(query)
+    );
+  }, [countryRows, countrySearch]);
+  const enabledCountryCount = countryRows.filter((country) => countryOverrides[country.id] ?? country.enabled).length;
   const excludedParentIds = useMemo(() => editing ? collectDescendantIds(categories, editing.id) : new Set<string>(), [categories, editing]);
   const parentOptions = useMemo(() => [
     { value: "", label: "No parent" },
@@ -330,19 +341,60 @@ export default function CategoriesPage() {
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
                       <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">Country Availability</h4>
-                      <p className="mt-0.5 text-[12.5px] text-[#6B6B6B]">New categories start invisible everywhere until countries are enabled here.</p>
+                      <p className="mt-0.5 text-[12.5px] text-[#6B6B6B]">
+                        New categories start invisible everywhere until countries are enabled here. Use search for long country lists.
+                      </p>
                     </div>
                     <span className="text-[12px] text-[#9A9A9A]">
-                      {(countries as CountryAvailability[]).filter((country) => countryOverrides[country.id] ?? country.enabled).length} enabled
+                      {enabledCountryCount} enabled
                     </span>
                   </div>
                   {countriesLoading ? (
                     <div className="h-20 animate-pulse rounded-md bg-[#F2F2F2]" />
-                  ) : (countries as CountryAvailability[]).length === 0 ? (
+                  ) : countryRows.length === 0 ? (
                     <p className="text-[13px] text-[#9A9A9A]">No countries found.</p>
                   ) : (
-                    <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                      {(countries as CountryAvailability[]).map((country) => (
+                    <div className="space-y-3">
+                      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                        <AdminInput
+                          aria-label="Search countries"
+                          placeholder={`Search ${countryRows.length} countries by name or code`}
+                          value={countrySearch}
+                          onChange={(event) => setCountrySearch(event.target.value)}
+                          className="h-9 lg:max-w-[360px]"
+                        />
+                        <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#6B6B6B]">
+                          <span>Showing {visibleCountries.length} of {countryRows.length}</span>
+                          <button
+                            type="button"
+                            className="rounded border border-[#E6E6E6] px-2.5 py-1 font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]"
+                            onClick={() => setCountryOverrides((current) => {
+                              const next = { ...current };
+                              visibleCountries.forEach((country) => { next[country.id] = true; });
+                              return next;
+                            })}
+                          >
+                            Enable visible
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border border-[#E6E6E6] px-2.5 py-1 font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]"
+                            onClick={() => setCountryOverrides((current) => {
+                              const next = { ...current };
+                              visibleCountries.forEach((country) => { next[country.id] = false; });
+                              return next;
+                            })}
+                          >
+                            Disable visible
+                          </button>
+                        </div>
+                      </div>
+                      <div className="max-h-[320px] overflow-y-auto rounded-md border border-[#E6E6E6] p-2">
+                        {visibleCountries.length === 0 ? (
+                          <p className="px-2 py-8 text-center text-[13px] text-[#9A9A9A]">No countries match your search.</p>
+                        ) : (
+                          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                      {visibleCountries.map((country) => (
                         <label key={country.id} className="flex items-center justify-between gap-3 rounded-md border border-[#E6E6E6] px-3 py-2">
                           <span className="min-w-0">
                             <span className="block truncate text-[13px] font-medium text-[#1A1A1A]">{country.name}</span>
@@ -356,6 +408,14 @@ export default function CategoriesPage() {
                           />
                         </label>
                       ))}
+                          </div>
+                        )}
+                      </div>
+                      {countryRows.length > 30 && (
+                        <p className="text-[12px] text-[#9A9A9A]">
+                          Large country lists are capped in this panel. Search or use Enable/Disable visible to manage countries in batches.
+                        </p>
+                      )}
                     </div>
                   )}
                 </section>
@@ -416,15 +476,22 @@ export default function CategoriesPage() {
         <div className="rounded-xl border border-dashed border-[#E6E6E6] py-12 text-center text-[13.5px] text-[#9A9A9A]">No categories yet.</div>
       ) : (
         <div className="rounded-lg border border-[#E6E6E6] bg-white p-3">
-          <div className="mb-2 hidden grid-cols-[1fr_160px_90px_100px_80px] gap-3 px-10 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A] md:grid">
-            <span>Name</span><span>Slug</span><span>Products</span><span>Status</span><span />
+          <div className="mb-2 hidden items-center gap-2 px-3 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A] md:flex">
+            <span className="w-8 shrink-0" />
+            <div className={`${categoryGridClass} min-w-0 flex-1 pr-3`}>
+              <span>Name</span>
+              <span>Slug</span>
+              <span>Products</span>
+              <span>Status</span>
+              <span className="text-right">Actions</span>
+            </div>
           </div>
           <SortableList
             items={rows}
             onReorder={handleReorder}
             handleAriaLabel="Drag category to reorder"
             renderItem={(category) => (
-              <div className="grid gap-3 md:grid-cols-[1fr_160px_90px_100px_80px] md:items-center">
+              <div className={categoryGridClass}>
                 <div className="flex min-w-0 items-center gap-3" style={{ paddingLeft: `${Math.min(category.depth, 4) * 18}px` }}>
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
                     {category.image ? <img src={category.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={17} className="text-[#9A9A9A]" />}
@@ -434,7 +501,7 @@ export default function CategoriesPage() {
                     {category.parent && <div className="text-[12px] text-[#9A9A9A]">Child of {category.parent.name}</div>}
                   </div>
                 </div>
-                <span className="font-mono text-[12px] text-[#6B6B6B]">{category.slug}</span>
+                <span className="truncate font-mono text-[12px] text-[#6B6B6B]">{category.slug}</span>
                 <span className="text-[13px] text-[#1A1A1A]">{category._count.products}</span>
                 <StatusBadge status={category.status} />
                 <div className="flex gap-1.5 md:justify-end">
