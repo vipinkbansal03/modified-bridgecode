@@ -93,6 +93,20 @@ type SectionOrderRow = {
 
 const DEFAULT_SECTION_ORDER_BY_PAGE_KEY: Record<string, string[]> = {
   home: ["home.hero", "home.about", "home.stats", "home.certifications", "home.contactCta"],
+  about: ["about.hero", "about.mission", "about.manufacture", "about.different", "about.faqs"],
+  manufacturing: [
+    "manufacturing.hero",
+    "manufacturing.teaser",
+    "manufacturing.expertise",
+    "manufacturing.mim",
+    "manufacturing.benefits",
+    "manufacturing.process",
+    "manufacturing.niti",
+    "manufacturing.faqs",
+  ],
+  contact: ["contact.hero", "contact.forms", "contact.offices"],
+  products: ["products.hero", "products.highlights", "products.support"],
+  "quality-certifications": ["quality.hero", "quality.management", "quality.certifications", "quality.symbols", "quality.faqs"],
 };
 
 function readMaxItems(settingsJson: unknown) {
