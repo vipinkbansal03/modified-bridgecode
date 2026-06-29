@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, Search, User, ShoppingCart, Menu, X } from "lucide-react";
+import { ChevronDown, User, ShoppingCart, Menu, X } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { MegaMenu } from "@/components/layout/MegaMenu";
 import { MobileMenu } from "@/components/layout/MobileMenu";
 import { CurrencySwitcher } from "@/components/ui/CurrencySwitcher";
 import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
-import { SearchOverlay } from "@/components/ui/SearchOverlay";
+import { HeaderSearch } from "@/components/ui/HeaderSearch";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { useCart } from "@/contexts/CartContext";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
@@ -35,7 +35,6 @@ export function Header() {
   const [megaOpen, setMegaOpen] = useState(false);
   const [capsOpen, setCapsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const { totals, openCart } = useCart();
   const { currentCustomer, logout } = useCustomerAuth();
@@ -49,7 +48,7 @@ export function Header() {
   }, []);
 
   useEffect(() => {
-    const shouldLockScroll = megaOpen || capsOpen || mobileOpen || searchOpen || accountOpen;
+    const shouldLockScroll = megaOpen || capsOpen || mobileOpen || accountOpen;
     if (!shouldLockScroll) return;
 
     const previousOverflow = document.body.style.overflow;
@@ -65,7 +64,7 @@ export function Header() {
       document.body.style.overflow = previousOverflow;
       document.body.style.paddingRight = previousPaddingRight;
     };
-  }, [accountOpen, capsOpen, megaOpen, mobileOpen, searchOpen]);
+  }, [accountOpen, capsOpen, megaOpen, mobileOpen]);
 
   return (
     <header
@@ -76,29 +75,29 @@ export function Header() {
       )}
     >
       <div className="border-b border-line">
-        <div className="mx-auto flex h-20 max-w-wrap items-center justify-between px-5 sm:px-10">
-          <Link href="/">
+        <div className="mx-auto flex h-20 max-w-[1480px] items-center justify-between gap-5 px-5 sm:px-8 xl:px-10">
+          <Link href="/" className="shrink-0">
             <Logo />
           </Link>
 
-          <ul className="hidden items-center gap-9 text-[15px] font-medium text-ink lg:flex">
+          <ul className="hidden shrink-0 items-center gap-5 text-[15px] font-medium text-ink xl:flex 2xl:gap-7">
             <li
-              className="relative"
+              className="relative shrink-0"
               onMouseEnter={() => setMegaOpen(true)}
               onMouseLeave={() => setMegaOpen(false)}
             >
-              <Link href="/products" className="flex items-center gap-1.5 py-7">
+              <Link href="/products" className="flex items-center gap-1.5 whitespace-nowrap py-7">
                 {t("ui.nav.products")}
                 <ChevronDown size={11} className="opacity-60" />
               </Link>
               <MegaMenu open={megaOpen} groups={nav.productMegaMenu} />
             </li>
             <li
-              className="relative"
+              className="relative shrink-0"
               onMouseEnter={() => setCapsOpen(true)}
               onMouseLeave={() => setCapsOpen(false)}
             >
-              <span className="flex cursor-default items-center gap-1.5 py-7">
+              <span className="flex cursor-default items-center gap-1.5 whitespace-nowrap py-7">
                 {t("ui.nav.capabilities")}
                 <ChevronDown size={11} className="opacity-60" />
               </span>
@@ -117,24 +116,18 @@ export function Header() {
               )}
             </li>
             {nav.primary.slice(1).map((link) => (
-              <li key={link.label}>
-                <Link href={link.href} className="block py-7 hover:text-brand">
+              <li key={link.label} className="shrink-0">
+                <Link href={link.href} className="block whitespace-nowrap py-7 hover:text-brand">
                   {label(link.label)}
                 </Link>
               </li>
             ))}
           </ul>
 
-          <div className="hidden items-center gap-5 lg:flex">
+          <div className="hidden min-w-0 items-center gap-3 xl:flex xl:gap-3.5">
+            <HeaderSearch />
             <LanguageSwitcher />
             <CurrencySwitcher />
-            <button
-              aria-label={t("ui.nav.search")}
-              className="text-ink hover:text-brand"
-              onClick={() => setSearchOpen(true)}
-            >
-              <Search size={18} />
-            </button>
             <div className="relative">
               {currentCustomer ? (
                 <>
@@ -194,7 +187,7 @@ export function Header() {
             </button>
             <Link
               href={nav.ctaHref}
-              className="rounded-pill border border-ink px-4.5 py-2.5 text-[14.5px] font-semibold text-ink transition-colors hover:bg-ink hover:text-white"
+              className="shrink-0 whitespace-nowrap rounded-pill border border-ink px-4.5 py-2.5 text-[14.5px] font-semibold text-ink transition-colors hover:bg-ink hover:text-white"
             >
               {label(nav.ctaLabel)}
             </Link>
@@ -202,7 +195,7 @@ export function Header() {
 
           <button
             aria-label={t("ui.nav.menu")}
-            className="text-ink lg:hidden"
+            className="text-ink xl:hidden"
             onClick={() => setMobileOpen((v) => !v)}
           >
             {mobileOpen ? <X size={22} /> : <Menu size={22} />}
@@ -214,7 +207,7 @@ export function Header() {
         <button
           aria-label="Close menu overlay"
           onClick={() => setMobileOpen(false)}
-          className="fixed inset-0 top-20 z-40 bg-black/45 backdrop-blur-[2px] lg:hidden"
+          className="fixed inset-0 top-20 z-40 bg-black/45 backdrop-blur-[2px] xl:hidden"
         />
       )}
 
@@ -227,10 +220,11 @@ export function Header() {
         ]}
         ctaLabel={label(nav.ctaLabel)}
         ctaHref={nav.ctaHref}
+        isLoggedIn={Boolean(currentCustomer)}
+        cartCount={totals.itemCount}
         onLinkClick={() => setMobileOpen(false)}
+        onCartClick={openCart}
       />
-
-      <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
     </header>
   );
 }

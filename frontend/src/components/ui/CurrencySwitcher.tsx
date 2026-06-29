@@ -29,10 +29,14 @@ export function CurrencySwitcher() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 text-[13.5px] font-medium text-ink hover:text-brand"
+        className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[13px] font-medium text-ink hover:text-brand"
       >
-        {activeCountry && <span>{activeCountry.code}</span>}
-        <span>{active.symbol}</span>
+        {activeCountry && (
+          <>
+            <span>{activeCountry.code}</span>
+            <span className="text-steel-3">/</span>
+          </>
+        )}
         <span>{active.code}</span>
         <ChevronDown size={11} className={cn("opacity-60 transition-transform", open && "rotate-180")} />
       </button>
