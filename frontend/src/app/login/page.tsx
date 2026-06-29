@@ -31,7 +31,12 @@ const fallbackSlides = [
 export default function LoginPage() {
   const router = useRouter();
   const { login, currentCustomer, isLoading } = useCustomerAuth();
-  const [returnTo, setReturnTo] = useState("/");
+  const [returnTo] = useState(() => {
+    if (typeof window === "undefined") return "/";
+
+    const next = new URLSearchParams(window.location.search).get("returnTo");
+    return next?.startsWith("/") ? next : "/";
+  });
   const [showPassword, setShowPassword] = useState(false);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const {
@@ -39,11 +44,6 @@ export default function LoginPage() {
     isError: isAuthSettingsError,
     isLoading: isAuthSettingsLoading,
   } = useAuthPageSettings();
-
-  useEffect(() => {
-    const next = new URLSearchParams(window.location.search).get("returnTo");
-    if (next?.startsWith("/")) setReturnTo(next);
-  }, []);
 
   useEffect(() => {
     if (!isLoading && currentCustomer) {
@@ -71,10 +71,6 @@ export default function LoginPage() {
     return () => window.clearInterval(timer);
   }, [loginSlides.length, showHero]);
 
-  useEffect(() => {
-    setActiveSlideIndex(0);
-  }, [loginSlides.length]);
-
   const formik = useFormik({
     initialValues: { email: "", password: "" },
     validationSchema: loginSchema,
@@ -91,7 +87,13 @@ export default function LoginPage() {
   });
 
   return (
-    <main className="grid min-h-svh grid-cols-1 overflow-hidden bg-white lg:grid-cols-[minmax(0,1.05fr)_minmax(480px,0.95fr)]">
+    <main
+      className={
+        showHero
+          ? "grid min-h-svh grid-cols-1 overflow-hidden bg-white lg:grid-cols-[minmax(0,1.05fr)_minmax(480px,0.95fr)]"
+          : "flex min-h-svh items-center justify-center overflow-hidden bg-[#F7F7F7]"
+      }
+    >
       {showHero && (
         <section className="relative hidden min-h-svh overflow-hidden lg:block">
           <div
@@ -100,9 +102,6 @@ export default function LoginPage() {
             style={{ backgroundImage: `url(${heroSlide.image})` }}
           >
             <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/35 to-black/75" />
-            <div className="absolute left-9 top-9 flex h-10 w-10 items-center justify-center border border-white/35 bg-white/10 text-[26px] font-serif text-white backdrop-blur-sm">
-              &quot;
-            </div>
             <div className="absolute bottom-20 left-9 max-w-[520px] text-white">
               <div className="mb-7 inline-flex items-center gap-2 rounded-full bg-black/35 px-4 py-2 text-[12px] font-medium backdrop-blur-md">
                 <span className="h-2 w-2 rounded-full bg-emerald-400" />
@@ -133,7 +132,13 @@ export default function LoginPage() {
         </section>
       )}
 
-      <section className="relative flex min-h-svh items-center justify-center bg-white px-5 py-8 sm:px-10">
+      <section
+        className={
+          showHero
+            ? "relative flex min-h-svh items-center justify-center bg-white px-5 py-8 sm:px-10"
+            : "relative flex min-h-svh w-full items-center justify-center bg-[#F7F7F7] px-5 py-8 sm:px-10"
+        }
+      >
         <button
           type="button"
           onClick={() => router.back()}
@@ -143,7 +148,13 @@ export default function LoginPage() {
           Back
         </button>
 
-        <div className="w-full max-w-[430px] pt-14 sm:pt-10">
+        <div
+          className={
+            showHero
+              ? "w-full max-w-[430px] pt-14 sm:pt-10"
+              : "w-full max-w-[460px] rounded-2xl border border-[#E8E8E8] bg-white p-6 shadow-[0_18px_45px_rgba(0,0,0,0.08)] sm:p-8"
+          }
+        >
           <div className="mb-8">
             <h1 className="font-serif text-[34px] font-semibold leading-tight text-[#111]">
               {loginSettings?.heading || "Customer Login"}

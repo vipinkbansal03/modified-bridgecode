@@ -2,14 +2,15 @@ import type { MetadataRoute } from "next";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://modortho.com";
 const API_BASE = process.env.API_BASE_URL ?? "http://localhost:4000";
+const defaultSitemapConfig = { includeProducts: true, includeCategories: true, includeBlogs: false, includeCmsPages: true };
 
 async function getSitemapConfig() {
   try {
     const res = await fetch(`${API_BASE}/api/settings/public/sitemap-config`, { next: { revalidate: 3600 } });
     const json = await res.json();
-    return json.data as { includeProducts: boolean; includeCategories: boolean; includeBlogs: boolean; includeCmsPages: boolean };
+    return json.data ?? defaultSitemapConfig as { includeProducts: boolean; includeCategories: boolean; includeBlogs: boolean; includeCmsPages: boolean };
   } catch {
-    return { includeProducts: true, includeCategories: true, includeBlogs: false, includeCmsPages: true };
+    return defaultSitemapConfig;
   }
 }
 

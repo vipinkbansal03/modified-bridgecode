@@ -78,9 +78,9 @@ const footerColumns = [
   {
     heading: "Resources",
     links: [
-      { label: "Blog", href: "https://www.modortho.com/blog" },
-      { label: "Terms & Conditions", href: "https://www.modortho.com/page/terms-and-conditions" },
-      { label: "Privacy Policy", href: "https://www.modortho.com/page/privacy-policy" },
+      { label: "Blog", href: "/blog" },
+      { label: "Terms & Conditions", href: "/terms-and-conditions" },
+      { label: "Privacy Policy", href: "/privacy-policy" },
     ],
   },
 ];
@@ -193,7 +193,7 @@ export function Footer() {
             <div className="flex flex-wrap gap-2 text-[13px] text-white/80">
               <Link href="/contact">{label("Legal")}</Link>
               <span>|</span>
-              <Link href="/contact">{label("Privacy Policy")}</Link>
+              <Link href="/privacy-policy">{label("Privacy Policy")}</Link>
               <span>|</span>
               <Link href="/contact">{label("Sitemap")}</Link>
             </div>

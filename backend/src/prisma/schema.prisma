@@ -620,6 +620,14 @@ model Customer {
   firstName        String
   lastName         String
   phone            String?
+  companyName      String?
+  website          String?
+  preferredPrescription String?
+  preferredPrescriptionOther String?
+  preferredSlot    String?
+  currentPractice  String?
+  currentPracticeOther String?
+  usingModernProducts Boolean @default(false)
   status           Status    @default(ACTIVE)
   customerType     CustomerType @default(RETAIL)
   approvalStatus   ApprovalStatus @default(ACTIVE)

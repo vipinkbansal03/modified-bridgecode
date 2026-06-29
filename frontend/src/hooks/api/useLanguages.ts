@@ -11,8 +11,13 @@ const STATIC_LANGUAGES: ApiLanguage[] = [
 
 async function fetchLanguages(): Promise<ApiLanguage[]> {
   if (!HAS_LIVE_API) return STATIC_LANGUAGES;
-  const res = await apiClient.get("/languages");
-  return unwrapData<ApiLanguage[]>(res);
+
+  try {
+    const res = await apiClient.get("/languages");
+    return unwrapData<ApiLanguage[]>(res);
+  } catch {
+    return STATIC_LANGUAGES;
+  }
 }
 
 export function useLanguages() {

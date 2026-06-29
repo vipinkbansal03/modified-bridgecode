@@ -28,7 +28,7 @@ export function MobileMenu({
           animate={{ opacity: 1, height: "auto" }}
           exit={{ opacity: 0, height: 0 }}
           transition={{ duration: 0.22, ease: "easeOut" }}
-          className="absolute left-0 right-0 top-full z-50 overflow-hidden border-b border-line bg-white lg:hidden"
+          className="absolute left-0 right-0 top-full z-50 overflow-hidden border-b border-line bg-white xl:hidden"
         >
           <div className="flex flex-col gap-1 px-5 py-8">
             {links.map((link) => (

@@ -81,7 +81,7 @@ export function Header() {
             <Logo />
           </Link>
 
-          <ul className="hidden items-center gap-9 text-[15px] font-medium text-ink lg:flex">
+          <ul className="hidden items-center gap-9 text-[15px] font-medium text-ink xl:flex">
             <li
               className="relative"
               onMouseEnter={() => setMegaOpen(true)}
@@ -125,7 +125,7 @@ export function Header() {
             ))}
           </ul>
 
-          <div className="hidden items-center gap-5 lg:flex">
+          <div className="hidden items-center gap-5 xl:flex">
             <LanguageSwitcher />
             <CurrencySwitcher />
             <button
@@ -202,7 +202,7 @@ export function Header() {
 
           <button
             aria-label={t("ui.nav.menu")}
-            className="text-ink lg:hidden"
+            className="text-ink xl:hidden"
             onClick={() => setMobileOpen((v) => !v)}
           >
             {mobileOpen ? <X size={22} /> : <Menu size={22} />}
@@ -214,7 +214,7 @@ export function Header() {
         <button
           aria-label="Close menu overlay"
           onClick={() => setMobileOpen(false)}
-          className="fixed inset-0 top-20 z-40 bg-black/45 backdrop-blur-[2px] lg:hidden"
+          className="fixed inset-0 top-20 z-40 bg-black/45 backdrop-blur-[2px] xl:hidden"
         />
       )}
 

@@ -86,7 +86,7 @@ export function FeaturedProductsSection({
 
   return (
     <section className="relative">
-      <div className="relative h-[calc(100vh-80px-300px)] md:h-[calc(100vh-131.6px-241.5px)] w-full bg-grey">
+      <div className="relative h-[320px] min-h-[260px] w-full bg-grey sm:h-[380px] md:h-[calc(100vh-131.6px-241.5px)] md:min-h-[320px]">
         <AnimatePresence mode="wait">
           <motion.div
             key={product.slug}

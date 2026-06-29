@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, X } from "lucide-react";
 import { AdminInput, AdminSelect, AdminTextarea, useToast } from "@/components/admin/AdminComponents";
@@ -40,6 +40,24 @@ const initialForm = {
   seoDescription: "",
 };
 
+function getInitialForm(blog?: Blog) {
+  if (!blog) return initialForm;
+  return {
+    title: blog.title ?? "",
+    slug: blog.slug ?? "",
+    content: blog.content ?? "",
+    excerpt: blog.excerpt ?? "",
+    featuredImage: blog.featuredImage ?? "",
+    authorId: blog.authorId ?? "",
+    categoryId: blog.categoryId ?? "",
+    tags: blog.tags ?? [],
+    status: blog.status ?? "DRAFT",
+    scheduledAt: blog.scheduledAt ? blog.scheduledAt.slice(0, 16) : "",
+    seoTitle: blog.seoTitle ?? "",
+    seoDescription: blog.seoDescription ?? "",
+  };
+}
+
 export function BlogEditor({ blog }: { blog?: Blog }) {
   const router = useRouter();
   const { showToast, ToastComponent } = useToast();
@@ -47,33 +65,16 @@ export function BlogEditor({ blog }: { blog?: Blog }) {
   const { data: categories = [] } = useAdminBlogCategories();
   const createBlog = useCreateBlog();
   const updateBlog = useUpdateBlog(blog?.id);
-  const [form, setForm] = useState(initialForm);
+  const [form, setForm] = useState(() => getInitialForm(blog));
   const [tagInput, setTagInput] = useState("");
   const [slugEdited, setSlugEdited] = useState(Boolean(blog?.slug));
   const [showSeo, setShowSeo] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  useEffect(() => {
-    if (!blog) return;
-    setForm({
-      title: blog.title ?? "",
-      slug: blog.slug ?? "",
-      content: blog.content ?? "",
-      excerpt: blog.excerpt ?? "",
-      featuredImage: blog.featuredImage ?? "",
-      authorId: blog.authorId ?? "",
-      categoryId: blog.categoryId ?? "",
-      tags: blog.tags ?? [],
-      status: blog.status ?? "DRAFT",
-      scheduledAt: blog.scheduledAt ? blog.scheduledAt.slice(0, 16) : "",
-      seoTitle: blog.seoTitle ?? "",
-      seoDescription: blog.seoDescription ?? "",
-    });
-  }, [blog]);
-
   const set = (key: keyof typeof form, value: unknown) => setForm((prev) => ({ ...prev, [key]: value }));
   const save = async (statusOverride?: string) => {
-    const payload = { ...form, status: statusOverride ?? form.status, authorId: form.authorId || null, categoryId: form.categoryId || null, scheduledAt: form.status === "SCHEDULED" ? form.scheduledAt : null };
+    const status = statusOverride ?? form.status;
+    const payload = { ...form, status, authorId: form.authorId || null, categoryId: form.categoryId || null, scheduledAt: status === "SCHEDULED" ? form.scheduledAt : null };
     try {
       if (blog?.id) await updateBlog.mutateAsync(payload);
       else await createBlog.mutateAsync(payload);
@@ -124,7 +125,7 @@ export function BlogEditor({ blog }: { blog?: Blog }) {
           {form.status === "SCHEDULED" && <AdminInput label="Scheduled At" type="datetime-local" value={form.scheduledAt} onChange={(event) => set("scheduledAt", event.target.value)} />}
           <div className="mt-4 flex gap-2">
             <button type="button" onClick={() => save("DRAFT")} className="rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-semibold">Save Draft</button>
-            <button type="button" onClick={() => save("PUBLISHED")} className="rounded-md bg-[#E31E24] px-3 py-2 text-[13px] font-semibold text-white">Publish</button>
+            <button type="button" onClick={() => form.status === "SCHEDULED" ? save() : save("PUBLISHED")} className="rounded-md bg-[#E31E24] px-3 py-2 text-[13px] font-semibold text-white">{form.status === "SCHEDULED" ? "Schedule" : "Publish"}</button>
           </div>
         </section>
         <section className="rounded-lg border border-[#E6E6E6] bg-white p-5">
