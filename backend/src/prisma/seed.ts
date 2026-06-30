@@ -17,6 +17,49 @@ function buildVariantKey(attributeValueIds: string[], packageId?: string | null)
   return packageId ? `${packageId}::${valueKey}` : valueKey;
 }
 
+type SeedMenuItem = {
+  key: string;
+  label: string;
+  url?: string;
+  parentKey?: string;
+  sortOrder?: number;
+  openInNewTab?: boolean;
+  status?: string;
+};
+
+async function upsertCmsMenuWithItems(menu: {
+  name: string;
+  location: string;
+  status?: string;
+  items: SeedMenuItem[];
+}) {
+  const cmsMenu = await prisma.cMSMenu.upsert({
+    where: { location: menu.location },
+    update: { name: menu.name, status: menu.status ?? "ACTIVE" },
+    create: { name: menu.name, location: menu.location, status: menu.status ?? "ACTIVE" },
+  });
+
+  await prisma.cMSMenuItem.deleteMany({ where: { menuId: cmsMenu.id } });
+
+  const createdByKey = new Map<string, { id: string }>();
+  for (const [index, item] of menu.items.entries()) {
+    const created = await prisma.cMSMenuItem.create({
+      data: {
+        menuId: cmsMenu.id,
+        parentId: item.parentKey ? createdByKey.get(item.parentKey)?.id ?? null : null,
+        label: item.label,
+        url: item.url ?? "",
+        sortOrder: item.sortOrder ?? index,
+        openInNewTab: item.openInNewTab ?? false,
+        status: item.status ?? "ACTIVE",
+      },
+    });
+    createdByKey.set(item.key, { id: created.id });
+  }
+
+  return cmsMenu;
+}
+
 const ADMIN_PERMISSIONS = [
   "products.view",
   "products.manage",
@@ -980,18 +1023,230 @@ async function main() {
   ]);
 
   const existingFooter = await prisma.cMSFooter.findFirst();
-  if (!existingFooter) {
+  if (existingFooter) {
+    await prisma.cMSFooter.update({
+      where: { id: existingFooter.id },
+      data: {
+        title: "Modern Orthodontics. All rights reserved.",
+        description: "Stay up to date on the latest news and more.",
+        email: "orders@modortho.com",
+        phone: "1800 890 8022",
+        address: "2024, Gobind Nagar, Circuit House Road, Ludhiana 141001, India",
+        socialLinksJson: {
+          facebook: "https://www.facebook.com/orthodonticsmodern",
+          linkedin: "https://in.linkedin.com/company/modern-orthodontics",
+          twitter: "https://twitter.com/ModOrtho",
+          instagram: "https://www.instagram.com/modern_ortho/",
+        } as Prisma.JsonObject,
+        newsletterEnabled: true,
+        status: "ACTIVE",
+      },
+    });
+  } else {
     await prisma.cMSFooter.create({
       data: {
-        title: "Modern Orthodontics",
-        description: "Precision orthodontic products, manufactured in India, trusted worldwide since 1994.",
+        title: "Modern Orthodontics. All rights reserved.",
+        description: "Stay up to date on the latest news and more.",
         email: "orders@modortho.com",
-        socialLinksJson: { linkedin: "#", instagram: "#", twitter: "#" },
+        phone: "1800 890 8022",
+        address: "2024, Gobind Nagar, Circuit House Road, Ludhiana 141001, India",
+        socialLinksJson: {
+          facebook: "https://www.facebook.com/orthodonticsmodern",
+          linkedin: "https://in.linkedin.com/company/modern-orthodontics",
+          twitter: "https://twitter.com/ModOrtho",
+          instagram: "https://www.instagram.com/modern_ortho/",
+        } as Prisma.JsonObject,
         newsletterEnabled: true,
         status: "ACTIVE",
       },
     });
   }
+
+  await upsertCmsMenuWithItems({
+    name: "Header Primary",
+    location: "header-primary",
+    items: [
+      { key: "quality", label: "Quality Certifications", url: "/quality-certifications" },
+      { key: "contact", label: "Contact Us", url: "/contact" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Header Capabilities",
+    location: "header-capabilities",
+    items: [
+      { key: "design", label: "Design & Engineering", url: "/design-and-engineering" },
+      { key: "manufacturing", label: "Manufacturing Services", url: "/manufacturing-services" },
+      { key: "oem", label: "OEM Services", url: "/oem-services" },
+      { key: "packaging", label: "Custom Packaging", url: "/custom-packaging" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Header Products Mega Menu",
+    location: "header-products-mega",
+    items: [
+      { key: "aesthetic", label: "Aesthetic Brackets", url: "/products?category=aesthetic-brackets" },
+      { key: "aesthetic-curio", label: "Curio Mono-Crystalline Ceramic", url: "/products/curio-mono-crystalline-ceramic", parentKey: "aesthetic" },
+      { key: "aesthetic-purity-ms", label: "Purity-MS Metal Slot Ceramic", url: "/products?category=aesthetic-brackets", parentKey: "aesthetic" },
+      { key: "aesthetic-purity", label: "Purity Ceramic", url: "/products?category=aesthetic-brackets", parentKey: "aesthetic" },
+      { key: "aesthetic-dart", label: "d'art Mini Ceramic", url: "/products?category=aesthetic-brackets", parentKey: "aesthetic" },
+      { key: "aesthetic-elegant", label: "Elegant Composite", url: "/products?category=aesthetic-brackets", parentKey: "aesthetic" },
+      { key: "metal", label: "Metal Brackets", url: "/products?category=metal-brackets" },
+      { key: "metal-sapphire-twin", label: "Sapphire True Twin", url: "/products/sapphire-true-twin", parentKey: "metal" },
+      { key: "metal-sapphire-plus", label: "Sapphire Plus Low-Profile", url: "/products/sapphire-plus-low-profile", parentKey: "metal" },
+      { key: "metal-atease", label: "At-Ease Self Ligating", url: "/products/at-ease-self-ligating", parentKey: "metal" },
+      { key: "metal-micro", label: "Micro-LP Mini", url: "/products?category=metal-brackets", parentKey: "metal" },
+      { key: "metal-bio", label: "Sapphire Brackets (Bio-Progressive)", url: "/products?category=metal-brackets", parentKey: "metal" },
+      { key: "metal-edgewise", label: "Sapphire Brackets (Standard Edgewise)", url: "/products?category=metal-brackets", parentKey: "metal" },
+      { key: "niti", label: "NiTi Wires", url: "/products?category=niti-wires" },
+      { key: "niti-super", label: "NiTi Super Elastic", url: "/products/niti-super-elastic", parentKey: "niti" },
+      { key: "niti-thermal", label: "NiTi Thermal", url: "/products?category=niti-wires", parentKey: "niti" },
+      { key: "niti-rcs", label: "NiTi RCS", url: "/products?category=niti-wires", parentKey: "niti" },
+      { key: "niti-spooled", label: "Spooled NiTi Wire", url: "/products?category=niti-wires", parentKey: "niti" },
+      { key: "niti-springs", label: "NiTi Springs", url: "/products?category=niti-wires", parentKey: "niti" },
+      { key: "ss", label: "SS Wires", url: "/products?category=ss-wires" },
+      { key: "ss-acti", label: "Acti-4S Stainless Steel Archwire", url: "/products?category=ss-wires", parentKey: "ss" },
+      { key: "ss-ligature", label: "Ligature Wires", url: "/products?category=ss-wires", parentKey: "ss" },
+      { key: "ss-coaxial", label: "Co-Axial Wire", url: "/products?category=ss-wires", parentKey: "ss" },
+      { key: "ss-retainer", label: "Fixed Retainer Wire", url: "/products?category=ss-wires", parentKey: "ss" },
+      { key: "special", label: "Special Wires", url: "/products?category=special-wires" },
+      { key: "special-posted", label: "Posted SS Wire", url: "/products?category=special-wires", parentKey: "special" },
+      { key: "special-beta", label: "Beta Titanium", url: "/products?category=special-wires", parentKey: "special" },
+      { key: "special-torqued", label: "Pre-Torqued Archwire", url: "/products?category=special-wires", parentKey: "special" },
+      { key: "special-three-force", label: "Three Force Arch Wire", url: "/products?category=special-wires", parentKey: "special" },
+      { key: "bands", label: "Molar Bands", url: "/products?category=molar-bands" },
+      { key: "bands-plain", label: "Plain Bands", url: "/products?category=molar-bands", parentKey: "bands" },
+      { key: "bands-prewelded", label: "Pre-welded Bands", url: "/products?category=molar-bands", parentKey: "bands" },
+      { key: "tubes", label: "Molar Tubes", url: "/products?category=molar-tubes" },
+      { key: "tubes-elfin-bondable", label: "Elfin Bondable Molar Tube", url: "/products?category=molar-tubes", parentKey: "tubes" },
+      { key: "tubes-afix", label: "Afix Bondable Molar Tube", url: "/products?category=molar-tubes", parentKey: "tubes" },
+      { key: "tubes-elfin-weldable", label: "Elfin Weldable Molar Tube", url: "/products?category=molar-tubes", parentKey: "tubes" },
+      { key: "elastomerics", label: "Elastomerics", url: "/products?category=elastomerics" },
+      { key: "elastomerics-ties", label: "Elastic Ties", url: "/products?category=elastomerics", parentKey: "elastomerics" },
+      { key: "elastomerics-chain", label: "Elastomeric Chain", url: "/products?category=elastomerics", parentKey: "elastomerics" },
+      { key: "elastomerics-separators", label: "Elastomeric Separators", url: "/products?category=elastomerics", parentKey: "elastomerics" },
+      { key: "elastomerics-thread", label: "Elastomeric Thread", url: "/products?category=elastomerics", parentKey: "elastomerics" },
+      { key: "elastomerics-guard", label: "Elastomeric Tissue Guard", url: "/products?category=elastomerics", parentKey: "elastomerics" },
+      { key: "elastomerics-sleeve", label: "Archwire Sleeve", url: "/products?category=elastomerics", parentKey: "elastomerics" },
+      { key: "tooth-color", label: "Tooth Color Wire", url: "/products?category=tooth-color-wire" },
+      { key: "tooth-color-niti", label: "Micro-KOT NiTi", url: "/products?category=tooth-color-wire", parentKey: "tooth-color" },
+      { key: "tooth-color-ss", label: "Micro-KOT SS", url: "/products?category=tooth-color-wire", parentKey: "tooth-color" },
+      { key: "begg", label: "Begg Appliances", url: "/products?category=begg-appliances" },
+      { key: "begg-brackets-bondable", label: "Begg Brackets (Bondable)", url: "/products?category=begg-appliances", parentKey: "begg" },
+      { key: "begg-brackets-weldable", label: "Begg Brackets (Weldable)", url: "/products?category=begg-appliances", parentKey: "begg" },
+      { key: "begg-bondable-tube", label: "Begg Molar Tubes (Bondable)", url: "/products?category=begg-appliances", parentKey: "begg" },
+      { key: "begg-lock-pins", label: "Lock Pins", url: "/products?category=begg-appliances", parentKey: "begg" },
+      { key: "misc", label: "Miscellaneous Items", url: "/products?category=miscellaneous-items" },
+      { key: "misc-implants", label: "Micro Implants", url: "/products?category=miscellaneous-items", parentKey: "misc" },
+      { key: "misc-lab-wire", label: "Stainless Steel Lab Wire", url: "/products?category=miscellaneous-items", parentKey: "misc" },
+      { key: "misc-strips", label: "Diamond Proximal Strips", url: "/products?category=miscellaneous-items", parentKey: "misc" },
+      { key: "misc-retractor", label: "Lip & Cheek Retractor", url: "/products?category=miscellaneous-items", parentKey: "misc" },
+      { key: "misc-hyrex", label: "Hyrex RME Screw", url: "/products?category=miscellaneous-items", parentKey: "misc" },
+      { key: "misc-base-former", label: "Base Former", url: "/products?category=miscellaneous-items", parentKey: "misc" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Header CTA",
+    location: "header-cta",
+    items: [{ key: "become-dealer", label: "Become a Dealer", url: "/contact" }],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "About Us",
+    location: "footer-about",
+    items: [
+      { key: "about", label: "About Us", url: "/about" },
+      { key: "manufacturing", label: "Manufacturing", url: "/manufacturing-services" },
+      { key: "quality", label: "Quality Certifications", url: "/quality-certifications" },
+      { key: "mission", label: "Mission", url: "/about#mission" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Products",
+    location: "footer-products",
+    items: [
+      { key: "aesthetic", label: "Aesthetic Brackets", url: "/products?category=aesthetic-brackets" },
+      { key: "metal", label: "Metal Brackets", url: "/products?category=metal-brackets" },
+      { key: "niti", label: "NiTi & SS Wires", url: "/products?category=niti-wires" },
+      { key: "bands", label: "Molar Bands & Tubes", url: "/products?category=molar-bands" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Capabilities",
+    location: "footer-capabilities",
+    items: [
+      { key: "design", label: "Design & Engineering", url: "/design-and-engineering" },
+      { key: "oem", label: "OEM Services", url: "/oem-services" },
+      { key: "packaging", label: "Custom Packaging", url: "/custom-packaging" },
+      { key: "quality", label: "Quality Control", url: "/quality-certifications" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Dealers & Bulk Orders",
+    location: "footer-dealers",
+    items: [
+      { key: "dealer", label: "Become a Dealer", url: "/contact" },
+      { key: "rfq", label: "Bulk & RFQ Pricing", url: "/products" },
+      { key: "catalogue", label: "Product Catalogue", url: "https://www.modortho.com/public/catalog/Modern-Catalog.zip", openInNewTab: true },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Resources",
+    location: "footer-resources",
+    items: [
+      { key: "blog", label: "Blog", url: "https://www.modortho.com/blog", openInNewTab: true },
+      { key: "terms", label: "Terms & Conditions", url: "https://www.modortho.com/page/terms-and-conditions", openInNewTab: true },
+      { key: "privacy", label: "Privacy Policy", url: "https://www.modortho.com/page/privacy-policy", openInNewTab: true },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Export & Trade",
+    location: "footer-export",
+    items: [
+      { key: "enquiries", label: "Export Enquiries", url: "/contact" },
+      { key: "distributors", label: "Global Distributors", url: "/contact" },
+      { key: "shipping", label: "Shipping & Logistics", url: "/contact" },
+      { key: "compliance", label: "Compliance Documents", url: "/quality-certifications" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "India Office",
+    location: "footer-india-office",
+    items: [
+      { key: "orders", label: "orders@modortho.com", url: "mailto:orders@modortho.com" },
+      { key: "info", label: "info@modortho.com", url: "mailto:info@modortho.com" },
+      { key: "phone", label: "1800 890 8022", url: "" },
+      { key: "address", label: "2024, Gobind Nagar, Circuit House Road, Ludhiana 141001, India", url: "" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "USA Office",
+    location: "footer-usa-office",
+    items: [
+      { key: "email", label: "sanjaygoyalmo@gmail.com", url: "mailto:sanjaygoyalmo@gmail.com" },
+      { key: "phone", label: "+1 470-866-2724", url: "" },
+      { key: "address", label: "1303 Colony Dr, Marietta, GA 30068, USA", url: "" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Legal",
+    location: "footer-legal",
+    items: [
+      { key: "legal", label: "Legal", url: "/contact" },
+      { key: "privacy", label: "Privacy Policy", url: "/contact" },
+      { key: "sitemap", label: "Sitemap", url: "/contact" },
+    ],
+  });
 
   // ─── Default Settings ────────────────────────────────────
   console.log("🌱 Seeding default settings…");

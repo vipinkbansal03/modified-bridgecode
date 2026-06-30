@@ -11,8 +11,10 @@ import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 import { HeaderSearch } from "@/components/ui/HeaderSearch";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { useCart } from "@/contexts/CartContext";
+import { useCmsMenu } from "@/hooks/api/useCmsContent";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import navigation from "@/data/navigation.json";
+import { cmsMenuToLinks, cmsMenuToMegaGroups } from "@/lib/cmsNavigation";
 import { cn } from "@/utils/cn";
 import type { NavigationData } from "@/types/common.types";
 import type { StaticMessageKey } from "@/i18n/staticMessages";
@@ -40,6 +42,28 @@ export function Header() {
   const { currentCustomer, logout } = useCustomerAuth();
   const { t } = useStaticTranslations();
   const label = (value: string) => navLabelKeys[value] ? t(navLabelKeys[value]) : value;
+  const { data: cmsPrimaryMenu } = useCmsMenu("header-primary");
+  const { data: cmsCapabilitiesMenu } = useCmsMenu("header-capabilities");
+  const { data: cmsProductsMegaMenu } = useCmsMenu("header-products-mega");
+  const { data: cmsCtaMenu } = useCmsMenu("header-cta");
+
+  const primaryLinks = cmsMenuToLinks(cmsPrimaryMenu);
+  const capabilitiesLinks = cmsMenuToLinks(cmsCapabilitiesMenu);
+  const productMegaGroups = cmsMenuToMegaGroups(cmsProductsMegaMenu);
+  const ctaLink = cmsMenuToLinks(cmsCtaMenu)[0];
+  const hasCmsPrimary = primaryLinks.length > 0;
+  const hasCmsCapabilities = capabilitiesLinks.length > 0;
+  const hasCmsProductsMega = productMegaGroups.length > 0;
+  const primaryNav = hasCmsPrimary ? primaryLinks : nav.primary.slice(1);
+  const capabilitiesNav = hasCmsCapabilities ? capabilitiesLinks : nav.capabilitiesMenu;
+  const productsMegaNav = hasCmsProductsMega ? productMegaGroups : nav.productMegaMenu;
+  const ctaLabel = ctaLink?.label || label(nav.ctaLabel);
+  const ctaHref = ctaLink?.href || nav.ctaHref;
+  const mobileLinks = [
+    { label: t("ui.nav.products"), href: "/products" },
+    ...capabilitiesNav,
+    ...primaryNav,
+  ];
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -90,7 +114,7 @@ export function Header() {
                 {t("ui.nav.products")}
                 <ChevronDown size={11} className="opacity-60" />
               </Link>
-              <MegaMenu open={megaOpen} groups={nav.productMegaMenu} />
+              <MegaMenu open={megaOpen} groups={productsMegaNav} />
             </li>
             <li
               className="relative shrink-0"
@@ -103,7 +127,7 @@ export function Header() {
               </span>
               {capsOpen && (
                 <div className="absolute left-0 top-full z-50 w-[260px] rounded-md border border-line bg-white p-3 shadow-[0_16px_32px_rgba(0,0,0,0.07)]">
-                  {nav.capabilitiesMenu.map((link) => (
+                  {capabilitiesNav.map((link) => (
                     <Link
                       key={link.label}
                       href={link.href}
@@ -115,7 +139,7 @@ export function Header() {
                 </div>
               )}
             </li>
-            {nav.primary.slice(1).map((link) => (
+            {primaryNav.map((link) => (
               <li key={link.label} className="shrink-0">
                 <Link href={link.href} className="block whitespace-nowrap py-7 hover:text-brand">
                   {label(link.label)}
@@ -186,10 +210,10 @@ export function Header() {
               )}
             </button>
             <Link
-              href={nav.ctaHref}
+              href={ctaHref}
               className="shrink-0 whitespace-nowrap rounded-pill border border-ink px-4.5 py-2.5 text-[14.5px] font-semibold text-ink transition-colors hover:bg-ink hover:text-white"
             >
-              {label(nav.ctaLabel)}
+              {ctaLabel}
             </Link>
           </div>
 
@@ -213,13 +237,9 @@ export function Header() {
 
       <MobileMenu
         open={mobileOpen}
-        links={[
-          nav.primary[0],
-          ...nav.capabilitiesMenu,
-          ...nav.primary.slice(1),
-        ]}
-        ctaLabel={label(nav.ctaLabel)}
-        ctaHref={nav.ctaHref}
+        links={mobileLinks}
+        ctaLabel={ctaLabel}
+        ctaHref={ctaHref}
         isLoggedIn={Boolean(currentCustomer)}
         cartCount={totals.itemCount}
         onLinkClick={() => setMobileOpen(false)}

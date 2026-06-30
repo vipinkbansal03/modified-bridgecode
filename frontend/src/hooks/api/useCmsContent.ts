@@ -16,6 +16,8 @@ export type CmsBlock = {
   sortOrder: number;
 };
 
+export type CmsTranslationMap = Record<string, Array<{ languageId: string; value: string; language?: { id: string; name: string; code: string } }>>;
+
 export type CmsSection = {
   id: string;
   sectionKey: string;
@@ -50,6 +52,40 @@ export type CmsPage = {
   sections: CmsSection[];
 };
 
+export type CmsMenuItem = {
+  id: string;
+  menuId: string;
+  parentId?: string | null;
+  label: string;
+  url: string;
+  sortOrder: number;
+  openInNewTab?: boolean;
+  status?: string;
+  translations?: CmsTranslationMap;
+};
+
+export type CmsMenu = {
+  id: string;
+  name: string;
+  location: string;
+  status: string;
+  items: CmsMenuItem[];
+};
+
+export type CmsFooter = {
+  id: string;
+  title?: string | null;
+  description?: string | null;
+  logo?: string | null;
+  address?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  socialLinksJson?: unknown;
+  newsletterEnabled?: boolean;
+  status: string;
+  translations?: CmsTranslationMap;
+};
+
 export function useCmsPage(pageKey: string) {
   return useQuery<CmsPage | null>({
     queryKey: ["cms-page", pageKey],
@@ -67,7 +103,7 @@ export function useCmsPage(pageKey: string) {
 }
 
 export function useCmsMenu(location: string) {
-  return useQuery({
+  return useQuery<CmsMenu | null>({
     queryKey: ["cms-menu", location],
     queryFn: async () => {
       try {
@@ -82,7 +118,7 @@ export function useCmsMenu(location: string) {
 }
 
 export function useCmsFooter() {
-  return useQuery({
+  return useQuery<CmsFooter | null>({
     queryKey: ["cms-footer"],
     queryFn: async () => {
       try {
