@@ -10,6 +10,14 @@ export interface CustomerSession {
   firstName: string;
   lastName: string;
   phone?: string | null;
+  companyName?: string | null;
+  website?: string | null;
+  preferredPrescription?: string | null;
+  preferredPrescriptionOther?: string | null;
+  preferredSlot?: string | null;
+  currentPractice?: string | null;
+  currentPracticeOther?: string | null;
+  usingModernProducts?: boolean;
   status?: string;
   customerType?: string;
   approvalStatus?: string;
@@ -22,8 +30,22 @@ type RegisterPayload = {
   password: string;
   firstName: string;
   lastName: string;
-  phone?: string;
+  phone: string;
   customerType?: "RETAIL" | "DEALER" | "DOCTOR" | "WHOLESALE";
+  companyName?: string;
+  website?: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  preferredPrescription?: "MBT" | "ROTH" | "OTHER";
+  preferredPrescriptionOther?: string;
+  preferredSlot?: "022" | "018";
+  currentPractice?: "STUDENT" | "ORTHODONTIST" | "OTHER";
+  currentPracticeOther?: string;
+  usingModernProducts?: boolean;
 };
 
 interface CustomerAuthContextType {

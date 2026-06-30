@@ -5,8 +5,22 @@ export const customerRegisterSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
   firstName: z.string().trim().min(1, "First name is required"),
   lastName: z.string().trim().min(1, "Last name is required"),
-  phone: z.string().trim().optional(),
+  phone: z.string().trim().min(1, "Mobile number is required"),
   customerType: z.enum(["RETAIL", "DEALER", "DOCTOR", "WHOLESALE"]).optional(),
+  companyName: z.string().trim().optional(),
+  website: z.string().trim().optional(),
+  addressLine1: z.string().trim().min(1, "Address is required"),
+  addressLine2: z.string().trim().optional(),
+  city: z.string().trim().min(1, "City is required"),
+  state: z.string().trim().min(1, "State is required"),
+  postalCode: z.string().trim().min(1, "Zipcode is required"),
+  country: z.string().trim().min(1, "Country is required"),
+  preferredPrescription: z.enum(["MBT", "ROTH", "OTHER"]).optional(),
+  preferredPrescriptionOther: z.string().trim().optional(),
+  preferredSlot: z.enum(["022", "018"]).optional(),
+  currentPractice: z.enum(["STUDENT", "ORTHODONTIST", "OTHER"]).optional(),
+  currentPracticeOther: z.string().trim().optional(),
+  usingModernProducts: z.boolean().optional(),
 });
 
 export const customerLoginSchema = z.object({

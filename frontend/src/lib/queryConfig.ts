@@ -59,6 +59,7 @@ export function makeQueryClient() {
         retry: (failureCount, error) => {
           // Never retry 404s or validation errors
           const msg = (error as Error)?.message ?? "";
+          if (msg.includes("Too many requests") || msg.includes("429")) return false;
           if (msg.includes("not found") || msg.includes("404")) return false;
           return failureCount < 2;
         },

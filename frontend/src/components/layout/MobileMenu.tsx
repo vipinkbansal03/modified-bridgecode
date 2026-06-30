@@ -37,7 +37,7 @@ export function MobileMenu({
           animate={{ opacity: 1, height: "calc(100svh - 80px)" }}
           exit={{ opacity: 0, height: 0 }}
           transition={{ duration: 0.22, ease: "easeOut" }}
-          className="fixed left-0 right-0 top-20 z-50 overflow-y-auto border-b border-line bg-white lg:hidden"
+          className="fixed left-0 right-0 top-20 z-50 overflow-y-auto border-b border-line bg-white xl:hidden"
         >
           <div className="flex min-h-full flex-col gap-1 px-5 py-6">
             <div className="mb-3">
