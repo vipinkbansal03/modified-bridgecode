@@ -22,6 +22,7 @@ import { Eye, Layers, Pencil, Plus, Search, Trash2 } from "lucide-react";
 
 interface ProductRow {
   id: string;
+  slug?: string;
   title: string;
   productCode?: string | null;
   category: { id: string; name: string };
@@ -233,9 +234,15 @@ export default function AdminProductsPage() {
               <StatusBadge status={product.status} />
               <div className="text-[13px] text-[#555]">{product._count.variants} variants</div>
               <div className="flex gap-1.5 md:justify-end">
-                <Link href={`/products/${product.id}`} target="_blank" className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]">
-                  <Eye size={13} />
-                </Link>
+                {product.slug ? (
+                  <Link href={`/products/${product.slug}`} target="_blank" className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]">
+                    <Eye size={13} />
+                  </Link>
+                ) : (
+                  <span title="Product slug missing" className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded border border-[#E6E6E6] text-[#C4C4C4]">
+                    <Eye size={13} />
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => setEditingProduct(product)}
