@@ -2,9 +2,13 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { ConfirmModal, Pagination, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { SortableList, toSortOrderPayload } from "@/components/admin/SortableList";
+import { Modal } from "@/components/ui/Modal";
+import { ProductCreateForm } from "@/components/admin/products/ProductCreateForm";
+import { ProductEditor } from "@/components/admin/products/ProductEditor";
 import {
   useAdminCategories,
   useAdminCountries,
@@ -32,6 +36,7 @@ interface ProductRow {
 type BulkAction = "enable" | "disable" | "assignCategory" | "assignCountries" | "delete";
 
 export default function AdminProductsPage() {
+  const router = useRouter();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -40,9 +45,11 @@ export default function AdminProductsPage() {
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const [bulkCountryIds, setBulkCountryIds] = useState<string[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<ProductRow | null>(null);
   const { showToast, ToastComponent } = useToast();
 
-  const { data, isLoading } = useAdminProducts({ page, search, status, limit: 20 });
+  const { data, isLoading, refetch } = useAdminProducts({ page, search, status, limit: 20 });
   const { data: categories = [] } = useAdminCategories();
   const { data: countries = [] } = useAdminCountries();
   const deleteMutation = useDeleteProduct();
@@ -101,6 +108,11 @@ export default function AdminProductsPage() {
     }
   };
 
+  const closeEditModal = () => {
+    setEditingProduct(null);
+    refetch();
+  };
+
   return (
     <AdminLayout title="Products" breadcrumb={[{ label: "Products" }]}>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -132,9 +144,9 @@ export default function AdminProductsPage() {
             <option value="ARCHIVED">Archived</option>
           </select>
         </div>
-        <Link href="/admin/products/create" className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
+        <button type="button" onClick={() => setCreateOpen(true)} className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
           <Plus size={15} /> New Product
-        </Link>
+        </button>
       </div>
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-[12.5px] text-[#9A9A9A]">
@@ -224,9 +236,13 @@ export default function AdminProductsPage() {
                 <Link href={`/products/${product.id}`} target="_blank" className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]">
                   <Eye size={13} />
                 </Link>
-                <Link href={`/admin/products/${product.id}/edit`} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]">
+                <button
+                  type="button"
+                  onClick={() => setEditingProduct(product)}
+                  className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+                >
                   <Pencil size={13} />
-                </Link>
+                </button>
                 <button type="button" onClick={() => setDeleting(product.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50">
                   <Trash2 size={13} />
                 </button>
@@ -246,6 +262,35 @@ export default function AdminProductsPage() {
         onCancel={() => setDeleting(null)}
         isLoading={deleteMutation.isPending}
       />
+
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="New Product"
+        panelClassName="max-w-5xl max-h-[calc(100vh-2.5rem)] overflow-y-auto"
+      >
+        <ProductCreateForm
+          compact
+          onCancel={() => setCreateOpen(false)}
+          onCreated={(productId) => {
+            setCreateOpen(false);
+            router.push(`/admin/products/${productId}/edit`);
+          }}
+        />
+      </Modal>
+
+      <Modal
+        open={!!editingProduct}
+        onClose={closeEditModal}
+        title={editingProduct ? `Edit Product: ${editingProduct.title}` : "Edit Product"}
+        panelClassName="h-[calc(100vh-2.5rem)] w-[min(1440px,calc(100vw-2.5rem))] max-w-[1440px] overflow-hidden p-7"
+      >
+        {editingProduct ? (
+          <div className="h-[calc(100vh-10rem)] overflow-y-auto">
+            <ProductEditor productId={editingProduct.id} embedded />
+          </div>
+        ) : null}
+      </Modal>
 
       {ToastComponent}
     </AdminLayout>

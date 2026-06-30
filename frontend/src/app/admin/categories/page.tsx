@@ -6,6 +6,7 @@ import * as Yup from "yup";
 import { Image as ImageIcon, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminSelect, AdminTextarea, ConfirmModal, StatusBadge, toastMessages, useToast } from "@/components/admin/AdminComponents";
+import { Modal } from "@/components/ui/Modal";
 import {
   filterTranslationLanguages,
   NoTranslationLanguagesMessage,
@@ -270,7 +271,29 @@ export default function CategoriesPage() {
     }
   };
 
-  const showForm = showCreate || !!editing;
+  const showEditor = !!editing;
+  const showCreateModal = showCreate && !editing;
+
+  const openCreateModal = () => {
+    setEditing(null);
+    setShowCreate(true);
+    setCategoryEditorTab("content");
+    setTranslationLanguageId("");
+    setSlugEdited(false);
+    setCountryOverrides({});
+    setCountrySearch("");
+    formik.resetForm();
+  };
+
+  const closeCreateModal = () => {
+    setShowCreate(false);
+    setCategoryEditorTab("content");
+    setTranslationLanguageId("");
+    setSlugEdited(false);
+    setCountryOverrides({});
+    setCountrySearch("");
+    formik.resetForm();
+  };
 
   return (
     <AdminLayout title="Categories" breadcrumb={[{ label: "Categories" }]}>
@@ -278,19 +301,23 @@ export default function CategoriesPage() {
         <p className="text-[13.5px] text-[#6B6B6B]">Drag rows to reorder. Child categories are indented under their parent.</p>
         <button
           type="button"
-          onClick={() => { setShowCreate(!showCreate); setEditing(null); setSlugEdited(false); formik.resetForm(); }}
+          onClick={openCreateModal}
           className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
         >
-          {showCreate ? <X size={14} /> : <Plus size={14} />}
-          {showCreate ? "Cancel" : "Add category"}
+          <Plus size={14} />
+          Add category
         </button>
       </div>
 
-      {showForm && (
-        <form onSubmit={formik.handleSubmit} className="mb-5 rounded-xl border border-[#E6E6E6] bg-white p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h3 className="text-[14px] font-semibold text-[#1A1A1A]">{editing ? `Edit: ${editing.name}` : "New category"}</h3>
-            {editing && (
+      <Modal
+        open={showEditor}
+        onClose={closeEditor}
+        title={editing ? `Edit Category: ${editing.name}` : "Category Editor"}
+        panelClassName="max-w-5xl max-h-[calc(100vh-2rem)] overflow-y-auto"
+      >
+        <form onSubmit={formik.handleSubmit} className="space-y-5">
+          {editing && (
+            <div className="flex justify-start">
               <TranslationModeBar
                 editorTab={categoryEditorTab}
                 onTabChange={setCategoryEditorTab}
@@ -298,10 +325,10 @@ export default function CategoriesPage() {
                 selectedLanguageId={translationLanguageId || activeTranslationLang?.id || ""}
                 onLanguageChange={setTranslationLanguageId}
               />
-            )}
-          </div>
+            </div>
+          )}
 
-          {formik.status && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">{formik.status}</div>}
+          {formik.status && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">{formik.status}</div>}
 
           {(!editing || categoryEditorTab === "content") && (
             <div className="space-y-4">
@@ -394,20 +421,20 @@ export default function CategoriesPage() {
                           <p className="px-2 py-8 text-center text-[13px] text-[#9A9A9A]">No countries match your search.</p>
                         ) : (
                           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                      {visibleCountries.map((country) => (
-                        <label key={country.id} className="flex items-center justify-between gap-3 rounded-md border border-[#E6E6E6] px-3 py-2">
-                          <span className="min-w-0">
-                            <span className="block truncate text-[13px] font-medium text-[#1A1A1A]">{country.name}</span>
-                            <span className="text-[11.5px] text-[#9A9A9A]">{country.code}{country.status !== "ACTIVE" ? ` · ${country.status}` : ""}</span>
-                          </span>
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 accent-[#E31E24]"
-                            checked={countryOverrides[country.id] ?? country.enabled}
-                            onChange={(e) => setCountryOverrides((current) => ({ ...current, [country.id]: e.target.checked }))}
-                          />
-                        </label>
-                      ))}
+                            {visibleCountries.map((country) => (
+                              <label key={country.id} className="flex items-center justify-between gap-3 rounded-md border border-[#E6E6E6] px-3 py-2">
+                                <span className="min-w-0">
+                                  <span className="block truncate text-[13px] font-medium text-[#1A1A1A]">{country.name}</span>
+                                  <span className="text-[11.5px] text-[#9A9A9A]">{country.code}{country.status !== "ACTIVE" ? ` · ${country.status}` : ""}</span>
+                                </span>
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 accent-[#E31E24]"
+                                  checked={countryOverrides[country.id] ?? country.enabled}
+                                  onChange={(e) => setCountryOverrides((current) => ({ ...current, [country.id]: e.target.checked }))}
+                                />
+                              </label>
+                            ))}
                           </div>
                         )}
                       </div>
@@ -459,7 +486,7 @@ export default function CategoriesPage() {
             ) : null
           )}
 
-          <div className="mt-5 flex gap-2.5">
+          <div className="flex gap-2.5 justify-end">
             {(!editing || categoryEditorTab === "content") && (
               <button type="submit" disabled={formik.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
                 {formik.isSubmitting ? "Saving..." : editing ? "Update category" : "Create category"}
@@ -468,7 +495,84 @@ export default function CategoriesPage() {
             <button type="button" onClick={closeEditor} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] hover:bg-[#F2F2F2]">Cancel</button>
           </div>
         </form>
-      )}
+      </Modal>
+
+      <Modal
+        open={showCreateModal}
+        onClose={closeCreateModal}
+        title="Add Category"
+        panelClassName="max-w-4xl max-h-[calc(100vh-2.5rem)] overflow-y-auto"
+      >
+        <form onSubmit={formik.handleSubmit} className="space-y-5">
+          <p className="text-[13px] leading-5 text-[#6B6B6B]">
+            Create the category now. Country availability and translation work can be refined after saving.
+          </p>
+
+          {formik.status && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">{formik.status}</div>}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <AdminInput
+              label="Name *"
+              placeholder="e.g. Metal Brackets"
+              value={formik.values.name}
+              onChange={(e) => handleNameChange(e.target.value)}
+              onBlur={formik.handleBlur}
+              name="name"
+              error={formik.touched.name ? (formik.errors.name as string) : ""}
+            />
+            <AdminInput
+              label="Slug *"
+              placeholder="metal-brackets"
+              value={formik.values.slug}
+              onChange={(e) => {
+                setSlugEdited(true);
+                formik.setFieldValue("slug", slugify(e.target.value));
+              }}
+              onBlur={formik.handleBlur}
+              name="slug"
+              error={formik.touched.slug ? (formik.errors.slug as string) : ""}
+            />
+            <AdminSelect label="Parent category" options={parentOptions} {...formik.getFieldProps("parentId")} />
+            <AdminSelect
+              label="Status"
+              options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]}
+              {...formik.getFieldProps("status")}
+            />
+          </div>
+
+          <AdminTextarea label="Description" rows={3} {...formik.getFieldProps("description")} />
+
+          <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
+            <h4 className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">SEO</h4>
+            <div className="grid gap-4 md:grid-cols-2">
+              <AdminInput label="Meta Title" placeholder="Browser/search title" {...formik.getFieldProps("seoTitle")} />
+              <AdminTextarea label="Meta Description" rows={2} placeholder="Short search description" {...formik.getFieldProps("seoDescription")} />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-[120px_1fr]">
+            <div className="flex h-[92px] w-[120px] items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
+              {formik.values.image ? <img src={formik.values.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={22} className="text-[#9A9A9A]" />}
+            </div>
+            <div className="space-y-2">
+              <AdminInput label="Image URL" placeholder="/uploads/category.jpg" {...formik.getFieldProps("image")} />
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]">
+                <Upload size={14} /> {uploadingImage ? "Uploading..." : "Upload image"}
+                <input type="file" accept="image/*" className="hidden" disabled={uploadingImage} onChange={(e) => handleImageUpload(e.target.files?.[0])} />
+              </label>
+            </div>
+          </div>
+
+          <div className="flex gap-2.5 justify-end">
+            <button type="button" onClick={closeCreateModal} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] hover:bg-[#F2F2F2]">
+              Cancel
+            </button>
+            <button type="submit" disabled={formik.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
+              {formik.isSubmitting ? "Creating..." : "Create category"}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {isLoading ? (
         <div className="space-y-3">{[...Array(4)].map((_, index) => <div key={index} className="h-20 animate-pulse rounded-lg bg-[#E6E6E6]" />)}</div>

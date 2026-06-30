@@ -3,15 +3,17 @@
 import type { ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
+import { cn } from "@/utils/cn";
 
 interface ModalProps {
   open: boolean;
   onClose: () => void;
   title?: string;
   children: ReactNode;
+  panelClassName?: string;
 }
 
-export function Modal({ open, onClose, title, children }: ModalProps) {
+export function Modal({ open, onClose, title, children, panelClassName }: ModalProps) {
   return (
     <AnimatePresence>
       {open && (
@@ -23,16 +25,16 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
           onClick={onClose}
         >
           <motion.div
-            className="w-full max-w-lg rounded-lg bg-white p-7"
+            className={cn("w-full max-w-lg rounded-lg bg-white p-7", panelClassName)}
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
             transition={{ duration: 0.22, ease: "easeOut" }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-5 flex items-center justify-between">
-              {title && <h3 className="text-lg font-medium text-ink">{title}</h3>}
-              <button onClick={onClose} aria-label="Close" className="text-steel hover:text-ink">
+            <div className="relative mb-5 pr-8">
+              {title && <h3 className="text-lg font-medium text-[#1A1A1A]">{title}</h3>}
+              <button onClick={onClose} aria-label="Close" className="absolute right-0 top-0 text-[#6B6B6B] hover:text-[#1A1A1A]">
                 <X size={20} />
               </button>
             </div>
