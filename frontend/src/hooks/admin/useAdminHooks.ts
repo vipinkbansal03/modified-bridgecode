@@ -574,12 +574,25 @@ export const useRejectCustomer = () => {
 
 // ─── Coupons ─────────────────────────────────────────────
 
-export const useAdminCoupons = (params?: { page?: number }) =>
+export const useAdminCoupons = (params?: { page?: number; limit?: number; search?: string; status?: string }) =>
   useQuery({ queryKey: ["admin-coupons", params], queryFn: () => adminApi.get("/coupons", { params }).then((r) => r.data) });
 
 export const useCreateCoupon = () => {
   const qc = useQueryClient();
   return useMutation({ mutationFn: (data: unknown) => adminApi.post("/coupons", data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-coupons"] }) });
+};
+
+export const useUpdateCoupon = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => adminApi.put(`/coupons/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-coupons"] }),
+  });
+};
+
+export const useDeleteCoupon = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => adminApi.delete(`/coupons/${id}`).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-coupons"] }) });
 };
 
 // ─── Quotes ──────────────────────────────────────────────
