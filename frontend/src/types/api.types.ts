@@ -23,6 +23,8 @@ export interface ApiProductPrice {
   mrp: number;
   sellingPrice: number;
   dealerPrice?: number | null;
+   doctorRetailerPrice?: number | null;
+   distributorPrice?: number | null;
 }
 
 export interface ApiAttributeValue {

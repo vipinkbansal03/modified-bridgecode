@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertCircle, CheckCircle2, Layers3, Minus, Plus, ShoppingBag, Sparkles } from "lucide-react";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
 import { useQuoteCart, type QuoteCartItem } from "@/contexts/QuoteCartContext";
 import { useCart } from "@/contexts/CartContext";
+import { apiClient } from "@/lib/apiClient";
 import { applyDiscount, nextDiscountTier } from "@/utils/discountRules";
 import { DynamicVariantMatrixConfigurator } from "./DynamicVariantMatrixConfigurator";
 import type { ApiAttribute, ApiProductDetail, ApiProductPrice, ApiVariant } from "@/types/api.types";
@@ -61,7 +62,7 @@ function getAttributeHelperText(displayType: AttributeDisplayType, selectedValue
 }
 
 export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
-  const { selectedCurrency } = useCurrencyContext();
+  const { selectedCurrency, selectedCountryCode } = useCurrencyContext();
   const { addItems } = useQuoteCart();
   const { addItem, openCart } = useCart();
   const attributes: ProductOptionAttribute[] = apiProduct.attributes.map((attribute) => ({
@@ -81,6 +82,7 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   const [drafts, setDrafts] = useState<DraftConfiguration[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [added, setAdded] = useState(false);
+  const [previewPriceMap, setPreviewPriceMap] = useState<Record<string, number>>({});
 
   if (!variants.length) return null;
 
@@ -96,11 +98,51 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   const currentPrice = currentVariant ? getPriceForCurrency(currentVariant, selectedCurrency) : null;
   const currencySymbol = currentPrice?.currencySymbol ?? variants[0]?.prices[0]?.currencySymbol ?? "₹";
   const currencyCode = currentPrice?.currencyCode ?? variants[0]?.prices[0]?.currencyCode ?? "INR";
+  const currentResolvedUnitPrice = currentVariant ? previewPriceMap[currentVariant.id] ?? currentPrice?.sellingPrice ?? 0 : 0;
 
   const subtotal = drafts.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
   const discount = applyDiscount(subtotal);
   const nextTier = nextDiscountTier(subtotal);
   const totalUnits = drafts.reduce((sum, item) => sum + item.quantity, 0);
+
+  useEffect(() => {
+    if (!currentVariant || quantity < 1) {
+      setPreviewPriceMap({});
+      return;
+    }
+
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        const customerToken = window.localStorage.getItem("customer_token");
+        const response = await apiClient.post(
+          `/products/${apiProduct.slug}/price-preview`,
+          { items: [{ variantId: currentVariant.id, quantity }] },
+          {
+            params: selectedCountryCode ? { countryCode: selectedCountryCode } : undefined,
+            headers: customerToken ? { Authorization: `Bearer ${customerToken}` } : undefined,
+          },
+        );
+
+        if (!active) return;
+
+        const previews = (response.data.data ?? []) as Array<{ variantId: string; unitPrice: number }>;
+        setPreviewPriceMap(
+          previews.reduce<Record<string, number>>((acc, preview) => {
+            acc[preview.variantId] = preview.unitPrice;
+            return acc;
+          }, {}),
+        );
+      } catch {
+        if (active) setPreviewPriceMap({});
+      }
+    }, 180);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [apiProduct.slug, currentVariant?.id, quantity, selectedCountryCode]);
 
   function isValueAvailable(attributeName: string, value: string) {
     return variants.some((variant) =>
@@ -128,7 +170,7 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
       variantTitle: currentVariant.title,
       sku: currentVariant.sku,
       quantity,
-      unitPrice: currentPrice?.sellingPrice ?? 0,
+      unitPrice: currentResolvedUnitPrice,
       currencyCode,
       currencySymbol,
       selectedAttributes: currentVariant.attributeCombination,
@@ -164,7 +206,7 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
       variantTitle: currentVariant.title,
       sku: currentVariant.sku,
       quantity,
-      unitPrice: currentPrice.sellingPrice,
+      unitPrice: currentResolvedUnitPrice,
       currencyCode,
       currencySymbol,
       countryCode: currentPrice.countryCode,
@@ -350,7 +392,7 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
 
                 <div className="sm:text-right">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-steel-2">Estimated Unit Price</p>
-                  <p className="mt-1 text-[24px] font-semibold text-ink">{formatMoney(currencySymbol, currentPrice?.sellingPrice ?? 0)}</p>
+                  <p className="mt-1 text-[24px] font-semibold text-ink">{formatMoney(currencySymbol, currentResolvedUnitPrice)}</p>
                   <p className="mt-1 text-[12px] text-steel">{currentVariant?.sku ? `SKU ${currentVariant.sku}` : "SKU assigned after configuration"}</p>
                 </div>
               </div>

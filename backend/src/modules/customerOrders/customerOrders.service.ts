@@ -1,6 +1,7 @@
 import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
 import { decrementVariantStock } from "../inventory/inventory.service";
+import { assertSellableInCountry } from "../countries/countryAvailability.service";
 import { resolvePrice } from "../pricing/priceResolver.service";
 import { calculateRequiredShipping } from "../shipping/shipping.service";
 import { validateCoupon } from "../coupons/coupons.service";
@@ -61,6 +62,9 @@ async function calculateCustomerOrder(customerId: string, input: CreateCustomerO
   if (!orderCountry) {
     throw new AppError("No default country is configured for this customer or product.", 400);
   }
+  if (orderCountry.status !== "ACTIVE") {
+    throw new AppError("Selected shipping country is inactive.", 400);
+  }
 
   const variantMap = new Map(variants.map((variant) => [variant.id, variant]));
   const orderItems = await Promise.all(input.items.map(async (item) => {
@@ -73,6 +77,11 @@ async function calculateCustomerOrder(customerId: string, input: CreateCustomerO
     }
 
     const itemCountryId = orderCountry.id ?? variant.product.defaultCountryId;
+    await assertSellableInCountry({
+      countryId: itemCountryId,
+      productId: variant.productId,
+      variantId: variant.id,
+    });
     const resolvedPrice = await resolvePrice({
       productId: variant.productId,
       variantId: variant.id,

@@ -4,6 +4,11 @@ import type { SignOptions } from "jsonwebtoken";
 import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
 import { sendCustomerPasswordResetEmail } from "../../utils/email";
+import {
+  SYSTEM_CUSTOMER_ROLE_KEYS,
+  ensureCustomerRoleByKey,
+  mapLegacyCustomerTypeToRoleKey,
+} from "../customerRoles/customerRoles.service";
 import type {
   CustomerLoginInput,
   CustomerRegisterInput,
@@ -38,6 +43,8 @@ function toCustomerSession(customer: {
   status: string;
   customerType: string;
   approvalStatus: string;
+  customerRoleId: string | null;
+  customerRole: { id: string; key: string; name: string } | null;
   tierId: string | null;
   defaultCountryId: string | null;
 }) {
@@ -58,6 +65,8 @@ function toCustomerSession(customer: {
     status: customer.status,
     customerType: customer.customerType,
     approvalStatus: customer.approvalStatus,
+    customerRoleId: customer.customerRoleId,
+    customerRole: customer.customerRole,
     tierId: customer.tierId,
     defaultCountryId: customer.defaultCountryId,
   };
@@ -91,6 +100,16 @@ export async function register(input: CustomerRegisterInput) {
 
   const passwordHash = await bcrypt.hash(input.password, 12);
   const customerType = input.customerType ?? "RETAIL";
+  const requestedRoleKey =
+    input.customerRoleKey ??
+    (customerType === "DEALER"
+      ? SYSTEM_CUSTOMER_ROLE_KEYS.dealer
+      : customerType === "WHOLESALE"
+        ? SYSTEM_CUSTOMER_ROLE_KEYS.dealer
+        : customerType === "DOCTOR"
+          ? SYSTEM_CUSTOMER_ROLE_KEYS.doctorRetailer
+          : mapLegacyCustomerTypeToRoleKey(customerType));
+  const customerRole = await ensureCustomerRoleByKey(requestedRoleKey);
   const customer = await prisma.$transaction(async (tx) => {
     const createdCustomer = await tx.customer.create({
       data: {
@@ -109,8 +128,12 @@ export async function register(input: CustomerRegisterInput) {
         usingModernProducts: input.usingModernProducts ?? false,
         status: "ACTIVE",
         customerType,
+        customerRoleId: customerRole.id,
         approvalStatus: customerType === "WHOLESALE" ? "PENDING_APPROVAL" : "ACTIVE",
         defaultCountryId: country.id,
+      },
+      include: {
+        customerRole: { select: { id: true, key: true, name: true } },
       },
     });
 
@@ -138,7 +161,12 @@ export async function register(input: CustomerRegisterInput) {
 }
 
 export async function login(input: CustomerLoginInput) {
-  const customer = await prisma.customer.findUnique({ where: { email: input.email } });
+  const customer = await prisma.customer.findUnique({
+    where: { email: input.email },
+    include: {
+      customerRole: { select: { id: true, key: true, name: true } },
+    },
+  });
   if (!customer || !(await bcrypt.compare(input.password, customer.passwordHash))) {
     throw new AppError("Invalid email or password.", 401);
   }

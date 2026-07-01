@@ -82,6 +82,8 @@ type VariantRow = {
     country?: { id: string; name: string; code: string } | null;
     mrp?: string | number | null;
     sellingPrice?: string | number | null;
+    dealerPrice?: string | number | null;
+    distributorPrice?: string | number | null;
     currency?: { symbol?: string | null; code?: string | null } | null;
   }[];
   attributeValues?: {
@@ -174,6 +176,8 @@ type CountryAvailability = {
 
 type BulkVariantDraft = {
   price?: string;
+  dealerPrice?: string;
+  doctorRetailerPrice?: string;
   stock?: string;
 };
 
@@ -275,13 +279,35 @@ function VariantGridMatrix({
                       {bulkEditMode && getDraft && onDraftChange ? (
                         <div className="grid grid-cols-2 gap-2">
                           <label className="text-[11px] font-medium text-[#6B6B6B]">
-                            Price
+                            Selling
                             <input
                               type="number"
                               min="0"
                               step="0.01"
                               value={getDraft(cell.variant).price}
                               onChange={(e) => onDraftChange(cell.variant!.id, { price: e.target.value })}
+                              className="mt-1 w-full rounded border border-[#E6E6E6] px-2 py-1.5 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                            />
+                          </label>
+                          <label className="text-[11px] font-medium text-[#6B6B6B]">
+                            Dealer
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={getDraft(cell.variant).dealerPrice}
+                              onChange={(e) => onDraftChange(cell.variant!.id, { dealerPrice: e.target.value })}
+                              className="mt-1 w-full rounded border border-[#E6E6E6] px-2 py-1.5 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                            />
+                          </label>
+                          <label className="text-[11px] font-medium text-[#6B6B6B]">
+                            Doctor / Retailer
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={getDraft(cell.variant).doctorRetailerPrice}
+                              onChange={(e) => onDraftChange(cell.variant!.id, { doctorRetailerPrice: e.target.value })}
                               className="mt-1 w-full rounded border border-[#E6E6E6] px-2 py-1.5 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
                             />
                           </label>
@@ -649,10 +675,21 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
   }, [mappedAttributeRows, variantRows]);
   const variantDisplayMode = variantGridState.mode;
 
-  const pricingCols: Column<{ id: string; country: { name: string; code: string }; currency: { symbol: string }; mrp: number; sellingPrice: number; status: string }>[] = [
+  const pricingCols: Column<{
+    id: string;
+    country: { name: string; code: string };
+    currency: { symbol: string };
+    mrp: number;
+    sellingPrice: number;
+    dealerPrice?: number | null;
+    distributorPrice?: number | null;
+    status: string;
+  }>[] = [
     { key: "country", label: "Country", render: (r) => `${r.country.name} (${r.country.code})` },
     { key: "mrp", label: "MRP", render: (r) => `${r.currency.symbol}${r.mrp}` },
     { key: "sellingPrice", label: "Selling Price", render: (r) => `${r.currency.symbol}${r.sellingPrice}` },
+    { key: "dealerPrice", label: "Dealer", render: (r) => (r.dealerPrice != null ? `${r.currency.symbol}${r.dealerPrice}` : "—") },
+    { key: "distributorPrice", label: "Doctor / Retailer", render: (r) => (r.distributorPrice != null ? `${r.currency.symbol}${r.distributorPrice}` : "—") },
     { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} /> },
   ];
 
@@ -699,6 +736,10 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
     const price = getVariantPriceForCountry(variant, selectedBulkCountryId);
     return {
       price: bulkDrafts[variant.id]?.price ?? (price?.sellingPrice !== undefined && price?.sellingPrice !== null ? `${price.sellingPrice}` : ""),
+      dealerPrice: bulkDrafts[variant.id]?.dealerPrice ?? (price?.dealerPrice !== undefined && price?.dealerPrice !== null ? `${price.dealerPrice}` : ""),
+      doctorRetailerPrice:
+        bulkDrafts[variant.id]?.doctorRetailerPrice ??
+        (price?.distributorPrice !== undefined && price?.distributorPrice !== null ? `${price.distributorPrice}` : ""),
       stock: bulkDrafts[variant.id]?.stock ?? (variant.inventory?.stock !== undefined && variant.inventory?.stock !== null ? `${variant.inventory.stock}` : ""),
     };
   };
@@ -723,13 +764,28 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
         if (!draft) return null;
         const currentPrice = getVariantPriceForCountry(variant, selectedBulkCountryId);
         const currentPriceValue = currentPrice?.sellingPrice !== undefined && currentPrice?.sellingPrice !== null ? `${currentPrice.sellingPrice}` : "";
+        const currentDealerPriceValue = currentPrice?.dealerPrice !== undefined && currentPrice?.dealerPrice !== null ? `${currentPrice.dealerPrice}` : "";
+        const currentDoctorRetailerPriceValue =
+          currentPrice?.distributorPrice !== undefined && currentPrice?.distributorPrice !== null ? `${currentPrice.distributorPrice}` : "";
         const currentStockValue = variant.inventory?.stock !== undefined && variant.inventory?.stock !== null ? `${variant.inventory.stock}` : "";
         const priceChanged = draft.price !== undefined && draft.price !== currentPriceValue;
+        const dealerPriceChanged = draft.dealerPrice !== undefined && draft.dealerPrice !== currentDealerPriceValue;
+        const doctorRetailerPriceChanged =
+          draft.doctorRetailerPrice !== undefined && draft.doctorRetailerPrice !== currentDoctorRetailerPriceValue;
         const stockChanged = draft.stock !== undefined && draft.stock !== currentStockValue;
-        if (!priceChanged && !stockChanged) return null;
+        if (!priceChanged && !dealerPriceChanged && !doctorRetailerPriceChanged && !stockChanged) return null;
         return {
           variantId: variant.id,
-          ...(priceChanged ? { countryId: selectedBulkCountryId || undefined, price: { sellingPrice: draft.price } } : {}),
+          ...(priceChanged || dealerPriceChanged || doctorRetailerPriceChanged
+            ? {
+                countryId: selectedBulkCountryId || undefined,
+                price: {
+                  ...(priceChanged ? { sellingPrice: draft.price } : {}),
+                  ...(dealerPriceChanged ? { dealerPrice: draft.dealerPrice } : {}),
+                  ...(doctorRetailerPriceChanged ? { distributorPrice: draft.doctorRetailerPrice } : {}),
+                },
+              }
+            : {}),
           ...(stockChanged ? { stock: draft.stock } : {}),
         };
       })
@@ -1403,7 +1459,9 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
             <th className="border-b border-[#E6E6E6] px-4 py-3">Variant</th>
             <th className="border-b border-[#E6E6E6] px-4 py-3">Package</th>
             <th className="border-b border-[#E6E6E6] px-4 py-3">SKU</th>
-            <th className="border-b border-[#E6E6E6] px-4 py-3">Price</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3">Selling</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3">Dealer</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3">Doctor / Retailer</th>
             <th className="border-b border-[#E6E6E6] px-4 py-3">Stock</th>
             <th className="border-b border-[#E6E6E6] px-4 py-3">Status</th>
             <th className="border-b border-[#E6E6E6] px-4 py-3">Actions</th>
@@ -1428,6 +1486,26 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                     value={draft.price}
                     onChange={(e) => updateBulkDraft(variant.id, { price: e.target.value })}
                     className="w-28 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
+                  />
+                </td>
+                <td className="px-4 py-3">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={draft.dealerPrice}
+                    onChange={(e) => updateBulkDraft(variant.id, { dealerPrice: e.target.value })}
+                    className="w-28 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
+                  />
+                </td>
+                <td className="px-4 py-3">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={draft.doctorRetailerPrice}
+                    onChange={(e) => updateBulkDraft(variant.id, { doctorRetailerPrice: e.target.value })}
+                    className="w-32 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
                   />
                 </td>
                 <td className="px-4 py-3">

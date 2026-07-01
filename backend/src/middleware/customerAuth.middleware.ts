@@ -10,6 +10,8 @@ export interface CustomerAuthRequest extends Request<ParamsFlatDictionary> {
     email: string;
     firstName: string;
     lastName: string;
+    customerRoleId: string | null;
+    customerRoleKey: string | null;
     tierId: string | null;
   };
 }
@@ -31,6 +33,7 @@ export const protectCustomer = async (req: CustomerAuthRequest, _res: Response, 
 
     const customer = await prisma.customer.findUnique({
       where: { id: decoded.id, deletedAt: null },
+      include: { customerRole: { select: { key: true } } },
     });
 
     if (!customer) throw new AppError("Customer account no longer exists.", 401);
@@ -41,6 +44,8 @@ export const protectCustomer = async (req: CustomerAuthRequest, _res: Response, 
       email: customer.email,
       firstName: customer.firstName,
       lastName: customer.lastName,
+      customerRoleId: customer.customerRoleId,
+      customerRoleKey: customer.customerRole?.key ?? null,
       tierId: customer.tierId,
     };
 

@@ -16,6 +16,7 @@ type CustomerRow = {
   status: string;
   customerType: string;
   approvalStatus: string;
+  customerRole?: { id: string; key: string; name: string } | null;
   tier?: { id: string; name: string } | null;
   createdAt: string;
 };
@@ -55,7 +56,8 @@ export default function AdminCustomersPage() {
       ),
     },
     { key: "phone", label: "Phone", render: (row) => row.phone || "-" },
-    { key: "customerType", label: "Type", render: (row) => row.customerType.replace("_", " ") },
+    { key: "customerRole", label: "Role", render: (row) => row.customerRole?.name ?? row.customerType.replace("_", " ") },
+    { key: "customerType", label: "Legacy Type", render: (row) => row.customerType.replace("_", " ") },
     { key: "status", label: "Account", render: (row) => <StatusBadge status={row.status} /> },
     { key: "approvalStatus", label: "Approval", render: (row) => <StatusBadge status={row.approvalStatus} /> },
     { key: "tier", label: "Tier", render: (row) => row.tier?.name ?? "None" },

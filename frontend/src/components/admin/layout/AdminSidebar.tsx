@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Package, Tag, Sliders, Layers, Warehouse, DollarSign, Percent, Globe, Map, Ticket, MessageSquare, ShoppingCart, Truck, CreditCard, Image, Languages, Sparkles, Users, Shield, Settings, FileText, ChevronRight, X, Newspaper, Menu, AlignLeft, Calculator,
   Award,
+  UserRoundCog,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -27,6 +28,7 @@ const navItems = [
   { label: "Quote Requests",  href: "/admin/quotes",       icon: MessageSquare, permission: "quotes.view" },
   { label: "Orders",          href: "/admin/orders",       icon: ShoppingCart, permission: "orders.view" },
   { label: "Customers",       href: "/admin/customers",    icon: Users },
+  { label: "Customer Roles",  href: "/admin/customer-roles", icon: UserRoundCog },
   { label: "Shipping",        href: "/admin/shipping",     icon: Truck,        permission: "shipping.view" },
   { label: "Payments",        href: "/admin/payments",     icon: CreditCard,   permission: "payments.view" },
   { label: "Media",           href: "/admin/media",        icon: Image,        permission: "media.view" },

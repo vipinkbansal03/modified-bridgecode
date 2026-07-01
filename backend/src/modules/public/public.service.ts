@@ -29,6 +29,27 @@ function approvedCategoryTranslationInclude(languageCode: string) {
   };
 }
 
+function buildStorefrontProductWhere(countryId: string, extra?: Prisma.ProductWhereInput): Prisma.ProductWhereInput {
+  return {
+    status: "ACTIVE",
+    deletedAt: null,
+    countries: { some: { countryId, enabled: true } },
+    category: { countries: { some: { countryId, enabled: true } } },
+    OR: [
+      { hasVariants: false },
+      {
+        variants: {
+          some: {
+            status: "ACTIVE",
+            countries: { some: { countryId, enabled: true } },
+          },
+        },
+      },
+    ],
+    ...(extra ?? {}),
+  };
+}
+
 // ─── Products ─────────────────────────────────────────────
 
 export async function publicListProducts(query: {
@@ -43,10 +64,7 @@ export async function publicListProducts(query: {
   const { page, limit, skip } = getPagination(query);
   const country = await resolvePublicCountry(query.countryCode);
 
-  const where: Prisma.ProductWhereInput = {
-    status: "ACTIVE" as const,
-    deletedAt: null as null,
-    countries: { some: { countryId: country.id, enabled: true } },
+  const where: Prisma.ProductWhereInput = buildStorefrontProductWhere(country.id, {
     category: {
       ...(query.category ? { slug: query.category } : {}),
       countries: { some: { countryId: country.id, enabled: true } },
@@ -55,7 +73,7 @@ export async function publicListProducts(query: {
       OR: buildProductTextSearchOr(query.search, languageCode),
     }),
     ...(query.featured === "true" && { isFeatured: true }),
-  };
+  });
 
   const orderBy =
     query.sort === "name_asc"
@@ -107,13 +125,7 @@ export async function publicListProducts(query: {
 export async function publicGetProduct(slug: string, languageCode?: string, countryCode?: string) {
   const country = await resolvePublicCountry(countryCode);
   const product = await prisma.product.findFirst({
-    where: {
-      slug,
-      status: "ACTIVE",
-      deletedAt: null,
-      countries: { some: { countryId: country.id, enabled: true } },
-      category: { countries: { some: { countryId: country.id, enabled: true } } },
-    },
+    where: buildStorefrontProductWhere(country.id, { slug }),
     include: {
       category: languageCode
         ? {
@@ -149,7 +161,7 @@ export async function publicGetProduct(slug: string, languageCode?: string, coun
     },
   });
 
-  if (!product) throw new AppError("Product not found.", 404);
+  if (!product || (product.hasVariants && product.variants.length === 0)) throw new AppError("Product not found.", 404);
   return toPublicProductDetail(product);
 }
 
@@ -165,13 +177,7 @@ export async function previewPublicProductPrices(
 
   const country = await resolvePublicCountry(countryCode);
   const product = await prisma.product.findFirst({
-    where: {
-      slug,
-      status: "ACTIVE",
-      deletedAt: null,
-      countries: { some: { countryId: country.id, enabled: true } },
-      category: { countries: { some: { countryId: country.id, enabled: true } } },
-    },
+    where: buildStorefrontProductWhere(country.id, { slug }),
     select: { id: true },
   });
 
@@ -241,11 +247,7 @@ export async function publicListCategories(languageCode?: string, countryCode?: 
       _count: {
         select: {
           products: {
-            where: {
-              status: "ACTIVE",
-              deletedAt: null,
-              countries: { some: { countryId: country.id, enabled: true } },
-            },
+            where: buildStorefrontProductWhere(country.id),
           },
         },
       },
@@ -269,9 +271,7 @@ export async function publicGetCategory(slug: string, languageCode?: string, cou
         select: {
           products: {
             where: {
-              status: "ACTIVE",
-              deletedAt: null,
-              countries: { some: { countryId: country.id, enabled: true } },
+              ...buildStorefrontProductWhere(country.id),
             },
           },
         },
@@ -496,13 +496,9 @@ export async function publicSearch(query: string, languageCode?: string, country
 
   const [products, categories] = await Promise.all([
     prisma.product.findMany({
-      where: {
-        status: "ACTIVE",
-        deletedAt: null,
-        countries: { some: { countryId: country.id, enabled: true } },
-        category: { countries: { some: { countryId: country.id, enabled: true } } },
+      where: buildStorefrontProductWhere(country.id, {
         OR: buildProductTextSearchOr(query, languageCode),
-      },
+      }),
       take: 8,
       include: {
         media: { take: 1 },
@@ -532,11 +528,7 @@ export async function publicSearch(query: string, languageCode?: string, country
         _count: {
           select: {
             products: {
-              where: {
-                status: "ACTIVE",
-                deletedAt: null,
-                countries: { some: { countryId: country.id, enabled: true } },
-              },
+              where: buildStorefrontProductWhere(country.id),
             },
           },
         },
@@ -555,7 +547,18 @@ export async function getPublicCurrencies() {
 
 export async function getPublicCountries() {
   return prisma.country.findMany({
-    where: { status: "ACTIVE" },
+    where: {
+      status: "ACTIVE",
+      productCountries: {
+        some: {
+          enabled: true,
+          product: {
+            status: "ACTIVE",
+            deletedAt: null,
+          },
+        },
+      },
+    },
     include: { currency: true },
     orderBy: { name: "asc" },
   });
@@ -567,16 +570,59 @@ async function resolvePublicCountry(countryCode?: string) {
   const normalizedCode = countryCode?.trim().toUpperCase();
   const country = normalizedCode
     ? await prisma.country.findFirst({
-        where: { code: normalizedCode, status: "ACTIVE" },
+        where: {
+          code: normalizedCode,
+          status: "ACTIVE",
+          productCountries: {
+            some: {
+              enabled: true,
+              product: {
+                status: "ACTIVE",
+                deletedAt: null,
+              },
+            },
+          },
+        },
         select: { id: true, code: true },
       })
     : await prisma.country.findFirst({
-        where: { isDefault: true, status: "ACTIVE" },
+        where: {
+          isDefault: true,
+          status: "ACTIVE",
+          productCountries: {
+            some: {
+              enabled: true,
+              product: {
+                status: "ACTIVE",
+                deletedAt: null,
+              },
+            },
+          },
+        },
         select: { id: true, code: true },
       });
 
-  if (!country) throw new AppError("Selected country is not available.", 400);
-  return country;
+  if (country) return country;
+
+  const fallbackCountry = await prisma.country.findFirst({
+    where: {
+      status: "ACTIVE",
+      productCountries: {
+        some: {
+          enabled: true,
+          product: {
+            status: "ACTIVE",
+            deletedAt: null,
+          },
+        },
+      },
+    },
+    orderBy: [{ isDefault: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true, code: true },
+  });
+
+  if (!fallbackCountry) throw new AppError("Selected country is not available.", 400);
+  return fallbackCountry;
 }
 
 export async function checkInventory(variantIds: string[]) {
@@ -651,6 +697,8 @@ type PublicProductRecord = Prisma.ProductGetPayload<{
   prices?: Array<{
     mrp: Prisma.Decimal | number;
     sellingPrice: Prisma.Decimal | number;
+    dealerPrice?: Prisma.Decimal | number | null;
+    distributorPrice?: Prisma.Decimal | number | null;
     country: { code: string; name: string };
     currency: { code: string; symbol: string };
   }>;
@@ -685,6 +733,9 @@ function toPublicProduct(p: PublicProductRecord) {
       currencySymbol: pr.currency.symbol,
       mrp: Number(pr.mrp),
       sellingPrice: Number(pr.sellingPrice),
+      dealerPrice: pr.dealerPrice != null ? Number(pr.dealerPrice) : null,
+      doctorRetailerPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+      distributorPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
     })) ?? [],
   };
 }
@@ -806,7 +857,9 @@ function toPublicProductDetail(p: PublicProductDetailRecord) {
         currencySymbol: pr.currency.symbol,
         mrp: Number(pr.mrp),
         sellingPrice: Number(pr.sellingPrice),
-        dealerPrice: pr.dealerPrice ? Number(pr.dealerPrice) : null,
+        dealerPrice: pr.dealerPrice != null ? Number(pr.dealerPrice) : null,
+        doctorRetailerPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+        distributorPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
       })),
       inventory: v.inventory
         ? {
@@ -822,7 +875,9 @@ function toPublicProductDetail(p: PublicProductDetailRecord) {
       currencySymbol: pr.currency.symbol,
       mrp: Number(pr.mrp),
       sellingPrice: Number(pr.sellingPrice),
-      dealerPrice: pr.dealerPrice ? Number(pr.dealerPrice) : null,
+      dealerPrice: pr.dealerPrice != null ? Number(pr.dealerPrice) : null,
+      doctorRetailerPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+      distributorPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
     })),
   };
 }

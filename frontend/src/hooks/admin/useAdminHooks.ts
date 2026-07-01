@@ -429,6 +429,22 @@ export const useUpdateInventory = () => {
 export const useAdminPricing = (productId?: string) =>
   useQuery({ queryKey: ["admin-pricing", productId], queryFn: () => adminApi.get("/pricing", { params: { productId } }).then((r) => r.data.data) });
 
+export const useCreatePricing = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: unknown) => adminApi.post("/pricing", data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-pricing"] }),
+  });
+};
+
+export const useUpdatePricing = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => adminApi.put(`/pricing/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-pricing"] }),
+  });
+};
+
 // ─── Currencies & Countries ───────────────────────────────
 
 export const useAdminTaxRules = (params?: { page?: number; limit?: number; countryId?: string; status?: string }) =>
@@ -517,6 +533,9 @@ export const useUpdateTierCountries = (tierId?: string) => {
 export const useAdminCustomers = (params?: { page?: number; limit?: number; search?: string; customerType?: string; approvalStatus?: string }) =>
   useQuery({ queryKey: ["admin-customers", params], queryFn: () => adminApi.get("/customers", { params }).then((r) => r.data) });
 
+export const useAdminCustomerRoles = () =>
+  useQuery({ queryKey: ["admin-customer-roles"], queryFn: () => adminApi.get("/customer-roles").then((r) => r.data.data) });
+
 export const useAdminCustomer = (id?: string) =>
   useQuery({ queryKey: ["admin-customer", id], queryFn: () => adminApi.get(`/customers/${id}`).then((r) => r.data.data), enabled: !!id });
 
@@ -543,6 +562,18 @@ export const useUpdateCustomerTier = () => {
   return useMutation({
     mutationFn: ({ id, tierId }: { id: string; tierId: string | null }) =>
       adminApi.put(`/customers/${id}/tier`, { tierId }).then((r) => r.data),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["admin-customers"] });
+      qc.invalidateQueries({ queryKey: ["admin-customer", vars.id] });
+    },
+  });
+};
+
+export const useUpdateCustomerRole = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, customerRoleId }: { id: string; customerRoleId: string }) =>
+      adminApi.put(`/customers/${id}/role`, { customerRoleId }).then((r) => r.data),
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["admin-customers"] });
       qc.invalidateQueries({ queryKey: ["admin-customer", vars.id] });
@@ -794,6 +825,31 @@ export const useAdminUsers = () =>
 
 export const useAdminRoles = () =>
   useQuery({ queryKey: ["admin-roles"], queryFn: () => adminApi.get("/roles").then((r) => r.data.data) });
+
+export const useCreateCustomerRole = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: unknown) => adminApi.post("/customer-roles", data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-customer-roles"] }),
+  });
+};
+
+export const useUpdateCustomerRoleAdmin = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) =>
+      adminApi.put(`/customer-roles/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-customer-roles"] }),
+  });
+};
+
+export const useDeleteCustomerRole = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.delete(`/customer-roles/${id}`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-customer-roles"] }),
+  });
+};
 
 // ─── Settings ────────────────────────────────────────────
 

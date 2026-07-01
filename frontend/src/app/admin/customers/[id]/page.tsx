@@ -8,12 +8,14 @@ import { AdminInput, AdminSelect, StatusBadge, useToast } from "@/components/adm
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import {
   useAdminCustomer,
+  useAdminCustomerRoles,
   useAdminCustomerAddresses,
   useAdminCustomerOrders,
   useAdminTiers,
   useApproveCustomer,
   useRejectCustomer,
   useUpdateAdminCustomer,
+  useUpdateCustomerRole,
   useUpdateCustomerTier,
 } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
@@ -27,6 +29,8 @@ type Customer = {
   status: string;
   customerType: string;
   approvalStatus: string;
+  customerRoleId?: string | null;
+  customerRole?: { id: string; key: string; name: string } | null;
   tierId?: string | null;
   tier?: { id: string; name: string } | null;
 };
@@ -66,10 +70,12 @@ export default function AdminCustomerDetailPage() {
   const customerId = params.id;
   const { showToast } = useToast();
   const { data: customer, isLoading } = useAdminCustomer(customerId) as { data?: Customer; isLoading: boolean };
+  const { data: customerRoles = [] } = useAdminCustomerRoles();
   const { data: tiers = [] } = useAdminTiers();
   const { data: orders = [], isLoading: ordersLoading } = useAdminCustomerOrders(customerId) as { data?: CustomerOrder[]; isLoading: boolean };
   const { data: addresses = [], isLoading: addressesLoading } = useAdminCustomerAddresses(customerId) as { data?: CustomerAddress[]; isLoading: boolean };
   const updateTier = useUpdateCustomerTier();
+  const updateCustomerRole = useUpdateCustomerRole();
   const updateCustomer = useUpdateAdminCustomer();
   const approveCustomer = useApproveCustomer();
   const rejectCustomer = useRejectCustomer();
@@ -113,6 +119,15 @@ export default function AdminCustomerDetailPage() {
       showToast("Customer tier updated.", "success");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Could not update customer tier."), "error");
+    }
+  }
+
+  async function handleCustomerRoleChange(customerRoleId: string) {
+    try {
+      await updateCustomerRole.mutateAsync({ id: customerId, customerRoleId });
+      showToast("Customer role updated.", "success");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Could not update customer role."), "error");
     }
   }
 
@@ -239,6 +254,16 @@ export default function AdminCustomerDetailPage() {
                 <Save size={16} className="text-[#E31E24]" />
                 <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Tier Assignment</h3>
               </div>
+              <AdminSelect
+                label="Customer Role"
+                value={customer.customerRoleId ?? ""}
+                onChange={(event) => handleCustomerRoleChange(event.target.value)}
+                disabled={updateCustomerRole.isPending}
+                options={customerRoles.map((role: { id: string; name: string; status: string }) => ({
+                  value: role.id,
+                  label: role.status === "ACTIVE" ? role.name : `${role.name} (Inactive)`,
+                }))}
+              />
               <AdminSelect
                 label="Tier"
                 value={customer.tierId ?? ""}

@@ -21,6 +21,8 @@ export interface CustomerSession {
   status?: string;
   customerType?: string;
   approvalStatus?: string;
+  customerRoleId?: string | null;
+  customerRole?: { id: string; key: string; name: string } | null;
   tierId?: string | null;
   defaultCountryId?: string | null;
 }

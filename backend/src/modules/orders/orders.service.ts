@@ -1,6 +1,7 @@
 import { prisma } from "../../config/database";
 import type { Prisma } from "@prisma/client";
 import { AppError, getPagination } from "../../utils/apiResponse";
+import { assertActiveCountry, assertSellableInCountry } from "../countries/countryAvailability.service";
 import { decrementVariantStock } from "../inventory/inventory.service";
 import { resolvePrice } from "../pricing/priceResolver.service";
 
@@ -134,8 +135,7 @@ export async function createAdminOrder(input: {
 
   const fallbackCountryId = input.countryId || customer?.defaultCountryId || products[0]?.defaultCountryId;
   if (!fallbackCountryId) throw new AppError("Country is required for manual order pricing.", 400);
-  const country = await prisma.country.findUnique({ where: { id: fallbackCountryId }, include: { currency: true } });
-  if (!country) throw new AppError("Country not found.", 404);
+  const country = await assertActiveCountry(fallbackCountryId);
 
   const orderItems = await Promise.all(input.items.map(async (item) => {
     const product = productMap.get(item.productId);
@@ -148,6 +148,11 @@ export async function createAdminOrder(input: {
     if (!Number.isInteger(quantity) || quantity < 1) throw new AppError("Quantity must be at least 1.", 400);
     const availableStock = variant?.inventory ? Math.max(0, variant.inventory.stock - variant.inventory.reservedStock) : null;
     if (availableStock !== null && availableStock < quantity) throw new AppError(`Insufficient stock for ${variant?.sku ?? variant?.title}.`, 400);
+    await assertSellableInCountry({
+      countryId: country.id,
+      productId: product.id,
+      variantId: variant?.id ?? null,
+    });
 
     const overridePrice = item.overridePrice === undefined || item.overridePrice === null || item.overridePrice === "" ? null : Number(item.overridePrice);
     if (overridePrice !== null && (!Number.isFinite(overridePrice) || overridePrice < 0)) throw new AppError("Override price must be a non-negative number.", 400);

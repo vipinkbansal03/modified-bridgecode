@@ -3,6 +3,7 @@ import { AppError, getPagination, slugify } from "../../utils/apiResponse";
 import { uploadFile, deleteFile } from "../../config/storage";
 import type { Prisma } from "@prisma/client";
 import { setVariantStock } from "../inventory/inventory.service";
+import { assertTierUsable } from "../tiers/tiers.service";
 
 const ALLOW_UNMAPPED_VARIANT_GENERATION_OVERRIDE = false;
 
@@ -1150,10 +1151,9 @@ export async function createTierPricing(productId: string, data: PricingRuleInpu
   await ensureVariantBelongsToProduct(productId, data.variantId);
 
   const [tier, country] = await Promise.all([
-    prisma.tier.findUnique({ where: { id: data.tierId } }),
+    assertTierUsable(data.tierId, { countryId: data.countryId }),
     prisma.country.findUnique({ where: { id: data.countryId } }),
   ]);
-  if (!tier) throw new AppError("Tier not found.", 404);
   if (!country) throw new AppError("Country not found.", 404);
 
   const existing = await prisma.tierPricing.findFirst({
@@ -1180,6 +1180,7 @@ export async function updateTierPricing(productId: string, ruleId: string, data:
     fixedPrice: data.fixedPrice ?? existing.fixedPrice,
   });
   await ensureVariantBelongsToProduct(productId, variantId);
+  await assertTierUsable(tierId, { countryId });
 
   const duplicate = await prisma.tierPricing.findFirst({
     where: { productId, tierId, countryId, variantId, NOT: { id: ruleId } },

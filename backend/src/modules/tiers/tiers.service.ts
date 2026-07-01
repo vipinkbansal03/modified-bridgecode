@@ -1,6 +1,32 @@
 import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
 
+export async function assertTierUsable(tierId: string, options?: { countryId?: string | null }) {
+  const tier = await prisma.tier.findUnique({
+    where: { id: tierId },
+    include: {
+      countries: {
+        select: {
+          countryId: true,
+          enabled: true,
+        },
+      },
+    },
+  });
+  if (!tier) throw new AppError("Tier not found.", 404);
+  if (tier.status !== "ACTIVE") throw new AppError("Only active tiers can be assigned or used in pricing.", 400);
+
+  if (options?.countryId) {
+    const hasMappings = tier.countries.length > 0;
+    const allowedForCountry = !hasMappings || tier.countries.some((mapping) => mapping.countryId === options.countryId && mapping.enabled);
+    if (!allowedForCountry) {
+      throw new AppError("This tier is not enabled for the selected country.", 400);
+    }
+  }
+
+  return tier;
+}
+
 export function listTiers() {
   return prisma.tier.findMany({
     include: { _count: { select: { customers: true, pricing: true, discounts: true } } },
