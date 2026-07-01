@@ -86,9 +86,9 @@ const footerColumns = [
   {
     heading: "Resources",
     links: [
-      { label: "Blog", href: "https://www.modortho.com/blog", openInNewTab: true },
-      { label: "Terms & Conditions", href: "https://www.modortho.com/page/terms-and-conditions", openInNewTab: true },
-      { label: "Privacy Policy", href: "https://www.modortho.com/page/privacy-policy", openInNewTab: true },
+      { label: "Blog", href: "/blog", openInNewTab: false },
+      { label: "Terms & Conditions", href: "/terms-and-conditions", openInNewTab: false },
+      { label: "Privacy Policy", href: "/privacy-policy", openInNewTab: false },
     ],
   },
 ];
@@ -99,9 +99,22 @@ const footerLabelKeys: Record<string, StaticMessageKey> = {
   "Quality Certifications": "ui.footer.qualityCertifications",
   Mission: "ui.footer.mission",
   Products: "ui.footer.products",
+  "Aesthetic Brackets": "ui.footer.aestheticBrackets",
+  "Metal Brackets": "ui.footer.metalBrackets",
+  "NiTi & SS Wires": "ui.footer.nitiSsWires",
+  "Molar Bands & Tubes": "ui.footer.molarBandsTubes",
   Capabilities: "ui.footer.capabilities",
+  "Design & Engineering": "ui.footer.designEngineering",
+  "OEM Services": "ui.footer.oemServices",
+  "Custom Packaging": "ui.footer.customPackaging",
+  "Quality Control": "ui.footer.qualityControl",
   "Dealers & Bulk Orders": "ui.footer.dealersBulkOrders",
+  "Become a Dealer": "ui.footer.becomeDealer",
+  "Bulk & RFQ Pricing": "ui.footer.bulkRfqPricing",
+  "Product Catalogue": "ui.footer.productCatalogue",
   Resources: "ui.footer.resources",
+  Blog: "ui.footer.blog",
+  "Terms & Conditions": "ui.footer.termsConditions",
   "Export & Trade": "ui.footer.exportTrade",
   "Export Enquiries": "ui.footer.exportEnquiries",
   "Global Distributors": "ui.footer.globalDistributors",
@@ -118,7 +131,7 @@ type FooterLink = { label: string; href: string; openInNewTab?: boolean };
 
 export function Footer() {
   const { t } = useStaticTranslations();
-  const label = (value: string) => footerLabelKeys[value] ? t(footerLabelKeys[value]) : value;
+  const label = (value: string) => (footerLabelKeys[value] ? t(footerLabelKeys[value]) : value);
   const { data: cmsFooter } = useCmsFooter();
   const { data: footerAboutMenu } = useCmsMenu("footer-about");
   const { data: footerProductsMenu } = useCmsMenu("footer-products");
@@ -186,9 +199,9 @@ export function Footer() {
   const legalLinks: FooterLink[] = cmsLegalColumn.links.length > 0
     ? cmsLegalColumn.links
     : [
-        { label: "Legal", href: "/contact" },
-        { label: "Privacy Policy", href: "/contact" },
-        { label: "Sitemap", href: "/contact" },
+        { label: "Terms & Conditions", href: "/terms-and-conditions" },
+        { label: "Privacy Policy", href: "/privacy-policy" },
+        { label: "Sitemap", href: "/sitemap.xml" },
       ];
 
   function renderFooterItem(item: FooterLink, key: string) {

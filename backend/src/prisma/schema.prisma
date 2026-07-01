@@ -316,6 +316,21 @@ model Tier {
   @@map("tiers")
 }
 
+model CustomerRole {
+  id          String     @id @default(uuid())
+  key         String     @unique
+  name        String     @unique
+  description String?
+  status      Status     @default(ACTIVE)
+  isSystem    Boolean    @default(false)
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  customers   Customer[]
+
+  @@map("customer_roles")
+}
+
 model TierCountry {
   id        String   @id @default(uuid())
   tierId    String
@@ -349,12 +364,14 @@ model Customer {
   customerType     CustomerType @default(RETAIL)
   approvalStatus   ApprovalStatus @default(ACTIVE)
   emailVerifiedAt  DateTime?
+  customerRoleId   String?
   tierId           String?
   defaultCountryId String?
   refreshToken     String?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   deletedAt        DateTime?
+  customerRole     CustomerRole?   @relation(fields: [customerRoleId], references: [id])
   tier             Tier?           @relation(fields: [tierId], references: [id])
   defaultCountry   Country?        @relation("CustomerDefaultCountry", fields: [defaultCountryId], references: [id])
   addresses        CustomerAddress[]

@@ -23,6 +23,8 @@ export interface ApiProductPrice {
   mrp: number;
   sellingPrice: number;
   dealerPrice?: number | null;
+   doctorRetailerPrice?: number | null;
+   distributorPrice?: number | null;
 }
 
 export interface ApiAttributeValue {
@@ -47,9 +49,12 @@ export interface ApiAttribute {
   id: string;
   name: string;
   role: "DROPDOWN" | "X_GRID" | "Y_GRID";
+  displayType?: "DROPDOWN" | "X_GRID" | "Y_GRID";
   status: string;
   sortOrder: number;
+  required?: boolean;
   values?: ApiAttributeValue[];
+  allowedValueIds?: string[];
   _count?: { values: number };
 }
 
@@ -63,7 +68,9 @@ export interface ApiVariant {
   title: string;
   sku: string | null;
   variantKey: string;
+  moq?: number | null;
   package: { id: string; title: string; slug: string } | null;
+  attributeValueIdsByAttributeId?: Record<string, string>;
   attributeCombination: Record<string, string>; // { "Prescription": "MBT", "Slot Size": ".022\"" }
   prices: ApiProductPrice[];
   inventory: ApiVariantInventory | null;

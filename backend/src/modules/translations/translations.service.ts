@@ -1,7 +1,9 @@
 import { TranslationStatus } from "@prisma/client";
+import Papa from "papaparse";
 import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
 import { generateProductContent } from "../ai/ai.service";
+import { getTranslationCoverage } from "./translationCoverage.service";
 
 type ProductTranslationInput = {
   title?: string | null;
@@ -18,8 +20,103 @@ type CategoryTranslationInput = {
   description?: string | null;
 };
 
-export const listLanguages = () => prisma.language.findMany({ orderBy: { name: "asc" } });
-export const createLanguage = (data: object) => prisma.language.create({ data: data as never });
+type TranslationCsvRow = {
+  type?: string;
+  priority?: string;
+  entityId?: string;
+  entityLabel?: string;
+  context?: string;
+  cmsEntityType?: string;
+  cmsPageId?: string;
+  field?: string;
+  fieldLabel?: string;
+  englishValue?: string;
+  translation?: string;
+};
+
+type LanguageInput = {
+  name?: unknown;
+  code?: unknown;
+  isEnabled?: unknown;
+  isDefault?: unknown;
+};
+
+const PRODUCT_TRANSLATION_FIELDS = new Set(["title", "shortDescription", "description", "seoTitle", "seoDescription"]);
+const CATEGORY_TRANSLATION_FIELDS = new Set(["name", "description"]);
+const CMS_TRANSLATION_ENTITY_TYPES = new Set(["page", "section", "block", "menuItem", "footer"]);
+
+function cmsTranslationKey(entityType: string, entityId: string, field: string) {
+  return `cms.${entityType}.${entityId}.${field}`;
+}
+
+function normalizeLanguageCode(code: unknown) {
+  if (typeof code !== "string") throw new AppError("Language code is required.", 400);
+  const normalized = code.trim().toLowerCase();
+  if (!/^[a-z]{2,3}(-[a-z]{2})?$/.test(normalized)) {
+    throw new AppError("Use a valid language code like en, hi, ar, or en-us.", 400);
+  }
+  return normalized;
+}
+
+function normalizeLanguageName(name: unknown) {
+  if (typeof name !== "string" || !name.trim()) throw new AppError("Language name is required.", 400);
+  return name.trim();
+}
+
+export const listLanguages = () => prisma.language.findMany({ orderBy: [{ isDefault: "desc" }, { name: "asc" }] });
+
+export async function createLanguage(data: LanguageInput) {
+  const name = normalizeLanguageName(data.name);
+  const code = normalizeLanguageCode(data.code);
+
+  const existing = await prisma.language.findUnique({ where: { code }, select: { id: true } });
+  if (existing) throw new AppError("A language with this code already exists.", 409);
+
+  return prisma.language.create({
+    data: {
+      name,
+      code,
+      isEnabled: typeof data.isEnabled === "boolean" ? data.isEnabled : true,
+      isDefault: false,
+    },
+  });
+}
+
+export async function updateLanguage(id: string, data: LanguageInput) {
+  const language = await prisma.language.findUnique({ where: { id } });
+  if (!language) throw new AppError("Language not found.", 404);
+
+  const updateData: { name?: string; code?: string; isEnabled?: boolean; isDefault?: boolean } = {};
+
+  if (data.name !== undefined) updateData.name = normalizeLanguageName(data.name);
+  if (data.code !== undefined) {
+    const code = normalizeLanguageCode(data.code);
+    const existing = await prisma.language.findUnique({ where: { code }, select: { id: true } });
+    if (existing && existing.id !== id) throw new AppError("A language with this code already exists.", 409);
+    updateData.code = code;
+  }
+  if (typeof data.isEnabled === "boolean") updateData.isEnabled = data.isEnabled;
+  if (typeof data.isDefault === "boolean") updateData.isDefault = data.isDefault;
+
+  if (language.isDefault && updateData.isEnabled === false) {
+    throw new AppError("Default language cannot be disabled.", 400);
+  }
+
+  return prisma.$transaction(async (tx) => {
+    if (updateData.isDefault === true) {
+      await tx.language.updateMany({
+        where: { id: { not: id }, isDefault: true },
+        data: { isDefault: false },
+      });
+      updateData.isEnabled = true;
+    }
+
+    return tx.language.update({
+      where: { id },
+      data: updateData,
+    });
+  });
+}
 
 export async function getProductTranslations(productId: string) {
   const langs = await prisma.language.findMany({ where: { isEnabled: true } });
@@ -189,6 +286,117 @@ export async function bulkApproveProductTranslations(ids: string[]) {
   });
 
   return { approved: result.count };
+}
+
+export async function exportCoverageCsv(
+  languageId: string,
+  query: { type?: string; priority?: string; search?: string },
+) {
+  const rows: TranslationCsvRow[] = [];
+  let page = 1;
+  let totalPages = 1;
+
+  do {
+    const coverage = await getTranslationCoverage(languageId, {
+      ...query,
+      page: String(page),
+      limit: "100",
+    });
+
+    totalPages = coverage.gaps.totalPages;
+
+    for (const gap of coverage.gaps.data) {
+      for (const missing of gap.missingFields) {
+        rows.push({
+          type: gap.type,
+          priority: gap.priority,
+          entityId: gap.entityId,
+          entityLabel: gap.entityLabel,
+          context: gap.context ?? "",
+          cmsEntityType: gap.cmsEntityType ?? "",
+          cmsPageId: gap.cmsPageId ?? "",
+          field: missing.field,
+          fieldLabel: missing.fieldLabel,
+          englishValue: missing.englishValue,
+          translation: "",
+        });
+      }
+    }
+
+    page += 1;
+  } while (page <= totalPages);
+
+  return Papa.unparse(rows, {
+    columns: [
+      "type",
+      "priority",
+      "entityId",
+      "entityLabel",
+      "context",
+      "cmsEntityType",
+      "cmsPageId",
+      "field",
+      "fieldLabel",
+      "englishValue",
+      "translation",
+    ],
+  });
+}
+
+export async function importTranslationsCsv(languageId: string, rows: TranslationCsvRow[]) {
+  const language = await prisma.language.findUnique({ where: { id: languageId }, select: { id: true, isDefault: true } });
+  if (!language) throw new AppError("Language not found.", 404);
+  if (language.isDefault) throw new AppError("Import is only available for non-default languages.", 400);
+
+  let imported = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  for (const [index, row] of rows.entries()) {
+    const rowNumber = index + 2;
+    const type = row.type?.trim();
+    const entityId = row.entityId?.trim();
+    const field = row.field?.trim();
+    const translation = row.translation?.trim();
+
+    if (!type || !entityId || !field) {
+      skipped += 1;
+      errors.push(`Row ${rowNumber}: type, entityId and field are required.`);
+      continue;
+    }
+
+    if (!translation) {
+      skipped += 1;
+      continue;
+    }
+
+    try {
+      if (type === "product") {
+        if (!PRODUCT_TRANSLATION_FIELDS.has(field)) throw new AppError(`Unsupported product field '${field}'.`, 400);
+        await upsertProductTranslation(entityId, languageId, { [field]: translation } as ProductTranslationInput);
+      } else if (type === "category") {
+        if (!CATEGORY_TRANSLATION_FIELDS.has(field)) throw new AppError(`Unsupported category field '${field}'.`, 400);
+        await upsertCategoryTranslation(entityId, languageId, { [field]: translation } as CategoryTranslationInput);
+      } else if (type === "static") {
+        await upsertKeyword(entityId, languageId, translation);
+      } else if (type === "cms") {
+        const entityType = row.cmsEntityType?.trim();
+        if (!entityType || !CMS_TRANSLATION_ENTITY_TYPES.has(entityType)) {
+          throw new AppError("CMS entity type is required for CMS rows.", 400);
+        }
+        await upsertKeyword(cmsTranslationKey(entityType, entityId, field), languageId, translation);
+      } else {
+        throw new AppError(`Unsupported translation type '${type}'.`, 400);
+      }
+
+      imported += 1;
+    } catch (error) {
+      skipped += 1;
+      errors.push(`Row ${rowNumber}: ${(error as Error).message}`);
+    }
+  }
+
+  return { imported, skipped, errors };
 }
 
 export const listKeywords = (languageId?: string) => prisma.translationKeyword.findMany({ where: languageId ? { languageId } : {}, include: { language: true } });

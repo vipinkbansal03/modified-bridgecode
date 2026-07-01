@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ShoppingCart, FileText, ChevronRight } from "lucide-react";
 import { useQuoteCart } from "@/contexts/QuoteCartContext";
+import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import { QuoteCartDrawer } from "./QuoteCartDrawer";
 
 function fmt(sym: string, val: number) {
@@ -12,6 +13,7 @@ function fmt(sym: string, val: number) {
 export function QuoteCartMini() {
   const { items, totals } = useQuoteCart();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const { t } = useStaticTranslations();
 
   if (!items.length) return null;
 
@@ -27,24 +29,24 @@ export function QuoteCartMini() {
                 {items.length}
               </span>
             </div>
-            <span className="text-[12.5px] font-semibold text-ink">Quote Cart</span>
+            <span className="text-[12.5px] font-semibold text-ink">{t("ui.quote.cartTitle")}</span>
           </div>
           <div className="px-4 py-3 space-y-1.5">
             <div className="flex justify-between text-[12px] text-[#6B6B6B]">
-              <span>Variants</span>
+              <span>{t("ui.quote.variants")}</span>
               <span className="font-medium text-ink">{items.length}</span>
             </div>
             <div className="flex justify-between text-[12px] text-[#6B6B6B]">
-              <span>Total units</span>
+              <span>{t("ui.quote.totalUnits")}</span>
               <span className="font-medium text-ink">{totals.totalQuantity}</span>
             </div>
             <div className="flex justify-between text-[12px] text-[#6B6B6B]">
-              <span>Est. value</span>
+              <span>{t("ui.quote.estimatedValue")}</span>
               <span className="font-semibold text-ink">{fmt(totals.currencySymbol, totals.grandTotal)}</span>
             </div>
             {totals.discountPercentage > 0 && (
               <div className="rounded bg-emerald-50 px-2 py-1 text-[10.5px] font-medium text-emerald-700">
-                {totals.discountPercentage}% volume discount applied
+                {t("ui.quote.volumeDiscountApplied", { percent: totals.discountPercentage })}
               </div>
             )}
           </div>
@@ -54,13 +56,13 @@ export function QuoteCartMini() {
               className="flex w-full items-center justify-center gap-1.5 rounded bg-[#E31E24] py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B]"
             >
               <FileText size={13} />
-              Submit RFQ
+              {t("ui.quote.submitRfq")}
             </button>
             <button
               onClick={() => setDrawerOpen(true)}
               className="flex w-full items-center justify-center gap-1 rounded border border-[#E6E6E6] py-1.5 text-[12px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
             >
-              View Quote
+              {t("ui.quote.viewQuote")}
               <ChevronRight size={12} />
             </button>
           </div>
@@ -79,12 +81,16 @@ export function QuoteCartMini() {
             </div>
             <div>
               <p className="text-[12.5px] font-semibold text-ink">
-                {items.length} {items.length === 1 ? "variant" : "variants"} — {totals.totalQuantity} units
+                {t("ui.quote.mobileSummary", {
+                  variants: items.length,
+                  variantLabel: items.length === 1 ? t("ui.quote.variantSingular") : t("ui.quote.variantPlural"),
+                  units: totals.totalQuantity,
+                })}
               </p>
               <p className="text-[11.5px] text-[#9A9A9A]">
                 {fmt(totals.currencySymbol, totals.grandTotal)}
                 {totals.discountPercentage > 0 && (
-                  <span className="ml-1 text-emerald-600">({totals.discountPercentage}% off)</span>
+                  <span className="ml-1 text-emerald-600">({t("ui.quote.discountOff", { percent: totals.discountPercentage })})</span>
                 )}
               </p>
             </div>
@@ -93,7 +99,7 @@ export function QuoteCartMini() {
             onClick={() => setDrawerOpen(true)}
             className="rounded bg-[#E31E24] px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
           >
-            View Quote
+            {t("ui.quote.viewQuote")}
           </button>
         </div>
       </div>

@@ -1,14 +1,57 @@
 import { Response } from "express";
 import { TranslationStatus } from "@prisma/client";
+import fs from "fs";
+import Papa from "papaparse";
 import { asyncHandler, ApiResponse } from "../../utils/apiResponse";
 import { AuthRequest } from "../../middleware/auth.middleware";
 import * as S from "./translations.service";
 
 export const listLanguages = asyncHandler(async (_r: AuthRequest, res: Response) => ApiResponse.success(res, "Languages.", await S.listLanguages()));
 export const getTranslationCoverage = asyncHandler(async (req: AuthRequest, res: Response) =>
-  ApiResponse.success(res, "Translation coverage.", await S.getTranslationCoverage(String(req.query.languageId), req.query as { type?: string; page?: string; limit?: string })),
+  ApiResponse.success(
+    res,
+    "Translation coverage.",
+    await S.getTranslationCoverage(
+      req.query.languageId ? String(req.query.languageId) : "",
+      req.query as { type?: string; priority?: string; page?: string; limit?: string; search?: string },
+    ),
+  ),
 );
+export const exportCoverageCsv = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const csv = await S.exportCoverageCsv(
+    req.query.languageId ? String(req.query.languageId) : "",
+    req.query as { type?: string; priority?: string; search?: string },
+  );
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="translation-coverage-${Date.now()}.csv"`);
+  return res.status(200).send(csv);
+});
+export const importTranslationsCsv = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const file = req.file as Express.Multer.File | undefined;
+  if (!file) return ApiResponse.success(res, "No CSV file uploaded.", { imported: 0, skipped: 0, errors: ["No CSV file provided."] });
+
+  const csvText = fs.readFileSync(file.path, "utf-8");
+  fs.unlinkSync(file.path);
+
+  const { data, errors: parseErrors } = Papa.parse<Record<string, string>>(csvText, {
+    header: true,
+    skipEmptyLines: true,
+  });
+
+  if (parseErrors.length) {
+    return ApiResponse.success(res, "CSV parse error.", {
+      imported: 0,
+      skipped: 0,
+      errors: parseErrors.map((error) => error.message),
+    });
+  }
+
+  const result = await S.importTranslationsCsv(req.query.languageId ? String(req.query.languageId) : "", data);
+  return ApiResponse.success(res, `Import complete: ${result.imported} imported, ${result.skipped} skipped.`, result);
+});
 export const createLanguage = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.created(res, "Language added.", await S.createLanguage(req.body)));
+export const updateLanguage = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Language updated.", await S.updateLanguage(String(req.params.id), req.body)));
 export const getProductTranslations = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Translations.", await S.getProductTranslations(String(req.params.productId))));
 export const updateTranslation = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Updated.", await S.updateTranslation(String(req.params.id), req.body)));
 export const upsertProductTranslation = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Saved.", await S.upsertProductTranslation(String(req.params.productId), String(req.params.languageId), req.body)));

@@ -98,7 +98,7 @@ export default function CountriesPage() {
       showToast("Default country cannot be deleted.", "error");
       return;
     }
-    if (!window.confirm(`Delete ${country.name}? It will be deactivated and hidden from this list.`)) return;
+    if (!window.confirm(`Delete ${country.name}? It will be deactivated and remain visible here as inactive.`)) return;
     setDeletingId(country.id);
     try {
       await adminApi.delete(`/countries/${country.id}`);

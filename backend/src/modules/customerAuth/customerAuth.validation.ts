@@ -7,6 +7,7 @@ export const customerRegisterSchema = z.object({
   lastName: z.string().trim().min(1, "Last name is required"),
   phone: z.string().trim().min(1, "Mobile number is required"),
   customerType: z.enum(["RETAIL", "DEALER", "DOCTOR", "WHOLESALE"]).optional(),
+  customerRoleKey: z.enum(["GUEST", "DEALER", "DOCTOR_RETAILER"]).optional(),
   companyName: z.string().trim().optional(),
   website: z.string().trim().optional(),
   addressLine1: z.string().trim().min(1, "Address is required"),

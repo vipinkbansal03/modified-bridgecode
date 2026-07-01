@@ -30,14 +30,24 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!countries.length || localStorage.getItem("country")) return;
-    const defaultCountry = countries.find((country) => country.isDefault) ?? countries[0];
-    if (!defaultCountry) return;
-    setSelectedCountryCodeState(defaultCountry.code);
-    setSelectedCurrencyState(defaultCountry.currency.code);
-    localStorage.setItem("country", defaultCountry.code);
-    localStorage.setItem("currency", defaultCountry.currency.code);
-  }, [countries]);
+    if (!countries.length) return;
+
+    const storedCountry = localStorage.getItem("country");
+    const validStoredCountry = storedCountry ? countries.find((country) => country.code === storedCountry.toUpperCase()) : null;
+    const fallbackCountry = countries.find((country) => country.isDefault) ?? countries[0];
+    const nextCountry = validStoredCountry ?? fallbackCountry;
+    if (!nextCountry) return;
+
+    if (!validStoredCountry || selectedCountryCode !== nextCountry.code) {
+      setSelectedCountryCodeState(nextCountry.code);
+      localStorage.setItem("country", nextCountry.code);
+    }
+
+    if (nextCountry.currency.code && selectedCurrency !== nextCountry.currency.code) {
+      setSelectedCurrencyState(nextCountry.currency.code);
+      localStorage.setItem("currency", nextCountry.currency.code);
+    }
+  }, [countries, selectedCountryCode, selectedCurrency]);
 
   function setSelectedCurrency(code: string) {
     setSelectedCurrencyState(code);

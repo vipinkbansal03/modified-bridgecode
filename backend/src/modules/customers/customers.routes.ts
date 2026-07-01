@@ -12,6 +12,7 @@ router.get("/:id", requirePermission("customers.view", "customers.manage"), C.ge
 router.put("/:id", requirePermission("customers.manage"), C.update);
 router.patch("/:id", requirePermission("customers.manage"), C.update);
 router.put("/:id/tier", requirePermission("customers.manage"), C.updateTier);
+router.put("/:id/role", requirePermission("customers.manage"), C.updateRole);
 router.post("/:id/approve", requirePermission("customers.manage"), C.approve);
 router.post("/:id/reject", requirePermission("customers.manage"), C.reject);
 

@@ -1,6 +1,7 @@
 import { DiscountRuleType, Prisma, Status } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { AppError, getPagination } from "../../utils/apiResponse";
+import { assertTierUsable } from "../tiers/tiers.service";
 
 type DiscountInput = {
   name?: string;
@@ -108,7 +109,7 @@ async function normalizeDiscountInput(input: DiscountInput, partial = false) {
   }
 
   await Promise.all([
-    assertExists("tier", tierId),
+    tierId ? assertTierUsable(tierId, { countryId }) : Promise.resolve(null),
     assertExists("country", countryId),
     assertExists("product", productId),
     assertExists("collection", collectionId),

@@ -10,8 +10,12 @@ type StaticTranslationMap = Partial<Record<StaticMessageKey, string>>;
 
 async function fetchStaticTranslations(language: string): Promise<StaticTranslationMap> {
   if (!HAS_LIVE_API || language === "en") return {};
-  const res = await apiClient.get("/translations/static", { params: { lang: language } });
-  return unwrapData<StaticTranslationMap>(res);
+  try {
+    const res = await apiClient.get("/translations/static", { params: { lang: language } });
+    return unwrapData<StaticTranslationMap>(res);
+  } catch {
+    return {};
+  }
 }
 
 export function useStaticTranslations() {
