@@ -13,6 +13,7 @@ type ValueInput = {
   moq?: number | null;
   tierPrice?: number | null;
   dealerPrice?: number | null;
+  validationRole?: AttributeRole;
   status?: string;
   sortOrder?: number;
 };
@@ -33,40 +34,40 @@ export function validateValueForRole(role: AttributeRole, data: ValueInput) {
   const tierPrice = data.tierPrice ?? null;
   const dealerPrice = data.dealerPrice ?? null;
 
-  if (role === "DROPDOWN") {
-    if (gridRole || countryId || moq != null || tierPrice != null || dealerPrice != null) {
-      throw new AppError(
-        "DROPDOWN values cannot have grid role, country, MOQ, or tier/dealer pricing fields.",
-        400,
-      );
-    }
-    return;
+  if (gridRole && gridRole !== "ROW" && gridRole !== "COLUMN") {
+    throw new AppError("Grid role must be ROW or COLUMN when provided.", 400);
   }
 
-  if (role === "X_GRID") {
-    if (!gridRole || (gridRole !== "ROW" && gridRole !== "COLUMN")) {
-      throw new AppError("X_GRID values must have gridRole set to ROW or COLUMN.", 400);
-    }
-    if (countryId || moq != null || tierPrice != null || dealerPrice != null) {
-      throw new AppError("X_GRID values cannot have country or Y-Grid pricing fields.", 400);
-    }
-    return;
+  if (moq != null && moq < 0) {
+    throw new AppError("MOQ must be zero or greater.", 400);
   }
 
-  if (role === "Y_GRID") {
-    if (gridRole) {
-      throw new AppError("Y_GRID values cannot have gridRole.", 400);
-    }
-    if (!countryId) {
-      throw new AppError("Y_GRID values must have a country selected.", 400);
-    }
-    if (moq == null && tierPrice == null && dealerPrice == null) {
-      throw new AppError(
-        "Y_GRID values must have at least one of MOQ, Tier Price, or Dealer Price.",
-        400,
-      );
+  if (tierPrice != null && tierPrice < 0) {
+    throw new AppError("Tier price must be zero or greater.", 400);
+  }
+
+  if (dealerPrice != null && dealerPrice < 0) {
+    throw new AppError("Dealer price must be zero or greater.", 400);
+  }
+
+  if ((role === "DROPDOWN" || role === "X_GRID" || role === "Y_GRID") && countryId) {
+    const hasLegacyPricingFields = moq != null || tierPrice != null || dealerPrice != null;
+    if (!hasLegacyPricingFields) {
+      throw new AppError("Country-scoped attribute values must include at least one legacy pricing field.", 400);
     }
   }
+
+  if ((role === "DROPDOWN" || role === "X_GRID" || role === "Y_GRID") && gridRole && countryId) {
+    throw new AppError("Grid role and country-specific attribute pricing cannot be combined on the same value.", 400);
+  }
+
+  if (role === "DROPDOWN" || role === "X_GRID" || role === "Y_GRID") {
+    return;
+  }
+}
+
+function getValidationRole(attributeRole: AttributeRole, data: ValueInput) {
+  return data.validationRole ?? attributeRole;
 }
 
 async function getAttributeOrThrow(id: string) {
@@ -253,7 +254,7 @@ export async function addAttributeValue(attributeId: string, data: ValueInput & 
     }
   }
 
-  validateValueForRole(attribute.role, payload);
+  validateValueForRole(getValidationRole(attribute.role, payload), payload);
 
   const maxOrder = await prisma.attributeValue.aggregate({
     where: { attributeId },
@@ -341,7 +342,7 @@ export async function updateAttributeValue(id: string, data: ValueInput) {
     }
   }
 
-  validateValueForRole(current.attribute.role, merged);
+  validateValueForRole(getValidationRole(current.attribute.role, merged), merged);
 
   return prisma.attributeValue.update({
     where: { id },

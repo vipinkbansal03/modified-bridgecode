@@ -572,9 +572,27 @@ export async function assignAttributes(
 
   const existingAttributes = await prisma.attribute.findMany({
     where: { id: { in: attributeIds } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, role: true },
   });
   if (existingAttributes.length !== attributeIds.length) throw new AppError("One or more attributes were not found.", 400);
+
+  const attributeById = new Map(existingAttributes.map((attribute) => [attribute.id, attribute]));
+  const xAxisAttributes = attributes.filter((attributeConfig) => attributeById.get(attributeConfig.attributeId)?.role === "X_GRID");
+  const yAxisAttributes = attributes.filter((attributeConfig) => attributeById.get(attributeConfig.attributeId)?.role === "Y_GRID");
+
+  if (xAxisAttributes.length > 1) {
+    throw new AppError(
+      `Only one Grid X Axis attribute can be mapped to a product. Remove one of: ${xAxisAttributes.map((attributeConfig) => attributeById.get(attributeConfig.attributeId)?.name ?? attributeConfig.attributeId).join(", ")}.`,
+      400,
+    );
+  }
+
+  if (yAxisAttributes.length > 1) {
+    throw new AppError(
+      `Only one Grid Y Axis attribute can be mapped to a product. Remove one of: ${yAxisAttributes.map((attributeConfig) => attributeById.get(attributeConfig.attributeId)?.name ?? attributeConfig.attributeId).join(", ")}.`,
+      400,
+    );
+  }
 
   const allowedValueIds = Array.from(new Set(attributes.flatMap((attributeConfig) => attributeConfig.allowedValueIds ?? [])));
   const allowedValues = allowedValueIds.length

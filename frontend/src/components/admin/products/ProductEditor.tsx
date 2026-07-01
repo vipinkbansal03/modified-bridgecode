@@ -578,22 +578,22 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
   ];
 
   const variantGridState: VariantGridState = useMemo(() => {
-    const rowAxisMappings = mappedAttributeRows.filter((mapping) => mapping.gridAxis === "ROW");
-    const columnAxisMappings = mappedAttributeRows.filter((mapping) => mapping.gridAxis === "COLUMN");
+    const rowAxisMappings = mappedAttributeRows.filter((mapping) => mapping.attribute.role === "Y_GRID");
+    const columnAxisMappings = mappedAttributeRows.filter((mapping) => mapping.attribute.role === "X_GRID");
     const reasons: string[] = [];
 
     if (rowAxisMappings.length !== 1 || columnAxisMappings.length !== 1) {
-      reasons.push("exactly one ROW axis and one COLUMN axis must be configured in Product Attributes");
+      reasons.push("exactly one Grid Y Axis attribute and one Grid X Axis attribute must be mapped to this product");
     }
 
     const rowAxis = rowAxisMappings[0];
     const columnAxis = columnAxisMappings[0];
 
-    if (rowAxis && rowAxis.attribute.role !== "X_GRID") {
-      reasons.push(`${rowAxis.attribute.name} is marked as the row axis but is not an X_GRID attribute`);
+    if (rowAxis && rowAxis.attribute.role !== "Y_GRID") {
+      reasons.push(`${rowAxis.attribute.name} must use the Grid Y Axis display type to drive matrix rows`);
     }
     if (columnAxis && columnAxis.attribute.role !== "X_GRID") {
-      reasons.push(`${columnAxis.attribute.name} is marked as the column axis but is not an X_GRID attribute`);
+      reasons.push(`${columnAxis.attribute.name} must use the Grid X Axis display type to drive matrix columns`);
     }
 
     const rowValues = rowAxis?.allowedValues.map((allowedValue) => allowedValue.attributeValue) ?? [];
@@ -2027,19 +2027,13 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center justify-end gap-3">
-                          <label className="flex items-center gap-2 text-[12.5px] text-[#555]">
-                            Grid axis
-                            <select
-                              value={mapping.gridAxis ?? ""}
-                              onChange={(e) => handleSetMappedGridAxis(mapping.attributeId, (e.target.value || null) as GridAxis | null)}
-                              disabled={mapping.attribute.role !== "X_GRID" || assignProductAttributes.isPending}
-                              className="rounded-md border border-[#E6E6E6] bg-white px-2 py-1.5 text-[12px] text-[#1A1A1A] disabled:bg-[#F5F5F5] disabled:text-[#9A9A9A]"
-                            >
-                              <option value="">None</option>
-                              <option value="ROW">Row</option>
-                              <option value="COLUMN">Column</option>
-                            </select>
-                          </label>
+                          <span className="rounded-full border border-[#E6E6E6] bg-[#FAFAFA] px-2.5 py-1 text-[11.5px] text-[#555]">
+                            {mapping.attribute.role === "X_GRID"
+                              ? "Matrix columns"
+                              : mapping.attribute.role === "Y_GRID"
+                                ? "Matrix rows"
+                                : "Dropdown filter"}
+                          </span>
                           <label className="flex items-center gap-2 text-[12.5px] text-[#555]">
                             <input
                               type="checkbox"
@@ -2099,78 +2093,19 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                         <span className="text-[12px] text-[#9A9A9A]">{newMappingValueIds.length} selected</span>
                       </div>
 
-                      {selectedAttributeDetail.role === "X_GRID" ? (
-                        (["ROW", "COLUMN", "OTHER"] as const).map((group) => {
-                          const values = selectedAttributeValues.filter((value) =>
-                            group === "OTHER" ? !value.gridRole : value.gridRole === group
-                          );
-                          if (!values.length) return null;
-                          return (
-                            <div key={group}>
-                              <p className="mb-2 text-[11.5px] font-semibold uppercase text-[#9A9A9A]">
-                                {group === "ROW" ? "Row Values" : group === "COLUMN" ? "Column Values" : "Ungrouped Values"}
-                              </p>
-                              <div className="space-y-1.5">
-                                {values.map((value) => (
-                                  <label key={value.id} className="flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[12.5px]">
-                                    <input
-                                      type="checkbox"
-                                      checked={newMappingValueIds.includes(value.id)}
-                                      onChange={() => toggleNewMappingValue(value.id)}
-                                      className="h-4 w-4 accent-[#E31E24]"
-                                    />
-                                    {value.value}
-                                  </label>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })
-                      ) : selectedAttributeDetail.role === "Y_GRID" ? (
-                        Object.entries(
-                          selectedAttributeValues.reduce<Record<string, AttributeValueDetail[]>>((groups, value) => {
-                            const key = value.country ? `${value.country.name} (${value.country.code})` : "No country";
-                            groups[key] = [...(groups[key] ?? []), value];
-                            return groups;
-                          }, {})
-                        ).map(([countryLabel, values]) => (
-                          <div key={countryLabel}>
-                            <p className="mb-2 text-[11.5px] font-semibold uppercase text-[#9A9A9A]">{countryLabel}</p>
-                            <div className="space-y-1.5">
-                              {values.map((value) => (
-                                <label key={value.id} className="block rounded-md border border-[#E6E6E6] px-3 py-2 text-[12.5px]">
-                                  <span className="flex items-center gap-2">
-                                    <input
-                                      type="checkbox"
-                                      checked={newMappingValueIds.includes(value.id)}
-                                      onChange={() => toggleNewMappingValue(value.id)}
-                                      className="h-4 w-4 accent-[#E31E24]"
-                                    />
-                                    <span className="font-medium text-[#1A1A1A]">{value.value}</span>
-                                  </span>
-                                  <span className="mt-1 block text-[11.5px] text-[#6B6B6B]">
-                                    MOQ: {value.moq ?? "Not set"} | Tier: {formatPriceValue(value.tierPrice)} | Dealer: {formatPriceValue(value.dealerPrice)}
-                                  </span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="space-y-1.5">
-                          {selectedAttributeValues.map((value) => (
-                            <label key={value.id} className="flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[12.5px]">
-                              <input
-                                type="checkbox"
-                                checked={newMappingValueIds.includes(value.id)}
-                                onChange={() => toggleNewMappingValue(value.id)}
-                                className="h-4 w-4 accent-[#E31E24]"
-                              />
-                              {value.value}
-                            </label>
-                          ))}
-                        </div>
-                      )}
+                      <div className="space-y-1.5">
+                        {selectedAttributeValues.map((value) => (
+                          <label key={value.id} className="flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[12.5px]">
+                            <input
+                              type="checkbox"
+                              checked={newMappingValueIds.includes(value.id)}
+                              onChange={() => toggleNewMappingValue(value.id)}
+                              className="h-4 w-4 accent-[#E31E24]"
+                            />
+                            {value.value}
+                          </label>
+                        ))}
+                      </div>
 
                       <button
                         type="button"

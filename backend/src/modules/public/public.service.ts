@@ -3,6 +3,7 @@ import { AppError, getPagination } from "../../utils/apiResponse";
 import { sendQuoteNotification, sendContactNotification } from "../../utils/email";
 import type { Prisma } from "@prisma/client";
 import { TranslationStatus } from "@prisma/client";
+import { resolvePrice } from "../pricing/priceResolver.service";
 
 function approvedProductTranslationInclude(languageCode: string) {
   return {
@@ -125,7 +126,11 @@ export async function publicGetProduct(slug: string, languageCode?: string, coun
       attributes: {
         include: {
           attribute: { include: { values: { where: { status: "ACTIVE" }, orderBy: { sortOrder: "asc" } } } },
-          allowedValues: { include: { attributeValue: true }, orderBy: { attributeValue: { sortOrder: "asc" } } },
+          allowedValues: {
+            where: { attributeValue: { status: "ACTIVE" } },
+            include: { attributeValue: true },
+            orderBy: { attributeValue: { sortOrder: "asc" } },
+          },
         },
       },
       variants: {
@@ -146,6 +151,78 @@ export async function publicGetProduct(slug: string, languageCode?: string, coun
 
   if (!product) throw new AppError("Product not found.", 404);
   return toPublicProductDetail(product);
+}
+
+export async function previewPublicProductPrices(
+  slug: string,
+  items: { variantId: string; quantity: number }[],
+  countryCode?: string,
+  customerId?: string | null,
+) {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new AppError("At least one variant quantity is required for price preview.", 400);
+  }
+
+  const country = await resolvePublicCountry(countryCode);
+  const product = await prisma.product.findFirst({
+    where: {
+      slug,
+      status: "ACTIVE",
+      deletedAt: null,
+      countries: { some: { countryId: country.id, enabled: true } },
+      category: { countries: { some: { countryId: country.id, enabled: true } } },
+    },
+    select: { id: true },
+  });
+
+  if (!product) throw new AppError("Product not found.", 404);
+
+  const requestedVariantIds = Array.from(new Set(items.map((item) => item.variantId)));
+  const variants = await prisma.productVariant.findMany({
+    where: {
+      id: { in: requestedVariantIds },
+      productId: product.id,
+      status: "ACTIVE",
+      countries: { some: { countryId: country.id, enabled: true } },
+    },
+    select: { id: true, productId: true },
+  });
+
+  if (variants.length !== requestedVariantIds.length) {
+    throw new AppError("One or more requested variants are not available for this product or country.", 400);
+  }
+
+  const variantById = new Map(variants.map((variant) => [variant.id, variant]));
+
+  return Promise.all(
+    items.map(async (item) => {
+      if (!Number.isInteger(item.quantity) || item.quantity < 1) {
+        throw new AppError("Preview quantity must be at least 1.", 400);
+      }
+
+      const variant = variantById.get(item.variantId);
+      if (!variant) throw new AppError("One or more requested variants are unavailable.", 400);
+
+      const resolved = await resolvePrice({
+        productId: variant.productId,
+        variantId: variant.id,
+        countryId: country.id,
+        customerId: customerId ?? undefined,
+        quantity: item.quantity,
+      });
+
+      return {
+        variantId: variant.id,
+        quantity: item.quantity,
+        unitPrice: resolved.finalPrice,
+        basePrice: resolved.basePrice,
+        priceBeforeTax: resolved.priceBeforeTax,
+        taxAmount: resolved.taxAmount,
+        currency: resolved.currency,
+        appliedDiscounts: resolved.appliedDiscounts,
+      };
+    }),
+  );
 }
 
 // ─── Categories ───────────────────────────────────────────
@@ -668,25 +745,45 @@ function toPublicProductDetail(p: PublicProductDetailRecord) {
       description: pkg.description,
       sortOrder: pkg.sortOrder,
     })),
-    attributes: p.attributes.map((pa) => ({
-      id: pa.attribute.id,
-      name: pa.attribute.name,
-      required: pa.required,
-      values: (pa.allowedValues.length ? pa.allowedValues.map((selection) => selection.attributeValue) : pa.attribute.values).map((value) => ({
-        id: value.id,
-        value: value.value,
-        slug: value.slug,
-        sortOrder: value.sortOrder,
-        image: value.image,
-        note: value.note,
-        priceAdjustment: Number(value.priceAdjustment),
-      })),
-    })),
+    attributes: p.attributes
+      .map((pa) => {
+        const allowedValues = pa.allowedValues
+          .map((selection) => selection.attributeValue)
+          .sort((a, b) => a.sortOrder - b.sortOrder || a.value.localeCompare(b.value));
+
+        return {
+          id: pa.attribute.id,
+          name: pa.attribute.name,
+          role: pa.attribute.role,
+          displayType: pa.attribute.role,
+          status: pa.attribute.status,
+          required: pa.required,
+          sortOrder: pa.attribute.sortOrder,
+          values: allowedValues.map((value) => ({
+            id: value.id,
+            attributeId: value.attributeId,
+            value: value.value,
+            slug: value.slug,
+            sortOrder: value.sortOrder,
+            image: value.image,
+            note: value.note,
+            priceAdjustment: Number(value.priceAdjustment),
+            gridRole: value.gridRole,
+            countryId: value.countryId,
+            moq: value.moq,
+            tierPrice: value.tierPrice != null ? Number(value.tierPrice) : null,
+            dealerPrice: value.dealerPrice != null ? Number(value.dealerPrice) : null,
+          })),
+          allowedValueIds: pa.allowedValues.map((selection) => selection.attributeValueId),
+        };
+      })
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
     variants: p.variants.map((v) => ({
       id: v.id,
       title: v.title,
       sku: v.sku,
       variantKey: v.variantKey,
+      moq: v.moq,
       package: v.package
         ? {
             id: v.package.id,
@@ -694,6 +791,10 @@ function toPublicProductDetail(p: PublicProductDetailRecord) {
             slug: v.package.slug,
           }
         : null,
+      attributeValueIdsByAttributeId: v.attributeValues.reduce<Record<string, string>>((acc, av) => {
+        acc[av.attributeId] = av.attributeValueId;
+        return acc;
+      }, {}),
       attributeCombination: v.attributeValues.reduce<Record<string, string>>((acc, av) => {
         acc[av.attribute.name] = av.attributeValue.value;
         return acc;

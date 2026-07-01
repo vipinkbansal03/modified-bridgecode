@@ -13,6 +13,7 @@ import {
   useToast,
 } from "@/components/admin/AdminComponents";
 import { AttributeRoleBadge } from "@/components/admin/attributes/AttributeRoleBadge";
+import { AttributeValueEditors } from "@/components/admin/attributes/AttributeValueEditors";
 import { SortableList, toSortOrderPayload } from "@/components/admin/SortableList";
 import { Modal } from "@/components/ui/Modal";
 import {
@@ -25,8 +26,8 @@ import {
 } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
 import {
-  ATTRIBUTE_ROLE_LABELS,
-  getRoleChangeWarnings,
+  ATTRIBUTE_DISPLAY_TYPE_LABELS,
+  getDisplayTypeChangeWarnings,
   type AttributeRole,
 } from "@/lib/attributeUtils";
 import type { ApiAttribute } from "@/types/api.types";
@@ -47,7 +48,6 @@ export default function AttributesPage() {
   const [name, setName] = useState("");
   const [role, setRole] = useState<AttributeRole>("DROPDOWN");
   const [status, setStatus] = useState<"ACTIVE" | "INACTIVE">("ACTIVE");
-  const [pendingRole, setPendingRole] = useState<AttributeRole | null>(null);
   const [roleWarnings, setRoleWarnings] = useState<string[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -71,7 +71,6 @@ export default function AttributesPage() {
     setName("");
     setRole("DROPDOWN");
     setStatus("ACTIVE");
-    setPendingRole(null);
     setRoleWarnings([]);
   };
 
@@ -81,35 +80,22 @@ export default function AttributesPage() {
     setName("");
     setRole("DROPDOWN");
     setStatus("ACTIVE");
-    setPendingRole(null);
     setRoleWarnings([]);
   };
 
   const openEditModal = (attributeId: string) => {
     setEditorMode("edit");
     setEditingId(attributeId);
-    setPendingRole(null);
     setRoleWarnings([]);
   };
 
   const handleRoleChange = (nextRole: AttributeRole) => {
-    if (editorMode !== "edit" || !editingAttribute || nextRole === editingAttribute.role) {
-      setRole(nextRole);
-      return;
-    }
-    const warnings = getRoleChangeWarnings(editingAttribute.values ?? [], nextRole, editingAttribute.role);
-    if (warnings.length > 0) {
-      setPendingRole(nextRole);
-      setRoleWarnings(warnings);
-      return;
-    }
     setRole(nextRole);
-  };
-
-  const confirmRoleChange = () => {
-    if (pendingRole) setRole(pendingRole);
-    setPendingRole(null);
-    setRoleWarnings([]);
+    if (editorMode === "edit" && editingAttribute && nextRole !== editingAttribute.role) {
+      setRoleWarnings(getDisplayTypeChangeWarnings(editingAttribute.values ?? [], nextRole, editingAttribute.role));
+    } else {
+      setRoleWarnings([]);
+    }
   };
 
   const handleSave = async () => {
@@ -231,7 +217,7 @@ export default function AttributesPage() {
         open={isEditorOpen}
         onClose={resetEditorState}
         title={editorMode === "edit" ? "Edit attribute" : "New attribute"}
-        panelClassName="max-w-md"
+        panelClassName="max-h-[90vh] max-w-3xl overflow-y-auto"
       >
         {editorMode === "edit" && editLoading ? (
           <div className="space-y-3">
@@ -244,13 +230,13 @@ export default function AttributesPage() {
             <div className="space-y-3">
               <AdminInput label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Wire Size" />
               <AdminSelect
-                label="Role"
+                label="Display Type"
                 value={role}
                 onChange={(e) => handleRoleChange(e.target.value as AttributeRole)}
                 options={[
-                  { value: "DROPDOWN", label: ATTRIBUTE_ROLE_LABELS.DROPDOWN },
-                  { value: "X_GRID", label: ATTRIBUTE_ROLE_LABELS.X_GRID },
-                  { value: "Y_GRID", label: ATTRIBUTE_ROLE_LABELS.Y_GRID },
+                  { value: "DROPDOWN", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.DROPDOWN },
+                  { value: "X_GRID", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.X_GRID },
+                  { value: "Y_GRID", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.Y_GRID },
                 ]}
               />
               <AdminSelect
@@ -267,8 +253,25 @@ export default function AttributesPage() {
             {editorMode === "edit" && currentRole && role !== currentRole ? (
               <p className="mt-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                Role changed. Save to apply. Existing values must match the new role or the server will reject the update.
+                Display type changed. Save to apply. The storefront will automatically switch between dropdown and matrix rendering based on this setting.
               </p>
+            ) : null}
+            {roleWarnings.length > 0 ? (
+              <p className="mt-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[12.5px] text-blue-900">
+                {roleWarnings.join(" ")}
+              </p>
+            ) : null}
+
+            {editorMode === "edit" && editingAttribute ? (
+              <div className="mt-5 border-t border-[#E6E6E6] pt-5">
+                <div className="mb-3">
+                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Values</h3>
+                  <p className="mt-1 text-[12.5px] text-[#6B6B6B]">
+                    If you switch the display type, update the existing values here before saving the attribute.
+                  </p>
+                </div>
+                <AttributeValueEditors attribute={{ ...(editingAttribute as ApiAttribute), role }} />
+              </div>
             ) : null}
 
             <div className="mt-5 flex gap-2">
@@ -287,21 +290,6 @@ export default function AttributesPage() {
           </>
         )}
       </Modal>
-
-      <ConfirmModal
-        open={!!pendingRole}
-        title="Change attribute role?"
-        message={
-          roleWarnings.length
-            ? `${roleWarnings.join(" ")} You can change the role, but saving will fail until values are updated.`
-            : "Proceed with role change?"
-        }
-        onConfirm={confirmRoleChange}
-        onCancel={() => {
-          setPendingRole(null);
-          setRoleWarnings([]);
-        }}
-      />
 
       <ConfirmModal
         open={!!deletingId}
