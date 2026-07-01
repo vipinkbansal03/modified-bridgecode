@@ -21,12 +21,16 @@ import type { ApiProductDetail } from "@/types/api.types";
 export const revalidate = 300;
 
 const staticProducts = productsData as ProductDetail[];
+const API_ORIGIN = process.env.API_BASE_URL
+  ?? (process.env.NEXT_PUBLIC_API_URL
+    ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api(?:\/admin)?$/, "")
+    : "http://localhost:4000");
 
 async function fetchProductFromApi(slug: string): Promise<ApiProductDetail | null> {
   try {
     const language = (await cookies()).get("language")?.value;
     const query = language ? `?lang=${encodeURIComponent(language)}` : "";
-    const res = await fetch(`${process.env.API_BASE_URL}/api/products/${slug}${query}`, {
+    const res = await fetch(`${API_ORIGIN}/api/products/${slug}${query}`, {
       next: { revalidate: 300 },
     });
     if (!res.ok) return null;
@@ -39,7 +43,7 @@ async function fetchProductFromApi(slug: string): Promise<ApiProductDetail | nul
 
 async function fetchSlugsFromApi(): Promise<string[]> {
   try {
-    const res = await fetch(`${process.env.API_BASE_URL}/api/products?limit=500`, {
+    const res = await fetch(`${API_ORIGIN}/api/products?limit=500`, {
       next: { revalidate: 3600 },
     });
     if (!res.ok) return [];

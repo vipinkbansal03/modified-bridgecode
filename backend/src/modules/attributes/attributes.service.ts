@@ -172,11 +172,13 @@ export async function createAttribute(data: {
   status?: string;
   sortOrder?: number;
 }) {
+  const name = data.name.trim();
   await assertUniqueAttributeName(data.name);
   const maxOrder = await prisma.attribute.aggregate({ _max: { sortOrder: true } });
   return prisma.attribute.create({
     data: {
-      name: data.name.trim(),
+      name,
+      slug: slugify(name),
       role: data.role,
       status: (data.status as "ACTIVE" | "INACTIVE") ?? "ACTIVE",
       sortOrder: data.sortOrder ?? (maxOrder._max.sortOrder ?? -1) + 1,
@@ -197,7 +199,7 @@ export async function updateAttribute(
   return prisma.attribute.update({
     where: { id },
     data: {
-      ...(data.name ? { name: data.name.trim() } : {}),
+      ...(data.name ? { name: data.name.trim(), slug: slugify(data.name) } : {}),
       ...(data.role ? { role: data.role } : {}),
       ...(data.status ? { status: data.status as "ACTIVE" | "INACTIVE" } : {}),
       ...(data.sortOrder != null ? { sortOrder: data.sortOrder } : {}),

@@ -128,7 +128,7 @@ const STATUS_STYLES: Record<string, string> = {
 export function StatusBadge({ status }: { status: string }) {
   const style = STATUS_STYLES[status] || "bg-gray-50 text-gray-600 border-gray-200";
   return (
-    <span className={cn("inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium", style)}>
+    <span className={cn("inline-flex w-fit shrink-0 items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium", style)}>
       {status.replace(/_/g, " ")}
     </span>
   );

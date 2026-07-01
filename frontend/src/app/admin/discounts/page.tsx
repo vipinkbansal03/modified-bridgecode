@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { Modal } from "@/components/ui/Modal";
 import {
   useAdminCategories,
   useAdminCountries,
@@ -237,54 +238,74 @@ export default function DiscountsPage() {
     },
   ];
 
+  const isCreateModalOpen = showForm && !form.id;
+  const isEditInlineOpen = showForm && !!form.id;
+
+  const discountForm = (
+    <form onSubmit={submit} className="rounded-lg border border-[#E6E6E6] bg-white p-5">
+      {form.id ? (
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Edit discount</h3>
+          <button type="button" onClick={resetForm} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
+            <X size={16} />
+          </button>
+        </div>
+      ) : null}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <AdminInput label="Rule Name *" value={form.name} onChange={(event) => setField("name", event.target.value)} placeholder="Gold launch promo" />
+        <AdminSelect label="Discount Type" value={form.type} onChange={(event) => setField("type", event.target.value)} options={[{ value: "TIER", label: "Tier-based" }, { value: "MOQ", label: "MOQ-based" }]} />
+        <AdminSelect label="Status" value={form.status} onChange={(event) => setField("status", event.target.value)} options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
+
+        {form.type === "TIER" ? (
+          <AdminSelect label="Tier *" value={form.tierId} onChange={(event) => setField("tierId", event.target.value)} options={options.tiers} />
+        ) : (
+          <AdminInput label="Minimum Quantity *" type="number" min="1" value={form.minQuantity} onChange={(event) => setField("minQuantity", event.target.value)} />
+        )}
+
+        <AdminSelect label="Value Type" value={form.valueType} onChange={(event) => setField("valueType", event.target.value)} options={[{ value: "PERCENT", label: "Percentage" }, { value: "FIXED", label: "Fixed amount off" }]} />
+        {form.valueType === "PERCENT" ? (
+          <AdminInput label="Discount Percent *" type="number" min="0" max="100" step="0.01" value={form.discountPercent} onChange={(event) => setField("discountPercent", event.target.value)} />
+        ) : (
+          <AdminInput label="Fixed Amount *" type="number" min="0" step="0.01" value={form.fixedAmount} onChange={(event) => setField("fixedAmount", event.target.value)} />
+        )}
+
+        <AdminSelect label="Country" value={form.countryId} onChange={(event) => setField("countryId", event.target.value)} options={options.countries} />
+        <AdminSelect label="Scope" value={form.scope} onChange={(event) => setField("scope", event.target.value)} options={[{ value: "PLATFORM", label: "Platform-wide" }, { value: "PRODUCT", label: "Product" }, { value: "COLLECTION", label: "Collection" }, { value: "CATEGORY", label: "Category" }]} />
+        {form.scope === "PRODUCT" && <AdminSelect label="Product *" value={form.productId} onChange={(event) => setField("productId", event.target.value)} options={options.products} />}
+        {form.scope === "COLLECTION" && <AdminSelect label="Collection *" value={form.collectionId} onChange={(event) => setField("collectionId", event.target.value)} options={options.collections} />}
+        {form.scope === "CATEGORY" && <AdminSelect label="Category *" value={form.categoryId} onChange={(event) => setField("categoryId", event.target.value)} options={options.categories} />}
+
+        <AdminInput label="Start Date" type="date" value={form.startDate} onChange={(event) => setField("startDate", event.target.value)} />
+        <AdminInput label="End Date" type="date" value={form.endDate} onChange={(event) => setField("endDate", event.target.value)} />
+      </div>
+      <div className="mt-5 flex gap-2">
+        <button type="submit" disabled={createDiscount.isPending || updateDiscount.isPending} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
+          {form.id ? "Update Discount" : "Create Discount"}
+        </button>
+        {form.id && <button type="button" onClick={resetForm} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2]">Clear Edit</button>}
+      </div>
+    </form>
+  );
+
   return (
     <AdminLayout title="Discounts" breadcrumb={[{ label: "Discounts" }]}>
       <div className="mb-5 flex justify-end">
         <button
-          onClick={() => (showForm ? resetForm() : setShowForm(true))}
+          onClick={() => {
+            resetForm();
+            setShowForm(true);
+          }}
           className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
         >
-          {showForm ? <X size={14} /> : <Plus size={14} />} {showForm ? "Cancel" : "Create Discount"}
+          <Plus size={14} /> Create Discount
         </button>
       </div>
 
-      {showForm && (
-        <form onSubmit={submit} className="mb-5 rounded-lg border border-[#E6E6E6] bg-white p-5">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <AdminInput label="Rule Name *" value={form.name} onChange={(event) => setField("name", event.target.value)} placeholder="Gold launch promo" />
-            <AdminSelect label="Discount Type" value={form.type} onChange={(event) => setField("type", event.target.value)} options={[{ value: "TIER", label: "Tier-based" }, { value: "MOQ", label: "MOQ-based" }]} />
-            <AdminSelect label="Status" value={form.status} onChange={(event) => setField("status", event.target.value)} options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
+      {isEditInlineOpen ? <div className="mb-5">{discountForm}</div> : null}
 
-            {form.type === "TIER" ? (
-              <AdminSelect label="Tier *" value={form.tierId} onChange={(event) => setField("tierId", event.target.value)} options={options.tiers} />
-            ) : (
-              <AdminInput label="Minimum Quantity *" type="number" min="1" value={form.minQuantity} onChange={(event) => setField("minQuantity", event.target.value)} />
-            )}
-
-            <AdminSelect label="Value Type" value={form.valueType} onChange={(event) => setField("valueType", event.target.value)} options={[{ value: "PERCENT", label: "Percentage" }, { value: "FIXED", label: "Fixed amount off" }]} />
-            {form.valueType === "PERCENT" ? (
-              <AdminInput label="Discount Percent *" type="number" min="0" max="100" step="0.01" value={form.discountPercent} onChange={(event) => setField("discountPercent", event.target.value)} />
-            ) : (
-              <AdminInput label="Fixed Amount *" type="number" min="0" step="0.01" value={form.fixedAmount} onChange={(event) => setField("fixedAmount", event.target.value)} />
-            )}
-
-            <AdminSelect label="Country" value={form.countryId} onChange={(event) => setField("countryId", event.target.value)} options={options.countries} />
-            <AdminSelect label="Scope" value={form.scope} onChange={(event) => setField("scope", event.target.value)} options={[{ value: "PLATFORM", label: "Platform-wide" }, { value: "PRODUCT", label: "Product" }, { value: "COLLECTION", label: "Collection" }, { value: "CATEGORY", label: "Category" }]} />
-            {form.scope === "PRODUCT" && <AdminSelect label="Product *" value={form.productId} onChange={(event) => setField("productId", event.target.value)} options={options.products} />}
-            {form.scope === "COLLECTION" && <AdminSelect label="Collection *" value={form.collectionId} onChange={(event) => setField("collectionId", event.target.value)} options={options.collections} />}
-            {form.scope === "CATEGORY" && <AdminSelect label="Category *" value={form.categoryId} onChange={(event) => setField("categoryId", event.target.value)} options={options.categories} />}
-
-            <AdminInput label="Start Date" type="date" value={form.startDate} onChange={(event) => setField("startDate", event.target.value)} />
-            <AdminInput label="End Date" type="date" value={form.endDate} onChange={(event) => setField("endDate", event.target.value)} />
-          </div>
-          <div className="mt-5 flex gap-2">
-            <button type="submit" disabled={createDiscount.isPending || updateDiscount.isPending} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
-              {form.id ? "Update Discount" : "Create Discount"}
-            </button>
-            {form.id && <button type="button" onClick={resetForm} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2]">Clear Edit</button>}
-          </div>
-        </form>
-      )}
+      <Modal open={isCreateModalOpen} onClose={resetForm} title="New discount" panelClassName="max-w-5xl">
+        {isCreateModalOpen ? discountForm : null}
+      </Modal>
 
       <DataTable<Discount> columns={columns} data={discounts} rowKey="id" isLoading={isLoading} emptyMessage="No discount rules yet." />
       <Pagination page={page} totalPages={data?.pagination?.totalPages || 1} onPageChange={setPage} />

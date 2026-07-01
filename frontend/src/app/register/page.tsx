@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import {
@@ -27,6 +27,7 @@ const registerSchema = Yup.object({
   email: Yup.string().email("Invalid email address").required("Email is required"),
   mobile: Yup.string().trim().required("Mobile number is required"),
   address: Yup.string().trim().required("Address is required"),
+  addressLine2: Yup.string().trim(),
   city: Yup.string().trim().required("City is required"),
   state: Yup.string().trim().required("State is required"),
   country: Yup.string().trim().required("Country is required"),
@@ -108,14 +109,14 @@ function RadioOption({
 export default function RegisterPage() {
   const router = useRouter();
   const { register } = useCustomerAuth();
-  const [returnTo, setReturnTo] = useState("/");
+  const [returnTo] = useState(() => {
+    if (typeof window === "undefined") return "/";
+
+    const next = new URLSearchParams(window.location.search).get("returnTo");
+    return next?.startsWith("/") ? next : "/";
+  });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  useEffect(() => {
-    const next = new URLSearchParams(window.location.search).get("returnTo");
-    if (next?.startsWith("/")) setReturnTo(next);
-  }, []);
 
   const formik = useFormik<RegisterFormValues>({
     initialValues: {
@@ -125,6 +126,7 @@ export default function RegisterPage() {
       email: "",
       mobile: "",
       address: "",
+      addressLine2: "",
       city: "",
       state: "",
       country: "India",
@@ -153,6 +155,20 @@ export default function RegisterPage() {
             password: values.password,
             phone: values.mobile,
             customerType: values.customerType as CustomerType,
+            companyName: values.companyName,
+            website: values.website,
+            addressLine1: values.address,
+            addressLine2: values.addressLine2,
+            city: values.city,
+            state: values.state,
+            postalCode: values.zipcode,
+            country: values.country,
+            preferredPrescription: values.preferredPrescription as "MBT" | "ROTH" | "OTHER",
+            preferredPrescriptionOther: values.preferredPrescriptionOther,
+            preferredSlot: values.preferredSlot as "022" | "018",
+            currentPractice: values.currentPractice as "STUDENT" | "ORTHODONTIST" | "OTHER",
+            currentPracticeOther: values.currentPracticeOther,
+            usingModernProducts: values.usingModernProducts === "YES",
           },
           returnTo,
         );
@@ -172,9 +188,6 @@ export default function RegisterPage() {
           style={{ backgroundImage: "url('/auth/login2.jpg')" }}
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/35 to-black/75" />
-        <div className="absolute left-9 top-9 flex h-10 w-10 items-center justify-center border border-white/35 bg-white/10 text-[26px] font-serif text-white backdrop-blur-sm">
-          &quot;
-        </div>
         <div className="absolute bottom-20 left-9 max-w-[520px] text-white">
           <div className="mb-7 inline-flex items-center gap-2 rounded-full bg-black/35 px-4 py-2 text-[12px] font-medium backdrop-blur-md">
             <span className="h-2 w-2 rounded-full bg-emerald-400" />
@@ -189,21 +202,22 @@ export default function RegisterPage() {
       </section>
 
       <section className="relative flex h-svh items-start justify-center overflow-hidden bg-white px-5 py-4 sm:px-10">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="absolute left-5 top-4 inline-flex h-8 items-center gap-2 rounded-md border border-[#E0E0E0] bg-white px-3 text-[12.5px] text-[#555] shadow-sm transition-colors hover:border-[#BBBBBB] hover:text-[#1A1A1A] sm:left-10"
-        >
-          <ArrowLeft size={14} />
-          Back
-        </button>
-
-        <div className="w-full max-w-[640px] pt-11">
-          <div className="mb-4">
-            <h1 className="font-serif text-[30px] font-semibold leading-tight text-[#111]">Create customer account</h1>
-            <p className="mt-1.5 text-[13px] text-[#8A8A8A]">
-              Register as a doctor or dealer to access the Modern Orthodontics portal.
-            </p>
+        <div className="w-full max-w-[640px] pt-4">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <h1 className="font-serif text-[30px] font-semibold leading-tight text-[#111]">Create customer account</h1>
+              <p className="mt-1.5 text-[13px] text-[#8A8A8A]">
+                Register as a doctor or dealer to access the Modern Orthodontics portal.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="inline-flex h-8 shrink-0 items-center gap-2 rounded-md border border-[#E0E0E0] bg-white px-3 text-[12.5px] text-[#555] shadow-sm transition-colors hover:border-[#BBBBBB] hover:text-[#1A1A1A]"
+            >
+              <ArrowLeft size={14} />
+              Back
+            </button>
           </div>
 
           <form onSubmit={formik.handleSubmit} noValidate className="space-y-2.5">
@@ -225,6 +239,7 @@ export default function RegisterPage() {
               <IconInput icon={<AtSign size={14} />} name="email" type="email" placeholder="Email" value={formik.values.email} onChange={formik.handleChange} onBlur={formik.handleBlur} error={formik.errors.email} touched={formik.touched.email} />
               <IconInput icon={<Smartphone size={14} />} name="mobile" placeholder="Mobile" value={formik.values.mobile} onChange={formik.handleChange} onBlur={formik.handleBlur} error={formik.errors.mobile} touched={formik.touched.mobile} />
               <IconInput icon={<MapPin size={14} />} name="address" placeholder="Address" value={formik.values.address} onChange={formik.handleChange} onBlur={formik.handleBlur} error={formik.errors.address} touched={formik.touched.address} />
+              <IconInput icon={<MapPin size={14} />} name="addressLine2" placeholder="Address line 2 (optional)" value={formik.values.addressLine2} onChange={formik.handleChange} onBlur={formik.handleBlur} error={formik.errors.addressLine2} touched={formik.touched.addressLine2} />
               <IconInput icon={<MapPin size={14} />} name="city" placeholder="City" value={formik.values.city} onChange={formik.handleChange} onBlur={formik.handleBlur} error={formik.errors.city} touched={formik.touched.city} />
               <IconInput icon={<MapPin size={14} />} name="state" placeholder="State" value={formik.values.state} onChange={formik.handleChange} onBlur={formik.handleBlur} error={formik.errors.state} touched={formik.touched.state} />
               <div>
@@ -315,7 +330,11 @@ export default function RegisterPage() {
                     className="h-4 w-4 accent-[#E31E24]"
                   />
                   <span>
-                    I have read and agree to the <span className="text-[#E31E24]">Terms and Conditions</span>.
+                    I have read and agree to the{" "}
+                    <Link href="/terms-and-conditions" className="text-[#E31E24] hover:underline">
+                      Terms and Conditions
+                    </Link>
+                    .
                   </span>
                 </label>
                 {formik.touched.termsAccepted && formik.errors.termsAccepted && (

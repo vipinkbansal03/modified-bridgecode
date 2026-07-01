@@ -1,12 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { Logo } from "@/components/ui/Logo";
-import { Container } from "@/components/ui/Container";
 import { NewsletterForm } from "@/components/forms/NewsletterForm";
+import { Container } from "@/components/ui/Container";
+import { Logo } from "@/components/ui/Logo";
+import { useCmsFooter, useCmsMenu } from "@/hooks/api/useCmsContent";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
-import { COMPANY_ADDRESS, INFO_EMAIL, ORDERS_EMAIL, USA_ADDRESS, USA_EMAIL, USA_PHONE, INDIA_PHONE, SOCIAL_LINKS } from "@/utils/constants";
 import type { StaticMessageKey } from "@/i18n/staticMessages";
+import {
+  buildFooterContactFallback,
+  buildFooterCopyright,
+  buildFooterNewsletterText,
+  cmsMenuToFooterColumns,
+  parseFooterSocialLinks,
+} from "@/lib/cmsNavigation";
+import { COMPANY_ADDRESS, INDIA_PHONE, INFO_EMAIL, ORDERS_EMAIL, SOCIAL_LINKS, USA_ADDRESS, USA_EMAIL, USA_PHONE } from "@/utils/constants";
 
 function SocialIcon({ label }: { label: "Facebook" | "LinkedIn" | "X" | "Instagram" }) {
   const common = { width: 19, height: 19, viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": true as const };
@@ -43,53 +51,46 @@ const footerColumns = [
   {
     heading: "About Us",
     links: [
-      { label: "About Us", href: "/about" },
-      { label: "Manufacturing", href: "/manufacturing-services" },
-      { label: "Quality Certifications", href: "/quality-certifications" },
-      { label: "Mission", href: "/about#mission" },
+      { label: "About Us", href: "/about", openInNewTab: false },
+      { label: "Manufacturing", href: "/manufacturing-services", openInNewTab: false },
+      { label: "Quality Certifications", href: "/quality-certifications", openInNewTab: false },
+      { label: "Mission", href: "/about#mission", openInNewTab: false },
     ],
   },
   {
     heading: "Products",
     links: [
-      { label: "Aesthetic Brackets", href: "/products?category=aesthetic-brackets" },
-      { label: "Metal Brackets", href: "/products?category=metal-brackets" },
-      { label: "NiTi & SS Wires", href: "/products?category=niti-wires" },
-      { label: "Molar Bands & Tubes", href: "/products?category=molar-bands" },
+      { label: "Aesthetic Brackets", href: "/products?category=aesthetic-brackets", openInNewTab: false },
+      { label: "Metal Brackets", href: "/products?category=metal-brackets", openInNewTab: false },
+      { label: "NiTi & SS Wires", href: "/products?category=niti-wires", openInNewTab: false },
+      { label: "Molar Bands & Tubes", href: "/products?category=molar-bands", openInNewTab: false },
     ],
   },
   {
     heading: "Capabilities",
     links: [
-      { label: "Design & Engineering", href: "/design-and-engineering" },
-      { label: "OEM Services", href: "/oem-services" },
-      { label: "Custom Packaging", href: "/custom-packaging" },
-      { label: "Quality Control", href: "/quality-certifications" },
+      { label: "Design & Engineering", href: "/design-and-engineering", openInNewTab: false },
+      { label: "OEM Services", href: "/oem-services", openInNewTab: false },
+      { label: "Custom Packaging", href: "/custom-packaging", openInNewTab: false },
+      { label: "Quality Control", href: "/quality-certifications", openInNewTab: false },
     ],
   },
   {
     heading: "Dealers & Bulk Orders",
     links: [
-      { label: "Become a Dealer", href: "/contact" },
-      { label: "Bulk & RFQ Pricing", href: "/products" },
-      { label: "Product Catalogue", href: "https://www.modortho.com/public/catalog/Modern-Catalog.zip" },
+      { label: "Become a Dealer", href: "/contact", openInNewTab: false },
+      { label: "Bulk & RFQ Pricing", href: "/products", openInNewTab: false },
+      { label: "Product Catalogue", href: "https://www.modortho.com/public/catalog/Modern-Catalog.zip", openInNewTab: true },
     ],
   },
   {
     heading: "Resources",
     links: [
-      { label: "Blog", href: "https://www.modortho.com/blog" },
-      { label: "Terms & Conditions", href: "https://www.modortho.com/page/terms-and-conditions" },
-      { label: "Privacy Policy", href: "https://www.modortho.com/page/privacy-policy" },
+      { label: "Blog", href: "/blog", openInNewTab: false },
+      { label: "Terms & Conditions", href: "/terms-and-conditions", openInNewTab: false },
+      { label: "Privacy Policy", href: "/privacy-policy", openInNewTab: false },
     ],
   },
-];
-
-const socialIcons = [
-  { href: SOCIAL_LINKS.facebook, label: "Facebook" as const },
-  { href: SOCIAL_LINKS.linkedin, label: "LinkedIn" as const },
-  { href: SOCIAL_LINKS.twitter, label: "X" as const },
-  { href: SOCIAL_LINKS.instagram, label: "Instagram" as const },
 ];
 
 const footerLabelKeys: Record<string, StaticMessageKey> = {
@@ -126,135 +127,190 @@ const footerLabelKeys: Record<string, StaticMessageKey> = {
   Sitemap: "ui.footer.sitemap",
 };
 
+type FooterLink = { label: string; href: string; openInNewTab?: boolean };
+
 export function Footer() {
   const { t } = useStaticTranslations();
-  const label = (value: string) => footerLabelKeys[value] ? t(footerLabelKeys[value]) : value;
+  const label = (value: string) => (footerLabelKeys[value] ? t(footerLabelKeys[value]) : value);
+  const { data: cmsFooter } = useCmsFooter();
+  const { data: footerAboutMenu } = useCmsMenu("footer-about");
+  const { data: footerProductsMenu } = useCmsMenu("footer-products");
+  const { data: footerCapabilitiesMenu } = useCmsMenu("footer-capabilities");
+  const { data: footerDealersMenu } = useCmsMenu("footer-dealers");
+  const { data: footerResourcesMenu } = useCmsMenu("footer-resources");
+  const { data: footerExportMenu } = useCmsMenu("footer-export");
+  const { data: footerIndiaOfficeMenu } = useCmsMenu("footer-india-office");
+  const { data: footerUsaOfficeMenu } = useCmsMenu("footer-usa-office");
+  const { data: footerLegalMenu } = useCmsMenu("footer-legal");
+
+  const cmsFooterColumns = [
+    cmsMenuToFooterColumns(footerAboutMenu),
+    cmsMenuToFooterColumns(footerProductsMenu),
+    cmsMenuToFooterColumns(footerCapabilitiesMenu),
+    cmsMenuToFooterColumns(footerDealersMenu),
+    cmsMenuToFooterColumns(footerResourcesMenu),
+  ].filter((column) => column.heading && column.links.length > 0);
+
+  const cmsExportColumn = cmsMenuToFooterColumns(footerExportMenu);
+  const cmsIndiaOfficeColumn = cmsMenuToFooterColumns(footerIndiaOfficeMenu);
+  const cmsUsaOfficeColumn = cmsMenuToFooterColumns(footerUsaOfficeMenu);
+  const cmsLegalColumn = cmsMenuToFooterColumns(footerLegalMenu);
+
+  const footerColumnsToRender = cmsFooterColumns.length > 0 ? cmsFooterColumns : footerColumns;
+  const footerSocialLinks = parseFooterSocialLinks(cmsFooter?.socialLinksJson);
+  const footerContactFallback = buildFooterContactFallback(cmsFooter);
+  const footerCopyright = buildFooterCopyright(cmsFooter, t("ui.footer.copyright"));
+  const footerNewsletterText = buildFooterNewsletterText(cmsFooter, t("ui.footer.newsletter"));
+  const shouldShowNewsletter = cmsFooter?.newsletterEnabled ?? true;
+
+  const socialLinks = [
+    { href: footerSocialLinks.facebook || SOCIAL_LINKS.facebook, label: "Facebook" as const },
+    { href: footerSocialLinks.linkedin || SOCIAL_LINKS.linkedin, label: "LinkedIn" as const },
+    { href: footerSocialLinks.twitter || SOCIAL_LINKS.twitter, label: "X" as const },
+    { href: footerSocialLinks.instagram || SOCIAL_LINKS.instagram, label: "Instagram" as const },
+  ].filter((item) => item.href);
+
+  const exportLinks: FooterLink[] = cmsExportColumn.links.length > 0
+    ? cmsExportColumn.links
+    : [
+        { label: "Export Enquiries", href: "/contact" },
+        { label: "Global Distributors", href: "/contact" },
+        { label: "Shipping & Logistics", href: "/contact" },
+        { label: "Compliance Documents", href: "/quality-certifications" },
+      ];
+
+  const indiaOfficeLinks: FooterLink[] = cmsIndiaOfficeColumn.links.length > 0
+    ? cmsIndiaOfficeColumn.links
+    : [
+        { label: ORDERS_EMAIL, href: `mailto:${ORDERS_EMAIL}` },
+        { label: INFO_EMAIL, href: `mailto:${INFO_EMAIL}` },
+        { label: INDIA_PHONE, href: "" },
+        { label: COMPANY_ADDRESS, href: "" },
+      ];
+
+  const usaOfficeLinks: FooterLink[] = cmsUsaOfficeColumn.links.length > 0
+    ? cmsUsaOfficeColumn.links
+    : [
+        { label: USA_EMAIL, href: `mailto:${USA_EMAIL}` },
+        { label: USA_PHONE, href: "" },
+        { label: USA_ADDRESS, href: "" },
+      ];
+
+  const legalLinks: FooterLink[] = cmsLegalColumn.links.length > 0
+    ? cmsLegalColumn.links
+    : [
+        { label: "Terms & Conditions", href: "/terms-and-conditions" },
+        { label: "Privacy Policy", href: "/privacy-policy" },
+        { label: "Sitemap", href: "/sitemap.xml" },
+      ];
+
+  function renderFooterItem(item: FooterLink, key: string) {
+    const href = item.href.trim();
+    const isExternal = href.startsWith("http") || href.startsWith("mailto:");
+
+    if (!href) {
+      return (
+        <span key={key} className="block break-words py-1.5 text-[13.5px] text-white/70">
+          {label(item.label)}
+        </span>
+      );
+    }
+
+    return (
+      <Link
+        key={key}
+        href={href}
+        target={item.openInNewTab || isExternal ? "_blank" : undefined}
+        rel={item.openInNewTab || isExternal ? "noopener noreferrer" : undefined}
+        className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white"
+      >
+        {label(item.label)}
+      </Link>
+    );
+  }
 
   return (
     <footer className="bg-brand text-white">
-  <Container className="border-t border-white/20 pt-10 sm:pt-12 lg:pt-12">
-    <div className="mb-8 flex items-center gap-2.5 sm:mb-10">
-      <Logo variant="light" />
-    </div>
-
-    <div className="mb-9 grid grid-cols-1 gap-7 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-8 lg:mb-10 lg:grid-cols-5 lg:gap-5 xl:gap-6">
-      {footerColumns.map((col) => (
-        <div key={col.heading} className="min-w-0">
-          <h6 className="mb-2.5 text-[13.5px] font-semibold text-white sm:text-[14px]">
-            {label(col.heading)}
-          </h6>
-
-          {col.links.map((link) => {
-            const isExternal = link.href.startsWith("http");
-
-            return (
-              <Link
-                key={link.label}
-                href={link.href}
-                target={isExternal ? "_blank" : undefined}
-                rel={isExternal ? "noopener noreferrer" : undefined}
-                className="block break-words py-1 text-[13px] leading-relaxed text-white/80 hover:text-white"
-              >
-                {label(link.label)}
-              </Link>
-            );
-          })}
+      <Container className="border-t border-white/20 pt-16">
+        <div className="mb-14 flex items-center gap-2.5">
+          {cmsFooter?.logo?.trim() ? (
+            <img
+              src={cmsFooter.logo.trim()}
+              alt="Modern Orthodontics"
+              className="h-11 w-auto max-w-[280px] object-contain"
+            />
+          ) : (
+            <Logo variant="light" />
+          )}
         </div>
-      ))}
 
-      <div className="min-w-0">
-        <h6 className="mb-2.5 text-[13.5px] font-semibold text-white sm:text-[14px]">
-          {label("Export & Trade")}
-        </h6>
-
-        <Link href="/contact" className="block break-words py-1 text-[13px] leading-relaxed text-white/80 hover:text-white">
-          {label("Export Enquiries")}
-        </Link>
-        <Link href="/contact" className="block break-words py-1 text-[13px] leading-relaxed text-white/80 hover:text-white">
-          {label("Global Distributors")}
-        </Link>
-        <Link href="/contact" className="block break-words py-1 text-[13px] leading-relaxed text-white/80 hover:text-white">
-          {label("Shipping & Logistics")}
-        </Link>
-        <Link href="/quality-certifications" className="block break-words py-1 text-[13px] leading-relaxed text-white/80 hover:text-white">
-          {label("Compliance Documents")}
-        </Link>
-      </div>
-
-      <div className="min-w-0 sm:col-span-2 lg:col-span-1">
-        <h6 className="mb-2.5 text-[13.5px] font-semibold text-white sm:text-[14px]">
-          {label("India Office")}
-        </h6>
-
-        <a href={`mailto:${ORDERS_EMAIL}`} className="block break-words py-1 text-[13px] leading-relaxed text-white/80 hover:text-white">
-          {ORDERS_EMAIL}
-        </a>
-        <a href={`mailto:${INFO_EMAIL}`} className="block break-words py-1 text-[13px] leading-relaxed text-white/80 hover:text-white">
-          {INFO_EMAIL}
-        </a>
-        <span className="block break-words py-1 text-[13px] leading-relaxed text-white/70">
-          {INDIA_PHONE}
-        </span>
-        <span className="block break-words py-1 text-[13px] leading-relaxed text-white/70">
-          {COMPANY_ADDRESS}
-        </span>
-      </div>
-
-      <div className="min-w-0 sm:col-span-2 lg:col-span-1">
-        <h6 className="mb-2.5 text-[13.5px] font-semibold text-white sm:text-[14px]">
-          {label("USA Office")}
-        </h6>
-
-        <a href={`mailto:${USA_EMAIL}`} className="block break-words py-1 text-[13px] leading-relaxed text-white/80 hover:text-white">
-          {USA_EMAIL}
-        </a>
-        <span className="block break-words py-1 text-[13px] leading-relaxed text-white/70">
-          {USA_PHONE}
-        </span>
-        <span className="block break-words py-1 text-[13px] leading-relaxed text-white/70">
-          {USA_ADDRESS}
-        </span>
-      </div>
-    </div>
-
-    <div className="flex flex-col gap-5 border-t border-white/20 py-6 sm:flex-row sm:items-start sm:justify-between">
-      <div>
-        <div className="mb-3.5 flex gap-4">
-          {socialIcons.map(({ href, label: socialLabel }) => (
-            <a
-              key={socialLabel}
-              href={href}
-              aria-label={socialLabel}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-white"
-            >
-              <SocialIcon label={socialLabel} />
-            </a>
+        <div className="mb-14 grid grid-cols-2 gap-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-5">
+          {footerColumnsToRender.map((col) => (
+            <div key={col.heading} className="min-w-0">
+              <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label(col.heading)}</h6>
+              {col.links.map((link) => renderFooterItem(link, `${col.heading}-${link.label}`))}
+            </div>
           ))}
+
+          <div className="min-w-0">
+            <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label(cmsExportColumn.heading || "Export & Trade")}</h6>
+            {exportLinks.map((item, index) => renderFooterItem(item, `footer-export-${index}`))}
+          </div>
+
+          <div className="min-w-0">
+            <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label(cmsIndiaOfficeColumn.heading || "India Office")}</h6>
+            {indiaOfficeLinks.map((item, index) => renderFooterItem(item, `footer-india-${index}`))}
+            {!cmsIndiaOfficeColumn.links.length && footerContactFallback.email && footerContactFallback.email !== ORDERS_EMAIL && (
+              renderFooterItem({ label: footerContactFallback.email, href: `mailto:${footerContactFallback.email}` }, "footer-india-fallback-email")
+            )}
+            {!cmsIndiaOfficeColumn.links.length && footerContactFallback.phone && footerContactFallback.phone !== INDIA_PHONE && (
+              renderFooterItem({ label: footerContactFallback.phone, href: "" }, "footer-india-fallback-phone")
+            )}
+            {!cmsIndiaOfficeColumn.links.length && footerContactFallback.address && footerContactFallback.address !== COMPANY_ADDRESS && (
+              renderFooterItem({ label: footerContactFallback.address, href: "" }, "footer-india-fallback-address")
+            )}
+          </div>
+
+          <div className="min-w-0">
+            <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label(cmsUsaOfficeColumn.heading || "USA Office")}</h6>
+            {usaOfficeLinks.map((item, index) => renderFooterItem(item, `footer-usa-${index}`))}
+          </div>
         </div>
 
-        <div className="mb-2 text-[12.5px] leading-relaxed text-white/80">
-          © {new Date().getFullYear()} {t("ui.footer.copyright")}
-        </div>
+        <div className="flex flex-wrap items-start justify-between gap-9 border-t border-white/20 py-8">
+          <div>
+            <div className="mb-5 flex gap-5">
+              {socialLinks.map(({ href, label: socialLabel }) => (
+                <a key={socialLabel} href={href} aria-label={socialLabel} target="_blank" rel="noopener noreferrer" className="text-white">
+                  <SocialIcon label={socialLabel} />
+                </a>
+              ))}
+            </div>
+            <div className="mb-2.5 text-[13px] text-white/80">© {new Date().getFullYear()} {footerCopyright}</div>
+            <div className="flex flex-wrap gap-2 text-[13px] text-white/80">
+              {legalLinks.map((item, index) => (
+                <div key={`footer-legal-${index}`} className="contents">
+                  {index > 0 && <span>|</span>}
+                  <Link
+                    href={item.href || "#"}
+                    target={item.openInNewTab ? "_blank" : undefined}
+                    rel={item.openInNewTab ? "noopener noreferrer" : undefined}
+                  >
+                    {label(item.label)}
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </div>
 
-        <div className="flex flex-wrap gap-x-2 gap-y-1 text-[12.5px] leading-relaxed text-white/80">
-          <Link href="/contact">{label("Legal")}</Link>
-          <span>|</span>
-          <Link href="/contact">{label("Privacy Policy")}</Link>
-          <span>|</span>
-          <Link href="/contact">{label("Sitemap")}</Link>
+          {shouldShowNewsletter && (
+            <div className="sm:text-right">
+              <p className="mb-3.5 text-[13px] text-white sm:text-sm">{footerNewsletterText}</p>
+              <NewsletterForm tone="light" />
+            </div>
+          )}
         </div>
-      </div>
-
-      <div className="w-full sm:max-w-[340px] sm:text-right">
-        <p className="mb-2.5 text-[12.5px] leading-relaxed text-white sm:text-[13px]">
-          {t("ui.footer.newsletter")}
-        </p>
-        <NewsletterForm tone="light" />
-      </div>
-    </div>
-  </Container>
-</footer>
+      </Container>
+    </footer>
   );
 }

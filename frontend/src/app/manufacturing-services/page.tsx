@@ -1,13 +1,16 @@
 import type { Metadata } from "next";
+import { CmsDetailPageRenderer, buildFallbackDetailRender } from "@/components/cms/CmsDetailPageRenderer";
 import { ManufacturingSection } from "@/components/sections/ManufacturingSection";
-import { DetailPageTemplate } from "@/components/sections/detail/DetailPageTemplate";
 import { ContactCTASection } from "@/components/sections/ContactCTASection";
-import { buildMetadata } from "@/lib/seo";
+import { fetchCmsPageByKey } from "@/lib/cmsPage";
+import { buildCmsMetadata } from "@/lib/seo";
 import manufacturingContent from "@/data/manufacturing-services.json";
 import homeContent from "@/data/home.json";
 import type { DetailPageContent } from "@/types/common.types";
 
-export const metadata: Metadata = buildMetadata(manufacturingContent.seo, "/manufacturing-services");
+export async function generateMetadata(): Promise<Metadata> {
+  return buildCmsMetadata("manufacturing", manufacturingContent.seo, "/manufacturing-services");
+}
 
 const manufacturingTeaser = {
   kicker: "OEM & Private Label",
@@ -16,11 +19,23 @@ const manufacturingTeaser = {
   image: "https://images.unsplash.com/photo-1769152683420-f4eff91cb30b?fm=jpg&q=80&w=1200&auto=format&fit=crop",
 };
 
-export default function ManufacturingServicesPage() {
+export default async function ManufacturingServicesPage() {
+  const cmsPage = await fetchCmsPageByKey("manufacturing");
+
   return (
     <>
-      <ManufacturingSection data={manufacturingTeaser} />
-      <DetailPageTemplate content={manufacturingContent as DetailPageContent} breadcrumbLabel="Manufacturing Services" />
+      <CmsDetailPageRenderer
+        page={cmsPage}
+        fallbackContent={manufacturingContent as DetailPageContent}
+        breadcrumbLabel="Manufacturing Services"
+        fallbackRender={
+          <>
+            <ManufacturingSection data={manufacturingTeaser} />
+            {buildFallbackDetailRender(manufacturingContent as DetailPageContent, "Manufacturing Services")}
+          </>
+        }
+        manufacturingTeaserFallback={manufacturingTeaser}
+      />
       <ContactCTASection data={homeContent.contactCta} />
     </>
   );

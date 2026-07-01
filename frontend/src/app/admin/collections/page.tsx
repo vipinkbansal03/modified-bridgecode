@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Edit2, Plus, Trash2, X } from "lucide-react";
+import { Edit2, Plus, Trash2 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { Modal } from "@/components/ui/Modal";
 import {
   useAdminCollectionCountries,
   useAdminCollectionDiscounts,
@@ -95,6 +96,11 @@ export default function CollectionsPage() {
       productIds: collection.products?.map((item) => item.productId) ?? [],
     });
     setSelectedCollectionId(collection.id);
+    setShowForm(true);
+  };
+
+  const openCreateModal = () => {
+    setForm(emptyForm);
     setShowForm(true);
   };
 
@@ -208,42 +214,51 @@ export default function CollectionsPage() {
     },
   ];
 
+  const isCreateModalOpen = showForm && !form.id;
+  const isEditInlineOpen = showForm && !!form.id;
+
+  const collectionForm = (
+    <form onSubmit={submit} className="rounded-lg border border-[#E6E6E6] bg-white p-5">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <AdminInput label="Name *" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+        <AdminInput label="Slug" value={form.slug} onChange={(event) => setForm({ ...form, slug: event.target.value })} placeholder="Auto from name if blank" />
+        <AdminSelect label="Status" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
+        <AdminInput label="Sort Order" type="number" value={form.sortOrder} onChange={(event) => setForm({ ...form, sortOrder: event.target.value })} />
+        <AdminInput label="Image URL" value={form.image} onChange={(event) => setForm({ ...form, image: event.target.value })} />
+        <AdminInput label="Description" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+      </div>
+
+      <div className="mt-4">
+        <div className="mb-2 text-[13px] font-medium text-[#111]">Products</div>
+        <div className="grid max-h-[220px] grid-cols-1 gap-2 overflow-y-auto rounded-md border border-[#E6E6E6] p-3 md:grid-cols-2">
+          {products.map((product) => (
+            <label key={product.id} className="flex items-center gap-2 text-[13px]">
+              <input type="checkbox" checked={form.productIds.includes(product.id)} onChange={() => toggleProduct(product.id)} />
+              {product.title}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <button type="submit" className="mt-5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
+        {form.id ? "Update Collection" : "Create Collection"}
+      </button>
+    </form>
+  );
+
   return (
     <AdminLayout title="Collections" breadcrumb={[{ label: "Collections" }]}>
       <div className="mb-5 flex justify-end">
-        <button onClick={() => (showForm ? reset() : setShowForm(true))} className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
-          {showForm ? <X size={14} /> : <Plus size={14} />} {showForm ? "Cancel" : "Create Collection"}
+        <button onClick={openCreateModal} className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
+          <Plus size={14} /> Create Collection
         </button>
       </div>
 
-      {showForm && (
-        <form onSubmit={submit} className="mb-5 rounded-lg border border-[#E6E6E6] bg-white p-5">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <AdminInput label="Name *" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
-            <AdminInput label="Slug" value={form.slug} onChange={(event) => setForm({ ...form, slug: event.target.value })} placeholder="Auto from name if blank" />
-            <AdminSelect label="Status" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
-            <AdminInput label="Sort Order" type="number" value={form.sortOrder} onChange={(event) => setForm({ ...form, sortOrder: event.target.value })} />
-            <AdminInput label="Image URL" value={form.image} onChange={(event) => setForm({ ...form, image: event.target.value })} />
-            <AdminInput label="Description" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
-          </div>
+      {isEditInlineOpen ? <div className="mb-5">{collectionForm}</div> : null}
 
-          <div className="mt-4">
-            <div className="mb-2 text-[13px] font-medium text-[#111]">Products</div>
-            <div className="grid max-h-[220px] grid-cols-1 gap-2 overflow-y-auto rounded-md border border-[#E6E6E6] p-3 md:grid-cols-2">
-              {products.map((product) => (
-                <label key={product.id} className="flex items-center gap-2 text-[13px]">
-                  <input type="checkbox" checked={form.productIds.includes(product.id)} onChange={() => toggleProduct(product.id)} />
-                  {product.title}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <button type="submit" className="mt-5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
-            {form.id ? "Update Collection" : "Create Collection"}
-          </button>
-        </form>
-      )}
+      <Modal open={isCreateModalOpen} onClose={reset} title="Create Collection" panelClassName="max-w-5xl max-h-[calc(100vh-2.5rem)] overflow-y-auto">
+        {isCreateModalOpen ? collectionForm : null}
+      </Modal>
 
       {selectedCollectionId && (
         <div className="mb-5 rounded-lg border border-[#E6E6E6] bg-white p-5">

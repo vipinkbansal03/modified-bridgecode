@@ -5,6 +5,7 @@ import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminSelect, ConfirmModal, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { SortableList, toSortOrderPayload } from "@/components/admin/SortableList";
+import { Modal } from "@/components/ui/Modal";
 import {
   useAdminTierCountries,
   useAdminTiers,
@@ -134,6 +135,28 @@ export default function AdminTiersPage() {
 
   const enabledCountryCount = (countries as CountryAvailability[]).filter((country) => countryOverrides[country.id] ?? country.enabled).length;
 
+  const isCreateModalOpen = showForm && !form.id;
+  const isEditInlineOpen = showForm && !!form.id;
+
+  const tierForm = (
+    <form onSubmit={submit} className="rounded-xl border border-[#E6E6E6] bg-white p-5">
+      {form.id ? (
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Edit tier</h3>
+          <button type="button" onClick={resetForm} className="text-[#9A9A9A] hover:text-[#1A1A1A]"><X size={16} /></button>
+        </div>
+      ) : null}
+      <div className="grid gap-4 md:grid-cols-3">
+        <AdminInput label="Name *" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Diamond" />
+        <AdminSelect label="Status" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
+        <AdminInput label="Sort Order" type="number" value={form.sortOrder} onChange={(event) => setForm({ ...form, sortOrder: event.target.value })} />
+      </div>
+      <button type="submit" disabled={createTier.isPending || updateTier.isPending} className="mt-5 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
+        {createTier.isPending || updateTier.isPending ? "Saving..." : form.id ? "Update Tier" : "Create Tier"}
+      </button>
+    </form>
+  );
+
   return (
     <AdminLayout title="Tiers" breadcrumb={[{ label: "Tiers" }]}>
       <div className="mb-5 flex items-center justify-between gap-3">
@@ -143,22 +166,11 @@ export default function AdminTiersPage() {
         </button>
       </div>
 
-      {showForm && (
-        <form onSubmit={submit} className="mb-5 rounded-xl border border-[#E6E6E6] bg-white p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-[14px] font-semibold text-[#1A1A1A]">{form.id ? "Edit tier" : "New tier"}</h3>
-            <button type="button" onClick={resetForm} className="text-[#9A9A9A] hover:text-[#1A1A1A]"><X size={16} /></button>
-          </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            <AdminInput label="Name *" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Diamond" />
-            <AdminSelect label="Status" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
-            <AdminInput label="Sort Order" type="number" value={form.sortOrder} onChange={(event) => setForm({ ...form, sortOrder: event.target.value })} />
-          </div>
-          <button type="submit" disabled={createTier.isPending || updateTier.isPending} className="mt-5 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
-            {createTier.isPending || updateTier.isPending ? "Saving..." : form.id ? "Update Tier" : "Create Tier"}
-          </button>
-        </form>
-      )}
+      {isEditInlineOpen ? <div className="mb-5">{tierForm}</div> : null}
+
+      <Modal open={isCreateModalOpen} onClose={resetForm} title="New tier" panelClassName="max-w-3xl">
+        {isCreateModalOpen ? tierForm : null}
+      </Modal>
 
       <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">

@@ -27,6 +27,14 @@ function toCustomerSession(customer: {
   firstName: string;
   lastName: string;
   phone: string | null;
+  companyName: string | null;
+  website: string | null;
+  preferredPrescription: string | null;
+  preferredPrescriptionOther: string | null;
+  preferredSlot: string | null;
+  currentPractice: string | null;
+  currentPracticeOther: string | null;
+  usingModernProducts: boolean;
   status: string;
   customerType: string;
   approvalStatus: string;
@@ -39,6 +47,14 @@ function toCustomerSession(customer: {
     firstName: customer.firstName,
     lastName: customer.lastName,
     phone: customer.phone,
+    companyName: customer.companyName,
+    website: customer.website,
+    preferredPrescription: customer.preferredPrescription,
+    preferredPrescriptionOther: customer.preferredPrescriptionOther,
+    preferredSlot: customer.preferredSlot,
+    currentPractice: customer.currentPractice,
+    currentPracticeOther: customer.currentPracticeOther,
+    usingModernProducts: customer.usingModernProducts,
     status: customer.status,
     customerType: customer.customerType,
     approvalStatus: customer.approvalStatus,
@@ -47,23 +63,74 @@ function toCustomerSession(customer: {
   };
 }
 
+function cleanOptional(value?: string) {
+  return value?.trim() || null;
+}
+
+async function resolveCountry(countryInput: string) {
+  const country = countryInput.trim();
+  const countryCode = country.toUpperCase();
+
+  return prisma.country.findFirst({
+    where: {
+      status: "ACTIVE",
+      OR: [
+        { code: countryCode },
+        { name: { equals: country, mode: "insensitive" } },
+      ],
+    },
+  });
+}
+
 export async function register(input: CustomerRegisterInput) {
   const existing = await prisma.customer.findUnique({ where: { email: input.email } });
   if (existing) throw new AppError("A customer account with this email already exists.", 409);
 
+  const country = await resolveCountry(input.country);
+  if (!country) throw new AppError("The selected country is not available.", 400);
+
   const passwordHash = await bcrypt.hash(input.password, 12);
   const customerType = input.customerType ?? "RETAIL";
-  const customer = await prisma.customer.create({
-    data: {
-      email: input.email,
-      passwordHash,
-      firstName: input.firstName,
-      lastName: input.lastName,
-      phone: input.phone || null,
-      status: "ACTIVE",
-      customerType,
-      approvalStatus: customerType === "WHOLESALE" ? "PENDING_APPROVAL" : "ACTIVE",
-    },
+  const customer = await prisma.$transaction(async (tx) => {
+    const createdCustomer = await tx.customer.create({
+      data: {
+        email: input.email,
+        passwordHash,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        phone: input.phone,
+        companyName: cleanOptional(input.companyName),
+        website: cleanOptional(input.website),
+        preferredPrescription: input.preferredPrescription ?? null,
+        preferredPrescriptionOther: cleanOptional(input.preferredPrescriptionOther),
+        preferredSlot: input.preferredSlot ?? null,
+        currentPractice: input.currentPractice ?? null,
+        currentPracticeOther: cleanOptional(input.currentPracticeOther),
+        usingModernProducts: input.usingModernProducts ?? false,
+        status: "ACTIVE",
+        customerType,
+        approvalStatus: customerType === "WHOLESALE" ? "PENDING_APPROVAL" : "ACTIVE",
+        defaultCountryId: country.id,
+      },
+    });
+
+    await tx.customerAddress.create({
+      data: {
+        customerId: createdCustomer.id,
+        label: "Default",
+        fullName: `${input.firstName} ${input.lastName}`.trim(),
+        phone: input.phone,
+        addressLine1: input.addressLine1,
+        addressLine2: cleanOptional(input.addressLine2),
+        city: input.city,
+        state: input.state,
+        postalCode: input.postalCode,
+        countryId: country.id,
+        isDefault: true,
+      },
+    });
+
+    return createdCustomer;
   });
 
   const token = signCustomerToken(customer.id);

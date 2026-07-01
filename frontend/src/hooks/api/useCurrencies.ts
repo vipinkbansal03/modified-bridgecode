@@ -14,14 +14,24 @@ const STATIC_CURRENCIES: ApiCurrency[] = [
 
 async function fetchCurrencies(): Promise<ApiCurrency[]> {
   if (!HAS_LIVE_API) return STATIC_CURRENCIES;
-  const res = await apiClient.get("/currencies");
-  return unwrapData<ApiCurrency[]>(res);
+
+  try {
+    const res = await apiClient.get("/currencies");
+    return unwrapData<ApiCurrency[]>(res);
+  } catch {
+    return STATIC_CURRENCIES;
+  }
 }
 
 async function fetchCountries(): Promise<ApiCountry[]> {
   if (!HAS_LIVE_API) return [];
-  const res = await apiClient.get("/countries");
-  return unwrapData<ApiCountry[]>(res);
+
+  try {
+    const res = await apiClient.get("/countries");
+    return unwrapData<ApiCountry[]>(res);
+  } catch {
+    return [];
+  }
 }
 
 export function useCurrencies() {

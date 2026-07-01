@@ -1,4 +1,4 @@
-import { Prisma, PrismaClient } from "@prisma/client";
+import { AttributeRole, AttributeStatus, Prisma, PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -15,6 +15,49 @@ function slugify(value: string) {
 function buildVariantKey(attributeValueIds: string[], packageId?: string | null) {
   const valueKey = [...attributeValueIds].sort().join("-");
   return packageId ? `${packageId}::${valueKey}` : valueKey;
+}
+
+type SeedMenuItem = {
+  key: string;
+  label: string;
+  url?: string;
+  parentKey?: string;
+  sortOrder?: number;
+  openInNewTab?: boolean;
+  status?: string;
+};
+
+async function upsertCmsMenuWithItems(menu: {
+  name: string;
+  location: string;
+  status?: string;
+  items: SeedMenuItem[];
+}) {
+  const cmsMenu = await prisma.cMSMenu.upsert({
+    where: { location: menu.location },
+    update: { name: menu.name, status: menu.status ?? "ACTIVE" },
+    create: { name: menu.name, location: menu.location, status: menu.status ?? "ACTIVE" },
+  });
+
+  await prisma.cMSMenuItem.deleteMany({ where: { menuId: cmsMenu.id } });
+
+  const createdByKey = new Map<string, { id: string }>();
+  for (const [index, item] of menu.items.entries()) {
+    const created = await prisma.cMSMenuItem.create({
+      data: {
+        menuId: cmsMenu.id,
+        parentId: item.parentKey ? createdByKey.get(item.parentKey)?.id ?? null : null,
+        label: item.label,
+        url: item.url ?? "",
+        sortOrder: item.sortOrder ?? index,
+        openInNewTab: item.openInNewTab ?? false,
+        status: item.status ?? "ACTIVE",
+      },
+    });
+    createdByKey.set(item.key, { id: created.id });
+  }
+
+  return cmsMenu;
 }
 
 const ADMIN_PERMISSIONS = [
@@ -260,13 +303,29 @@ async function main() {
       throw new Error(`Multiple existing attributes found with name "${attributeData.name}". Resolve duplicates before seeding.`);
     }
 
+    const attributeCreatePayload: Prisma.AttributeCreateInput = {
+      name: attributeData.name,
+      slug: slugify(attributeData.name),
+      sortOrder: attributeData.sortOrder,
+      role: AttributeRole.DROPDOWN,
+      status: AttributeStatus.ACTIVE,
+    };
+
+    const attributeUpdatePayload: Prisma.AttributeUpdateInput = {
+      name: attributeData.name,
+      slug: slugify(attributeData.name),
+      sortOrder: attributeData.sortOrder,
+      role: AttributeRole.DROPDOWN,
+      status: AttributeStatus.ACTIVE,
+    };
+
     const attribute = existingAttributes[0]
       ? await prisma.attribute.update({
           where: { id: existingAttributes[0].id },
-          data: { name: attributeData.name, sortOrder: attributeData.sortOrder, status: "ACTIVE" },
+          data: attributeUpdatePayload,
         })
       : await prisma.attribute.create({
-          data: { name: attributeData.name, role: "DROPDOWN", sortOrder: attributeData.sortOrder, status: "ACTIVE" },
+          data: attributeCreatePayload,
         });
 
     const valuesByValue = new Map<string, { id: string; attributeId: string; value: string }>();
@@ -626,7 +685,7 @@ async function main() {
   async function upsertPage(data: { title: string; slug: string; pageKey: string; seoTitle?: string; seoDescription?: string }) {
     return prisma.cMSPage.upsert({
       where: { pageKey: data.pageKey },
-      update: { title: data.title, seoTitle: data.seoTitle, seoDescription: data.seoDescription },
+      update: { title: data.title, slug: data.slug, seoTitle: data.seoTitle, seoDescription: data.seoDescription, status: "ACTIVE" },
       create: { ...data, status: "ACTIVE" },
     });
   }
@@ -711,26 +770,483 @@ async function main() {
   ]);
 
   // ── Other pages ──────────────────────────────────────────
-  await upsertPage({ title: "About Us", slug: "about", pageKey: "about", seoTitle: "About Modern Orthodontics" });
+  const aboutPage = await upsertPage({
+    title: "About Us",
+    slug: "about",
+    pageKey: "about",
+    seoTitle: "About Modern Orthodontics",
+    seoDescription: "Modern Orthodontics has manufactured orthodontic hardware in-house since 1994.",
+  });
+  const aboutHeroSection = await upsertSection(aboutPage.id, { sectionKey: "about.hero", title: "About Hero", sortOrder: 0 });
+  await clearAndAddBlocks(aboutHeroSection.id, [
+    {
+      blockType: "hero",
+      title: "Engineering precision orthodontic hardware, since 1994.",
+      subtitle: "About Modern Orthodontics",
+      description: "Our mission is to provide high-quality orthodontic products throughout the world - on time, competitively priced, and backed by support our customers can rely on.",
+      image: "https://images.unsplash.com/photo-1738162837438-92ff852619a1?fm=jpg&q=80&w=1600&auto=format&fit=crop",
+      dataJson: {
+        subnav: [
+          { label: "Our Mission", anchor: "mission" },
+          { label: "What We Manufacture", anchor: "manufacture" },
+          { label: "What Makes Us Different", anchor: "different" },
+          { label: "FAQs", anchor: "faqs" },
+        ],
+      },
+    },
+  ]);
+  const aboutMissionSection = await upsertSection(aboutPage.id, { sectionKey: "about.mission", title: "Our Mission", sortOrder: 1 });
+  await clearAndAddBlocks(aboutMissionSection.id, [
+    {
+      blockType: "rich_text",
+      title: "Our mission",
+      description: "Our mission is to provide high quality orthodontic products throughout the world, on time, competitively priced and with unparalleled customer support. In doing so, we continue to forge new relationships within our growing customer base and distribution network, while building our reputation as a trusted source of quality orthodontic design, production and manufacturing.",
+    },
+    {
+      blockType: "rich_text",
+      title: "Built around in-house manufacturing",
+      description: "We are manufacturers. Modern Orthodontics is a leading manufacturer of high quality, competitively priced orthodontic products. Founded in 1994, we have been doing OEM work for many orthodontic companies, and we remain one of the very few companies in the industry with in-house manufacturing across the complete range of products below.",
+    },
+  ]);
+  const aboutManufacturingSection = await upsertSection(aboutPage.id, { sectionKey: "about.manufacture", title: "What We Manufacture", sortOrder: 2 });
+  await clearAndAddBlocks(aboutManufacturingSection.id, [
+    { blockType: "capability", title: "Brackets", description: "Aesthetic and metal bracket systems, designed and produced end-to-end at our Ludhiana facility.", icon: "Pyramid" },
+    { blockType: "capability", title: "Molar Bands", description: "Plain and pre-welded molar bands manufactured to a consistent fit and finish.", icon: "CircleDot" },
+    { blockType: "capability", title: "Molar Tubes", description: "Bondable and weldable molar tubes built for reliable anchorage.", icon: "Disc" },
+    { blockType: "capability", title: "NiTi Wires & Springs", description: "Including three force-level wires, drawn and heat-treated in-house.", icon: "Waves" },
+    { blockType: "capability", title: "SS & TMA Wires", description: "Stainless steel and titanium-molybdenum alloy wires across the clinical range.", icon: "Spline" },
+    { blockType: "capability", title: "Coated & Pre-Torqued Wires", description: "Tooth-coloured and pre-torqued archwire options for aesthetic cases.", icon: "Link2" },
+  ]);
+  const aboutDifferentSection = await upsertSection(aboutPage.id, { sectionKey: "about.different", title: "What Makes Us Different", sortOrder: 3 });
+  await clearAndAddBlocks(aboutDifferentSection.id, [
+    {
+      blockType: "intro",
+      title: "What makes us different",
+      description: "We use a powerful blend of the latest design software, ultra-modern manufacturing equipment and precise engineering techniques. It positions Modern Orthodontics apart from the competition as a true innovator in the design and manufacture of orthodontic products - committed to developing products for the real benefit of the science of orthodontics and the orthodontic community as a whole.",
+    },
+    { blockType: "capability", title: "Design Software", description: "Modern CAD and engineering tools used from the earliest stage of every new product.", icon: "PenTool" },
+    { blockType: "capability", title: "Manufacturing Equipment", description: "Ultra-modern machinery across brackets, wires, bands and tubes - all on one site.", icon: "Factory" },
+    { blockType: "capability", title: "Engineering Precision", description: "Tight tolerances held consistently across every batch we ship.", icon: "Compass" },
+  ]);
+  const aboutFaqSection = await upsertSection(aboutPage.id, { sectionKey: "about.faqs", title: "FAQs", sortOrder: 4 });
+  await clearAndAddBlocks(aboutFaqSection.id, [
+    { blockType: "faq", title: "How long has Modern Orthodontics been manufacturing?", description: "Since 1994 - over 30 years of in-house orthodontic manufacturing at our Ludhiana, India facility." },
+    { blockType: "faq", title: "Do you manufacture everything in-house, or outsource parts?", description: "In-house. We're one of the few orthodontic companies with complete in-house manufacturing of brackets, molar tubes, molar bands, NiTi wires and springs, SS and TMA wires, and coated and pre-torqued wires." },
+    { blockType: "faq", title: "Does Modern Orthodontics offer OEM or private-label manufacturing?", description: "Yes. We've done OEM work for many orthodontic companies for years, alongside our own product range." },
+    { blockType: "faq", title: "Where is Modern Orthodontics based, and where do you ship?", description: "We're based in Ludhiana, Punjab, India, and supply orthodontists and dealers directly in 42 countries across six continents." },
+    { blockType: "faq", title: "How can I get a product catalogue or place a bulk order?", description: "Email us at orders@modortho.com - for India, you can also call 1800 890 8022." },
+  ]);
   await upsertPage({ title: "Manufacturing", slug: "manufacturing", pageKey: "manufacturing", seoTitle: "Manufacturing — Modern Orthodontics" });
   await upsertPage({ title: "Contact", slug: "contact", pageKey: "contact", seoTitle: "Contact Us — Modern Orthodontics" });
   await upsertPage({ title: "Products", slug: "products", pageKey: "products", seoTitle: "Orthodontic Products — Modern Orthodontics" });
   await upsertPage({ title: "Quality & Certifications", slug: "quality-certifications", pageKey: "quality-certifications", seoTitle: "Certifications — Modern Orthodontics" });
 
   // ── Default footer ────────────────────────────────────────
+  const manufacturingPage = await upsertPage({
+    title: "Manufacturing Services",
+    slug: "manufacturing-services",
+    pageKey: "manufacturing",
+    seoTitle: "Manufacturing Services - Modern Orthodontics",
+    seoDescription: "In-house orthodontic manufacturing capabilities spanning brackets, wires, bands, tubes, and OEM production.",
+  });
+  const manufacturingHeroSection = await upsertSection(manufacturingPage.id, { sectionKey: "manufacturing.hero", title: "Manufacturing Hero", sortOrder: 0 });
+  await clearAndAddBlocks(manufacturingHeroSection.id, [
+    {
+      blockType: "hero",
+      title: "Manufacturing services built for OEM partners.",
+      subtitle: "Manufacturing Services",
+      description: "Modern Orthodontics combines design, tooling, and production under one roof so partners can launch dependable orthodontic products faster.",
+      image: "https://images.unsplash.com/photo-1738162837438-92ff852619a1?fm=jpg&q=80&w=1600&auto=format&fit=crop",
+    },
+  ]);
+  const manufacturingTeaserSection = await upsertSection(manufacturingPage.id, { sectionKey: "manufacturing.teaser", title: "Manufacturing Teaser", sortOrder: 1 });
+  await clearAndAddBlocks(manufacturingTeaserSection.id, [
+    {
+      blockType: "intro",
+      title: "Designed for orthodontic brands that need reliability at scale.",
+      description: "Our Ludhiana facility supports concept development, process control, and export-ready production for long-term distribution partners.",
+    },
+  ]);
+  const manufacturingExpertiseSection = await upsertSection(manufacturingPage.id, { sectionKey: "manufacturing.expertise", title: "Expertise", sortOrder: 2 });
+  await clearAndAddBlocks(manufacturingExpertiseSection.id, [
+    { blockType: "capability", title: "Brackets & Tubes", description: "Precision-made bracket systems and bondable or weldable tubes produced in-house.", icon: "Pyramid" },
+    { blockType: "capability", title: "Bands & Attachments", description: "Molar bands and auxiliaries manufactured with tight quality control for daily clinical use.", icon: "CircleDot" },
+    { blockType: "capability", title: "Archwires & Springs", description: "NiTi, stainless steel, TMA, coated, and specialty wire programs produced for global partners.", icon: "Waves" },
+  ]);
+  const manufacturingMimSection = await upsertSection(manufacturingPage.id, { sectionKey: "manufacturing.mim", title: "MIM Capability", sortOrder: 3 });
+  await clearAndAddBlocks(manufacturingMimSection.id, [
+    {
+      blockType: "rich_text",
+      title: "Metal injection moulding capability",
+      description: "We use modern tooling and process engineering to produce complex orthodontic components with repeatable precision and surface quality.",
+    },
+  ]);
+  const manufacturingBenefitsSection = await upsertSection(manufacturingPage.id, { sectionKey: "manufacturing.benefits", title: "Benefits", sortOrder: 4 });
+  await clearAndAddBlocks(manufacturingBenefitsSection.id, [
+    { blockType: "benefit", title: "Single-source production", description: "Fewer handoffs and more consistent output because design and manufacturing stay aligned." },
+    { blockType: "benefit", title: "OEM-ready workflows", description: "Established processes for private-label manufacturing, compliance, and export documentation." },
+    { blockType: "benefit", title: "Quality-first systems", description: "ISO-certified quality controls built into every stage of production." },
+  ]);
+  const manufacturingProcessSection = await upsertSection(manufacturingPage.id, { sectionKey: "manufacturing.process", title: "Process", sortOrder: 5 });
+  await clearAndAddBlocks(manufacturingProcessSection.id, [
+    { blockType: "step", title: "Design Review", description: "We align on product specs, materials, tolerances, and packaging requirements." },
+    { blockType: "step", title: "Tooling & Validation", description: "Samples are validated for fit, finish, and production repeatability before scale-up." },
+    { blockType: "step", title: "Controlled Production", description: "Manufacturing runs under documented quality checks and export-ready traceability." },
+  ]);
+  const manufacturingNitiSection = await upsertSection(manufacturingPage.id, { sectionKey: "manufacturing.niti", title: "NiTi Specialization", sortOrder: 6 });
+  await clearAndAddBlocks(manufacturingNitiSection.id, [
+    {
+      blockType: "rich_text",
+      title: "NiTi wire specialization",
+      description: "Our wire programs include multiple force levels and configurations developed for consistency in performance and finish.",
+    },
+  ]);
+  const manufacturingFaqSection = await upsertSection(manufacturingPage.id, { sectionKey: "manufacturing.faqs", title: "FAQs", sortOrder: 7 });
+  await clearAndAddBlocks(manufacturingFaqSection.id, [
+    { blockType: "faq", title: "Do you support OEM manufacturing?", description: "Yes. OEM and private-label manufacturing are a core part of our long-standing business." },
+    { blockType: "faq", title: "Where are the products manufactured?", description: "Production is handled from our in-house facility in Ludhiana, Punjab, India." },
+    { blockType: "faq", title: "Can you handle recurring export volumes?", description: "Yes. Our systems are built to support repeatable production and international supply programs." },
+  ]);
+
+  const contactPage = await upsertPage({
+    title: "Contact",
+    slug: "contact",
+    pageKey: "contact",
+    seoTitle: "Contact Us - Modern Orthodontics",
+    seoDescription: "Contact Modern Orthodontics for product enquiries, dealership requests, and export support.",
+  });
+  const contactHeroSection = await upsertSection(contactPage.id, { sectionKey: "contact.hero", title: "Contact Hero", sortOrder: 0 });
+  await clearAndAddBlocks(contactHeroSection.id, [
+    {
+      blockType: "hero",
+      title: "Get in touch with our team",
+      subtitle: "Contact",
+      description: "Whether you need product details, pricing support, or dealership guidance, we'll route you to the right team quickly.",
+    },
+  ]);
+  const contactFormsSection = await upsertSection(contactPage.id, { sectionKey: "contact.forms", title: "Contact Forms", sortOrder: 1 });
+  await clearAndAddBlocks(contactFormsSection.id, [
+    { blockType: "form", title: "General Enquiry", description: "For product questions, quote requests, and support.", dataJson: { formType: "general", ctaLabel: "Submit enquiry" } },
+    { blockType: "form", title: "Dealer Registration", description: "For partners interested in becoming an authorised dealer.", dataJson: { formType: "dealer", ctaLabel: "Apply now" } },
+  ]);
+  const contactOfficesSection = await upsertSection(contactPage.id, { sectionKey: "contact.offices", title: "Office Details", sortOrder: 2 });
+  await clearAndAddBlocks(contactOfficesSection.id, [
+    {
+      blockType: "office",
+      title: "Corporate Office",
+      description: "Modern Orthodontics Pvt. Ltd., Ludhiana, Punjab, India",
+      dataJson: { email: "orders@modortho.com", phone: "1800 890 8022" },
+    },
+    {
+      blockType: "office",
+      title: "Export Support",
+      description: "Support for international distributors, OEM programs, and regulatory documentation.",
+      dataJson: { email: "exports@modortho.com", phone: "+91-161-000-0000" },
+    },
+  ]);
+
+  const productsPage = await upsertPage({
+    title: "Products",
+    slug: "products",
+    pageKey: "products",
+    seoTitle: "Orthodontic Products - Modern Orthodontics",
+    seoDescription: "Explore brackets, wires, tubes, bands, and accessories manufactured by Modern Orthodontics.",
+  });
+  const productsHeroSection = await upsertSection(productsPage.id, { sectionKey: "products.hero", title: "Products Hero", sortOrder: 0 });
+  await clearAndAddBlocks(productsHeroSection.id, [
+    {
+      blockType: "hero",
+      title: "Orthodontic products manufactured in-house.",
+      subtitle: "Products",
+      description: "Browse product families built for orthodontists, dealers, and OEM distribution partners across global markets.",
+    },
+  ]);
+  const productsHighlightsSection = await upsertSection(productsPage.id, { sectionKey: "products.highlights", title: "Highlights", sortOrder: 1 });
+  await clearAndAddBlocks(productsHighlightsSection.id, [
+    { blockType: "category", title: "Bracket Systems", description: "Metal and aesthetic options developed for precision and consistency.", linkUrl: "/products" },
+    { blockType: "category", title: "Archwires", description: "NiTi, stainless steel, TMA, coated, and specialty wire programs.", linkUrl: "/products" },
+    { blockType: "category", title: "Bands, Tubes & Accessories", description: "Complementary products for complete case support and sourcing simplicity.", linkUrl: "/products" },
+  ]);
+  const productsSupportSection = await upsertSection(productsPage.id, { sectionKey: "products.support", title: "Support CTA", sortOrder: 2 });
+  await clearAndAddBlocks(productsSupportSection.id, [
+    {
+      blockType: "cta",
+      title: "Need help choosing the right product range?",
+      description: "Our team can recommend suitable categories based on your market, requirements, and order profile.",
+      linkLabel: "Contact sales",
+      linkUrl: "/contact",
+    },
+  ]);
+
+  const qualityPage = await upsertPage({
+    title: "Quality & Certifications",
+    slug: "quality-certifications",
+    pageKey: "quality-certifications",
+    seoTitle: "Quality & Certifications - Modern Orthodontics",
+    seoDescription: "Review the certifications, quality systems, and compliance standards behind Modern Orthodontics manufacturing.",
+  });
+  const qualityHeroSection = await upsertSection(qualityPage.id, { sectionKey: "quality.hero", title: "Quality Hero", sortOrder: 0 });
+  await clearAndAddBlocks(qualityHeroSection.id, [
+    {
+      blockType: "hero",
+      title: "Certified to the standards global orthodontic brands require.",
+      subtitle: "Quality & Certifications",
+      description: "Our quality systems are built to support dependable manufacturing, regulatory readiness, and customer confidence.",
+    },
+  ]);
+  const qualityManagementSection = await upsertSection(qualityPage.id, { sectionKey: "quality.management", title: "Quality Management", sortOrder: 1 });
+  await clearAndAddBlocks(qualityManagementSection.id, [
+    {
+      blockType: "rich_text",
+      title: "Quality management systems",
+      description: "Documented procedures, traceability, and inspection standards are embedded across product development and manufacturing operations.",
+    },
+  ]);
+  const qualityCertificationsSection = await upsertSection(qualityPage.id, { sectionKey: "quality.certifications", title: "Certifications", sortOrder: 2 });
+  await clearAndAddBlocks(qualityCertificationsSection.id, [
+    { blockType: "certification", title: "ISO 13485:2016", description: "Certified quality management system for medical device manufacturing.", icon: "BadgeCheck" },
+    { blockType: "certification", title: "EU CE Marked", description: "Products compliant with European medical device requirements.", icon: "ShieldCheck" },
+    { blockType: "certification", title: "US FDA Registered", description: "Registered manufacturing operations aligned with relevant FDA requirements.", icon: "Stamp" },
+    { blockType: "certification", title: "MDSAP & CDSCO", description: "Support for multi-market compliance and Indian regulatory obligations.", icon: "Globe" },
+  ]);
+  const qualitySymbolsSection = await upsertSection(qualityPage.id, { sectionKey: "quality.symbols", title: "Symbols & Labels", sortOrder: 3 });
+  await clearAndAddBlocks(qualitySymbolsSection.id, [
+    { blockType: "symbol", title: "Sterile / Single Use", description: "Packaging and product labeling aligned to regulated use contexts." },
+    { blockType: "symbol", title: "Lot Traceability", description: "Batch tracking supports quality assurance and post-shipment accountability." },
+    { blockType: "symbol", title: "Regulatory Markings", description: "Clear labeling for certifications, cautions, and product handling requirements." },
+  ]);
+  const qualityFaqSection = await upsertSection(qualityPage.id, { sectionKey: "quality.faqs", title: "FAQs", sortOrder: 4 });
+  await clearAndAddBlocks(qualityFaqSection.id, [
+    { blockType: "faq", title: "Which certifications does Modern Orthodontics hold?", description: "Key certifications include ISO 13485:2016, CE marking support, FDA registration, and other market-specific compliance programs." },
+    { blockType: "faq", title: "Can you share compliance documents with dealers or OEM customers?", description: "Yes. Relevant documentation can be shared based on the product range and commercial engagement." },
+    { blockType: "faq", title: "Do your quality systems support export programs?", description: "Yes. Our systems are built with international distribution and compliance expectations in mind." },
+  ]);
+
   const existingFooter = await prisma.cMSFooter.findFirst();
-  if (!existingFooter) {
+  if (existingFooter) {
+    await prisma.cMSFooter.update({
+      where: { id: existingFooter.id },
+      data: {
+        title: "Modern Orthodontics. All rights reserved.",
+        description: "Stay up to date on the latest news and more.",
+        email: "orders@modortho.com",
+        phone: "1800 890 8022",
+        address: "2024, Gobind Nagar, Circuit House Road, Ludhiana 141001, India",
+        socialLinksJson: {
+          facebook: "https://www.facebook.com/orthodonticsmodern",
+          linkedin: "https://in.linkedin.com/company/modern-orthodontics",
+          twitter: "https://twitter.com/ModOrtho",
+          instagram: "https://www.instagram.com/modern_ortho/",
+        } as Prisma.JsonObject,
+        newsletterEnabled: true,
+        status: "ACTIVE",
+      },
+    });
+  } else {
     await prisma.cMSFooter.create({
       data: {
-        title: "Modern Orthodontics",
-        description: "Precision orthodontic products, manufactured in India, trusted worldwide since 1994.",
+        title: "Modern Orthodontics. All rights reserved.",
+        description: "Stay up to date on the latest news and more.",
         email: "orders@modortho.com",
-        socialLinksJson: { linkedin: "#", instagram: "#", twitter: "#" },
+        phone: "1800 890 8022",
+        address: "2024, Gobind Nagar, Circuit House Road, Ludhiana 141001, India",
+        socialLinksJson: {
+          facebook: "https://www.facebook.com/orthodonticsmodern",
+          linkedin: "https://in.linkedin.com/company/modern-orthodontics",
+          twitter: "https://twitter.com/ModOrtho",
+          instagram: "https://www.instagram.com/modern_ortho/",
+        } as Prisma.JsonObject,
         newsletterEnabled: true,
         status: "ACTIVE",
       },
     });
   }
+
+  await upsertCmsMenuWithItems({
+    name: "Header Primary",
+    location: "header-primary",
+    items: [
+      { key: "quality", label: "Quality Certifications", url: "/quality-certifications" },
+      { key: "contact", label: "Contact Us", url: "/contact" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Header Capabilities",
+    location: "header-capabilities",
+    items: [
+      { key: "design", label: "Design & Engineering", url: "/design-and-engineering" },
+      { key: "manufacturing", label: "Manufacturing Services", url: "/manufacturing-services" },
+      { key: "oem", label: "OEM Services", url: "/oem-services" },
+      { key: "packaging", label: "Custom Packaging", url: "/custom-packaging" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Header Products Mega Menu",
+    location: "header-products-mega",
+    items: [
+      { key: "aesthetic", label: "Aesthetic Brackets", url: "/products?category=aesthetic-brackets" },
+      { key: "aesthetic-curio", label: "Curio Mono-Crystalline Ceramic", url: "/products/curio-mono-crystalline-ceramic", parentKey: "aesthetic" },
+      { key: "aesthetic-purity-ms", label: "Purity-MS Metal Slot Ceramic", url: "/products?category=aesthetic-brackets", parentKey: "aesthetic" },
+      { key: "aesthetic-purity", label: "Purity Ceramic", url: "/products?category=aesthetic-brackets", parentKey: "aesthetic" },
+      { key: "aesthetic-dart", label: "d'art Mini Ceramic", url: "/products?category=aesthetic-brackets", parentKey: "aesthetic" },
+      { key: "aesthetic-elegant", label: "Elegant Composite", url: "/products?category=aesthetic-brackets", parentKey: "aesthetic" },
+      { key: "metal", label: "Metal Brackets", url: "/products?category=metal-brackets" },
+      { key: "metal-sapphire-twin", label: "Sapphire True Twin", url: "/products/sapphire-true-twin", parentKey: "metal" },
+      { key: "metal-sapphire-plus", label: "Sapphire Plus Low-Profile", url: "/products/sapphire-plus-low-profile", parentKey: "metal" },
+      { key: "metal-atease", label: "At-Ease Self Ligating", url: "/products/at-ease-self-ligating", parentKey: "metal" },
+      { key: "metal-micro", label: "Micro-LP Mini", url: "/products?category=metal-brackets", parentKey: "metal" },
+      { key: "metal-bio", label: "Sapphire Brackets (Bio-Progressive)", url: "/products?category=metal-brackets", parentKey: "metal" },
+      { key: "metal-edgewise", label: "Sapphire Brackets (Standard Edgewise)", url: "/products?category=metal-brackets", parentKey: "metal" },
+      { key: "niti", label: "NiTi Wires", url: "/products?category=niti-wires" },
+      { key: "niti-super", label: "NiTi Super Elastic", url: "/products/niti-super-elastic", parentKey: "niti" },
+      { key: "niti-thermal", label: "NiTi Thermal", url: "/products?category=niti-wires", parentKey: "niti" },
+      { key: "niti-rcs", label: "NiTi RCS", url: "/products?category=niti-wires", parentKey: "niti" },
+      { key: "niti-spooled", label: "Spooled NiTi Wire", url: "/products?category=niti-wires", parentKey: "niti" },
+      { key: "niti-springs", label: "NiTi Springs", url: "/products?category=niti-wires", parentKey: "niti" },
+      { key: "ss", label: "SS Wires", url: "/products?category=ss-wires" },
+      { key: "ss-acti", label: "Acti-4S Stainless Steel Archwire", url: "/products?category=ss-wires", parentKey: "ss" },
+      { key: "ss-ligature", label: "Ligature Wires", url: "/products?category=ss-wires", parentKey: "ss" },
+      { key: "ss-coaxial", label: "Co-Axial Wire", url: "/products?category=ss-wires", parentKey: "ss" },
+      { key: "ss-retainer", label: "Fixed Retainer Wire", url: "/products?category=ss-wires", parentKey: "ss" },
+      { key: "special", label: "Special Wires", url: "/products?category=special-wires" },
+      { key: "special-posted", label: "Posted SS Wire", url: "/products?category=special-wires", parentKey: "special" },
+      { key: "special-beta", label: "Beta Titanium", url: "/products?category=special-wires", parentKey: "special" },
+      { key: "special-torqued", label: "Pre-Torqued Archwire", url: "/products?category=special-wires", parentKey: "special" },
+      { key: "special-three-force", label: "Three Force Arch Wire", url: "/products?category=special-wires", parentKey: "special" },
+      { key: "bands", label: "Molar Bands", url: "/products?category=molar-bands" },
+      { key: "bands-plain", label: "Plain Bands", url: "/products?category=molar-bands", parentKey: "bands" },
+      { key: "bands-prewelded", label: "Pre-welded Bands", url: "/products?category=molar-bands", parentKey: "bands" },
+      { key: "tubes", label: "Molar Tubes", url: "/products?category=molar-tubes" },
+      { key: "tubes-elfin-bondable", label: "Elfin Bondable Molar Tube", url: "/products?category=molar-tubes", parentKey: "tubes" },
+      { key: "tubes-afix", label: "Afix Bondable Molar Tube", url: "/products?category=molar-tubes", parentKey: "tubes" },
+      { key: "tubes-elfin-weldable", label: "Elfin Weldable Molar Tube", url: "/products?category=molar-tubes", parentKey: "tubes" },
+      { key: "elastomerics", label: "Elastomerics", url: "/products?category=elastomerics" },
+      { key: "elastomerics-ties", label: "Elastic Ties", url: "/products?category=elastomerics", parentKey: "elastomerics" },
+      { key: "elastomerics-chain", label: "Elastomeric Chain", url: "/products?category=elastomerics", parentKey: "elastomerics" },
+      { key: "elastomerics-separators", label: "Elastomeric Separators", url: "/products?category=elastomerics", parentKey: "elastomerics" },
+      { key: "elastomerics-thread", label: "Elastomeric Thread", url: "/products?category=elastomerics", parentKey: "elastomerics" },
+      { key: "elastomerics-guard", label: "Elastomeric Tissue Guard", url: "/products?category=elastomerics", parentKey: "elastomerics" },
+      { key: "elastomerics-sleeve", label: "Archwire Sleeve", url: "/products?category=elastomerics", parentKey: "elastomerics" },
+      { key: "tooth-color", label: "Tooth Color Wire", url: "/products?category=tooth-color-wire" },
+      { key: "tooth-color-niti", label: "Micro-KOT NiTi", url: "/products?category=tooth-color-wire", parentKey: "tooth-color" },
+      { key: "tooth-color-ss", label: "Micro-KOT SS", url: "/products?category=tooth-color-wire", parentKey: "tooth-color" },
+      { key: "begg", label: "Begg Appliances", url: "/products?category=begg-appliances" },
+      { key: "begg-brackets-bondable", label: "Begg Brackets (Bondable)", url: "/products?category=begg-appliances", parentKey: "begg" },
+      { key: "begg-brackets-weldable", label: "Begg Brackets (Weldable)", url: "/products?category=begg-appliances", parentKey: "begg" },
+      { key: "begg-bondable-tube", label: "Begg Molar Tubes (Bondable)", url: "/products?category=begg-appliances", parentKey: "begg" },
+      { key: "begg-lock-pins", label: "Lock Pins", url: "/products?category=begg-appliances", parentKey: "begg" },
+      { key: "misc", label: "Miscellaneous Items", url: "/products?category=miscellaneous-items" },
+      { key: "misc-implants", label: "Micro Implants", url: "/products?category=miscellaneous-items", parentKey: "misc" },
+      { key: "misc-lab-wire", label: "Stainless Steel Lab Wire", url: "/products?category=miscellaneous-items", parentKey: "misc" },
+      { key: "misc-strips", label: "Diamond Proximal Strips", url: "/products?category=miscellaneous-items", parentKey: "misc" },
+      { key: "misc-retractor", label: "Lip & Cheek Retractor", url: "/products?category=miscellaneous-items", parentKey: "misc" },
+      { key: "misc-hyrex", label: "Hyrex RME Screw", url: "/products?category=miscellaneous-items", parentKey: "misc" },
+      { key: "misc-base-former", label: "Base Former", url: "/products?category=miscellaneous-items", parentKey: "misc" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Header CTA",
+    location: "header-cta",
+    items: [{ key: "become-dealer", label: "Become a Dealer", url: "/contact" }],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "About Us",
+    location: "footer-about",
+    items: [
+      { key: "about", label: "About Us", url: "/about" },
+      { key: "manufacturing", label: "Manufacturing", url: "/manufacturing-services" },
+      { key: "quality", label: "Quality Certifications", url: "/quality-certifications" },
+      { key: "mission", label: "Mission", url: "/about#mission" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Products",
+    location: "footer-products",
+    items: [
+      { key: "aesthetic", label: "Aesthetic Brackets", url: "/products?category=aesthetic-brackets" },
+      { key: "metal", label: "Metal Brackets", url: "/products?category=metal-brackets" },
+      { key: "niti", label: "NiTi & SS Wires", url: "/products?category=niti-wires" },
+      { key: "bands", label: "Molar Bands & Tubes", url: "/products?category=molar-bands" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Capabilities",
+    location: "footer-capabilities",
+    items: [
+      { key: "design", label: "Design & Engineering", url: "/design-and-engineering" },
+      { key: "oem", label: "OEM Services", url: "/oem-services" },
+      { key: "packaging", label: "Custom Packaging", url: "/custom-packaging" },
+      { key: "quality", label: "Quality Control", url: "/quality-certifications" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Dealers & Bulk Orders",
+    location: "footer-dealers",
+    items: [
+      { key: "dealer", label: "Become a Dealer", url: "/contact" },
+      { key: "rfq", label: "Bulk & RFQ Pricing", url: "/products" },
+      { key: "catalogue", label: "Product Catalogue", url: "https://www.modortho.com/public/catalog/Modern-Catalog.zip", openInNewTab: true },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Resources",
+    location: "footer-resources",
+    items: [
+      { key: "blog", label: "Blog", url: "https://www.modortho.com/blog", openInNewTab: true },
+      { key: "terms", label: "Terms & Conditions", url: "https://www.modortho.com/page/terms-and-conditions", openInNewTab: true },
+      { key: "privacy", label: "Privacy Policy", url: "https://www.modortho.com/page/privacy-policy", openInNewTab: true },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Export & Trade",
+    location: "footer-export",
+    items: [
+      { key: "enquiries", label: "Export Enquiries", url: "/contact" },
+      { key: "distributors", label: "Global Distributors", url: "/contact" },
+      { key: "shipping", label: "Shipping & Logistics", url: "/contact" },
+      { key: "compliance", label: "Compliance Documents", url: "/quality-certifications" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "India Office",
+    location: "footer-india-office",
+    items: [
+      { key: "orders", label: "orders@modortho.com", url: "mailto:orders@modortho.com" },
+      { key: "info", label: "info@modortho.com", url: "mailto:info@modortho.com" },
+      { key: "phone", label: "1800 890 8022", url: "" },
+      { key: "address", label: "2024, Gobind Nagar, Circuit House Road, Ludhiana 141001, India", url: "" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "USA Office",
+    location: "footer-usa-office",
+    items: [
+      { key: "email", label: "sanjaygoyalmo@gmail.com", url: "mailto:sanjaygoyalmo@gmail.com" },
+      { key: "phone", label: "+1 470-866-2724", url: "" },
+      { key: "address", label: "1303 Colony Dr, Marietta, GA 30068, USA", url: "" },
+    ],
+  });
+
+  await upsertCmsMenuWithItems({
+    name: "Legal",
+    location: "footer-legal",
+    items: [
+      { key: "legal", label: "Legal", url: "/contact" },
+      { key: "privacy", label: "Privacy Policy", url: "/contact" },
+      { key: "sitemap", label: "Sitemap", url: "/contact" },
+    ],
+  });
 
   // ─── Default Settings ────────────────────────────────────
   console.log("🌱 Seeding default settings…");
