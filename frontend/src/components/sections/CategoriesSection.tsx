@@ -6,6 +6,7 @@ import { CategoryCard } from "@/components/ui/CategoryCard";
 import { SkeletonGrid } from "@/components/ui/Skeleton";
 import { Reveal } from "@/components/ui/Reveal";
 import { useCategories } from "@/hooks/api/useCategories";
+import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import { cn } from "@/utils/cn";
 
 const CATEGORY_STOCK_IMAGES: Record<string, string> = {
@@ -23,6 +24,7 @@ const CATEGORY_STOCK_IMAGES: Record<string, string> = {
 };
 
 export function CategoriesSection() {
+  const { t } = useStaticTranslations();
   const { data: categories, isLoading } = useCategories();
   const [view, setView] = useState<"doctor" | "dealer">("doctor");
 
@@ -30,7 +32,7 @@ export function CategoriesSection() {
     <section id="categories" className="py-16 lg:py-20">
       <Container>
         <div className="mb-10">
-          <h2 className="text-[clamp(28px,3.4vw,40px)] font-light text-ink">Shop by category</h2>
+          <h2 className="text-[clamp(28px,3.4vw,40px)] font-light text-ink">{t("ui.home.shopByCategory")}</h2>
         </div>
         <div className="mb-10 flex gap-2.5">
           {(["doctor", "dealer"] as const).map((v) => (
@@ -42,7 +44,7 @@ export function CategoriesSection() {
                 view === v ? "bg-ink text-white" : "bg-grey text-steel"
               )}
             >
-              {v === "doctor" ? "For Doctors" : "For Dealers"}
+              {v === "doctor" ? t("ui.home.forDoctors") : t("ui.home.forDealers")}
             </button>
           ))}
         </div>

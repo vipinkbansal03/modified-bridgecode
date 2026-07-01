@@ -98,9 +98,22 @@ const footerLabelKeys: Record<string, StaticMessageKey> = {
   "Quality Certifications": "ui.footer.qualityCertifications",
   Mission: "ui.footer.mission",
   Products: "ui.footer.products",
+  "Aesthetic Brackets": "ui.footer.aestheticBrackets",
+  "Metal Brackets": "ui.footer.metalBrackets",
+  "NiTi & SS Wires": "ui.footer.nitiSsWires",
+  "Molar Bands & Tubes": "ui.footer.molarBandsTubes",
   Capabilities: "ui.footer.capabilities",
+  "Design & Engineering": "ui.footer.designEngineering",
+  "OEM Services": "ui.footer.oemServices",
+  "Custom Packaging": "ui.footer.customPackaging",
+  "Quality Control": "ui.footer.qualityControl",
   "Dealers & Bulk Orders": "ui.footer.dealersBulkOrders",
+  "Become a Dealer": "ui.footer.becomeDealer",
+  "Bulk & RFQ Pricing": "ui.footer.bulkRfqPricing",
+  "Product Catalogue": "ui.footer.productCatalogue",
   Resources: "ui.footer.resources",
+  Blog: "ui.footer.blog",
+  "Terms & Conditions": "ui.footer.termsConditions",
   "Export & Trade": "ui.footer.exportTrade",
   "Export Enquiries": "ui.footer.exportEnquiries",
   "Global Distributors": "ui.footer.globalDistributors",
@@ -119,92 +132,129 @@ export function Footer() {
 
   return (
     <footer className="bg-brand text-white">
-      <Container className="border-t border-white/20 pt-16">
-        <div className="mb-14 flex items-center gap-2.5">
-          <Logo variant="light" />
-        </div>
+  <Container className="border-t border-white/20 pt-10 sm:pt-12 lg:pt-12">
+    <div className="mb-8 flex items-center gap-2.5 sm:mb-10">
+      <Logo variant="light" />
+    </div>
 
-        <div className="mb-14 grid grid-cols-2 gap-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-5">
-          {footerColumns.map((col) => (
-            <div key={col.heading} className="min-w-0">
-              <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label(col.heading)}</h6>
-              {col.links.map((link) => {
-                const isExternal = link.href.startsWith("http");
-                return (
-                  <Link
-                    key={link.label}
-                    href={link.href}
-                    target={isExternal ? "_blank" : undefined}
-                    rel={isExternal ? "noopener noreferrer" : undefined}
-                    className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white"
-                  >
-                    {label(link.label)}
-                  </Link>
-                );
-              })}
-            </div>
+    <div className="mb-9 grid grid-cols-1 gap-7 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-8 lg:mb-10 lg:grid-cols-5 lg:gap-5 xl:gap-6">
+      {footerColumns.map((col) => (
+        <div key={col.heading} className="min-w-0">
+          <h6 className="mb-2.5 text-[13.5px] font-semibold text-white sm:text-[14px]">
+            {label(col.heading)}
+          </h6>
+
+          {col.links.map((link) => {
+            const isExternal = link.href.startsWith("http");
+
+            return (
+              <Link
+                key={link.label}
+                href={link.href}
+                target={isExternal ? "_blank" : undefined}
+                rel={isExternal ? "noopener noreferrer" : undefined}
+                className="block break-words py-1 text-[13px] leading-relaxed text-white/80 hover:text-white"
+              >
+                {label(link.label)}
+              </Link>
+            );
+          })}
+        </div>
+      ))}
+
+      <div className="min-w-0">
+        <h6 className="mb-2.5 text-[13.5px] font-semibold text-white sm:text-[14px]">
+          {label("Export & Trade")}
+        </h6>
+
+        <Link href="/contact" className="block break-words py-1 text-[13px] leading-relaxed text-white/80 hover:text-white">
+          {label("Export Enquiries")}
+        </Link>
+        <Link href="/contact" className="block break-words py-1 text-[13px] leading-relaxed text-white/80 hover:text-white">
+          {label("Global Distributors")}
+        </Link>
+        <Link href="/contact" className="block break-words py-1 text-[13px] leading-relaxed text-white/80 hover:text-white">
+          {label("Shipping & Logistics")}
+        </Link>
+        <Link href="/quality-certifications" className="block break-words py-1 text-[13px] leading-relaxed text-white/80 hover:text-white">
+          {label("Compliance Documents")}
+        </Link>
+      </div>
+
+      <div className="min-w-0 sm:col-span-2 lg:col-span-1">
+        <h6 className="mb-2.5 text-[13.5px] font-semibold text-white sm:text-[14px]">
+          {label("India Office")}
+        </h6>
+
+        <a href={`mailto:${ORDERS_EMAIL}`} className="block break-words py-1 text-[13px] leading-relaxed text-white/80 hover:text-white">
+          {ORDERS_EMAIL}
+        </a>
+        <a href={`mailto:${INFO_EMAIL}`} className="block break-words py-1 text-[13px] leading-relaxed text-white/80 hover:text-white">
+          {INFO_EMAIL}
+        </a>
+        <span className="block break-words py-1 text-[13px] leading-relaxed text-white/70">
+          {INDIA_PHONE}
+        </span>
+        <span className="block break-words py-1 text-[13px] leading-relaxed text-white/70">
+          {COMPANY_ADDRESS}
+        </span>
+      </div>
+
+      <div className="min-w-0 sm:col-span-2 lg:col-span-1">
+        <h6 className="mb-2.5 text-[13.5px] font-semibold text-white sm:text-[14px]">
+          {label("USA Office")}
+        </h6>
+
+        <a href={`mailto:${USA_EMAIL}`} className="block break-words py-1 text-[13px] leading-relaxed text-white/80 hover:text-white">
+          {USA_EMAIL}
+        </a>
+        <span className="block break-words py-1 text-[13px] leading-relaxed text-white/70">
+          {USA_PHONE}
+        </span>
+        <span className="block break-words py-1 text-[13px] leading-relaxed text-white/70">
+          {USA_ADDRESS}
+        </span>
+      </div>
+    </div>
+
+    <div className="flex flex-col gap-5 border-t border-white/20 py-6 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <div className="mb-3.5 flex gap-4">
+          {socialIcons.map(({ href, label: socialLabel }) => (
+            <a
+              key={socialLabel}
+              href={href}
+              aria-label={socialLabel}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-white"
+            >
+              <SocialIcon label={socialLabel} />
+            </a>
           ))}
-          <div className="min-w-0">
-            <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label("Export & Trade")}</h6>
-            <Link href="/contact" className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
-              {label("Export Enquiries")}
-            </Link>
-            <Link href="/contact" className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
-              {label("Global Distributors")}
-            </Link>
-            <Link href="/contact" className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
-              {label("Shipping & Logistics")}
-            </Link>
-            <Link href="/quality-certifications" className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
-              {label("Compliance Documents")}
-            </Link>
-          </div>
-          <div className="min-w-0">
-            <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label("India Office")}</h6>
-            <a href={`mailto:${ORDERS_EMAIL}`} className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
-              {ORDERS_EMAIL}
-            </a>
-            <a href={`mailto:${INFO_EMAIL}`} className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
-              {INFO_EMAIL}
-            </a>
-            <span className="block py-1.5 text-[13.5px] text-white/70">{INDIA_PHONE}</span>
-            <span className="block break-words py-1.5 text-[13.5px] text-white/70">{COMPANY_ADDRESS}</span>
-          </div>
-          <div className="min-w-0">
-            <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label("USA Office")}</h6>
-            <a href={`mailto:${USA_EMAIL}`} className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white">
-              {USA_EMAIL}
-            </a>
-            <span className="block py-1.5 text-[13.5px] text-white/70">{USA_PHONE}</span>
-            <span className="block break-words py-1.5 text-[13.5px] text-white/70">{USA_ADDRESS}</span>
-          </div>
         </div>
 
-        <div className="flex flex-wrap items-start justify-between gap-9 border-t border-white/20 py-8">
-          <div>
-            <div className="mb-5 flex gap-5">
-              {socialIcons.map(({ href, label: socialLabel }) => (
-                <a key={socialLabel} href={href} aria-label={socialLabel} target="_blank" rel="noopener noreferrer" className="text-white">
-                  <SocialIcon label={socialLabel} />
-                </a>
-              ))}
-            </div>
-            <div className="mb-2.5 text-[13px] text-white/80">© {new Date().getFullYear()} {t("ui.footer.copyright")}</div>
-            <div className="flex flex-wrap gap-2 text-[13px] text-white/80">
-              <Link href="/contact">{label("Legal")}</Link>
-              <span>|</span>
-              <Link href="/contact">{label("Privacy Policy")}</Link>
-              <span>|</span>
-              <Link href="/contact">{label("Sitemap")}</Link>
-            </div>
-          </div>
-
-          <div className="sm:text-right">
-            <p className="mb-3.5 text-[13px] text-white sm:text-sm">{t("ui.footer.newsletter")}</p>
-            <NewsletterForm tone="light" />
-          </div>
+        <div className="mb-2 text-[12.5px] leading-relaxed text-white/80">
+          © {new Date().getFullYear()} {t("ui.footer.copyright")}
         </div>
-      </Container>
-    </footer>
+
+        <div className="flex flex-wrap gap-x-2 gap-y-1 text-[12.5px] leading-relaxed text-white/80">
+          <Link href="/contact">{label("Legal")}</Link>
+          <span>|</span>
+          <Link href="/contact">{label("Privacy Policy")}</Link>
+          <span>|</span>
+          <Link href="/contact">{label("Sitemap")}</Link>
+        </div>
+      </div>
+
+      <div className="w-full sm:max-w-[340px] sm:text-right">
+        <p className="mb-2.5 text-[12.5px] leading-relaxed text-white sm:text-[13px]">
+          {t("ui.footer.newsletter")}
+        </p>
+        <NewsletterForm tone="light" />
+      </div>
+    </div>
+  </Container>
+</footer>
   );
 }

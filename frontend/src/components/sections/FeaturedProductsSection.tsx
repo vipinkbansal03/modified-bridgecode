@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useProducts } from "@/hooks/api/useProducts";
+import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import staticProducts from "@/data/products.json";
 import type { ApiProductSummary } from "@/types/api.types";
 
@@ -28,6 +29,7 @@ export function FeaturedProductsSection({
   slugs,
   captions,
 }: FeaturedProductsSectionProps) {
+  const { t } = useStaticTranslations();
   const { data: allProducts, isLoading } = useProducts({ limit: 200 });
   const [index, setIndex] = useState(0);
 
@@ -112,25 +114,25 @@ export function FeaturedProductsSection({
         <Container className="flex flex-wrap items-end justify-between gap-7">
           <div>
             <span className="mb-2.5 block text-[13px] font-medium tracking-[0.03em] text-[#9A9A9A]">
-              Featured Product
+              {t("ui.home.featuredProduct")}
             </span>
             <h3 className="max-w-[600px] text-[clamp(26px,3.2vw,36px)] font-light leading-tight text-white">
               {product.title}
             </h3>
             <p className="mt-3.5 max-w-[520px] text-[15px] text-[#B9B9B9]">
-              {captions[product.slug] ?? product.shortDescription}
+              {product.shortDescription || captions[product.slug]}
             </p>
           </div>
           <div className="flex flex-none gap-2.5">
             <button
-              aria-label="Previous product"
+              aria-label={t("ui.home.previousProduct")}
               onClick={() => go(-1)}
               className="flex h-9.5 w-9.5 items-center justify-center rounded-full border border-white/40 text-white hover:border-white"
             >
               <ChevronLeft size={14} />
             </button>
             <button
-              aria-label="Next product"
+              aria-label={t("ui.home.nextProduct")}
               onClick={() => go(1)}
               className="flex h-9.5 w-9.5 items-center justify-center rounded-full border border-white/40 text-white hover:border-white"
             >

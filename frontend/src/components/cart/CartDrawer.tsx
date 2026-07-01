@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Minus, Plus, ShoppingCart, Trash2, X } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
+import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 
 function formatMoney(symbol: string, amount: number) {
   return `${symbol}${Math.round(amount || 0).toLocaleString("en-IN")}`;
@@ -10,6 +11,7 @@ function formatMoney(symbol: string, amount: number) {
 
 export function CartDrawer() {
   const { items, totals, isOpen, closeCart, updateQuantity, removeItem } = useCart();
+  const { t } = useStaticTranslations();
 
   if (!isOpen) return null;
 
@@ -17,7 +19,7 @@ export function CartDrawer() {
     <>
       <button
         type="button"
-        aria-label="Close cart"
+        aria-label={t("ui.cart.close")}
         onClick={closeCart}
         className="fixed inset-0 z-[70] bg-black/45 backdrop-blur-[2px]"
       />
@@ -26,11 +28,13 @@ export function CartDrawer() {
           <div className="flex items-center gap-2">
             <ShoppingCart size={18} className="text-brand" />
             <div>
-              <p className="text-[15px] font-semibold text-ink">Cart</p>
-              <p className="text-[12px] text-steel">{totals.itemCount} item{totals.itemCount === 1 ? "" : "s"}</p>
+              <p className="text-[15px] font-semibold text-ink">{t("ui.cart.title")}</p>
+              <p className="text-[12px] text-steel">
+                {totals.itemCount} {totals.itemCount === 1 ? t("ui.cart.itemSingular") : t("ui.cart.itemPlural")}
+              </p>
             </div>
           </div>
-          <button type="button" aria-label="Close cart" onClick={closeCart} className="rounded-full border border-line p-2 text-ink hover:border-brand hover:text-brand">
+          <button type="button" aria-label={t("ui.cart.close")} onClick={closeCart} className="rounded-full border border-line p-2 text-ink hover:border-brand hover:text-brand">
             <X size={16} />
           </button>
         </div>
@@ -46,10 +50,10 @@ export function CartDrawer() {
                         {item.productTitle}
                       </Link>
                       <p className="mt-1 text-[12.5px] text-steel">{item.variantTitle}</p>
-                      {item.sku && <p className="mt-1 text-[11.5px] uppercase tracking-wide text-steel-2">SKU {item.sku}</p>}
-                      {item.countryCode && <p className="mt-1 text-[11.5px] text-steel-2">Pricing: {item.countryName ?? item.countryCode}</p>}
+                      {item.sku && <p className="mt-1 text-[11.5px] uppercase tracking-wide text-steel-2">{t("ui.cart.sku")} {item.sku}</p>}
+                      {item.countryCode && <p className="mt-1 text-[11.5px] text-steel-2">{t("ui.cart.pricing")}: {item.countryName ?? item.countryCode}</p>}
                     </div>
-                    <button type="button" aria-label="Remove item" onClick={() => removeItem(item.variantId)} className="text-steel hover:text-brand">
+                    <button type="button" aria-label={t("ui.cart.removeItem")} onClick={() => removeItem(item.variantId)} className="text-steel hover:text-brand">
                       <Trash2 size={16} />
                     </button>
                   </div>
@@ -64,16 +68,16 @@ export function CartDrawer() {
 
                   <div className="mt-4 flex items-center justify-between gap-3">
                     <div className="flex items-center rounded-full border border-line p-1">
-                      <button type="button" aria-label="Decrease quantity" onClick={() => updateQuantity(item.variantId, item.quantity - 1)} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-grey">
+                      <button type="button" aria-label={t("ui.cart.decreaseQuantity")} onClick={() => updateQuantity(item.variantId, item.quantity - 1)} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-grey">
                         <Minus size={13} />
                       </button>
                       <span className="w-10 text-center text-[13px] font-semibold">{item.quantity}</span>
-                      <button type="button" aria-label="Increase quantity" onClick={() => updateQuantity(item.variantId, item.quantity + 1)} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-grey">
+                      <button type="button" aria-label={t("ui.cart.increaseQuantity")} onClick={() => updateQuantity(item.variantId, item.quantity + 1)} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-grey">
                         <Plus size={13} />
                       </button>
                     </div>
                     <div className="text-right">
-                      <p className="text-[11px] uppercase tracking-wide text-steel-2">Line total</p>
+                      <p className="text-[11px] uppercase tracking-wide text-steel-2">{t("ui.cart.lineTotal")}</p>
                       <p className="text-[15px] font-semibold text-ink">{formatMoney(item.currencySymbol, item.unitPrice * item.quantity)}</p>
                     </div>
                   </div>
@@ -83,15 +87,15 @@ export function CartDrawer() {
           ) : (
             <div className="flex h-full flex-col items-center justify-center text-center">
               <ShoppingCart size={28} className="mb-3 text-steel-2" />
-              <p className="text-[15px] font-semibold text-ink">Your cart is empty.</p>
-              <p className="mt-1 max-w-[260px] text-[13px] leading-relaxed text-steel">Choose a product variant to start a purchase order.</p>
+              <p className="text-[15px] font-semibold text-ink">{t("ui.cart.emptyTitle")}</p>
+              <p className="mt-1 max-w-[260px] text-[13px] leading-relaxed text-steel">{t("ui.cart.emptyBody")}</p>
             </div>
           )}
         </div>
 
         <div className="border-t border-line p-5">
           <div className="mb-4 flex items-center justify-between text-[15px]">
-            <span className="text-steel">Subtotal</span>
+            <span className="text-steel">{t("ui.cart.subtotal")}</span>
             <strong className="text-ink">{formatMoney(totals.currencySymbol, totals.subtotal)}</strong>
           </div>
           <Link
@@ -101,7 +105,7 @@ export function CartDrawer() {
               items.length ? "bg-brand text-white hover:bg-brand-deep" : "pointer-events-none bg-grey text-steel"
             }`}
           >
-            Checkout
+            {t("ui.cart.checkout")}
           </Link>
         </div>
       </aside>

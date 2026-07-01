@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import { Container } from "@/components/ui/Container";
 import { Reveal } from "@/components/ui/Reveal";
 import { WORLD_MAP_PATH } from "@/data/worldMapPath";
+import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import type { LocationPin } from "@/types/common.types";
+import type { StaticMessageKey } from "@/i18n/staticMessages";
 
 interface LocationsSectionProps {
   data: { subtitle: string; pins: LocationPin[] };
@@ -16,14 +18,35 @@ const pinColor: Record<LocationPin["category"], string> = {
   dealer: "#9A9A9A",
 };
 
-const categoryLabel: Record<LocationPin["category"], string> = {
-  hq: "Manufacturing HQ",
-  export: "Direct Export",
-  dealer: "Dealer Network",
+const locationNameKeys: Record<string, StaticMessageKey> = {
+  hq: "ui.location.ludhianaIndia",
+  us: "ui.location.unitedStates",
+  de: "ui.location.germany",
+  gb: "ui.location.unitedKingdom",
+  za: "ui.location.southAfrica",
+  au: "ui.location.australia",
+  br: "ui.location.brazil",
+  mx: "ui.location.mexico",
+  ae: "ui.location.unitedArabEmirates",
+  ke: "ui.location.kenya",
+  id: "ui.location.indonesia",
+  vn: "ui.location.vietnam",
 };
 
 export function LocationsSection({ data }: LocationsSectionProps) {
+  const { t } = useStaticTranslations();
   const [activeId, setActiveId] = useState<string | null>(null);
+  const categoryLabel: Record<LocationPin["category"], string> = {
+    hq: t("ui.home.manufacturingHq"),
+    export: t("ui.home.directExport"),
+    dealer: t("ui.home.dealerNetwork"),
+  };
+  const locationLabel = (pin: LocationPin) => {
+    const placeKey = locationNameKeys[pin.id];
+    const place = placeKey ? t(placeKey) : pin.label.split("—").pop()?.trim() ?? pin.label;
+    const prefix = pin.category === "hq" ? t("ui.home.manufacturingFacility") : categoryLabel[pin.category];
+    return `${prefix} — ${place}`;
+  };
   const active = useMemo(() => data.pins.find((pin) => pin.id === activeId) ?? data.pins[0] ?? null, [activeId, data.pins]);
   const groupedPins = useMemo(
     () => ({
@@ -39,8 +62,10 @@ export function LocationsSection({ data }: LocationsSectionProps) {
       <Container>
         <Reveal>
           <div className="mb-9 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-7">
-            <h2 className="text-[clamp(28px,3.4vw,40px)] font-light text-ink">Our Locations</h2>
-            <span className="text-sm text-steel">{data.subtitle}</span>
+            <h2 className="text-[clamp(28px,3.4vw,40px)] font-light text-ink">{t("ui.home.ourLocations")}</h2>
+            <span className="text-sm text-steel">
+              {data.subtitle === "Find us around the globe" ? t("ui.home.findUsAroundGlobe") : data.subtitle}
+            </span>
           </div>
 
           <div className="relative mt-2.5 w-full">
@@ -51,7 +76,7 @@ export function LocationsSection({ data }: LocationsSectionProps) {
             {data.pins.map((pin) => (
               <button
                 key={pin.id}
-                aria-label={pin.label}
+                aria-label={locationLabel(pin)}
                 onMouseEnter={() => setActiveId(pin.id)}
                 onFocus={() => setActiveId(pin.id)}
                 className="absolute -translate-x-1/2 -translate-y-full cursor-pointer border-none bg-transparent p-0 transition-transform hover:scale-[1.18]"
@@ -72,20 +97,20 @@ export function LocationsSection({ data }: LocationsSectionProps) {
                 className="pointer-events-none absolute -translate-x-1/2 -translate-y-[120%] rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink shadow-md"
                 style={{ left: `${active.xPct}%`, top: `${active.yPct}%` }}
               >
-                {active.label}
+                {locationLabel(active)}
               </div>
             )}
           </div>
 
           <div className="mt-9 flex flex-wrap gap-7.5 border-t border-line pt-6.5 text-[13.5px] text-steel">
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-full bg-brand" /> Manufacturing HQ
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-brand" /> {categoryLabel.hq}
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-full bg-ink" /> Direct Export
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-ink" /> {categoryLabel.export}
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-full bg-steel-2" /> Dealer Network
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-steel-2" /> {categoryLabel.dealer}
             </span>
           </div>
 
@@ -110,7 +135,7 @@ export function LocationsSection({ data }: LocationsSectionProps) {
                           : "border-line bg-offwhite text-steel hover:border-steel-2 hover:bg-white"
                       }`}
                     >
-                      {pin.label}
+                      {locationLabel(pin)}
                     </button>
                   ))}
                 </div>

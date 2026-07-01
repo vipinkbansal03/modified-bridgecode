@@ -3,6 +3,7 @@ import { AppError, getPagination } from "../../utils/apiResponse";
 import { staticMessageDefaults, staticMessageKeys } from "../../constants/staticMessageKeys";
 
 export type CoverageGapType = "product" | "category" | "static" | "cms";
+export type CoveragePriority = "high" | "medium" | "low";
 type CmsEntityType = "page" | "section" | "block" | "menuItem" | "footer";
 
 const PRODUCT_FIELDS = ["title", "shortDescription", "description", "seoTitle", "seoDescription"] as const;
@@ -40,6 +41,8 @@ export type CoverageMissingField = {
 
 export type CoverageGap = {
   type: CoverageGapType;
+  priority: CoveragePriority;
+  priorityLabel: string;
   entityId: string;
   entityLabel: string;
   context?: string;
@@ -51,7 +54,30 @@ export type CoverageGap = {
 export type CoverageBucketSummary = {
   gaps: number;
   fields: number;
+  totalFields: number;
+  completedFields: number;
+  completionPercentage: number;
 };
+
+type CoverageCollection = {
+  gaps: CoverageGap[];
+  totalFields: number;
+};
+
+type CoverageGapInput = Omit<CoverageGap, "priority" | "priorityLabel">;
+
+const META_FIELDS = new Set(["seoTitle", "seoDescription", "ogTitle", "ogDescription"]);
+const CUSTOMER_FACING_FIELDS = new Set([
+  "title",
+  "name",
+  "label",
+  "shortDescription",
+  "description",
+  "subtitle",
+  "linkLabel",
+  "address",
+  "value",
+]);
 
 function hasValue(value: unknown): value is string {
   return typeof value === "string" && Boolean(value.trim());
@@ -94,23 +120,82 @@ function collectMissingFields(
   return missing;
 }
 
-function summarize(gaps: CoverageGap[]): Record<CoverageGapType, CoverageBucketSummary> {
+function countTranslatableFields(source: Record<string, unknown>, fields: readonly string[]) {
+  return fields.reduce((count, field) => count + (hasValue(getStringField(source, field)) ? 1 : 0), 0);
+}
+
+function withPriority(gap: CoverageGapInput): CoverageGap {
+  const metaOnly = gap.missingFields.length > 0 && gap.missingFields.every((field) => META_FIELDS.has(field.field));
+  const hasCustomerFacingField = gap.missingFields.some((field) => CUSTOMER_FACING_FIELDS.has(field.field));
+
+  if (gap.type === "static" || hasCustomerFacingField) {
+    return { ...gap, priority: "high", priorityLabel: "Needs attention first" };
+  }
+
+  if (metaOnly) {
+    return { ...gap, priority: "low", priorityLabel: "SEO / metadata" };
+  }
+
+  if (gap.type === "cms") {
+    return { ...gap, priority: "medium", priorityLabel: "CMS content" };
+  }
+
+  return { ...gap, priority: "medium", priorityLabel: "Catalog content" };
+}
+
+function emptyBucket(): CoverageBucketSummary {
+  return { gaps: 0, fields: 0, totalFields: 0, completedFields: 0, completionPercentage: 0 };
+}
+
+function finalizeBucket(bucket: CoverageBucketSummary) {
+  bucket.completedFields = Math.max(0, bucket.totalFields - bucket.fields);
+  bucket.completionPercentage = bucket.totalFields > 0 ? Math.round((bucket.completedFields / bucket.totalFields) * 100) : 100;
+}
+
+function summarize(collections: Record<CoverageGapType, CoverageCollection>): Record<CoverageGapType, CoverageBucketSummary> {
   const buckets: Record<CoverageGapType, CoverageBucketSummary> = {
-    product: { gaps: 0, fields: 0 },
-    category: { gaps: 0, fields: 0 },
-    static: { gaps: 0, fields: 0 },
-    cms: { gaps: 0, fields: 0 },
+    product: emptyBucket(),
+    category: emptyBucket(),
+    static: emptyBucket(),
+    cms: emptyBucket(),
   };
 
-  for (const gap of gaps) {
-    buckets[gap.type].gaps += 1;
-    buckets[gap.type].fields += gap.missingFields.length;
+  for (const type of Object.keys(collections) as CoverageGapType[]) {
+    buckets[type].totalFields = collections[type].totalFields;
+
+    for (const gap of collections[type].gaps) {
+      buckets[type].gaps += 1;
+      buckets[type].fields += gap.missingFields.length;
+    }
+
+    finalizeBucket(buckets[type]);
   }
 
   return buckets;
 }
 
-async function collectProductGaps(languageId: string): Promise<CoverageGap[]> {
+function gapMatchesSearch(gap: CoverageGap, search?: string) {
+  const query = search?.trim().toLowerCase();
+  if (!query) return true;
+
+  const searchableText = [
+    gap.type,
+    gap.entityId,
+    gap.entityLabel,
+    gap.context ?? "",
+    gap.cmsEntityType ?? "",
+    ...gap.missingFields.flatMap((field) => [field.field, field.fieldLabel, field.englishValue]),
+  ].join(" ").toLowerCase();
+
+  return searchableText.includes(query);
+}
+
+function gapMatchesPriority(gap: CoverageGap, priority?: string) {
+  if (!priority || priority === "all") return true;
+  return gap.priority === priority;
+}
+
+async function collectProductGaps(languageId: string): Promise<CoverageCollection> {
   const products = await prisma.product.findMany({
     where: { status: "ACTIVE" },
     select: {
@@ -124,60 +209,64 @@ async function collectProductGaps(languageId: string): Promise<CoverageGap[]> {
     orderBy: { title: "asc" },
   });
 
-  if (!products.length) return [];
+  if (!products.length) return { gaps: [], totalFields: 0 };
 
   const translations = await prisma.productTranslation.findMany({
     where: { languageId, productId: { in: products.map((product) => product.id) } },
   });
   const translationMap = new Map(translations.map((row) => [row.productId, row]));
   const gaps: CoverageGap[] = [];
+  let totalFields = 0;
 
   for (const product of products) {
+    totalFields += countTranslatableFields(product, PRODUCT_FIELDS);
     const missingFields = collectMissingFields(product, translationMap.get(product.id) ?? null, PRODUCT_FIELDS, () => null);
     if (missingFields.length) {
-      gaps.push({
+      gaps.push(withPriority({
         type: "product",
         entityId: product.id,
         entityLabel: product.title,
         missingFields,
-      });
+      }));
     }
   }
 
-  return gaps;
+  return { gaps, totalFields };
 }
 
-async function collectCategoryGaps(languageId: string): Promise<CoverageGap[]> {
+async function collectCategoryGaps(languageId: string): Promise<CoverageCollection> {
   const categories = await prisma.category.findMany({
     where: { status: "ACTIVE" },
     select: { id: true, name: true, description: true },
     orderBy: { name: "asc" },
   });
 
-  if (!categories.length) return [];
+  if (!categories.length) return { gaps: [], totalFields: 0 };
 
   const translations = await prisma.categoryTranslation.findMany({
     where: { languageId, categoryId: { in: categories.map((category) => category.id) } },
   });
   const translationMap = new Map(translations.map((row) => [row.categoryId, row]));
   const gaps: CoverageGap[] = [];
+  let totalFields = 0;
 
   for (const category of categories) {
+    totalFields += countTranslatableFields(category, CATEGORY_FIELDS);
     const missingFields = collectMissingFields(category, translationMap.get(category.id) ?? null, CATEGORY_FIELDS, () => null);
     if (missingFields.length) {
-      gaps.push({
+      gaps.push(withPriority({
         type: "category",
         entityId: category.id,
         entityLabel: category.name,
         missingFields,
-      });
+      }));
     }
   }
 
-  return gaps;
+  return { gaps, totalFields };
 }
 
-async function collectStaticGaps(languageId: string): Promise<CoverageGap[]> {
+async function collectStaticGaps(languageId: string): Promise<CoverageCollection> {
   const keywords = await prisma.translationKeyword.findMany({
     where: { languageId, key: { in: staticMessageKeys } },
     select: { key: true, value: true },
@@ -187,7 +276,7 @@ async function collectStaticGaps(languageId: string): Promise<CoverageGap[]> {
 
   for (const key of staticMessageKeys) {
     if (hasValue(keywordMap.get(key))) continue;
-    gaps.push({
+    gaps.push(withPriority({
       type: "static",
       entityId: key,
       entityLabel: key,
@@ -198,13 +287,13 @@ async function collectStaticGaps(languageId: string): Promise<CoverageGap[]> {
           englishValue: staticMessageDefaults[key] ?? key,
         },
       ],
-    });
+    }));
   }
 
-  return gaps;
+  return { gaps, totalFields: staticMessageKeys.length };
 }
 
-async function collectCmsGaps(languageId: string): Promise<CoverageGap[]> {
+async function collectCmsGaps(languageId: string): Promise<CoverageCollection> {
   const [pages, menus, footer, cmsKeywords] = await Promise.all([
     prisma.cMSPage.findMany({
       include: {
@@ -231,28 +320,31 @@ async function collectCmsGaps(languageId: string): Promise<CoverageGap[]> {
     cmsValueMap.get(cmsTranslationKey(entityType, entityId, field));
 
   const gaps: CoverageGap[] = [];
+  let totalFields = 0;
 
   for (const page of pages) {
+    totalFields += countTranslatableFields(page, CMS_TRANSLATABLE_FIELDS.page);
     const pageMissing = collectMissingFields(page, null, CMS_TRANSLATABLE_FIELDS.page, (field) =>
       getCmsValue("page", page.id, field),
     );
     if (pageMissing.length) {
-      gaps.push({
+      gaps.push(withPriority({
         type: "cms",
         entityId: page.id,
         entityLabel: page.title,
         context: "Page",
         cmsEntityType: "page",
         missingFields: pageMissing,
-      });
+      }));
     }
 
     for (const section of page.sections) {
+      totalFields += countTranslatableFields(section, CMS_TRANSLATABLE_FIELDS.section);
       const sectionMissing = collectMissingFields(section, null, CMS_TRANSLATABLE_FIELDS.section, (field) =>
         getCmsValue("section", section.id, field),
       );
       if (sectionMissing.length) {
-        gaps.push({
+        gaps.push(withPriority({
           type: "cms",
           entityId: section.id,
           entityLabel: section.title || section.sectionKey,
@@ -260,15 +352,16 @@ async function collectCmsGaps(languageId: string): Promise<CoverageGap[]> {
           cmsEntityType: "section",
           cmsPageId: page.id,
           missingFields: sectionMissing,
-        });
+        }));
       }
 
       for (const block of section.blocks) {
+        totalFields += countTranslatableFields(block, CMS_TRANSLATABLE_FIELDS.block);
         const blockMissing = collectMissingFields(block, null, CMS_TRANSLATABLE_FIELDS.block, (field) =>
           getCmsValue("block", block.id, field),
         );
         if (blockMissing.length) {
-          gaps.push({
+          gaps.push(withPriority({
             type: "cms",
             entityId: block.id,
             entityLabel: block.title || block.blockType,
@@ -276,7 +369,7 @@ async function collectCmsGaps(languageId: string): Promise<CoverageGap[]> {
             cmsEntityType: "block",
             cmsPageId: page.id,
             missingFields: blockMissing,
-          });
+          }));
         }
       }
     }
@@ -284,46 +377,50 @@ async function collectCmsGaps(languageId: string): Promise<CoverageGap[]> {
 
   for (const menu of menus) {
     for (const item of menu.items) {
+      totalFields += countTranslatableFields(item, CMS_TRANSLATABLE_FIELDS.menuItem);
       const itemMissing = collectMissingFields(item, null, CMS_TRANSLATABLE_FIELDS.menuItem, (field) =>
         getCmsValue("menuItem", item.id, field),
       );
       if (itemMissing.length) {
-        gaps.push({
+        gaps.push(withPriority({
           type: "cms",
           entityId: item.id,
           entityLabel: item.label,
           context: `${menu.name} menu`,
           cmsEntityType: "menuItem",
           missingFields: itemMissing,
-        });
+        }));
       }
     }
   }
 
   if (footer) {
+    totalFields += countTranslatableFields(footer, CMS_TRANSLATABLE_FIELDS.footer);
     const footerMissing = collectMissingFields(footer, null, CMS_TRANSLATABLE_FIELDS.footer, (field) =>
       getCmsValue("footer", footer.id, field),
     );
     if (footerMissing.length) {
-      gaps.push({
+      gaps.push(withPriority({
         type: "cms",
         entityId: footer.id,
         entityLabel: footer.title || "Footer",
         context: "Footer",
         cmsEntityType: "footer",
         missingFields: footerMissing,
-      });
+      }));
     }
   }
 
-  return gaps;
+  return { gaps, totalFields };
 }
 
 export async function getTranslationCoverage(
   languageId: string,
-  query: { type?: string; page?: string; limit?: string },
+  query: { type?: string; priority?: string; page?: string; limit?: string; search?: string },
 ) {
-  if (!languageId) throw new AppError("languageId is required.", 400);
+  if (!languageId || languageId === "undefined" || languageId === "null") {
+    throw new AppError("languageId is required.", 400);
+  }
 
   const language = await prisma.language.findUnique({
     where: { id: languageId },
@@ -335,33 +432,53 @@ export async function getTranslationCoverage(
   if (!language.isEnabled) throw new AppError("Language is disabled.", 400);
 
   const filterType = query.type as CoverageGapType | "all" | undefined;
+  const priorityFilter = query.priority as CoveragePriority | "all" | undefined;
   const { page, limit, skip } = getPagination(query);
 
-  const [productGaps, categoryGaps, staticGaps, cmsGaps] = await Promise.all([
+  if (filterType && filterType !== "all" && !["product", "category", "static", "cms"].includes(filterType)) {
+    throw new AppError("Invalid coverage type.", 400);
+  }
+
+  if (priorityFilter && priorityFilter !== "all" && !["high", "medium", "low"].includes(priorityFilter)) {
+    throw new AppError("Invalid coverage priority.", 400);
+  }
+
+  const [productCoverage, categoryCoverage, staticCoverage, cmsCoverage] = await Promise.all([
     collectProductGaps(languageId),
     collectCategoryGaps(languageId),
     collectStaticGaps(languageId),
     collectCmsGaps(languageId),
   ]);
 
-  const allGaps = [...productGaps, ...categoryGaps, ...staticGaps, ...cmsGaps];
-  const summary = summarize(allGaps);
+  const collections: Record<CoverageGapType, CoverageCollection> = {
+    product: productCoverage,
+    category: categoryCoverage,
+    static: staticCoverage,
+    cms: cmsCoverage,
+  };
+
+  const allGaps = [
+    ...productCoverage.gaps,
+    ...categoryCoverage.gaps,
+    ...staticCoverage.gaps,
+    ...cmsCoverage.gaps,
+  ];
+  const summary = summarize(collections);
 
   const filteredGaps =
     !filterType || filterType === "all"
       ? allGaps
       : allGaps.filter((gap) => gap.type === filterType);
 
-  if (filterType && filterType !== "all" && !["product", "category", "static", "cms"].includes(filterType)) {
-    throw new AppError("Invalid coverage type.", 400);
-  }
+  const priorityGaps = filteredGaps.filter((gap) => gapMatchesPriority(gap, priorityFilter));
+  const searchedGaps = priorityGaps.filter((gap) => gapMatchesSearch(gap, query.search));
 
-  const total = filteredGaps.length;
-  const data = filteredGaps.slice(skip, skip + limit);
+  const total = searchedGaps.length;
+  const data = searchedGaps.slice(skip, skip + limit);
 
   return {
     language,
     summary,
-    gaps: { data, total, page, limit },
+    gaps: { data, total, page, limit, skip, totalPages: Math.ceil(total / limit) },
   };
 }

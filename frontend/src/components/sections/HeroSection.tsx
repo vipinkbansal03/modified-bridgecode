@@ -5,6 +5,7 @@ import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
 import { Container } from "@/components/ui/Container";
+import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import { PillCTA } from "../ui/PillCTA";
 
 export interface HeroSlide {
@@ -22,6 +23,7 @@ interface HeroSectionProps {
 const AUTOPLAY_MS = 6000000;
 
 export function HeroSection({ data }: HeroSectionProps) {
+  const { t } = useStaticTranslations();
   const { slides } = data;
   const [index, setIndex] = useState(0);
 
@@ -34,6 +36,8 @@ export function HeroSection({ data }: HeroSectionProps) {
   }, [slides.length]);
 
   const slide = slides[index];
+  const kicker = slide.kicker === "Since 1994" ? t("ui.home.since1994") : slide.kicker;
+  const ctaLabel = slide.ctaLabel === "Shop by category" ? t("ui.home.shopByCategory") : slide.ctaLabel;
   const go = (delta: number) =>
     setIndex((i) => (i + delta + slides.length) % slides.length);
 
@@ -67,12 +71,12 @@ export function HeroSection({ data }: HeroSectionProps) {
               transition={{ duration: 0.6, delay: 0.15, ease: "easeOut" }}
             >
               <span className="mb-5 block text-[13px] font-medium tracking-wide text-white">
-                {slide.kicker}
+                {kicker}
               </span>
               <h1 className="max-w-[780px] text-[clamp(40px,6vw,76px)] font-light leading-[1.06] text-white">
                 {slide.title}
               </h1>
-              <PillCTA href={slide.ctaHref} label={slide.ctaLabel} className="mt-8" />
+              <PillCTA href={slide.ctaHref} label={ctaLabel} className="mt-8" />
             </motion.div>
           </Container>
         </motion.div>
@@ -83,14 +87,14 @@ export function HeroSection({ data }: HeroSectionProps) {
           {slides.map((_, i) => (
             <button
               key={i}
-              aria-label={`Go to slide ${i + 1}`}
+              aria-label={t("ui.common.goToSlide", { number: i + 1 })}
               onClick={() => setIndex(i)}
               className={`h-2 rounded-full bg-white transition-all ${i === index ? "w-6" : "w-2 bg-white/35"}`}
             />
           ))}
         </div>
         <button
-          aria-label="Previous slide"
+          aria-label={t("ui.common.previousSlide")}
           onClick={() => go(-1)}
           className="hidden sm:flex h-9.5 w-9.5 items-center justify-center rounded-full border border-white/40 text-white hover:border-white"
         >
@@ -98,7 +102,7 @@ export function HeroSection({ data }: HeroSectionProps) {
         </button>
 
         <button
-          aria-label="Next slide"
+          aria-label={t("ui.common.nextSlide")}
           onClick={() => go(1)}
           className="hidden sm:flex h-9.5 w-9.5 items-center justify-center rounded-full border border-white/40 text-white hover:border-white"
         >

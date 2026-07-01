@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, createContext, useContext, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, XCircle, Info } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, XCircle, Info } from "lucide-react";
 import { cn } from "@/utils/cn";
 
 // ─── DataTable ────────────────────────────────────────────
@@ -206,15 +206,82 @@ interface AdminSelectProps extends React.SelectHTMLAttributes<HTMLSelectElement>
 }
 
 export function AdminSelect({ label, error, options, className, ...props }: AdminSelectProps) {
+  const { value, defaultValue, onChange, onBlur, disabled, name, id } = props;
+  const [isOpen, setIsOpen] = useState(false);
+  const [internalValue, setInternalValue] = useState(String(defaultValue ?? ""));
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selectedValue = String(value ?? internalValue ?? "");
+  const selectedOption = options.find((option) => option.value === selectedValue);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectOption = (nextValue: string) => {
+    setInternalValue(nextValue);
+    setIsOpen(false);
+
+    if (onChange) {
+      onChange({
+        target: { value: nextValue, name },
+        currentTarget: { value: nextValue, name },
+      } as React.ChangeEvent<HTMLSelectElement>);
+    }
+  };
+
   return (
-    <div className="space-y-1.5">
+    <div ref={rootRef} className="relative space-y-1.5">
       {label && <label className="block text-[13px] font-medium text-[#1A1A1A]">{label}</label>}
-      <select
-        {...props}
-        className={cn("w-full rounded-md border bg-white px-3.5 py-2.5 text-[14px] text-[#1A1A1A] outline-none", error ? "border-red-400" : "border-[#E6E6E6] focus:border-[#E31E24]", className)}
+      <input type="hidden" name={name} value={selectedValue} />
+      <button
+        id={id}
+        type="button"
+        disabled={disabled}
+        onBlur={onBlur as unknown as React.FocusEventHandler<HTMLButtonElement>}
+        onClick={() => setIsOpen((current) => !current)}
+        className={cn(
+          "flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border bg-white px-3.5 py-2.5 text-left text-[14px] text-[#1A1A1A] outline-none transition disabled:cursor-not-allowed disabled:opacity-50",
+          error ? "border-red-400" : "border-[#E6E6E6] focus:border-[#E31E24]",
+          className,
+        )}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
       >
-        {options.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-      </select>
+        <span className={cn("truncate", !selectedOption && "text-[#9A9A9A]")}>
+          {selectedOption?.label ?? options[0]?.label ?? "Select"}
+        </span>
+        <ChevronDown size={15} className={cn("shrink-0 text-[#9A9A9A] transition", isOpen && "rotate-180")} />
+      </button>
+      {isOpen && (
+        <div
+          role="listbox"
+          className="absolute left-0 right-0 z-50 mt-1 max-h-64 origin-top animate-admin-select-dropdown overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg"
+        >
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="option"
+              aria-selected={option.value === selectedValue}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => selectOption(option.value)}
+              className={cn(
+                "w-full cursor-pointer px-3.5 py-2 text-left text-[13.5px] transition hover:bg-[#F7F7F7]",
+                option.value === selectedValue ? "bg-red-50 text-[#E31E24]" : "text-[#1A1A1A]",
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
       {error && <p className="text-[12px] text-red-500">{error}</p>}
     </div>
   );

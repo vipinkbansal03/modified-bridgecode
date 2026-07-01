@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { Reveal } from "@/components/ui/Reveal";
+import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import type { FaqItem } from "@/types/common.types";
 
 interface FaqAccordionProps {
@@ -11,13 +12,14 @@ interface FaqAccordionProps {
 }
 
 export function FaqAccordion({ items }: FaqAccordionProps) {
+  const { t } = useStaticTranslations();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
     <section id="faqs" className="py-16">
       <Container>
         <Reveal>
-          <h2 className="mb-2 text-[clamp(24px,2.6vw,32px)] font-normal text-ink">Frequently asked questions</h2>
+          <h2 className="mb-2 text-[clamp(24px,2.6vw,32px)] font-normal text-ink">{t("ui.common.faqsTitle")}</h2>
           <div className="mt-2">
             {items.map((item, i) => {
               const open = openIndex === i;

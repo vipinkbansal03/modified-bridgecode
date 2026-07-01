@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
+import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 
 export interface BlogCardProps {
   image: string;
@@ -17,6 +18,9 @@ export interface BlogCardProps {
 }
 
 export function BlogCard({ image, title, excerpt, date, url, ctaLabel = "Read more", primary }: BlogCardProps) {
+  const { t } = useStaticTranslations();
+  const label = ctaLabel === "Read more" ? t("ui.blog.readMore") : ctaLabel;
+
   return (
     <motion.div whileHover={{ y: -3 }} transition={{ duration: 0.2, ease: "easeOut" }} className="flex min-h-[100%] w-[280px] flex-none snap-start flex-col">
       <div className="relative mb-4.5 h-[220px] w-full rounded bg-grey overflow-hidden">
@@ -35,7 +39,7 @@ export function BlogCard({ image, title, excerpt, date, url, ctaLabel = "Read mo
             : "inline-flex items-center gap-1.5 self-start rounded-pill border border-line px-4 py-2.5 text-[13.5px] font-medium text-ink"
         }
       >
-        {ctaLabel} <ArrowRight size={13} />
+        {label} <ArrowRight size={13} />
       </a>
     </motion.div>
   );
