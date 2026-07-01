@@ -207,7 +207,7 @@ export default function RegisterPage() {
             <div>
               <h1 className="font-serif text-[30px] font-semibold leading-tight text-[#111]">Create customer account</h1>
               <p className="mt-1.5 text-[13px] text-[#8A8A8A]">
-                Register as a doctor or dealer to access the Modern Orthodontics portal.
+                Register as a doctor / retailer or dealer to access the Modern Orthodontics portal.
               </p>
             </div>
             <button
@@ -229,7 +229,7 @@ export default function RegisterPage() {
 
             <div className="flex flex-wrap items-center justify-center gap-7 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] px-4 py-2 text-[13px]">
               <span className="font-semibold text-[#1A1A1A]">Register as</span>
-              <RadioOption name="customerType" value="DOCTOR" label="Doctor" checked={formik.values.customerType === "DOCTOR"} onChange={formik.handleChange} />
+              <RadioOption name="customerType" value="DOCTOR" label="Doctor / Retailer" checked={formik.values.customerType === "DOCTOR"} onChange={formik.handleChange} />
               <RadioOption name="customerType" value="DEALER" label="Dealer" checked={formik.values.customerType === "DEALER"} onChange={formik.handleChange} />
             </div>
 

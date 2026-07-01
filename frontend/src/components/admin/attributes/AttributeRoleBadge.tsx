@@ -9,8 +9,8 @@ const STYLES: Record<AttributeRole, string> = {
 
 const LABELS: Record<AttributeRole, string> = {
   DROPDOWN: "Dropdown",
-  X_GRID: "X-Grid",
-  Y_GRID: "Y-Grid",
+  X_GRID: "Grid X Axis",
+  Y_GRID: "Grid Y Axis",
 };
 
 export function AttributeRoleBadge({ role }: { role: AttributeRole }) {

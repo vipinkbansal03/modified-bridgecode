@@ -40,6 +40,7 @@ const valueBaseSchema = z.object({
   moq: z.number().int().min(0).nullable().optional(),
   tierPrice: z.number().min(0).nullable().optional(),
   dealerPrice: z.number().min(0).nullable().optional(),
+  validationRole: attributeRole.optional(),
   status: attributeStatus.optional(),
   sortOrder: z.number().int().min(0).optional(),
 });

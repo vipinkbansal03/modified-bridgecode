@@ -2,6 +2,8 @@ import { ApprovalStatus, CustomerType, Status } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { AppError, getPagination } from "../../utils/apiResponse";
 import { sendCustomerApprovalEmail, sendCustomerRejectionEmail } from "../../utils/email";
+import { assignCustomerRole } from "../customerRoles/customerRoles.service";
+import { assertTierUsable } from "../tiers/tiers.service";
 
 type CustomerProfileInput = {
   firstName?: string;
@@ -34,7 +36,7 @@ export async function listCustomers(query: { page?: string; limit?: string; sear
       skip,
       take: limit,
       orderBy: { createdAt: "desc" },
-      include: { tier: true },
+      include: { tier: true, customerRole: true },
     }),
     prisma.customer.count({ where }),
   ]);
@@ -45,7 +47,7 @@ export async function listCustomers(query: { page?: string; limit?: string; sear
 export async function getCustomer(id: string) {
   const customer = await prisma.customer.findUnique({
     where: { id, deletedAt: null },
-    include: { tier: true, defaultCountry: true },
+    include: { tier: true, defaultCountry: true, customerRole: true },
   });
   if (!customer) throw new AppError("Customer not found.", 404);
   return customer;
@@ -54,14 +56,17 @@ export async function getCustomer(id: string) {
 export async function updateCustomerTier(id: string, tierId: string | null) {
   await getCustomer(id);
   if (tierId) {
-    const tier = await prisma.tier.findUnique({ where: { id: tierId } });
-    if (!tier) throw new AppError("Tier not found.", 404);
+    await assertTierUsable(tierId);
   }
   return prisma.customer.update({
     where: { id },
     data: { tierId },
-    include: { tier: true },
+    include: { tier: true, customerRole: true, defaultCountry: true },
   });
+}
+
+export async function updateCustomerRole(id: string, customerRoleId: string) {
+  return assignCustomerRole(id, customerRoleId);
 }
 
 export async function updateCustomerProfile(id: string, data: CustomerProfileInput) {
@@ -106,7 +111,7 @@ export async function updateCustomerProfile(id: string, data: CustomerProfileInp
   return prisma.customer.update({
     where: { id },
     data: next,
-    include: { tier: true, defaultCountry: true },
+    include: { tier: true, defaultCountry: true, customerRole: true },
   });
 }
 
@@ -114,7 +119,7 @@ export async function approveCustomer(id: string) {
   const customer = await prisma.customer.update({
     where: { id },
     data: { approvalStatus: "ACTIVE" },
-    include: { tier: true, defaultCountry: true },
+    include: { tier: true, defaultCountry: true, customerRole: true },
   });
   await sendCustomerApprovalEmail({ email: customer.email, firstName: customer.firstName });
   return customer;
@@ -124,7 +129,7 @@ export async function rejectCustomer(id: string) {
   const customer = await prisma.customer.update({
     where: { id },
     data: { approvalStatus: "SUSPENDED" },
-    include: { tier: true, defaultCountry: true },
+    include: { tier: true, defaultCountry: true, customerRole: true },
   });
   await sendCustomerRejectionEmail({ email: customer.email, firstName: customer.firstName });
   return customer;

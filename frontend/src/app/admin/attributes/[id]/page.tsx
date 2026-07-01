@@ -15,7 +15,7 @@ import { AttributeRoleBadge } from "@/components/admin/attributes/AttributeRoleB
 import { AttributeValueEditors } from "@/components/admin/attributes/AttributeValueEditors";
 import { useAdminAttribute, useUpdateAttribute } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
-import { ATTRIBUTE_ROLE_LABELS, getRoleChangeWarnings, type AttributeRole } from "@/lib/attributeUtils";
+import { ATTRIBUTE_DISPLAY_TYPE_LABELS, getDisplayTypeChangeWarnings, type AttributeRole } from "@/lib/attributeUtils";
 import type { ApiAttribute } from "@/types/api.types";
 
 export default function AttributeDetailPage() {
@@ -28,7 +28,6 @@ export default function AttributeDetailPage() {
   const [name, setName] = useState("");
   const [role, setRole] = useState<AttributeRole>("DROPDOWN");
   const [status, setStatus] = useState<"ACTIVE" | "INACTIVE">("ACTIVE");
-  const [pendingRole, setPendingRole] = useState<AttributeRole | null>(null);
   const [roleWarnings, setRoleWarnings] = useState<string[]>([]);
 
   useEffect(() => {
@@ -39,23 +38,12 @@ export default function AttributeDetailPage() {
   }, [attribute]);
 
   const handleRoleChange = (nextRole: AttributeRole) => {
-    if (!attribute || nextRole === attribute.role) {
-      setRole(nextRole);
-      return;
-    }
-    const warnings = getRoleChangeWarnings(attribute.values ?? [], nextRole, attribute.role);
-    if (warnings.length > 0) {
-      setPendingRole(nextRole);
-      setRoleWarnings(warnings);
-      return;
-    }
     setRole(nextRole);
-  };
-
-  const confirmRoleChange = () => {
-    if (pendingRole) setRole(pendingRole);
-    setPendingRole(null);
-    setRoleWarnings([]);
+    if (attribute && nextRole !== attribute.role) {
+      setRoleWarnings(getDisplayTypeChangeWarnings(attribute.values ?? [], nextRole, attribute.role));
+    } else {
+      setRoleWarnings([]);
+    }
   };
 
   const handleSave = async () => {
@@ -79,7 +67,7 @@ export default function AttributeDetailPage() {
 
   if (isLoading) {
     return (
-      <AdminLayout title="Attribute" breadcrumb={[{ label: "Attributes", href: "/admin/attributes" }, { label: "…" }]}>
+      <AdminLayout title="Attribute" breadcrumb={[{ label: "Attributes", href: "/admin/attributes" }, { label: "..." }]}>
         <div className="h-40 animate-pulse rounded-lg bg-[#E6E6E6]" />
       </AdminLayout>
     );
@@ -110,13 +98,13 @@ export default function AttributeDetailPage() {
         <div className="grid gap-4 sm:grid-cols-3">
           <AdminInput label="Name" value={name} onChange={(e) => setName(e.target.value)} />
           <AdminSelect
-            label="Role"
+            label="Display Type"
             value={role}
             onChange={(e) => handleRoleChange(e.target.value as AttributeRole)}
             options={[
-              { value: "DROPDOWN", label: ATTRIBUTE_ROLE_LABELS.DROPDOWN },
-              { value: "X_GRID", label: ATTRIBUTE_ROLE_LABELS.X_GRID },
-              { value: "Y_GRID", label: ATTRIBUTE_ROLE_LABELS.Y_GRID },
+              { value: "DROPDOWN", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.DROPDOWN },
+              { value: "X_GRID", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.X_GRID },
+              { value: "Y_GRID", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.Y_GRID },
             ]}
           />
           <AdminSelect
@@ -132,7 +120,12 @@ export default function AttributeDetailPage() {
         {role !== attribute.role && (
           <p className="mt-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-            Role changed — save to apply. Existing values must match the new role or the server will reject the update.
+            Display type changed. Save to apply. The storefront will automatically switch between dropdown and matrix rendering based on this setting.
+          </p>
+        )}
+        {roleWarnings.length > 0 && (
+          <p className="mt-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[12.5px] text-blue-900">
+            {roleWarnings.join(" ")}
           </p>
         )}
         <button
@@ -149,13 +142,6 @@ export default function AttributeDetailPage() {
         <AttributeValueEditors attribute={{ ...(attribute as ApiAttribute), role }} />
       </div>
 
-      <ConfirmModal
-        open={!!pendingRole}
-        title="Change attribute role?"
-        message={roleWarnings.length ? `${roleWarnings.join(" ")} You can change the role, but saving will fail until values are updated.` : "Proceed with role change?"}
-        onConfirm={confirmRoleChange}
-        onCancel={() => { setPendingRole(null); setRoleWarnings([]); }}
-      />
       {ToastComponent}
     </AdminLayout>
   );

@@ -3,6 +3,7 @@ import { AppError, getPagination, slugify } from "../../utils/apiResponse";
 import { uploadFile, deleteFile } from "../../config/storage";
 import type { Prisma } from "@prisma/client";
 import { setVariantStock } from "../inventory/inventory.service";
+import { assertTierUsable } from "../tiers/tiers.service";
 
 const ALLOW_UNMAPPED_VARIANT_GENERATION_OVERRIDE = false;
 
@@ -572,9 +573,27 @@ export async function assignAttributes(
 
   const existingAttributes = await prisma.attribute.findMany({
     where: { id: { in: attributeIds } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, role: true },
   });
   if (existingAttributes.length !== attributeIds.length) throw new AppError("One or more attributes were not found.", 400);
+
+  const attributeById = new Map(existingAttributes.map((attribute) => [attribute.id, attribute]));
+  const xAxisAttributes = attributes.filter((attributeConfig) => attributeById.get(attributeConfig.attributeId)?.role === "X_GRID");
+  const yAxisAttributes = attributes.filter((attributeConfig) => attributeById.get(attributeConfig.attributeId)?.role === "Y_GRID");
+
+  if (xAxisAttributes.length > 1) {
+    throw new AppError(
+      `Only one Grid X Axis attribute can be mapped to a product. Remove one of: ${xAxisAttributes.map((attributeConfig) => attributeById.get(attributeConfig.attributeId)?.name ?? attributeConfig.attributeId).join(", ")}.`,
+      400,
+    );
+  }
+
+  if (yAxisAttributes.length > 1) {
+    throw new AppError(
+      `Only one Grid Y Axis attribute can be mapped to a product. Remove one of: ${yAxisAttributes.map((attributeConfig) => attributeById.get(attributeConfig.attributeId)?.name ?? attributeConfig.attributeId).join(", ")}.`,
+      400,
+    );
+  }
 
   const allowedValueIds = Array.from(new Set(attributes.flatMap((attributeConfig) => attributeConfig.allowedValueIds ?? [])));
   const allowedValues = allowedValueIds.length
@@ -1132,10 +1151,9 @@ export async function createTierPricing(productId: string, data: PricingRuleInpu
   await ensureVariantBelongsToProduct(productId, data.variantId);
 
   const [tier, country] = await Promise.all([
-    prisma.tier.findUnique({ where: { id: data.tierId } }),
+    assertTierUsable(data.tierId, { countryId: data.countryId }),
     prisma.country.findUnique({ where: { id: data.countryId } }),
   ]);
-  if (!tier) throw new AppError("Tier not found.", 404);
   if (!country) throw new AppError("Country not found.", 404);
 
   const existing = await prisma.tierPricing.findFirst({
@@ -1162,6 +1180,7 @@ export async function updateTierPricing(productId: string, ruleId: string, data:
     fixedPrice: data.fixedPrice ?? existing.fixedPrice,
   });
   await ensureVariantBelongsToProduct(productId, variantId);
+  await assertTierUsable(tierId, { countryId });
 
   const duplicate = await prisma.tierPricing.findFirst({
     where: { productId, tierId, countryId, variantId, NOT: { id: ruleId } },

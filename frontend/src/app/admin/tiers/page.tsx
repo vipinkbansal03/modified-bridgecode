@@ -212,9 +212,15 @@ export default function AdminTiersPage() {
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Country Availability</h3>
-              <p className="mt-0.5 text-[12.5px] text-[#6B6B6B]">A new tier is not recognized in any country until enabled here.</p>
+              <p className="mt-0.5 text-[12.5px] text-[#6B6B6B]">
+                If no countries are enabled here, this tier works globally. Once you enable one or more countries, the tier is limited to those enabled countries.
+              </p>
             </div>
-            {selectedTier && <span className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] text-[#6B6B6B]">{enabledCountryCount} enabled</span>}
+            {selectedTier && (
+              <span className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] text-[#6B6B6B]">
+                {enabledCountryCount === 0 ? "Global fallback" : `${enabledCountryCount} enabled`}
+              </span>
+            )}
           </div>
 
           {!selectedTier ? (

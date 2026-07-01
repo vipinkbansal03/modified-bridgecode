@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { asyncHandler, ApiResponse } from "../../utils/apiResponse";
+import { asyncHandler, ApiResponse, AppError } from "../../utils/apiResponse";
 import { AuthRequest } from "../../middleware/auth.middleware";
 import * as CustomersService from "./customers.service";
 
@@ -36,6 +36,13 @@ export const updateTier = asyncHandler(async (req: AuthRequest, res: Response) =
   const tierId = req.body?.tierId === "" ? null : req.body?.tierId ?? null;
   const customer = await CustomersService.updateCustomerTier(req.params.id, tierId);
   return ApiResponse.success(res, "Customer tier updated.", customer);
+});
+
+export const updateRole = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const customerRoleId = String(req.body?.customerRoleId ?? "").trim();
+  if (!customerRoleId) throw new AppError("Customer role is required.", 400);
+  const customer = await CustomersService.updateCustomerRole(req.params.id, customerRoleId);
+  return ApiResponse.success(res, "Customer role updated.", customer);
 });
 
 export const listOrders = asyncHandler(async (req: AuthRequest, res: Response) => {

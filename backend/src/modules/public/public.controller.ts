@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { asyncHandler, ApiResponse, ApiResponse as AR } from "../../utils/apiResponse";
 import * as S from "./public.service";
+import jwt from "jsonwebtoken";
 
 export const listProducts = asyncHandler(async (req: Request, res: Response) => {
   const result = await S.publicListProducts({ ...(req.query as Record<string, string>), countryCode: getRequestedCountry(req) } as never, getRequestedLanguage(req));
@@ -10,6 +11,17 @@ export const listProducts = asyncHandler(async (req: Request, res: Response) => 
 export const getProduct = asyncHandler(async (req: Request, res: Response) => {
   const product = await S.publicGetProduct(String(req.params.slug), getRequestedLanguage(req), getRequestedCountry(req));
   return AR.success(res, "Product.", product);
+});
+
+export const previewProductPrices = asyncHandler(async (req: Request, res: Response) => {
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  const result = await S.previewPublicProductPrices(
+    String(req.params.slug),
+    items,
+    getRequestedCountry(req),
+    getOptionalCustomerId(req),
+  );
+  return AR.success(res, "Price preview.", result);
 });
 
 export const listCategories = asyncHandler(async (req: Request, res: Response) => {
@@ -66,4 +78,17 @@ function getRequestedCountry(req: Request) {
   const queryCountry = typeof req.query.countryCode === "string" ? req.query.countryCode : "";
   const headerCountry = typeof req.headers["x-country-code"] === "string" ? req.headers["x-country-code"] : "";
   return (queryCountry || headerCountry).trim().toUpperCase() || undefined;
+}
+
+function getOptionalCustomerId(req: Request) {
+  const authHeader = typeof req.headers.authorization === "string" ? req.headers.authorization : "";
+  if (!authHeader.startsWith("Bearer ")) return undefined;
+
+  try {
+    const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET!) as { id?: string; scope?: string };
+    if (decoded.scope !== "customer" || !decoded.id) return undefined;
+    return decoded.id;
+  } catch {
+    return undefined;
+  }
 }
