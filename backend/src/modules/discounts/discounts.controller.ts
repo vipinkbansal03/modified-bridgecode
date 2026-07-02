@@ -17,6 +17,11 @@ export const create = asyncHandler(async (req: AuthRequest, res: Response) => {
   return ApiResponse.created(res, "Discount created.", discount);
 });
 
+export const bulk = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await DiscountsService.bulkDiscounts(req.body);
+  return ApiResponse.success(res, "Bulk action completed.", result);
+});
+
 export const update = asyncHandler(async (req: AuthRequest, res: Response) => {
   const discount = await DiscountsService.updateDiscount(req.params.id, req.body);
   return ApiResponse.success(res, "Discount updated.", discount);

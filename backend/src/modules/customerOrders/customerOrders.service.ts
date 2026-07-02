@@ -14,6 +14,10 @@ function generateOrderNumber() {
 
 const CUSTOMER_CHECKOUT_PAYMENT_METHOD = "PAY_ON_DELIVERY";
 
+function roundMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 async function calculateCustomerOrder(customerId: string, input: CreateCustomerOrderInput) {
   const customer = await prisma.customer.findUnique({
     where: { id: customerId, deletedAt: null },
@@ -127,6 +131,23 @@ async function calculateCustomerOrder(customerId: string, input: CreateCustomerO
 
 export async function estimateCustomerOrder(customerId: string, input: CreateCustomerOrderInput) {
   const calculation = await calculateCustomerOrder(customerId, input);
+  const automaticDiscounts = calculation.orderItems.flatMap((item) =>
+    item.resolvedPrice.appliedDiscounts
+      .filter((entry) => entry.type === "PROMOTIONAL_DISCOUNT")
+      .map((entry) => ({
+        variantId: item.variant.id,
+        sku: item.variant.sku,
+        label: entry.label,
+        discountRuleType: entry.discountRuleType,
+        discountPercent: entry.discountPercent ?? null,
+        fixedAmount: entry.fixedAmount ?? null,
+        amountBefore: entry.amountBefore,
+        amountAfter: entry.amountAfter,
+        discountAmount: roundMoney((entry.amountBefore - entry.amountAfter) * item.quantity),
+        quantity: item.quantity,
+      })),
+  );
+  const automaticDiscount = roundMoney(automaticDiscounts.reduce((sum, entry) => sum + entry.discountAmount, 0));
   const taxBreakdown = calculation.orderItems.reduce((layers, item) => {
     for (const layer of item.resolvedPrice.appliedDiscounts.filter((entry) => entry.type === "TAX")) {
       const key = `${layer.label}:${layer.taxPercent ?? ""}`;
@@ -148,6 +169,17 @@ export async function estimateCustomerOrder(customerId: string, input: CreateCus
     discount: calculation.discount,
     couponCode: calculation.couponValidation?.coupon.code ?? null,
     couponDiscount: calculation.discount,
+    automaticDiscount,
+    automaticDiscounts,
+    items: calculation.orderItems.map((item) => ({
+      variantId: item.variant.id,
+      sku: item.variant.sku,
+      title: item.variant.title,
+      quantity: item.quantity,
+      unitPrice: item.unitPriceBeforeTax,
+      lineSubtotal: item.subtotal,
+      appliedDiscounts: item.resolvedPrice.appliedDiscounts.filter((entry) => entry.type === "PROMOTIONAL_DISCOUNT"),
+    })),
     total: calculation.total,
     currency: calculation.orderItems[0]?.resolvedPrice.currency,
     taxBreakdown: Array.from(taxBreakdown.values()),

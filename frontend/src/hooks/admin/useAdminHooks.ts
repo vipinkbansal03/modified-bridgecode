@@ -628,7 +628,7 @@ export const useDeleteCoupon = () => {
 
 // ─── Quotes ──────────────────────────────────────────────
 
-export const useAdminDiscounts = (params?: { page?: number; type?: string; status?: string }) =>
+export const useAdminDiscounts = (params?: { page?: number; limit?: number; search?: string; type?: string; status?: string; scope?: string; countryId?: string }) =>
   useQuery({ queryKey: ["admin-discounts", params], queryFn: () => adminApi.get("/discounts", { params }).then((r) => r.data) });
 
 export const useCreateDiscount = () => {
@@ -647,6 +647,14 @@ export const useUpdateDiscount = () => {
 export const useDeleteDiscount = () => {
   const qc = useQueryClient();
   return useMutation({ mutationFn: (id: string) => adminApi.delete(`/discounts/${id}`).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-discounts"] }) });
+};
+
+export const useBulkDiscounts = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { ids: string[]; action: "ENABLE" | "DISABLE" | "DELETE" }) => adminApi.post("/discounts/bulk", data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-discounts"] }),
+  });
 };
 
 // ─── Blogs ────────────────────────────────────────────────

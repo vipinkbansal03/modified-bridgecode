@@ -33,7 +33,7 @@ export type AppliedPriceLayer = {
   taxPercent?: number | null;
   taxAmount?: number | null;
   taxRuleType?: "CGST" | "SGST" | "VAT" | "SALES_TAX" | "LEGACY_PRODUCT_PRICE_TAX";
-  discountRuleType?: "TIER" | "MOQ";
+  discountRuleType?: "TIER" | "MOQ" | "PROMOTIONAL";
   ruleId?: string;
   warning?: string;
 };
@@ -94,7 +94,7 @@ function applyRule(
 type PromotionalDiscount = {
   id: string;
   name: string;
-  type: "TIER" | "MOQ";
+  type: "TIER" | "MOQ" | "PROMOTIONAL";
   productId: string | null;
   collectionId: string | null;
   categoryId: string | null;
@@ -113,7 +113,7 @@ function applyPromotionalDiscount(currentPrice: number, rule: PromotionalDiscoun
 
   const layer: AppliedPriceLayer = {
     type: "PROMOTIONAL_DISCOUNT",
-    label: `${rule.name} ${rule.type === "TIER" ? "tier" : "MOQ"} discount`,
+    label: `${rule.name} ${rule.type === "TIER" ? "tier" : rule.type === "MOQ" ? "MOQ" : "promotional"} discount`,
     amountBefore,
     amountAfter,
     discountPercent,
@@ -171,7 +171,7 @@ function selectBestPromotionalDiscount(discounts: PromotionalDiscount[], current
 
 async function findPromotionalDiscounts(
   input: ResolvePriceInput,
-  type: "TIER" | "MOQ",
+  type: "TIER" | "MOQ" | "PROMOTIONAL",
   productCategoryId: string | null,
   productCollectionIds: string[],
   tierId?: string | null
@@ -190,7 +190,8 @@ async function findPromotionalDiscounts(
     where: {
       type,
       status: "ACTIVE",
-      ...(type === "TIER" ? { tierId } : { minQuantity: { lte: input.quantity } }),
+      ...(type === "TIER" ? { tierId } : {}),
+      ...(type === "MOQ" ? { minQuantity: { lte: input.quantity } } : {}),
       OR: scopeFilters,
       AND: [
         { OR: [{ countryId: input.countryId }, { countryId: null }] },
@@ -432,6 +433,17 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
   if (promotionalMoqDiscount) {
     const applied = applyPromotionalDiscount(currentPrice, promotionalMoqDiscount.discount);
     if (promotionalMoqDiscount.warning) applied.layer.warning = promotionalMoqDiscount.warning;
+    currentPrice = applied.nextPrice;
+    layers.push(applied.layer);
+  }
+
+  const openPromotionalDiscount = selectBestPromotionalDiscount(
+    await findPromotionalDiscounts(input, "PROMOTIONAL", product?.categoryId ?? null, productCollectionIds),
+    currentPrice
+  );
+  if (openPromotionalDiscount) {
+    const applied = applyPromotionalDiscount(currentPrice, openPromotionalDiscount.discount);
+    if (openPromotionalDiscount.warning) applied.layer.warning = openPromotionalDiscount.warning;
     currentPrice = applied.nextPrice;
     layers.push(applied.layer);
   }
