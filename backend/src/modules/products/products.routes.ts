@@ -10,6 +10,9 @@ router.get("/", requirePermission("products.view", "products.create", "products.
 router.post("/", requirePermission("products.create"), C.create);
 router.put("/reorder", requirePermission("products.update", "products.manage"), C.reorder);
 router.post("/bulk", requirePermission("products.update", "products.delete", "products.manage"), C.bulkUpdate);
+router.get("/export", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.exportSpreadsheet);
+router.post("/import/preview", requirePermission("products.create"), upload.single("file"), C.previewImport);
+router.get("/variants", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listVariants);
 router.get("/:id/countries", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listCountries);
 router.put("/:id/countries", requirePermission("products.update"), C.updateCountries);
 router.get("/:id/tier-pricing", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listTierPricing);
@@ -22,6 +25,9 @@ router.put("/:id/moq-pricing/:ruleId", requirePermission("products.update"), C.u
 router.delete("/:id/moq-pricing/:ruleId", requirePermission("products.update"), C.deleteMoqPricing);
 router.get("/:id", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.getOne);
 router.put("/:id", requirePermission("products.update"), C.update);
+router.post("/:id/duplicate", requirePermission("products.update"), C.duplicate);
+router.post("/:id/archive", requirePermission("products.update"), C.archive);
+router.post("/:id/restore", requirePermission("products.update"), C.restore);
 router.delete("/:id", requirePermission("products.delete"), C.remove);
 router.post("/:id/packages", requirePermission("products.update"), C.createPackage);
 router.put("/:id/packages/:packageId", requirePermission("products.update"), C.updatePackage);
@@ -40,9 +46,11 @@ router.post("/:id/variants", requirePermission("products.update"), C.createVaria
 router.get("/:id/variants/:variantId/countries", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listVariantCountries);
 router.put("/:id/variants/:variantId/countries", requirePermission("products.update"), C.updateVariantCountries);
 router.put("/:id/variants/:variantId", requirePermission("products.update"), C.updateVariant);
+router.post("/:id/variants/:variantId/archive", requirePermission("products.update"), C.archiveVariant);
+router.post("/:id/variants/:variantId/restore", requirePermission("products.update"), C.restoreVariant);
 router.delete("/:id/variants/:variantId", requirePermission("products.update"), C.deleteVariant);
 router.post("/:id/variants/:variantId/clone", requirePermission("products.update"), C.cloneVariant);
 
-router.post("/import", requirePermission("products.create"), upload.single("file"), C.importCsv);
+router.post("/import", requirePermission("products.create"), upload.single("file"), C.importSpreadsheet);
 
 export default router;

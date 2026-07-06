@@ -2,7 +2,7 @@
 
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { StatCard, DataTable, StatusBadge, Column } from "@/components/admin/AdminComponents";
-import { useAdminOrders, useAdminProducts, useAdminQuotes, useAdminInventory, useOrderAnalytics } from "@/hooks/admin/useAdminHooks";
+import { useAdminOrders, useAdminProducts, useAdminQuotes, useAdminInventory, useAdminInventoryDashboard, useOrderAnalytics } from "@/hooks/admin/useAdminHooks";
 import { Package, ShoppingCart, MessageSquare, Warehouse, ArrowRight, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import {
@@ -33,7 +33,8 @@ export default function DashboardPage() {
   const { data: orders, isLoading: ordersLoading } = useAdminOrders({ limit: 5 } as never);
   const { data: products, isLoading: productsLoading } = useAdminProducts({ limit: 1 });
   const { data: quotes } = useAdminQuotes({ page: 1 });
-  const { data: inventory } = useAdminInventory({} as never);
+  const { data: inventory } = useAdminInventory({ status: "LOW_STOCK", limit: 6 } as never);
+  const { data: inventorySummary } = useAdminInventoryDashboard();
   const { data: analytics } = useOrderAnalytics();
 
   return (
@@ -43,7 +44,7 @@ export default function DashboardPage() {
         <StatCard title="Total Products" value={products?.pagination?.total ?? "—"} icon={<Package size={18} />} isLoading={productsLoading} />
         <StatCard title="Total Orders" value={orders?.pagination?.total ?? analytics?.totals?.totalOrders ?? "—"} icon={<ShoppingCart size={18} />} isLoading={ordersLoading} color="bg-blue-600" />
         <StatCard title="Pending Quotes" value={quotes?.pagination?.total ?? "—"} icon={<MessageSquare size={18} />} color="bg-orange-500" />
-        <StatCard title="Low Stock Items" value={inventory?.pagination?.total ?? "—"} icon={<Warehouse size={18} />} color="bg-red-500" />
+        <StatCard title="Low Stock Items" value={inventorySummary?.totals?.lowStockCount ?? "—"} icon={<Warehouse size={18} />} color="bg-red-500" />
       </div>
 
       {/* Charts */}

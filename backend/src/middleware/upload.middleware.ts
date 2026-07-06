@@ -27,6 +27,7 @@ const fileFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFil
     "text/plain",
     "application/csv",
     "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ];
   if (allowed.includes(file.mimetype)) {
     cb(null, true);

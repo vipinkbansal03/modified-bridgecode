@@ -1,6 +1,7 @@
 import { Prisma, Status } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { AppError, slugify } from "../../utils/apiResponse";
+import { readSpreadsheetRows, writeSpreadsheetBuffer } from "../../utils/spreadsheet";
 
 const categoryInclude = {
   parent: { select: { id: true, name: true, slug: true } },
@@ -20,6 +21,50 @@ type CategoryInput = {
   status?: Status;
   sortOrder?: number;
 };
+
+type CategorySpreadsheetRow = {
+  name: string;
+  slug?: string | null;
+  parentSlug?: string | null;
+  status?: string | null;
+  sortOrder?: number | null;
+  image?: string | null;
+  description?: string | null;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  countryCodes?: string[];
+};
+
+type SpreadsheetIssue = {
+  row: number;
+  field: string;
+  message: string;
+};
+
+function parseBooleanList(value: string | null | undefined) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) return [];
+  return normalized
+    .split(/[;,|]/)
+    .map((code) => code.trim().toUpperCase())
+    .filter(Boolean);
+}
+
+function parseCategoryRow(raw: Record<string, string>): CategorySpreadsheetRow {
+  const sortOrder = String(raw.sortOrder ?? "").trim();
+  return {
+    name: raw.name?.trim() || "",
+    slug: raw.slug?.trim() || null,
+    parentSlug: raw.parentSlug?.trim() || null,
+    status: raw.status?.trim().toUpperCase() || null,
+    sortOrder: sortOrder ? Number(sortOrder) : null,
+    image: raw.image?.trim() || null,
+    description: raw.description?.trim() || null,
+    seoTitle: raw.seoTitle?.trim() || null,
+    seoDescription: raw.seoDescription?.trim() || null,
+    countryCodes: parseBooleanList(raw.countryCodes),
+  };
+}
 
 export async function listCategories() {
   return prisma.category.findMany({
@@ -47,6 +92,19 @@ async function assertUniqueSlug(slug: string, excludeId?: string) {
     },
   });
   if (existing) throw new AppError("A category with this slug already exists.", 409);
+}
+
+async function assertUniqueNameWithinParent(name: string, parentId: string | null | undefined, excludeId?: string) {
+  const existing = await prisma.category.findFirst({
+    where: {
+      name,
+      parentId: parentId ?? null,
+      deletedAt: null,
+      ...(excludeId ? { NOT: { id: excludeId } } : {}),
+    },
+    select: { id: true },
+  });
+  if (existing) throw new AppError("A category with this name already exists under the same parent.", 409);
 }
 
 async function assertValidParent(categoryId: string | undefined, parentId: string | null | undefined) {
@@ -94,6 +152,7 @@ export async function createCategory(data: CategoryInput & { name: string }) {
   const slug = slugify(data.slug?.trim() || data.name);
   if (!slug) throw new AppError("Category slug is required.", 400);
   await assertUniqueSlug(slug);
+  await assertUniqueNameWithinParent(data.name.trim(), data.parentId);
   await assertValidParent(undefined, data.parentId);
   const maxOrder = await prisma.category.aggregate({ where: { deletedAt: null }, _max: { sortOrder: true } });
   const writeData = cleanCategoryData({ ...data, slug, sortOrder: data.sortOrder ?? (maxOrder._max.sortOrder ?? -1) + 1 });
@@ -101,12 +160,13 @@ export async function createCategory(data: CategoryInput & { name: string }) {
 }
 
 export async function updateCategory(id: string, data: CategoryInput) {
-  await getCategory(id);
+  const current = await getCategory(id);
   const slug = data.slug !== undefined || data.name !== undefined ? slugify(data.slug?.trim() || data.name || "") : undefined;
   if (slug !== undefined) {
     if (!slug) throw new AppError("Category slug is required.", 400);
     await assertUniqueSlug(slug, id);
   }
+  if (data.name !== undefined) await assertUniqueNameWithinParent(data.name.trim(), data.parentId === undefined ? current.parentId : data.parentId, id);
   await assertValidParent(id, data.parentId);
   const writeData = cleanCategoryData({ ...data, ...(slug !== undefined ? { slug } : {}) }, id);
   return prisma.category.update({ where: { id }, data: writeData as Prisma.CategoryUncheckedUpdateInput, include: categoryInclude });
@@ -114,7 +174,81 @@ export async function updateCategory(id: string, data: CategoryInput) {
 
 export async function deleteCategory(id: string) {
   await getCategory(id);
+  const [productCount, childCount] = await Promise.all([
+    prisma.product.count({ where: { categoryId: id, deletedAt: null } }),
+    prisma.category.count({ where: { parentId: id, deletedAt: null } }),
+  ]);
+  if (productCount > 0) throw new AppError("Cannot delete a category that is used by products.", 400);
+  if (childCount > 0) throw new AppError("Cannot delete a category that still has child categories.", 400);
   return prisma.category.update({ where: { id }, data: { deletedAt: new Date() } });
+}
+
+export async function archiveCategory(id: string) {
+  await getCategory(id);
+  return prisma.category.update({ where: { id }, data: { status: "INACTIVE" } });
+}
+
+export async function restoreCategory(id: string) {
+  await getCategory(id);
+  return prisma.category.update({ where: { id }, data: { status: "ACTIVE", deletedAt: null } });
+}
+
+export async function duplicateCategory(id: string) {
+  const source = await prisma.category.findFirst({
+    where: { id, deletedAt: null },
+    include: {
+      countries: true,
+      translations: true,
+    },
+  });
+  if (!source) throw new AppError("Category not found.", 404);
+
+  const baseName = `${source.name} Copy`;
+  const slug = `${slugify(baseName)}-${Date.now()}`;
+  await assertUniqueSlug(slug);
+  await assertUniqueNameWithinParent(baseName, source.parentId);
+
+  return prisma.$transaction(async (tx) => {
+    const category = await tx.category.create({
+      data: {
+        name: baseName,
+        slug,
+        description: source.description,
+        seoTitle: source.seoTitle,
+        seoDescription: source.seoDescription,
+        parentId: source.parentId,
+        image: source.image,
+        status: source.status,
+        sortOrder: source.sortOrder + 1,
+      },
+      include: categoryInclude,
+    });
+
+    if (source.countries.length) {
+      await tx.categoryCountry.createMany({
+        data: source.countries.map((country) => ({
+          categoryId: category.id,
+          countryId: country.countryId,
+          enabled: country.enabled,
+        })),
+      });
+    }
+
+    if (source.translations.length) {
+      await tx.categoryTranslation.createMany({
+        data: source.translations.map((translation) => ({
+          categoryId: category.id,
+          languageId: translation.languageId,
+          name: translation.name,
+          description: translation.description,
+          reviewedAt: translation.reviewedAt,
+          status: translation.status,
+        })),
+      });
+    }
+
+    return getCategory(category.id);
+  });
 }
 
 export async function reorderCategories(items: { id: string; sortOrder: number }[]) {
@@ -164,4 +298,231 @@ export async function updateCategoryCountries(categoryId: string, items: { count
     ),
   );
   return listCategoryCountries(categoryId);
+}
+
+const CATEGORY_EXPORT_COLUMNS = [
+  { key: "name", header: "name" },
+  { key: "slug", header: "slug" },
+  { key: "parentSlug", header: "parentSlug" },
+  { key: "status", header: "status" },
+  { key: "sortOrder", header: "sortOrder" },
+  { key: "image", header: "image" },
+  { key: "description", header: "description" },
+  { key: "seoTitle", header: "seoTitle" },
+  { key: "seoDescription", header: "seoDescription" },
+  { key: "countryCodes", header: "countryCodes" },
+] as const;
+
+function categoryExportCountryCodes(countries: { country: { code: string } }[]) {
+  return countries.map((country) => country.country.code).join(", ");
+}
+
+async function previewCategoryRows(rows: Record<string, string>[]) {
+  const parsed = rows.map(parseCategoryRow);
+  const issues: SpreadsheetIssue[] = [];
+  const duplicateWarnings: string[] = [];
+  const seenSlug = new Map<string, number>();
+  const seenNameByParent = new Map<string, number>();
+  const slugs = new Set<string>();
+  const fileRowBySlug = new Map<string, number>();
+  const countryCodes = new Set<string>();
+
+  for (const [index, row] of parsed.entries()) {
+    const rowNumber = index + 2;
+    if (!row.name) issues.push({ row: rowNumber, field: "name", message: "Name is required." });
+    if (row.status && !["ACTIVE", "INACTIVE"].includes(row.status)) {
+      issues.push({ row: rowNumber, field: "status", message: "Status must be ACTIVE or INACTIVE." });
+    }
+    const slug = slugify(row.slug || row.name);
+    fileRowBySlug.set(slug, rowNumber);
+    const seenSlugRow = seenSlug.get(slug);
+    if (seenSlugRow) {
+      const message = `Duplicate slug '${slug}' found on rows ${seenSlugRow} and ${rowNumber}.`;
+      issues.push({ row: rowNumber, field: "slug", message });
+      duplicateWarnings.push(message);
+    } else {
+      seenSlug.set(slug, rowNumber);
+    }
+    const parentKey = `${row.parentSlug || ""}::${row.name.toLowerCase()}`;
+    const seenNameRow = seenNameByParent.get(parentKey);
+    if (seenNameRow) {
+      const message = `Duplicate category name '${row.name}' under the same parent appears on rows ${seenNameRow} and ${rowNumber}.`;
+      issues.push({ row: rowNumber, field: "name", message });
+      duplicateWarnings.push(message);
+    } else {
+      seenNameByParent.set(parentKey, rowNumber);
+    }
+    slugs.add(slug);
+    row.countryCodes?.forEach((code) => countryCodes.add(code));
+  }
+
+  const [existingCategories, countries] = await Promise.all([
+    prisma.category.findMany({
+      where: { slug: { in: Array.from(slugs) }, deletedAt: null },
+      select: { slug: true, id: true, status: true },
+    }),
+    prisma.country.findMany({ where: { code: { in: Array.from(countryCodes) } }, select: { code: true, status: true } }),
+  ]);
+
+  const categoryBySlug = new Map(existingCategories.map((category) => [category.slug, category]));
+  const countryByCode = new Map(countries.map((country) => [country.code, country]));
+  const previewRows: Array<CategorySpreadsheetRow & { row: number }> = [];
+
+  for (const [index, row] of parsed.entries()) {
+    const rowNumber = index + 2;
+    const slug = slugify(row.slug || row.name);
+    const parentSlug = row.parentSlug ? slugify(row.parentSlug) : null;
+    const parentExists = parentSlug ? categoryBySlug.get(parentSlug) : null;
+    const parentInFile = parentSlug ? fileRowBySlug.has(parentSlug) : false;
+    if (parentSlug && !parentExists && !parentInFile) {
+      issues.push({ row: rowNumber, field: "parentSlug", message: `Parent category '${row.parentSlug}' was not found.` });
+    }
+    if (parentExists && parentExists.status !== "ACTIVE") {
+      issues.push({ row: rowNumber, field: "parentSlug", message: `Parent category '${row.parentSlug}' is inactive.` });
+    }
+    row.countryCodes?.forEach((code) => {
+      const country = countryByCode.get(code);
+      if (!country) issues.push({ row: rowNumber, field: "countryCodes", message: `Country '${code}' was not found.` });
+      else if (country.status !== "ACTIVE") issues.push({ row: rowNumber, field: "countryCodes", message: `Country '${code}' is inactive.` });
+    });
+    previewRows.push({ ...row, row: rowNumber, slug });
+  }
+
+  return { parsed, issues, duplicateWarnings, categoryBySlug, previewRows, fileRowBySlug };
+}
+
+export async function exportCategoriesSpreadsheet() {
+  const categories = await prisma.category.findMany({
+    where: { deletedAt: null },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    include: {
+      parent: { select: { slug: true } },
+      countries: { where: { enabled: true }, include: { country: { select: { code: true } } } },
+    },
+  });
+
+  return writeSpreadsheetBuffer(
+    categories.map((category) => ({
+      name: category.name,
+      slug: category.slug,
+      parentSlug: category.parent?.slug ?? "",
+      status: category.status,
+      sortOrder: category.sortOrder,
+      image: category.image ?? "",
+      description: category.description ?? "",
+      seoTitle: category.seoTitle ?? "",
+      seoDescription: category.seoDescription ?? "",
+      countryCodes: categoryExportCountryCodes(category.countries),
+    })),
+    "Categories",
+    CATEGORY_EXPORT_COLUMNS.map((column) => ({ key: column.key, header: column.header })),
+  );
+}
+
+export async function previewCategoryImport(filePath: string) {
+  const rows = readSpreadsheetRows(filePath);
+  const preview = await previewCategoryRows(rows);
+  return {
+    totalRows: preview.parsed.length,
+    validRows: Math.max(0, preview.parsed.length - preview.issues.length),
+    invalidRows: preview.issues.length,
+    issues: preview.issues,
+    duplicateWarnings: preview.duplicateWarnings,
+    sampleRows: preview.previewRows.slice(0, 10),
+  };
+}
+
+async function syncCategoryCountries(tx: Prisma.TransactionClient, categoryId: string, countryCodes: string[]) {
+  if (!countryCodes.length) return;
+  const countries = await tx.country.findMany({ where: { code: { in: countryCodes } }, select: { id: true, code: true } });
+  if (countries.length !== countryCodes.length) throw new AppError("One or more countries were not found.", 400);
+  await Promise.all(
+    countries.map((country) =>
+      tx.categoryCountry.upsert({
+        where: { categoryId_countryId: { categoryId, countryId: country.id } },
+        update: { enabled: true },
+        create: { categoryId, countryId: country.id, enabled: true },
+      }),
+    ),
+  );
+}
+
+export async function importCategoriesSpreadsheet(filePath: string) {
+  const rows = readSpreadsheetRows(filePath);
+  const preview = await previewCategoryRows(rows);
+  if (preview.issues.length > 0) {
+    throw new AppError(`Import validation failed with ${preview.issues.length} issue(s).`, 400);
+  }
+
+  const summary = { created: 0, updated: 0 };
+  const nowSuffix = Date.now().toString().slice(-6);
+  const rowMap = new Map<string, CategorySpreadsheetRow>();
+  preview.parsed.forEach((row) => {
+    const slug = slugify(row.slug || row.name);
+    rowMap.set(slug, row);
+  });
+  const depthMemo = new Map<string, number>();
+  const visitStack = new Set<string>();
+  const getDepth = (slug: string): number => {
+    if (depthMemo.has(slug)) return depthMemo.get(slug)!;
+    if (visitStack.has(slug)) throw new AppError("Circular category references were found in the import file.", 400);
+    visitStack.add(slug);
+    const row = rowMap.get(slug);
+    if (!row) {
+      visitStack.delete(slug);
+      return 0;
+    }
+    const parentSlug = row.parentSlug ? slugify(row.parentSlug) : null;
+    const parentDepth = parentSlug && rowMap.has(parentSlug) ? getDepth(parentSlug) + 1 : 0;
+    depthMemo.set(slug, parentDepth);
+    visitStack.delete(slug);
+    return parentDepth;
+  };
+  const sortedRows = [...preview.parsed].sort((a, b) => {
+    const aSlug = slugify(a.slug || a.name);
+    const bSlug = slugify(b.slug || b.name);
+    return getDepth(aSlug) - getDepth(bSlug) || a.name.localeCompare(b.name);
+  });
+
+  await prisma.$transaction(async (tx) => {
+    for (const [index, row] of sortedRows.entries()) {
+      const slug = slugify(row.slug || row.name);
+      const existing = await tx.category.findFirst({ where: { slug, deletedAt: null } });
+      const parentSlug = row.parentSlug ? slugify(row.parentSlug) : null;
+      const parent = parentSlug ? await tx.category.findFirst({ where: { slug: parentSlug, deletedAt: null }, select: { id: true } }) : null;
+      const baseData = {
+        name: row.name.trim(),
+        slug: existing ? existing.slug : `${slug}-${nowSuffix}-${index + 1}`,
+        description: row.description || null,
+        seoTitle: row.seoTitle || null,
+        seoDescription: row.seoDescription || null,
+        parentId: parent?.id ?? null,
+        image: row.image || null,
+        status: (row.status as never) || "ACTIVE",
+        sortOrder: row.sortOrder ?? 0,
+      };
+
+      if (existing) {
+        await tx.category.update({ where: { id: existing.id }, data: baseData });
+        if (row.countryCodes?.length) await syncCategoryCountries(tx, existing.id, row.countryCodes);
+        summary.updated += 1;
+      } else {
+        const created = await tx.category.create({ data: baseData });
+        if (row.countryCodes?.length) await syncCategoryCountries(tx, created.id, row.countryCodes);
+        summary.created += 1;
+      }
+    }
+  });
+
+  return {
+    ...summary,
+    report: {
+      totalRows: sortedRows.length,
+      validRows: sortedRows.length,
+      invalidRows: 0,
+      issues: [],
+      duplicateWarnings: preview.duplicateWarnings,
+      sampleRows: sortedRows.slice(0, 10).map((row, index) => ({ row: index + 2, ...row })),
+    },
+  };
 }

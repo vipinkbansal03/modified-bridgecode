@@ -234,6 +234,9 @@ export async function shipOrder(id: string, data: { shippingProvider: string; tr
 
 export async function deliverOrder(id: string) {
   const order = await getOrder(id);
+  if (order.status === "DELIVERED") {
+    return order;
+  }
 
   await Promise.all(
     order.items

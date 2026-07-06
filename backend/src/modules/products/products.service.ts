@@ -1,6 +1,7 @@
 import { prisma } from "../../config/database";
 import { AppError, getPagination, slugify } from "../../utils/apiResponse";
 import { uploadFile, deleteFile } from "../../config/storage";
+import { readSpreadsheetRows, removeTempFile, writeSpreadsheetBuffer } from "../../utils/spreadsheet";
 import type { Prisma } from "@prisma/client";
 import { setVariantStock } from "../inventory/inventory.service";
 import { assertTierUsable } from "../tiers/tiers.service";
@@ -18,6 +19,198 @@ function buildGeneratedVariantSku(product: { id: string; sku?: string | null }, 
     hash = (hash * 31 + variantKey.charCodeAt(i)) >>> 0;
   }
   return `${product.sku || product.id}-${hash.toString(36)}`;
+}
+
+async function assertActiveCategory(categoryId: string) {
+  const category = await prisma.category.findFirst({
+    where: { id: categoryId, deletedAt: null },
+    select: { id: true, status: true },
+  });
+  if (!category) throw new AppError("Category not found.", 404);
+  if (category.status !== "ACTIVE") throw new AppError("Selected category is inactive.", 400);
+  return category;
+}
+
+async function assertUniqueProductSlug(slug: string, excludeId?: string) {
+  const duplicate = await prisma.product.findFirst({
+    where: {
+      slug,
+      deletedAt: null,
+      ...(excludeId ? { NOT: { id: excludeId } } : {}),
+    },
+    select: { id: true },
+  });
+  if (duplicate) throw new AppError("A product with this slug already exists.", 409);
+}
+
+async function assertUniqueProductSku(sku?: string | null, excludeId?: string) {
+  const normalized = sku?.trim();
+  if (!normalized) return;
+  const duplicate = await prisma.product.findFirst({
+    where: {
+      sku: normalized,
+      deletedAt: null,
+      ...(excludeId ? { NOT: { id: excludeId } } : {}),
+    },
+    select: { id: true },
+  });
+  if (duplicate) throw new AppError("A product with this SKU already exists.", 409);
+}
+
+function summarizeInventory(inventories: { stock: number; reservedStock: number }[]) {
+  return inventories.reduce(
+    (acc, inventory) => {
+      acc.stock += inventory.stock;
+      acc.available += Math.max(0, inventory.stock - inventory.reservedStock);
+      return acc;
+    },
+    { stock: 0, available: 0 },
+  );
+}
+
+type ProductInput = {
+  title: string;
+  shortDescription?: string;
+  description?: string;
+  categoryId: string;
+  sku?: string;
+  productCode?: string;
+  brand?: string;
+  status?: string;
+  isFeatured?: boolean;
+  hasVariants?: boolean;
+  defaultCountryId?: string;
+  defaultCurrencyId?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  seoKeywords?: string;
+};
+
+type ProductListQuery = {
+  page?: string;
+  limit?: string;
+  search?: string;
+  categoryId?: string;
+  status?: string;
+  sortBy?: string;
+  sortDir?: string;
+  ids?: string[];
+};
+
+type VariantListQuery = {
+  page?: string;
+  limit?: string;
+  search?: string;
+  status?: string;
+  productId?: string;
+  sortBy?: string;
+  sortDir?: string;
+};
+
+type SpreadsheetIssue = {
+  row: number;
+  field: string;
+  message: string;
+};
+
+type SpreadsheetPreviewResult = {
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  issues: SpreadsheetIssue[];
+  duplicateWarnings: string[];
+  sampleRows: Record<string, unknown>[];
+};
+
+type ProductImportRow = {
+  title: string;
+  sku?: string | null;
+  productCode?: string | null;
+  categorySlug?: string | null;
+  brand?: string | null;
+  status?: string | null;
+  sortOrder?: number | null;
+  isFeatured?: boolean | null;
+  hasVariants?: boolean | null;
+  shortDescription?: string | null;
+  description?: string | null;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  seoKeywords?: string | null;
+  countryCodes?: string[];
+};
+
+type CategoryImportRow = {
+  name: string;
+  slug?: string | null;
+  parentSlug?: string | null;
+  status?: string | null;
+  sortOrder?: number | null;
+  image?: string | null;
+  description?: string | null;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  countryCodes?: string[];
+};
+
+function parseBooleanish(value: unknown) {
+  if (typeof value === "boolean") return value;
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) return null;
+  if (["1", "true", "yes", "y"].includes(normalized)) return true;
+  if (["0", "false", "no", "n"].includes(normalized)) return false;
+  return null;
+}
+
+function parseNumberish(value: unknown) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseCodeList(value: unknown) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) return [];
+  return normalized
+    .split(/[;,|]/)
+    .map((code) => code.trim().toUpperCase())
+    .filter(Boolean);
+}
+
+function parseProductImportRow(raw: Record<string, string>): ProductImportRow {
+  return {
+    title: raw.title?.trim() || "",
+    sku: raw.sku?.trim() || null,
+    productCode: raw.productCode?.trim() || null,
+    categorySlug: raw.categorySlug?.trim() || null,
+    brand: raw.brand?.trim() || null,
+    status: raw.status?.trim().toUpperCase() || null,
+    sortOrder: parseNumberish(raw.sortOrder),
+    isFeatured: parseBooleanish(raw.isFeatured),
+    hasVariants: parseBooleanish(raw.hasVariants),
+    shortDescription: raw.shortDescription?.trim() || null,
+    description: raw.description?.trim() || null,
+    seoTitle: raw.seoTitle?.trim() || null,
+    seoDescription: raw.seoDescription?.trim() || null,
+    seoKeywords: raw.seoKeywords?.trim() || null,
+    countryCodes: parseCodeList(raw.countryCodes),
+  };
+}
+
+function parseCategoryImportRow(raw: Record<string, string>): CategoryImportRow {
+  return {
+    name: raw.name?.trim() || "",
+    slug: raw.slug?.trim() || null,
+    parentSlug: raw.parentSlug?.trim() || null,
+    status: raw.status?.trim().toUpperCase() || null,
+    sortOrder: parseNumberish(raw.sortOrder),
+    image: raw.image?.trim() || null,
+    description: raw.description?.trim() || null,
+    seoTitle: raw.seoTitle?.trim() || null,
+    seoDescription: raw.seoDescription?.trim() || null,
+    countryCodes: parseCodeList(raw.countryCodes),
+  };
 }
 
 type BulkVariantUpdate = {
@@ -162,17 +355,13 @@ function buildVariantTitle(values: { value: string }[], packageTitle?: string | 
   return [...values.map((value) => value.value), ...(packageTitle ? [packageTitle] : [])].filter(Boolean).join(" / ");
 }
 
-// ─── List ─────────────────────────────────────────────────
-
-export async function listProducts(query: {
-  page?: string;
-  limit?: string;
+function buildProductWhere(query: {
   search?: string;
   categoryId?: string;
   status?: string;
-}) {
-  const { page, limit, skip } = getPagination(query);
-  const where: Prisma.ProductWhereInput = {
+  ids?: string[];
+}): Prisma.ProductWhereInput {
+  return {
     deletedAt: null,
     ...(query.search && {
       OR: [
@@ -183,21 +372,136 @@ export async function listProducts(query: {
     }),
     ...(query.categoryId && { categoryId: query.categoryId }),
     ...(query.status && { status: query.status as never }),
+    ...(query.ids?.length ? { id: { in: query.ids } } : {}),
   };
+}
+
+function buildVariantWhere(query: VariantListQuery): Prisma.ProductVariantWhereInput {
+  return {
+    product: { deletedAt: null },
+    ...(query.productId && { productId: query.productId }),
+    ...(query.status && { status: query.status as never }),
+    ...(query.search && {
+      OR: [
+        { title: { contains: query.search, mode: "insensitive" } },
+        { sku: { contains: query.search, mode: "insensitive" } },
+        { variantKey: { contains: query.search, mode: "insensitive" } },
+        {
+          product: {
+            OR: [
+              { title: { contains: query.search, mode: "insensitive" } },
+              { sku: { contains: query.search, mode: "insensitive" } },
+            ],
+          },
+        },
+      ],
+    }),
+  };
+}
+
+function buildVariantOrder(query: VariantListQuery): Prisma.ProductVariantOrderByWithRelationInput[] {
+  const sortDir = query.sortDir === "asc" ? "asc" : "desc";
+  switch (query.sortBy) {
+    case "title":
+      return [{ title: sortDir }, { createdAt: "desc" }];
+    case "sku":
+      return [{ sku: sortDir }, { createdAt: "desc" }];
+    case "status":
+      return [{ status: sortDir }, { createdAt: "desc" }];
+    case "product":
+      return [{ product: { title: sortDir } }, { title: "asc" }];
+    case "updatedAt":
+      return [{ updatedAt: sortDir }];
+    case "createdAt":
+      return [{ createdAt: sortDir }];
+    default:
+      return [{ updatedAt: "desc" }];
+  }
+}
+
+// ─── List ─────────────────────────────────────────────────
+
+export async function listProducts(query: ProductListQuery) {
+  const { page, limit, skip } = getPagination(query);
+  const where: Prisma.ProductWhereInput = buildProductWhere(query);
+
+  const sortBy = query.sortBy || "sortOrder";
+  const sortDir = query.sortDir === "asc" ? "asc" : "desc";
+  const orderBy: Prisma.ProductOrderByWithRelationInput[] =
+    sortBy === "title"
+      ? [{ title: sortDir as Prisma.SortOrder }, { createdAt: "desc" }]
+      : sortBy === "sku"
+      ? [{ sku: sortDir as Prisma.SortOrder }, { createdAt: "desc" }]
+      : sortBy === "brand"
+      ? [{ brand: sortDir as Prisma.SortOrder }, { createdAt: "desc" }]
+      : sortBy === "status"
+      ? [{ status: sortDir as Prisma.SortOrder }, { createdAt: "desc" }]
+      : sortBy === "updatedAt"
+      ? [{ updatedAt: sortDir as Prisma.SortOrder }]
+      : sortBy === "category"
+      ? [{ category: { name: sortDir as Prisma.SortOrder } }, { createdAt: "desc" }]
+      : [{ sortOrder: "asc" }, { createdAt: "desc" }];
 
   const [data, total] = await Promise.all([
     prisma.product.findMany({
       where,
       skip,
       take: limit,
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+      orderBy,
       include: {
-        category: { select: { id: true, name: true, slug: true } },
+        category: { select: { id: true, name: true, slug: true, status: true } },
         media: { orderBy: { sortOrder: "asc" }, take: 1 },
-        _count: { select: { variants: true } },
+        countries: { where: { enabled: true }, select: { countryId: true } },
+        inventories: { select: { stock: true, reservedStock: true } },
+        prices: {
+          where: { status: "ACTIVE", variantId: null },
+          orderBy: [{ sellingPrice: "asc" }],
+          take: 1,
+          include: { country: true, currency: true },
+        },
+        _count: { select: { variants: true, collections: true } },
       },
     }),
     prisma.product.count({ where }),
+  ]);
+
+  return { data, total, page, limit };
+}
+
+export async function listVariants(query: VariantListQuery) {
+  const { page, limit, skip } = getPagination(query);
+  const where = buildVariantWhere(query);
+  const orderBy = buildVariantOrder(query);
+
+  const [data, total] = await Promise.all([
+    prisma.productVariant.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy,
+      include: {
+        product: {
+          select: {
+            id: true,
+            title: true,
+            sku: true,
+            category: { select: { id: true, name: true, slug: true } },
+            media: { orderBy: { sortOrder: "asc" }, take: 1, select: { url: true, altText: true } },
+          },
+        },
+        package: { select: { id: true, title: true } },
+        countries: { where: { enabled: true }, select: { countryId: true } },
+        inventory: true,
+        prices: {
+          where: { status: "ACTIVE" },
+          orderBy: [{ sellingPrice: "asc" }],
+          take: 1,
+          include: { currency: true, country: true },
+        },
+        _count: { select: { attributeValues: true, countries: true, prices: true } },
+      },
+    }),
+    prisma.productVariant.count({ where }),
   ]);
 
   return { data, total, page, limit };
@@ -249,31 +553,23 @@ export async function getProduct(id: string) {
 
 // ─── Create ───────────────────────────────────────────────
 
-export async function createProduct(data: {
-  title: string;
-  shortDescription?: string;
-  description?: string;
-  categoryId: string;
-  sku?: string;
-  productCode?: string;
-  brand?: string;
-  status?: string;
-  isFeatured?: boolean;
-  hasVariants?: boolean;
-  defaultCountryId?: string;
-  defaultCurrencyId?: string;
-  seoTitle?: string;
-  seoDescription?: string;
-  seoKeywords?: string;
-}) {
-  const slug = slugify(data.title);
-  const existing = await prisma.product.findUnique({ where: { slug } });
-  const finalSlug = existing ? `${slug}-${Date.now()}` : slug;
+export async function createProduct(data: ProductInput) {
+  const title = data.title.trim();
+  if (!title) throw new AppError("Product title is required.", 400);
+  if (!data.categoryId) throw new AppError("Category is required.", 400);
+  await assertActiveCategory(data.categoryId);
+
+  const slug = slugify(title);
+  if (!slug) throw new AppError("Product slug is required.", 400);
+  await assertUniqueProductSlug(slug);
+  await assertUniqueProductSku(data.sku);
 
   return prisma.product.create({
     data: {
       ...data,
-      slug: finalSlug,
+      title,
+      slug,
+      sku: data.sku?.trim() || null,
       status: (data.status as never) || "DRAFT",
     },
   });
@@ -281,13 +577,26 @@ export async function createProduct(data: {
 
 // ─── Update ───────────────────────────────────────────────
 
-export async function updateProduct(id: string, data: Partial<ReturnType<typeof createProduct>>) {
-  await getProduct(id); // Throws 404 if not found
+export async function updateProduct(id: string, data: Partial<ProductInput>) {
+  const existing = await getProduct(id); // Throws 404 if not found
+  if (data.categoryId) await assertActiveCategory(data.categoryId);
 
   const updateData = { ...data } as Record<string, unknown>;
   if (data && typeof data === "object" && "title" in data && data.title) {
-    updateData.slug = slugify(data.title as string);
+    const nextSlug = slugify(data.title as string);
+    if (!nextSlug) throw new AppError("Product slug is required.", 400);
+    await assertUniqueProductSlug(nextSlug, id);
+    updateData.slug = nextSlug;
   }
+  if (data.sku !== undefined) {
+    await assertUniqueProductSku(data.sku, id);
+    updateData.sku = data.sku?.trim() || null;
+  }
+  if (data.title !== undefined) updateData.title = data.title.trim();
+  if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;
+  if (data.shortDescription !== undefined) updateData.shortDescription = data.shortDescription || null;
+  if (data.description !== undefined) updateData.description = data.description || null;
+  if (data.brand !== undefined) updateData.brand = data.brand?.trim() || existing.brand;
   return prisma.product.update({ where: { id }, data: updateData });
 }
 
@@ -296,6 +605,201 @@ export async function updateProduct(id: string, data: Partial<ReturnType<typeof 
 export async function deleteProduct(id: string) {
   await getProduct(id);
   return prisma.product.update({ where: { id }, data: { deletedAt: new Date() } });
+}
+
+export async function archiveProduct(id: string) {
+  await getProduct(id);
+  return prisma.product.update({ where: { id }, data: { status: "ARCHIVED" } });
+}
+
+export async function restoreProduct(id: string) {
+  await getProduct(id);
+  return prisma.product.update({ where: { id }, data: { status: "ACTIVE", deletedAt: null } });
+}
+
+export async function duplicateProduct(id: string) {
+  const source = await prisma.product.findFirst({
+    where: { id, deletedAt: null },
+    include: {
+      media: { orderBy: { sortOrder: "asc" } },
+      packages: { orderBy: { sortOrder: "asc" } },
+      attributes: {
+        include: { allowedValues: true },
+        orderBy: [{ createdAt: "asc" }],
+      },
+      inventories: { where: { variantId: null } },
+      countries: true,
+      collections: true,
+      translations: true,
+      prices: { include: { country: true, currency: true } },
+      variants: {
+        where: { status: { not: "INACTIVE" } },
+        include: {
+          attributeValues: true,
+          countries: true,
+          inventory: true,
+          prices: { include: { country: true, currency: true } },
+        },
+      },
+    },
+  });
+  if (!source) throw new AppError("Product not found.", 404);
+
+  const copiedSlug = `${slugify(source.title)}-copy-${Date.now()}`;
+  const copySuffix = Date.now().toString().slice(-4);
+  await assertUniqueProductSlug(copiedSlug);
+  if (source.sku) await assertUniqueProductSku(`${source.sku}-copy-${copySuffix}`);
+
+  return prisma.$transaction(async (tx) => {
+    const product = await tx.product.create({
+      data: {
+        title: `${source.title} Copy`,
+        slug: copiedSlug,
+        shortDescription: source.shortDescription,
+        description: source.description,
+        sortOrder: source.sortOrder,
+        categoryId: source.categoryId,
+        sku: source.sku ? `${source.sku}-copy-${copySuffix}` : null,
+        productCode: source.productCode,
+        brand: source.brand,
+        status: "DRAFT",
+        isFeatured: source.isFeatured,
+        hasVariants: source.hasVariants,
+        defaultCountryId: source.defaultCountryId,
+        defaultCurrencyId: source.defaultCurrencyId,
+        seoTitle: source.seoTitle,
+        seoDescription: source.seoDescription,
+        seoKeywords: source.seoKeywords,
+      },
+    });
+
+    if (source.media.length) {
+      await tx.productMedia.createMany({
+        data: source.media.map((media) => ({
+          productId: product.id,
+          url: media.url,
+          publicId: media.publicId,
+          type: media.type,
+          altText: media.altText,
+          sortOrder: media.sortOrder,
+          storageProvider: media.storageProvider,
+        })),
+      });
+    }
+
+    if (source.countries.length) {
+      await tx.productCountry.createMany({
+        data: source.countries.map((country) => ({
+          productId: product.id,
+          countryId: country.countryId,
+          enabled: country.enabled,
+        })),
+      });
+    }
+
+    if (source.collections.length) {
+      await tx.collectionProduct.createMany({
+        data: source.collections.map((collection, index) => ({
+          collectionId: collection.collectionId,
+          productId: product.id,
+          sortOrder: collection.sortOrder || index + 1,
+        })),
+      });
+    }
+
+    if (source.translations.length) {
+      await tx.productTranslation.createMany({
+        data: source.translations.map((translation) => ({
+          productId: product.id,
+          languageId: translation.languageId,
+          title: translation.title,
+          shortDescription: translation.shortDescription,
+          description: translation.description,
+          seoTitle: translation.seoTitle,
+          seoDescription: translation.seoDescription,
+          status: translation.status,
+          reviewedAt: translation.reviewedAt,
+          isAiGenerated: translation.isAiGenerated,
+        })),
+      });
+    }
+
+    for (const pkg of source.packages) {
+      await tx.productPackage.create({
+        data: {
+          productId: product.id,
+          title: pkg.title,
+          slug: `${pkg.slug}-copy-${Date.now().toString().slice(-4)}`,
+          image: pkg.image,
+          description: pkg.description,
+          status: pkg.status,
+          sortOrder: pkg.sortOrder,
+        },
+      });
+    }
+
+    for (const attribute of source.attributes) {
+      const copiedAttribute = await tx.productAttribute.create({
+        data: {
+          productId: product.id,
+          attributeId: attribute.attributeId,
+          required: attribute.required,
+          gridAxis: attribute.gridAxis,
+        },
+      });
+
+      if (attribute.allowedValues.length) {
+        await tx.productAttributeValueSelection.createMany({
+          data: attribute.allowedValues.map((allowedValue) => ({
+            productAttributeId: copiedAttribute.id,
+            attributeValueId: allowedValue.attributeValueId,
+          })),
+        });
+      }
+    }
+
+    if (source.inventories.length) {
+      await tx.inventory.createMany({
+        data: source.inventories.map((inventory) => ({
+          productId: product.id,
+          variantId: null,
+          stock: inventory.stock,
+          reservedStock: inventory.reservedStock,
+          lowStockThreshold: inventory.lowStockThreshold,
+          status: inventory.status,
+        })),
+      });
+    }
+
+    if (source.prices.length) {
+      await tx.productPrice.createMany({
+        data: source.prices.map((price) => ({
+          productId: product.id,
+          variantId: null,
+          countryId: price.countryId,
+          currencyId: price.currencyId,
+          mrp: price.mrp,
+          sellingPrice: price.sellingPrice,
+          dealerPrice: price.dealerPrice,
+          distributorPrice: price.distributorPrice,
+          taxPercentage: price.taxPercentage,
+          status: price.status,
+        })),
+      });
+    }
+
+    return tx.product.findUnique({
+      where: { id: product.id },
+      include: {
+        category: { select: { id: true, name: true, slug: true, status: true } },
+        media: { orderBy: { sortOrder: "asc" }, take: 1 },
+        countries: { where: { enabled: true }, select: { countryId: true } },
+        inventories: { select: { stock: true, reservedStock: true } },
+        prices: { where: { status: "ACTIVE", variantId: null }, orderBy: [{ sellingPrice: "asc" }], take: 1, include: { country: true, currency: true } },
+        _count: { select: { variants: true, collections: true } },
+      },
+    });
+  });
 }
 
 export async function reorderProducts(items: { id: string; sortOrder: number }[]) {
@@ -321,9 +825,10 @@ export async function reorderProducts(items: { id: string; sortOrder: number }[]
 
 export async function bulkUpdateProducts(data: {
   ids?: string[];
-  action?: "delete" | "enable" | "disable" | "assignCategory" | "assignCountries";
+  action?: "delete" | "enable" | "disable" | "archive" | "restore" | "assignCategory" | "assignCountries" | "assignCollections";
   categoryId?: string;
   countryIds?: string[];
+  collectionIds?: string[];
 }) {
   const ids = Array.from(new Set(data.ids ?? []));
   if (!ids.length) throw new AppError("Select at least one product.", 400);
@@ -351,10 +856,17 @@ export async function bulkUpdateProducts(data: {
     return { updated: ids.length };
   }
 
+  if (data.action === "archive" || data.action === "restore") {
+    await prisma.product.updateMany({
+      where: { id: { in: ids } },
+      data: { status: data.action === "archive" ? "ARCHIVED" : "ACTIVE" },
+    });
+    return { updated: ids.length };
+  }
+
   if (data.action === "assignCategory") {
     if (!data.categoryId) throw new AppError("categoryId is required.", 400);
-    const category = await prisma.category.findUnique({ where: { id: data.categoryId, deletedAt: null } });
-    if (!category) throw new AppError("Category not found.", 404);
+    await assertActiveCategory(data.categoryId);
     await prisma.product.updateMany({ where: { id: { in: ids } }, data: { categoryId: data.categoryId } });
     return { updated: ids.length };
   }
@@ -374,6 +886,25 @@ export async function bulkUpdateProducts(data: {
           })
         )
       )
+    );
+    return { updated: ids.length };
+  }
+
+  if (data.action === "assignCollections") {
+    const collectionIds = Array.from(new Set(data.collectionIds ?? []));
+    if (!collectionIds.length) throw new AppError("Select at least one collection.", 400);
+    const collections = await prisma.collection.findMany({ where: { id: { in: collectionIds } }, select: { id: true } });
+    if (collections.length !== collectionIds.length) throw new AppError("One or more collections were not found.", 400);
+    await prisma.$transaction(
+      ids.flatMap((productId) =>
+        collectionIds.map((collectionId) =>
+          prisma.collectionProduct.upsert({
+            where: { collectionId_productId: { collectionId, productId } },
+            update: {},
+            create: { collectionId, productId },
+          }),
+        ),
+      ),
     );
     return { updated: ids.length };
   }
@@ -1082,6 +1613,22 @@ export async function deleteVariant(productId: string, variantId: string) {
   });
 }
 
+export async function archiveVariant(productId: string, variantId: string) {
+  await getVariant(productId, variantId);
+  return prisma.productVariant.update({
+    where: { id: variantId },
+    data: { status: "INACTIVE" },
+  });
+}
+
+export async function restoreVariant(productId: string, variantId: string) {
+  await getVariant(productId, variantId);
+  return prisma.productVariant.update({
+    where: { id: variantId },
+    data: { status: "ACTIVE" },
+  });
+}
+
 export async function cloneVariant(productId: string, variantId: string) {
   const source = await getVariant(productId, variantId);
   const cloneSuffix = Date.now().toString().slice(-6);
@@ -1262,4 +1809,319 @@ export async function deleteMoqPricing(productId: string, ruleId: string) {
   const existing = await prisma.moqPricing.findFirst({ where: { id: ruleId, productId } });
   if (!existing) throw new AppError("MOQ pricing rule not found.", 404);
   await prisma.moqPricing.delete({ where: { id: ruleId } });
+}
+
+const PRODUCT_EXPORT_COLUMNS = [
+  { key: "title", header: "title" },
+  { key: "sku", header: "sku" },
+  { key: "productCode", header: "productCode" },
+  { key: "categorySlug", header: "categorySlug" },
+  { key: "brand", header: "brand" },
+  { key: "status", header: "status" },
+  { key: "sortOrder", header: "sortOrder" },
+  { key: "isFeatured", header: "isFeatured" },
+  { key: "hasVariants", header: "hasVariants" },
+  { key: "shortDescription", header: "shortDescription" },
+  { key: "description", header: "description" },
+  { key: "seoTitle", header: "seoTitle" },
+  { key: "seoDescription", header: "seoDescription" },
+  { key: "seoKeywords", header: "seoKeywords" },
+  { key: "countryCodes", header: "countryCodes" },
+] as const;
+
+function uniqueExcelSlug(title: string, suffix: string) {
+  const base = slugify(title);
+  return base ? `${base}-${suffix}` : suffix;
+}
+
+async function getProductSpreadsheetPreview(rows: Record<string, string>[]) {
+  const parsedRows = rows.map(parseProductImportRow);
+  const issues: SpreadsheetIssue[] = [];
+  const duplicateWarnings: string[] = [];
+  const seenSku = new Map<string, number>();
+  const seenProductCode = new Map<string, number>();
+  const seenSlug = new Map<string, number>();
+  const productCodes = new Set<string>();
+  const skus = new Set<string>();
+  const categorySlugs = new Set<string>();
+  const countryCodes = new Set<string>();
+
+  for (const [index, row] of parsedRows.entries()) {
+    const rowNumber = index + 2;
+    if (!row.title) issues.push({ row: rowNumber, field: "title", message: "Title is required." });
+    if (!row.categorySlug) issues.push({ row: rowNumber, field: "categorySlug", message: "Category slug is required." });
+    if (row.status && !["DRAFT", "ACTIVE", "INACTIVE", "ARCHIVED"].includes(row.status)) {
+      issues.push({ row: rowNumber, field: "status", message: "Status must be DRAFT, ACTIVE, INACTIVE, or ARCHIVED." });
+    }
+
+    if (row.sku) {
+      const seen = seenSku.get(row.sku);
+      if (seen) {
+        const message = `Duplicate SKU '${row.sku}' found on rows ${seen} and ${rowNumber}.`;
+        issues.push({ row: rowNumber, field: "sku", message });
+        duplicateWarnings.push(message);
+      } else {
+        seenSku.set(row.sku, rowNumber);
+      }
+      skus.add(row.sku);
+    }
+
+    if (row.productCode) {
+      const seen = seenProductCode.get(row.productCode);
+      if (seen) {
+        const message = `Duplicate product code '${row.productCode}' found on rows ${seen} and ${rowNumber}.`;
+        issues.push({ row: rowNumber, field: "productCode", message });
+        duplicateWarnings.push(message);
+      } else {
+        seenProductCode.set(row.productCode, rowNumber);
+      }
+      productCodes.add(row.productCode);
+    }
+
+    if (row.title) {
+      const generatedSlug = slugify(row.title);
+      const seen = seenSlug.get(generatedSlug);
+      if (seen) {
+        const message = `Duplicate generated slug '${generatedSlug}' would be produced on rows ${seen} and ${rowNumber}.`;
+        duplicateWarnings.push(message);
+      } else {
+        seenSlug.set(generatedSlug, rowNumber);
+      }
+    }
+
+    if (row.categorySlug) categorySlugs.add(row.categorySlug);
+    row.countryCodes?.forEach((code) => countryCodes.add(code));
+  }
+
+  const [categories, countries, existingProducts] = await Promise.all([
+    prisma.category.findMany({ where: { slug: { in: Array.from(categorySlugs) }, deletedAt: null }, select: { id: true, slug: true, status: true } }),
+    prisma.country.findMany({ where: { code: { in: Array.from(countryCodes) } }, select: { code: true, status: true } }),
+    prisma.product.findMany({
+      where: {
+        deletedAt: null,
+        OR: [
+          ...(skus.size ? [{ sku: { in: Array.from(skus) } }] : []),
+          ...(productCodes.size ? [{ productCode: { in: Array.from(productCodes) } }] : []),
+        ],
+      },
+      select: { id: true, sku: true, productCode: true, title: true },
+    }),
+  ]);
+
+  const categoryBySlug = new Map(categories.map((category) => [category.slug, category]));
+  const countryByCode = new Map(countries.map((country) => [country.code, country]));
+  const productBySku = new Map(existingProducts.filter((product) => product.sku).map((product) => [product.sku as string, product]));
+  const productByCode = new Map(existingProducts.filter((product) => product.productCode).map((product) => [product.productCode as string, product]));
+
+  for (const [index, row] of parsedRows.entries()) {
+    const rowNumber = index + 2;
+    const category = row.categorySlug ? categoryBySlug.get(row.categorySlug) : null;
+    if (!category) {
+      issues.push({ row: rowNumber, field: "categorySlug", message: `Category '${row.categorySlug || ""}' was not found.` });
+    } else if (category.status !== "ACTIVE") {
+      issues.push({ row: rowNumber, field: "categorySlug", message: `Category '${row.categorySlug}' is inactive.` });
+    }
+
+    for (const code of row.countryCodes ?? []) {
+      const country = countryByCode.get(code);
+      if (!country) {
+        issues.push({ row: rowNumber, field: "countryCodes", message: `Country '${code}' was not found.` });
+      } else if (country.status !== "ACTIVE") {
+        issues.push({ row: rowNumber, field: "countryCodes", message: `Country '${code}' is inactive.` });
+      }
+    }
+
+    if (row.sku && productBySku.has(row.sku)) {
+      const existing = productBySku.get(row.sku)!;
+      if (row.productCode && existing.productCode && existing.productCode !== row.productCode) {
+        issues.push({ row: rowNumber, field: "sku", message: `SKU '${row.sku}' already belongs to product '${existing.title}'.` });
+      }
+    }
+    if (row.productCode && productByCode.has(row.productCode)) {
+      const existing = productByCode.get(row.productCode)!;
+      if (row.sku && existing.sku && existing.sku !== row.sku) {
+        issues.push({ row: rowNumber, field: "productCode", message: `Product code '${row.productCode}' already belongs to product '${existing.title}'.` });
+      }
+    }
+  }
+
+  return {
+    rows: parsedRows,
+    issues,
+    duplicateWarnings,
+    categoryBySlug,
+    countryByCode,
+    existingProducts,
+  };
+}
+
+export async function previewProductImport(filePath: string) {
+  const rows = readSpreadsheetRows(filePath);
+  const preview = await getProductSpreadsheetPreview(rows);
+  const sampleRows = preview.rows.slice(0, 10).map((row, index) => ({ row: index + 2, ...row }));
+  return {
+    totalRows: preview.rows.length,
+    validRows: Math.max(0, preview.rows.length - preview.issues.length),
+    invalidRows: preview.issues.length,
+    issues: preview.issues,
+    duplicateWarnings: preview.duplicateWarnings,
+    sampleRows,
+  } satisfies SpreadsheetPreviewResult;
+}
+
+function buildProductExportRow(product: {
+  title: string;
+  sku: string | null;
+  productCode: string | null;
+  brand: string;
+  status: string;
+  sortOrder: number;
+  isFeatured: boolean;
+  hasVariants: boolean;
+  shortDescription: string | null;
+  description: string | null;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  seoKeywords: string | null;
+  category: { slug: string };
+  countries: { country: { code: string } }[];
+}) {
+  return {
+    title: product.title,
+    sku: product.sku ?? "",
+    productCode: product.productCode ?? "",
+    categorySlug: product.category.slug,
+    brand: product.brand,
+    status: product.status,
+    sortOrder: product.sortOrder,
+    isFeatured: product.isFeatured ? "TRUE" : "FALSE",
+    hasVariants: product.hasVariants ? "TRUE" : "FALSE",
+    shortDescription: product.shortDescription ?? "",
+    description: product.description ?? "",
+    seoTitle: product.seoTitle ?? "",
+    seoDescription: product.seoDescription ?? "",
+    seoKeywords: product.seoKeywords ?? "",
+    countryCodes: product.countries.map((country) => country.country.code).join(", "),
+  };
+}
+
+export async function exportProductsSpreadsheet(query: ProductListQuery) {
+  const products = await prisma.product.findMany({
+    where: buildProductWhere(query),
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+    include: {
+      category: { select: { slug: true } },
+      countries: { where: { enabled: true }, include: { country: { select: { code: true } } } },
+    },
+  });
+
+  return writeSpreadsheetBuffer(
+    products.map(buildProductExportRow),
+    "Products",
+    PRODUCT_EXPORT_COLUMNS.map((column) => ({ key: column.key, header: column.header })),
+  );
+}
+
+async function syncProductCountries(tx: Prisma.TransactionClient, productId: string, countryCodes: string[]) {
+  if (!countryCodes.length) return;
+  const countries = await tx.country.findMany({ where: { code: { in: countryCodes } }, select: { id: true, code: true } });
+  if (countries.length !== countryCodes.length) throw new AppError("One or more countries were not found.", 400);
+  await Promise.all(
+    countries.map((country) =>
+      tx.productCountry.upsert({
+        where: { productId_countryId: { productId, countryId: country.id } },
+        update: { enabled: true },
+        create: { productId, countryId: country.id, enabled: true },
+      }),
+    ),
+  );
+}
+
+export async function importProductsSpreadsheet(filePath: string) {
+  const rows = readSpreadsheetRows(filePath);
+  const preview = await getProductSpreadsheetPreview(rows);
+  if (preview.issues.length > 0) {
+    throw new AppError(`Import validation failed with ${preview.issues.length} issue(s).`, 400);
+  }
+
+  const parsedRows = preview.rows;
+  const summary = { created: 0, updated: 0 };
+  const suffix = Date.now().toString().slice(-6);
+
+  await prisma.$transaction(async (tx) => {
+    for (const [index, row] of parsedRows.entries()) {
+      const category = row.categorySlug ? preview.categoryBySlug.get(row.categorySlug) : null;
+      if (!category) throw new AppError(`Category '${row.categorySlug || ""}' not found during import.`, 400);
+
+      const normalizedSku = row.sku?.trim() || null;
+      const normalizedProductCode = row.productCode?.trim() || null;
+      const existing = normalizedProductCode
+        ? await tx.product.findFirst({ where: { productCode: normalizedProductCode, deletedAt: null } })
+        : normalizedSku
+          ? await tx.product.findFirst({ where: { sku: normalizedSku, deletedAt: null } })
+          : null;
+
+      const baseSlug = uniqueExcelSlug(row.title, `${suffix}-${index + 1}`);
+      const slug = existing ? existing.slug : baseSlug;
+
+      if (existing) {
+        await tx.product.update({
+          where: { id: existing.id },
+          data: {
+            title: row.title.trim(),
+            slug,
+            shortDescription: row.shortDescription || null,
+            description: row.description || null,
+            categoryId: category.id,
+            sku: normalizedSku,
+            productCode: normalizedProductCode,
+            brand: row.brand || existing.brand,
+            status: (row.status as never) || existing.status,
+            sortOrder: row.sortOrder ?? existing.sortOrder,
+            isFeatured: row.isFeatured ?? existing.isFeatured,
+            hasVariants: row.hasVariants ?? existing.hasVariants,
+            seoTitle: row.seoTitle || null,
+            seoDescription: row.seoDescription || null,
+            seoKeywords: row.seoKeywords || null,
+          },
+        });
+        if (row.countryCodes?.length) await syncProductCountries(tx, existing.id, row.countryCodes);
+        summary.updated += 1;
+      } else {
+        const product = await tx.product.create({
+          data: {
+            title: row.title.trim(),
+            slug,
+            shortDescription: row.shortDescription || null,
+            description: row.description || null,
+            categoryId: category.id,
+            sku: normalizedSku,
+            productCode: normalizedProductCode || undefined,
+            brand: row.brand || "Modern Orthodontics",
+            status: (row.status as never) || "DRAFT",
+            sortOrder: row.sortOrder ?? 0,
+            isFeatured: row.isFeatured ?? false,
+            hasVariants: row.hasVariants ?? false,
+            seoTitle: row.seoTitle || null,
+            seoDescription: row.seoDescription || null,
+            seoKeywords: row.seoKeywords || null,
+          },
+        });
+        if (row.countryCodes?.length) await syncProductCountries(tx, product.id, row.countryCodes);
+        summary.created += 1;
+      }
+    }
+  });
+
+  return {
+    ...summary,
+    report: {
+      totalRows: parsedRows.length,
+      validRows: parsedRows.length,
+      invalidRows: 0,
+      issues: [],
+      duplicateWarnings: preview.duplicateWarnings,
+      sampleRows: parsedRows.slice(0, 10).map((row, index) => ({ row: index + 2, ...row })),
+    } satisfies SpreadsheetPreviewResult,
+  };
 }

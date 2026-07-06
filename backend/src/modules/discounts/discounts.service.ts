@@ -1,14 +1,16 @@
-import { DiscountRuleType, Prisma, Status } from "@prisma/client";
+import { Prisma, Status } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { AppError, getPagination } from "../../utils/apiResponse";
 import { assertTierUsable } from "../tiers/tiers.service";
 
-const DISCOUNT_TYPES: DiscountRuleType[] = ["TIER", "MOQ", "PROMOTIONAL"];
+type DiscountRuleKind = "TIER" | "MOQ" | "PROMOTIONAL";
+
+const DISCOUNT_TYPES: DiscountRuleKind[] = ["TIER", "MOQ", "PROMOTIONAL"];
 const DISCOUNT_STATUSES: Status[] = ["ACTIVE", "INACTIVE"];
 
 type DiscountInput = {
   name?: string;
-  type?: DiscountRuleType;
+  type?: DiscountRuleKind;
   status?: Status;
   tierId?: string | null;
   minQuantity?: number | string | null;
@@ -159,7 +161,7 @@ export async function listDiscounts(query: DiscountListQuery) {
   const scope = query.scope?.trim().toUpperCase();
   const countryId = blankToNull(query.countryId) as string | null;
 
-  if (type && !DISCOUNT_TYPES.includes(type as DiscountRuleType)) {
+  if (type && !DISCOUNT_TYPES.includes(type as DiscountRuleKind)) {
     throw new AppError("Invalid discount type.", 400);
   }
   if (status && !DISCOUNT_STATUSES.includes(status as Status)) {
@@ -170,7 +172,7 @@ export async function listDiscounts(query: DiscountListQuery) {
   }
 
   const where: Prisma.DiscountWhereInput = {
-    ...(type ? { type: type as DiscountRuleType } : {}),
+    ...(type ? { type: type as never } : {}),
     ...(status ? { status: status as Status } : {}),
     ...(countryId ? { countryId } : {}),
     ...(scope === "PLATFORM" ? { productId: null, collectionId: null, categoryId: null } : {}),

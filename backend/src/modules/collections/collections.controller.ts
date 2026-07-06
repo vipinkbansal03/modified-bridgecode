@@ -25,6 +25,18 @@ export const remove = asyncHandler(async (req: AuthRequest, res: Response) => {
   return ApiResponse.success(res, "Collection deleted.");
 });
 
+export const archive = asyncHandler(async (req: AuthRequest, res: Response) =>
+  ApiResponse.success(res, "Collection archived.", await CollectionsService.archiveCollection(req.params.id))
+);
+
+export const restore = asyncHandler(async (req: AuthRequest, res: Response) =>
+  ApiResponse.success(res, "Collection restored.", await CollectionsService.restoreCollection(req.params.id))
+);
+
+export const duplicate = asyncHandler(async (req: AuthRequest, res: Response) =>
+  ApiResponse.created(res, "Collection duplicated.", await CollectionsService.duplicateCollection(req.params.id))
+);
+
 export const listCountries = asyncHandler(async (req: AuthRequest, res: Response) =>
   ApiResponse.success(res, "Collection countries fetched.", await CollectionsService.listCollectionCountries(req.params.id))
 );

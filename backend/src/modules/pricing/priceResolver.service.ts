@@ -33,7 +33,7 @@ export type AppliedPriceLayer = {
   taxPercent?: number | null;
   taxAmount?: number | null;
   taxRuleType?: "CGST" | "SGST" | "VAT" | "SALES_TAX" | "LEGACY_PRODUCT_PRICE_TAX";
-  discountRuleType?: "TIER" | "MOQ" | "PROMOTIONAL";
+  discountRuleType?: DiscountRuleKind;
   ruleId?: string;
   warning?: string;
 };
@@ -94,7 +94,7 @@ function applyRule(
 type PromotionalDiscount = {
   id: string;
   name: string;
-  type: "TIER" | "MOQ" | "PROMOTIONAL";
+  type: DiscountRuleKind;
   productId: string | null;
   collectionId: string | null;
   categoryId: string | null;
@@ -171,7 +171,7 @@ function selectBestPromotionalDiscount(discounts: PromotionalDiscount[], current
 
 async function findPromotionalDiscounts(
   input: ResolvePriceInput,
-  type: "TIER" | "MOQ" | "PROMOTIONAL",
+  type: DiscountRuleKind,
   productCategoryId: string | null,
   productCollectionIds: string[],
   tierId?: string | null
@@ -501,3 +501,4 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
     },
   };
 }
+type DiscountRuleKind = "TIER" | "MOQ" | "PROMOTIONAL";

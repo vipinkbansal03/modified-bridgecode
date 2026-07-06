@@ -1,11 +1,9 @@
-import fs from "fs";
-import Papa from "papaparse";
 import { Response } from "express";
 import { asyncHandler, ApiResponse } from "../../utils/apiResponse";
 import { AuthRequest } from "../../middleware/auth.middleware";
-import * as ProductService from "./products.service";
 import { prisma } from "../../config/database";
-import { slugify } from "../../utils/apiResponse";
+import * as ProductService from "./products.service";
+import { removeTempFile } from "../../utils/spreadsheet";
 
 export const list = asyncHandler(async (req: AuthRequest, res: Response) => {
   const result = await ProductService.listProducts(req.query as never);
@@ -46,6 +44,29 @@ export const remove = asyncHandler(async (req: AuthRequest, res: Response) => {
   return ApiResponse.success(res, "Product deleted.");
 });
 
+export const archive = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const product = await ProductService.archiveProduct(req.params.id as string);
+  return ApiResponse.success(res, "Product archived.", product);
+});
+
+export const restore = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const product = await ProductService.restoreProduct(req.params.id as string);
+  return ApiResponse.success(res, "Product restored.", product);
+});
+
+export const duplicate = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const product = await ProductService.duplicateProduct(req.params.id as string);
+  return ApiResponse.created(res, "Product duplicated.", product);
+});
+
+export const exportSpreadsheet = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const ids = typeof req.query.ids === "string" ? req.query.ids.split(",").map((id) => id.trim()).filter(Boolean) : undefined;
+  const buffer = await ProductService.exportProductsSpreadsheet({ ...req.query, ids } as never);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="products-export-${Date.now()}.xlsx"`);
+  return res.status(200).send(buffer);
+});
+
 export const reorder = asyncHandler(async (req: AuthRequest, res: Response) => {
   const products = await ProductService.reorderProducts(req.body?.items);
   return ApiResponse.success(res, "Products reordered.", products);
@@ -59,6 +80,15 @@ export const bulkUpdate = asyncHandler(async (req: AuthRequest, res: Response) =
 export const listCountries = asyncHandler(async (req: AuthRequest, res: Response) => {
   const countries = await ProductService.listProductCountries(req.params.id as string);
   return ApiResponse.success(res, "Product countries fetched.", countries);
+});
+
+export const listVariants = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await ProductService.listVariants(req.query as never);
+  return ApiResponse.paginated(res, "Variants fetched.", result.data, {
+    page: result.page,
+    limit: result.limit,
+    total: result.total,
+  });
 });
 
 export const updateCountries = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -154,6 +184,16 @@ export const deleteVariant = asyncHandler(async (req: AuthRequest, res: Response
   return ApiResponse.success(res, "Variant deleted.");
 });
 
+export const archiveVariant = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const variant = await ProductService.archiveVariant(req.params.id as string, req.params.variantId as string);
+  return ApiResponse.success(res, "Variant archived.", variant);
+});
+
+export const restoreVariant = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const variant = await ProductService.restoreVariant(req.params.id as string, req.params.variantId as string);
+  return ApiResponse.success(res, "Variant restored.", variant);
+});
+
 export const cloneVariant = asyncHandler(async (req: AuthRequest, res: Response) => {
   const variant = await ProductService.cloneVariant(req.params.id as string, req.params.variantId as string);
   return ApiResponse.created(res, "Variant cloned.", variant);
@@ -199,67 +239,26 @@ export const deleteMoqPricing = asyncHandler(async (req: AuthRequest, res: Respo
   return ApiResponse.success(res, "MOQ pricing rule deleted.");
 });
 
-export const importCsv = asyncHandler(async (req: AuthRequest, res: Response) => {
+export const previewImport = asyncHandler(async (req: AuthRequest, res: Response) => {
   const file = req.file as Express.Multer.File | undefined;
-  if (!file) return ApiResponse.success(res, "No file uploaded.", { created: 0, updated: 0, errors: ["No CSV file provided."] });
+  if (!file) return ApiResponse.success(res, "No file uploaded.", { totalRows: 0, validRows: 0, invalidRows: 0, issues: ["No spreadsheet file provided."] });
 
-  const csvText = fs.readFileSync(file.path, "utf-8");
-  fs.unlinkSync(file.path);
-
-  const { data, errors: parseErrors } = Papa.parse<Record<string, string>>(csvText, {
-    header: true,
-    skipEmptyLines: true,
-  });
-
-  if (parseErrors.length) {
-    return ApiResponse.success(res, "CSV parse error.", { created: 0, updated: 0, errors: parseErrors.map((e) => e.message) });
+  try {
+    const report = await ProductService.previewProductImport(file.path);
+    return ApiResponse.success(res, "Import preview generated.", report);
+  } finally {
+    removeTempFile(file.path);
   }
+});
 
-  let created = 0;
-  let updated = 0;
-  const errors: string[] = [];
+export const importSpreadsheet = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const file = req.file as Express.Multer.File | undefined;
+  if (!file) return ApiResponse.success(res, "No file uploaded.", { created: 0, updated: 0, report: { totalRows: 0, validRows: 0, invalidRows: 0, issues: ["No spreadsheet file provided."], duplicateWarnings: [], sampleRows: [] } });
 
-  for (const row of data) {
-    try {
-      const { title, productCode, categoryId, sku, brand, shortDescription, description, status, isFeatured } = row;
-      if (!title || !categoryId) {
-        errors.push(`Row missing title or categoryId: ${JSON.stringify(row)}`);
-        continue;
-      }
-
-      const existing = productCode
-        ? await prisma.product.findFirst({ where: { productCode, deletedAt: null } })
-        : null;
-
-      if (existing) {
-        await prisma.product.update({
-          where: { id: existing.id },
-          data: { title, sku: sku || undefined, brand: brand || undefined, shortDescription: shortDescription || undefined, description: description || undefined, status: (status as never) || "DRAFT", isFeatured: isFeatured === "true" },
-        });
-        updated++;
-      } else {
-        const slug = slugify(title);
-        const existing2 = await prisma.product.findUnique({ where: { slug } });
-        await prisma.product.create({
-          data: {
-            title,
-            slug: existing2 ? `${slug}-${Date.now()}` : slug,
-            productCode: productCode || undefined,
-            categoryId,
-            sku: sku || undefined,
-            brand: brand || "Modern Orthodontics",
-            shortDescription: shortDescription || undefined,
-            description: description || undefined,
-            status: (status as never) || "DRAFT",
-            isFeatured: isFeatured === "true",
-          },
-        });
-        created++;
-      }
-    } catch (err) {
-      errors.push(`Row failed: ${(err as Error).message}`);
-    }
+  try {
+    const result = await ProductService.importProductsSpreadsheet(file.path);
+    return ApiResponse.success(res, "Products imported successfully.", result);
+  } finally {
+    removeTempFile(file.path);
   }
-
-  return ApiResponse.success(res, `Import complete: ${created} created, ${updated} updated.`, { created, updated, errors });
 });

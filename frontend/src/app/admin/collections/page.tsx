@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Edit2, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Archive, Copy, Edit2, Globe, Image as ImageIcon, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
@@ -12,10 +12,13 @@ import {
   useAdminCountries,
   useAdminProducts,
   useAdminTiers,
+  useArchiveCollection,
   useCreateCollection,
   useCreateCollectionDiscount,
   useDeleteCollection,
   useDeleteCollectionDiscount,
+  useDuplicateCollection,
+  useRestoreCollection,
   useUpdateCollection,
   useUpdateCollectionCountries,
 } from "@/hooks/admin/useAdminHooks";
@@ -30,6 +33,7 @@ type Collection = {
   image: string | null;
   status: "ACTIVE" | "INACTIVE";
   sortOrder: number;
+  updatedAt?: string;
   products: { productId: string; product: Product }[];
   _count?: { products: number };
 };
@@ -60,29 +64,71 @@ const emptyDiscountForm = {
   endDate: "",
 };
 
+type CollectionSortBy = "sortOrder" | "name" | "slug" | "status" | "updatedAt" | "createdAt";
+const EMPTY_COUNTRIES: CountryToggle[] = [];
+
 export default function CollectionsPage() {
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sortBy, setSortBy] = useState<CollectionSortBy>("sortOrder");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [discountForm, setDiscountForm] = useState(emptyDiscountForm);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>("");
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
+  const [countrySearch, setCountrySearch] = useState("");
   const { showToast, ToastComponent } = useToast();
-  const { data, isLoading } = useAdminCollections({ page });
+
+  const { data, isLoading } = useAdminCollections({
+    page,
+    limit: 10,
+    status: statusFilter || undefined,
+    search: search || undefined,
+    sortBy,
+    sortDir,
+  });
   const { data: productsData } = useAdminProducts({ limit: 200 });
-  const { data: countries = [] } = useAdminCollectionCountries(selectedCollectionId);
+  const { data: countries, isLoading: countriesLoading } = useAdminCollectionCountries(selectedCollectionId);
   const { data: allCountries = [] } = useAdminCountries();
   const { data: tiers = [] } = useAdminTiers();
   const { data: collectionDiscounts = [] } = useAdminCollectionDiscounts(selectedCollectionId);
   const createCollection = useCreateCollection();
   const updateCollection = useUpdateCollection();
   const deleteCollection = useDeleteCollection();
+  const archiveCollection = useArchiveCollection();
+  const restoreCollection = useRestoreCollection();
+  const duplicateCollection = useDuplicateCollection();
   const updateCountries = useUpdateCollectionCountries(selectedCollectionId);
   const createCollectionDiscount = useCreateCollectionDiscount(selectedCollectionId);
   const deleteCollectionDiscount = useDeleteCollectionDiscount(selectedCollectionId);
 
   const collections: Collection[] = data?.data ?? [];
   const products: Product[] = productsData?.data ?? [];
+  const selectedCountries = (countries ?? EMPTY_COUNTRIES) as CountryToggle[];
+  const filteredCountries = useMemo(() => {
+    const query = countrySearch.trim().toLowerCase();
+    if (!query) return selectedCountries;
+    return selectedCountries.filter((country) => `${country.name} ${country.code}`.toLowerCase().includes(query));
+  }, [countrySearch, selectedCountries]);
+
+  useEffect(() => {
+    if (!selectedCollectionId) {
+      setCountryOverrides((current) => (Object.keys(current).length === 0 ? current : {}));
+      return;
+    }
+    const nextOverrides = Object.fromEntries(selectedCountries.map((country) => [country.id, country.enabled]));
+    setCountryOverrides((current) => {
+      const currentKeys = Object.keys(current);
+      const nextKeys = Object.keys(nextOverrides);
+      if (currentKeys.length === nextKeys.length && nextKeys.every((key) => current[key] === nextOverrides[key])) {
+        return current;
+      }
+      return nextOverrides;
+    });
+  }, [selectedCollectionId, selectedCountries]);
 
   const edit = (collection: Collection) => {
     setForm({
@@ -112,19 +158,17 @@ export default function CollectionsPage() {
   const toggleProduct = (productId: string) => {
     setForm((current) => ({
       ...current,
-      productIds: current.productIds.includes(productId)
-        ? current.productIds.filter((id) => id !== productId)
-        : [...current.productIds, productId],
+      productIds: current.productIds.includes(productId) ? current.productIds.filter((id) => id !== productId) : [...current.productIds, productId],
     }));
   };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const payload = {
-      name: form.name,
-      slug: form.slug || undefined,
-      description: form.description || null,
-      image: form.image || null,
+      name: form.name.trim(),
+      slug: form.slug.trim() || undefined,
+      description: form.description.trim() || null,
+      image: form.image.trim() || null,
       status: form.status,
       sortOrder: form.sortOrder,
       productIds: form.productIds,
@@ -146,7 +190,7 @@ export default function CollectionsPage() {
 
   const saveCountries = async () => {
     try {
-      await updateCountries.mutateAsync((countries as CountryToggle[]).map((country) => ({ countryId: country.id, enabled: country.enabled })));
+      await updateCountries.mutateAsync(selectedCountries.map((country) => ({ countryId: country.id, enabled: countryOverrides[country.id] ?? country.enabled })));
       showToast("Country visibility saved.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to save country visibility."), "error");
@@ -187,7 +231,10 @@ export default function CollectionsPage() {
     try {
       await deleteCollection.mutateAsync(deleting);
       showToast("Collection deleted.");
-      if (selectedCollectionId === deleting) setSelectedCollectionId("");
+      if (selectedCollectionId === deleting) {
+        setSelectedCollectionId("");
+        setCountryOverrides((current) => (Object.keys(current).length === 0 ? current : {}));
+      }
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to delete collection."), "error");
     } finally {
@@ -195,24 +242,115 @@ export default function CollectionsPage() {
     }
   };
 
-  const columns: Column<Collection>[] = [
-    { key: "name", label: "Collection", render: (row) => <div><div className="font-medium">{row.name}</div><div className="text-[12px] text-[#6B6B6B]">{row.slug}</div></div> },
-    { key: "products", label: "Products", render: (row) => row._count?.products ?? row.products?.length ?? 0 },
-    { key: "sortOrder", label: "Sort", render: (row) => row.sortOrder },
-    { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
-    {
-      key: "actions",
-      label: "",
-      width: "116px",
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          <button onClick={() => setSelectedCollectionId(row.id)} className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F2F2F2]">Countries</button>
-          <button onClick={() => edit(row)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"><Edit2 size={13} /></button>
-          <button onClick={() => setDeleting(row.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"><Trash2 size={13} /></button>
-        </div>
-      ),
-    },
-  ];
+  const handleDuplicate = async (collectionId: string) => {
+    try {
+      const result = await duplicateCollection.mutateAsync(collectionId);
+      setSelectedCollectionId(result.data.id);
+      showToast("Collection duplicated.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to duplicate collection."), "error");
+    }
+  };
+
+  const handleArchiveToggle = async (collection: Collection) => {
+    try {
+      if (collection.status === "ACTIVE") {
+        await archiveCollection.mutateAsync(collection.id);
+        showToast("Collection archived.");
+      } else {
+        await restoreCollection.mutateAsync(collection.id);
+        showToast("Collection restored.");
+      }
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to update collection status."), "error");
+    }
+  };
+
+  const columns: Column<Collection>[] = useMemo(
+    () => [
+      {
+        key: "image",
+        label: "Image",
+        width: "84px",
+        render: (row) => (
+          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
+            {row.image ? <img src={row.image} alt={row.name} className="h-full w-full object-cover" /> : <ImageIcon size={16} className="text-[#9A9A9A]" />}
+          </div>
+        ),
+      },
+      {
+        key: "name",
+        label: "Collection",
+        width: "280px",
+        render: (row) => (
+          <div className="min-w-0">
+            <div className="truncate font-medium text-[#1A1A1A]">{row.name}</div>
+            <div className="truncate text-[12px] text-[#6B6B6B]">{row.description || "No description"}</div>
+          </div>
+        ),
+      },
+      { key: "slug", label: "Slug", width: "180px", render: (row) => <span className="truncate font-mono text-[12px] text-[#6B6B6B]">{row.slug}</span> },
+      { key: "products", label: "Products", width: "100px", render: (row) => row._count?.products ?? row.products?.length ?? 0 },
+      { key: "sortOrder", label: "Sort", width: "84px", render: (row) => row.sortOrder },
+      { key: "status", label: "Status", width: "120px", render: (row) => <StatusBadge status={row.status} /> },
+      {
+        key: "updatedAt",
+        label: "Updated",
+        width: "120px",
+        render: (row) => (row.updatedAt ? new Date(row.updatedAt).toLocaleDateString() : "—"),
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        width: "220px",
+        render: (row) => (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setSelectedCollectionId(row.id)}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+              title="Manage countries"
+            >
+              <Globe size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDuplicate(row.id)}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+              title="Duplicate collection"
+            >
+              <Copy size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleArchiveToggle(row)}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+              title={row.status === "ACTIVE" ? "Archive collection" : "Restore collection"}
+            >
+              {row.status === "ACTIVE" ? <Archive size={13} /> : <RotateCcw size={13} />}
+            </button>
+            <button
+              type="button"
+              onClick={() => edit(row)}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+              title="Edit collection"
+            >
+              <Edit2 size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeleting(row.id)}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"
+              title="Delete collection"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [archiveCollection, duplicateCollection, edit],
+  );
 
   const isCreateModalOpen = showForm && !form.id;
   const isEditInlineOpen = showForm && !!form.id;
@@ -222,7 +360,12 @@ export default function CollectionsPage() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <AdminInput label="Name *" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
         <AdminInput label="Slug" value={form.slug} onChange={(event) => setForm({ ...form, slug: event.target.value })} placeholder="Auto from name if blank" />
-        <AdminSelect label="Status" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
+        <AdminSelect
+          label="Status"
+          value={form.status}
+          onChange={(event) => setForm({ ...form, status: event.target.value })}
+          options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]}
+        />
         <AdminInput label="Sort Order" type="number" value={form.sortOrder} onChange={(event) => setForm({ ...form, sortOrder: event.target.value })} />
         <AdminInput label="Image URL" value={form.image} onChange={(event) => setForm({ ...form, image: event.target.value })} />
         <AdminInput label="Description" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
@@ -248,7 +391,45 @@ export default function CollectionsPage() {
 
   return (
     <AdminLayout title="Collections" breadcrumb={[{ label: "Collections" }]}>
-      <div className="mb-5 flex justify-end">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
+            <input
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+              placeholder="Search collections..."
+              className="w-[240px] rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] outline-none focus:border-[#E31E24]"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(event) => {
+              setStatusFilter(event.target.value);
+              setPage(1);
+            }}
+            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none"
+          >
+            <option value="">All Status</option>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
+          </select>
+          <select value={sortBy} onChange={(event) => setSortBy(event.target.value as CollectionSortBy)} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none">
+            <option value="sortOrder">Sort order</option>
+            <option value="name">Name</option>
+            <option value="slug">Slug</option>
+            <option value="status">Status</option>
+            <option value="updatedAt">Updated date</option>
+            <option value="createdAt">Created date</option>
+          </select>
+          <select value={sortDir} onChange={(event) => setSortDir(event.target.value as "asc" | "desc")} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none">
+            <option value="asc">Ascending</option>
+            <option value="desc">Descending</option>
+          </select>
+        </div>
         <button onClick={openCreateModal} className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
           <Plus size={14} /> Create Collection
         </button>
@@ -260,27 +441,47 @@ export default function CollectionsPage() {
         {isCreateModalOpen ? collectionForm : null}
       </Modal>
 
-      {selectedCollectionId && (
+      {selectedCollectionId ? (
         <div className="mb-5 rounded-lg border border-[#E6E6E6] bg-white p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-[14px] font-semibold text-[#111]">Country Visibility</h3>
-            <button onClick={() => setSelectedCollectionId("")} className="text-[12px] text-[#6B6B6B]">Close</button>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-[14px] font-semibold text-[#111]">Country Visibility</h3>
+              <p className="text-[12.5px] text-[#6B6B6B]">Use the switches below to control where this collection appears.</p>
+            </div>
+            <button onClick={() => setSelectedCollectionId("")} className="text-[12px] text-[#6B6B6B]">
+              Close
+            </button>
           </div>
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-            {(countries as CountryToggle[]).map((country) => (
-              <label key={country.id} className="flex items-center gap-2 rounded border border-[#E6E6E6] px-3 py-2 text-[13px]">
-                <input
-                  type="checkbox"
-                  checked={country.enabled}
-                  onChange={(event) => {
-                    country.enabled = event.target.checked;
-                  }}
-                />
-                {country.name} ({country.code})
-              </label>
-            ))}
+
+          <div className="mb-3 flex items-center gap-2">
+            <div className="relative">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
+              <input
+                value={countrySearch}
+                onChange={(event) => setCountrySearch(event.target.value)}
+                placeholder="Search countries..."
+                className="w-[240px] rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3 text-[13px] outline-none focus:border-[#E31E24]"
+              />
+            </div>
+            <button onClick={saveCountries} className="rounded-md bg-[#111] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#222]">
+              Save Visibility
+            </button>
           </div>
-          <button onClick={saveCountries} className="mt-4 rounded-md bg-[#111] px-4 py-2 text-[13.5px] font-medium text-white hover:bg-[#222]">Save Visibility</button>
+
+          <div className="grid max-h-[260px] grid-cols-1 gap-2 overflow-y-auto md:grid-cols-3">
+            {countriesLoading ? (
+              <div className="col-span-full rounded-md border border-dashed border-[#E6E6E6] px-4 py-8 text-center text-[13px] text-[#9A9A9A]">Loading country visibility...</div>
+            ) : filteredCountries.length === 0 ? (
+              <div className="col-span-full rounded-md border border-dashed border-[#E6E6E6] px-4 py-8 text-center text-[13px] text-[#9A9A9A]">No countries found.</div>
+            ) : (
+              filteredCountries.map((country) => (
+                <label key={country.id} className="flex items-center gap-2 rounded border border-[#E6E6E6] px-3 py-2 text-[13px]">
+                  <input type="checkbox" checked={countryOverrides[country.id] ?? country.enabled} onChange={(event) => setCountryOverrides((current) => ({ ...current, [country.id]: event.target.checked }))} />
+                  {country.name} ({country.code})
+                </label>
+              ))
+            )}
+          </div>
 
           <div className="mt-6 border-t border-[#E6E6E6] pt-5">
             <h3 className="mb-3 text-[14px] font-semibold text-[#111]">Discount Rules</h3>
@@ -290,7 +491,10 @@ export default function CollectionsPage() {
                 label="Type"
                 value={discountForm.type}
                 onChange={(event) => setDiscountForm({ ...discountForm, type: event.target.value, tierId: "", minQuantity: "" })}
-                options={[{ value: "TIER", label: "Tier" }, { value: "MOQ", label: "MOQ" }]}
+                options={[
+                  { value: "TIER", label: "Tier" },
+                  { value: "MOQ", label: "MOQ" },
+                ]}
               />
               {discountForm.type === "TIER" ? (
                 <AdminSelect
@@ -347,11 +551,19 @@ export default function CollectionsPage() {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
       <DataTable<Collection> columns={columns} data={collections} rowKey="id" isLoading={isLoading} emptyMessage="No collections yet." />
       <Pagination page={page} totalPages={data?.pagination?.totalPages || 1} onPageChange={setPage} />
-      <ConfirmModal open={!!deleting} title="Delete collection?" message="This removes the collection and its product/country mappings." onConfirm={confirmDelete} onCancel={() => setDeleting(null)} />
+
+      <ConfirmModal
+        open={!!deleting}
+        title="Delete collection?"
+        message="This removes the collection and its product/country mappings."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleting(null)}
+      />
+
       {ToastComponent}
     </AdminLayout>
   );

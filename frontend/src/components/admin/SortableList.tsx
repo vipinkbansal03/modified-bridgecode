@@ -10,6 +10,8 @@ export interface SortableListProps<T extends { id: string }> {
   renderItem: (item: T, index: number) => ReactNode;
   disabled?: boolean;
   className?: string;
+  rowWidthClassName?: string;
+  contentClassName?: string;
   itemClassName?: string;
   handleAriaLabel?: string;
 }
@@ -20,6 +22,8 @@ export function SortableList<T extends { id: string }>({
   renderItem,
   disabled = false,
   className,
+  rowWidthClassName = "w-max min-w-max",
+  contentClassName = "min-w-max flex-none py-2 pr-3",
   itemClassName,
   handleAriaLabel = "Drag to reorder",
 }: SortableListProps<T>) {
@@ -38,7 +42,7 @@ export function SortableList<T extends { id: string }>({
   };
 
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("space-y-2 min-w-max", className)}>
       {items.map((item, index) => (
         <div
           key={item.id}
@@ -60,6 +64,7 @@ export function SortableList<T extends { id: string }>({
           }}
           className={cn(
             "flex items-stretch gap-2 rounded-lg border bg-white transition-shadow",
+            rowWidthClassName,
             draggingId === item.id && "opacity-50",
             overId === item.id && draggingId && draggingId !== item.id && "border-[#E31E24] shadow-sm",
             disabled ? "border-[#E6E6E6]" : "border-[#E6E6E6]",
@@ -70,7 +75,7 @@ export function SortableList<T extends { id: string }>({
             type="button"
             aria-label={handleAriaLabel}
             className={cn(
-              "flex shrink-0 items-center px-2 text-[#9A9A9A]",
+              "flex shrink-0 items-center px-1.5 text-[#9A9A9A]",
               disabled ? "cursor-not-allowed opacity-40" : "cursor-grab active:cursor-grabbing hover:text-[#1A1A1A]",
             )}
             disabled={disabled}
@@ -78,7 +83,7 @@ export function SortableList<T extends { id: string }>({
           >
             <GripVertical size={16} />
           </button>
-          <div className="min-w-0 flex-1 py-2 pr-3">{renderItem(item, index)}</div>
+          <div className={contentClassName}>{renderItem(item, index)}</div>
         </div>
       ))}
     </div>

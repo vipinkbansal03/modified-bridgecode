@@ -62,7 +62,7 @@ function ValueFormFields({
   const update = (patch: Partial<ValueFormState>) => setForm({ ...form, ...patch });
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid w-full gap-3 sm:grid-cols-2">
       <AdminInput
         label="Value"
         value={form.value}
@@ -96,7 +96,7 @@ function ValueFormFields({
 
 function ValueRowSummary({ value }: { value: ApiAttributeValue }) {
   return (
-    <div className="flex flex-wrap items-center gap-3 text-[13px]">
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 text-[13px]">
       <span className="font-medium text-[#1A1A1A]">{value.value}</span>
       <span className="font-mono text-[11px] text-[#9A9A9A]">{value.slug}</span>
       {Number(value.priceAdjustment) !== 0 && <span className="text-[#6B6B6B]">+{value.priceAdjustment}</span>}
@@ -193,7 +193,7 @@ function ValueListSection({
   };
 
   return (
-    <div className="rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-4">
+    <div className="w-full rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-[13px] font-semibold text-[#1A1A1A]">{title}</h3>
         <button
@@ -209,10 +209,13 @@ function ValueListSection({
         <p className="py-6 text-center text-[12.5px] text-[#9A9A9A]">No values yet.</p>
       ) : (
         <SortableList
+          className="w-full min-w-0"
+          rowWidthClassName="w-full min-w-0"
+          contentClassName="flex-1 min-w-0 py-2 pr-3"
           items={activeValues}
           onReorder={persistReorder}
           renderItem={(value) => (
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex w-full min-w-0 items-center justify-between gap-3">
               <ValueRowSummary value={value} />
               <div className="flex shrink-0 gap-1">
                 <button type="button" onClick={() => openEdit(value)} className="rounded p-1.5 text-[#6B6B6B] hover:bg-[#F0F0F0]">
@@ -228,7 +231,7 @@ function ValueListSection({
       )}
 
       {showForm && (
-        <div className="mt-4 rounded-lg border border-[#E6E6E6] bg-white p-4">
+        <div className="mt-4 w-full rounded-lg border border-[#E6E6E6] bg-white p-4">
           <h4 className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">{editingId ? "Edit value" : "New value"}</h4>
           <ValueFormFields form={form} setForm={setForm} />
           <div className="mt-4 flex gap-2">

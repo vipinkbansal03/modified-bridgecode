@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useFormik } from "formik";
 import * as Yup from "yup";
-import { Image as ImageIcon, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import { Archive, Copy, Download, Image as ImageIcon, Pencil, Plus, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminSelect, AdminTextarea, ConfirmModal, StatusBadge, toastMessages, useToast } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
@@ -20,8 +20,12 @@ import {
   useAdminCategories,
   useAdminCategoryCountries,
   useAdminLanguages,
+  useArchiveCategory,
+  useDeleteCategory,
+  useDuplicateCategory,
   useCreateCategory,
   useReorderCategories,
+  useRestoreCategory,
   useUpdateCategory,
   useUpdateCategoryCountries,
 } from "@/hooks/admin/useAdminHooks";
@@ -60,6 +64,16 @@ interface CountryAvailability {
 }
 
 type CategoryRow = Category & { depth: number };
+
+type SpreadsheetIssue = { row: number; field: string; message: string };
+type SpreadsheetPreview = {
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  issues: SpreadsheetIssue[];
+  duplicateWarnings: string[];
+  sampleRows: Array<Record<string, unknown>>;
+};
 
 const schema = Yup.object({
   name: Yup.string().trim().required("Name is required"),
@@ -111,12 +125,20 @@ export default function CategoriesPage() {
   const [editing, setEditing] = useState<Category | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<SpreadsheetPreview | null>(null);
+  const [importMessage, setImportMessage] = useState("");
+  const [importing, setImporting] = useState(false);
   const [categoryEditorTab, setCategoryEditorTab] = useState<"content" | "translations">("content");
   const [translationLanguageId, setTranslationLanguageId] = useState("");
   const [slugEdited, setSlugEdited] = useState(false);
   const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
   const [countrySearch, setCountrySearch] = useState("");
   const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { showToast, ToastComponent } = useToast();
 
   const { data: categories = [], isLoading, refetch } = useAdminCategories();
@@ -124,13 +146,25 @@ export default function CategoriesPage() {
   const { data: countries = [], isLoading: countriesLoading } = useAdminCategoryCountries(editing?.id);
   const createCategory = useCreateCategory();
   const updateCategory = useUpdateCategory();
+  const deleteCategory = useDeleteCategory();
+  const duplicateCategory = useDuplicateCategory();
+  const archiveCategory = useArchiveCategory();
+  const restoreCategory = useRestoreCategory();
   const reorderCategories = useReorderCategories();
   const updateCountries = useUpdateCategoryCountries(editing?.id);
 
   const translationLanguages = filterTranslationLanguages(languages);
   const activeTranslationLang = translationLanguages.find((lang) => lang.id === translationLanguageId) ?? translationLanguages[0];
-  const rows = useMemo(() => flattenCategories(categories), [categories]);
-  const categoryGridClass = "grid gap-4 md:grid-cols-[minmax(360px,1fr)_220px_110px_130px_72px] md:items-center";
+  const filteredCategories = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return (categories as Category[]).filter((category) => {
+      const matchesSearch = !query || `${category.name} ${category.slug} ${category.parent?.name || ""}`.toLowerCase().includes(query);
+      const matchesStatus = !statusFilter || category.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [categories, search, statusFilter]);
+  const rows = useMemo(() => flattenCategories(filteredCategories), [filteredCategories]);
+  const categoryGridClass = "grid w-full min-w-0 gap-3 md:grid-cols-[minmax(320px,1.2fr)_minmax(180px,220px)_90px_120px_168px] md:items-center";
   const countryRows = useMemo(() => countries as CountryAvailability[], [countries]);
   const visibleCountries = useMemo(() => {
     const query = countrySearch.trim().toLowerCase();
@@ -242,13 +276,99 @@ export default function CategoriesPage() {
   const handleDelete = async () => {
     if (!deleting) return;
     try {
-      await adminApi.delete(`/categories/${deleting}`);
+      await deleteCategory.mutateAsync(deleting);
       showToast("Category deleted.");
       refetch();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to delete category."), "error");
     } finally {
       setDeleting(null);
+    }
+  };
+
+  const handleDuplicate = async (id: string) => {
+    try {
+      await duplicateCategory.mutateAsync(id);
+      showToast("Category duplicated.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to duplicate category."), "error");
+    }
+  };
+
+  const handleArchiveToggle = async (category: Category) => {
+    try {
+      if (category.status === "ACTIVE") {
+        await archiveCategory.mutateAsync(category.id);
+        showToast("Category archived.");
+      } else {
+        await restoreCategory.mutateAsync(category.id);
+        showToast("Category restored.");
+      }
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to update category status."), "error");
+    }
+  };
+
+  const exportCategories = async () => {
+    try {
+      const response = await adminApi.get("/categories/export", { responseType: "blob" });
+      const blob = new Blob([response.data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "categories-export.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to export categories."), "error");
+    }
+  };
+
+  const openImportDialog = () => {
+    setImportPreview(null);
+    setImportMessage("");
+    setImportFile(null);
+    setImportOpen(true);
+    fileInputRef.current?.click();
+  };
+
+  const handleImportFile = async (file?: File) => {
+    if (!file) return;
+    setImportFile(file);
+    setImportMessage("Previewing spreadsheet...");
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const response = await adminApi.post("/categories/import/preview", formData, { headers: { "Content-Type": "multipart/form-data" } });
+      const report = response.data?.data as SpreadsheetPreview;
+      setImportPreview(report);
+      setImportMessage(report.invalidRows > 0 ? "Fix the validation issues before importing." : "Preview looks good. You can import now.");
+    } catch (error) {
+      setImportMessage(getAdminErrorMessage(error, "Failed to preview spreadsheet."));
+      setImportPreview(null);
+    }
+  };
+
+  const confirmImport = async () => {
+    if (!importFile) return;
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", importFile);
+      const response = await adminApi.post("/categories/import", formData, { headers: { "Content-Type": "multipart/form-data" } });
+      const result = response.data?.data as { created: number; updated: number; report: SpreadsheetPreview };
+      showToast(`Imported ${result.created} created and ${result.updated} updated categories.`);
+      setImportOpen(false);
+      setImportFile(null);
+      setImportPreview(null);
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to import spreadsheet."), "error");
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -298,7 +418,33 @@ export default function CategoriesPage() {
   return (
     <AdminLayout title="Categories" breadcrumb={[{ label: "Categories" }]}>
       <div className="mb-5 flex items-center justify-between gap-3">
-        <p className="text-[13.5px] text-[#6B6B6B]">Drag rows to reorder. Child categories are indented under their parent.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* <p className="text-[13.5px] text-[#6B6B6B]">Drag rows to reorder. Child categories are indented under their parent.</p> */}
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search categories..."
+              className="w-[220px] rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] outline-none focus:border-[#E31E24]"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none"
+          >
+            <option value="">All status</option>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
+          </select>
+          <button type="button" onClick={exportCategories} className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">
+            <Download size={14} /> Export Excel
+          </button>
+          <button type="button" onClick={openImportDialog} className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">
+            <Upload size={14} /> Import Excel
+          </button>
+        </div>
         <button
           type="button"
           onClick={openCreateModal}
@@ -307,6 +453,16 @@ export default function CategoriesPage() {
           <Plus size={14} />
           Add category
         </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          className="hidden"
+          onChange={(event) => {
+            void handleImportFile(event.target.files?.[0] || undefined);
+            event.currentTarget.value = "";
+          }}
+        />
       </div>
 
       <Modal
@@ -581,7 +737,7 @@ export default function CategoriesPage() {
       ) : (
         <div className="rounded-lg border border-[#E6E6E6] bg-white p-3">
           <div className="mb-2 hidden items-center gap-2 px-3 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A] md:flex">
-            <span className="w-8 shrink-0" />
+            <span className="w-6 shrink-0" />
             <div className={`${categoryGridClass} min-w-0 flex-1 pr-3`}>
               <span>Name</span>
               <span>Slug</span>
@@ -591,14 +747,17 @@ export default function CategoriesPage() {
             </div>
           </div>
           <SortableList
+            className="w-full min-w-0"
             items={rows}
             onReorder={handleReorder}
             handleAriaLabel="Drag category to reorder"
+            rowWidthClassName="w-full min-w-0"
+            contentClassName="flex-1 min-w-0 w-full py-2 pr-3"
             renderItem={(category) => (
               <div className={categoryGridClass}>
-                <div className="flex min-w-0 items-center gap-3" style={{ paddingLeft: `${Math.min(category.depth, 4) * 18}px` }}>
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
-                    {category.image ? <img src={category.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={17} className="text-[#9A9A9A]" />}
+                <div className="flex min-w-0 items-center gap-2" style={{ paddingLeft: `${Math.min(category.depth, 4) * 14}px` }}>
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
+                    {category.image ? <img src={category.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={16} className="text-[#9A9A9A]" />}
                   </div>
                   <div className="min-w-0">
                     <div className="truncate text-[14px] font-semibold text-[#1A1A1A]">{category.name}</div>
@@ -609,8 +768,23 @@ export default function CategoriesPage() {
                 <span className="text-[13px] text-[#1A1A1A]">{category._count.products}</span>
                 <StatusBadge status={category.status} />
                 <div className="flex gap-1.5 md:justify-end">
-                  <button type="button" onClick={() => openEditor(category)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"><Pencil size={13} /></button>
-                  <button type="button" onClick={() => setDeleting(category.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"><Trash2 size={13} /></button>
+                  <button type="button" onClick={() => handleDuplicate(category.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Duplicate category">
+                    <Copy size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleArchiveToggle(category)}
+                    className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+                    title={category.status === "ACTIVE" ? "Archive category" : "Restore category"}
+                  >
+                    {category.status === "ACTIVE" ? <Archive size={13} /> : <RotateCcw size={13} />}
+                  </button>
+                  <button type="button" onClick={() => openEditor(category)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Edit category">
+                    <Pencil size={13} />
+                  </button>
+                  <button type="button" onClick={() => setDeleting(category.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50" title="Delete category">
+                    <Trash2 size={13} />
+                  </button>
                 </div>
               </div>
             )}
@@ -621,10 +795,81 @@ export default function CategoriesPage() {
       <ConfirmModal
         open={!!deleting}
         title="Delete category?"
-        message="This soft deletes the category. Products are not deleted."
+        message="This soft deletes the category. Deletion is blocked if products or child categories still reference it."
         onConfirm={handleDelete}
         onCancel={() => setDeleting(null)}
       />
+
+      <Modal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        title="Import Categories Excel"
+        panelClassName="max-w-4xl max-h-[calc(100vh-2.5rem)] overflow-y-auto"
+      >
+        <div className="space-y-4">
+          <p className="text-[13.5px] leading-5 text-[#6B6B6B]">
+            Upload an `.xlsx` or `.csv` file. The first sheet is validated on the server before any category is created or updated.
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
+            >
+              Choose File
+            </button>
+            <span className="text-[13px] text-[#6B6B6B]">{importFile ? importFile.name : "No file selected"}</span>
+          </div>
+          {importMessage ? <div className="rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2 text-[13px] text-[#1A1A1A]">{importMessage}</div> : null}
+          {importPreview ? (
+            <div className="space-y-4 rounded-lg border border-[#E6E6E6] bg-white p-4">
+              <div className="grid gap-3 md:grid-cols-4">
+                <div className="rounded border border-[#E6E6E6] p-3">
+                  <div className="text-[11px] uppercase tracking-wide text-[#9A9A9A]">Rows</div>
+                  <div className="mt-1 text-[20px] font-semibold text-[#1A1A1A]">{importPreview.totalRows}</div>
+                </div>
+                <div className="rounded border border-[#E6E6E6] p-3">
+                  <div className="text-[11px] uppercase tracking-wide text-[#9A9A9A]">Valid</div>
+                  <div className="mt-1 text-[20px] font-semibold text-green-600">{importPreview.validRows}</div>
+                </div>
+                <div className="rounded border border-[#E6E6E6] p-3">
+                  <div className="text-[11px] uppercase tracking-wide text-[#9A9A9A]">Invalid</div>
+                  <div className="mt-1 text-[20px] font-semibold text-red-600">{importPreview.invalidRows}</div>
+                </div>
+                <div className="rounded border border-[#E6E6E6] p-3">
+                  <div className="text-[11px] uppercase tracking-wide text-[#9A9A9A]">Warnings</div>
+                  <div className="mt-1 text-[20px] font-semibold text-amber-600">{importPreview.duplicateWarnings.length}</div>
+                </div>
+              </div>
+              {importPreview.issues.length > 0 ? (
+                <div>
+                  <h4 className="mb-2 text-[13px] font-semibold text-[#1A1A1A]">Validation Issues</h4>
+                  <div className="max-h-48 overflow-y-auto rounded border border-[#E6E6E6]">
+                    {importPreview.issues.map((issue, index) => (
+                      <div key={`${issue.row}-${issue.field}-${index}`} className="border-b border-[#F0F0F0] px-3 py-2 text-[13px] last:border-b-0">
+                        <span className="font-semibold text-[#E31E24]">Row {issue.row}</span> <span className="text-[#6B6B6B]">[{issue.field}]</span> {issue.message}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="flex items-center justify-end gap-2.5">
+            <button type="button" onClick={() => setImportOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium text-[#555] hover:bg-[#F2F2F2]">
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={confirmImport}
+              disabled={!importFile || importing || !!importPreview?.invalidRows}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white disabled:opacity-60"
+            >
+              {importing ? "Importing..." : "Import Categories"}
+            </button>
+          </div>
+        </div>
+      </Modal>
       {ToastComponent}
     </AdminLayout>
   );

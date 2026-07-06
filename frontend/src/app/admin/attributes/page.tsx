@@ -187,11 +187,14 @@ export default function AttributesPage() {
         </div>
       ) : (
         <SortableList
+          className="w-full min-w-0"
+          rowWidthClassName="w-full min-w-0"
+          contentClassName="flex-1 min-w-0 py-2 pr-3"
           items={sorted}
           onReorder={handleReorder}
           renderItem={(attr) => (
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
                 <Link href={`/admin/attributes/${attr.id}`} className="text-[14px] font-semibold text-[#1A1A1A] hover:text-[#E31E24]">
                   {attr.name}
                 </Link>

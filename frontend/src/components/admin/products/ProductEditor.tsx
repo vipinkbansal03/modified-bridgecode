@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { Upload, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2 } from "lucide-react";
@@ -370,6 +371,8 @@ type ProductEditorProps = {
 };
 
 export function ProductEditor({ productId, embedded = false }: ProductEditorProps) {
+  const searchParams = useSearchParams();
+  const variantIdFromQuery = searchParams.get("variant");
   const [activeTab, setActiveTab] = useState(0);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [deletingMedia, setDeletingMedia] = useState<string | null>(null);
@@ -1106,6 +1109,12 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
     );
   };
 
+  useEffect(() => {
+    if (!variantIdFromQuery || editingVariant) return;
+    const match = variantRows.find((variant) => variant.id === variantIdFromQuery);
+    if (match) openEditVariantModal(match);
+  }, [editingVariant, openEditVariantModal, variantIdFromQuery, variantRows]);
+
   const handleCloneVariant = async (variantId: string) => {
     try {
       await adminApi.post(`/products/${productId}/variants/${variantId}/clone`);
@@ -1800,7 +1809,11 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                     const base = prompt("Enter base price in USD:");
                     if (!base) return;
                     try {
-                      await adminApi.post("/pricing/generate-country-prices", { productId, basePrice: parseFloat(base), baseCurrencyId: "usd" });
+                      await adminApi.post("/pricing/generate-country-prices", {
+                        productId,
+                        basePrice: parseFloat(base),
+                        baseCurrencyId: product.defaultCurrencyId || undefined,
+                      });
                       showToast("Country prices generated.");
                       refetch();
                     } catch {
