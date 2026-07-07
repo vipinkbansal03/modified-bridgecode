@@ -576,14 +576,37 @@ export const useBulkUpdateInventory = () => {
 
 // ─── Pricing ─────────────────────────────────────────────
 
-export const useAdminPricing = (productId?: string) =>
-  useQuery({ queryKey: ["admin-pricing", productId], queryFn: () => adminApi.get("/pricing", { params: { productId } }).then((r) => r.data.data) });
+export const useAdminPricingDashboard = () =>
+  useQuery({ queryKey: ["admin-pricing-dashboard"], queryFn: () => adminApi.get("/pricing/dashboard").then((r) => r.data.data), staleTime: 60_000 });
+
+export const useAdminPricing = (params?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  ruleType?: string;
+  productId?: string;
+  variantId?: string;
+  countryId?: string;
+  tierId?: string;
+  minQuantity?: string;
+  sortBy?: string;
+  sortDir?: string;
+  ids?: string[];
+}) =>
+  useQuery({
+    queryKey: ["admin-pricing", params],
+    queryFn: () => adminApi.get("/pricing", { params: { ...params, ids: params?.ids?.join(",") } }).then((r) => r.data),
+  });
 
 export const useCreatePricing = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: unknown) => adminApi.post("/pricing", data).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-pricing"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
+    },
   });
 };
 
@@ -591,13 +614,96 @@ export const useUpdatePricing = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => adminApi.put(`/pricing/${id}`, data).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-pricing"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
+    },
+  });
+};
+
+export const useDeletePricing = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.delete(`/pricing/${id}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
+    },
+  });
+};
+
+export const useDuplicatePricing = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.post(`/pricing/${id}/duplicate`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
+    },
+  });
+};
+
+export const useBulkPricing = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { ids: string[]; ruleType: string; action: string; countryId?: string | null; tierId?: string | null }) =>
+      adminApi.post("/pricing/bulk", data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
+    },
+  });
+};
+
+export const usePreviewPricing = (params?: {
+  productId?: string;
+  variantId?: string;
+  countryId?: string;
+  quantity?: number;
+  customerId?: string;
+  customerRoleKey?: string;
+  tierId?: string;
+}) =>
+  useQuery({
+    queryKey: ["admin-pricing-preview", params],
+    queryFn: () => adminApi.get("/pricing/preview", { params }).then((r) => r.data.data),
+    enabled: !!params?.productId && !!params?.countryId && !!params?.quantity,
+  });
+
+export const useExportPricing = () =>
+  useMutation({
+    mutationFn: (params?: Record<string, unknown>) => adminApi.get("/pricing/export", { params, responseType: "blob" }).then((r) => r.data),
+  });
+
+export const usePreviewPricingImport = () =>
+  useMutation({
+    mutationFn: (formData: FormData) => adminApi.post("/pricing/import/preview", formData, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data.data),
+  });
+
+export const useImportPricing = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (formData: FormData) => adminApi.post("/pricing/import", formData, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
+    },
   });
 };
 
 // ─── Currencies & Countries ───────────────────────────────
 
-export const useAdminTaxRules = (params?: { page?: number; limit?: number; countryId?: string; status?: string }) =>
+export const useAdminTaxDashboard = () =>
+  useQuery({ queryKey: ["admin-tax-dashboard"], queryFn: () => adminApi.get("/tax-rules/dashboard").then((r) => r.data.data), staleTime: 60_000 });
+
+export const useAdminTaxPreview = (params?: { countryId?: string; subtotal?: number }) =>
+  useQuery({
+    queryKey: ["admin-tax-preview", params],
+    queryFn: () => adminApi.get("/tax-rules/preview", { params }).then((r) => r.data.data),
+    enabled: !!params?.countryId && params.subtotal !== undefined,
+  });
+
+export const useAdminTaxRules = (params?: { page?: number; limit?: number; search?: string; countryId?: string; status?: string; type?: string; sortBy?: string; sortDir?: string }) =>
   useQuery({ queryKey: ["admin-tax-rules", params], queryFn: () => adminApi.get("/tax-rules", { params }).then((r) => r.data) });
 
 export const useCreateTaxRule = () => {
@@ -624,20 +730,138 @@ export const useDeleteTaxRule = () => {
   });
 };
 
+export const useBulkTaxRules = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { ids: string[]; action: string }) => adminApi.post("/tax-rules/bulk", data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-tax-rules"] });
+      qc.invalidateQueries({ queryKey: ["admin-tax-dashboard"] });
+    },
+  });
+};
+
+export const useExportTaxRules = () =>
+  useMutation({
+    mutationFn: (params?: Record<string, unknown>) => adminApi.get("/tax-rules/export", { params, responseType: "blob" }).then((r) => r.data),
+  });
+
+export const usePreviewTaxImport = () =>
+  useMutation({
+    mutationFn: (formData: FormData) => adminApi.post("/tax-rules/import/preview", formData, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data.data),
+  });
+
+export const useImportTaxRules = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (formData: FormData) => adminApi.post("/tax-rules/import", formData, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-tax-rules"] });
+      qc.invalidateQueries({ queryKey: ["admin-tax-dashboard"] });
+    },
+  });
+};
+
 export const useAdminCurrencies = () =>
-  useQuery({ queryKey: ["admin-currencies"], queryFn: () => adminApi.get("/currencies").then((r) => r.data.data) });
+  useQuery({ queryKey: ["admin-currencies"], queryFn: () => adminApi.get("/currencies/simple").then((r) => r.data.data) });
+
+export const useAdminCurrenciesPaged = (params?: { page?: number; limit?: number; search?: string; status?: string; sortBy?: string; sortDir?: string }) =>
+  useQuery({ queryKey: ["admin-currencies-paged", params], queryFn: () => adminApi.get("/currencies", { params }).then((r) => r.data) });
+
+export const useAdminCurrencyDashboard = () =>
+  useQuery({ queryKey: ["admin-currency-dashboard"], queryFn: () => adminApi.get("/currencies/dashboard").then((r) => r.data.data), staleTime: 60_000 });
+
+export const useCreateCurrency = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: unknown) => adminApi.post("/currencies", data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-currencies"] });
+      qc.invalidateQueries({ queryKey: ["admin-currencies-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-currency-dashboard"] });
+    },
+  });
+};
+
+export const useUpdateCurrency = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => adminApi.put(`/currencies/${id}`, data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-currencies"] });
+      qc.invalidateQueries({ queryKey: ["admin-currencies-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-currency-dashboard"] });
+    },
+  });
+};
+
+export const useDeleteCurrency = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.delete(`/currencies/${id}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-currencies"] });
+      qc.invalidateQueries({ queryKey: ["admin-currencies-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-currency-dashboard"] });
+    },
+  });
+};
+
+export const useBulkCurrencies = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { ids: string[]; action: "ENABLE" | "DISABLE" | "DELETE" }) => adminApi.post("/currencies/bulk", data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-currencies"] });
+      qc.invalidateQueries({ queryKey: ["admin-currencies-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-currency-dashboard"] });
+    },
+  });
+};
+
+export const useExportCurrencies = () =>
+  useMutation({
+    mutationFn: (params?: Record<string, unknown>) => adminApi.get("/currencies/export", { params, responseType: "blob" }).then((r) => r.data),
+  });
+
+export const usePreviewCurrencyImport = () =>
+  useMutation({
+    mutationFn: (formData: FormData) => adminApi.post("/currencies/import/preview", formData, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data.data),
+  });
+
+export const useImportCurrencies = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (formData: FormData) => adminApi.post("/currencies/import", formData, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-currencies"] });
+      qc.invalidateQueries({ queryKey: ["admin-currencies-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-currency-dashboard"] });
+    },
+  });
+};
 
 export const useAdminCountries = () =>
   useQuery({ queryKey: ["admin-countries"], queryFn: () => adminApi.get("/countries").then((r) => r.data.data) });
 
+export const useAdminTierDashboard = () =>
+  useQuery({ queryKey: ["admin-tier-dashboard"], queryFn: () => adminApi.get("/tiers/dashboard").then((r) => r.data.data), staleTime: 60_000 });
+
 export const useAdminTiers = () =>
-  useQuery({ queryKey: ["admin-tiers"], queryFn: () => adminApi.get("/tiers").then((r) => r.data.data) });
+  useQuery({ queryKey: ["admin-tiers"], queryFn: () => adminApi.get("/tiers/simple").then((r) => r.data.data) });
+
+export const useAdminTiersPaged = (params?: { page?: number; limit?: number; search?: string; status?: string; countryId?: string; sortBy?: string; sortDir?: string }) =>
+  useQuery({ queryKey: ["admin-tiers-paged", params], queryFn: () => adminApi.get("/tiers", { params }).then((r) => r.data) });
 
 export const useCreateTier = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: unknown) => adminApi.post("/tiers", data).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-tiers"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-tiers"] });
+      qc.invalidateQueries({ queryKey: ["admin-tiers-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-tier-dashboard"] });
+    },
   });
 };
 
@@ -645,7 +869,11 @@ export const useUpdateTier = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => adminApi.put(`/tiers/${id}`, data).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-tiers"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-tiers"] });
+      qc.invalidateQueries({ queryKey: ["admin-tiers-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-tier-dashboard"] });
+    },
   });
 };
 
@@ -653,7 +881,23 @@ export const useDeleteTier = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => adminApi.delete(`/tiers/${id}`).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-tiers"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-tiers"] });
+      qc.invalidateQueries({ queryKey: ["admin-tiers-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-tier-dashboard"] });
+    },
+  });
+};
+
+export const useBulkTiers = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { ids: string[]; action: "ENABLE" | "DISABLE" | "DELETE" }) => adminApi.post("/tiers/bulk", data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-tiers"] });
+      qc.invalidateQueries({ queryKey: ["admin-tiers-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-tier-dashboard"] });
+    },
   });
 };
 
@@ -661,7 +905,32 @@ export const useReorderTiers = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (items: { id: string; sortOrder: number }[]) => adminApi.put("/tiers/reorder", { items }).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-tiers"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-tiers"] });
+      qc.invalidateQueries({ queryKey: ["admin-tiers-paged"] });
+    },
+  });
+};
+
+export const useExportTiers = () =>
+  useMutation({
+    mutationFn: (params?: Record<string, unknown>) => adminApi.get("/tiers/export", { params, responseType: "blob" }).then((r) => r.data),
+  });
+
+export const usePreviewTierImport = () =>
+  useMutation({
+    mutationFn: (formData: FormData) => adminApi.post("/tiers/import/preview", formData, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data.data),
+  });
+
+export const useImportTiers = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (formData: FormData) => adminApi.post("/tiers/import", formData, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-tiers"] });
+      qc.invalidateQueries({ queryKey: ["admin-tiers-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-tier-dashboard"] });
+    },
   });
 };
 
@@ -676,11 +945,14 @@ export const useUpdateTierCountries = (tierId?: string) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (items: { countryId: string; enabled: boolean }[]) => adminApi.put(`/tiers/${tierId}/countries`, { items }).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-tier-countries", tierId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-tier-countries", tierId] });
+      qc.invalidateQueries({ queryKey: ["admin-tier-dashboard"] });
+    },
   });
 };
 
-export const useAdminCustomers = (params?: { page?: number; limit?: number; search?: string; customerType?: string; approvalStatus?: string }) =>
+export const useAdminCustomers = (params?: { page?: number; limit?: number; search?: string; status?: string; customerType?: string; approvalStatus?: string; customerRoleId?: string; tierId?: string; countryId?: string; sortBy?: string; sortDir?: string }) =>
   useQuery({ queryKey: ["admin-customers", params], queryFn: () => adminApi.get("/customers", { params }).then((r) => r.data) });
 
 export const useAdminCustomerRoles = () =>
@@ -755,7 +1027,7 @@ export const useRejectCustomer = () => {
 
 // ─── Coupons ─────────────────────────────────────────────
 
-export const useAdminCoupons = (params?: { page?: number; limit?: number; search?: string; status?: string }) =>
+export const useAdminCoupons = (params?: { page?: number; limit?: number; search?: string; status?: string; sortBy?: string; sortDir?: string }) =>
   useQuery({ queryKey: ["admin-coupons", params], queryFn: () => adminApi.get("/coupons", { params }).then((r) => r.data) });
 
 export const useCreateCoupon = () => {
@@ -778,32 +1050,74 @@ export const useDeleteCoupon = () => {
 
 // ─── Quotes ──────────────────────────────────────────────
 
-export const useAdminDiscounts = (params?: { page?: number; limit?: number; search?: string; type?: string; status?: string; scope?: string; countryId?: string }) =>
+export const useAdminDiscountDashboard = () =>
+  useQuery({ queryKey: ["admin-discount-dashboard"], queryFn: () => adminApi.get("/discounts/dashboard").then((r) => r.data.data), staleTime: 60_000 });
+
+export const useAdminDiscounts = (params?: { page?: number; limit?: number; search?: string; type?: string; status?: string; scope?: string; countryId?: string; sortBy?: string; sortDir?: string }) =>
   useQuery({ queryKey: ["admin-discounts", params], queryFn: () => adminApi.get("/discounts", { params }).then((r) => r.data) });
 
 export const useCreateDiscount = () => {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (data: unknown) => adminApi.post("/discounts", data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-discounts"] }) });
+  return useMutation({
+    mutationFn: (data: unknown) => adminApi.post("/discounts", data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-discounts"] });
+      qc.invalidateQueries({ queryKey: ["admin-discount-dashboard"] });
+    },
+  });
 };
 
 export const useUpdateDiscount = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => adminApi.put(`/discounts/${id}`, data).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-discounts"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-discounts"] });
+      qc.invalidateQueries({ queryKey: ["admin-discount-dashboard"] });
+    },
   });
 };
 
 export const useDeleteDiscount = () => {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (id: string) => adminApi.delete(`/discounts/${id}`).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-discounts"] }) });
+  return useMutation({
+    mutationFn: (id: string) => adminApi.delete(`/discounts/${id}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-discounts"] });
+      qc.invalidateQueries({ queryKey: ["admin-discount-dashboard"] });
+    },
+  });
 };
 
 export const useBulkDiscounts = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { ids: string[]; action: "ENABLE" | "DISABLE" | "DELETE" }) => adminApi.post("/discounts/bulk", data).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-discounts"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-discounts"] });
+      qc.invalidateQueries({ queryKey: ["admin-discount-dashboard"] });
+    },
+  });
+};
+
+export const useExportDiscounts = () =>
+  useMutation({
+    mutationFn: (params?: Record<string, unknown>) => adminApi.get("/discounts/export", { params, responseType: "blob" }).then((r) => r.data),
+  });
+
+export const usePreviewDiscountImport = () =>
+  useMutation({
+    mutationFn: (formData: FormData) => adminApi.post("/discounts/import/preview", formData, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data.data),
+  });
+
+export const useImportDiscounts = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (formData: FormData) => adminApi.post("/discounts/import", formData, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-discounts"] });
+      qc.invalidateQueries({ queryKey: ["admin-discount-dashboard"] });
+    },
   });
 };
 
@@ -901,7 +1215,7 @@ export const useBulkBanners = () => {
   return useMutation({ mutationFn: (data: { ids: string[]; action: string }) => adminApi.post("/banners/bulk", data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-banners"] }) });
 };
 
-export const useAdminQuotes = (params?: { page?: number; status?: string }) =>
+export const useAdminQuotes = (params?: { page?: number; limit?: number; status?: string; search?: string; sortBy?: string; sortDir?: string }) =>
   useQuery({ queryKey: ["admin-quotes", params], queryFn: () => adminApi.get("/quotes", { params }).then((r) => r.data) });
 
 export const useAdminQuote = (id: string) =>
@@ -940,7 +1254,7 @@ export const useConvertQuoteToOrder = () => {
 
 // ─── Orders ──────────────────────────────────────────────
 
-export const useAdminOrders = (params?: { page?: number; status?: string; paymentStatus?: string; search?: string; countryId?: string; dateFrom?: string; dateTo?: string }) =>
+export const useAdminOrders = (params?: { page?: number; limit?: number; status?: string; paymentStatus?: string; search?: string; countryId?: string; dateFrom?: string; dateTo?: string; sortBy?: string; sortDir?: string }) =>
   useQuery({ queryKey: ["admin-orders", params], queryFn: () => adminApi.get("/orders", { params }).then((r) => r.data) });
 
 export const useCreateAdminOrder = () => {

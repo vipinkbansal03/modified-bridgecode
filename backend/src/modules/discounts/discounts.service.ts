@@ -1,6 +1,7 @@
 import { Prisma, Status } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { AppError, getPagination } from "../../utils/apiResponse";
+import { readSpreadsheetRows, writeSpreadsheetBuffer } from "../../utils/spreadsheet";
 import { assertTierUsable } from "../tiers/tiers.service";
 
 type DiscountRuleKind = "TIER" | "MOQ" | "PROMOTIONAL";
@@ -54,6 +55,70 @@ function dateOrNull(value: unknown, field: string) {
   const date = normalized instanceof Date ? normalized : new Date(String(normalized));
   if (Number.isNaN(date.getTime())) throw new AppError(`${field} must be a valid date.`, 400);
   return date;
+}
+
+function buildDiscountOrderBy(query: DiscountListQuery) {
+  const dir = query.sortDir === "asc" ? "asc" : "desc";
+  switch (query.sortBy) {
+    case "updatedAt":
+      return [{ updatedAt: dir }, { createdAt: "desc" }];
+    case "name":
+      return [{ name: dir }, { createdAt: "desc" }];
+    case "type":
+      return [{ type: dir }, { createdAt: "desc" }];
+    case "status":
+      return [{ status: dir }, { createdAt: "desc" }];
+    case "startDate":
+      return [{ startDate: dir }, { createdAt: "desc" }];
+    case "endDate":
+      return [{ endDate: dir }, { createdAt: "desc" }];
+    case "createdAt":
+    default:
+      return [{ createdAt: dir }];
+  }
+}
+
+function discountInclude() {
+  return {
+    tier: true,
+    country: true,
+    product: { select: { id: true, title: true, slug: true } },
+    collection: true,
+    category: true,
+  };
+}
+
+function buildDiscountWhere(query: DiscountListQuery) {
+  const search = query.search?.trim();
+  const type = query.type?.trim().toUpperCase();
+  const status = query.status?.trim().toUpperCase();
+  const scope = query.scope?.trim().toUpperCase();
+  const countryId = blankToNull(query.countryId) as string | null;
+
+  const where: Prisma.DiscountWhereInput = {
+    ...(type ? { type: type as never } : {}),
+    ...(status ? { status: status as Status } : {}),
+    ...(countryId ? { countryId } : {}),
+    ...(scope === "PLATFORM" ? { productId: null, collectionId: null, categoryId: null } : {}),
+    ...(scope === "PRODUCT" ? { productId: { not: null } } : {}),
+    ...(scope === "COLLECTION" ? { collectionId: { not: null } } : {}),
+    ...(scope === "CATEGORY" ? { categoryId: { not: null } } : {}),
+    ...(search
+      ? {
+          OR: [
+            { name: { contains: search, mode: "insensitive" } },
+            { product: { title: { contains: search, mode: "insensitive" } } },
+            { collection: { name: { contains: search, mode: "insensitive" } } },
+            { category: { name: { contains: search, mode: "insensitive" } } },
+            { tier: { name: { contains: search, mode: "insensitive" } } },
+            { country: { name: { contains: search, mode: "insensitive" } } },
+            { country: { code: { contains: search, mode: "insensitive" } } },
+          ],
+        }
+      : {}),
+  };
+
+  return where;
 }
 
 async function assertExists(model: "tier" | "country" | "product" | "category" | "collection", id: string | null) {
@@ -151,6 +216,31 @@ type DiscountListQuery = {
   status?: string;
   scope?: string;
   countryId?: string;
+  sortBy?: string;
+  sortDir?: string;
+};
+
+type DiscountSpreadsheetRow = {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  tierId: string;
+  minQuantity: string;
+  discountPercent: string;
+  fixedAmount: string;
+  countryId: string;
+  productId: string;
+  collectionId: string;
+  categoryId: string;
+  startDate: string;
+  endDate: string;
+};
+
+type SpreadsheetIssue = {
+  row: number;
+  field: string;
+  message: string;
 };
 
 export async function listDiscounts(query: DiscountListQuery) {
@@ -198,12 +288,38 @@ export async function listDiscounts(query: DiscountListQuery) {
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: "desc" },
-      include: { tier: true, country: true, product: { select: { id: true, title: true, slug: true } }, collection: true, category: true },
+      orderBy: buildDiscountOrderBy(query) as never,
+      include: discountInclude(),
     }),
     prisma.discount.count({ where }),
   ]);
   return { data, total, page, limit };
+}
+
+export async function getDiscountDashboard() {
+  const [total, active, inactive, tier, moq, promotional, recentlyUpdated] = await Promise.all([
+    prisma.discount.count(),
+    prisma.discount.count({ where: { status: "ACTIVE" } }),
+    prisma.discount.count({ where: { status: "INACTIVE" } }),
+    prisma.discount.count({ where: { type: "TIER" } }),
+    prisma.discount.count({ where: { type: "MOQ" } }),
+    prisma.discount.count({ where: { type: "PROMOTIONAL" } }),
+    prisma.discount.findMany({
+      take: 5,
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      include: discountInclude(),
+    }),
+  ]);
+
+  return {
+    totalDiscounts: total,
+    activeDiscounts: active,
+    inactiveDiscounts: inactive,
+    tierDiscounts: tier,
+    moqDiscounts: moq,
+    promotionalDiscounts: promotional,
+    recentlyUpdated,
+  };
 }
 
 export async function createDiscount(input: DiscountInput) {
@@ -252,4 +368,235 @@ export async function bulkDiscounts(input: BulkDiscountInput) {
     data: { status: input.action === "ENABLE" ? "ACTIVE" : "INACTIVE" },
   });
   return { affected: result.count };
+}
+
+const DISCOUNT_EXPORT_COLUMNS = [
+  { key: "id", header: "id" },
+  { key: "name", header: "name" },
+  { key: "type", header: "type" },
+  { key: "status", header: "status" },
+  { key: "tierId", header: "tierId" },
+  { key: "minQuantity", header: "minQuantity" },
+  { key: "discountPercent", header: "discountPercent" },
+  { key: "fixedAmount", header: "fixedAmount" },
+  { key: "countryId", header: "countryId" },
+  { key: "productId", header: "productId" },
+  { key: "collectionId", header: "collectionId" },
+  { key: "categoryId", header: "categoryId" },
+  { key: "startDate", header: "startDate" },
+  { key: "endDate", header: "endDate" },
+] as const;
+
+function parseDiscountRow(raw: Record<string, string>): DiscountSpreadsheetRow {
+  return {
+    id: raw.id?.trim() || "",
+    name: raw.name?.trim() || "",
+    type: raw.type?.trim().toUpperCase() || "",
+    status: raw.status?.trim().toUpperCase() || "ACTIVE",
+    tierId: raw.tierId?.trim() || "",
+    minQuantity: raw.minQuantity?.trim() || "",
+    discountPercent: raw.discountPercent?.trim() || "",
+    fixedAmount: raw.fixedAmount?.trim() || "",
+    countryId: raw.countryId?.trim() || "",
+    productId: raw.productId?.trim() || "",
+    collectionId: raw.collectionId?.trim() || "",
+    categoryId: raw.categoryId?.trim() || "",
+    startDate: raw.startDate?.trim() || "",
+    endDate: raw.endDate?.trim() || "",
+  };
+}
+
+function rowToPayload(row: DiscountSpreadsheetRow) {
+  return {
+    name: row.name,
+    type: row.type as DiscountRuleKind,
+    status: row.status as Status,
+    tierId: row.tierId || null,
+    minQuantity: row.minQuantity || null,
+    discountPercent: row.discountPercent || null,
+    fixedAmount: row.fixedAmount || null,
+    countryId: row.countryId || null,
+    productId: row.productId || null,
+    collectionId: row.collectionId || null,
+    categoryId: row.categoryId || null,
+    startDate: row.startDate || null,
+    endDate: row.endDate || null,
+  };
+}
+
+async function validateDiscountRows(rows: Record<string, string>[]) {
+  const parsed = rows.map(parseDiscountRow);
+  const issues: SpreadsheetIssue[] = [];
+  const duplicateWarnings: string[] = [];
+  const seen = new Map<string, number>();
+  const ids = new Set<string>();
+  const relatedIds = {
+    tierIds: new Set<string>(),
+    countryIds: new Set<string>(),
+    productIds: new Set<string>(),
+    collectionIds: new Set<string>(),
+    categoryIds: new Set<string>(),
+  };
+
+  for (const [index, row] of parsed.entries()) {
+    const rowNumber = index + 2;
+    if (!row.name) issues.push({ row: rowNumber, field: "name", message: "Name is required." });
+    if (!["TIER", "MOQ", "PROMOTIONAL"].includes(row.type)) issues.push({ row: rowNumber, field: "type", message: "Type must be TIER, MOQ, or PROMOTIONAL." });
+    if (!["ACTIVE", "INACTIVE"].includes(row.status)) issues.push({ row: rowNumber, field: "status", message: "Status must be ACTIVE or INACTIVE." });
+    if (row.tierId) relatedIds.tierIds.add(row.tierId);
+    if (row.countryId) relatedIds.countryIds.add(row.countryId);
+    if (row.productId) relatedIds.productIds.add(row.productId);
+    if (row.collectionId) relatedIds.collectionIds.add(row.collectionId);
+    if (row.categoryId) relatedIds.categoryIds.add(row.categoryId);
+
+    const duplicateKey = [row.name.toLowerCase(), row.type, row.tierId, row.countryId, row.productId, row.collectionId, row.categoryId, row.minQuantity, row.discountPercent, row.fixedAmount].join("|");
+    const seenRow = seen.get(duplicateKey);
+    if (seenRow) {
+      const message = `Duplicate discount definition found on rows ${seenRow} and ${rowNumber}.`;
+      issues.push({ row: rowNumber, field: "name", message });
+      duplicateWarnings.push(message);
+    } else {
+      seen.set(duplicateKey, rowNumber);
+    }
+
+    if (row.id) ids.add(row.id);
+  }
+
+  const [tiers, countries, products, categories, collections] = await Promise.all([
+    relatedIds.tierIds.size ? prisma.tier.findMany({ where: { id: { in: Array.from(relatedIds.tierIds) } }, select: { id: true, status: true } }) : Promise.resolve([]),
+    relatedIds.countryIds.size ? prisma.country.findMany({ where: { id: { in: Array.from(relatedIds.countryIds) } }, select: { id: true, status: true } }) : Promise.resolve([]),
+    relatedIds.productIds.size ? prisma.product.findMany({ where: { id: { in: Array.from(relatedIds.productIds) } }, select: { id: true, status: true } }) : Promise.resolve([]),
+    relatedIds.categoryIds.size ? prisma.category.findMany({ where: { id: { in: Array.from(relatedIds.categoryIds) } }, select: { id: true, status: true } }) : Promise.resolve([]),
+    relatedIds.collectionIds.size ? prisma.collection.findMany({ where: { id: { in: Array.from(relatedIds.collectionIds) } }, select: { id: true, status: true } }) : Promise.resolve([]),
+  ]);
+
+  const tierById = new Map(tiers.map((tier) => [tier.id, tier]));
+  const countryById = new Map(countries.map((country) => [country.id, country]));
+  const productById = new Map(products.map((product) => [product.id, product]));
+  const categoryById = new Map(categories.map((category) => [category.id, category]));
+  const collectionById = new Map(collections.map((collection) => [collection.id, collection]));
+
+  for (const [index, row] of parsed.entries()) {
+    const rowNumber = index + 2;
+    if (row.tierId) {
+      const tier = tierById.get(row.tierId);
+      if (!tier) issues.push({ row: rowNumber, field: "tierId", message: "Tier not found." });
+      else if (tier.status !== "ACTIVE") issues.push({ row: rowNumber, field: "tierId", message: "Tier is inactive." });
+    }
+    if (row.countryId) {
+      const country = countryById.get(row.countryId);
+      if (!country) issues.push({ row: rowNumber, field: "countryId", message: "Country not found." });
+      else if (country.status !== "ACTIVE") issues.push({ row: rowNumber, field: "countryId", message: "Country is inactive." });
+    }
+    if (row.productId) {
+      const product = productById.get(row.productId);
+      if (!product) issues.push({ row: rowNumber, field: "productId", message: "Product not found." });
+      else if (product.status !== "ACTIVE") issues.push({ row: rowNumber, field: "productId", message: "Product is inactive." });
+    }
+    if (row.categoryId) {
+      const category = categoryById.get(row.categoryId);
+      if (!category) issues.push({ row: rowNumber, field: "categoryId", message: "Category not found." });
+      else if (category.status !== "ACTIVE") issues.push({ row: rowNumber, field: "categoryId", message: "Category is inactive." });
+    }
+    if (row.collectionId) {
+      const collection = collectionById.get(row.collectionId);
+      if (!collection) issues.push({ row: rowNumber, field: "collectionId", message: "Collection not found." });
+      else if (collection.status !== "ACTIVE") issues.push({ row: rowNumber, field: "collectionId", message: "Collection is inactive." });
+    }
+  }
+
+  return { parsed, issues, duplicateWarnings };
+}
+
+export async function exportDiscountsSpreadsheet(query: DiscountListQuery & { ids?: string }) {
+  const ids = query.ids?.split(",").map((id) => id.trim()).filter(Boolean) ?? [];
+  const where = ids.length ? { id: { in: ids } } : (buildDiscountWhere(query) as Prisma.DiscountWhereInput);
+  const discounts = await prisma.discount.findMany({
+    where,
+    orderBy: buildDiscountOrderBy(query) as never,
+    include: discountInclude(),
+  });
+
+  return writeSpreadsheetBuffer(
+    discounts.map((discount) => ({
+      id: discount.id,
+      name: discount.name,
+      type: discount.type,
+      status: discount.status,
+      tierId: discount.tierId ?? "",
+      minQuantity: discount.minQuantity ?? "",
+      discountPercent: discount.discountPercent ?? "",
+      fixedAmount: discount.fixedAmount ?? "",
+      countryId: discount.countryId ?? "",
+      productId: discount.productId ?? "",
+      collectionId: discount.collectionId ?? "",
+      categoryId: discount.categoryId ?? "",
+      startDate: discount.startDate ? discount.startDate.toISOString() : "",
+      endDate: discount.endDate ? discount.endDate.toISOString() : "",
+    })),
+    "Discounts",
+    DISCOUNT_EXPORT_COLUMNS.map((column) => ({ key: column.key, header: column.header })),
+  );
+}
+
+export async function previewDiscountImport(filePath: string) {
+  const rows = readSpreadsheetRows(filePath);
+  const preview = await validateDiscountRows(rows);
+  return {
+    totalRows: preview.parsed.length,
+    validRows: Math.max(0, preview.parsed.length - preview.issues.length),
+    invalidRows: preview.issues.length,
+    issues: preview.issues,
+    duplicateWarnings: preview.duplicateWarnings,
+    sampleRows: preview.parsed.slice(0, 10).map((row, index) => ({ row: index + 2, ...row })),
+  };
+}
+
+export async function importDiscountSpreadsheet(filePath: string) {
+  const rows = readSpreadsheetRows(filePath);
+  const preview = await validateDiscountRows(rows);
+  if (preview.issues.length > 0) {
+    throw new AppError(`Import validation failed with ${preview.issues.length} issue(s).`, 400);
+  }
+
+  const summary = { created: 0, updated: 0 };
+  await prisma.$transaction(async (tx) => {
+    for (const row of preview.parsed) {
+      const payload = rowToPayload(row);
+      const existing = row.id
+        ? await tx.discount.findUnique({ where: { id: row.id } })
+        : await tx.discount.findFirst({
+            where: {
+              name: row.name,
+              type: payload.type,
+              tierId: payload.tierId,
+              countryId: payload.countryId,
+              productId: payload.productId,
+              collectionId: payload.collectionId,
+              categoryId: payload.categoryId,
+              minQuantity: payload.minQuantity ? Number(payload.minQuantity) : null,
+            },
+          });
+
+      if (existing) {
+        await tx.discount.update({ where: { id: existing.id }, data: await normalizeDiscountInput(payload, true) as Prisma.DiscountUncheckedUpdateInput });
+        summary.updated += 1;
+      } else {
+        await tx.discount.create({ data: await normalizeDiscountInput(payload) as Prisma.DiscountUncheckedCreateInput });
+        summary.created += 1;
+      }
+    }
+  });
+
+  return {
+    ...summary,
+    report: {
+      totalRows: preview.parsed.length,
+      validRows: preview.parsed.length,
+      invalidRows: 0,
+      issues: [],
+      duplicateWarnings: preview.duplicateWarnings,
+      sampleRows: preview.parsed.slice(0, 10).map((row, index) => ({ row: index + 2, ...row })),
+    },
+  };
 }

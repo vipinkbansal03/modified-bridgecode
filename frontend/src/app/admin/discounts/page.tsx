@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Edit2, Plus, Search, Trash2, X } from "lucide-react";
+import { Download, Edit2, Eye, Filter, Plus, Search, SlidersHorizontal, SquareCheckBig, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, StatCard, useToast } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import {
   useAdminCategories,
   useAdminCountries,
+  useAdminDiscountDashboard,
   useAdminDiscounts,
   useAdminCollections,
   useAdminProducts,
@@ -15,6 +16,9 @@ import {
   useBulkDiscounts,
   useCreateDiscount,
   useDeleteDiscount,
+  useExportDiscounts,
+  useImportDiscounts,
+  usePreviewDiscountImport,
   useUpdateDiscount,
 } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
@@ -61,6 +65,25 @@ type FormState = {
   endDate: string;
 };
 
+type DiscountDashboard = {
+  totalDiscounts: number;
+  activeDiscounts: number;
+  inactiveDiscounts: number;
+  tierDiscounts: number;
+  moqDiscounts: number;
+  promotionalDiscounts: number;
+  recentlyUpdated: Discount[];
+};
+
+type SpreadsheetReport = {
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  issues: Array<{ row: number; field: string; message: string }>;
+  duplicateWarnings: string[];
+  sampleRows: Array<Record<string, unknown>>;
+};
+
 const blankForm: FormState = {
   name: "",
   type: "TIER",
@@ -77,6 +100,16 @@ const blankForm: FormState = {
   categoryId: "",
   startDate: "",
   endDate: "",
+};
+
+const visibleColumnsDefault = {
+  name: true,
+  type: true,
+  discount: true,
+  condition: true,
+  country: true,
+  dates: true,
+  status: true,
 };
 
 function dateInput(value: string | null) {
@@ -115,6 +148,20 @@ function toForm(discount: Discount): FormState {
   };
 }
 
+function formatDate(value?: string | null) {
+  if (!value) return " - ";
+  return new Date(value).toLocaleDateString();
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function DiscountsPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
@@ -124,12 +171,21 @@ export default function DiscountsPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [scopeFilter, setScopeFilter] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [showFilters, setShowFilters] = useState(true);
+  const [showColumns, setShowColumns] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importReport, setImportReport] = useState<SpreadsheetReport | null>(null);
+  const [importMessage, setImportMessage] = useState("");
+  const [importing, setImporting] = useState(false);
   const [form, setForm] = useState<FormState>(blankForm);
   const [showForm, setShowForm] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const { showToast, ToastComponent } = useToast();
+  const { data: dashboardData, isLoading: dashboardLoading } = useAdminDiscountDashboard();
   const { data, isLoading } = useAdminDiscounts({
     page,
     limit,
@@ -138,6 +194,8 @@ export default function DiscountsPage() {
     type: typeFilter || undefined,
     scope: scopeFilter || undefined,
     countryId: countryFilter || undefined,
+    sortBy,
+    sortDir,
   });
   const { data: tiers = [] } = useAdminTiers();
   const { data: countries = [] } = useAdminCountries();
@@ -148,6 +206,9 @@ export default function DiscountsPage() {
   const updateDiscount = useUpdateDiscount();
   const deleteDiscount = useDeleteDiscount();
   const bulkDiscounts = useBulkDiscounts();
+  const exportDiscounts = useExportDiscounts();
+  const previewDiscountImport = usePreviewDiscountImport();
+  const importDiscounts = useImportDiscounts();
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -157,12 +218,18 @@ export default function DiscountsPage() {
     return () => window.clearTimeout(timeout);
   }, [search]);
 
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [page, limit, debouncedSearch, status, typeFilter, scopeFilter, countryFilter, sortBy, sortDir]);
+
   const products: Related[] = productsData?.data ?? [];
   const collections: Related[] = collectionsData?.data ?? [];
   const discounts: Discount[] = data?.data ?? [];
   const totalPages = data?.pagination?.totalPages ?? 1;
+  const dashboard = dashboardData as DiscountDashboard | undefined;
   const visibleIds = useMemo(() => discounts.map((discount) => discount.id), [discounts]);
   const selectedOnPage = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+  const [visibleColumns, setVisibleColumns] = useState(visibleColumnsDefault);
 
   const options = useMemo(
     () => ({
@@ -286,6 +353,64 @@ export default function DiscountsPage() {
     }
   };
 
+  const handleExport = async (selectedOnly = false) => {
+    try {
+      const params: Record<string, unknown> = {
+        search: debouncedSearch.trim() || undefined,
+        status: status || undefined,
+        type: typeFilter || undefined,
+        scope: scopeFilter || undefined,
+        countryId: countryFilter || undefined,
+        sortBy,
+        sortDir,
+      };
+      if (selectedOnly && selectedIds.length > 0) {
+        params.ids = selectedIds.join(",");
+      }
+      const blob = await exportDiscounts.mutateAsync(params);
+      downloadBlob(blob as Blob, selectedOnly && selectedIds.length ? "discounts-selected.xlsx" : "discounts-export.xlsx");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to export discounts."), "error");
+    }
+  };
+
+  const handleImportPreview = async () => {
+    if (!importFile) {
+      showToast("Choose a spreadsheet first.", "error");
+      return;
+    }
+    try {
+      const formData = new FormData();
+      formData.append("file", importFile);
+      const report = (await previewDiscountImport.mutateAsync(formData)) as SpreadsheetReport;
+      setImportReport(report);
+      setImportMessage(report.invalidRows > 0 ? "Fix the validation issues before importing." : "Preview looks good. You can import now.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to preview discounts spreadsheet."), "error");
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importFile) {
+      showToast("Choose a spreadsheet first.", "error");
+      return;
+    }
+    try {
+      setImporting(true);
+      const formData = new FormData();
+      formData.append("file", importFile);
+      await importDiscounts.mutateAsync(formData);
+      showToast("Discounts imported.");
+      setImportFile(null);
+      setImportReport(null);
+      setImportMessage("");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to import discounts."), "error");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const columns: Column<Discount>[] = [
     {
       key: "select",
@@ -385,6 +510,17 @@ export default function DiscountsPage() {
     },
   ];
 
+  const filteredColumns = columns.filter((column) => {
+    if (column.key === "name") return visibleColumns.name;
+    if (column.key === "type") return visibleColumns.type;
+    if (column.key === "value") return visibleColumns.discount;
+    if (column.key === "condition") return visibleColumns.condition;
+    if (column.key === "country") return visibleColumns.country;
+    if (column.key === "dates") return visibleColumns.dates;
+    if (column.key === "status") return visibleColumns.status;
+    return true;
+  });
+
   const isCreateModalOpen = showForm && !form.id;
   const isEditInlineOpen = showForm && !!form.id;
 
@@ -440,6 +576,12 @@ export default function DiscountsPage() {
 
   return (
     <AdminLayout title="Discounts" breadcrumb={[{ label: "Discounts" }]}>
+      <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <StatCard title="Total Discounts" value={dashboard?.totalDiscounts ?? 0} subtitle="All discount rules" icon={<Filter size={18} />} isLoading={dashboardLoading} />
+        <StatCard title="Active Discounts" value={dashboard?.activeDiscounts ?? 0} subtitle="Currently available" icon={<SquareCheckBig size={18} />} color="bg-green-600" isLoading={dashboardLoading} />
+        <StatCard title="Inactive Discounts" value={dashboard?.inactiveDiscounts ?? 0} subtitle="Paused or disabled" icon={<X size={18} />} color="bg-gray-600" isLoading={dashboardLoading} />
+      </div>
+
       <div className="mb-5 rounded-xl border border-[#E6E6E6] bg-white p-4">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <label className="relative w-full xl:max-w-md">
@@ -523,6 +665,30 @@ export default function DiscountsPage() {
             />
             <button
               type="button"
+              onClick={() => setShowFilters((current) => !current)}
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
+            >
+              <Filter size={14} />
+              {showFilters ? "Hide filters" : "Show filters"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowColumns((current) => !current)}
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
+            >
+              <SlidersHorizontal size={14} />
+              Columns
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleExport(false)}
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
+            >
+              <Download size={14} />
+              Export
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 resetForm();
                 setShowForm(true);
@@ -533,6 +699,38 @@ export default function DiscountsPage() {
             </button>
           </div>
         </div>
+
+        {showFilters ? (
+          <div className="mt-4 grid gap-3 border-t border-[#F0F0F0] pt-4 lg:grid-cols-[repeat(3,minmax(0,1fr))_auto_auto] lg:items-center">
+            <AdminSelect
+              value={String(sortBy)}
+              onChange={(event) => setSortBy(event.target.value)}
+              options={[
+                { value: "createdAt", label: "Created date" },
+                { value: "updatedAt", label: "Updated date" },
+                { value: "name", label: "Rule name" },
+                { value: "type", label: "Type" },
+                { value: "status", label: "Status" },
+              ]}
+            />
+            <AdminSelect
+              value={sortDir}
+              onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+              options={[
+                { value: "desc", label: "Descending" },
+                { value: "asc", label: "Ascending" },
+              ]}
+            />
+            <button type="button" onClick={() => void handleExport(true)} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">
+              <Download size={14} />
+              Export selected
+            </button>
+            <button type="button" onClick={() => setSelectedIds([])} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">
+              Clear selection
+            </button>
+            <div className="text-right text-[12.5px] text-[#9A9A9A]">{selectedIds.length} selected / {data?.pagination?.total ?? 0} total</div>
+          </div>
+        ) : null}
       </div>
 
       {isEditInlineOpen ? <div className="mb-5">{discountForm}</div> : null}
@@ -581,7 +779,100 @@ export default function DiscountsPage() {
         </div>
       </div>
 
-      <DataTable<Discount> columns={columns} data={discounts} rowKey="id" isLoading={isLoading} emptyMessage="No discount rules found." />
+      {showColumns ? (
+        <div className="mb-5 rounded-xl border border-[#E6E6E6] bg-white p-4">
+          <div className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">Column visibility</div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {Object.entries(visibleColumns).map(([key, value]) => (
+              <label key={key} className="flex items-center gap-2 text-[13px] text-[#1A1A1A]">
+                <input type="checkbox" checked={value} onChange={(event) => setVisibleColumns((current) => ({ ...current, [key]: event.target.checked }))} />
+                <span className="capitalize">{key}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mb-5 grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
+        <DataTable<Discount> columns={filteredColumns} data={discounts} rowKey="id" isLoading={isLoading} emptyMessage="No discount rules found." />
+
+        <div className="space-y-5">
+          <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Import / Export</h3>
+                <p className="mt-1 text-[12.5px] text-[#6B6B6B]">Spreadsheet actions use the same backend rules as the list view.</p>
+              </div>
+              <button type="button" onClick={() => void handleExport(false)} className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
+                <Download size={14} /> Export
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3">
+              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-[#D6D6D6] bg-[#FAFAFA] px-4 py-3">
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={(event) => {
+                    setImportFile(event.target.files?.[0] ?? null);
+                    setImportReport(null);
+                    setImportMessage("");
+                  }}
+                />
+                <div className="min-w-0">
+                  <div className="text-[13px] font-medium text-[#1A1A1A]">{importFile ? importFile.name : "Choose file"}</div>
+                  <div className="mt-0.5 text-[12px] text-[#6B6B6B]">Preview before import.</div>
+                </div>
+                <Upload size={16} className="shrink-0 text-[#E31E24]" />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => void handleImportPreview()} disabled={previewDiscountImport.isPending} className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-50">
+                  <Eye size={14} /> Preview
+                </button>
+                <button type="button" onClick={() => void handleImport()} disabled={importing || importDiscounts.isPending || !!importReport?.invalidRows} className="inline-flex items-center gap-2 rounded-md bg-[#E31E24] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
+                  <Upload size={14} /> {importing ? "Importing..." : "Import"}
+                </button>
+              </div>
+            </div>
+            {importMessage ? <div className="mt-4 rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2 text-[13px] text-[#1A1A1A]">{importMessage}</div> : null}
+            {importReport ? (
+              <div className="mt-4 space-y-3 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3 text-[12.5px] text-[#1A1A1A]">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
+                    <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Rows</div>
+                    <div className="mt-1 text-[18px] font-semibold text-[#1A1A1A]">{importReport.totalRows}</div>
+                  </div>
+                  <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
+                    <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Valid</div>
+                    <div className="mt-1 text-[18px] font-semibold text-green-600">{importReport.validRows}</div>
+                  </div>
+                  <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
+                    <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Invalid</div>
+                    <div className="mt-1 text-[18px] font-semibold text-red-600">{importReport.invalidRows}</div>
+                  </div>
+                  <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
+                    <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Dups</div>
+                    <div className="mt-1 text-[18px] font-semibold text-amber-600">{importReport.duplicateWarnings.length}</div>
+                  </div>
+                </div>
+                {importReport.issues.length > 0 ? (
+                  <div>
+                    <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Issues</div>
+                    <div className="mt-2 space-y-1.5">
+                      {importReport.issues.slice(0, 4).map((issue, index) => (
+                        <div key={`${issue.row}-${issue.field}-${index}`} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[12px] text-[#6B6B6B]">
+                          Row {issue.row}: {issue.message}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
       <Pagination page={page} totalPages={totalPages} onPageChange={(nextPage) => {
         setPage(nextPage);
         setSelectedIds([]);

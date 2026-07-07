@@ -338,8 +338,33 @@ export async function submitPublicQuote(input: QuoteSubmitInput) {
     : await prisma.country.findFirst({ where: { isDefault: true }, include: { currency: true } });
 
   const defaultCountry = country || { id: "default", currencyId: "default", currency: { symbol: "$" } };
+  const resolvedItems = await Promise.all(
+    input.items.map(async (item) => {
+      const quantity = Number(item.quantity);
+      if (!Number.isInteger(quantity) || quantity < 1) {
+        throw new AppError("Quote item quantity must be at least 1.", 400);
+      }
 
-  const subtotal = input.items.reduce((sum, i) => sum + (i.unitPrice || 0) * i.quantity, 0);
+      const resolved = item.productId && item.variantId
+        ? await resolvePrice({
+            productId: item.productId,
+            variantId: item.variantId,
+            countryId: defaultCountry.id,
+            quantity,
+          })
+        : null;
+
+      const unitPrice = resolved?.finalPrice ?? Number(item.unitPrice || 0);
+      return {
+        ...item,
+        quantity,
+        unitPrice,
+        total: unitPrice * quantity,
+      };
+    }),
+  );
+
+  const subtotal = resolvedItems.reduce((sum, item) => sum + item.total, 0);
   const quoteNumber = `QUO-${Date.now()}`;
 
   const quote = await prisma.quote.create({
@@ -356,14 +381,14 @@ export async function submitPublicQuote(input: QuoteSubmitInput) {
       total: subtotal,
       notes: input.message,
       items: {
-        create: input.items.map((i) => ({
+        create: resolvedItems.map((i) => ({
           productId: i.productId,
           variantId: i.variantId,
           title: i.productTitle,
           sku: i.sku,
           quantity: i.quantity,
           unitPrice: i.unitPrice || 0,
-          total: (i.unitPrice || 0) * i.quantity,
+          total: i.total,
         })),
       },
     },
@@ -376,11 +401,11 @@ export async function submitPublicQuote(input: QuoteSubmitInput) {
     customerEmail: input.customerEmail,
     customerPhone: input.customerPhone,
     companyName: input.companyName,
-    items: input.items.map((i) => ({
+    items: resolvedItems.map((i) => ({
       productTitle: i.productTitle,
       sku: i.sku,
       quantity: i.quantity,
-      unitPrice: i.unitPrice || 0,
+      unitPrice: i.unitPrice,
     })),
     subtotal,
     notes: input.message,

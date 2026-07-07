@@ -15,28 +15,69 @@ type CustomerProfileInput = {
   approvalStatus?: ApprovalStatus;
 };
 
-export async function listCustomers(query: { page?: string; limit?: string; search?: string; customerType?: CustomerType; approvalStatus?: ApprovalStatus }) {
+type CustomerListQuery = {
+  page?: string;
+  limit?: string;
+  search?: string;
+  status?: Status;
+  customerType?: CustomerType;
+  approvalStatus?: ApprovalStatus;
+  customerRoleId?: string | null;
+  tierId?: string | null;
+  countryId?: string | null;
+  sortBy?: string;
+  sortDir?: string;
+};
+
+export async function listCustomers(query: CustomerListQuery) {
   const { page, limit, skip } = getPagination(query);
   const where = {
     deletedAt: null,
+    ...(query.status && { status: query.status }),
     ...(query.customerType && { customerType: query.customerType }),
     ...(query.approvalStatus && { approvalStatus: query.approvalStatus }),
+    ...(query.customerRoleId && { customerRoleId: query.customerRoleId }),
+    ...(query.tierId && { tierId: query.tierId }),
+    ...(query.countryId && { defaultCountryId: query.countryId }),
     ...(query.search && {
       OR: [
         { email: { contains: query.search, mode: "insensitive" as const } },
         { firstName: { contains: query.search, mode: "insensitive" as const } },
         { lastName: { contains: query.search, mode: "insensitive" as const } },
+        { companyName: { contains: query.search, mode: "insensitive" as const } },
+        { phone: { contains: query.search, mode: "insensitive" as const } },
       ],
     }),
   };
+
+  const sortDir = query.sortDir === "asc" ? "asc" : "desc";
+  const orderBy = (() => {
+    switch (query.sortBy) {
+      case "email":
+        return [{ email: sortDir }, { createdAt: "desc" }];
+      case "status":
+        return [{ status: sortDir }, { createdAt: "desc" }];
+      case "approvalStatus":
+        return [{ approvalStatus: sortDir }, { createdAt: "desc" }];
+      case "customerType":
+        return [{ customerType: sortDir }, { createdAt: "desc" }];
+      case "updatedAt":
+        return [{ updatedAt: sortDir }, { createdAt: "desc" }];
+      case "firstName":
+      case "lastName":
+      case "name":
+      default:
+        return [{ firstName: sortDir }, { lastName: sortDir }, { createdAt: "desc" }];
+    }
+  })();
 
   const [data, total] = await Promise.all([
     prisma.customer.findMany({
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: "desc" },
-      include: { tier: true, customerRole: true },
+      orderBy: orderBy as never,
+      include: { tier: true, customerRole: true, defaultCountry: true },
     }),
     prisma.customer.count({ where }),
   ]);

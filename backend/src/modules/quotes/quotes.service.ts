@@ -2,11 +2,41 @@ import { prisma } from "../../config/database";
 import { AppError, getPagination } from "../../utils/apiResponse";
 import { sendQuoteConvertedEmail } from "../../utils/email";
 
-export async function listQuotes(query: { page?: string; limit?: string; status?: string }) {
+export async function listQuotes(query: { page?: string; limit?: string; status?: string; search?: string; sortBy?: string; sortDir?: string }) {
   const { page, limit, skip } = getPagination(query);
-  const where = query.status ? { status: query.status as never } : {};
+  const where: Record<string, unknown> = {};
+  if (query.status) where.status = query.status as never;
+  if (query.search?.trim()) {
+    const search = query.search.trim();
+    where.OR = [
+      { quoteNumber: { contains: search, mode: "insensitive" } },
+      { customerName: { contains: search, mode: "insensitive" } },
+      { customerEmail: { contains: search, mode: "insensitive" } },
+      { companyName: { contains: search, mode: "insensitive" } },
+    ];
+  }
+  const sortDir = query.sortDir === "asc" ? "asc" : "desc";
+  const orderBy = (() => {
+    switch (query.sortBy) {
+      case "quoteNumber":
+        return [{ quoteNumber: sortDir }, { createdAt: "desc" }];
+      case "customerName":
+        return [{ customerName: sortDir }, { createdAt: "desc" }];
+      case "total":
+        return [{ total: sortDir }, { createdAt: "desc" }];
+      case "status":
+        return [{ status: sortDir }, { createdAt: "desc" }];
+      case "updatedAt":
+        return [{ updatedAt: sortDir }, { createdAt: "desc" }];
+      case "country":
+        return [{ country: { code: sortDir } }, { createdAt: "desc" }];
+      case "createdAt":
+      default:
+        return [{ createdAt: sortDir }];
+    }
+  })();
   const [data, total] = await Promise.all([
-    prisma.quote.findMany({ where, skip, take: limit, orderBy: { createdAt: "desc" }, include: { country: true, currency: true, items: true, _count: { select: { items: true } } } }),
+    prisma.quote.findMany({ where: where as never, skip, take: limit, orderBy: orderBy as never, include: { country: true, currency: true, items: true, _count: { select: { items: true } } } }),
     prisma.quote.count({ where }),
   ]);
   return { data, total, page, limit };

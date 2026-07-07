@@ -1,16 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Edit2, Plus, Search, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Edit2, Plus, Search, Shield, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { useAdminCountries, useAdminCoupons, useCreateCoupon, useDeleteCoupon, useUpdateCoupon } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
 
 type Related = { id: string; name?: string; code?: string };
 
-type Coupon = {
+type CouponRow = {
   id: string;
   code: string;
   description: string | null;
@@ -25,6 +25,7 @@ type Coupon = {
   countryId: string | null;
   country?: Related | null;
   status: "ACTIVE" | "INACTIVE";
+  createdAt?: string;
 };
 
 type FormState = {
@@ -65,13 +66,17 @@ function amount(value: string | number | null | undefined) {
   return Number(value).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 }
 
-function valueLabel(coupon: Coupon) {
-  return coupon.discountType === "PERCENTAGE"
-    ? `${amount(coupon.discountValue)}% off`
-    : `${amount(coupon.discountValue)} off`;
+function validity(coupon: CouponRow) {
+  const start = dateInput(coupon.startDate);
+  const end = dateInput(coupon.endDate);
+  return `${start} to ${end}`;
 }
 
-function toForm(coupon: Coupon): FormState {
+function valueLabel(coupon: CouponRow) {
+  return coupon.discountType === "PERCENTAGE" ? `${amount(coupon.discountValue)}%` : amount(coupon.discountValue);
+}
+
+function toForm(coupon: CouponRow): FormState {
   return {
     id: coupon.id,
     code: coupon.code,
@@ -89,28 +94,53 @@ function toForm(coupon: Coupon): FormState {
 }
 
 export default function CouponsPage() {
+  const { showToast, ToastComponent } = useToast();
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(20);
+  const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [form, setForm] = useState<FormState>(blankForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [deleting, setDeleting] = useState<Coupon | null>(null);
+  const [deleting, setDeleting] = useState<CouponRow | null>(null);
 
-  const { showToast, ToastComponent } = useToast();
   const { data, isLoading } = useAdminCoupons({
     page,
     limit,
-    search: search.trim() || undefined,
+    search: debouncedSearch.trim() || undefined,
     status: status || undefined,
+    sortBy,
+    sortDir,
   });
   const { data: countries = [] } = useAdminCountries();
   const createCoupon = useCreateCoupon();
   const updateCoupon = useUpdateCoupon();
   const deleteCoupon = useDeleteCoupon();
 
-  const coupons: Coupon[] = data?.data ?? [];
-  const totalPages = data?.pagination?.totalPages ?? 1;
+  const response = data as { data?: CouponRow[]; pagination?: { page: number; limit: number; total: number; totalPages: number } } | undefined;
+  const coupons = response?.data ?? [];
+  const pagination = response?.pagination ?? { page, limit, total: 0, totalPages: 1 };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, status, sortBy, sortDir, limit]);
+
+  const stats = useMemo(
+    () => ({
+      total: Number(pagination.total ?? 0),
+      active: coupons.filter((coupon) => coupon.status === "ACTIVE").length,
+      percentage: coupons.filter((coupon) => coupon.discountType === "PERCENTAGE").length,
+      fixed: coupons.filter((coupon) => coupon.discountType === "FIXED").length,
+    }),
+    [pagination.total, coupons],
+  );
 
   const countryOptions = useMemo(
     () => [
@@ -186,7 +216,7 @@ export default function CouponsPage() {
     }
   };
 
-  const toggleStatus = async (coupon: Coupon) => {
+  const toggleStatus = async (coupon: CouponRow) => {
     const nextStatus = coupon.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
     try {
       await updateCoupon.mutateAsync({ id: coupon.id, status: nextStatus });
@@ -208,7 +238,7 @@ export default function CouponsPage() {
     }
   };
 
-  const columns: Column<Coupon>[] = [
+  const columns: Column<CouponRow>[] = [
     {
       key: "code",
       label: "Coupon",
@@ -226,7 +256,9 @@ export default function CouponsPage() {
       label: "Discount",
       render: (row) => (
         <div>
-          <div className="font-semibold text-[#1A1A1A]">{valueLabel(row)}</div>
+          <div className="font-semibold text-[#1A1A1A]">
+            {row.discountType === "PERCENTAGE" ? `${valueLabel(row)} off` : `${valueLabel(row)} off`}
+          </div>
           <div className="mt-1 text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">
             {row.discountType === "PERCENTAGE" ? "Percentage coupon" : "Fixed amount coupon"}
           </div>
@@ -238,47 +270,21 @@ export default function CouponsPage() {
       label: "Conditions",
       render: (row) => (
         <div className="flex max-w-[340px] flex-wrap gap-1.5 text-[12px] text-[#6B6B6B]">
-          <span className="rounded-full bg-[#F8F8F8] px-2 py-1">
-            Min: {row.minOrderValue ? amount(row.minOrderValue) : "None"}
-          </span>
-          {row.discountType === "PERCENTAGE" && row.maxDiscount ? (
-            <span className="rounded-full bg-[#F8F8F8] px-2 py-1">Cap: {amount(row.maxDiscount)}</span>
-          ) : null}
-          <span className="rounded-full bg-[#F8F8F8] px-2 py-1">
-            {row.country ? `${row.country.name} (${row.country.code})` : "All countries"}
-          </span>
+          <span className="rounded-full bg-[#F8F8F8] px-2 py-1">Min: {row.minOrderValue ? amount(row.minOrderValue) : "None"}</span>
+          {row.discountType === "PERCENTAGE" && row.maxDiscount ? <span className="rounded-full bg-[#F8F8F8] px-2 py-1">Cap: {amount(row.maxDiscount)}</span> : null}
+          <span className="rounded-full bg-[#F8F8F8] px-2 py-1">{row.country ? `${row.country.name} (${row.country.code})` : "All countries"}</span>
         </div>
       ),
     },
     { key: "usage", label: "Usage", render: (row) => `${row.usedCount}/${row.usageLimit || "Unlimited"}` },
-    { key: "dates", label: "Dates", render: (row) => `${dateInput(row.startDate)} to ${dateInput(row.endDate)}` },
-    {
-      key: "status",
-      label: "Status",
-      render: (row) => {
-        const isActive = row.status === "ACTIVE";
-        return (
-          <button
-            type="button"
-            onClick={() => toggleStatus(row)}
-            disabled={updateCoupon.isPending}
-            title={isActive ? "Click to pause this coupon" : "Click to activate this coupon"}
-            className="inline-flex items-center gap-2 rounded-full border border-[#E6E6E6] bg-white px-2.5 py-1.5 text-[12px] font-medium transition hover:border-[#D0D0D0] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <span className={`relative h-4 w-8 rounded-full transition ${isActive ? "bg-emerald-500" : "bg-[#D9D9D9]"}`}>
-              <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition ${isActive ? "left-4" : "left-0.5"}`} />
-            </span>
-            <span className={isActive ? "text-emerald-700" : "text-[#6B6B6B]"}>{isActive ? "Active" : "Inactive"}</span>
-          </button>
-        );
-      },
-    },
+    { key: "dates", label: "Validity", render: (row) => validity(row) },
+    { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
     {
       key: "actions",
-      label: "",
-      width: "86px",
+      label: "Actions",
+      width: "96px",
       render: (row) => (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => {
@@ -293,7 +299,7 @@ export default function CouponsPage() {
           <button
             type="button"
             onClick={() => setDeleting(row)}
-            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"
+            className="flex h-7 w-7 items-center justify-center rounded border border-[#F2C9C9] text-red-500 hover:bg-red-50"
             aria-label={`Delete ${row.code}`}
           >
             <Trash2 size={13} />
@@ -305,56 +311,88 @@ export default function CouponsPage() {
 
   return (
     <AdminLayout title="Coupons" breadcrumb={[{ label: "Coupons" }]}>
-      <div className="mb-5 rounded-xl border border-[#E6E6E6] bg-white p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <label className="relative w-full lg:max-w-md">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setPage(1);
-              }}
-              placeholder="Search coupon code or description..."
-              className="h-10 w-full rounded-lg border border-[#E6E6E6] bg-white pl-9 pr-3 text-[13.5px] outline-none transition focus:border-[#E31E24] focus:ring-2 focus:ring-[#E31E24]/10"
-            />
-          </label>
+      <div className="space-y-5">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard title="Total Coupons" value={stats.total} subtitle="All coupon records" icon={<Shield size={18} />} />
+          <StatCard title="Active Coupons" value={stats.active} subtitle="Available now" icon={<Shield size={18} />} color="bg-green-600" />
+          <StatCard title="Percentage Coupons" value={stats.percentage} subtitle="Rate-based deals" icon={<Shield size={18} />} color="bg-[#0F6CBD]" />
+          <StatCard title="Fixed Coupons" value={stats.fixed} subtitle="Flat-value deals" icon={<Shield size={18} />} color="bg-[#7A4F01]" />
+        </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.8fr)_repeat(4,minmax(0,1fr))]">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search coupon code or description..."
+                className="h-10 w-full rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+              />
+            </div>
             <AdminSelect
+              label=""
               value={status}
-              onChange={(event) => {
-                setStatus(event.target.value);
-                setPage(1);
-              }}
+              onChange={(event) => setStatus(event.target.value)}
               options={[
                 { value: "", label: "All statuses" },
                 { value: "ACTIVE", label: "Active" },
                 { value: "INACTIVE", label: "Inactive" },
               ]}
-              className="min-w-[150px]"
             />
             <AdminSelect
-              value={String(limit)}
-              onChange={(event) => {
-                setLimit(Number(event.target.value));
-                setPage(1);
-              }}
+              label=""
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value)}
               options={[
-                { value: "10", label: "10 per page" },
-                { value: "20", label: "20 per page" },
-                { value: "50", label: "50 per page" },
+                { value: "createdAt", label: "Created date" },
+                { value: "code", label: "Code" },
+                { value: "discountValue", label: "Discount" },
+                { value: "usedCount", label: "Usage" },
+                { value: "startDate", label: "Start date" },
+                { value: "endDate", label: "End date" },
+                { value: "status", label: "Status" },
               ]}
-              className="min-w-[140px]"
             />
+            <AdminSelect
+              label=""
+              value={sortDir}
+              onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+              options={[
+                { value: "desc", label: "Descending" },
+                { value: "asc", label: "Ascending" },
+              ]}
+            />
+            <AdminSelect
+              label=""
+              value={String(limit)}
+              onChange={(event) => setLimit(Number(event.target.value))}
+              options={[
+                { value: "10", label: "10 / page" },
+                { value: "20", label: "20 / page" },
+                { value: "50", label: "50 / page" },
+              ]}
+            />
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[12.5px] text-[#6B6B6B]">Coupon restrictions are validated again during checkout.</div>
             <button
               type="button"
               onClick={openCreate}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
+              className="inline-flex h-10 items-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
             >
-              <Plus size={14} /> Create Coupon
+              <Plus size={14} />
+              Create Coupon
             </button>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-[#E6E6E6] bg-white">
+          <DataTable<CouponRow> columns={columns} data={coupons} rowKey="id" isLoading={isLoading} emptyMessage="No coupons found." />
+          <div className="border-t border-[#E6E6E6] px-4 py-3">
+            <Pagination page={pagination.page} totalPages={pagination.totalPages || 1} onPageChange={setPage} />
           </div>
         </div>
       </div>
@@ -421,8 +459,6 @@ export default function CouponsPage() {
         </form>
       </Modal>
 
-      <DataTable<Coupon> columns={columns} data={coupons} rowKey="id" isLoading={isLoading} emptyMessage="No coupons found." />
-      <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
       <ConfirmModal
         open={!!deleting}
         title="Delete coupon?"
@@ -430,6 +466,7 @@ export default function CouponsPage() {
         onConfirm={confirmDelete}
         onCancel={() => setDeleting(null)}
       />
+
       {ToastComponent}
     </AdminLayout>
   );

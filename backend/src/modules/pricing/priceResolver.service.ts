@@ -5,6 +5,7 @@ import { logger } from "../../config/logger";
 import {
   SYSTEM_CUSTOMER_ROLE_KEYS,
   buildRolePriceLayer,
+  ensureCustomerRoleByKey,
   resolveCustomerRoleFromCustomer,
 } from "../customerRoles/customerRoles.service";
 
@@ -13,6 +14,8 @@ type ResolvePriceInput = {
   variantId?: string | null;
   countryId: string;
   customerId?: string | null;
+  customerRoleKey?: string | null;
+  tierId?: string | null;
   quantity: number;
 };
 
@@ -234,21 +237,22 @@ async function findBasePrice(input: ResolvePriceInput) {
 }
 
 async function resolvePricingContext(input: ResolvePriceInput): Promise<ResolvedPricingContext> {
-  const role = await resolveCustomerRoleFromCustomer(input.customerId);
-  if (!input.customerId) {
-    return {
-      role,
-      tierId: null,
-      tierEligibleForCountry: false,
-    };
-  }
+  const role = input.customerId
+    ? await resolveCustomerRoleFromCustomer(input.customerId)
+    : input.customerRoleKey
+      ? await ensureCustomerRoleByKey(input.customerRoleKey)
+      : await ensureCustomerRoleByKey(SYSTEM_CUSTOMER_ROLE_KEYS.guest);
 
-  const customer = await prisma.customer.findUnique({
-    where: { id: input.customerId, deletedAt: null },
-    select: { tierId: true },
-  });
+  const tierId = input.customerId
+    ? (input.tierId ?? (
+        await prisma.customer.findUnique({
+          where: { id: input.customerId, deletedAt: null },
+          select: { tierId: true },
+        })
+      )?.tierId ?? null)
+    : input.tierId ?? null;
 
-  if (!customer?.tierId) {
+  if (!tierId) {
     return {
       role,
       tierId: null,
@@ -257,7 +261,7 @@ async function resolvePricingContext(input: ResolvePriceInput): Promise<Resolved
   }
 
   const tier = await prisma.tier.findUnique({
-    where: { id: customer.tierId },
+    where: { id: tierId },
     select: {
       id: true,
       status: true,

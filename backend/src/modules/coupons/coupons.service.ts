@@ -22,6 +22,8 @@ type CouponListQuery = {
   limit?: string;
   search?: string;
   status?: string;
+  sortBy?: string;
+  sortDir?: string;
 };
 
 function blankToNull(value: unknown) {
@@ -154,12 +156,33 @@ export async function listCoupons(query: CouponListQuery) {
       : {}),
   };
 
+  const sortDir = query.sortDir === "asc" ? "asc" : "desc";
+  const orderBy = (() => {
+    switch (query.sortBy) {
+      case "code":
+        return [{ code: sortDir }, { createdAt: "desc" }];
+      case "discountValue":
+        return [{ discountValue: sortDir }, { createdAt: "desc" }];
+      case "usedCount":
+        return [{ usedCount: sortDir }, { createdAt: "desc" }];
+      case "startDate":
+        return [{ startDate: sortDir }, { createdAt: "desc" }];
+      case "endDate":
+        return [{ endDate: sortDir }, { createdAt: "desc" }];
+      case "status":
+        return [{ status: sortDir }, { createdAt: "desc" }];
+      case "createdAt":
+      default:
+        return [{ createdAt: sortDir }];
+    }
+  })();
+
   const [data, total] = await Promise.all([
     prisma.coupon.findMany({
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: "desc" },
+      orderBy: orderBy as never,
       include: { country: true, currency: true },
     }),
     prisma.coupon.count({ where }),

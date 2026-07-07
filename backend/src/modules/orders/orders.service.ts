@@ -60,6 +60,8 @@ export async function listOrders(query: {
   countryId?: string;
   dateFrom?: string;
   dateTo?: string;
+  sortBy?: string;
+  sortDir?: string;
 }) {
   const { page, limit, skip } = getPagination(query);
   const where: Prisma.OrderWhereInput = {};
@@ -80,8 +82,32 @@ export async function listOrders(query: {
       ...(query.dateTo ? { lte: new Date(`${query.dateTo}T23:59:59.999Z`) } : {}),
     };
   }
+
+  const sortDir = query.sortDir === "asc" ? "asc" : "desc";
+  const orderBy = (() => {
+    switch (query.sortBy) {
+      case "orderNumber":
+        return [{ orderNumber: sortDir }, { createdAt: "desc" }];
+      case "customerName":
+        return [{ customerName: sortDir }, { createdAt: "desc" }];
+      case "total":
+        return [{ total: sortDir }, { createdAt: "desc" }];
+      case "status":
+        return [{ status: sortDir }, { createdAt: "desc" }];
+      case "paymentStatus":
+        return [{ paymentStatus: sortDir }, { createdAt: "desc" }];
+      case "country":
+        return [{ country: { code: sortDir } }, { createdAt: "desc" }];
+      case "updatedAt":
+        return [{ updatedAt: sortDir }, { createdAt: "desc" }];
+      case "createdAt":
+      default:
+        return [{ createdAt: sortDir }];
+    }
+  })();
+
   const [data, total] = await Promise.all([
-    prisma.order.findMany({ where, skip, take: limit, orderBy: { createdAt: "desc" }, include: { country: true, currency: true, shippingZone: { include: { provider: true, country: true } }, _count: { select: { items: true } } } }),
+    prisma.order.findMany({ where, skip, take: limit, orderBy: orderBy as never, include: { country: true, currency: true, shippingZone: { include: { provider: true, country: true } }, _count: { select: { items: true } } } }),
     prisma.order.count({ where }),
   ]);
   return { data, total, page, limit };

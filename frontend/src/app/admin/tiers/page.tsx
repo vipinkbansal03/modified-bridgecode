@@ -1,17 +1,35 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Edit2, Plus, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  Copy,
+  Download,
+  Edit2,
+  Eye,
+  Filter,
+  Plus,
+  RefreshCw,
+  Search,
+  SlidersHorizontal,
+  SquareCheckBig,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { AdminInput, AdminSelect, ConfirmModal, StatusBadge, useToast } from "@/components/admin/AdminComponents";
-import { SortableList, toSortOrderPayload } from "@/components/admin/SortableList";
+import { AdminInput, AdminSelect, ConfirmModal, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import {
+  useAdminCountries,
   useAdminTierCountries,
-  useAdminTiers,
+  useAdminTierDashboard,
+  useAdminTiersPaged,
+  useBulkTiers,
   useCreateTier,
   useDeleteTier,
-  useReorderTiers,
+  useExportTiers,
+  useImportTiers,
+  usePreviewTierImport,
   useUpdateTier,
   useUpdateTierCountries,
 } from "@/hooks/admin/useAdminHooks";
@@ -22,10 +40,12 @@ type TierRow = {
   name: string;
   status: "ACTIVE" | "INACTIVE";
   sortOrder: number;
-  _count?: { customers?: number; pricing?: number; discounts?: number };
+  createdAt?: string;
+  updatedAt?: string;
+  _count?: { customers?: number; pricing?: number; discounts?: number; countries?: number };
 };
 
-type CountryAvailability = {
+type TierCountryRow = {
   id: string;
   name: string;
   code: string;
@@ -34,29 +54,164 @@ type CountryAvailability = {
   currency?: { code?: string | null } | null;
 };
 
-const emptyForm = { id: "", name: "", status: "ACTIVE", sortOrder: "0" };
+type TierDashboard = {
+  totalTiers: number;
+  activeTiers: number;
+  inactiveTiers: number;
+  mappedCountries: number;
+  recentlyUpdated: TierRow[];
+};
+
+type SpreadsheetReport = {
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  issues: Array<{ row: number; field: string; message: string }>;
+  duplicateWarnings: string[];
+  sampleRows: Array<Record<string, unknown>>;
+};
+
+type TierFormState = {
+  id: string;
+  name: string;
+  status: "ACTIVE" | "INACTIVE";
+  sortOrder: string;
+};
+
+const emptyForm: TierFormState = {
+  id: "",
+  name: "",
+  status: "ACTIVE",
+  sortOrder: "0",
+};
+
+const visibleColumnsDefault = {
+  name: true,
+  customers: true,
+  pricing: true,
+  discounts: true,
+  countries: true,
+  priority: true,
+  status: true,
+  updatedAt: true,
+};
+
+function formatDate(value?: string) {
+  if (!value) return " - ";
+  return new Date(value).toLocaleDateString();
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function AdminTiersPage() {
   const { showToast, ToastComponent } = useToast();
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [countryFilter, setCountryFilter] = useState("");
+  const [sortBy, setSortBy] = useState("sortOrder");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [showFilters, setShowFilters] = useState(true);
+  const [showColumns, setShowColumns] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState<"ENABLE" | "DISABLE" | "DELETE" | "">("");
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState<TierFormState>(emptyForm);
+  const [deleteTarget, setDeleteTarget] = useState<TierRow | null>(null);
   const [selectedTierId, setSelectedTierId] = useState("");
   const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
-  const [deleting, setDeleting] = useState<TierRow | null>(null);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importReport, setImportReport] = useState<SpreadsheetReport | null>(null);
+  const [importMessage, setImportMessage] = useState("");
+  const [importing, setImporting] = useState(false);
 
-  const { data: tiers = [], isLoading, refetch } = useAdminTiers();
-  const { data: countries = [], isLoading: countriesLoading } = useAdminTierCountries(selectedTierId);
+  const { data: dashboardData, isLoading: dashboardLoading } = useAdminTierDashboard();
+  const { data: countries = [] } = useAdminCountries();
+  const tiersQuery = useAdminTiersPaged({
+    page,
+    limit,
+    search: search || undefined,
+    status: statusFilter || undefined,
+    countryId: countryFilter || undefined,
+    sortBy,
+    sortDir,
+  });
+
+  const tierDashboard = dashboardData as TierDashboard | undefined;
+  const tiersResponse = tiersQuery.data as { data?: TierRow[]; pagination?: { page: number; limit: number; total: number; totalPages: number } } | undefined;
+  const rows = (tiersResponse?.data ?? []) as TierRow[];
+  const pagination = tiersResponse?.pagination ?? { page, limit, total: 0, totalPages: 1 };
+
+  const selectedTier = rows.find((tier) => tier.id === selectedTierId) ?? null;
+  const { data: tierCountries = [], isLoading: countriesLoading } = useAdminTierCountries(selectedTierId);
+
   const createTier = useCreateTier();
   const updateTier = useUpdateTier();
   const deleteTier = useDeleteTier();
-  const reorderTiers = useReorderTiers();
+  const bulkTiers = useBulkTiers();
+  const exportTiers = useExportTiers();
+  const previewTierImport = usePreviewTierImport();
+  const importTiers = useImportTiers();
   const updateTierCountries = useUpdateTierCountries(selectedTierId);
 
-  const rows = useMemo(
-    () => [...(tiers as TierRow[])].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
-    [tiers]
+  const [visibleColumns, setVisibleColumns] = useState(visibleColumnsDefault);
+
+  const countryOptions = useMemo(
+    () => [
+      { value: "", label: "All countries" },
+      ...countries.map((country: { id: string; name: string; code: string }) => ({
+        value: country.id,
+        label: `${country.name} (${country.code})`,
+      })),
+    ],
+    [countries],
   );
-  const selectedTier = rows.find((tier) => tier.id === selectedTierId) ?? null;
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [page, limit, search, statusFilter, countryFilter, sortBy, sortDir]);
+
+  useEffect(() => {
+    if (rows.length === 0) {
+      setSelectedTierId("");
+      return;
+    }
+    if (!rows.some((row) => row.id === selectedTierId)) {
+      setSelectedTierId(rows[0].id);
+    }
+  }, [rows, selectedTierId]);
+
+  useEffect(() => {
+    setCountryOverrides({});
+  }, [selectedTierId]);
+
+  const filteredColumns = useMemo(
+    () =>
+      [
+        visibleColumns.name ? "name" : null,
+        visibleColumns.customers ? "customers" : null,
+        visibleColumns.pricing ? "pricing" : null,
+        visibleColumns.discounts ? "discounts" : null,
+        visibleColumns.countries ? "countries" : null,
+        visibleColumns.priority ? "priority" : null,
+        visibleColumns.status ? "status" : null,
+        visibleColumns.updatedAt ? "updatedAt" : null,
+      ].filter(Boolean) as string[],
+    [visibleColumns],
+  );
+
+  const pageIds = rows.map((row) => row.id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
+  const selectedTierCountries = tierCountries as TierCountryRow[];
+  const enabledCountryCount = selectedTierCountries.filter((country) => countryOverrides[country.id] ?? country.enabled).length;
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -69,27 +224,40 @@ export default function AdminTiersPage() {
   };
 
   const startEdit = (tier: TierRow) => {
-    setForm({ id: tier.id, name: tier.name, status: tier.status, sortOrder: String(tier.sortOrder ?? 0) });
-    setSelectedTierId(tier.id);
-    setCountryOverrides({});
+    setForm({
+      id: tier.id,
+      name: tier.name,
+      status: tier.status,
+      sortOrder: String(tier.sortOrder ?? 0),
+    });
     setShowForm(true);
   };
 
-  const submit = async (event: React.FormEvent) => {
+  const startClone = (tier: TierRow) => {
+    setForm({
+      id: "",
+      name: `${tier.name} Copy`,
+      status: "ACTIVE",
+      sortOrder: String(tier.sortOrder ?? 0),
+    });
+    setShowForm(true);
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const payload = { name: form.name.trim(), status: form.status, sortOrder: Number(form.sortOrder || 0) };
-    if (!payload.name) {
+    const name = form.name.trim();
+    if (!name) {
       showToast("Tier name is required.", "error");
       return;
     }
+
     try {
+      const payload = { name, status: form.status, sortOrder: Number(form.sortOrder || 0) };
       if (form.id) {
         await updateTier.mutateAsync({ id: form.id, ...payload });
         showToast("Tier updated.");
       } else {
-        const result = await createTier.mutateAsync(payload);
-        const createdId = result.data?.id;
-        if (createdId) setSelectedTierId(createdId);
+        await createTier.mutateAsync(payload);
         showToast("Tier created.");
       }
       resetForm();
@@ -98,173 +266,672 @@ export default function AdminTiersPage() {
     }
   };
 
-  const handleReorder = async (nextRows: TierRow[]) => {
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await reorderTiers.mutateAsync(toSortOrderPayload(nextRows));
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to reorder tiers."), "error");
-      refetch();
-    }
-  };
-
-  const confirmDelete = async () => {
-    if (!deleting) return;
-    try {
-      await deleteTier.mutateAsync(deleting.id);
-      if (selectedTierId === deleting.id) setSelectedTierId("");
+      await deleteTier.mutateAsync(deleteTarget.id);
+      if (selectedTierId === deleteTarget.id) {
+        setSelectedTierId("");
+      }
       showToast("Tier deleted.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to delete tier."), "error");
     } finally {
-      setDeleting(null);
+      setDeleteTarget(null);
     }
   };
 
-  const saveCountries = async () => {
+  const handleBulkAction = async () => {
+    if (!bulkAction || selectedIds.length === 0) {
+      showToast("Select at least one tier and choose an action.", "error");
+      return;
+    }
+
     try {
-      await updateTierCountries.mutateAsync((countries as CountryAvailability[]).map((country) => ({
-        countryId: country.id,
-        enabled: countryOverrides[country.id] ?? country.enabled,
-      })));
-      showToast("Tier country availability saved.");
-      setCountryOverrides({});
+      await bulkTiers.mutateAsync({ ids: selectedIds, action: bulkAction });
+      showToast(
+        bulkAction === "DELETE" ? "Tiers deleted." : bulkAction === "ENABLE" ? "Tiers enabled." : "Tiers disabled.",
+      );
+      setSelectedIds([]);
+      setBulkAction("");
     } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to save tier country availability."), "error");
+      showToast(getAdminErrorMessage(error, "Bulk action failed."), "error");
     }
   };
 
-  const enabledCountryCount = (countries as CountryAvailability[]).filter((country) => countryOverrides[country.id] ?? country.enabled).length;
+  const handleToggleStatus = async (tier: TierRow) => {
+    try {
+      await updateTier.mutateAsync({
+        id: tier.id,
+        status: tier.status === "ACTIVE" ? "INACTIVE" : "ACTIVE",
+      });
+      showToast(tier.status === "ACTIVE" ? "Tier disabled." : "Tier enabled.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to update tier."), "error");
+    }
+  };
 
-  const isCreateModalOpen = showForm && !form.id;
-  const isEditInlineOpen = showForm && !!form.id;
+  const handleSelectAllPage = () => {
+    if (allPageSelected) {
+      setSelectedIds((current) => current.filter((id) => !pageIds.includes(id)));
+      return;
+    }
 
-  const tierForm = (
-    <form onSubmit={submit} className="rounded-xl border border-[#E6E6E6] bg-white p-5">
-      {form.id ? (
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Edit tier</h3>
-          <button type="button" onClick={resetForm} className="text-[#9A9A9A] hover:text-[#1A1A1A]"><X size={16} /></button>
-        </div>
-      ) : null}
-      <div className="grid gap-4 md:grid-cols-3">
-        <AdminInput label="Name *" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Diamond" />
-        <AdminSelect label="Status" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
-        <AdminInput label="Sort Order" type="number" value={form.sortOrder} onChange={(event) => setForm({ ...form, sortOrder: event.target.value })} />
-      </div>
-      <button type="submit" disabled={createTier.isPending || updateTier.isPending} className="mt-5 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
-        {createTier.isPending || updateTier.isPending ? "Saving..." : form.id ? "Update Tier" : "Create Tier"}
-      </button>
-    </form>
-  );
+    setSelectedIds((current) => Array.from(new Set([...current, ...pageIds])));
+  };
+
+  const handleExport = async (selectedOnly = false) => {
+    try {
+      const params: Record<string, unknown> = {
+        search: search || undefined,
+        status: statusFilter || undefined,
+        countryId: countryFilter || undefined,
+        sortBy,
+        sortDir,
+      };
+      if (selectedOnly && selectedIds.length > 0) {
+        params.ids = selectedIds.join(",");
+      }
+      const blob = await exportTiers.mutateAsync(params);
+      downloadBlob(blob as Blob, selectedOnly && selectedIds.length ? "tiers-selected.xlsx" : "tiers-export.xlsx");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to export tiers."), "error");
+    }
+  };
+
+  const handleImportPreview = async () => {
+    if (!importFile) {
+      showToast("Choose a spreadsheet first.", "error");
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append("file", importFile);
+      const report = (await previewTierImport.mutateAsync(formData)) as SpreadsheetReport;
+      setImportReport(report);
+      setImportMessage(report.invalidRows > 0 ? "Fix the validation issues before importing." : "Preview looks good. You can import now.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to preview tier spreadsheet."), "error");
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importFile) {
+      showToast("Choose a spreadsheet first.", "error");
+      return;
+    }
+
+    try {
+      setImporting(true);
+      const formData = new FormData();
+      formData.append("file", importFile);
+      await importTiers.mutateAsync(formData);
+      showToast("Tiers imported.");
+      setImportFile(null);
+      setImportReport(null);
+      setImportMessage("");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to import tiers."), "error");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   return (
     <AdminLayout title="Tiers" breadcrumb={[{ label: "Tiers" }]}>
-      <div className="mb-5 flex items-center justify-between gap-3">
-        <p className="text-[13.5px] text-[#6B6B6B]">Manage customer tiers used for assignment and tier-based pricing rules.</p>
-        <button onClick={startCreate} className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
-          <Plus size={14} /> New Tier
-        </button>
-      </div>
-
-      {isEditInlineOpen ? <div className="mb-5">{tierForm}</div> : null}
-
-      <Modal open={isCreateModalOpen} onClose={resetForm} title="New tier" panelClassName="max-w-3xl">
-        {isCreateModalOpen ? tierForm : null}
-      </Modal>
-
-      <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="mb-3 hidden grid-cols-[1fr_100px_110px_90px_110px] gap-3 px-10 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A] md:grid">
-            <span>Name</span><span>Customers</span><span>Sort</span><span>Status</span><span />
-          </div>
-          {isLoading ? (
-            <div className="space-y-3">{[...Array(3)].map((_, index) => <div key={index} className="h-16 animate-pulse rounded-lg bg-[#E6E6E6]" />)}</div>
-          ) : rows.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-[#E6E6E6] py-10 text-center text-[13px] text-[#9A9A9A]">No tiers yet.</div>
-          ) : (
-            <SortableList
-              items={rows}
-              onReorder={handleReorder}
-              handleAriaLabel="Drag tier to reorder"
-              renderItem={(tier) => (
-                <div className="grid gap-3 md:grid-cols-[1fr_100px_110px_90px_110px] md:items-center">
-                  <button
-                    type="button"
-                    onClick={() => { setSelectedTierId(tier.id); setCountryOverrides({}); }}
-                    className="text-left text-[14px] font-semibold text-[#1A1A1A] hover:text-[#E31E24]"
-                  >
-                    {tier.name}
-                  </button>
-                  <span className="text-[13px] text-[#1A1A1A]">{tier._count?.customers ?? 0}</span>
-                  <span className="text-[13px] text-[#6B6B6B]">{tier.sortOrder}</span>
-                  <StatusBadge status={tier.status} />
-                  <div className="flex gap-1.5 md:justify-end">
-                    <button type="button" onClick={() => startEdit(tier)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"><Edit2 size={13} /></button>
-                    <button type="button" onClick={() => setDeleting(tier)} className="flex h-7 w-7 items-center justify-center rounded border border-[#F2C9C9] text-red-500 hover:bg-red-50"><Trash2 size={13} /></button>
-                  </div>
-                </div>
-              )}
-            />
-          )}
+      <div className="space-y-5">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard title="Total Tiers" value={tierDashboard?.totalTiers ?? 0} subtitle="All tier records" icon={<Filter size={18} />} isLoading={dashboardLoading} />
+          <StatCard title="Active Tiers" value={tierDashboard?.activeTiers ?? 0} subtitle="Available for use" icon={<SquareCheckBig size={18} />} color="bg-green-600" isLoading={dashboardLoading} />
+          <StatCard title="Inactive Tiers" value={tierDashboard?.inactiveTiers ?? 0} subtitle="Disabled tiers" icon={<X size={18} />} color="bg-gray-600" isLoading={dashboardLoading} />
+          <StatCard title="Country Rules" value={tierDashboard?.mappedCountries ?? 0} subtitle="Tiers with country mapping" icon={<RefreshCw size={18} />} color="bg-[#0F6CBD]" isLoading={dashboardLoading} />
         </div>
 
-        <div className="rounded-xl border border-[#E6E6E6] bg-white p-5">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Country Availability</h3>
-              <p className="mt-0.5 text-[12.5px] text-[#6B6B6B]">
-                If no countries are enabled here, this tier works globally. Once you enable one or more countries, the tier is limited to those enabled countries.
-              </p>
+        <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.7fr)_repeat(3,minmax(0,1fr))]">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
+              <input
+                value={search}
+                onChange={(event) => {
+                  setPage(1);
+                  setSearch(event.target.value);
+                }}
+                placeholder="Search tiers..."
+                className="h-10 w-full rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+              />
             </div>
-            {selectedTier && (
-              <span className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] text-[#6B6B6B]">
-                {enabledCountryCount === 0 ? "Global fallback" : `${enabledCountryCount} enabled`}
-              </span>
-            )}
+            <AdminSelect
+              label=""
+              value={statusFilter}
+              onChange={(event) => {
+                setPage(1);
+                setStatusFilter(event.target.value);
+              }}
+              options={[
+                { value: "", label: "All status" },
+                { value: "ACTIVE", label: "Active" },
+                { value: "INACTIVE", label: "Inactive" },
+              ]}
+            />
+            <AdminSelect
+              label=""
+              value={countryFilter}
+              onChange={(event) => {
+                setPage(1);
+                setCountryFilter(event.target.value);
+              }}
+              options={countryOptions}
+            />
+            <AdminSelect
+              label=""
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value)}
+              options={[
+                { value: "sortOrder", label: "Priority" },
+                { value: "updatedAt", label: "Updated date" },
+                { value: "createdAt", label: "Created date" },
+                { value: "name", label: "Tier name" },
+                { value: "status", label: "Status" },
+              ]}
+            />
           </div>
 
-          {!selectedTier ? (
-            <p className="rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-4 text-[13px] text-[#9A9A9A]">Select a tier to manage country availability.</p>
-          ) : countriesLoading ? (
-            <div className="h-28 animate-pulse rounded-md bg-[#F2F2F2]" />
-          ) : (countries as CountryAvailability[]).length === 0 ? (
-            <p className="text-[13px] text-[#9A9A9A]">No countries found.</p>
-          ) : (
-            <>
-              <div className="mb-4 rounded-md bg-[#FAFAFA] px-3 py-2 text-[13px] font-medium text-[#1A1A1A]">{selectedTier.name}</div>
-              <div className="grid gap-2">
-                {(countries as CountryAvailability[]).map((country) => (
-                  <label key={country.id} className="flex items-center justify-between gap-3 rounded-md border border-[#E6E6E6] px-3 py-2">
-                    <span className="min-w-0">
-                      <span className="block truncate text-[13px] font-medium text-[#1A1A1A]">{country.name}</span>
-                      <span className="text-[11.5px] text-[#9A9A9A]">{country.code}{country.currency?.code ? ` - ${country.currency.code}` : ""}</span>
-                    </span>
+          <div className="mt-3 grid gap-3 xl:grid-cols-[repeat(2,minmax(0,1fr))_auto_auto_auto_auto]">
+            <AdminSelect
+              label=""
+              value={sortDir}
+              onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+              options={[
+                { value: "asc", label: "Ascending" },
+                { value: "desc", label: "Descending" },
+              ]}
+            />
+            <AdminSelect
+              label=""
+              value={String(limit)}
+              onChange={(event) => {
+                setPage(1);
+                setLimit(Number(event.target.value));
+              }}
+              options={[
+                { value: "10", label: "10 per page" },
+                { value: "20", label: "20 per page" },
+                { value: "50", label: "50 per page" },
+              ]}
+            />
+            <button type="button" onClick={() => setShowFilters((current) => !current)} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]">
+              <Filter size={14} />
+              {showFilters ? "Hide bulk" : "Show bulk"}
+            </button>
+            <button type="button" onClick={() => setShowColumns((current) => !current)} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]">
+              <SlidersHorizontal size={14} />
+              Columns
+            </button>
+            <button type="button" onClick={() => void handleExport(false)} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]">
+              <Download size={14} />
+              Export
+            </button>
+            <button type="button" onClick={startCreate} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
+              <Plus size={14} />
+              Add Tier
+            </button>
+          </div>
+
+          {showFilters ? (
+            <div className="mt-4 grid gap-3 border-t border-[#F0F0F0] pt-4 lg:grid-cols-[auto_minmax(180px,220px)_auto_auto_auto_1fr] lg:items-center">
+              <div className="text-[12.5px] font-medium text-[#6B6B6B]">Bulk actions</div>
+              <AdminSelect
+                label=""
+                value={bulkAction}
+                onChange={(event) => setBulkAction(event.target.value as "ENABLE" | "DISABLE" | "DELETE" | "")}
+                options={[
+                  { value: "", label: "Choose action" },
+                  { value: "ENABLE", label: "Enable" },
+                  { value: "DISABLE", label: "Disable" },
+                  { value: "DELETE", label: "Delete" },
+                ]}
+              />
+              <button type="button" onClick={handleBulkAction} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]">
+                <SquareCheckBig size={14} />
+                Apply
+              </button>
+              <button type="button" onClick={() => void handleExport(true)} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]">
+                <Download size={14} />
+                Export selected
+              </button>
+              <button type="button" onClick={() => setSelectedIds([])} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F7F7F7]">
+                Clear selection
+              </button>
+              <div className="text-right text-[12.5px] text-[#9A9A9A]">
+                {selectedIds.length} selected / {pagination.total ?? 0} total
+              </div>
+            </div>
+          ) : null}
+
+          {showColumns ? (
+            <div className="mt-4 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
+              <div className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">Column visibility</div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {Object.entries(visibleColumns).map(([key, value]) => (
+                  <label key={key} className="flex items-center gap-2 text-[13px] text-[#1A1A1A]">
                     <input
                       type="checkbox"
-                      className="h-4 w-4 accent-[#E31E24]"
-                      checked={countryOverrides[country.id] ?? country.enabled}
-                      onChange={(event) => setCountryOverrides((current) => ({ ...current, [country.id]: event.target.checked }))}
+                      checked={value}
+                      onChange={(event) => setVisibleColumns((current) => ({ ...current, [key]: event.target.checked }))}
                     />
+                    <span className="capitalize">{key.replace(/([A-Z])/g, " $1")}</span>
                   </label>
                 ))}
               </div>
-              <button onClick={saveCountries} disabled={updateTierCountries.isPending} className="mt-4 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
-                {updateTierCountries.isPending ? "Saving..." : "Save Availability"}
-              </button>
-            </>
-          )}
+            </div>
+          ) : null}
         </div>
-      </div>
 
-      <ConfirmModal
-        open={!!deleting}
-        title="Delete tier?"
-        message={deleting ? `Delete ${deleting.name}? This is blocked automatically if customers, tier pricing, or discounts still reference it.` : ""}
-        onConfirm={confirmDelete}
-        onCancel={() => setDeleting(null)}
-        isLoading={deleteTier.isPending}
-      />
-      {ToastComponent}
+        <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Recently Updated</h3>
+              <p className="mt-0.5 text-[12.5px] text-[#6B6B6B]">Quick access to the latest tier changes.</p>
+            </div>
+            <span className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] text-[#6B6B6B]">
+              {tierDashboard?.recentlyUpdated?.length ?? 0} items
+            </span>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {(tierDashboard?.recentlyUpdated ?? []).slice(0, 5).map((tier) => (
+              <button
+                key={tier.id}
+                type="button"
+                onClick={() => {
+                  setSelectedTierId(tier.id);
+                  setShowForm(false);
+                }}
+                className="rounded-lg border border-[#E6E6E6] px-3 py-2 text-left transition hover:bg-[#FAFAFA]"
+              >
+                <div className="truncate text-[13px] font-medium text-[#1A1A1A]">{tier.name}</div>
+                <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">Updated {formatDate(tier.updatedAt)}</div>
+              </button>
+            ))}
+            {(tierDashboard?.recentlyUpdated ?? []).length === 0 ? (
+              <p className="text-[13px] text-[#6B6B6B]">No recent tier changes yet.</p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.95fr)]">
+          <div className="space-y-4">
+            <div className="rounded-xl border border-[#E6E6E6] bg-white">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-[#F8F8F8] border-b border-[#E6E6E6]">
+                    <tr>
+                      <th className="w-10 px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">
+                        <input
+                          type="checkbox"
+                          checked={allPageSelected}
+                          onChange={handleSelectAllPage}
+                          aria-label="Select all rows on this page"
+                          className="h-4 w-4 accent-[#E31E24]"
+                        />
+                      </th>
+                      {filteredColumns.includes("name") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Tier Name</th> : null}
+                      {filteredColumns.includes("customers") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Customers</th> : null}
+                      {filteredColumns.includes("pricing") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Pricing Rules</th> : null}
+                      {filteredColumns.includes("discounts") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Discounts</th> : null}
+                      {filteredColumns.includes("countries") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Countries</th> : null}
+                      {filteredColumns.includes("priority") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Priority</th> : null}
+                      {filteredColumns.includes("status") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Status</th> : null}
+                      {filteredColumns.includes("updatedAt") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Updated Date</th> : null}
+                      <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E6E6E6]">
+                    {tiersQuery.isLoading ? (
+                      [...Array(5)].map((_, index) => (
+                        <tr key={index}>
+                          <td className="px-4 py-4" colSpan={10}>
+                            <div className="h-5 animate-pulse rounded bg-[#F0F0F0]" />
+                          </td>
+                        </tr>
+                      ))
+                    ) : rows.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} className="px-4 py-12 text-center text-[13.5px] text-[#9A9A9A]">
+                          No tiers found.
+                        </td>
+                      </tr>
+                    ) : (
+                      rows.map((tier) => {
+                        const isSelected = selectedIds.includes(tier.id);
+                        return (
+                          <tr key={tier.id} className={isSelected ? "bg-[#FFF8F8]" : "hover:bg-[#FAFAFA]"}>
+                            <td className="px-4 py-4 align-top">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(event) => {
+                                  const checked = event.target.checked;
+                                  setSelectedIds((current) =>
+                                    checked ? Array.from(new Set([...current, tier.id])) : current.filter((id) => id !== tier.id),
+                                  );
+                                }}
+                                className="h-4 w-4 accent-[#E31E24]"
+                              />
+                            </td>
+                            {filteredColumns.includes("name") ? (
+                              <td className="px-4 py-4 align-top">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedTierId(tier.id);
+                                    setShowForm(false);
+                                  }}
+                                  className="text-left"
+                                >
+                                  <div className="font-medium text-[#1A1A1A] hover:text-[#E31E24]">{tier.name}</div>
+                                  <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">Updated {formatDate(tier.updatedAt)}</div>
+                                </button>
+                              </td>
+                            ) : null}
+                            {filteredColumns.includes("customers") ? <td className="px-4 py-4 align-top text-[13px] text-[#1A1A1A]">{tier._count?.customers ?? 0}</td> : null}
+                            {filteredColumns.includes("pricing") ? <td className="px-4 py-4 align-top text-[13px] text-[#1A1A1A]">{tier._count?.pricing ?? 0}</td> : null}
+                            {filteredColumns.includes("discounts") ? <td className="px-4 py-4 align-top text-[13px] text-[#1A1A1A]">{tier._count?.discounts ?? 0}</td> : null}
+                            {filteredColumns.includes("countries") ? <td className="px-4 py-4 align-top text-[13px] text-[#1A1A1A]">{tier._count?.countries ?? 0}</td> : null}
+                            {filteredColumns.includes("priority") ? <td className="px-4 py-4 align-top text-[13px] text-[#6B6B6B]">{tier.sortOrder}</td> : null}
+                            {filteredColumns.includes("status") ? <td className="px-4 py-4 align-top"><StatusBadge status={tier.status} /></td> : null}
+                            {filteredColumns.includes("updatedAt") ? <td className="px-4 py-4 align-top text-[13px] text-[#1A1A1A]">{formatDate(tier.updatedAt)}</td> : null}
+                            <td className="px-4 py-4 align-top">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedTierId(tier.id);
+                                    setShowForm(false);
+                                  }}
+                                  className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                                  title="View countries"
+                                >
+                                  <Eye size={15} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => startEdit(tier)}
+                                  className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                                  title="Edit tier"
+                                >
+                                  <Edit2 size={15} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => startClone(tier)}
+                                  className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                                  title="Clone tier"
+                                >
+                                  <Copy size={15} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleToggleStatus(tier)}
+                                  className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                                  title={tier.status === "ACTIVE" ? "Disable tier" : "Enable tier"}
+                                >
+                                  <RefreshCw size={15} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteTarget(tier)}
+                                  className="rounded border border-[#F2D7D7] p-2 text-[#E31E24] hover:bg-[#FFF5F5]"
+                                  title="Delete tier"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="border-t border-[#E6E6E6] px-4 py-3">
+                <Pagination page={pagination.page} totalPages={pagination.totalPages || 1} onPageChange={setPage} />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            <div className="rounded-xl border border-[#E6E6E6] bg-white p-5">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Country Availability</h3>
+                  <p className="mt-0.5 text-[12.5px] text-[#6B6B6B]">
+                    A tier stays global if no countries are enabled. Once one or more are selected, the tier is restricted to those countries.
+                  </p>
+                </div>
+                {selectedTier ? (
+                  <span className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] text-[#6B6B6B]">
+                    {enabledCountryCount === 0 ? "Global fallback" : `${enabledCountryCount} enabled`}
+                  </span>
+                ) : null}
+              </div>
+
+              {!selectedTier ? (
+                <p className="rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-4 text-[13px] text-[#9A9A9A]">
+                  Select a tier to manage country availability.
+                </p>
+              ) : countriesLoading ? (
+                <div className="h-28 animate-pulse rounded-md bg-[#F2F2F2]" />
+              ) : selectedTierCountries.length === 0 ? (
+                <p className="text-[13px] text-[#9A9A9A]">No countries found.</p>
+              ) : (
+                <>
+                  <div className="mb-4 rounded-md bg-[#FAFAFA] px-3 py-2 text-[13px] font-medium text-[#1A1A1A]">{selectedTier.name}</div>
+                  <div className="grid gap-2">
+                    {selectedTierCountries.map((country) => (
+                      <label key={country.id} className="flex items-center justify-between gap-3 rounded-md border border-[#E6E6E6] px-3 py-2">
+                        <span className="min-w-0">
+                          <span className="block truncate text-[13px] font-medium text-[#1A1A1A]">{country.name}</span>
+                          <span className="text-[11.5px] text-[#9A9A9A]">
+                            {country.code}
+                            {country.currency?.code ? ` - ${country.currency.code}` : ""}
+                          </span>
+                        </span>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-[#E31E24]"
+                          checked={countryOverrides[country.id] ?? country.enabled}
+                          onChange={(event) => setCountryOverrides((current) => ({ ...current, [country.id]: event.target.checked }))}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await updateTierCountries.mutateAsync(
+                          selectedTierCountries.map((country) => ({
+                            countryId: country.id,
+                            enabled: countryOverrides[country.id] ?? country.enabled,
+                          })),
+                        );
+                        setCountryOverrides({});
+                        showToast("Tier country availability saved.");
+                      } catch (error) {
+                        showToast(getAdminErrorMessage(error, "Failed to save tier country availability."), "error");
+                      }
+                    }}
+                    disabled={updateTierCountries.isPending}
+                    className="mt-4 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
+                  >
+                    {updateTierCountries.isPending ? "Saving..." : "Save Availability"}
+                  </button>
+                </>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-[#E6E6E6] bg-white p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Import / Export</h3>
+                  <p className="mt-1 text-[12.5px] text-[#6B6B6B]">Spreadsheet import uses validation before commit and reuses the existing Excel utility.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleExport(false)}
+                  className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
+                >
+                  <Download size={14} /> Export
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-3">
+                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-[#D6D6D6] bg-[#FAFAFA] px-4 py-3">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                    onChange={(event) => {
+                      setImportFile(event.target.files?.[0] ?? null);
+                      setImportReport(null);
+                      setImportMessage("");
+                    }}
+                  />
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-medium text-[#1A1A1A]">{importFile ? importFile.name : "Choose file"}</div>
+                    <div className="mt-0.5 text-[12px] text-[#6B6B6B]">Preview before import.</div>
+                  </div>
+                  <Upload size={16} className="shrink-0 text-[#E31E24]" />
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleImportPreview()}
+                    disabled={previewTierImport.isPending}
+                    className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-50"
+                  >
+                    <Eye size={14} /> Preview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleImport()}
+                    disabled={importing || importTiers.isPending || !!importReport?.invalidRows}
+                    className="inline-flex items-center gap-2 rounded-md bg-[#E31E24] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
+                  >
+                    <Upload size={14} /> {importing ? "Importing..." : "Import"}
+                  </button>
+                </div>
+              </div>
+
+              {importMessage ? (
+                <div className="mt-4 rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2 text-[13px] text-[#1A1A1A]">
+                  {importMessage}
+                </div>
+              ) : null}
+
+              {importReport ? (
+                <div className="mt-4 space-y-3 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3 text-[12.5px] text-[#1A1A1A]">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
+                      <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Total rows</div>
+                      <div className="mt-1 text-[18px] font-semibold text-[#1A1A1A]">{importReport.totalRows}</div>
+                    </div>
+                    <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
+                      <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Valid rows</div>
+                      <div className="mt-1 text-[18px] font-semibold text-green-600">{importReport.validRows}</div>
+                    </div>
+                    <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
+                      <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Invalid rows</div>
+                      <div className="mt-1 text-[18px] font-semibold text-red-600">{importReport.invalidRows}</div>
+                    </div>
+                    <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
+                      <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Duplicates</div>
+                      <div className="mt-1 text-[18px] font-semibold text-amber-600">{importReport.duplicateWarnings.length}</div>
+                    </div>
+                  </div>
+
+                  {importReport.issues.length > 0 ? (
+                    <div>
+                      <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Validation issues</div>
+                      <div className="mt-2 space-y-1.5">
+                        {importReport.issues.slice(0, 5).map((issue, index) => (
+                          <div key={`${issue.row}-${issue.field}-${index}`} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[12px] text-[#6B6B6B]">
+                            Row {issue.row}: {issue.message}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {importReport.sampleRows.length > 0 ? (
+                    <div>
+                      <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Sample rows</div>
+                      <div className="mt-2 space-y-2">
+                        {importReport.sampleRows.slice(0, 3).map((row, index) => (
+                          <div key={index} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[12px] text-[#6B6B6B]">
+                            {JSON.stringify(row)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <Modal open={showForm} onClose={resetForm} title={form.id ? "Edit tier" : "Add tier"} panelClassName="max-w-xl">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <AdminInput label="Tier Name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Diamond, Gold, Silver..." />
+              <AdminSelect
+                label="Status"
+                value={form.status}
+                onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as TierFormState["status"] }))}
+                options={[
+                  { value: "ACTIVE", label: "Active" },
+                  { value: "INACTIVE", label: "Inactive" },
+                ]}
+              />
+              <AdminInput
+                label="Priority"
+                type="number"
+                min="0"
+                step="1"
+                value={form.sortOrder}
+                onChange={(event) => setForm((current) => ({ ...current, sortOrder: event.target.value }))}
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-[#E6E6E6] pt-4">
+              <p className="text-[12.5px] text-[#6B6B6B]">Priority controls resolver precedence. Lower values are processed first.</p>
+              <div className="flex gap-2">
+                <button type="button" onClick={resetForm} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
+                  Cancel
+                </button>
+                <button type="submit" disabled={createTier.isPending || updateTier.isPending} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
+                  {form.id ? "Save tier" : "Create tier"}
+                </button>
+              </div>
+            </div>
+          </form>
+        </Modal>
+
+        <ConfirmModal
+          open={!!deleteTarget}
+          title="Delete tier?"
+          message={deleteTarget ? `Delete ${deleteTarget.name}? This is blocked automatically if customers, pricing rules, or discounts still reference it.` : ""}
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteTarget(null)}
+          isLoading={deleteTier.isPending}
+        />
+
+        {ToastComponent}
+      </div>
     </AdminLayout>
   );
 }
