@@ -1218,6 +1218,14 @@ export const useBulkBanners = () => {
 export const useAdminQuotes = (params?: { page?: number; limit?: number; status?: string; search?: string; sortBy?: string; sortDir?: string }) =>
   useQuery({ queryKey: ["admin-quotes", params], queryFn: () => adminApi.get("/quotes", { params }).then((r) => r.data) });
 
+export const useCreateQuote = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: unknown) => adminApi.post("/quotes", data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-quotes"] }),
+  });
+};
+
 export const useAdminQuote = (id: string) =>
   useQuery({ queryKey: ["admin-quote", id], queryFn: () => adminApi.get(`/quotes/${id}`).then((r) => r.data.data), enabled: !!id });
 

@@ -5,8 +5,7 @@ import { DataTable, Column, useToast, ConfirmModal } from "@/components/admin/Ad
 import { useAdminRoles } from "@/hooks/admin/useAdminHooks";
 import { adminApi } from "@/services/adminApi";
 import { Plus, Trash2 } from "lucide-react";
-
-const ALL_PERMISSIONS = ["*","products.create","products.update","products.delete","products.view","orders.manage","orders.view","quotes.manage","quotes.view","inventory.manage","users.manage","settings.manage","logs.view"];
+import { ALL_PERMISSIONS } from "@/constants/adminPermissions";
 interface Role { id: string; name: string; permissions: string[]; _count: { users: number } }
 
 export default function RolesPage() {
