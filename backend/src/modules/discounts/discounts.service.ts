@@ -3,10 +3,7 @@ import { prisma } from "../../config/database";
 import { AppError, getPagination } from "../../utils/apiResponse";
 import { readSpreadsheetRows, writeSpreadsheetBuffer } from "../../utils/spreadsheet";
 import { assertTierUsable } from "../tiers/tiers.service";
-
-type DiscountRuleKind = "TIER" | "MOQ" | "PROMOTIONAL";
-
-const DISCOUNT_TYPES: DiscountRuleKind[] = ["TIER", "MOQ", "PROMOTIONAL"];
+import { DISCOUNT_RULE_KINDS, isDiscountRuleKind, supportsPromotionalDiscountType, type DiscountRuleKind } from "./discountRules";
 const DISCOUNT_STATUSES: Status[] = ["ACTIVE", "INACTIVE"];
 
 type DiscountInput = {
@@ -88,12 +85,25 @@ function discountInclude() {
   };
 }
 
-function buildDiscountWhere(query: DiscountListQuery) {
+async function buildDiscountWhere(query: DiscountListQuery) {
   const search = query.search?.trim();
   const type = query.type?.trim().toUpperCase();
   const status = query.status?.trim().toUpperCase();
   const scope = query.scope?.trim().toUpperCase();
   const countryId = blankToNull(query.countryId) as string | null;
+
+  if (type && !isDiscountRuleKind(type)) {
+    throw new AppError("Invalid discount type.", 400);
+  }
+  if (status && !DISCOUNT_STATUSES.includes(status as Status)) {
+    throw new AppError("Invalid discount status.", 400);
+  }
+  if (scope && !["PLATFORM", "PRODUCT", "COLLECTION", "CATEGORY"].includes(scope)) {
+    throw new AppError("Invalid discount scope.", 400);
+  }
+  if (type === "PROMOTIONAL" && !(await supportsPromotionalDiscountType())) {
+    return { id: { in: [] } };
+  }
 
   const where: Prisma.DiscountWhereInput = {
     ...(type ? { type: type as never } : {}),
@@ -140,7 +150,7 @@ async function normalizeDiscountInput(input: DiscountInput, partial = false) {
   const type = input.type;
   if (!partial && !input.name?.trim()) throw new AppError("Discount name is required.", 400);
   if (!partial && !type) throw new AppError("Discount type is required.", 400);
-  if (type && !DISCOUNT_TYPES.includes(type)) throw new AppError("Discount type must be TIER, MOQ, or PROMOTIONAL.", 400);
+  if (type && !DISCOUNT_RULE_KINDS.includes(type)) throw new AppError("Discount type must be TIER, MOQ, or PROMOTIONAL.", 400);
   if (input.status && !DISCOUNT_STATUSES.includes(input.status)) throw new AppError("Discount status must be ACTIVE or INACTIVE.", 400);
 
   const tierId = blankToNull(input.tierId) as string | null;
@@ -181,6 +191,9 @@ async function normalizeDiscountInput(input: DiscountInput, partial = false) {
   if (type === "PROMOTIONAL") {
     if (tierId) throw new AppError("Promotional discounts cannot be tied to a tier.", 400);
     if (minQuantity !== null) throw new AppError("Promotional discounts cannot set minimum quantity.", 400);
+    if (!(await supportsPromotionalDiscountType())) {
+      throw new AppError("Promotional discounts are not available until the database enum migration is applied.", 409);
+    }
   }
 
   await Promise.all([
@@ -245,44 +258,7 @@ type SpreadsheetIssue = {
 
 export async function listDiscounts(query: DiscountListQuery) {
   const { page, limit, skip } = getPagination(query);
-  const search = query.search?.trim();
-  const type = query.type?.trim().toUpperCase();
-  const status = query.status?.trim().toUpperCase();
-  const scope = query.scope?.trim().toUpperCase();
-  const countryId = blankToNull(query.countryId) as string | null;
-
-  if (type && !DISCOUNT_TYPES.includes(type as DiscountRuleKind)) {
-    throw new AppError("Invalid discount type.", 400);
-  }
-  if (status && !DISCOUNT_STATUSES.includes(status as Status)) {
-    throw new AppError("Invalid discount status.", 400);
-  }
-  if (scope && !["PLATFORM", "PRODUCT", "COLLECTION", "CATEGORY"].includes(scope)) {
-    throw new AppError("Invalid discount scope.", 400);
-  }
-
-  const where: Prisma.DiscountWhereInput = {
-    ...(type ? { type: type as never } : {}),
-    ...(status ? { status: status as Status } : {}),
-    ...(countryId ? { countryId } : {}),
-    ...(scope === "PLATFORM" ? { productId: null, collectionId: null, categoryId: null } : {}),
-    ...(scope === "PRODUCT" ? { productId: { not: null } } : {}),
-    ...(scope === "COLLECTION" ? { collectionId: { not: null } } : {}),
-    ...(scope === "CATEGORY" ? { categoryId: { not: null } } : {}),
-    ...(search
-      ? {
-          OR: [
-            { name: { contains: search, mode: "insensitive" } },
-            { product: { title: { contains: search, mode: "insensitive" } } },
-            { collection: { name: { contains: search, mode: "insensitive" } } },
-            { category: { name: { contains: search, mode: "insensitive" } } },
-            { tier: { name: { contains: search, mode: "insensitive" } } },
-            { country: { name: { contains: search, mode: "insensitive" } } },
-            { country: { code: { contains: search, mode: "insensitive" } } },
-          ],
-        }
-      : {}),
-  };
+  const where = await buildDiscountWhere(query);
   const [data, total] = await Promise.all([
     prisma.discount.findMany({
       where,
@@ -297,13 +273,14 @@ export async function listDiscounts(query: DiscountListQuery) {
 }
 
 export async function getDiscountDashboard() {
+  const promotionalSupported = await supportsPromotionalDiscountType();
   const [total, active, inactive, tier, moq, promotional, recentlyUpdated] = await Promise.all([
     prisma.discount.count(),
     prisma.discount.count({ where: { status: "ACTIVE" } }),
     prisma.discount.count({ where: { status: "INACTIVE" } }),
     prisma.discount.count({ where: { type: "TIER" } }),
     prisma.discount.count({ where: { type: "MOQ" } }),
-    prisma.discount.count({ where: { type: "PROMOTIONAL" } }),
+    promotionalSupported ? prisma.discount.count({ where: { type: "PROMOTIONAL" } }) : Promise.resolve(0),
     prisma.discount.findMany({
       take: 5,
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
@@ -441,7 +418,10 @@ async function validateDiscountRows(rows: Record<string, string>[]) {
   for (const [index, row] of parsed.entries()) {
     const rowNumber = index + 2;
     if (!row.name) issues.push({ row: rowNumber, field: "name", message: "Name is required." });
-    if (!["TIER", "MOQ", "PROMOTIONAL"].includes(row.type)) issues.push({ row: rowNumber, field: "type", message: "Type must be TIER, MOQ, or PROMOTIONAL." });
+    if (!DISCOUNT_RULE_KINDS.includes(row.type as DiscountRuleKind)) issues.push({ row: rowNumber, field: "type", message: "Type must be TIER, MOQ, or PROMOTIONAL." });
+    else if (row.type === "PROMOTIONAL" && !(await supportsPromotionalDiscountType())) {
+      issues.push({ row: rowNumber, field: "type", message: "PROMOTIONAL discounts are not available until the database enum migration is applied." });
+    }
     if (!["ACTIVE", "INACTIVE"].includes(row.status)) issues.push({ row: rowNumber, field: "status", message: "Status must be ACTIVE or INACTIVE." });
     if (row.tierId) relatedIds.tierIds.add(row.tierId);
     if (row.countryId) relatedIds.countryIds.add(row.countryId);
@@ -510,7 +490,7 @@ async function validateDiscountRows(rows: Record<string, string>[]) {
 
 export async function exportDiscountsSpreadsheet(query: DiscountListQuery & { ids?: string }) {
   const ids = query.ids?.split(",").map((id) => id.trim()).filter(Boolean) ?? [];
-  const where = ids.length ? { id: { in: ids } } : (buildDiscountWhere(query) as Prisma.DiscountWhereInput);
+  const where = ids.length ? { id: { in: ids } } : await buildDiscountWhere(query);
   const discounts = await prisma.discount.findMany({
     where,
     orderBy: buildDiscountOrderBy(query) as never,

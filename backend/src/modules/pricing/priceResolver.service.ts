@@ -8,6 +8,7 @@ import {
   ensureCustomerRoleByKey,
   resolveCustomerRoleFromCustomer,
 } from "../customerRoles/customerRoles.service";
+import { supportsPromotionalDiscountType, type DiscountRuleKind } from "../discounts/discountRules";
 
 type ResolvePriceInput = {
   productId: string;
@@ -180,6 +181,7 @@ async function findPromotionalDiscounts(
   tierId?: string | null
 ) {
   if (type === "TIER" && !tierId) return [];
+  if (type === "PROMOTIONAL" && !(await supportsPromotionalDiscountType())) return [];
 
   const now = new Date();
   const scopeFilters: Prisma.DiscountWhereInput[] = [
@@ -505,4 +507,3 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
     },
   };
 }
-type DiscountRuleKind = "TIER" | "MOQ" | "PROMOTIONAL";
