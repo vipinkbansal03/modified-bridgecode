@@ -2,13 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { ConfirmModal, Pagination, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { SortableList, toSortOrderPayload } from "@/components/admin/SortableList";
 import { Modal } from "@/components/ui/Modal";
-import { ProductCreateForm } from "@/components/admin/products/ProductCreateForm";
-import { ProductEditor } from "@/components/admin/products/ProductEditor";
 import {
   useAdminCategories,
   useAdminCollections,
@@ -75,7 +72,6 @@ const DEFAULT_COLUMNS: Record<ColumnKey, boolean> = {
 const PRODUCT_COLUMNS_STORAGE_KEY = "admin-products-columns-v2";
 
 export default function AdminProductsPage() {
-  const router = useRouter();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -88,8 +84,6 @@ export default function AdminProductsPage() {
   const [bulkCountryIds, setBulkCountryIds] = useState<string[]>([]);
   const [bulkCollectionIds, setBulkCollectionIds] = useState<string[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<ProductRow | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importPreview, setImportPreview] = useState<SpreadsheetPreview | null>(null);
@@ -310,11 +304,6 @@ export default function AdminProductsPage() {
     }
   };
 
-  const closeEditModal = () => {
-    setEditingProduct(null);
-    refetch();
-  };
-
   return (
     <AdminLayout title="Products" breadcrumb={[{ label: "Products" }]}>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -400,9 +389,9 @@ export default function AdminProductsPage() {
             </div>
           </details>
         </div>
-        <button type="button" onClick={() => setCreateOpen(true)} className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
+        <Link href="/admin/products/create" className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
           <Plus size={15} /> New Product
-        </button>
+        </Link>
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => exportProducts(false)} className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">
             <Download size={15} /> Export Excel
@@ -586,14 +575,13 @@ export default function AdminProductsPage() {
                           >
                             {product.status === "ARCHIVED" ? <RotateCcw size={13} /> : <Archive size={13} />}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditingProduct(product)}
-                            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-                            title="Edit product"
-                          >
-                            <Pencil size={13} />
-                          </button>
+                           <Link
+                             href={`/admin/products/${product.id}/edit`}
+                             className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+                             title="Edit product"
+                           >
+                             <Pencil size={13} />
+                           </Link>
                           <button type="button" onClick={() => setDeleting(product.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50" title="Delete product">
                             <Trash2 size={13} />
                           </button>
@@ -618,35 +606,6 @@ export default function AdminProductsPage() {
         onCancel={() => setDeleting(null)}
         isLoading={deleteMutation.isPending}
       />
-
-      <Modal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        title="New Product"
-        panelClassName="max-w-5xl max-h-[calc(100vh-2.5rem)] overflow-y-auto"
-      >
-        <ProductCreateForm
-          compact
-          onCancel={() => setCreateOpen(false)}
-          onCreated={(productId) => {
-            setCreateOpen(false);
-            router.push(`/admin/products/${productId}/edit`);
-          }}
-        />
-      </Modal>
-
-      <Modal
-        open={!!editingProduct}
-        onClose={closeEditModal}
-        title={editingProduct ? `Edit Product: ${editingProduct.title}` : "Edit Product"}
-        panelClassName="h-[calc(100vh-2.5rem)] w-[min(1440px,calc(100vw-2.5rem))] max-w-[1440px] overflow-hidden p-7"
-      >
-        {editingProduct ? (
-          <div className="h-[calc(100vh-10rem)] overflow-y-auto">
-            <ProductEditor productId={editingProduct.id} embedded />
-          </div>
-        ) : null}
-      </Modal>
 
       <Modal
         open={importOpen}

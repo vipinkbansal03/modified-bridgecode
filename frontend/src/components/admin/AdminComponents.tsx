@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, createContext, useContext, type ReactNode } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, createContext, useContext, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, XCircle, Info } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -210,12 +210,32 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
   const [isOpen, setIsOpen] = useState(false);
   const [internalValue, setInternalValue] = useState(String(defaultValue ?? ""));
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [menuStyle, setMenuStyle] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const selectedValue = String(value ?? internalValue ?? "");
   const selectedOption = options.find((option) => option.value === selectedValue);
 
+  const updateMenuPosition = useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const gap = 6;
+    const edge = 12;
+    const spaceBelow = viewportHeight - rect.bottom - gap - edge;
+    const spaceAbove = rect.top - gap - edge;
+    const openUp = spaceBelow < 180 && spaceAbove > spaceBelow;
+    const maxHeight = Math.max(160, Math.min(320, openUp ? spaceAbove : spaceBelow));
+    const left = Math.max(edge, Math.min(rect.left, viewportWidth - rect.width - edge));
+    const top = openUp ? Math.max(edge, rect.top - gap - maxHeight) : rect.bottom + gap;
+    setMenuStyle({ top, left, width: rect.width, maxHeight });
+  }, []);
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (rootRef.current && !rootRef.current.contains(target) && menuRef.current && !menuRef.current.contains(target)) {
         setIsOpen(false);
       }
     }
@@ -223,6 +243,21 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useLayoutEffect(() => {
+    if (isOpen) updateMenuPosition();
+  }, [isOpen, updateMenuPosition]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleReflow = () => updateMenuPosition();
+    window.addEventListener("resize", handleReflow);
+    window.addEventListener("scroll", handleReflow, true);
+    return () => {
+      window.removeEventListener("resize", handleReflow);
+      window.removeEventListener("scroll", handleReflow, true);
+    };
+  }, [isOpen, updateMenuPosition]);
 
   const selectOption = (nextValue: string) => {
     setInternalValue(nextValue);
@@ -241,6 +276,7 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
       {label && <label className="block text-[13px] font-medium text-[#1A1A1A]">{label}</label>}
       <input type="hidden" name={name} value={selectedValue} />
       <button
+        ref={buttonRef}
         id={id}
         type="button"
         disabled={disabled}
@@ -259,29 +295,40 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
         </span>
         <ChevronDown size={15} className={cn("shrink-0 text-[#9A9A9A] transition", isOpen && "rotate-180")} />
       </button>
-      {isOpen && (
-        <div
-          role="listbox"
-          className="absolute left-0 right-0 z-50 mt-1 max-h-64 origin-top animate-admin-select-dropdown overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg"
-        >
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="option"
-              aria-selected={option.value === selectedValue}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => selectOption(option.value)}
-              className={cn(
-                "w-full cursor-pointer px-3.5 py-2 text-left text-[13.5px] transition hover:bg-[#F7F7F7]",
-                option.value === selectedValue ? "bg-red-50 text-[#E31E24]" : "text-[#1A1A1A]",
-              )}
+      {isOpen && menuStyle && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={menuRef}
+              role="listbox"
+              className="z-[150] origin-top animate-admin-select-dropdown overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg"
+              style={{
+                position: "fixed",
+                top: menuStyle.top,
+                left: menuStyle.left,
+                width: menuStyle.width,
+                maxHeight: menuStyle.maxHeight,
+              }}
             >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      )}
+              {options.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="option"
+                  aria-selected={option.value === selectedValue}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => selectOption(option.value)}
+                  className={cn(
+                    "w-full cursor-pointer px-3.5 py-2 text-left text-[13.5px] transition hover:bg-[#F7F7F7]",
+                    option.value === selectedValue ? "bg-red-50 text-[#E31E24]" : "text-[#1A1A1A]",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
       {error && <p className="text-[12px] text-red-500">{error}</p>}
     </div>
   );
