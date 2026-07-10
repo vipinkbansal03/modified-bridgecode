@@ -471,10 +471,12 @@ export function ProductEditor({ productId }: ProductEditorProps) {
             id: mapping.attributeId,
             name: mapping.attribute.name,
             role: mapping.attribute.role,
-            values: mapping.allowedValues.map((allowedValue) => ({
-              id: allowedValue.attributeValueId,
-              value: allowedValue.attributeValue.value,
-            })),
+            values: (mapping.allowedValues.length ? mapping.allowedValues.map((allowedValue) => allowedValue.attributeValue) : mapping.attribute.values).map(
+              (value) => ({
+                id: value.id,
+                value: value.value,
+              }),
+            ),
           }))
         : attributeCatalog,
     [attributeCatalog, hasMappedProductAttributes, mappedAttributeRows]
@@ -1128,11 +1130,14 @@ export function ProductEditor({ productId }: ProductEditorProps) {
   };
 
   const openGenerateVariantModal = () => {
+    const requiredAttributeIds = mappedAttributeRows.filter((mapping) => mapping.required).map((mapping) => mapping.attributeId);
     setGeneratePackageIds(packageRows.map((pkg) => pkg.id));
-    setGenerateAttributeIds([]);
+    setGenerateAttributeIds(requiredAttributeIds);
     setGenerateSelectionMap({});
     setGenerateModeMap(
-      Object.fromEntries(variantGenerationCatalog.map((attribute) => [attribute.id, "skip"])) as GenerateModeMap
+      Object.fromEntries(
+        variantGenerationCatalog.map((attribute) => [attribute.id, requiredAttributeIds.includes(attribute.id) ? "all" : "skip"])
+      ) as GenerateModeMap
     );
     setGenerateAttributePicker("");
     setGenerateValuePickerMap({});

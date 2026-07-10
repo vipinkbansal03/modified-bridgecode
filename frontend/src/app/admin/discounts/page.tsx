@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, Edit2, Eye, Filter, Plus, Search, SlidersHorizontal, SquareCheckBig, Trash2, Upload, X } from "lucide-react";
+import { Download, Edit2, Eye, Filter, Search, SlidersHorizontal, SquareCheckBig, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, StatCard, useToast } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
@@ -583,22 +583,62 @@ export default function DiscountsPage() {
       </div>
 
       <div className="mb-5 rounded-xl border border-[#E6E6E6] bg-white p-4">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <label className="relative w-full xl:max-w-md">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                resetPage();
-              }}
-              placeholder="Search rule, product, category, tier..."
-              className="h-10 w-full rounded-lg border border-[#E6E6E6] bg-white pl-9 pr-3 text-[13.5px] outline-none transition focus:border-[#E31E24] focus:ring-2 focus:ring-[#E31E24]/10"
-            />
-          </label>
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <label className="relative w-full xl:max-w-[520px] xl:flex-1">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  resetPage();
+                }}
+                placeholder="Search rule, product, category, tier..."
+                className="h-10 w-full rounded-lg border border-[#E6E6E6] bg-white pl-9 pr-3 text-[13.5px] outline-none transition placeholder:text-[#9A9A9A] focus:border-[#E31E24] focus:ring-2 focus:ring-[#E31E24]/10"
+              />
+            </label>
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:flex xl:items-center">
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowFilters((current) => !current)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
+              >
+                <Filter size={14} />
+                {showFilters ? "Hide filters" : "Show filters"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowColumns((current) => !current)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
+              >
+                <SlidersHorizontal size={14} />
+                Columns
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleExport(false)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
+              >
+                <Download size={14} />
+                Export
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  resetForm();
+                  setShowForm(true);
+                }}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
+              >
+                <span className="text-[15px] leading-none">+</span>
+                <span>Create Discount</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <AdminSelect
               value={status}
               onChange={(event) => {
@@ -610,7 +650,6 @@ export default function DiscountsPage() {
                 { value: "ACTIVE", label: "Active" },
                 { value: "INACTIVE", label: "Inactive" },
               ]}
-              className="min-w-[145px]"
             />
             <AdminSelect
               value={typeFilter}
@@ -624,7 +663,6 @@ export default function DiscountsPage() {
                 { value: "MOQ", label: "MOQ-based" },
                 { value: "PROMOTIONAL", label: "Open promotion" },
               ]}
-              className="min-w-[145px]"
             />
             <AdminSelect
               value={scopeFilter}
@@ -639,7 +677,6 @@ export default function DiscountsPage() {
                 { value: "COLLECTION", label: "Collection" },
                 { value: "CATEGORY", label: "Category" },
               ]}
-              className="min-w-[155px]"
             />
             <AdminSelect
               value={countryFilter}
@@ -648,7 +685,6 @@ export default function DiscountsPage() {
                 resetPage();
               }}
               options={options.countries}
-              className="min-w-[160px]"
             />
             <AdminSelect
               value={String(limit)}
@@ -661,42 +697,7 @@ export default function DiscountsPage() {
                 { value: "20", label: "20 per page" },
                 { value: "50", label: "50 per page" },
               ]}
-              className="min-w-[135px]"
             />
-            <button
-              type="button"
-              onClick={() => setShowFilters((current) => !current)}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
-            >
-              <Filter size={14} />
-              {showFilters ? "Hide filters" : "Show filters"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowColumns((current) => !current)}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
-            >
-              <SlidersHorizontal size={14} />
-              Columns
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleExport(false)}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
-            >
-              <Download size={14} />
-              Export
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                resetForm();
-                setShowForm(true);
-              }}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-            >
-              <Plus size={14} /> Create Discount
-            </button>
           </div>
         </div>
 
