@@ -6,6 +6,8 @@ import type { Prisma } from "@prisma/client";
 import { setVariantStock } from "../inventory/inventory.service";
 import { assertTierUsable } from "../tiers/tiers.service";
 
+const { shouldSyncStorefrontVisibility } = require("./productVisibility");
+
 const ALLOW_UNMAPPED_VARIANT_GENERATION_OVERRIDE = false;
 
 function buildVariantKey(attributeValueIds: string[], packageId?: string | null) {
@@ -55,6 +57,24 @@ async function assertUniqueProductSku(sku?: string | null, excludeId?: string) {
     select: { id: true },
   });
   if (duplicate) throw new AppError("A product with this SKU already exists.", 409);
+}
+
+async function syncStorefrontVisibility(tx: Prisma.TransactionClient, productId: string, status: string | null | undefined, previousStatus?: string | null) {
+  const nextStatus = String(status ?? previousStatus ?? "DRAFT").toUpperCase();
+  if (!shouldSyncStorefrontVisibility(nextStatus, previousStatus)) return;
+
+  const countries = await tx.country.findMany({ where: { status: "ACTIVE" }, select: { id: true } });
+  if (!countries.length) return;
+
+  await Promise.all(
+    countries.map((country) =>
+      tx.productCountry.upsert({
+        where: { productId_countryId: { productId, countryId: country.id } },
+        update: { enabled: true },
+        create: { productId, countryId: country.id, enabled: true },
+      }),
+    ),
+  );
 }
 
 function summarizeInventory(inventories: { stock: number; reservedStock: number }[]) {
@@ -563,15 +583,21 @@ export async function createProduct(data: ProductInput) {
   if (!slug) throw new AppError("Product slug is required.", 400);
   await assertUniqueProductSlug(slug);
   await assertUniqueProductSku(data.sku);
+  const normalizedStatus = (data.status as never) || "DRAFT";
 
-  return prisma.product.create({
-    data: {
-      ...data,
-      title,
-      slug,
-      sku: data.sku?.trim() || null,
-      status: (data.status as never) || "DRAFT",
-    },
+  return prisma.$transaction(async (tx) => {
+    const product = await tx.product.create({
+      data: {
+        ...data,
+        title,
+        slug,
+        sku: data.sku?.trim() || null,
+        status: normalizedStatus,
+      },
+    });
+
+    await syncStorefrontVisibility(tx, product.id, normalizedStatus, null);
+    return product;
   });
 }
 
@@ -597,7 +623,12 @@ export async function updateProduct(id: string, data: Partial<ProductInput>) {
   if (data.shortDescription !== undefined) updateData.shortDescription = data.shortDescription || null;
   if (data.description !== undefined) updateData.description = data.description || null;
   if (data.brand !== undefined) updateData.brand = data.brand?.trim() || existing.brand;
-  return prisma.product.update({ where: { id }, data: updateData });
+
+  return prisma.$transaction(async (tx) => {
+    const product = await tx.product.update({ where: { id }, data: updateData as Prisma.ProductUpdateInput });
+    await syncStorefrontVisibility(tx, product.id, product.status, existing.status);
+    return product;
+  });
 }
 
 // ─── Soft delete ─────────────────────────────────────────
@@ -613,8 +644,12 @@ export async function archiveProduct(id: string) {
 }
 
 export async function restoreProduct(id: string) {
-  await getProduct(id);
-  return prisma.product.update({ where: { id }, data: { status: "ACTIVE", deletedAt: null } });
+  const existing = await getProduct(id);
+  return prisma.$transaction(async (tx) => {
+    const product = await tx.product.update({ where: { id }, data: { status: "ACTIVE", deletedAt: null } });
+    await syncStorefrontVisibility(tx, product.id, product.status, existing.status);
+    return product;
+  });
 }
 
 export async function duplicateProduct(id: string) {
