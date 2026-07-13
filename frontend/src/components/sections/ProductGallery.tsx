@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ImageOff } from "lucide-react";
 import { cn } from "@/utils/cn";
 
 interface ProductGalleryProps {
@@ -20,15 +20,19 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
 
   if (!safeImages.length) {
     return (
-      <div className="flex min-h-[440px] items-center justify-center bg-offwhite text-sm text-steel-2">
-        No image
+      <div className="flex min-h-[260px] items-center justify-center rounded-lg border border-dashed border-line bg-offwhite px-5 text-center text-sm text-steel-2 sm:min-h-[360px] lg:min-h-[440px]">
+        <div>
+          <ImageOff size={28} className="mx-auto mb-2 text-steel-2" />
+          <p className="font-medium text-steel">No product image uploaded</p>
+          <p className="mt-1 text-[12px] text-steel-2">Images added from admin media will appear here.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex gap-4.5">
-      <div className="flex flex-col gap-3.5">
+    <div className="flex flex-col gap-3.5 sm:flex-row sm:gap-4.5">
+      <div className="custom-scrollbar-x order-2 flex gap-2.5 overflow-x-auto pb-3 sm:order-1 sm:flex-col sm:gap-3.5 sm:overflow-visible sm:pb-0">
         {safeImages.map((img, i) => (
           <button
             key={img}
@@ -43,7 +47,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
         ))}
       </div>
 
-      <div className="relative flex min-h-[440px] flex-1 items-center justify-center overflow-hidden bg-offwhite">
+      <div className="relative order-1 flex min-h-[280px] flex-1 items-center justify-center overflow-hidden rounded-lg bg-offwhite sm:order-2 sm:min-h-[360px] lg:min-h-[440px]">
         <button
           aria-label="Previous"
           onClick={() => go(-1)}
@@ -51,7 +55,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
         >
           <ChevronLeft size={14} />
         </button>
-        <div className="relative h-[400px] w-[78%]">
+        <div className="relative h-[260px] w-[84%] sm:h-[340px] lg:h-[400px] lg:w-[78%]">
           <Image src={safeImages[index]} alt={title} fill className="object-contain" sizes="500px" />
         </div>
         <button

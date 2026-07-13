@@ -39,7 +39,7 @@ export function CartDrawer() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-5">
+        <div className="custom-scrollbar flex-1 overflow-y-auto px-5 py-5">
           {items.length ? (
             <div className="space-y-4">
               {items.map((item) => (

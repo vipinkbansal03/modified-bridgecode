@@ -7,8 +7,10 @@ import { QuoteCartProvider } from "@/contexts/QuoteCartContext";
 import { CustomerAuthProvider } from "@/contexts/CustomerAuthContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { TrackingProvider } from "@/providers/TrackingProvider";
+import { ToastProvider } from "@/components/ui/ToastProvider";
 import { buildCmsMetadata } from "@/lib/seo";
 import seoData from "@/data/seo.json";
+import "react-toastify/dist/ReactToastify.css";
 import "@/styles/globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -31,7 +33,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <CustomerAuthProvider>
                   <CartProvider>
                     <TrackingProvider>
-                      <AppShell>{children}</AppShell>
+                      <ToastProvider>
+                        <AppShell>{children}</AppShell>
+                      </ToastProvider>
                     </TrackingProvider>
                   </CartProvider>
                 </CustomerAuthProvider>

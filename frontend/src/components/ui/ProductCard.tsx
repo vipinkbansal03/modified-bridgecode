@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
+import { ImageOff } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 
@@ -24,11 +25,16 @@ export function ProductCard({ image, title, slug, category, shortDescription, pr
     <motion.div whileHover={{ y: -4 }} transition={{ duration: 0.2, ease: "easeOut" }}>
       <Link href={`/products/${slug}`} className="block">
         <Card className="h-full">
-          <div className="relative h-[230px] w-full bg-offwhite">
+          <div className="relative h-[190px] w-full bg-offwhite sm:h-[230px]">
             {imageSrc ? (
               <Image src={imageSrc} alt={title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />
             ) : (
-              <div className="flex h-full items-center justify-center text-sm text-steel-2">No image</div>
+              <div className="flex h-full items-center justify-center px-4 text-center text-sm text-steel-2">
+                <div>
+                  <ImageOff size={24} className="mx-auto mb-2 text-steel-2" />
+                  <span>No image uploaded</span>
+                </div>
+              </div>
             )}
             {badge && (
               <span className="absolute top-3 left-3">
@@ -36,7 +42,7 @@ export function ProductCard({ image, title, slug, category, shortDescription, pr
               </span>
             )}
           </div>
-          <div className="p-5">
+          <div className="p-4 sm:p-5">
             {category && <span className="text-xs uppercase tracking-wide text-steel-2">{category}</span>}
             <h5 className="mt-1.5 text-[15px] font-medium text-ink">{title}</h5>
             {shortDescription && <p className="mt-1.5 text-sm text-steel">{shortDescription}</p>}

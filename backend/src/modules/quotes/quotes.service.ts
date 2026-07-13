@@ -196,7 +196,18 @@ export async function createAdminQuote(input: {
   return getQuote(quote.id);
 }
 
-export const updateStatus = (id: string, status: string) => prisma.quote.update({ where: { id }, data: { status: status as never } });
+export async function updateStatus(id: string, status: string) {
+  const quote = await prisma.quote.findUnique({
+    where: { id },
+    select: { status: true, convertedOrderId: true },
+  });
+  if (!quote) throw new AppError("Quote not found.", 404);
+  if (quote.status === "CONVERTED" || quote.convertedOrderId) {
+    throw new AppError("Converted quotes cannot be moved to another status.", 400);
+  }
+
+  return prisma.quote.update({ where: { id }, data: { status: status as never } });
+}
 
 export const addNote = (quoteId: string, userId: string, note: string) =>
   prisma.quoteNote.create({ data: { quoteId, userId, note } });
@@ -211,7 +222,7 @@ export async function updateQuoteReview(
   }
 ) {
   const quote = await getQuote(id);
-  if (quote.status === "CONVERTED") throw new AppError("Converted quotes cannot be edited.", 400);
+  if (quote.status === "CONVERTED" || quote.convertedOrderId) throw new AppError("Converted quotes cannot be edited.", 400);
 
   const discount = data.discount === undefined || data.discount === null || data.discount === "" ? Number(quote.discount) : Number(data.discount);
   const shippingCharge = data.shippingCharge === undefined || data.shippingCharge === null || data.shippingCharge === "" ? Number(quote.shippingCharge) : Number(data.shippingCharge);
@@ -258,7 +269,19 @@ export async function updateQuoteReview(
 
 export async function convertToOrder(quoteId: string) {
   const quote = await getQuote(quoteId);
-  if (quote.status === "CONVERTED") throw new AppError("Quote already converted.", 400);
+  if (quote.status === "CONVERTED" || quote.convertedOrderId) throw new AppError("Quote already converted.", 400);
+
+  const existingOrder = await prisma.order.findFirst({
+    where: { fromQuoteId: quote.id },
+    select: { id: true },
+  });
+  if (existingOrder) {
+    await prisma.quote.update({
+      where: { id: quoteId },
+      data: { status: "CONVERTED", convertedOrderId: existingOrder.id },
+    });
+    throw new AppError("Quote already converted.", 400);
+  }
 
   const orderNumber = `ORD-${Date.now()}`;
   const order = await prisma.order.create({

@@ -34,6 +34,7 @@ type QuoteDetail = {
   shippingCharge: number;
   total: number;
   status: string;
+  convertedOrderId?: string | null;
   notes: string | null;
   expiresAt: string | null;
   createdAt: string;
@@ -65,6 +66,10 @@ export default function QuoteDetailPage() {
 
   async function saveReview() {
     if (!quote) return;
+    if (quote.status === "CONVERTED" || quote.convertedOrderId) {
+      showToast("Converted quotes cannot be edited.", "error");
+      return;
+    }
     try {
       await updateReview.mutateAsync({ id: quote.id, items, discount, shippingCharge, notes });
       showToast("Quote review updated.");
@@ -75,6 +80,10 @@ export default function QuoteDetailPage() {
 
   async function approveAndConvert() {
     if (!quote) return;
+    if (quote.status === "CONVERTED" || quote.convertedOrderId) {
+      showToast("Quote already converted.", "error");
+      return;
+    }
     try {
       await updateReview.mutateAsync({ id: quote.id, items, discount, shippingCharge, notes });
       const result = await convertQuote.mutateAsync(quote.id);
@@ -103,10 +112,11 @@ export default function QuoteDetailPage() {
   }
 
   const sym = quote.currency.symbol;
+  const isConverted = quote.status === "CONVERTED" || Boolean(quote.convertedOrderId);
 
   return (
     <AdminLayout title={`Quote ${quote.quoteNumber}`} breadcrumb={[{ label: "Quotes", href: "/admin/quotes" }, { label: quote.quoteNumber }]}>
-      <div className="mb-5 flex items-center justify-between">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <button onClick={() => router.back()} className="flex items-center gap-1.5 text-[13.5px] text-[#6B6B6B] hover:text-[#111]"><ArrowLeft size={14} /> Back</button>
         <StatusBadge status={quote.status} />
       </div>
@@ -115,36 +125,38 @@ export default function QuoteDetailPage() {
         <div className="lg:col-span-2 space-y-5">
           <div className="rounded-lg border border-[#E6E6E6] bg-white overflow-hidden">
             <div className="border-b border-[#E6E6E6] px-5 py-3.5"><h3 className="text-[14px] font-semibold text-[#111]">Review Items</h3></div>
-            <table className="w-full text-sm">
-              <thead className="bg-[#F8F8F8] border-b border-[#E6E6E6]">
-                <tr>{["Product", "SKU", "Qty", "Unit Price", "Saved Total"].map((h) => <th key={h} className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">{h}</th>)}</tr>
-              </thead>
-              <tbody className="divide-y divide-[#E6E6E6]">
-                {quote.items.map((item) => (
-                  <tr key={item.id}>
-                    <td className="px-4 py-3 font-medium text-[#111]">{item.title}</td>
-                    <td className="px-4 py-3 font-mono text-[12px] text-[#6B6B6B]">{item.sku ?? "-"}</td>
-                    <td className="px-4 py-3"><input className="w-20 rounded border border-[#E6E6E6] px-2 py-1" type="number" min="1" value={items.find((i) => i.id === item.id)?.quantity ?? item.quantity} onChange={(event) => setItems((current) => current.map((i) => i.id === item.id ? { ...i, quantity: event.target.value } : i))} /></td>
-                    <td className="px-4 py-3"><input className="w-28 rounded border border-[#E6E6E6] px-2 py-1" type="number" min="0" step="0.01" value={items.find((i) => i.id === item.id)?.unitPrice ?? item.unitPrice} onChange={(event) => setItems((current) => current.map((i) => i.id === item.id ? { ...i, unitPrice: event.target.value } : i))} /></td>
-                    <td className="px-4 py-3 font-semibold text-[#111]">{sym}{Number(item.total).toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="custom-scrollbar-x overflow-x-auto">
+              <table className="w-full min-w-[760px] text-sm">
+                <thead className="bg-[#F8F8F8] border-b border-[#E6E6E6]">
+                  <tr>{["Product", "SKU", "Qty", "Unit Price", "Saved Total"].map((h) => <th key={h} className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">{h}</th>)}</tr>
+                </thead>
+                <tbody className="divide-y divide-[#E6E6E6]">
+                  {quote.items.map((item) => (
+                    <tr key={item.id}>
+                      <td className="px-4 py-3 font-medium text-[#111]">{item.title}</td>
+                      <td className="px-4 py-3 font-mono text-[12px] text-[#6B6B6B]">{item.sku ?? "-"}</td>
+                      <td className="px-4 py-3"><input className="w-20 rounded border border-[#E6E6E6] px-2 py-1 disabled:bg-[#F8F8F8] disabled:text-[#9A9A9A]" type="number" min="1" disabled={isConverted} value={items.find((i) => i.id === item.id)?.quantity ?? item.quantity} onChange={(event) => setItems((current) => current.map((i) => i.id === item.id ? { ...i, quantity: event.target.value } : i))} /></td>
+                      <td className="px-4 py-3"><input className="w-28 rounded border border-[#E6E6E6] px-2 py-1 disabled:bg-[#F8F8F8] disabled:text-[#9A9A9A]" type="number" min="0" step="0.01" disabled={isConverted} value={items.find((i) => i.id === item.id)?.unitPrice ?? item.unitPrice} onChange={(event) => setItems((current) => current.map((i) => i.id === item.id ? { ...i, unitPrice: event.target.value } : i))} /></td>
+                      <td className="px-4 py-3 font-semibold text-[#111]">{sym}{Number(item.total).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <div className="border-t border-[#E6E6E6] px-5 py-4 space-y-3 text-[13.5px]">
               <div className="flex justify-between text-[#6B6B6B]"><span>Saved subtotal</span><span>{sym}{Number(quote.subtotal).toFixed(2)}</span></div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <AdminInput label="Discount" type="number" min="0" step="0.01" value={discount} onChange={(event) => setDiscount(event.target.value)} />
-                <AdminInput label="Shipping Charge" type="number" min="0" step="0.01" value={shippingCharge} onChange={(event) => setShippingCharge(event.target.value)} />
+                <AdminInput label="Discount" type="number" min="0" step="0.01" disabled={isConverted} value={discount} onChange={(event) => setDiscount(event.target.value)} />
+                <AdminInput label="Shipping Charge" type="number" min="0" step="0.01" disabled={isConverted} value={shippingCharge} onChange={(event) => setShippingCharge(event.target.value)} />
               </div>
               <div className="flex justify-between font-semibold text-[#111] text-[15px]"><span>Saved total</span><span>{sym}{Number(quote.total).toFixed(2)}</span></div>
-              <button onClick={saveReview} disabled={updateReview.isPending} className="rounded-md bg-[#111] px-4 py-2 text-[13.5px] font-medium text-white hover:bg-[#222] disabled:opacity-50">{updateReview.isPending ? "Saving..." : "Save Review Changes"}</button>
+              <button onClick={saveReview} disabled={isConverted || updateReview.isPending} className="rounded-md bg-[#111] px-4 py-2 text-[13.5px] font-medium text-white hover:bg-[#222] disabled:opacity-50">{isConverted ? "Review Locked" : updateReview.isPending ? "Saving..." : "Save Review Changes"}</button>
             </div>
           </div>
 
           <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4">
             <h3 className="mb-2 text-[14px] font-semibold text-[#111]">Notes</h3>
-            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} className="min-h-[120px] w-full rounded-md border border-[#E6E6E6] px-3 py-2 text-[13.5px]" />
+            <textarea value={notes} disabled={isConverted} onChange={(event) => setNotes(event.target.value)} className="min-h-[120px] w-full rounded-md border border-[#E6E6E6] px-3 py-2 text-[13.5px] disabled:bg-[#F8F8F8] disabled:text-[#9A9A9A]" />
           </div>
         </div>
 
@@ -160,14 +172,15 @@ export default function QuoteDetailPage() {
 
           <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-3">
             <h3 className="text-[14px] font-semibold text-[#111]">Update Status</h3>
-            <AdminSelect label="" options={STATUS_OPTIONS} value={newStatus || quote.status} onChange={(e) => setNewStatus(e.target.value)} />
-            <button onClick={() => updateStatus({ id: quote.id, status: newStatus }, { onSuccess: () => setNewStatus("") })} disabled={isPending || !newStatus || newStatus === quote.status} className="w-full rounded-md bg-[#111] px-4 py-2.5 text-[13.5px] font-medium text-white hover:bg-[#222] disabled:opacity-50">{isPending ? "Saving..." : "Update Status"}</button>
+            <AdminSelect label="" options={STATUS_OPTIONS} value={newStatus || quote.status} disabled={isConverted} onChange={(e) => setNewStatus(e.target.value)} />
+            {isConverted && <p className="text-[12.5px] text-[#9A9A9A]">This quote has already been converted to an order, so its status is locked.</p>}
+            <button onClick={() => updateStatus({ id: quote.id, status: newStatus }, { onSuccess: () => setNewStatus("") })} disabled={isConverted || isPending || !newStatus || newStatus === quote.status} className="w-full rounded-md bg-[#111] px-4 py-2.5 text-[13.5px] font-medium text-white hover:bg-[#222] disabled:opacity-50">{isConverted ? "Status Locked" : isPending ? "Saving..." : "Update Status"}</button>
           </div>
 
           <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-3">
             <h3 className="flex items-center gap-2 text-[14px] font-semibold text-[#111]"><CheckCircle size={15} /> Approval</h3>
             <p className="text-[13px] text-[#6B6B6B]">Saves review edits before converting the quote to an order and notifying the customer.</p>
-            <button onClick={approveAndConvert} disabled={quote.status === "CONVERTED" || updateReview.isPending || convertQuote.isPending} className="w-full rounded-md bg-[#E31E24] px-4 py-2.5 text-[13.5px] font-medium text-white hover:bg-[#B5151B] disabled:opacity-50">{quote.status === "CONVERTED" ? "Already Converted" : convertQuote.isPending ? "Converting..." : "Approve & Convert to Order"}</button>
+            <button onClick={approveAndConvert} disabled={isConverted || updateReview.isPending || convertQuote.isPending} className="w-full rounded-md bg-[#E31E24] px-4 py-2.5 text-[13.5px] font-medium text-white hover:bg-[#B5151B] disabled:opacity-50">{isConverted ? "Already Converted" : convertQuote.isPending ? "Converting..." : "Approve & Convert to Order"}</button>
           </div>
         </div>
       </div>
@@ -177,5 +190,10 @@ export default function QuoteDetailPage() {
 }
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return <div className="flex justify-between gap-3 text-[13.5px]"><span className="text-[#9A9A9A]">{label}</span><span className="text-right font-medium text-[#111]">{value}</span></div>;
+  return (
+    <div className="flex flex-col gap-1 text-[13.5px] sm:flex-row sm:justify-between sm:gap-3">
+      <span className="text-[#9A9A9A]">{label}</span>
+      <span className="break-words text-left font-medium text-[#111] sm:text-right">{value}</span>
+    </div>
+  );
 }

@@ -14,6 +14,9 @@ export interface QuoteEmailData {
   companyName?: string;
   items: { productTitle: string; sku?: string; quantity: number; unitPrice: number }[];
   subtotal: number;
+  discount?: number;
+  discountPercent?: number;
+  total?: number;
   notes?: string;
 }
 
@@ -28,10 +31,19 @@ export interface ContactEmailData {
   type?: string;
 }
 
-export async function sendCustomerPasswordResetEmail(data: { email: string; firstName: string; resetToken: string }): Promise<void> {
+function formatCurrency(value: number) {
+  return `₹${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+}
+
+export async function sendCustomerPasswordResetEmail(data: {
+  email: string;
+  firstName: string;
+  resetToken: string;
+}): Promise<void> {
   if (!resend) return;
 
-  const resetBaseUrl = process.env.CUSTOMER_PASSWORD_RESET_URL || `${process.env.FRONTEND_URL || "http://localhost:3000"}/reset-password`;
+  const resetBaseUrl =
+    process.env.CUSTOMER_PASSWORD_RESET_URL || `${process.env.FRONTEND_URL || "http://localhost:3000"}/reset-password`;
   const separator = resetBaseUrl.includes("?") ? "&" : "?";
   const resetUrl = `${resetBaseUrl}${separator}token=${encodeURIComponent(data.resetToken)}`;
 
@@ -60,6 +72,7 @@ export async function sendCustomerPasswordResetEmail(data: { email: string; firs
 
 export async function sendCustomerApprovalEmail(data: { email: string; firstName: string }): Promise<void> {
   if (!resend) return;
+
   try {
     await resend.emails.send({
       from: FROM,
@@ -80,6 +93,7 @@ export async function sendCustomerApprovalEmail(data: { email: string; firstName
 
 export async function sendCustomerRejectionEmail(data: { email: string; firstName: string }): Promise<void> {
   if (!resend) return;
+
   try {
     await resend.emails.send({
       from: FROM,
@@ -102,8 +116,17 @@ export async function sendQuoteNotification(data: QuoteEmailData): Promise<void>
   if (!resend) return;
 
   const itemRows = data.items
-    .map((i) => `  • ${i.productTitle}${i.sku ? ` [${i.sku}]` : ""} × ${i.quantity} @ ₹${i.unitPrice}`)
+    .map((item) => {
+      const skuLabel = item.sku ? ` [${item.sku}]` : "";
+      return `  • ${item.productTitle}${skuLabel} × ${item.quantity} @ ${formatCurrency(item.unitPrice)}`;
+    })
     .join("\n");
+  const discount = Number(data.discount || 0);
+  const summaryRows = [
+    `Subtotal: ${formatCurrency(data.subtotal)}`,
+    discount > 0 ? `Volume Discount${data.discountPercent ? ` (${data.discountPercent}%)` : ""}: -${formatCurrency(discount)}` : "",
+    data.total != null ? `Estimated Total: ${formatCurrency(data.total)}` : "",
+  ].filter(Boolean);
 
   try {
     await resend.emails.send({
@@ -120,7 +143,7 @@ export async function sendQuoteNotification(data: QuoteEmailData): Promise<void>
         "Items:",
         itemRows,
         "",
-        `Subtotal: ₹${data.subtotal}`,
+        ...summaryRows,
         data.notes ? `\nNotes: ${data.notes}` : "",
       ]
         .filter(Boolean)
@@ -140,6 +163,8 @@ export async function sendQuoteNotification(data: QuoteEmailData): Promise<void>
         "",
         "Items requested:",
         itemRows,
+        "",
+        ...summaryRows,
         "",
         "Best regards,",
         "Modern Orthodontics Team",
@@ -171,7 +196,7 @@ export async function sendQuoteConvertedEmail(data: {
         "",
         `Quote Reference: ${data.quoteNumber}`,
         `Order Number: ${data.orderNumber}`,
-        `Order Total: ₹${data.total}`,
+        `Order Total: ${formatCurrency(data.total)}`,
         "",
         "Our team will follow up with the next steps.",
         "",

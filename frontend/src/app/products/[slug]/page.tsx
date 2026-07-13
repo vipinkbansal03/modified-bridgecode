@@ -31,7 +31,7 @@ async function fetchProductFromApi(slug: string): Promise<ApiProductDetail | nul
     const language = (await cookies()).get("language")?.value;
     const query = language ? `?lang=${encodeURIComponent(language)}` : "";
     const res = await fetch(`${API_ORIGIN}/api/products/${slug}${query}`, {
-      next: { revalidate: 300 },
+      cache: "no-store",
     });
     if (!res.ok) return null;
     const json = await res.json();
@@ -66,7 +66,7 @@ function mergeProduct(api: ApiProductDetail, staticProduct: ProductDetail | unde
     category: api.category.name,
     categorySlug: api.category.slug,
     productCode: api.productCode ?? staticProduct?.productCode ?? "",
-    images: apiImages.length ? apiImages : staticProduct?.images ?? [],
+    images: apiImages,
     information: api.shortDescription ?? staticProduct?.information ?? "",
     tagline: staticProduct?.tagline,
     highlights: staticProduct?.highlights ?? [],
@@ -161,7 +161,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           ) : product.prescriptionOptions && product.slotOptions && product.packagingOptions && product.discountTiers ? (
             <BulkOrderPanel product={product as Required<typeof product>} productId={apiProduct?.id} />
           ) : (
-            <SimpleInquiryPanel product={product} />
+            <SimpleInquiryPanel product={product} productId={apiProduct?.id} />
           )}
         </Container>
       </section>
