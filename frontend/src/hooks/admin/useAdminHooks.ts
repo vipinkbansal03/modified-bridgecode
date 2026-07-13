@@ -18,12 +18,25 @@ export const useAdminProductCountries = (productId?: string) =>
 
 export const useCreateProduct = () => {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (data: unknown) => adminApi.post("/products", data).then((r) => r.data), onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }) });
+  return useMutation({
+    mutationFn: (data: unknown) => adminApi.post("/products", data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+    },
+  });
 };
 
 export const useUpdateProduct = (id: string) => {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (data: unknown) => adminApi.put(`/products/${id}`, data).then((r) => r.data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-products"] }); qc.invalidateQueries({ queryKey: ["admin-product", id] }); } });
+  return useMutation({
+    mutationFn: (data: unknown) => adminApi.put(`/products/${id}`, data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+      qc.invalidateQueries({ queryKey: ["admin-product", id] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+    },
+  });
 };
 
 export const useDeleteProduct = () => {
@@ -79,7 +92,10 @@ export const useUpdateProductCountries = (productId?: string) => {
   return useMutation({
     mutationFn: (items: { countryId: string; enabled: boolean }[]) =>
       adminApi.put(`/products/${productId}/countries`, { items }).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product-countries", productId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-product-countries", productId] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+    },
   });
 };
 

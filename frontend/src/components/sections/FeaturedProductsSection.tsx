@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useProducts } from "@/hooks/api/useProducts";
+import { useFeaturedProducts } from "@/hooks/api/useProducts";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import staticProducts from "@/data/products.json";
 import type { ApiProductSummary } from "@/types/api.types";
@@ -30,10 +31,13 @@ export function FeaturedProductsSection({
   captions,
 }: FeaturedProductsSectionProps) {
   const { t } = useStaticTranslations();
-  const { data: allProducts, isLoading } = useProducts({ limit: 200 });
+  const { data: featuredProducts = [], isLoading: featuredLoading } = useFeaturedProducts();
+  const { data: allProducts, isLoading: allProductsLoading } = useProducts({ limit: 200 });
   const [index, setIndex] = useState(0);
 
   const products = useMemo(() => {
+    if (featuredProducts.length) return featuredProducts;
+
     const liveProducts = allProducts?.data ?? [];
     const liveMatches = slugs
       .map((slug) => liveProducts.find((p) => p.slug === slug))
@@ -71,7 +75,7 @@ export function FeaturedProductsSection({
       .filter(Boolean) as ApiProductSummary[];
   }, [allProducts, slugs]);
 
-  if (isLoading) {
+  if (featuredLoading || allProductsLoading) {
     return (
       <section>
         <Skeleton className="h-[420px] w-full rounded-none" />

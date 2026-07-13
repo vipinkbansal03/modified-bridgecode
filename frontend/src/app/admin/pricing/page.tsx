@@ -29,6 +29,7 @@ import {
 import { Modal } from "@/components/ui/Modal";
 import {
   useAdminCountries,
+  useAdminCustomerRoles,
   useAdminPricing,
   useAdminPricingDashboard,
   useAdminProduct,
@@ -283,6 +284,7 @@ export default function PricingPage() {
   });
   const { data: countries = [] } = useAdminCountries();
   const { data: tiers = [] } = useAdminTiers();
+  const { data: customerRoles = [] } = useAdminCustomerRoles();
   const { data: productsData } = useAdminProducts({ page: 1, limit: 100, search: productFilter || undefined });
   const { data: filterProduct } = useAdminProduct(productFilter);
   const { data: selectedProduct } = useAdminProduct(form.productId);
@@ -1025,9 +1027,10 @@ export default function PricingPage() {
                 onChange={(event) => setPreviewInput((current) => ({ ...current, customerRoleKey: event.target.value }))}
                 options={[
                   { value: "", label: "Auto from customer" },
-                  { value: "guest", label: "Guest" },
-                  { value: "dealer", label: "Dealer" },
-                  { value: "doctor-retailer", label: "Doctor / Retailer" },
+                  ...(customerRoles as any[]).map((role) => ({
+                    value: role.key,
+                    label: role.name,
+                  })),
                 ]}
               />
               <AdminSelect
@@ -1107,9 +1110,10 @@ export default function PricingPage() {
                 onChange={(event) => setPreviewInput((current) => ({ ...current, customerRoleKey: event.target.value }))}
                 options={[
                   { value: "", label: "Auto from customer" },
-                  { value: "guest", label: "Guest" },
-                  { value: "dealer", label: "Dealer" },
-                  { value: "doctor-retailer", label: "Doctor / Retailer" },
+                  ...(customerRoles as any[]).map((role) => ({
+                    value: role.key,
+                    label: role.name,
+                  })),
                 ]}
               />
               <AdminSelect label="Tier" value={previewInput.tierId} onChange={(event) => setPreviewInput((current) => ({ ...current, tierId: event.target.value }))} options={tierOptions} />
@@ -1237,7 +1241,18 @@ export default function PricingPage() {
               <AdminSelect label="Variant" value={form.variantId} onChange={(event) => setForm((current) => ({ ...current, variantId: event.target.value }))} options={variantOptions} />
               <AdminSelect label="Country" value={form.countryId} onChange={(event) => setForm((current) => ({ ...current, countryId: event.target.value }))} options={countryOptions} />
               <AdminSelect label="Status" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as "ACTIVE" | "INACTIVE" }))} options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
-              <AdminInput label="Customer Role Key" value={form.customerRoleKey} onChange={(event) => setForm((current) => ({ ...current, customerRoleKey: event.target.value }))} placeholder="guest / dealer / doctor-retailer" />
+              <AdminSelect
+                label="Customer Role Key"
+                value={form.customerRoleKey}
+                onChange={(event) => setForm((current) => ({ ...current, customerRoleKey: event.target.value }))}
+                options={[
+                  { value: "", label: "None / Any" },
+                  ...(customerRoles as any[]).map((role) => ({
+                    value: role.key,
+                    label: role.name,
+                  })),
+                ]}
+              />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

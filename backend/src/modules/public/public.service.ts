@@ -30,23 +30,39 @@ function approvedCategoryTranslationInclude(languageCode: string) {
 }
 
 function buildStorefrontProductWhere(countryId: string, extra?: Prisma.ProductWhereInput): Prisma.ProductWhereInput {
+  const { OR: extraOr, ...extraRest } = (extra ?? {}) as Prisma.ProductWhereInput & { OR?: Prisma.ProductWhereInput[] };
+  const andConditions: Prisma.ProductWhereInput[] = [
+    {
+      OR: [
+        { hasVariants: false },
+        {
+          variants: {
+            some: {
+              status: "ACTIVE",
+              countries: { some: { countryId, enabled: true } },
+            },
+          },
+        },
+      ],
+    },
+    {
+      OR: [
+        { countries: { some: { countryId, enabled: true } } },
+        { countries: { none: {} } },
+      ],
+    },
+  ];
+
+  if (extraOr) {
+    andConditions.push({ OR: extraOr });
+  }
+
   return {
     status: "ACTIVE",
     deletedAt: null,
-    countries: { some: { countryId, enabled: true } },
     category: { countries: { some: { countryId, enabled: true } } },
-    OR: [
-      { hasVariants: false },
-      {
-        variants: {
-          some: {
-            status: "ACTIVE",
-            countries: { some: { countryId, enabled: true } },
-          },
-        },
-      },
-    ],
-    ...(extra ?? {}),
+    ...extraRest,
+    AND: andConditions,
   };
 }
 
