@@ -77,6 +77,26 @@ async function syncStorefrontVisibility(tx: Prisma.TransactionClient, productId:
   );
 }
 
+async function syncVariantsStorefrontVisibility(variantIds: string[], productId: string) {
+  const uniqueVariantIds = Array.from(new Set(variantIds));
+  if (!uniqueVariantIds.length) return;
+  const productCountries = await prisma.productCountry.findMany({
+    where: { productId, enabled: true, country: { status: "ACTIVE" } },
+    select: { countryId: true },
+  });
+
+  await prisma.variantCountry.createMany({
+    data: uniqueVariantIds.flatMap((variantId) =>
+      productCountries.map(({ countryId }) => ({ variantId, countryId, enabled: true })),
+    ),
+    skipDuplicates: true,
+  });
+}
+
+async function syncVariantStorefrontVisibility(variantId: string, productId: string) {
+  await syncVariantsStorefrontVisibility([variantId], productId);
+}
+
 function summarizeInventory(inventories: { stock: number; reservedStock: number }[]) {
   return inventories.reduce(
     (acc, inventory) => {
@@ -885,17 +905,27 @@ export async function bulkUpdateProducts(data: {
   }
 
   if (data.action === "enable" || data.action === "disable") {
-    await prisma.product.updateMany({
-      where: { id: { in: ids } },
-      data: { status: data.action === "enable" ? "ACTIVE" : "INACTIVE" },
+    await prisma.$transaction(async (tx) => {
+      await tx.product.updateMany({
+        where: { id: { in: ids } },
+        data: { status: data.action === "enable" ? "ACTIVE" : "INACTIVE" },
+      });
+      if (data.action === "enable") {
+        await Promise.all(ids.map((id) => syncStorefrontVisibility(tx, id, "ACTIVE")));
+      }
     });
     return { updated: ids.length };
   }
 
   if (data.action === "archive" || data.action === "restore") {
-    await prisma.product.updateMany({
-      where: { id: { in: ids } },
-      data: { status: data.action === "archive" ? "ARCHIVED" : "ACTIVE" },
+    await prisma.$transaction(async (tx) => {
+      await tx.product.updateMany({
+        where: { id: { in: ids } },
+        data: { status: data.action === "archive" ? "ARCHIVED" : "ACTIVE" },
+      });
+      if (data.action === "restore") {
+        await Promise.all(ids.map((id) => syncStorefrontVisibility(tx, id, "ACTIVE")));
+      }
     });
     return { updated: ids.length };
   }
@@ -1371,6 +1401,11 @@ export async function generateVariants(
     )
   );
 
+  await syncVariantsStorefrontVisibility(
+    createdVariants.filter((variant) => variant.status === "ACTIVE").map((variant) => variant.id),
+    productId,
+  );
+
   return createdVariants;
 }
 
@@ -1425,6 +1460,8 @@ export async function createVariant(
   await prisma.inventory.create({
     data: { productId, variantId: variant.id, stock: 0 },
   });
+
+  if (variant.status === "ACTIVE") await syncVariantStorefrontVisibility(variant.id, productId);
 
   return getVariant(productId, variant.id);
 }
@@ -1659,10 +1696,12 @@ export async function archiveVariant(productId: string, variantId: string) {
 
 export async function restoreVariant(productId: string, variantId: string) {
   await getVariant(productId, variantId);
-  return prisma.productVariant.update({
+  const variant = await prisma.productVariant.update({
     where: { id: variantId },
     data: { status: "ACTIVE" },
   });
+  await syncVariantStorefrontVisibility(variant.id, productId);
+  return variant;
 }
 
 export async function cloneVariant(productId: string, variantId: string) {
