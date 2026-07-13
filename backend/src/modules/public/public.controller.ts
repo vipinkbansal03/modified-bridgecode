@@ -65,7 +65,8 @@ export const getCountries = asyncHandler(async (_req: Request, res: Response) =>
 
 export const checkInventory = asyncHandler(async (req: Request, res: Response) => {
   const ids = (req.query.variantIds as string || "").split(",").filter(Boolean);
-  return AR.success(res, "Inventory.", await S.checkInventory(ids));
+  const countryCode = typeof req.query.countryCode === "string" ? req.query.countryCode : undefined;
+  return AR.success(res, "Inventory.", await S.checkInventory(ids, countryCode));
 });
 
 function getRequestedLanguage(req: Request) {

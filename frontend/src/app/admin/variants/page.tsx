@@ -30,7 +30,7 @@ type VariantRow = {
   };
   package?: { id: string; title: string } | null;
   countries?: { countryId: string }[];
-  inventory?: { stock?: number; reservedStock?: number; status?: string } | null;
+  inventories?: { countryId?: string | null; stock?: number; reservedStock?: number; status?: string }[];
   prices?: { sellingPrice: string | number; currency: { symbol: string; code: string }; country?: { name: string; code: string } | null }[];
 };
 
@@ -42,6 +42,10 @@ function formatPrice(row: VariantRow) {
   const amount = Number(price.sellingPrice);
   const formatted = Number.isFinite(amount) ? amount.toLocaleString("en-IN") : String(price.sellingPrice);
   return `${price.currency.symbol}${formatted}`;
+}
+
+function getBaseInventory(row: VariantRow) {
+  return row.inventories?.find((inventory) => !inventory.countryId) ?? null;
 }
 
 export default function VariantsPage() {
@@ -162,8 +166,9 @@ export default function VariantsPage() {
       label: "Inventory",
       width: "140px",
       render: (row) => {
-        const stock = Number(row.inventory?.stock ?? 0);
-        const reserved = Number(row.inventory?.reservedStock ?? 0);
+        const inventory = getBaseInventory(row);
+        const stock = Number(inventory?.stock ?? 0);
+        const reserved = Number(inventory?.reservedStock ?? 0);
         return <span className="font-medium text-[#1A1A1A]">{`${stock} / ${Math.max(0, stock - reserved)}`}</span>;
       },
     },
@@ -226,8 +231,10 @@ export default function VariantsPage() {
     <AdminLayout title="Variants" breadcrumb={[{ label: "Variants" }]}>
       <div className="space-y-5">
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-            <div className="grid flex-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mb-4 rounded-md border border-dashed border-[#E6E6E6] bg-[#FAFAFA] px-4 py-3 text-[13px] leading-5 text-[#6B6B6B]">
+            Variants are managed through the product editor. The page below lists them globally so you can search and route directly to the right product.
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <AdminInput
                 value={search}
                 onChange={(event) => {
@@ -273,10 +280,6 @@ export default function VariantsPage() {
                   { value: "asc", label: "Ascending" },
                 ]}
               />
-            </div>
-            <div className="rounded-md border border-dashed border-[#E6E6E6] bg-[#FAFAFA] px-4 py-3 text-[13px] text-[#6B6B6B]">
-              Variants are managed through the product editor. The page below lists them globally so you can search and route directly to the right product.
-            </div>
           </div>
         </div>
 

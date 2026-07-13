@@ -148,6 +148,11 @@ export const listAttributes = () =>
   prisma.attribute.findMany({
     orderBy: { sortOrder: "asc" },
     include: {
+      values: {
+        where: { status: "ACTIVE" },
+        orderBy: { sortOrder: "asc" },
+        select: { id: true, value: true, sortOrder: true },
+      },
       _count: { select: { values: { where: { status: "ACTIVE" } } } },
     },
   });

@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { Upload, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminTextarea, AdminSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column, toastMessages } from "@/components/admin/AdminComponents";
+import { Modal } from "@/components/ui/Modal";
 import {
   useAdminProduct,
   useUpdateProduct,
@@ -76,7 +77,14 @@ type VariantRow = {
   moq?: number | null;
   packageId?: string | null;
   package?: { id: string; title: string } | null;
-  inventory?: { id?: string; stock: number; lowStockThreshold?: number | null; status?: string | null } | null;
+  inventories?: {
+    id?: string;
+    countryId?: string | null;
+    country?: { id: string; name: string; code: string } | null;
+    stock: number;
+    lowStockThreshold?: number | null;
+    status?: string | null;
+  }[];
   prices?: {
     id: string;
     countryId?: string | null;
@@ -91,7 +99,7 @@ type VariantRow = {
     attributeId: string;
     attributeValueId: string;
     attribute?: { name: string };
-    attributeValue?: { value: string };
+    attributeValue?: { id?: string; value: string };
   }[];
 };
 
@@ -119,6 +127,28 @@ type AttributeValueDetail = {
 
 const getAttributeValues = <T extends { id: string; value: string }>(attribute?: { values?: T[] | null }): T[] =>
   Array.isArray(attribute?.values) ? attribute.values : [];
+
+const getBaseInventory = <T extends { countryId?: string | null }>(inventories?: T[] | null) =>
+  Array.isArray(inventories) ? inventories.find((inventory) => !inventory.countryId) ?? null : null;
+
+const resolveEditSelectedValue = (
+  attributeId: string,
+  values: { id: string; value: string }[],
+  selections: SingleSelectionMap,
+  variant: VariantRow | null,
+) => {
+  const selectedId = selections[attributeId];
+  if (!selectedId) return null;
+  const fromCatalog = values.find((value) => value.id === selectedId);
+  if (fromCatalog) return fromCatalog;
+  const fromVariant = variant?.attributeValues?.find(
+    (binding) => binding.attributeId === attributeId && binding.attributeValueId === selectedId,
+  )?.attributeValue;
+  if (fromVariant?.value) {
+    return { id: fromVariant.id ?? selectedId, value: fromVariant.value };
+  }
+  return null;
+};
 
 type ProductAttributeMapping = {
   id: string;
@@ -328,7 +358,7 @@ function VariantGridMatrix({
                         </div>
                       ) : (
                         <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#555]">
-                          <span>Stock: {cell.variant.inventory?.stock ?? "No stock"}</span>
+                          <span>Stock: {getBaseInventory(cell.variant.inventories)?.stock ?? "No stock"}</span>
                           <span>Price: {bulkCountryId ? `${getVariantPriceForCountry(cell.variant, bulkCountryId)?.currency?.symbol ?? ""}${getVariantPriceForCountry(cell.variant, bulkCountryId)?.sellingPrice ?? "No price"}` : formatVariantPrice(cell.variant)}</span>
                         </div>
                       )}
@@ -370,6 +400,8 @@ type ProductEditorProps = {
 };
 
 export function ProductEditor({ productId }: ProductEditorProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const variantIdFromQuery = searchParams.get("variant");
   const [activeTab, setActiveTab] = useState(0);
@@ -425,6 +457,9 @@ export function ProductEditor({ productId }: ProductEditorProps) {
   const [bulkSaving, setBulkSaving] = useState(false);
   const [tierRuleDraft, setTierRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
   const [moqRuleDraft, setMoqRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
+  const [countryPriceModalOpen, setCountryPriceModalOpen] = useState(false);
+  const [countryPriceBase, setCountryPriceBase] = useState("");
+  const [generatingCountryPrices, setGeneratingCountryPrices] = useState(false);
   const { showToast, ToastComponent } = useToast();
 
   const { data: product, isLoading, refetch } = useAdminProduct(productId);
@@ -481,6 +516,47 @@ export function ProductEditor({ productId }: ProductEditorProps) {
         : attributeCatalog,
     [attributeCatalog, hasMappedProductAttributes, mappedAttributeRows]
   );
+  const editVariantAttributeCatalog = useMemo(() => {
+    const catalog = new Map<string, GlobalAttribute>();
+
+    variantGenerationCatalog.forEach((attribute) => {
+      catalog.set(attribute.id, {
+        id: attribute.id,
+        name: attribute.name,
+        role: attribute.role,
+        values: [...getAttributeValues(attribute)],
+      });
+    });
+
+    attributeCatalog.forEach((attribute) => {
+      if (!catalog.has(attribute.id)) {
+        catalog.set(attribute.id, {
+          id: attribute.id,
+          name: attribute.name,
+          role: attribute.role,
+          values: [...getAttributeValues(attribute)],
+        });
+      }
+    });
+
+    (editingVariant?.attributeValues ?? []).forEach((binding) => {
+      const attributeId = binding.attributeId;
+      const existing = catalog.get(attributeId) ?? {
+        id: attributeId,
+        name: binding.attribute?.name ?? "Attribute",
+        role: undefined,
+        values: [] as { id: string; value: string }[],
+      };
+      if (binding.attribute?.name) existing.name = binding.attribute.name;
+      const value = binding.attributeValue;
+      if (value?.value && !existing.values.some((item) => item.id === (value.id ?? binding.attributeValueId))) {
+        existing.values.push({ id: value.id ?? binding.attributeValueId, value: value.value });
+      }
+      catalog.set(attributeId, existing);
+    });
+
+    return catalog;
+  }, [attributeCatalog, editingVariant, variantGenerationCatalog]);
   const packageRows = useMemo(() => (product?.packages ?? []) as PackageRow[], [product?.packages]);
   const variantRows = useMemo(() => (product?.variants ?? []) as VariantRow[], [product?.variants]);
   const bulkCountryOptions = useMemo(() => {
@@ -586,7 +662,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
     { key: "package", label: "Package", render: (row) => row.package?.title ?? "Default" },
     { key: "sku", label: "SKU" },
     { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
-    { key: "stock", label: "Stock", render: (row) => row.inventory?.stock ?? "—" },
+    { key: "stock", label: "Stock", render: (row) => getBaseInventory(row.inventories)?.stock ?? "—" },
     {
       key: "actions",
       label: "Actions",
@@ -746,7 +822,11 @@ export function ProductEditor({ productId }: ProductEditorProps) {
       doctorRetailerPrice:
         bulkDrafts[variant.id]?.doctorRetailerPrice ??
         (price?.distributorPrice !== undefined && price?.distributorPrice !== null ? `${price.distributorPrice}` : ""),
-      stock: bulkDrafts[variant.id]?.stock ?? (variant.inventory?.stock !== undefined && variant.inventory?.stock !== null ? `${variant.inventory.stock}` : ""),
+      stock:
+        bulkDrafts[variant.id]?.stock ??
+        (getBaseInventory(variant.inventories)?.stock !== undefined && getBaseInventory(variant.inventories)?.stock !== null
+          ? `${getBaseInventory(variant.inventories)?.stock}`
+          : ""),
     };
   };
 
@@ -773,7 +853,10 @@ export function ProductEditor({ productId }: ProductEditorProps) {
         const currentDealerPriceValue = currentPrice?.dealerPrice !== undefined && currentPrice?.dealerPrice !== null ? `${currentPrice.dealerPrice}` : "";
         const currentDoctorRetailerPriceValue =
           currentPrice?.distributorPrice !== undefined && currentPrice?.distributorPrice !== null ? `${currentPrice.distributorPrice}` : "";
-        const currentStockValue = variant.inventory?.stock !== undefined && variant.inventory?.stock !== null ? `${variant.inventory.stock}` : "";
+        const currentStockValue =
+          getBaseInventory(variant.inventories)?.stock !== undefined && getBaseInventory(variant.inventories)?.stock !== null
+            ? `${getBaseInventory(variant.inventories)?.stock}`
+            : "";
         const priceChanged = draft.price !== undefined && draft.price !== currentPriceValue;
         const dealerPriceChanged = draft.dealerPrice !== undefined && draft.dealerPrice !== currentDealerPriceValue;
         const doctorRetailerPriceChanged =
@@ -1135,16 +1218,14 @@ export function ProductEditor({ productId }: ProductEditorProps) {
     setGenerateAttributeIds(requiredAttributeIds);
     setGenerateSelectionMap({});
     setGenerateModeMap(
-      Object.fromEntries(
-        variantGenerationCatalog.map((attribute) => [attribute.id, requiredAttributeIds.includes(attribute.id) ? "all" : "skip"])
-      ) as GenerateModeMap
+      Object.fromEntries(requiredAttributeIds.map((attributeId) => [attributeId, "all"])) as GenerateModeMap,
     );
     setGenerateAttributePicker("");
     setGenerateValuePickerMap({});
     setGenerateVariantOpen(true);
   };
 
-  const openEditVariantModal = (variant: VariantRow) => {
+  const openEditVariantModal = useCallback((variant: VariantRow) => {
     const usedAttributeIds = (variant.attributeValues ?? []).map((value) => value.attributeId);
     setEditingVariant(variant);
     setEditVariantAttributeIds(usedAttributeIds);
@@ -1157,7 +1238,50 @@ export function ProductEditor({ productId }: ProductEditorProps) {
     setEditVariantSelections(
       Object.fromEntries((variant.attributeValues ?? []).map((value) => [value.attributeId, value.attributeValueId]))
     );
-  };
+  }, []);
+
+  const closeEditVariantModal = useCallback(() => {
+    setEditingVariant(null);
+    if (!variantIdFromQuery) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("variant");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams, variantIdFromQuery]);
+
+  const openCountryPriceModal = useCallback(() => {
+    setCountryPriceBase("");
+    setCountryPriceModalOpen(true);
+  }, []);
+
+  const closeCountryPriceModal = useCallback(() => {
+    if (generatingCountryPrices) return;
+    setCountryPriceModalOpen(false);
+    setCountryPriceBase("");
+  }, [generatingCountryPrices]);
+
+  const handleGenerateCountryPrices = useCallback(async () => {
+    const basePrice = Number(countryPriceBase);
+    if (!Number.isFinite(basePrice) || basePrice <= 0) {
+      showToast("Enter a valid base price greater than 0.", "error");
+      return;
+    }
+
+    try {
+      setGeneratingCountryPrices(true);
+      const result = await adminApi.post("/pricing/generate-country-prices", {
+        productId,
+        basePrice,
+      });
+      showToast(result.data?.message || "Country prices generated.");
+      closeCountryPriceModal();
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to generate country prices."), "error");
+    } finally {
+      setGeneratingCountryPrices(false);
+    }
+  }, [closeCountryPriceModal, countryPriceBase, productId, refetch, showToast]);
 
   useEffect(() => {
     if (!variantIdFromQuery || editingVariant) return;
@@ -1270,7 +1394,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
         status: editVariantStatus,
       });
       showToast("Variant updated.");
-      setEditingVariant(null);
+      closeEditVariantModal();
       refetch();
     } catch {
       showToast("Failed to update variant.", "error");
@@ -1281,7 +1405,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
     const selectedAttributes = variantGenerationCatalog
       .filter((attribute) => generateAttributeIds.includes(attribute.id))
       .map((attribute) => {
-        const mode = generateModeMap[attribute.id] ?? "skip";
+        const mode = generateModeMap[attribute.id] ?? "all";
         if (mode === "skip") return null;
         if (mode === "all") {
           return {
@@ -1299,14 +1423,31 @@ export function ProductEditor({ productId }: ProductEditorProps) {
       .filter(Boolean) as { attributeId: string; attributeValueIds: string[] }[];
 
     if (!selectedAttributes.length) {
-      showToast("Select at least one attribute group.", "error");
+      const skippedAttributes = variantGenerationCatalog.filter(
+        (attribute) => generateAttributeIds.includes(attribute.id) && (generateModeMap[attribute.id] ?? "all") === "skip",
+      );
+      if (skippedAttributes.length > 0) {
+        showToast(
+          `${skippedAttributes.map((attribute) => attribute.name).join(", ")} is set to Skip Attribute. Switch to Use All Values or remove it.`,
+          "error",
+        );
+        return;
+      }
+
+      const hasAddedAttributes = generateAttributeIds.length > 0;
+      showToast(
+        hasAddedAttributes
+          ? "Choose values for each attribute, or switch an attribute to Use All Values."
+          : "Add at least one attribute before generating variants.",
+        "error",
+      );
       return;
     }
 
     const specificMissing = variantGenerationCatalog
       .filter((attribute) => generateAttributeIds.includes(attribute.id))
       .some((attribute) => {
-      const mode = generateModeMap[attribute.id] ?? "skip";
+      const mode = generateModeMap[attribute.id] ?? "all";
       return mode === "specific" && !(generateSelectionMap[attribute.id] ?? []).length;
     });
     if (specificMissing) {
@@ -1471,7 +1612,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
       return;
     }
     setGenerateAttributeIds((current) => [...current, generateAttributePicker]);
-    setGenerateModeMap((current) => ({ ...current, [generateAttributePicker]: "specific" }));
+    setGenerateModeMap((current) => ({ ...current, [generateAttributePicker]: "all" }));
     setGenerateAttributePicker("");
   };
 
@@ -1482,7 +1623,11 @@ export function ProductEditor({ productId }: ProductEditorProps) {
       delete next[attributeId];
       return next;
     });
-    setGenerateModeMap((current) => ({ ...current, [attributeId]: "skip" }));
+    setGenerateModeMap((current) => {
+      const next = { ...current };
+      delete next[attributeId];
+      return next;
+    });
     setGenerateValuePickerMap((current) => {
       const next = { ...current };
       delete next[attributeId];
@@ -1855,21 +2000,8 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                   <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Set prices per country. Use Generate to auto-convert from base price.</p>
                 </div>
                 <button
-                  onClick={async () => {
-                    const base = prompt("Enter base price in USD:");
-                    if (!base) return;
-                    try {
-                      await adminApi.post("/pricing/generate-country-prices", {
-                        productId,
-                        basePrice: parseFloat(base),
-                        baseCurrencyId: product.defaultCurrencyId || undefined,
-                      });
-                      showToast("Country prices generated.");
-                      refetch();
-                    } catch {
-                      showToast("Failed.", "error");
-                    }
-                  }}
+                  type="button"
+                  onClick={openCountryPriceModal}
                   className="flex items-center gap-1.5 rounded-md bg-[#1A1A1A] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#333]"
                 >
                   <RefreshCw size={14} /> Generate All Country Prices
@@ -1944,41 +2076,68 @@ export function ProductEditor({ productId }: ProductEditorProps) {
           <div className="p-6">
             <h3 className="mb-4 text-[14px] font-semibold text-[#1A1A1A]">Inventory</h3>
             <div className="space-y-3">
-              {(variantRows.length ? variantRows : [{ id: "main", title: "Main Stock", inventory: null }]).map((v: { id: string; title: string; inventory?: { id?: string; stock: number; lowStockThreshold?: number | null; status?: string | null } | null }) => (
-                <div key={v.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-[#E6E6E6] p-4">
-                  <span className="min-w-[160px] text-[13.5px] font-medium text-[#1A1A1A]">{v.title}</span>
-                  <div className="ml-auto flex items-center gap-2">
-                    <div className="text-center">
-                      <div className="mb-1 text-[11px] text-[#9A9A9A]">Stock</div>
-                      <input
-                        type="number"
-                        min="0"
-                        defaultValue={v.inventory?.stock || 0}
-                        className="w-20 rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13.5px] outline-none focus:border-[#E31E24]"
-                        onBlur={async (e) => {
-                          if (!v.inventory?.id) return;
-                          await adminApi.put(`/inventory/${v.inventory.id}`, { stock: parseInt(e.target.value) });
-                          showToast("Stock updated.");
-                        }}
-                      />
+              {(variantRows.length
+                ? variantRows.map((variant) => ({
+                    id: variant.id,
+                    title: variant.title,
+                    inventories: variant.inventories ?? [],
+                  }))
+                : [{ id: "main", title: "Main Stock", inventories: (product?.inventories ?? []) as VariantRow["inventories"] }]).map(
+                (item: { id: string; title: string; inventories?: VariantRow["inventories"] }) => {
+                  const baseInventory = getBaseInventory(item.inventories);
+                  const countryInventories = (item.inventories ?? []).filter((inventory) => inventory.countryId);
+                  return (
+                    <div key={item.id} className="rounded-lg border border-[#E6E6E6] p-4">
+                      <div className="mb-3 text-[13.5px] font-medium text-[#1A1A1A]">{item.title}</div>
+                      <div className="space-y-3">
+                        {[baseInventory, ...countryInventories].filter(Boolean).map((inventory) => (
+                          <div key={inventory?.id ?? `${item.id}-${inventory?.countryId ?? "base"}`} className="flex flex-wrap items-center gap-3 rounded-lg border border-[#F1F1F1] bg-[#FCFCFC] p-3">
+                            <div>
+                              <div className="text-[12px] font-medium text-[#1A1A1A]">{inventory?.country ? `${inventory.country.name} (${inventory.country.code})` : "Base Inventory"}</div>
+                              <div className="text-[11px] text-[#8A8A8A]">{inventory?.country ? "Overrides base stock for this country." : "Fallback stock used when no country override exists."}</div>
+                            </div>
+                            <div className="ml-auto flex items-center gap-2">
+                              <div className="text-center">
+                                <div className="mb-1 text-[11px] text-[#9A9A9A]">Stock</div>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  defaultValue={inventory?.stock || 0}
+                                  className="w-20 rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13.5px] outline-none focus:border-[#E31E24]"
+                                  onBlur={async (e) => {
+                                    if (!inventory?.id) return;
+                                    await adminApi.put(`/inventory/${inventory.id}`, { stock: parseInt(e.target.value) });
+                                    showToast("Stock updated.");
+                                  }}
+                                />
+                              </div>
+                              <div className="text-center">
+                                <div className="mb-1 text-[11px] text-[#9A9A9A]">Low Stock</div>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  defaultValue={inventory?.lowStockThreshold || 10}
+                                  className="w-20 rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13.5px] outline-none focus:border-[#E31E24]"
+                                  onBlur={async (e) => {
+                                    if (!inventory?.id) return;
+                                    await adminApi.put(`/inventory/${inventory.id}`, { lowStockThreshold: parseInt(e.target.value) });
+                                  }}
+                                />
+                              </div>
+                              {inventory && <StatusBadge status={inventory.status || "INACTIVE"} />}
+                            </div>
+                          </div>
+                        ))}
+                        {!countryInventories.length && (
+                          <p className="rounded-md border border-dashed border-[#E6E6E6] px-3 py-2 text-[12px] text-[#8A8A8A]">
+                            No country overrides yet. Add them from the inventory admin list or import sheet.
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-center">
-                      <div className="mb-1 text-[11px] text-[#9A9A9A]">Low Stock</div>
-                      <input
-                        type="number"
-                        min="0"
-                        defaultValue={v.inventory?.lowStockThreshold || 10}
-                        className="w-20 rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13.5px] outline-none focus:border-[#E31E24]"
-                        onBlur={async (e) => {
-                          if (!v.inventory?.id) return;
-                          await adminApi.put(`/inventory/${v.inventory.id}`, { lowStockThreshold: parseInt(e.target.value) });
-                        }}
-                      />
-                    </div>
-                    {v.inventory && <StatusBadge status={v.inventory.status || "INACTIVE"} />}
-                  </div>
-                </div>
-              ))}
+                  );
+                },
+              )}
             </div>
           </div>
         )}
@@ -2530,7 +2689,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
               {generateAttributeIds.map((attributeId) => {
                 const attribute = variantGenerationCatalog.find((item) => item.id === attributeId);
                 if (!attribute) return null;
-                const mode = generateModeMap[attribute.id] ?? "specific";
+                const mode = generateModeMap[attribute.id] === "skip" ? "all" : (generateModeMap[attribute.id] ?? "all");
                 const selectedValueIds = generateSelectionMap[attribute.id] ?? [];
                 const values = getAttributeValues(attribute);
                 const selectedValues = values.filter((value) => selectedValueIds.includes(value.id));
@@ -2554,7 +2713,6 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                         options={[
                           { value: "all", label: "Use All Values" },
                           { value: "specific", label: "Select Specific Values" },
-                          { value: "skip", label: "Skip Attribute" },
                         ]}
                       />
                     </div>
@@ -2603,8 +2761,11 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                             </button>
                           </div>
                         )}
-                        {selectedValues.length === 0 && (
-                          <p className="text-[12px] text-[#9A9A9A]">Add one or more values for this attribute.</p>
+                        {selectedValues.length === 0 && values.length === 0 && (
+                          <p className="text-[12px] text-[#E31E24]">No values found for this attribute. Add values in Admin → Attributes first.</p>
+                        )}
+                        {selectedValues.length === 0 && values.length > 0 && (
+                          <p className="text-[12px] text-[#9A9A9A]">Add one or more values for this attribute, or switch to Use All Values.</p>
                         )}
                       </div>
                     )}
@@ -2909,7 +3070,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                 <h3 className="text-[18px] font-semibold text-[#1A1A1A]">Edit Variant</h3>
                 <p className="mt-1 text-[13px] text-[#6B6B6B]">Update package, attribute values, SKU and variant status.</p>
               </div>
-              <button onClick={() => setEditingVariant(null)} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
+              <button onClick={closeEditVariantModal} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
                 <X size={18} />
               </button>
             </div>
@@ -2945,26 +3106,26 @@ export function ProductEditor({ productId }: ProductEditorProps) {
 
             <div className="mt-4 space-y-4">
               {editVariantAttributeIds.map((attributeId) => {
-                const attribute = attributeCatalog.find((item) => item.id === attributeId);
+                const attribute = editVariantAttributeCatalog.get(attributeId);
                 if (!attribute) return null;
                 const values = getAttributeValues(attribute);
-                const selectedValue = values.find((value) => value.id === editVariantSelections[attribute.id]);
-                const availableValues = values.filter((value) => value.id !== editVariantSelections[attribute.id]);
+                const selectedValue = resolveEditSelectedValue(attribute.id, values, editVariantSelections, editingVariant);
+                const availableValues = values.filter((value) => value.id !== selectedValue?.id);
 
                 return (
                   <div key={attribute.id} className="rounded-lg border border-[#E6E6E6] p-4">
                     <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <div className="text-[13px] font-semibold text-[#1A1A1A]">{attribute.name} <span className="ml-1 font-normal text-[#9A9A9A]">{attribute.id}</span></div>
+                        <div className="text-[13px] font-semibold text-[#1A1A1A]">{attribute.name}</div>
                         <p className="mt-1 text-[12px] text-[#6B6B6B]">Choose one exact value for this attribute.</p>
                       </div>
                       <button onClick={() => removeEditVariantAttribute(attribute.id)} className="text-[13px] font-medium text-[#E31E24] hover:text-[#B5151B]">
                         Remove
                       </button>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {selectedValue ? (
-                        <span className="inline-flex items-center gap-2 rounded-full border border-[#E6E6E6] bg-white px-4 py-2 text-[12px] text-[#1A1A1A]">
+                        <span className="inline-flex items-center gap-2 rounded-full border border-[#E6E6E6] bg-white px-4 py-2 text-[12px] font-medium text-[#1A1A1A]">
                           {selectedValue.value}
                           <button
                             type="button"
@@ -2975,18 +3136,25 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                           </button>
                         </span>
                       ) : null}
-                      <select
-                        value=""
-                        onChange={(e) => setEditVariantSelections((current) => ({ ...current, [attribute.id]: e.target.value }))}
-                        className="rounded-full border border-dashed border-[#BDBDBD] bg-white px-4 py-2 text-[12px] text-[#6B6B6B] outline-none hover:border-[#9A9A9A]"
-                      >
-                        <option value="">+ Add value</option>
-                        {(selectedValue ? availableValues : values).map((value) => (
-                          <option key={value.id} value={value.id}>
-                            {value.value}
-                          </option>
-                        ))}
-                      </select>
+                      {!selectedValue && availableValues.length > 0 ? (
+                        <div className="min-w-[180px]">
+                          <AdminSelect
+                            value=""
+                            onChange={(event) => {
+                              const valueId = event.target.value;
+                              if (!valueId) return;
+                              setEditVariantSelections((current) => ({ ...current, [attribute.id]: valueId }));
+                            }}
+                            options={[
+                              { value: "", label: "Select value…" },
+                              ...availableValues.map((value) => ({ value: value.id, label: value.value })),
+                            ]}
+                          />
+                        </div>
+                      ) : null}
+                      {!selectedValue && availableValues.length === 0 ? (
+                        <p className="text-[12px] text-[#E31E24]">No values available for this attribute.</p>
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -2994,7 +3162,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
             </div>
 
             <div className="mt-6 flex items-center justify-end gap-2">
-              <button onClick={() => setEditingVariant(null)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]">Cancel</button>
+              <button onClick={closeEditVariantModal} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]">Cancel</button>
               <button onClick={handleUpdateVariant} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">Save Variant</button>
             </div>
           </div>
@@ -3024,6 +3192,46 @@ export function ProductEditor({ productId }: ProductEditorProps) {
         onConfirm={() => deletingVariant && handleDeleteVariant(deletingVariant.id)}
         onCancel={() => setDeletingVariant(null)}
       />
+
+      <Modal
+        open={countryPriceModalOpen}
+        onClose={closeCountryPriceModal}
+        title="Generate Country Prices"
+        panelClassName="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-[13px] leading-5 text-[#6B6B6B]">
+            Enter the base product price once, and country prices will be generated automatically using the configured exchange rates.
+          </p>
+          <AdminInput
+            label="Base Price"
+            type="number"
+            min="0"
+            step="0.01"
+            value={countryPriceBase}
+            onChange={(event) => setCountryPriceBase(event.target.value)}
+            placeholder="Enter base price"
+          />
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={closeCountryPriceModal}
+              disabled={generatingCountryPrices}
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5] disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleGenerateCountryPrices}
+              disabled={generatingCountryPrices}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
+            >
+              {generatingCountryPrices ? "Generating..." : "Generate Prices"}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {ToastComponent}
     </>

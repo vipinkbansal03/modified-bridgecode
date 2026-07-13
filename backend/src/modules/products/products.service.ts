@@ -511,7 +511,7 @@ export async function listVariants(query: VariantListQuery) {
         },
         package: { select: { id: true, title: true } },
         countries: { where: { enabled: true }, select: { countryId: true } },
-        inventory: true,
+        inventories: { include: { country: true }, orderBy: [{ countryId: "asc" }] },
         prices: {
           where: { status: "ACTIVE" },
           orderBy: [{ sellingPrice: "asc" }],
@@ -560,9 +560,10 @@ export async function getProduct(id: string) {
             include: { attribute: true, attributeValue: true },
           },
           prices: { include: { country: true, currency: true } },
-          inventory: true,
+          inventories: { include: { country: true }, orderBy: [{ countryId: "asc" }] },
         },
       },
+      inventories: { include: { country: true }, orderBy: [{ countryId: "asc" }] },
       prices: { include: { country: true, currency: true, variant: true } },
       translations: { include: { language: true } },
     },
@@ -662,7 +663,7 @@ export async function duplicateProduct(id: string) {
         include: { allowedValues: true },
         orderBy: [{ createdAt: "asc" }],
       },
-      inventories: { where: { variantId: null } },
+      inventories: { where: { variantId: null }, include: { country: true }, orderBy: [{ countryId: "asc" }] },
       countries: true,
       collections: true,
       translations: true,
@@ -672,7 +673,7 @@ export async function duplicateProduct(id: string) {
         include: {
           attributeValues: true,
           countries: true,
-          inventory: true,
+          inventories: { include: { country: true }, orderBy: [{ countryId: "asc" }] },
           prices: { include: { country: true, currency: true } },
         },
       },
@@ -1691,8 +1692,9 @@ export async function cloneVariant(productId: string, variantId: string) {
     })),
   });
 
+  const baseInventory = source.inventories.find((inventory) => !inventory.countryId);
   await prisma.inventory.create({
-    data: { productId, variantId: clone.id, stock: source.inventory?.stock ?? 0, lowStockThreshold: source.inventory?.lowStockThreshold ?? 10 },
+    data: { productId, variantId: clone.id, stock: baseInventory?.stock ?? 0, lowStockThreshold: baseInventory?.lowStockThreshold ?? 10 },
   });
 
   return getVariant(productId, clone.id);
@@ -1705,7 +1707,7 @@ export async function getVariant(productId: string, variantId: string) {
       package: true,
       attributeValues: { include: { attribute: true, attributeValue: true } },
       prices: { include: { country: true, currency: true } },
-      inventory: true,
+      inventories: { include: { country: true }, orderBy: [{ countryId: "asc" }] },
     },
   });
   if (!variant) throw new AppError("Variant not found.", 404);

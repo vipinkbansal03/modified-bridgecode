@@ -167,7 +167,10 @@ export async function publicGetProduct(slug: string, languageCode?: string, coun
           package: true,
           attributeValues: { include: { attribute: true, attributeValue: true } },
           prices: { where: { status: "ACTIVE", countryId: country.id }, include: { country: true, currency: true } },
-          inventory: true,
+          inventories: {
+            where: { OR: [{ countryId: country.id }, { countryId: null }] },
+            orderBy: [{ countryId: "desc" }],
+          },
         },
       },
       prices: {
@@ -178,7 +181,7 @@ export async function publicGetProduct(slug: string, languageCode?: string, coun
   });
 
   if (!product || (product.hasVariants && product.variants.length === 0)) throw new AppError("Product not found.", 404);
-  return toPublicProductDetail(product);
+  return toPublicProductDetail(product, country.id);
 }
 
 export async function previewPublicProductPrices(
@@ -694,12 +697,26 @@ async function resolvePublicCountry(countryCode?: string) {
   return fallbackCountry;
 }
 
-export async function checkInventory(variantIds: string[]) {
+export async function checkInventory(variantIds: string[], countryCode?: string) {
+  const requestedCountry = countryCode ? await resolvePublicCountry(countryCode) : null;
   const records = await prisma.inventory.findMany({
-    where: { variantId: { in: variantIds } },
-    select: { variantId: true, stock: true, reservedStock: true, status: true },
+    where: {
+      variantId: { in: variantIds },
+      OR: requestedCountry ? [{ countryId: requestedCountry.id }, { countryId: null }] : [{ countryId: null }],
+    },
+    select: { variantId: true, countryId: true, stock: true, reservedStock: true, status: true },
+    orderBy: [{ countryId: "desc" }],
   });
-  return records.map((r) => ({
+
+  const bestByVariant = new Map<string, (typeof records)[number]>();
+  for (const record of records) {
+    if (!record.variantId) continue;
+    if (!bestByVariant.has(record.variantId) || (!!record.countryId && !bestByVariant.get(record.variantId)?.countryId)) {
+      bestByVariant.set(record.variantId, record);
+    }
+  }
+
+  return Array.from(bestByVariant.values()).map((r) => ({
     variantId: r.variantId,
     available: Math.max(0, r.stock - r.reservedStock),
     status: r.status,
@@ -825,7 +842,7 @@ type PublicProductDetailRecord = Prisma.ProductGetPayload<{
         package: true;
         attributeValues: { include: { attribute: true; attributeValue: true } };
         prices: { include: { country: true; currency: true } };
-        inventory: true;
+        inventories: true;
       };
     };
     prices: { include: { country: true; currency: true } };
@@ -834,7 +851,7 @@ type PublicProductDetailRecord = Prisma.ProductGetPayload<{
   translations?: ProductTranslationSnapshot[];
 };
 
-function toPublicProductDetail(p: PublicProductDetailRecord) {
+function toPublicProductDetail(p: PublicProductDetailRecord, countryId?: string) {
   const text = getProductText(p);
   const categoryText = getCategoryText(p.category);
 
@@ -930,10 +947,15 @@ function toPublicProductDetail(p: PublicProductDetailRecord) {
         doctorRetailerPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
         distributorPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
       })),
-      inventory: v.inventory
+      inventory: (v.inventories.find((inventory) => inventory.countryId === countryId) ?? v.inventories.find((inventory) => inventory.countryId === null))
         ? {
-            available: Math.max(0, v.inventory.stock - v.inventory.reservedStock),
-            status: v.inventory.status,
+            available: Math.max(
+              0,
+              ((v.inventories.find((inventory) => inventory.countryId === countryId) ?? v.inventories.find((inventory) => inventory.countryId === null))?.stock ?? 0) -
+                ((v.inventories.find((inventory) => inventory.countryId === countryId) ?? v.inventories.find((inventory) => inventory.countryId === null))?.reservedStock ?? 0),
+            ),
+            status:
+              (v.inventories.find((inventory) => inventory.countryId === countryId) ?? v.inventories.find((inventory) => inventory.countryId === null))?.status ?? "OUT_OF_STOCK",
           }
         : null,
     })),

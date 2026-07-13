@@ -227,10 +227,13 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
     const spaceAbove = rect.top - gap - edge;
     const openUp = spaceBelow < 180 && spaceAbove > spaceBelow;
     const maxHeight = Math.max(160, Math.min(320, openUp ? spaceAbove : spaceBelow));
-    const left = Math.max(edge, Math.min(rect.left, viewportWidth - rect.width - edge));
+    const longestLabel = options.reduce((max, option) => Math.max(max, option.label.length), 0);
+    const contentMinWidth = Math.min(320, Math.max(168, longestLabel * 8 + 48));
+    const width = Math.max(rect.width, contentMinWidth);
+    const left = Math.max(edge, Math.min(rect.left, viewportWidth - width - edge));
     const top = openUp ? Math.max(edge, rect.top - gap - maxHeight) : rect.bottom + gap;
-    setMenuStyle({ top, left, width: rect.width, maxHeight });
-  }, []);
+    setMenuStyle({ top, left, width, maxHeight });
+  }, [options]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -272,7 +275,7 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
   };
 
   return (
-    <div ref={rootRef} className="relative space-y-1.5">
+    <div ref={rootRef} className="relative w-full min-w-[10rem] space-y-1.5">
       {label && <label className="block text-[13px] font-medium text-[#1A1A1A]">{label}</label>}
       <input type="hidden" name={name} value={selectedValue} />
       <button
@@ -318,7 +321,7 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => selectOption(option.value)}
                   className={cn(
-                    "w-full cursor-pointer px-3.5 py-2 text-left text-[13.5px] transition hover:bg-[#F7F7F7]",
+                    "w-full cursor-pointer whitespace-nowrap px-3.5 py-2 text-left text-[13.5px] transition hover:bg-[#F7F7F7]",
                     option.value === selectedValue ? "bg-red-50 text-[#E31E24]" : "text-[#1A1A1A]",
                   )}
                 >

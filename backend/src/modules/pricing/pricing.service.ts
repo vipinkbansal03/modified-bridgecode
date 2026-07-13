@@ -1207,10 +1207,25 @@ export async function generateCountryPrices(productId: string, basePrice: number
   }));
 
   for (const price of prices) {
-    await prisma.productPrice.upsert({
-      where: { productId_variantId_countryId: { productId: price.productId, variantId: null as unknown as string, countryId: price.countryId } },
-      update: price,
-      create: price,
+    const existing = await prisma.productPrice.findFirst({
+      where: {
+        productId: price.productId,
+        variantId: null,
+        countryId: price.countryId,
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await prisma.productPrice.update({
+        where: { id: existing.id },
+        data: price,
+      });
+      continue;
+    }
+
+    await prisma.productPrice.create({
+      data: price,
     });
   }
 
