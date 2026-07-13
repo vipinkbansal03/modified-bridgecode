@@ -5,6 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "prebuild": "prisma generate --schema src/prisma/schema.prisma",
     "build": "tsc",
     "start": "node dist/server.js",
     "postinstall": "prisma generate --schema src/prisma/schema.prisma",
