@@ -1,24 +1,30 @@
 "use client";
 
-import type { ApiVariant, ApiProductPrice } from "@/types/api.types";
-import { StockBadge } from "./StockBadge";
+import type { ApiAttribute, ApiProductPrice, ApiVariant } from "@/types/api.types";
 import { QuantityInput } from "./QuantityInput";
+import { StockBadge } from "./StockBadge";
 
 interface Props {
   variants: ApiVariant[];
+  attributes?: ApiAttribute[];
   quantityMap: Record<string, number>;
   priceMap: Record<string, ApiProductPrice | null>;
   onQtyChange: (variantId: string, qty: number) => void;
 }
 
-export function BulkOrderTable({ variants, quantityMap, priceMap, onQtyChange }: Props) {
-  const attrKeys = variants.length ? Object.keys(variants[0].attributeCombination) : [];
+export function BulkOrderTable({ variants, attributes, quantityMap, priceMap, onQtyChange }: Props) {
+  const fallbackKeys = variants.length ? Object.keys(variants[0].attributeCombination) : [];
+  const orderedAttributeKeys = attributes?.length
+    ? attributes
+        .filter((attribute) => variants.some((variant) => variant.attributeCombination[attribute.name] != null))
+        .map((attribute) => attribute.name)
+    : [];
+  const attrKeys = orderedAttributeKeys.length ? orderedAttributeKeys : fallbackKeys;
 
   return (
     <>
-      {/* Desktop table */}
-      <div className="hidden overflow-x-auto sm:block">
-        <table className="w-full text-[13px]">
+      <div className="custom-scrollbar-x hidden overflow-x-auto pb-2 sm:block">
+        <table className="w-full min-w-[900px] text-[13px]">
           <thead>
             <tr className="border-b border-[#E6E6E6] text-left text-[11px] font-semibold uppercase tracking-wider text-[#9A9A9A]">
               {attrKeys.map((k) => (
@@ -33,23 +39,24 @@ export function BulkOrderTable({ variants, quantityMap, priceMap, onQtyChange }:
             </tr>
           </thead>
           <tbody>
-            {variants.map((v) => {
-              const price = priceMap[v.id];
-              const outOfStock = v.inventory?.status === "OUT_OF_STOCK";
-              const qty = quantityMap[v.id] ?? 0;
+            {variants.map((variant) => {
+              const price = priceMap[variant.id];
+              const outOfStock = variant.inventory?.status === "OUT_OF_STOCK";
+              const qty = quantityMap[variant.id] ?? 0;
+
               return (
                 <tr
-                  key={v.id}
-                  className={`border-b border-[#F5F5F5] ${outOfStock ? "opacity-55" : ""} ${
-                    qty > 0 ? "bg-[#FFFBFB]" : ""
+                  key={variant.id}
+                  className={`border-b border-[#F5F5F5] transition-colors ${outOfStock ? "opacity-55" : ""} ${
+                    qty > 0 ? "bg-[#FFFBFB]" : "hover:bg-[#FAFAFA]"
                   }`}
                 >
-                  {attrKeys.map((k) => (
-                    <td key={k} className="py-3 pr-4 font-medium text-ink">
-                      {v.attributeCombination[k] ?? "—"}
+                  {attrKeys.map((key) => (
+                    <td key={key} className="py-3 pr-4 font-medium text-ink">
+                      {variant.attributeCombination[key] ?? "—"}
                     </td>
                   ))}
-                  <td className="py-3 pr-4 font-mono text-[11.5px] text-[#9A9A9A]">{v.sku ?? "—"}</td>
+                  <td className="py-3 pr-4 font-mono text-[11.5px] text-[#9A9A9A]">{variant.sku ?? "—"}</td>
                   <td className="py-3 pr-4 text-right font-semibold text-ink">
                     {price ? (
                       <>
@@ -66,14 +73,14 @@ export function BulkOrderTable({ variants, quantityMap, priceMap, onQtyChange }:
                     )}
                   </td>
                   <td className="py-3 pr-4">
-                    <StockBadge status={v.inventory?.status} />
+                    <StockBadge status={variant.inventory?.status} />
                   </td>
                   <td className="py-3">
                     <QuantityInput
                       value={qty}
-                      onChange={(val) => onQtyChange(v.id, val)}
+                      onChange={(val) => onQtyChange(variant.id, val)}
                       min={0}
-                      max={v.inventory?.available}
+                      max={variant.inventory?.available}
                       disabled={outOfStock}
                     />
                   </td>
@@ -84,32 +91,37 @@ export function BulkOrderTable({ variants, quantityMap, priceMap, onQtyChange }:
         </table>
       </div>
 
-      {/* Mobile cards */}
       <div className="space-y-3 sm:hidden">
-        {variants.map((v) => {
-          const price = priceMap[v.id];
-          const outOfStock = v.inventory?.status === "OUT_OF_STOCK";
-          const qty = quantityMap[v.id] ?? 0;
+        {variants.map((variant) => {
+          const price = priceMap[variant.id];
+          const outOfStock = variant.inventory?.status === "OUT_OF_STOCK";
+          const qty = quantityMap[variant.id] ?? 0;
+
           return (
             <div
-              key={v.id}
-              className={`rounded-lg border p-3.5 ${
+              key={variant.id}
+              className={`rounded-xl border p-3.5 ${
                 qty > 0 ? "border-[#E31E24]/20 bg-[#FFFBFB]" : "border-[#E6E6E6] bg-white"
               } ${outOfStock ? "opacity-55" : ""}`}
             >
-              <div className="mb-2 flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[13.5px] font-semibold text-ink">{v.title}</p>
-                  {Object.entries(v.attributeCombination).map(([k, val]) => (
-                    <p key={k} className="text-[11.5px] text-[#9A9A9A]">
-                      {k}: {val}
-                    </p>
-                  ))}
-                  {v.sku && <p className="mt-0.5 font-mono text-[11px] text-[#B0B0B0]">{v.sku}</p>}
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[13.5px] font-semibold leading-snug text-ink">{variant.title}</p>
+                  <div className="mt-1 space-y-0.5">
+                    {attrKeys.map((key) => (
+                      <p key={key} className="text-[11.5px] text-[#9A9A9A]">
+                        {key}: {variant.attributeCombination[key] ?? "—"}
+                      </p>
+                    ))}
+                  </div>
+                  {variant.sku && <p className="mt-1 font-mono text-[11px] text-[#B0B0B0]">{variant.sku}</p>}
                 </div>
-                <StockBadge status={v.inventory?.status} />
+                <div className="shrink-0">
+                  <StockBadge status={variant.inventory?.status} />
+                </div>
               </div>
-              <div className="flex items-center justify-between">
+
+              <div className="flex flex-col gap-3 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
                 <span className="text-[14px] font-semibold text-ink">
                   {price ? (
                     <>
@@ -122,9 +134,9 @@ export function BulkOrderTable({ variants, quantityMap, priceMap, onQtyChange }:
                 </span>
                 <QuantityInput
                   value={qty}
-                  onChange={(val) => onQtyChange(v.id, val)}
+                  onChange={(val) => onQtyChange(variant.id, val)}
                   min={0}
-                  max={v.inventory?.available}
+                  max={variant.inventory?.available}
                   disabled={outOfStock}
                 />
               </div>

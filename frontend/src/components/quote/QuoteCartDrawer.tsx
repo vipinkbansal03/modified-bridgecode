@@ -5,6 +5,7 @@ import { X, Trash2, CheckCircle, FileText } from "lucide-react";
 import { useQuoteCart } from "@/contexts/QuoteCartContext";
 import { useQuoteSubmit } from "@/hooks/api";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
+import { useToast } from "@/components/ui/ToastProvider";
 
 interface Props {
   open: boolean;
@@ -15,15 +16,28 @@ function fmt(sym: string, val: number) {
   return `${sym}${val.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
+function getQuoteErrorMessage(error: unknown) {
+  if (typeof error === "object" && error && "response" in error) {
+    const apiMessage = (error as { response?: { data?: { message?: string } } }).response?.data?.message;
+    if (apiMessage) return apiMessage;
+  }
+
+  return error instanceof Error && error.message
+    ? error.message
+    : "Quote request could not be submitted. Please try again.";
+}
+
 export function QuoteCartDrawer({ open, onClose }: Props) {
   const { items, totals, removeItem, clearCart } = useQuoteCart();
   const { t } = useStaticTranslations();
+  const { showToast } = useToast();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [company, setCompany] = useState("");
   const [message, setMessage] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   const { mutate: submitQuote, isPending } = useQuoteSubmit();
 
@@ -46,6 +60,7 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name || !email || !items.length) return;
+    setSubmitError("");
 
     submitQuote(
       {
@@ -64,9 +79,21 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
         message: message || undefined,
       },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
           setSubmitted(true);
           clearCart();
+          showToast({
+            type: "success",
+            title: "Quote request submitted",
+            message: result.quoteNumber
+              ? `Reference ${result.quoteNumber} has been sent to the admin quote desk.`
+              : "Your RFQ has been sent to the admin quote desk.",
+          });
+        },
+        onError: (error) => {
+          const errorMessage = getQuoteErrorMessage(error);
+          setSubmitError(errorMessage);
+          showToast({ type: "error", title: "Quote request failed", message: errorMessage });
         },
       }
     );
@@ -119,7 +146,7 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
         ) : (
           <>
             {/* Cart items */}
-            <div className="flex-1 overflow-y-auto px-5 py-4">
+            <div className="custom-scrollbar flex-1 overflow-y-auto px-5 py-4">
               {items.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <p className="text-[14px] text-[#9A9A9A]">{t("ui.quote.emptyTitle")}</p>
@@ -184,7 +211,7 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                   {/* RFQ form */}
                   <form onSubmit={handleSubmit} className="mt-5 space-y-3">
                     <p className="text-[13px] font-medium text-ink">{t("ui.quote.submitRequestTitle")}</p>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <div>
                         <label className="mb-1 block text-[11.5px] font-medium text-[#6B6B6B]">{t("ui.quote.fullName")}</label>
                         <input
@@ -207,7 +234,7 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                         />
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <div>
                         <label className="mb-1 block text-[11.5px] font-medium text-[#6B6B6B]">{t("ui.quote.phone")}</label>
                         <input
@@ -237,6 +264,14 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                         className="w-full rounded border border-[#E6E6E6] px-3 py-2 text-[13px] focus:border-[#E31E24] focus:outline-none resize-none"
                       />
                     </div>
+                    {submitError && (
+                      <div
+                        role="alert"
+                        className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] leading-relaxed text-[#E31E24]"
+                      >
+                        {submitError}
+                      </div>
+                    )}
                     <button
                       type="submit"
                       disabled={isPending || !name || !email}

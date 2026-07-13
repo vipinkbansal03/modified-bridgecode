@@ -24,15 +24,15 @@ export function BulkOrderFlat({ variants, productTitle, quantityMap, priceMap, o
         return (
           <div
             key={v.id}
-            className={`flex items-center justify-between gap-4 rounded-lg border p-4 transition-colors ${
+            className={`flex flex-col gap-3 rounded-xl border p-4 transition-colors sm:flex-row sm:items-center sm:justify-between sm:gap-4 ${
               qty > 0 ? "border-[#E31E24]/20 bg-[#FFFBFB]" : "border-[#E6E6E6] bg-white"
             } ${outOfStock ? "opacity-55" : ""}`}
           >
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-[14px] font-medium text-ink truncate">{label}</p>
               {v.sku && <p className="mt-0.5 font-mono text-[11px] text-[#B0B0B0]">{v.sku}</p>}
             </div>
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex w-full flex-wrap items-center justify-between gap-3 sm:w-auto sm:shrink-0 sm:justify-end">
               <StockBadge status={v.inventory?.status} />
               <div className="text-right">
                 {price ? (

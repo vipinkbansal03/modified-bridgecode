@@ -34,3 +34,9 @@ coverage/
 .turbo/
 .cache/
 
+# Local helper script
+project-tree.js
+
+# Generated tree files
+structure.txt
+structure-clean.txt
