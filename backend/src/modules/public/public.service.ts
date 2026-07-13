@@ -348,6 +348,27 @@ export interface QuoteSubmitInput {
   message?: string;
 }
 
+const QUOTE_VOLUME_TIERS = [
+  { minValue: 50000, percentage: 15 },
+  { minValue: 25000, percentage: 10 },
+] as const;
+
+function quoteVolumeDiscountPercent(subtotal: number) {
+  for (const tier of QUOTE_VOLUME_TIERS) {
+    if (subtotal >= tier.minValue) return tier.percentage;
+  }
+  return 0;
+}
+
+function roundMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function getSubmittedUnitPrice(value: unknown) {
+  const price = Number(value);
+  return Number.isFinite(price) && price > 0 ? price : null;
+}
+
 export async function submitPublicQuote(input: QuoteSubmitInput) {
   const country = input.countryCode
     ? await prisma.country.findFirst({ where: { code: input.countryCode }, include: { currency: true } })
@@ -370,17 +391,21 @@ export async function submitPublicQuote(input: QuoteSubmitInput) {
           })
         : null;
 
-      const unitPrice = resolved?.finalPrice ?? Number(item.unitPrice || 0);
+      const submittedUnitPrice = getSubmittedUnitPrice(item.unitPrice);
+      const unitPrice = submittedUnitPrice ?? resolved?.finalPrice ?? 0;
       return {
         ...item,
         quantity,
         unitPrice,
-        total: unitPrice * quantity,
+        total: roundMoney(unitPrice * quantity),
       };
     }),
   );
 
-  const subtotal = resolvedItems.reduce((sum, item) => sum + item.total, 0);
+  const subtotal = roundMoney(resolvedItems.reduce((sum, item) => sum + item.total, 0));
+  const discountPercent = quoteVolumeDiscountPercent(subtotal);
+  const discount = roundMoney((subtotal * discountPercent) / 100);
+  const total = roundMoney(Math.max(0, subtotal - discount));
   const quoteNumber = `QUO-${Date.now()}`;
 
   const quote = await prisma.quote.create({
@@ -393,8 +418,8 @@ export async function submitPublicQuote(input: QuoteSubmitInput) {
       countryId: defaultCountry.id,
       currencyId: defaultCountry.currencyId,
       subtotal,
-      discount: 0,
-      total: subtotal,
+      discount,
+      total,
       notes: input.message,
       items: {
         create: resolvedItems.map((i) => ({
@@ -424,6 +449,9 @@ export async function submitPublicQuote(input: QuoteSubmitInput) {
       unitPrice: i.unitPrice,
     })),
     subtotal,
+    discount,
+    discountPercent,
+    total,
     notes: input.message,
   });
 

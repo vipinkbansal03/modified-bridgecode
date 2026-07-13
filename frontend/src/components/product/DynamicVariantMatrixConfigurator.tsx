@@ -331,6 +331,14 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
           <p className="max-w-[760px] text-[14.5px] leading-relaxed text-steel">
             Use the matrix below to enter quantities across multiple variant combinations, then add every selected line to cart or quote in one action.
           </p>
+          <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
+            <span className="rounded-pill border border-brand/20 bg-red-50 px-3 py-1 font-semibold text-brand">
+              X axis / columns: {xAxisAttribute.name}
+            </span>
+            <span className="rounded-pill border border-line bg-white px-3 py-1 font-semibold text-ink">
+              Y axis / rows: {yAxisAttribute.name}
+            </span>
+          </div>
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -384,13 +392,13 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
                 <table className="min-w-[720px] w-full border-collapse">
                   <thead>
                     <tr className="bg-offwhite">
-                      <th className="sticky left-0 z-20 border-b border-r border-line bg-offwhite px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-steel-2">
+                      <th className="sticky left-0 z-20 border-b border-r border-line bg-[#F8F8F8] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-ink">
                         {yAxisAttribute.name} / {xAxisAttribute.name}
                       </th>
                       {xAxisAttribute.values.map((columnValue) => (
                         <th
                           key={columnValue.id}
-                          className="sticky top-0 z-10 min-w-[160px] border-b border-line px-4 py-3 text-center text-[12px] font-semibold text-ink"
+                          className="sticky top-0 z-10 min-w-[160px] border-b border-line bg-red-50 px-4 py-3 text-center text-[12px] font-semibold text-brand"
                         >
                           {columnValue.value}
                         </th>
@@ -400,7 +408,7 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
                   <tbody>
                     {yAxisAttribute.values.map((rowValue) => (
                       <tr key={rowValue.id} className="border-b border-line last:border-b-0">
-                        <th className="sticky left-0 z-10 border-r border-line bg-white px-4 py-4 text-left text-[13px] font-semibold text-ink">
+                        <th className="sticky left-0 z-10 border-r border-line bg-[#F8F8F8] px-4 py-4 text-left text-[13px] font-semibold text-ink">
                           {rowValue.value}
                         </th>
                         {xAxisAttribute.values.map((columnValue) => {

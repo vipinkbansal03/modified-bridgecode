@@ -7,6 +7,7 @@ import { formatCurrency } from "@/utils/formatCurrency";
 import { ORDERS_EMAIL } from "@/utils/constants";
 import { cn } from "@/utils/cn";
 import { useQuoteSubmit } from "@/hooks/api/useQuoteSubmit";
+import { useToast } from "@/components/ui/ToastProvider";
 import type { ProductDetail } from "@/types/product.types";
 
 type FullConfigProduct = ProductDetail &
@@ -14,7 +15,7 @@ type FullConfigProduct = ProductDetail &
 
 interface BulkOrderPanelProps {
   product: FullConfigProduct;
-  /** Backend product ID (cuid). When provided, quotes go via API; otherwise falls back to mailto. */
+  /** Backend product ID (cuid). When provided, quotes go via API. */
   productId?: string;
 }
 
@@ -42,8 +43,10 @@ export function BulkOrderPanel({ product, productId }: BulkOrderPanelProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [quoteSuccess, setQuoteSuccess] = useState(false);
+  const [quoteError, setQuoteError] = useState("");
 
   const { mutate: submitQuote, isPending: quoteSubmitting } = useQuoteSubmit();
+  const { showToast } = useToast();
 
   const packaging = product.packagingOptions[packagingIndex];
 
@@ -65,13 +68,13 @@ export function BulkOrderPanel({ product, productId }: BulkOrderPanelProps) {
 
   function handleQuoteSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setQuoteError("");
     if (!name.trim() || !email.trim()) return;
 
     if (!productId) {
-      // Fallback: open mailto with filled config
-      window.location.href = `mailto:${ORDERS_EMAIL}?subject=${encodeURIComponent(`Quote Request - ${product.title}`)}&body=${encodeURIComponent(
-        `Name: ${name}\nEmail: ${email}\n\nProduct: ${product.title}\nPrescription: ${prescription}\nSlot Size: ${slot}\nPackaging: ${packaging.label}\nQuantity: ${qty}\nEstimated Total: ${formatCurrency(total)}`
-      )}`;
+      const errorMessage = "This product is not connected to the backend RFQ catalogue yet. Please sync the product before submitting a quote.";
+      setQuoteError(errorMessage);
+      showToast({ type: "error", title: "Quote request unavailable", message: errorMessage });
       return;
     }
 
@@ -90,11 +93,23 @@ export function BulkOrderPanel({ product, productId }: BulkOrderPanelProps) {
         message: `Prescription: ${prescription} | Slot: ${slot} | Packaging: ${packaging.label}`,
       },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
           setQuoteSuccess(true);
           setQuoteOpen(false);
           setName("");
           setEmail("");
+          showToast({
+            type: "success",
+            title: "Quote request submitted",
+            message: result.quoteNumber
+              ? `Reference ${result.quoteNumber} has been sent to the admin quote desk.`
+              : "Your RFQ has been sent to the admin quote desk.",
+          });
+        },
+        onError: () => {
+          const errorMessage = "Quote request could not be submitted. Please try again.";
+          setQuoteError(errorMessage);
+          showToast({ type: "error", title: "Quote request failed", message: errorMessage });
         },
       }
     );
@@ -286,6 +301,7 @@ export function BulkOrderPanel({ product, productId }: BulkOrderPanelProps) {
                   onChange={(e) => setEmail(e.target.value)}
                   className="mb-3 w-full rounded-md border border-line px-3 py-2.5 text-[13.5px] text-ink outline-none focus:border-steel-2"
                 />
+                {quoteError && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs leading-relaxed text-brand">{quoteError}</p>}
                 <button
                   type="submit"
                   disabled={quoteSubmitting}
@@ -308,8 +324,8 @@ export function BulkOrderPanel({ product, productId }: BulkOrderPanelProps) {
               </div>
             )}
             <p className="mt-3.5 text-xs leading-relaxed text-steel-2">
-              Both options email our orders team with this exact configuration. Final confirmation and dealer
-              pricing follow by reply.
+              Quote requests are saved for admin review. Place Order still emails our orders team with this exact
+              configuration for manual confirmation.
             </p>
           </div>
         </div>

@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, Layers3, Minus, Plus, ShoppingBag, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AlertCircle, CheckCircle2, ChevronDown, Layers3, Minus, Plus, ShoppingBag, Sparkles } from "lucide-react";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
 import { useQuoteCart, type QuoteCartItem } from "@/contexts/QuoteCartContext";
 import { useCart } from "@/contexts/CartContext";
@@ -58,7 +58,39 @@ function getAttributeDisplayType(attribute: ProductOptionAttribute): AttributeDi
 function getAttributeHelperText(displayType: AttributeDisplayType, selectedValue?: string) {
   if (selectedValue) return `Selected: ${selectedValue}`;
   if (displayType === "DROPDOWN") return "Select one option from the list below.";
+  if (displayType === "X_GRID") return "Shown as the horizontal option group.";
+  if (displayType === "Y_GRID") return "Shown as the vertical option group.";
   return "Choose one option to continue.";
+}
+
+function getAttributeDisplayMeta(displayType: AttributeDisplayType) {
+  if (displayType === "X_GRID") {
+    return {
+      label: "X axis",
+      cardClass: "border-brand/25 bg-[#FFFBFB]",
+      badgeClass: "border-brand/20 bg-red-50 text-brand",
+      optionGridClass: "grid gap-2 sm:grid-cols-2 lg:grid-cols-3",
+      activeClass: "border-brand bg-white text-brand shadow-[0_0_0_3px_rgba(227,30,36,0.08)]",
+    };
+  }
+
+  if (displayType === "Y_GRID") {
+    return {
+      label: "Y axis",
+      cardClass: "border-[#D8D8D8] bg-[#F8F8F8]",
+      badgeClass: "border-[#D8D8D8] bg-white text-ink",
+      optionGridClass: "grid gap-2",
+      activeClass: "border-ink bg-white text-ink shadow-[0_0_0_3px_rgba(26,26,26,0.08)]",
+    };
+  }
+
+  return {
+    label: "Dropdown",
+    cardClass: "border-line bg-offwhite",
+    badgeClass: "border-line bg-white text-steel",
+    optionGridClass: "grid gap-2",
+    activeClass: "border-brand bg-white text-brand",
+  };
 }
 
 export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
@@ -83,6 +115,11 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   const [error, setError] = useState<string | null>(null);
   const [added, setAdded] = useState(false);
   const [previewPriceMap, setPreviewPriceMap] = useState<Record<string, number>>({});
+  const [summaryHighlighted, setSummaryHighlighted] = useState(false);
+  const [quoteSummaryHighlighted, setQuoteSummaryHighlighted] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const selectedConfigurationsRef = useRef<HTMLDivElement | null>(null);
+  const quoteSummaryRef = useRef<HTMLDivElement | null>(null);
 
   if (!variants.length) return null;
 
@@ -104,6 +141,18 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   const discount = applyDiscount(subtotal);
   const nextTier = nextDiscountTier(subtotal);
   const totalUnits = drafts.reduce((sum, item) => sum + item.quantity, 0);
+
+  useEffect(() => {
+    function handleOutsideClick(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest("[data-variant-dropdown]")) {
+        setOpenDropdown(null);
+      }
+    }
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
 
   useEffect(() => {
     if (!currentVariant || quantity < 1) {
@@ -155,8 +204,18 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
 
   function handleOptionSelect(attributeName: string, value: string) {
     setSelectedOptions((current) => ({ ...current, [attributeName]: value }));
+    setOpenDropdown(null);
     setError(null);
     setAdded(false);
+  }
+
+  function focusPanel(ref: React.RefObject<HTMLDivElement | null>, offset = 112) {
+    const element = ref.current;
+    if (!element) return;
+
+    const top = element.getBoundingClientRect().top + window.scrollY - offset;
+    window.scrollTo({ top, behavior: "smooth" });
+    element.focus({ preventScroll: true });
   }
 
   function handleAddConfiguration() {
@@ -186,6 +245,11 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     setQuantity(1);
     setError(null);
     setAdded(false);
+    setSummaryHighlighted(true);
+
+    window.setTimeout(() => focusPanel(selectedConfigurationsRef), 50);
+
+    window.setTimeout(() => setSummaryHighlighted(false), 1400);
   }
 
   function handleAddToCart() {
@@ -218,10 +282,15 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     openCart();
   }
 
-  function updateDraftQuantity(variantId: string, nextQuantity: number) {
+  function updateDraftQuantity(variantId: string, nextQuantity: number, shouldFocusQuoteSummary = false) {
     setDrafts((current) =>
       nextQuantity <= 0 ? current.filter((item) => item.variantId !== variantId) : current.map((item) => (item.variantId === variantId ? { ...item, quantity: nextQuantity } : item))
     );
+
+    if (shouldFocusQuoteSummary) {
+      setQuoteSummaryHighlighted(true);
+      window.setTimeout(() => setQuoteSummaryHighlighted(false), 1400);
+    }
   }
 
   function handleAddToQuote() {
@@ -250,9 +319,9 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   }
 
   return (
-    <section className="pt-16">
-      <div className="mb-8 rounded-lg border border-line bg-white p-6 sm:p-7">
-        <div className="mb-7 flex flex-col gap-4 border-b border-line pb-6 lg:flex-row lg:items-end lg:justify-between">
+    <section className="pt-8 sm:pt-12 lg:pt-16">
+      <div className="mb-8 rounded-lg border border-line bg-white p-3 sm:p-5 lg:p-7">
+        <div className="mb-5 flex flex-col gap-4 border-b border-line pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-[720px]">
             <span className="mb-2 inline-flex items-center gap-2 rounded-pill border border-line bg-offwhite px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand">
               <Sparkles size={12} />
@@ -274,17 +343,32 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
           </Link>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_380px]">
-          <div className="space-y-5">
+        <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="grid gap-4 md:grid-cols-2 lg:gap-5">
             {attributes.map((attribute) => {
               const displayType = getAttributeDisplayType(attribute);
               const selectedValue = selectedOptions[attribute.name];
+              const displayMeta = getAttributeDisplayMeta(displayType);
 
               return (
-                <div key={attribute.id} className="rounded-lg border border-line bg-offwhite p-4 sm:p-5">
+                <div
+                  key={attribute.id}
+                  className={[
+                    "rounded-lg border p-3 transition-colors sm:p-4 lg:p-5",
+                    displayMeta.cardClass,
+                    displayType === "DROPDOWN" ? "" : "md:col-span-2",
+                  ].join(" ")}
+                >
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">{attribute.name}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">{attribute.name}</p>
+                        {displayType !== "DROPDOWN" && (
+                          <span className={["rounded-pill border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]", displayMeta.badgeClass].join(" ")}>
+                            {displayMeta.label}
+                          </span>
+                        )}
+                      </div>
                       <p className="mt-1 text-[13px] text-steel">{getAttributeHelperText(displayType, selectedValue)}</p>
                     </div>
                     <div className="text-right">
@@ -295,25 +379,60 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                   </div>
 
                   {displayType === "DROPDOWN" ? (
-                    <select
-                      value={selectedValue ?? ""}
-                      onChange={(event) => handleOptionSelect(attribute.name, event.target.value)}
-                      className="w-full rounded-lg border border-line bg-white px-4 py-3 text-[13px] text-ink outline-none transition focus:border-brand"
-                    >
-                      <option value="" disabled>
-                        Choose one option
-                      </option>
-                      {attribute.values.map((value) => {
-                        const available = isValueAvailable(attribute.name, value.value);
-                        return (
-                          <option key={value.id} value={value.value} disabled={!available}>
-                            {value.value}{!available ? " (Unavailable)" : ""}
-                          </option>
-                        );
-                      })}
-                    </select>
+                    <div className="relative" data-variant-dropdown>
+                      <button
+                        type="button"
+                        onClick={() => setOpenDropdown((current) => (current === attribute.id ? null : attribute.id))}
+                        className={[
+                          "flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg border bg-white py-3 pl-4 pr-4 text-left text-[13px] text-ink outline-none transition",
+                          openDropdown === attribute.id ? "border-brand shadow-[0_0_0_3px_rgba(227,30,36,0.08)]" : "border-line hover:border-steel-2",
+                        ].join(" ")}
+                      >
+                        <span className="truncate">{selectedValue || "Choose one option"}</span>
+                        <ChevronDown
+                          size={16}
+                          className={[
+                            "shrink-0 text-steel-2 transition-transform duration-200",
+                            openDropdown === attribute.id ? "rotate-180" : "",
+                          ].join(" ")}
+                        />
+                      </button>
+
+                      {openDropdown === attribute.id && (
+                        <div className="absolute left-0 right-0 z-30 mt-2 overflow-hidden rounded-lg border border-line bg-white shadow-[0_16px_40px_rgba(26,26,26,0.12)]">
+                          <button
+                            type="button"
+                            disabled
+                            className="flex w-full cursor-not-allowed items-center px-4 py-2.5 text-left text-[12.5px] text-steel-2"
+                          >
+                            Choose one option
+                          </button>
+                        {attribute.values.map((value) => {
+                          const available = isValueAvailable(attribute.name, value.value);
+                          const active = selectedValue === value.value;
+                          return (
+                              <button
+                                key={value.id}
+                                type="button"
+                                disabled={!available}
+                                onClick={() => handleOptionSelect(attribute.name, value.value)}
+                                className={[
+                                  "flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-[13px] transition-colors",
+                                  active ? "bg-brand text-white" : "text-ink",
+                                  !active && available ? "cursor-pointer hover:bg-red-50 hover:text-brand" : "",
+                                  !available ? "cursor-not-allowed bg-offwhite text-steel-2 opacity-70" : "",
+                                ].join(" ")}
+                              >
+                                <span className="truncate">{value.value}</span>
+                                {!available && <span className="text-[11px]">Unavailable</span>}
+                              </button>
+                          );
+                        })}
+                        </div>
+                      )}
+                    </div>
                   ) : (
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className={displayMeta.optionGridClass}>
                       {attribute.values.map((value) => {
                         const active = selectedValue === value.value;
                         const available = isValueAvailable(attribute.name, value.value);
@@ -325,7 +444,7 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                             onClick={() => handleOptionSelect(attribute.name, value.value)}
                             className={[
                               "rounded-lg border px-4 py-3 text-left text-[13px] font-medium transition-colors",
-                              active ? "border-brand bg-white text-brand" : "",
+                              active ? displayMeta.activeClass : "",
                               !active && available ? "border-line bg-white text-ink hover:border-steel-2" : "",
                               !available ? "cursor-not-allowed border-line bg-[#F6F3EF] text-steel-2 opacity-70" : "",
                             ].join(" ")}
@@ -340,18 +459,18 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
               );
             })}
 
-            <div className="rounded-lg border border-line bg-white p-4 sm:p-5">
+            <div className="rounded-lg border border-line bg-white p-3 md:col-span-2 sm:p-5">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">Quantity</p>
                   <p className="mt-1 text-[13px] text-steel">Set the unit count for this configuration before you add it to the list.</p>
                 </div>
-                <div className="flex items-center rounded-pill border border-line bg-offwhite p-1.5">
+                <div className="inline-flex w-fit max-w-full items-center rounded-pill border border-line bg-offwhite p-1.5 sm:self-auto">
                   <button
                     type="button"
                     aria-label="Decrease quantity"
                     onClick={() => setQuantity((current) => Math.max(1, current - 1))}
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-line bg-white text-ink"
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink transition hover:border-steel-2"
                   >
                     <Minus size={14} />
                   </button>
@@ -360,13 +479,13 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                     min={1}
                     value={quantity}
                     onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))}
-                    className="w-20 appearance-none border-0 bg-transparent text-center text-[15px] font-semibold text-ink outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="w-12 appearance-none border-0 bg-transparent text-center text-[15px] font-semibold text-ink outline-none sm:w-16 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                   <button
                     type="button"
                     aria-label="Increase quantity"
                     onClick={() => setQuantity((current) => current + 1)}
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-line bg-white text-ink"
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink transition hover:border-steel-2"
                   >
                     <Plus size={14} />
                   </button>
@@ -376,7 +495,7 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
               <div className="flex flex-col gap-3 rounded-lg border border-line bg-offwhite p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-steel-2">Current Variant</p>
-                  <p className="mt-1 text-[18px] font-semibold text-ink">{currentVariant?.title ?? "No valid combination selected"}</p>
+                  <p className="mt-1 text-[16px] font-semibold leading-snug text-ink sm:text-[18px]">{currentVariant?.title ?? "No valid combination selected"}</p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {currentVariant ? (
                       Object.entries(currentVariant.attributeCombination).map(([key, value]) => (
@@ -397,25 +516,25 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3">
                 <button
                   type="button"
                   onClick={handleAddConfiguration}
-                  className="inline-flex flex-1 items-center justify-center rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90"
+                  className="inline-flex items-center justify-center rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90"
                 >
                   Add Configuration
                 </button>
                 <button
                   type="button"
                   onClick={handleAddToCart}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand"
+                  className="inline-flex items-center justify-center gap-2 rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand"
                 >
                   <ShoppingBag size={15} />
                   Add to Cart
                 </button>
                 <Link
                   href={`/quick-order?product=${apiProduct.slug}`}
-                  className="inline-flex items-center justify-center rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand"
+                  className="inline-flex items-center justify-center rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand sm:col-span-2 lg:col-span-1 xl:col-span-2 2xl:col-span-1"
                 >
                   Use Spreadsheet View
                 </Link>
@@ -437,8 +556,15 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
             </div>
           </div>
 
-          <div className="space-y-5">
-            <div className="rounded-lg border border-line bg-offwhite p-5">
+          <aside className="space-y-4 sm:space-y-5 xl:sticky xl:top-28 xl:self-start">
+            <div
+              ref={selectedConfigurationsRef}
+              tabIndex={-1}
+              className={[
+                "rounded-lg border bg-offwhite p-4 outline-none transition-all duration-300 sm:p-5",
+                summaryHighlighted ? "border-brand shadow-[0_0_0_4px_rgba(227,30,36,0.10)]" : "border-line",
+              ].join(" ")}
+            >
               <div className="mb-4 flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-white text-brand">
                   <Layers3 size={18} />
@@ -476,21 +602,21 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                       </div>
 
                       <div className="mt-4 flex items-center justify-between gap-3">
-                        <div className="flex items-center rounded-pill border border-line bg-offwhite p-1">
+                        <div className="inline-flex w-fit max-w-full items-center rounded-pill border border-line bg-offwhite p-1">
                           <button
                             type="button"
                             aria-label="Decrease configuration quantity"
-                            onClick={() => updateDraftQuantity(draft.variantId, draft.quantity - 1)}
-                            className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-white text-ink"
+                            onClick={() => updateDraftQuantity(draft.variantId, draft.quantity - 1, true)}
+                            className="flex size-8 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink transition hover:border-steel-2"
                           >
                             <Minus size={13} />
                           </button>
-                          <span className="w-12 text-center text-[13px] font-semibold text-ink">{draft.quantity}</span>
+                          <span className="w-10 text-center text-[13px] font-semibold text-ink">{draft.quantity}</span>
                           <button
                             type="button"
                             aria-label="Increase configuration quantity"
-                            onClick={() => updateDraftQuantity(draft.variantId, draft.quantity + 1)}
-                            className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-white text-ink"
+                            onClick={() => updateDraftQuantity(draft.variantId, draft.quantity + 1, true)}
+                            className="flex size-8 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink transition hover:border-steel-2"
                           >
                             <Plus size={13} />
                           </button>
@@ -512,7 +638,14 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
               )}
             </div>
 
-            <div className="rounded-lg border border-line bg-white p-5">
+            <div
+              ref={quoteSummaryRef}
+              tabIndex={-1}
+              className={[
+                "rounded-lg border bg-white p-4 outline-none transition-all duration-300 sm:p-5",
+                quoteSummaryHighlighted ? "border-brand shadow-[0_0_0_4px_rgba(227,30,36,0.10)]" : "border-line",
+              ].join(" ")}
+            >
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">Quote Summary</p>
               <div className="mt-4 space-y-3">
                 <div className="flex items-center justify-between text-[13.5px] text-steel">
@@ -564,7 +697,7 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                 Spreadsheet-style high-volume entry remains available in Quick Order.
               </p>
             </div>
-          </div>
+          </aside>
         </div>
       </div>
     </section>
