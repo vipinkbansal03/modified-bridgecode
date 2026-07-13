@@ -3,8 +3,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, LayoutDashboard, TableProperties } from "lucide-react";
-import { BulkOrderBuilder } from "@/components/product/BulkOrderBuilder";
+import { ArrowLeft, LayoutGrid } from "lucide-react";
+import { VariantConfigurator } from "@/components/product/VariantConfigurator";
 import { Container } from "@/components/ui/Container";
 import { useProduct } from "@/hooks/api/useProducts";
 
@@ -29,24 +29,20 @@ function QuickOrderPageContent() {
             <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-[720px]">
                 <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#E31E24]/20 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#E31E24]">
-                  <TableProperties size={12} />
-                  Quick Order Workspace
+                  <LayoutGrid size={12} />
+                  Bulk Order Grid
                 </span>
                 <h1 className="text-[clamp(28px,4vw,48px)] font-medium leading-[1.05] tracking-[-0.04em] text-ink">
-                  Spreadsheet-style bulk ordering
+                  Order every size in one view
                 </h1>
                 <p className="mt-3 max-w-[680px] text-[14.5px] leading-relaxed text-[#6B6B6B] sm:text-[15px]">
-                  Enter quantities across product variants in one place. Ideal for repeat SKU entry, dealer ordering,
-                  and fast RFQ batching.
+                  Choose the dropdown options, then enter quantities directly where each row and column meet.
+                  All matching sizes stay visible together for faster dealer and clinic ordering.
                 </p>
               </div>
 
               <div className="rounded-xl border border-line bg-white px-4 py-3 text-[12.5px] text-[#6B6B6B] shadow-sm lg:max-w-[360px]">
-                <div className="flex items-center gap-2 font-semibold text-ink">
-                  <LayoutDashboard size={14} />
-                  Bulk entry workspace
-                </div>
-                <p className="mt-1">Selections are saved into the same Quote Cart used on product detail pages.</p>
+                Attribute roles control this layout: Dropdown filters, Grid X Axis columns, and Grid Y Axis rows.
               </div>
             </div>
           </div>
@@ -66,11 +62,11 @@ function QuickOrderPageContent() {
 
             {slug && !isLoading && (!product || !product.variants.length) && (
               <div className="rounded-xl border border-[#F2D5C6] bg-[#FFF5F0] p-5 text-[14px] text-[#8A4D2A]">
-                This product either does not exist or does not expose backend variants for spreadsheet ordering.
+                This product either does not exist or does not have active variants available for bulk ordering.
               </div>
             )}
 
-            {product && product.variants.length > 0 && <BulkOrderBuilder apiProduct={product} />}
+            {product && product.variants.length > 0 && <VariantConfigurator apiProduct={product} />}
           </div>
         </div>
       </Container>

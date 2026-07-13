@@ -12,6 +12,7 @@ router.get("/export", requirePermission("inventory.view", "inventory.manage"), C
 router.post("/import/preview", requirePermission("inventory.manage"), upload.single("file"), C.previewImport);
 router.post("/import", requirePermission("inventory.manage"), upload.single("file"), C.importSpreadsheet);
 router.post("/bulk", requirePermission("inventory.manage"), C.bulkUpdate);
+router.put("/product/:productId", requirePermission("inventory.manage"), C.upsertProduct);
 router.get("/:variantId/adjustments", requirePermission("inventory.view", "inventory.manage"), C.listVariantAdjustments);
 router.put("/:id", requirePermission("inventory.manage"), C.update);
 export default router;

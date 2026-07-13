@@ -891,8 +891,8 @@ function toPublicProductDetail(p: PublicProductDetailRecord, countryId?: string)
         return {
           id: pa.attribute.id,
           name: pa.attribute.name,
-          role: pa.attribute.role,
-          displayType: pa.attribute.role,
+          role: pa.gridAxis === "COLUMN" ? "X_GRID" : pa.gridAxis === "ROW" ? "Y_GRID" : "DROPDOWN",
+          displayType: pa.gridAxis === "COLUMN" ? "X_GRID" : pa.gridAxis === "ROW" ? "Y_GRID" : "DROPDOWN",
           status: pa.attribute.status,
           required: pa.required,
           sortOrder: pa.attribute.sortOrder,

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, ChevronDown, Layers3, Minus, Plus, ShoppingBag, Sparkles } from "lucide-react";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
@@ -29,11 +28,14 @@ interface DraftConfiguration {
   selectedAttributes: Record<string, string>;
 }
 
-function getPriceForCurrency(variant: ApiVariant, currencyCode: string): ApiProductPrice | null {
+function getPriceForCurrency(variant: ApiVariant, currencyCode: string, productPrices: ApiProductPrice[] = []): ApiProductPrice | null {
   return (
     variant.prices.find((price) => price.currencyCode === currencyCode) ??
     variant.prices.find((price) => price.currencyCode === "INR") ??
     variant.prices[0] ??
+    productPrices.find((price) => price.currencyCode === currencyCode) ??
+    productPrices.find((price) => price.currencyCode === "INR") ??
+    productPrices[0] ??
     null
   );
 }
@@ -94,6 +96,21 @@ function getAttributeDisplayMeta(displayType: AttributeDisplayType) {
 }
 
 export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
+  const attributes = apiProduct.attributes.map((attribute) => ({
+    ...attribute,
+    values: attribute.values ?? [],
+  }));
+  const xAxisCount = attributes.filter((attribute) => getAttributeDisplayType(attribute) === "X_GRID").length;
+  const yAxisCount = attributes.filter((attribute) => getAttributeDisplayType(attribute) === "Y_GRID").length;
+
+  if (xAxisCount >= 1 && yAxisCount >= 1) {
+    return <DynamicVariantMatrixConfigurator apiProduct={apiProduct} />;
+  }
+
+  return <SingleVariantConfigurator apiProduct={apiProduct} />;
+}
+
+function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   const { selectedCurrency, selectedCountryCode } = useCurrencyContext();
   const { addItems } = useQuoteCart();
   const { addItem, openCart } = useCart();
@@ -101,13 +118,6 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     ...attribute,
     values: attribute.values ?? [],
   }));
-  const xAxisCount = attributes.filter((attribute) => getAttributeDisplayType(attribute) === "X_GRID").length;
-  const yAxisCount = attributes.filter((attribute) => getAttributeDisplayType(attribute) === "Y_GRID").length;
-
-  if (xAxisCount === 1 && yAxisCount === 1) {
-    return <DynamicVariantMatrixConfigurator apiProduct={apiProduct} />;
-  }
-
   const variants = apiProduct.variants;
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>(() => buildInitialSelections(attributes, variants));
   const [quantity, setQuantity] = useState(1);
@@ -121,8 +131,6 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   const selectedConfigurationsRef = useRef<HTMLDivElement | null>(null);
   const quoteSummaryRef = useRef<HTMLDivElement | null>(null);
 
-  if (!variants.length) return null;
-
   const matchingVariants = variants.filter((variant) =>
     Object.entries(selectedOptions).every(([attributeName, value]) => !value || variant.attributeCombination[attributeName] === value)
   );
@@ -132,7 +140,7 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
       attributes.every((attribute) => variant.attributeCombination[attribute.name] === selectedOptions[attribute.name])
     ) ?? null;
 
-  const currentPrice = currentVariant ? getPriceForCurrency(currentVariant, selectedCurrency) : null;
+  const currentPrice = currentVariant ? getPriceForCurrency(currentVariant, selectedCurrency, apiProduct.prices) : null;
   const currencySymbol = currentPrice?.currencySymbol ?? variants[0]?.prices[0]?.currencySymbol ?? "₹";
   const currencyCode = currentPrice?.currencyCode ?? variants[0]?.prices[0]?.currencyCode ?? "INR";
   const currentResolvedUnitPrice = currentVariant ? previewPriceMap[currentVariant.id] ?? currentPrice?.sellingPrice ?? 0 : 0;
@@ -155,10 +163,7 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   }, []);
 
   useEffect(() => {
-    if (!currentVariant || quantity < 1) {
-      setPreviewPriceMap({});
-      return;
-    }
+    if (!currentVariant || quantity < 1) return;
 
     let active = true;
     const timer = window.setTimeout(async () => {
@@ -318,6 +323,8 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     setError(null);
   }
 
+  if (!variants.length) return null;
+
   return (
     <section className="pt-8 sm:pt-12 lg:pt-16">
       <div className="mb-8 rounded-lg border border-line bg-white p-3 sm:p-5 lg:p-7">
@@ -335,12 +342,6 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
             </p>
           </div>
 
-          <Link
-            href={`/quick-order?product=${apiProduct.slug}`}
-            className="inline-flex items-center justify-center rounded-pill border border-line bg-offwhite px-4 py-2.5 text-[12.5px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand"
-          >
-            Open Quick Order Workspace
-          </Link>
         </div>
 
         <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -532,12 +533,6 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                   <ShoppingBag size={15} />
                   Add to Cart
                 </button>
-                <Link
-                  href={`/quick-order?product=${apiProduct.slug}`}
-                  className="inline-flex items-center justify-center rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand sm:col-span-2 lg:col-span-1 xl:col-span-2 2xl:col-span-1"
-                >
-                  Use Spreadsheet View
-                </Link>
               </div>
 
               {error && (
@@ -693,9 +688,6 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
               >
                 Add To Quote
               </button>
-              <p className="mt-2 text-center text-[11.5px] text-steel-2">
-                Spreadsheet-style high-volume entry remains available in Quick Order.
-              </p>
             </div>
           </aside>
         </div>

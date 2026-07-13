@@ -355,13 +355,15 @@ export async function updateInventory(
   if (data.lowStockThreshold !== undefined && data.lowStockThreshold < 0) throw new AppError("Low stock threshold cannot be negative.", 400);
 
   const nextStock = data.stock ?? existing.stock;
+  const nextReservedStock = data.reservedStock ?? existing.reservedStock;
   const nextLowStockThreshold = data.lowStockThreshold ?? existing.lowStockThreshold;
-  const shouldRecalculateStatus = data.stock !== undefined || data.lowStockThreshold !== undefined;
+  if (nextReservedStock > nextStock) throw new AppError("Reserved stock cannot exceed stock.", 400);
+  const shouldRecalculateStatus = data.stock !== undefined || data.reservedStock !== undefined || data.lowStockThreshold !== undefined;
   const updated = await client.inventory.update({
     where: { id },
     data: {
       ...data,
-      ...(shouldRecalculateStatus ? { status: getInventoryStatus(nextStock, nextLowStockThreshold) } : {}),
+      ...(shouldRecalculateStatus ? { status: getInventoryStatus(nextStock - nextReservedStock, nextLowStockThreshold) } : {}),
     } as never,
   });
 
@@ -370,6 +372,44 @@ export async function updateInventory(
   }
 
   return updated;
+}
+
+export async function upsertProductInventory(
+  productId: string,
+  data: { countryId?: string | null; stock?: number; reservedStock?: number; lowStockThreshold?: number },
+) {
+  const product = await prisma.product.findFirst({ where: { id: productId, deletedAt: null }, select: { id: true } });
+  if (!product) throw new AppError("Product not found.", 404);
+
+  const countryId = data.countryId ?? null;
+  if (countryId) {
+    const country = await prisma.country.findUnique({ where: { id: countryId }, select: { id: true } });
+    if (!country) throw new AppError("Country not found.", 404);
+  }
+
+  const stock = Math.trunc(Number(data.stock ?? 0));
+  const reservedStock = Math.trunc(Number(data.reservedStock ?? 0));
+  const lowStockThreshold = Math.trunc(Number(data.lowStockThreshold ?? 10));
+  if (![stock, reservedStock, lowStockThreshold].every(Number.isFinite) || stock < 0 || reservedStock < 0 || lowStockThreshold < 0) {
+    throw new AppError("Inventory values must be valid non-negative numbers.", 400);
+  }
+  if (reservedStock > stock) throw new AppError("Reserved stock cannot exceed stock.", 400);
+
+  const existing = await prisma.inventory.findFirst({ where: { productId, variantId: null, countryId } });
+  if (existing) return updateInventory(existing.id, { stock, reservedStock, lowStockThreshold });
+
+  return prisma.inventory.create({
+    data: {
+      productId,
+      variantId: null,
+      countryId,
+      stock,
+      reservedStock,
+      lowStockThreshold,
+      status: getInventoryStatus(stock - reservedStock, lowStockThreshold),
+    },
+    include: { country: true },
+  });
 }
 
 export async function bulkUpdateInventory(input: InventoryBulkUpdateInput) {
