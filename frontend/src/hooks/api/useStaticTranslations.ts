@@ -1,8 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { apiClient, HAS_LIVE_API, unwrapData } from "@/lib/apiClient";
-import { qk, STALE } from "@/lib/queryConfig";
 import { useLanguageContext } from "@/contexts/LanguageContext";
 import { staticMessages, type StaticMessageKey } from "@/i18n/staticMessages";
 
@@ -20,14 +19,45 @@ async function fetchStaticTranslations(language: string): Promise<StaticTranslat
 
 export function useStaticTranslations() {
   const { selectedLanguage } = useLanguageContext();
-  const { data = {} } = useQuery({
-    queryKey: qk.translations.static(selectedLanguage),
-    queryFn: () => fetchStaticTranslations(selectedLanguage),
-    staleTime: STALE.long,
-  });
+  const [translations, setTranslations] = useState<StaticTranslationMap>({});
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    let isActive = true;
+
+    if (!HAS_LIVE_API || selectedLanguage === "en") {
+      setTranslations({});
+      setIsLoading(false);
+      return () => {
+        isActive = false;
+      };
+    }
+
+    setIsLoading(true);
+    fetchStaticTranslations(selectedLanguage)
+      .then((data) => {
+        if (isActive) {
+          setTranslations(data);
+        }
+      })
+      .catch(() => {
+        if (isActive) {
+          setTranslations({});
+        }
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedLanguage]);
 
   function t(key: StaticMessageKey, params?: Record<string, string | number>) {
-    let value = data[key] || staticMessages[key] || key;
+    let value = translations[key] || staticMessages[key] || key;
     if (params) {
       for (const [name, paramValue] of Object.entries(params)) {
         value = value.replaceAll(`{${name}}`, String(paramValue));
@@ -36,5 +66,5 @@ export function useStaticTranslations() {
     return value;
   }
 
-  return { t, language: selectedLanguage };
+  return { t, language: selectedLanguage, isLoading };
 }
