@@ -465,28 +465,6 @@ export async function submitContact(input: ContactInput) {
     },
   });
 
-  // Also store as a quote with zero items so it shows up in the Quotes module
-  const country = await prisma.country.findFirst({ where: { isDefault: true } });
-  const currency = await prisma.currency.findFirst({ where: { isBase: true } });
-
-  if (country && currency) {
-    await prisma.quote.create({
-      data: {
-        quoteNumber: `CONTACT-${Date.now()}`,
-        customerName: input.name,
-        customerEmail: input.email,
-        customerPhone: input.phone,
-        companyName: input.company,
-        countryId: country.id,
-        currencyId: currency.id,
-        subtotal: 0,
-        discount: 0,
-        total: 0,
-        notes: `[${(input.type || "general").toUpperCase()}] ${input.subject ? input.subject + ": " : ""}${input.message}`,
-      },
-    });
-  }
-
   void sendContactNotification(input);
 
   return { success: true, message: "Your message has been received. We'll respond within 24 hours." };
