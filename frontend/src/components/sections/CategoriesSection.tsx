@@ -34,7 +34,7 @@ export function CategoriesSection() {
         <div className="mb-10">
           <h2 className="text-[clamp(28px,3.4vw,40px)] font-light text-ink">{t("ui.home.shopByCategory")}</h2>
         </div>
-        <div className="mb-10 flex gap-2.5">
+        {/* <div className="mb-10 flex gap-2.5">
           {(["doctor", "dealer"] as const).map((v) => (
             <button
               key={v}
@@ -47,7 +47,7 @@ export function CategoriesSection() {
               {v === "doctor" ? t("ui.home.forDoctors") : t("ui.home.forDealers")}
             </button>
           ))}
-        </div>
+        </div> */}
 
         {isLoading ? (
           <SkeletonGrid count={8} columns={4} />

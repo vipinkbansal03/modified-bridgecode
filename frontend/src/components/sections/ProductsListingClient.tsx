@@ -62,7 +62,7 @@ export function ProductsListingClient() {
 
           <div className="flex items-center gap-3.5">
             {/* Doctor / Dealer toggle */}
-            <div className="flex gap-2">
+            {/* <div className="flex gap-2">
               {(["doctor", "dealer"] as const).map((v) => (
                 <button
                   key={v}
@@ -75,7 +75,7 @@ export function ProductsListingClient() {
                   {v === "doctor" ? t("ui.products.doctor") : t("ui.products.dealer")}
                 </button>
               ))}
-            </div>
+            </div> */}
 
             {/* Sort dropdown */}
             <div className="relative">
