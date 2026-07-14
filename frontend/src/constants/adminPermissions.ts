@@ -28,6 +28,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       "orders.manage",
       "quotes.view",
       "quotes.manage",
+      "contactSubmissions.view",
+      "contactSubmissions.manage",
       "shipping.view",
       "shipping.manage",
       "coupons.view",
@@ -69,4 +71,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   },
 ];
 
-export const ALL_PERMISSIONS = PERMISSION_GROUPS.flatMap((group) => group.permissions);
+export const ALL_PERMISSIONS = PERMISSION_GROUPS.flatMap(
+  (group) => group.permissions,
+);

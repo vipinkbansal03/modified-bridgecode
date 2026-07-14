@@ -1,6 +1,9 @@
 import { prisma } from "../../config/database";
 import { AppError, getPagination } from "../../utils/apiResponse";
-import { sendQuoteNotification, sendContactNotification } from "../../utils/email";
+import {
+  sendQuoteNotification,
+  sendContactNotification,
+} from "../../utils/email";
 import type { Prisma } from "@prisma/client";
 import { TranslationStatus } from "@prisma/client";
 import { resolvePrice } from "../pricing/priceResolver.service";
@@ -29,8 +32,12 @@ function approvedCategoryTranslationInclude(languageCode: string) {
   };
 }
 
-function buildStorefrontProductWhere(countryId: string, extra?: Prisma.ProductWhereInput): Prisma.ProductWhereInput {
-  const { OR: extraOr, ...extraRest } = (extra ?? {}) as Prisma.ProductWhereInput & { OR?: Prisma.ProductWhereInput[] };
+function buildStorefrontProductWhere(
+  countryId: string,
+  extra?: Prisma.ProductWhereInput,
+): Prisma.ProductWhereInput {
+  const { OR: extraOr, ...extraRest } = (extra ??
+    {}) as Prisma.ProductWhereInput & { OR?: Prisma.ProductWhereInput[] };
   const andConditions: Prisma.ProductWhereInput[] = [
     {
       OR: [
@@ -68,16 +75,19 @@ function buildStorefrontProductWhere(countryId: string, extra?: Prisma.ProductWh
 
 // ─── Products ─────────────────────────────────────────────
 
-export async function publicListProducts(query: {
-  page?: string;
-  limit?: string;
-  category?: string;   // category slug
-  search?: string;
-  featured?: string;
-  attributeValues?: string; // comma-separated attribute values
-  sort?: string;       // "newest" | "name_asc" | "name_desc"
-  countryCode?: string;
-}, languageCode?: string) {
+export async function publicListProducts(
+  query: {
+    page?: string;
+    limit?: string;
+    category?: string; // category slug
+    search?: string;
+    featured?: string;
+    attributeValues?: string; // comma-separated attribute values
+    sort?: string; // "newest" | "name_asc" | "name_desc"
+    countryCode?: string;
+  },
+  languageCode?: string,
+) {
   const { page, limit, skip } = getPagination(query);
   const country = await resolvePublicCountry(query.countryCode);
   const selectedAttributeValues = (query.attributeValues ?? "")
@@ -85,39 +95,51 @@ export async function publicListProducts(query: {
     .map((value) => value.trim())
     .filter(Boolean);
 
-  const where: Prisma.ProductWhereInput = buildStorefrontProductWhere(country.id, {
-    category: {
-      ...(query.category ? { slug: query.category } : {}),
-      countries: { some: { countryId: country.id, enabled: true } },
-    },
-    ...(query.search && {
-      OR: buildProductTextSearchOr(query.search, languageCode),
-    }),
-    ...(query.featured === "true" && { isFeatured: true }),
-    ...(selectedAttributeValues.length > 0 && {
-      variants: {
-        some: {
-          status: "ACTIVE",
-          countries: { some: { countryId: country.id, enabled: true } },
-          attributeValues: {
-            some: {
-              attributeValue: {
-                value: { in: selectedAttributeValues },
-                status: "ACTIVE",
+  const where: Prisma.ProductWhereInput = buildStorefrontProductWhere(
+    country.id,
+    {
+      category: {
+        ...(query.category ? { slug: query.category } : {}),
+        countries: { some: { countryId: country.id, enabled: true } },
+      },
+      ...(query.search && {
+        OR: buildProductTextSearchOr(query.search, languageCode),
+      }),
+      ...(query.featured === "true" && {
+        isFeatured: true,
+      }),
+      ...(selectedAttributeValues.length > 0 && {
+        variants: {
+          some: {
+            status: "ACTIVE",
+            countries: {
+              some: {
+                countryId: country.id,
+                enabled: true,
+              },
+            },
+            attributeValues: {
+              some: {
+                attributeValue: {
+                  value: {
+                    in: selectedAttributeValues,
+                  },
+                  status: "ACTIVE",
+                },
               },
             },
           },
         },
-      },
-    }),
-  });
+      }),
+    },
+  );
 
   const orderBy =
     query.sort === "name_asc"
       ? { title: "asc" as const }
       : query.sort === "name_desc"
-      ? { title: "desc" as const }
-      : { createdAt: "desc" as const };
+        ? { title: "desc" as const }
+        : { createdAt: "desc" as const };
 
   const [products, total] = await Promise.all([
     prisma.product.findMany({
@@ -133,12 +155,19 @@ export async function publicListProducts(query: {
             slug: true,
             description: true,
             ...(languageCode && {
-              translations: approvedCategoryTranslationInclude(languageCode).translations,
+              translations:
+                approvedCategoryTranslationInclude(languageCode).translations,
             }),
           },
         },
-        media: { where: { type: "IMAGE" }, orderBy: { sortOrder: "asc" }, take: 3 },
-        ...(languageCode ? approvedProductTranslationInclude(languageCode) : {}),
+        media: {
+          where: { type: "IMAGE" },
+          orderBy: { sortOrder: "asc" },
+          take: 3,
+        },
+        ...(languageCode
+          ? approvedProductTranslationInclude(languageCode)
+          : {}),
         prices: {
           where: { status: "ACTIVE", countryId: country.id },
           include: { country: true, currency: true },
@@ -147,7 +176,10 @@ export async function publicListProducts(query: {
         _count: {
           select: {
             variants: {
-              where: { status: "ACTIVE", countries: { some: { countryId: country.id, enabled: true } } },
+              where: {
+                status: "ACTIVE",
+                countries: { some: { countryId: country.id, enabled: true } },
+              },
             },
           },
         },
@@ -188,12 +220,19 @@ export async function publicListProductFacets(countryCode?: string) {
     const key = `${row.attribute.name}::${row.attributeValue.value}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    facets.push({ attributeName: row.attribute.name, value: row.attributeValue.value });
+    facets.push({
+      attributeName: row.attribute.name,
+      value: row.attributeValue.value,
+    });
   }
   return facets;
 }
 
-export async function publicGetProduct(slug: string, languageCode?: string, countryCode?: string) {
+export async function publicGetProduct(
+  slug: string,
+  languageCode?: string,
+  countryCode?: string,
+) {
   const country = await resolvePublicCountry(countryCode);
   const product = await prisma.product.findFirst({
     where: buildStorefrontProductWhere(country.id, { slug }),
@@ -208,7 +247,14 @@ export async function publicGetProduct(slug: string, languageCode?: string, coun
       packages: { where: { status: "ACTIVE" }, orderBy: { sortOrder: "asc" } },
       attributes: {
         include: {
-          attribute: { include: { values: { where: { status: "ACTIVE" }, orderBy: { sortOrder: "asc" } } } },
+          attribute: {
+            include: {
+              values: {
+                where: { status: "ACTIVE" },
+                orderBy: { sortOrder: "asc" },
+              },
+            },
+          },
           allowedValues: {
             where: { attributeValue: { status: "ACTIVE" } },
             include: { attributeValue: true },
@@ -217,11 +263,19 @@ export async function publicGetProduct(slug: string, languageCode?: string, coun
         },
       },
       variants: {
-        where: { status: "ACTIVE", countries: { some: { countryId: country.id, enabled: true } } },
+        where: {
+          status: "ACTIVE",
+          countries: { some: { countryId: country.id, enabled: true } },
+        },
         include: {
           package: true,
-          attributeValues: { include: { attribute: true, attributeValue: true } },
-          prices: { where: { status: "ACTIVE", countryId: country.id }, include: { country: true, currency: true } },
+          attributeValues: {
+            include: { attribute: true, attributeValue: true },
+          },
+          prices: {
+            where: { status: "ACTIVE", countryId: country.id },
+            include: { country: true, currency: true },
+          },
           inventories: {
             where: { OR: [{ countryId: country.id }, { countryId: null }] },
             orderBy: [{ countryId: "desc" }],
@@ -235,7 +289,8 @@ export async function publicGetProduct(slug: string, languageCode?: string, coun
     },
   });
 
-  if (!product || (product.hasVariants && product.variants.length === 0)) throw new AppError("Product not found.", 404);
+  if (!product || (product.hasVariants && product.variants.length === 0))
+    throw new AppError("Product not found.", 404);
   return toPublicProductDetail(product, country.id);
 }
 
@@ -246,7 +301,10 @@ export async function previewPublicProductPrices(
   customerId?: string | null,
 ) {
   if (!Array.isArray(items) || items.length === 0) {
-    throw new AppError("At least one variant quantity is required for price preview.", 400);
+    throw new AppError(
+      "At least one variant quantity is required for price preview.",
+      400,
+    );
   }
 
   const country = await resolvePublicCountry(countryCode);
@@ -257,7 +315,9 @@ export async function previewPublicProductPrices(
 
   if (!product) throw new AppError("Product not found.", 404);
 
-  const requestedVariantIds = Array.from(new Set(items.map((item) => item.variantId)));
+  const requestedVariantIds = Array.from(
+    new Set(items.map((item) => item.variantId)),
+  );
   const variants = await prisma.productVariant.findMany({
     where: {
       id: { in: requestedVariantIds },
@@ -269,7 +329,10 @@ export async function previewPublicProductPrices(
   });
 
   if (variants.length !== requestedVariantIds.length) {
-    throw new AppError("One or more requested variants are not available for this product or country.", 400);
+    throw new AppError(
+      "One or more requested variants are not available for this product or country.",
+      400,
+    );
   }
 
   const variantById = new Map(variants.map((variant) => [variant.id, variant]));
@@ -281,7 +344,11 @@ export async function previewPublicProductPrices(
       }
 
       const variant = variantById.get(item.variantId);
-      if (!variant) throw new AppError("One or more requested variants are unavailable.", 400);
+      if (!variant)
+        throw new AppError(
+          "One or more requested variants are unavailable.",
+          400,
+        );
 
       const resolved = await resolvePrice({
         productId: variant.productId,
@@ -307,7 +374,10 @@ export async function previewPublicProductPrices(
 
 // ─── Categories ───────────────────────────────────────────
 
-export async function publicListCategories(languageCode?: string, countryCode?: string) {
+export async function publicListCategories(
+  languageCode?: string,
+  countryCode?: string,
+) {
   const country = await resolvePublicCountry(countryCode);
   const cats = await prisma.category.findMany({
     where: {
@@ -330,7 +400,11 @@ export async function publicListCategories(languageCode?: string, countryCode?: 
   return cats.map(toPublicCategory);
 }
 
-export async function publicGetCategory(slug: string, languageCode?: string, countryCode?: string) {
+export async function publicGetCategory(
+  slug: string,
+  languageCode?: string,
+  countryCode?: string,
+) {
   const country = await resolvePublicCountry(countryCode);
   const category = await prisma.category.findFirst({
     where: {
@@ -430,10 +504,20 @@ function getSubmittedUnitPrice(value: unknown) {
 
 export async function submitPublicQuote(input: QuoteSubmitInput) {
   const country = input.countryCode
-    ? await prisma.country.findFirst({ where: { code: input.countryCode }, include: { currency: true } })
-    : await prisma.country.findFirst({ where: { isDefault: true }, include: { currency: true } });
+    ? await prisma.country.findFirst({
+        where: { code: input.countryCode },
+        include: { currency: true },
+      })
+    : await prisma.country.findFirst({
+        where: { isDefault: true },
+        include: { currency: true },
+      });
 
-  const defaultCountry = country || { id: "default", currencyId: "default", currency: { symbol: "$" } };
+  const defaultCountry = country || {
+    id: "default",
+    currencyId: "default",
+    currency: { symbol: "$" },
+  };
   const resolvedItems = await Promise.all(
     input.items.map(async (item) => {
       const quantity = Number(item.quantity);
@@ -441,15 +525,16 @@ export async function submitPublicQuote(input: QuoteSubmitInput) {
         throw new AppError("Quote item quantity must be at least 1.", 400);
       }
 
-      const resolved = item.productId && item.variantId
-        ? await resolvePrice({
-            productId: item.productId,
-            variantId: item.variantId,
-            countryId: defaultCountry.id,
-            customerId: input.customerId ?? undefined,
-            quantity,
-          })
-        : null;
+      const resolved =
+        item.productId && item.variantId
+          ? await resolvePrice({
+              productId: item.productId,
+              variantId: item.variantId,
+              countryId: defaultCountry.id,
+              customerId: input.customerId ?? undefined,
+              quantity,
+            })
+          : null;
 
       const submittedUnitPrice = getSubmittedUnitPrice(item.unitPrice);
       const unitPrice = submittedUnitPrice ?? resolved?.finalPrice ?? 0;
@@ -462,7 +547,9 @@ export async function submitPublicQuote(input: QuoteSubmitInput) {
     }),
   );
 
-  const subtotal = roundMoney(resolvedItems.reduce((sum, item) => sum + item.total, 0));
+  const subtotal = roundMoney(
+    resolvedItems.reduce((sum, item) => sum + item.total, 0),
+  );
   const discountPercent = quoteVolumeDiscountPercent(subtotal);
   const discount = roundMoney((subtotal * discountPercent) / 100);
   const total = roundMoney(Math.max(0, subtotal - discount));
@@ -541,36 +628,32 @@ export async function submitContact(input: ContactInput) {
     },
   });
 
-  // Also store as a quote with zero items so it shows up in the Quotes module
-  const country = await prisma.country.findFirst({ where: { isDefault: true } });
-  const currency = await prisma.currency.findFirst({ where: { isBase: true } });
-
-  if (country && currency) {
-    await prisma.quote.create({
-      data: {
-        quoteNumber: `CONTACT-${Date.now()}`,
-        customerName: input.name,
-        customerEmail: input.email,
-        customerPhone: input.phone,
-        companyName: input.company,
-        countryId: country.id,
-        currencyId: currency.id,
-        subtotal: 0,
-        discount: 0,
-        total: 0,
-        notes: `[${(input.type || "general").toUpperCase()}] ${input.subject ? input.subject + ": " : ""}${input.message}`,
-      },
-    });
-  }
+  await prisma.contactSubmission.create({
+    data: {
+      name: input.name,
+      email: input.email,
+      phone: input.phone || null,
+      company: input.company || null,
+      subject: input.subject || null,
+      type: input.type || null,
+      message: input.message,
+    },
+  });
 
   void sendContactNotification(input);
 
-  return { success: true, message: "Your message has been received. We'll respond within 24 hours." };
+  return {
+    success: true,
+    message: "Your message has been received. We'll respond within 24 hours.",
+  };
 }
 
 // ─── Search ───────────────────────────────────────────────
 
-function buildProductTextSearchOr(query: string, languageCode?: string): Prisma.ProductWhereInput[] {
+function buildProductTextSearchOr(
+  query: string,
+  languageCode?: string,
+): Prisma.ProductWhereInput[] {
   const textMatch = { contains: query, mode: "insensitive" as const };
   const matches: Prisma.ProductWhereInput[] = [
     { title: textMatch },
@@ -597,7 +680,10 @@ function buildProductTextSearchOr(query: string, languageCode?: string): Prisma.
   return matches;
 }
 
-function buildCategoryTextSearchOr(query: string, languageCode?: string): Prisma.CategoryWhereInput[] {
+function buildCategoryTextSearchOr(
+  query: string,
+  languageCode?: string,
+): Prisma.CategoryWhereInput[] {
   const textMatch = { contains: query, mode: "insensitive" as const };
   const matches: Prisma.CategoryWhereInput[] = [
     { name: textMatch },
@@ -619,7 +705,11 @@ function buildCategoryTextSearchOr(query: string, languageCode?: string): Prisma
   return matches;
 }
 
-export async function publicSearch(query: string, languageCode?: string, countryCode?: string) {
+export async function publicSearch(
+  query: string,
+  languageCode?: string,
+  countryCode?: string,
+) {
   if (!query || query.length < 2) return { products: [], categories: [] };
   const country = await resolvePublicCountry(countryCode);
 
@@ -631,14 +721,17 @@ export async function publicSearch(query: string, languageCode?: string, country
       take: 8,
       include: {
         media: { take: 1 },
-        ...(languageCode ? approvedProductTranslationInclude(languageCode) : {}),
+        ...(languageCode
+          ? approvedProductTranslationInclude(languageCode)
+          : {}),
         category: {
           select: {
             name: true,
             slug: true,
             description: true,
             ...(languageCode && {
-              translations: approvedCategoryTranslationInclude(languageCode).translations,
+              translations:
+                approvedCategoryTranslationInclude(languageCode).translations,
             }),
           },
         },
@@ -653,7 +746,9 @@ export async function publicSearch(query: string, languageCode?: string, country
       },
       take: 4,
       include: {
-        ...(languageCode ? approvedCategoryTranslationInclude(languageCode) : {}),
+        ...(languageCode
+          ? approvedCategoryTranslationInclude(languageCode)
+          : {}),
         _count: {
           select: {
             products: {
@@ -665,13 +760,19 @@ export async function publicSearch(query: string, languageCode?: string, country
     }),
   ]);
 
-  return { products: products.map(toPublicProduct), categories: categories.map(toPublicCategory) };
+  return {
+    products: products.map(toPublicProduct),
+    categories: categories.map(toPublicCategory),
+  };
 }
 
 // ─── Currency / country detection ────────────────────────
 
 export async function getPublicCurrencies() {
-  return prisma.currency.findMany({ where: { status: "ACTIVE" }, orderBy: { code: "asc" } });
+  return prisma.currency.findMany({
+    where: { status: "ACTIVE" },
+    orderBy: { code: "asc" },
+  });
 }
 
 export async function getPublicCountries() {
@@ -723,25 +824,42 @@ async function resolvePublicCountry(countryCode?: string) {
     select: { id: true, code: true },
   });
 
-  if (!fallbackCountry) throw new AppError("Selected country is not available.", 400);
+  if (!fallbackCountry)
+    throw new AppError("Selected country is not available.", 400);
   return fallbackCountry;
 }
 
-export async function checkInventory(variantIds: string[], countryCode?: string) {
-  const requestedCountry = countryCode ? await resolvePublicCountry(countryCode) : null;
+export async function checkInventory(
+  variantIds: string[],
+  countryCode?: string,
+) {
+  const requestedCountry = countryCode
+    ? await resolvePublicCountry(countryCode)
+    : null;
   const records = await prisma.inventory.findMany({
     where: {
       variantId: { in: variantIds },
-      OR: requestedCountry ? [{ countryId: requestedCountry.id }, { countryId: null }] : [{ countryId: null }],
+      OR: requestedCountry
+        ? [{ countryId: requestedCountry.id }, { countryId: null }]
+        : [{ countryId: null }],
     },
-    select: { variantId: true, countryId: true, stock: true, reservedStock: true, status: true },
+    select: {
+      variantId: true,
+      countryId: true,
+      stock: true,
+      reservedStock: true,
+      status: true,
+    },
     orderBy: [{ countryId: "desc" }],
   });
 
   const bestByVariant = new Map<string, (typeof records)[number]>();
   for (const record of records) {
     if (!record.variantId) continue;
-    if (!bestByVariant.has(record.variantId) || (!!record.countryId && !bestByVariant.get(record.variantId)?.countryId)) {
+    if (
+      !bestByVariant.has(record.variantId) ||
+      (!!record.countryId && !bestByVariant.get(record.variantId)?.countryId)
+    ) {
       bestByVariant.set(record.variantId, record);
     }
   }
@@ -800,7 +918,8 @@ function getProductText(product: ProductTextSource) {
     shortDescription: translation?.shortDescription || product.shortDescription,
     description: translation?.description || product.description || null,
     seoTitle: translation?.seoTitle || product.seoTitle || null,
-    seoDescription: translation?.seoDescription || product.seoDescription || null,
+    seoDescription:
+      translation?.seoDescription || product.seoDescription || null,
   };
 }
 
@@ -842,17 +961,20 @@ function toPublicProduct(p: PublicProductRecord) {
     isFeatured: p.isFeatured,
     hasVariants: p.hasVariants,
     variantCount: p._count?.variants ?? 0,
-    prices: p.prices?.map((pr) => ({
-      countryCode: pr.country.code,
-      countryName: pr.country.name,
-      currencyCode: pr.currency.code,
-      currencySymbol: pr.currency.symbol,
-      mrp: Number(pr.mrp),
-      sellingPrice: Number(pr.sellingPrice),
-      dealerPrice: pr.dealerPrice != null ? Number(pr.dealerPrice) : null,
-      doctorRetailerPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
-      distributorPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
-    })) ?? [],
+    prices:
+      p.prices?.map((pr) => ({
+        countryCode: pr.country.code,
+        countryName: pr.country.name,
+        currencyCode: pr.currency.code,
+        currencySymbol: pr.currency.symbol,
+        mrp: Number(pr.mrp),
+        sellingPrice: Number(pr.sellingPrice),
+        dealerPrice: pr.dealerPrice != null ? Number(pr.dealerPrice) : null,
+        doctorRetailerPrice:
+          pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+        distributorPrice:
+          pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+      })) ?? [],
   };
 }
 
@@ -881,7 +1003,10 @@ type PublicProductDetailRecord = Prisma.ProductGetPayload<{
   translations?: ProductTranslationSnapshot[];
 };
 
-function toPublicProductDetail(p: PublicProductDetailRecord, countryId?: string) {
+function toPublicProductDetail(
+  p: PublicProductDetailRecord,
+  countryId?: string,
+) {
   const text = getProductText(p);
   const categoryText = getCategoryText(p.category);
   const productPrices = p.prices.map((pr) => ({
@@ -892,8 +1017,10 @@ function toPublicProductDetail(p: PublicProductDetailRecord, countryId?: string)
     mrp: Number(pr.mrp),
     sellingPrice: Number(pr.sellingPrice),
     dealerPrice: pr.dealerPrice != null ? Number(pr.dealerPrice) : null,
-    doctorRetailerPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
-    distributorPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+    doctorRetailerPrice:
+      pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+    distributorPrice:
+      pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
   }));
 
   const publicVariants = p.variants.map((v) => {
@@ -905,8 +1032,10 @@ function toPublicProductDetail(p: PublicProductDetailRecord, countryId?: string)
       mrp: Number(pr.mrp),
       sellingPrice: Number(pr.sellingPrice),
       dealerPrice: pr.dealerPrice != null ? Number(pr.dealerPrice) : null,
-      doctorRetailerPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
-      distributorPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+      doctorRetailerPrice:
+        pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+      distributorPrice:
+        pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
     }));
 
     return {
@@ -922,47 +1051,86 @@ function toPublicProductDetail(p: PublicProductDetailRecord, countryId?: string)
             slug: v.package.slug,
           }
         : null,
-      attributeValueIdsByAttributeId: v.attributeValues.reduce<Record<string, string>>((acc, av) => {
+      attributeValueIdsByAttributeId: v.attributeValues.reduce<
+        Record<string, string>
+      >((acc, av) => {
         acc[av.attributeId] = av.attributeValueId;
         return acc;
       }, {}),
-      attributeCombination: v.attributeValues.reduce<Record<string, string>>((acc, av) => {
-        acc[av.attribute.name] = av.attributeValue.value;
-        return acc;
-      }, {}),
+      attributeCombination: v.attributeValues.reduce<Record<string, string>>(
+        (acc, av) => {
+          acc[av.attribute.name] = av.attributeValue.value;
+          return acc;
+        },
+        {},
+      ),
       // Fall back to product-level country price when variant has none yet.
       prices: variantPrices.length ? variantPrices : productPrices,
-      inventory: (v.inventories.find((inventory) => inventory.countryId === countryId) ?? v.inventories.find((inventory) => inventory.countryId === null))
-        ? {
-            available: Math.max(
-              0,
-              ((v.inventories.find((inventory) => inventory.countryId === countryId) ?? v.inventories.find((inventory) => inventory.countryId === null))?.stock ?? 0) -
-                ((v.inventories.find((inventory) => inventory.countryId === countryId) ?? v.inventories.find((inventory) => inventory.countryId === null))?.reservedStock ?? 0),
-            ),
-            status:
-              (v.inventories.find((inventory) => inventory.countryId === countryId) ?? v.inventories.find((inventory) => inventory.countryId === null))?.status ?? "OUT_OF_STOCK",
-          }
-        : null,
+      inventory:
+        (v.inventories.find((inventory) => inventory.countryId === countryId) ??
+        v.inventories.find((inventory) => inventory.countryId === null))
+          ? {
+              available: Math.max(
+                0,
+                ((
+                  v.inventories.find(
+                    (inventory) => inventory.countryId === countryId,
+                  ) ??
+                  v.inventories.find(
+                    (inventory) => inventory.countryId === null,
+                  )
+                )?.stock ?? 0) -
+                  ((
+                    v.inventories.find(
+                      (inventory) => inventory.countryId === countryId,
+                    ) ??
+                    v.inventories.find(
+                      (inventory) => inventory.countryId === null,
+                    )
+                  )?.reservedStock ?? 0),
+              ),
+              status:
+                (
+                  v.inventories.find(
+                    (inventory) => inventory.countryId === countryId,
+                  ) ??
+                  v.inventories.find(
+                    (inventory) => inventory.countryId === null,
+                  )
+                )?.status ?? "OUT_OF_STOCK",
+            }
+          : null,
     };
   });
 
   const variantAttributeNames = new Set(
-    publicVariants.flatMap((variant) => Object.keys(variant.attributeCombination)),
+    publicVariants.flatMap((variant) =>
+      Object.keys(variant.attributeCombination),
+    ),
   );
 
   const configuratorAttributes = p.attributes
     .map((pa) => {
       const allowedValues = pa.allowedValues
         .map((selection) => selection.attributeValue)
-        .sort((a, b) => a.sortOrder - b.sortOrder || a.value.localeCompare(b.value));
+        .sort(
+          (a, b) => a.sortOrder - b.sortOrder || a.value.localeCompare(b.value),
+        );
 
       // Only offer values that exist on at least one sellable variant for this country.
       const valuesUsedByVariants = allowedValues.filter((value) =>
-        publicVariants.some((variant) => variant.attributeCombination[pa.attribute.name] === value.value),
+        publicVariants.some(
+          (variant) =>
+            variant.attributeCombination[pa.attribute.name] === value.value,
+        ),
       );
 
       const role =
-        pa.gridAxis === "COLUMN" ? "X_GRID" : pa.gridAxis === "ROW" ? "Y_GRID" : pa.attribute.role ?? "DROPDOWN";
+        pa.gridAxis === "COLUMN"
+          ? "X_GRID"
+          : pa.gridAxis === "ROW"
+            ? "Y_GRID"
+            : (pa.attribute.role ?? "DROPDOWN");
 
       return {
         id: pa.attribute.id,
@@ -972,7 +1140,10 @@ function toPublicProductDetail(p: PublicProductDetailRecord, countryId?: string)
         status: pa.attribute.status,
         required: pa.required,
         sortOrder: pa.attribute.sortOrder,
-        values: (valuesUsedByVariants.length ? valuesUsedByVariants : allowedValues).map((value) => ({
+        values: (valuesUsedByVariants.length
+          ? valuesUsedByVariants
+          : allowedValues
+        ).map((value) => ({
           id: value.id,
           attributeId: value.attributeId,
           value: value.value,
@@ -985,9 +1156,12 @@ function toPublicProductDetail(p: PublicProductDetailRecord, countryId?: string)
           countryId: value.countryId,
           moq: value.moq,
           tierPrice: value.tierPrice != null ? Number(value.tierPrice) : null,
-          dealerPrice: value.dealerPrice != null ? Number(value.dealerPrice) : null,
+          dealerPrice:
+            value.dealerPrice != null ? Number(value.dealerPrice) : null,
         })),
-        allowedValueIds: pa.allowedValues.map((selection) => selection.attributeValueId),
+        allowedValueIds: pa.allowedValues.map(
+          (selection) => selection.attributeValueId,
+        ),
       };
     })
     .filter((attribute) => {
@@ -1009,8 +1183,12 @@ function toPublicProductDetail(p: PublicProductDetailRecord, countryId?: string)
       name: categoryText.name,
       slug: p.category?.slug ?? "",
     },
-    images: p.media.filter((m) => m.type === "IMAGE").map((m) => ({ url: m.url, alt: m.altText ?? text.title })),
-    documents: p.media.filter((m) => m.type === "PDF").map((m) => ({ url: m.url, label: m.altText ?? "Document" })),
+    images: p.media
+      .filter((m) => m.type === "IMAGE")
+      .map((m) => ({ url: m.url, alt: m.altText ?? text.title })),
+    documents: p.media
+      .filter((m) => m.type === "PDF")
+      .map((m) => ({ url: m.url, label: m.altText ?? "Document" })),
     isFeatured: p.isFeatured,
     hasVariants: p.hasVariants,
     seoTitle: text.seoTitle,
@@ -1030,7 +1208,15 @@ function toPublicProductDetail(p: PublicProductDetailRecord, countryId?: string)
   };
 }
 
-function toPublicCategory(c: { id: string; name: string; slug: string; description: string | null; image: string | null; translations?: CategoryTranslationSnapshot[]; _count: { products: number } }) {
+function toPublicCategory(c: {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  image: string | null;
+  translations?: CategoryTranslationSnapshot[];
+  _count: { products: number };
+}) {
   const text = getCategoryText(c);
 
   return {

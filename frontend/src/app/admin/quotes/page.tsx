@@ -6,6 +6,7 @@ import { Clock3, Eye, Filter, MessageSquareQuote, Plus, Search, ShoppingCart, X 
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminSelect, DataTable, Pagination, StatCard, StatusBadge, type Column } from "@/components/admin/AdminComponents";
 import { useAdminQuotes } from "@/hooks/admin/useAdminHooks";
+import { AdminStatsGrid } from "@/components/admin/dashboard/AdminStatsGrid";
 
 type QuoteRow = {
   id: string;
@@ -122,12 +123,12 @@ export default function QuotesPage() {
   return (
     <AdminLayout title="Quotes" breadcrumb={[{ label: "Quotes" }]}>
       <div className="space-y-5">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <AdminStatsGrid>
           <StatCard title="Total Quotes" value={counts.total} subtitle="All quote requests" icon={<MessageSquareQuote size={18} />} />
           <StatCard title="Pending Quotes" value={counts.pending} subtitle="Awaiting review" icon={<Clock3 size={18} />} color="bg-amber-600" />
           <StatCard title="Reviewing" value={counts.reviewing} subtitle="In progress" icon={<Filter size={18} />} color="bg-[#0F6CBD]" />
           <StatCard title="Converted" value={counts.converted} subtitle="Turned into orders" icon={<ShoppingCart size={18} />} color="bg-green-600" />
-        </div>
+        </AdminStatsGrid>
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1.8fr)_repeat(3,minmax(0,1fr))]">
