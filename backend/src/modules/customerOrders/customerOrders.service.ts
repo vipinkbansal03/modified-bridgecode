@@ -42,7 +42,7 @@ async function calculateCustomerOrder(customerId: string, input: CreateCustomerO
           defaultCurrency: true,
         },
       },
-      inventory: true,
+      inventories: true,
     },
   });
 
@@ -75,7 +75,8 @@ async function calculateCustomerOrder(customerId: string, input: CreateCustomerO
     const variant = variantMap.get(item.variantId);
     if (!variant) throw new AppError("One or more cart items are no longer available.", 400);
 
-    const availableStock = Math.max(0, (variant.inventory?.stock ?? 0) - (variant.inventory?.reservedStock ?? 0));
+    const stockRecord = variant.inventories.find((inventory) => inventory.countryId === orderCountry.id) ?? variant.inventories.find((inventory) => inventory.countryId === null);
+    const availableStock = Math.max(0, (stockRecord?.stock ?? 0) - (stockRecord?.reservedStock ?? 0));
     if (availableStock < item.quantity) {
       throw new AppError(`Insufficient stock for ${variant.sku ?? variant.title}.`, 400);
     }
@@ -239,6 +240,7 @@ export async function createCustomerOrder(customerId: string, input: CreateCusto
       await decrementVariantStock(
         item.variant.id,
         item.quantity,
+        order.countryId,
         { reason: "customer_order", adjustedBy: `customer:${customer.id};order:${order.id}` },
         tx
       );

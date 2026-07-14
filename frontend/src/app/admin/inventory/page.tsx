@@ -18,6 +18,8 @@ import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 type InventoryRow = {
   id: string;
   variantId?: string | null;
+  countryId?: string | null;
+  country?: { id: string; name: string; code: string } | null;
   product: {
     id: string;
     title: string;
@@ -573,7 +575,7 @@ export default function InventoryPage() {
               <div className="divide-y divide-[#E6E6E6]">
                 {rows.map((row) => {
                   const availableStock = Math.max(0, row.stock - row.reservedStock);
-                  const countryCount = row.product.countries?.length ?? 0;
+                  const countryLabel = row.country ? `${row.country.name} (${row.country.code})` : "Base";
                   const nextStockValue = String(row.stock);
                   const nextThresholdValue = String(row.lowStockThreshold);
 
@@ -597,7 +599,7 @@ export default function InventoryPage() {
                       </div>
                       <div className="px-2 text-[13px] text-[#555]">{tinyNumber(row.stock)}</div>
                       <div className="px-2 text-[13px] text-[#555]">{tinyNumber(availableStock)}</div>
-                      {visibleColumns.country && <div className="px-2 text-[13px] text-[#555]">{countryCount}</div>}
+                      {visibleColumns.country && <div className="px-2 text-[13px] text-[#555]">{countryLabel}</div>}
                       {visibleColumns.reserved && <div className="px-2 text-[13px] text-[#555]">{tinyNumber(row.reservedStock)}</div>}
                       {visibleColumns.threshold && (
                         <div className="px-2">

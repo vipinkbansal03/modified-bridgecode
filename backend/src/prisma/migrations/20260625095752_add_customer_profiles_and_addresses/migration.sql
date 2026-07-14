@@ -1,0 +1,3 @@
+-- No-op migration.
+-- Customer profiles and addresses were already created in 20260625082944_add_customer_model.
+-- This migration directory was created without SQL; kept for migration history continuity.

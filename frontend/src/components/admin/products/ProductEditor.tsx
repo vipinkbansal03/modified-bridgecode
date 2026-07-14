@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { Upload, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminTextarea, AdminSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column, toastMessages } from "@/components/admin/AdminComponents";
+import { Modal } from "@/components/ui/Modal";
 import {
   useAdminProduct,
   useUpdateProduct,
@@ -76,7 +77,16 @@ type VariantRow = {
   moq?: number | null;
   packageId?: string | null;
   package?: { id: string; title: string } | null;
-  inventory?: { id?: string; stock: number; lowStockThreshold?: number | null; status?: string | null } | null;
+  inventories?: {
+    id?: string;
+    variantId?: string | null;
+    countryId?: string | null;
+    country?: { id: string; name: string; code: string } | null;
+    stock: number;
+    reservedStock?: number | null;
+    lowStockThreshold?: number | null;
+    status?: string | null;
+  }[];
   prices?: {
     id: string;
     countryId?: string | null;
@@ -91,9 +101,63 @@ type VariantRow = {
     attributeId: string;
     attributeValueId: string;
     attribute?: { name: string };
-    attributeValue?: { value: string };
+    attributeValue?: { id?: string; value: string };
   }[];
 };
+
+function ProductBaseInventoryEditor({
+  productId,
+  inventory,
+  onSaved,
+  notify,
+}: {
+  productId: string;
+  inventory?: NonNullable<VariantRow["inventories"]>[number] | null;
+  onSaved: () => Promise<unknown>;
+  notify: (message: string, type?: "success" | "error") => void;
+}) {
+  const [stock, setStock] = useState(inventory?.stock ?? 0);
+  const [reservedStock, setReservedStock] = useState(inventory?.reservedStock ?? 0);
+  const [lowStockThreshold, setLowStockThreshold] = useState(inventory?.lowStockThreshold ?? 10);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (reservedStock > stock) {
+      notify("Reserved stock cannot exceed stock.", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      await adminApi.put(`/inventory/product/${productId}`, { stock, reservedStock, lowStockThreshold });
+      await onSaved();
+      notify("Base inventory saved.");
+    } catch (error) {
+      notify(getAdminErrorMessage(error, "Failed to save base inventory."), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-[#E6E6E6] bg-white p-4">
+      <div className="mb-4">
+        <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">Product Base Inventory</h4>
+        <p className="mt-1 text-[12px] text-[#6B6B6B]">This inventory is inherited by newly generated variants when no country-specific override applies.</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <AdminInput label="Stock" type="number" min={0} step={1} value={stock} onChange={(event) => setStock(Math.max(0, Math.trunc(Number(event.target.value))))} />
+        <AdminInput label="Reserved stock" type="number" min={0} step={1} value={reservedStock} onChange={(event) => setReservedStock(Math.max(0, Math.trunc(Number(event.target.value))))} />
+        <AdminInput label="Low-stock threshold" type="number" min={0} step={1} value={lowStockThreshold} onChange={(event) => setLowStockThreshold(Math.max(0, Math.trunc(Number(event.target.value))))} />
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <span className="text-[12px] text-[#6B6B6B]">Available after reservations: {Math.max(0, stock - reservedStock)}</span>
+        <button type="button" onClick={save} disabled={saving} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
+          {saving ? "Saving…" : inventory?.id ? "Update Base Inventory" : "Create Base Inventory"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 type GlobalAttribute = {
   id: string;
@@ -119,6 +183,28 @@ type AttributeValueDetail = {
 
 const getAttributeValues = <T extends { id: string; value: string }>(attribute?: { values?: T[] | null }): T[] =>
   Array.isArray(attribute?.values) ? attribute.values : [];
+
+const getBaseInventory = <T extends { countryId?: string | null }>(inventories?: T[] | null) =>
+  Array.isArray(inventories) ? inventories.find((inventory) => !inventory.countryId) ?? null : null;
+
+const resolveEditSelectedValue = (
+  attributeId: string,
+  values: { id: string; value: string }[],
+  selections: SingleSelectionMap,
+  variant: VariantRow | null,
+) => {
+  const selectedId = selections[attributeId];
+  if (!selectedId) return null;
+  const fromCatalog = values.find((value) => value.id === selectedId);
+  if (fromCatalog) return fromCatalog;
+  const fromVariant = variant?.attributeValues?.find(
+    (binding) => binding.attributeId === attributeId && binding.attributeValueId === selectedId,
+  )?.attributeValue;
+  if (fromVariant?.value) {
+    return { id: fromVariant.id ?? selectedId, value: fromVariant.value };
+  }
+  return null;
+};
 
 type ProductAttributeMapping = {
   id: string;
@@ -328,7 +414,7 @@ function VariantGridMatrix({
                         </div>
                       ) : (
                         <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#555]">
-                          <span>Stock: {cell.variant.inventory?.stock ?? "No stock"}</span>
+                          <span>Stock: {getBaseInventory(cell.variant.inventories)?.stock ?? "No stock"}</span>
                           <span>Price: {bulkCountryId ? `${getVariantPriceForCountry(cell.variant, bulkCountryId)?.currency?.symbol ?? ""}${getVariantPriceForCountry(cell.variant, bulkCountryId)?.sellingPrice ?? "No price"}` : formatVariantPrice(cell.variant)}</span>
                         </div>
                       )}
@@ -367,10 +453,11 @@ function VariantGridMatrix({
 
 type ProductEditorProps = {
   productId: string;
-  embedded?: boolean;
 };
 
-export function ProductEditor({ productId, embedded = false }: ProductEditorProps) {
+export function ProductEditor({ productId }: ProductEditorProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const variantIdFromQuery = searchParams.get("variant");
   const [activeTab, setActiveTab] = useState(0);
@@ -383,6 +470,7 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
   const [packageTitle, setPackageTitle] = useState("");
   const [packageDescription, setPackageDescription] = useState("");
   const [packageImage, setPackageImage] = useState("");
+  const [uploadingPackageImage, setUploadingPackageImage] = useState(false);
   const [packageSortOrder, setPackageSortOrder] = useState(0);
   const [packageStatus, setPackageStatus] = useState("ACTIVE");
   const [manualVariantOpen, setManualVariantOpen] = useState(false);
@@ -414,16 +502,22 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
   const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
   const [variantCountryModalVariant, setVariantCountryModalVariant] = useState<VariantRow | null>(null);
   const [variantCountryOverrides, setVariantCountryOverrides] = useState<Record<string, boolean>>({});
+  const [inventoryOverrideDrafts, setInventoryOverrideDrafts] = useState<Record<string, { countryId: string; stock: string }>>({});
   const [selectedMappingAttributeId, setSelectedMappingAttributeId] = useState("");
   const [newMappingRequired, setNewMappingRequired] = useState(true);
+  const [newMappingGridAxis, setNewMappingGridAxis] = useState<GridAxis | null>(null);
   const [newMappingValueIds, setNewMappingValueIds] = useState<string[]>([]);
   const [bulkEditMode, setBulkEditMode] = useState(false);
   const [bulkCountryId, setBulkCountryId] = useState("");
   const [bulkDrafts, setBulkDrafts] = useState<Record<string, BulkVariantDraft>>({});
   const [bulkRowErrors, setBulkRowErrors] = useState<Record<string, string>>({});
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [selectedVariantIds, setSelectedVariantIds] = useState<string[]>([]);
   const [tierRuleDraft, setTierRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
   const [moqRuleDraft, setMoqRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
+  const [countryPriceModalOpen, setCountryPriceModalOpen] = useState(false);
+  const [countryPriceBase, setCountryPriceBase] = useState("");
+  const [generatingCountryPrices, setGeneratingCountryPrices] = useState(false);
   const { showToast, ToastComponent } = useToast();
 
   const { data: product, isLoading, refetch } = useAdminProduct(productId);
@@ -470,14 +564,57 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
             id: mapping.attributeId,
             name: mapping.attribute.name,
             role: mapping.attribute.role,
-            values: mapping.allowedValues.map((allowedValue) => ({
-              id: allowedValue.attributeValueId,
-              value: allowedValue.attributeValue.value,
-            })),
+            values: (mapping.allowedValues.length ? mapping.allowedValues.map((allowedValue) => allowedValue.attributeValue) : mapping.attribute.values).map(
+              (value) => ({
+                id: value.id,
+                value: value.value,
+              }),
+            ),
           }))
         : attributeCatalog,
     [attributeCatalog, hasMappedProductAttributes, mappedAttributeRows]
   );
+  const editVariantAttributeCatalog = useMemo(() => {
+    const catalog = new Map<string, GlobalAttribute>();
+
+    variantGenerationCatalog.forEach((attribute) => {
+      catalog.set(attribute.id, {
+        id: attribute.id,
+        name: attribute.name,
+        role: attribute.role,
+        values: [...getAttributeValues(attribute)],
+      });
+    });
+
+    attributeCatalog.forEach((attribute) => {
+      if (!catalog.has(attribute.id)) {
+        catalog.set(attribute.id, {
+          id: attribute.id,
+          name: attribute.name,
+          role: attribute.role,
+          values: [...getAttributeValues(attribute)],
+        });
+      }
+    });
+
+    (editingVariant?.attributeValues ?? []).forEach((binding) => {
+      const attributeId = binding.attributeId;
+      const existing = catalog.get(attributeId) ?? {
+        id: attributeId,
+        name: binding.attribute?.name ?? "Attribute",
+        role: undefined,
+        values: [] as { id: string; value: string }[],
+      };
+      if (binding.attribute?.name) existing.name = binding.attribute.name;
+      const value = binding.attributeValue;
+      if (value?.value && !existing.values.some((item) => item.id === (value.id ?? binding.attributeValueId))) {
+        existing.values.push({ id: value.id ?? binding.attributeValueId, value: value.value });
+      }
+      catalog.set(attributeId, existing);
+    });
+
+    return catalog;
+  }, [attributeCatalog, editingVariant, variantGenerationCatalog]);
   const packageRows = useMemo(() => (product?.packages ?? []) as PackageRow[], [product?.packages]);
   const variantRows = useMemo(() => (product?.variants ?? []) as VariantRow[], [product?.variants]);
   const bulkCountryOptions = useMemo(() => {
@@ -579,11 +716,24 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
   ];
 
   const variantCols: Column<VariantRow>[] = [
+    {
+      key: "select",
+      label: "Select",
+      render: (row) => (
+        <input
+          type="checkbox"
+          aria-label={`Select ${row.title}`}
+          checked={selectedVariantIds.includes(row.id)}
+          onChange={(event) => setSelectedVariantIds((current) => event.target.checked ? [...current, row.id] : current.filter((id) => id !== row.id))}
+          className="h-4 w-4 accent-[#E31E24]"
+        />
+      ),
+    },
     { key: "title", label: "Variant" },
     { key: "package", label: "Package", render: (row) => row.package?.title ?? "Default" },
     { key: "sku", label: "SKU" },
     { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
-    { key: "stock", label: "Stock", render: (row) => row.inventory?.stock ?? "—" },
+    { key: "stock", label: "Stock", render: (row) => getBaseInventory(row.inventories)?.stock ?? "—" },
     {
       key: "actions",
       label: "Actions",
@@ -743,7 +893,11 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
       doctorRetailerPrice:
         bulkDrafts[variant.id]?.doctorRetailerPrice ??
         (price?.distributorPrice !== undefined && price?.distributorPrice !== null ? `${price.distributorPrice}` : ""),
-      stock: bulkDrafts[variant.id]?.stock ?? (variant.inventory?.stock !== undefined && variant.inventory?.stock !== null ? `${variant.inventory.stock}` : ""),
+      stock:
+        bulkDrafts[variant.id]?.stock ??
+        (getBaseInventory(variant.inventories)?.stock !== undefined && getBaseInventory(variant.inventories)?.stock !== null
+          ? `${getBaseInventory(variant.inventories)?.stock}`
+          : ""),
     };
   };
 
@@ -770,7 +924,10 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
         const currentDealerPriceValue = currentPrice?.dealerPrice !== undefined && currentPrice?.dealerPrice !== null ? `${currentPrice.dealerPrice}` : "";
         const currentDoctorRetailerPriceValue =
           currentPrice?.distributorPrice !== undefined && currentPrice?.distributorPrice !== null ? `${currentPrice.distributorPrice}` : "";
-        const currentStockValue = variant.inventory?.stock !== undefined && variant.inventory?.stock !== null ? `${variant.inventory.stock}` : "";
+        const currentStockValue =
+          getBaseInventory(variant.inventories)?.stock !== undefined && getBaseInventory(variant.inventories)?.stock !== null
+            ? `${getBaseInventory(variant.inventories)?.stock}`
+            : "";
         const priceChanged = draft.price !== undefined && draft.price !== currentPriceValue;
         const dealerPriceChanged = draft.dealerPrice !== undefined && draft.dealerPrice !== currentDealerPriceValue;
         const doctorRetailerPriceChanged =
@@ -815,6 +972,28 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
       if (!failed) setBulkDrafts({});
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Bulk update failed."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  const handleBulkDeleteVariants = async () => {
+    if (!selectedVariantIds.length) {
+      showToast("Select at least one variant.", "error");
+      return;
+    }
+    if (!window.confirm(`Delete ${selectedVariantIds.length} selected variant${selectedVariantIds.length === 1 ? "" : "s"}?`)) return;
+    setBulkSaving(true);
+    try {
+      const response = await adminApi.put(`/products/${productId}/variants/bulk`, {
+        updates: selectedVariantIds.map((variantId) => ({ variantId, action: "delete" })),
+      });
+      const summary = response.data.data.summary as { succeeded: number; failed: number };
+      showToast(summary.failed ? `Deleted ${summary.succeeded}; ${summary.failed} failed.` : `${summary.succeeded} variant${summary.succeeded === 1 ? "" : "s"} deleted.`, summary.failed ? "error" : "success");
+      setSelectedVariantIds([]);
+      await refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Bulk delete failed."), "error");
     } finally {
       setBulkSaving(false);
     }
@@ -886,6 +1065,7 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
   const resetAttributeMappingForm = () => {
     setSelectedMappingAttributeId("");
     setNewMappingRequired(true);
+    setNewMappingGridAxis(null);
     setNewMappingValueIds([]);
   };
 
@@ -893,6 +1073,14 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
     setNewMappingValueIds((current) =>
       current.includes(valueId) ? current.filter((id) => id !== valueId) : [...current, valueId]
     );
+  };
+
+  const selectAllNewMappingValues = () => {
+    setNewMappingValueIds(selectedAttributeValues.map((value) => value.id));
+  };
+
+  const clearAllNewMappingValues = () => {
+    setNewMappingValueIds([]);
   };
 
   const handleAddProductAttribute = async () => {
@@ -906,12 +1094,13 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
     }
 
     try {
+      const existingMappings = toProductAttributePayload(mappedAttributeRows);
       await assignProductAttributes.mutateAsync([
-        ...toProductAttributePayload(mappedAttributeRows),
+        ...existingMappings,
         {
           attributeId: selectedMappingAttributeId,
           required: newMappingRequired,
-          gridAxis: null,
+          gridAxis: newMappingGridAxis,
           allowedValueIds: newMappingValueIds,
         },
       ]);
@@ -939,10 +1128,12 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
     try {
       await assignProductAttributes.mutateAsync(
         toProductAttributePayload(mappedAttributeRows).map((mapping) =>
-          mapping.attributeId === attributeId ? { ...mapping, gridAxis } : mapping
+          mapping.attributeId === attributeId
+            ? { ...mapping, gridAxis }
+            : mapping
         )
       );
-      showToast("Grid axis updated.");
+      showToast(gridAxis === "COLUMN" ? "Column attribute updated." : gridAxis === "ROW" ? "Row attribute updated." : "Attribute changed to Dropdown.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to update grid axis."), "error");
     }
@@ -964,6 +1155,20 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
         ? "border-purple-200 bg-purple-50 text-purple-700"
         : "border-emerald-200 bg-emerald-50 text-emerald-700";
 
+  const getDisplayTypeLabel = (gridAxis?: GridAxis | null) => {
+    const role = gridAxis === "ROW" ? "Y_GRID" : gridAxis === "COLUMN" ? "X_GRID" : "DROPDOWN";
+    return role === "X_GRID" ? "Matrix columns" : role === "Y_GRID" ? "Matrix rows" : "Dropdown filter";
+  };
+
+  const getDisplayTypeRole = (gridAxis?: GridAxis | null): AttributeRole =>
+    gridAxis === "ROW" ? "Y_GRID" : gridAxis === "COLUMN" ? "X_GRID" : "DROPDOWN";
+
+  const getDisplayTypeValue = (gridAxis?: GridAxis | null) => {
+    if (gridAxis === "ROW") return "ROW";
+    if (gridAxis === "COLUMN") return "COLUMN";
+    return "";
+  };
+
   const formatPriceValue = (value?: string | number | null) => (value === null || value === undefined || value === "" ? "Not set" : `${value}`);
 
   const saveProductTranslation = async (languageId: string, field: ProductTranslationField, value: string) => {
@@ -982,6 +1187,7 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
     setPackageTitle("");
     setPackageDescription("");
     setPackageImage("");
+    setUploadingPackageImage(false);
     setPackageSortOrder(0);
     setPackageStatus("ACTIVE");
   };
@@ -1026,6 +1232,27 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
       refetch();
     } catch {
       showToast("Failed to save package.", "error");
+    }
+  };
+
+  const uploadPackageImage = async (file?: File) => {
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("files", file);
+    setUploadingPackageImage(true);
+    try {
+      const response = await adminApi.post("/media", formData, { headers: { "Content-Type": "multipart/form-data" } });
+      const uploaded = response.data?.data?.[0];
+      if (uploaded?.url) {
+        setPackageImage(uploaded.url);
+        showToast("Package image uploaded.");
+      } else {
+        throw new Error("Upload completed, but no image URL was returned.");
+      }
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Package image upload failed."), "error");
+    } finally {
+      setUploadingPackageImage(false);
     }
   };
 
@@ -1083,18 +1310,27 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
   };
 
   const openGenerateVariantModal = () => {
+    const mappedAttributeIdsForGeneration = (
+      mappedAttributeRows.length
+        ? mappedAttributeRows
+        : []
+    ).map((mapping) => mapping.attributeId);
+    const seedAttributeIds =
+      mappedAttributeIdsForGeneration.length > 0
+        ? mappedAttributeIdsForGeneration
+        : mappedAttributeRows.filter((mapping) => mapping.required).map((mapping) => mapping.attributeId);
     setGeneratePackageIds(packageRows.map((pkg) => pkg.id));
-    setGenerateAttributeIds([]);
+    setGenerateAttributeIds(seedAttributeIds);
     setGenerateSelectionMap({});
     setGenerateModeMap(
-      Object.fromEntries(variantGenerationCatalog.map((attribute) => [attribute.id, "skip"])) as GenerateModeMap
+      Object.fromEntries(seedAttributeIds.map((attributeId) => [attributeId, "all"])) as GenerateModeMap,
     );
     setGenerateAttributePicker("");
     setGenerateValuePickerMap({});
     setGenerateVariantOpen(true);
   };
 
-  const openEditVariantModal = (variant: VariantRow) => {
+  const openEditVariantModal = useCallback((variant: VariantRow) => {
     const usedAttributeIds = (variant.attributeValues ?? []).map((value) => value.attributeId);
     setEditingVariant(variant);
     setEditVariantAttributeIds(usedAttributeIds);
@@ -1107,7 +1343,50 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
     setEditVariantSelections(
       Object.fromEntries((variant.attributeValues ?? []).map((value) => [value.attributeId, value.attributeValueId]))
     );
-  };
+  }, []);
+
+  const closeEditVariantModal = useCallback(() => {
+    setEditingVariant(null);
+    if (!variantIdFromQuery) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("variant");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams, variantIdFromQuery]);
+
+  const openCountryPriceModal = useCallback(() => {
+    setCountryPriceBase("");
+    setCountryPriceModalOpen(true);
+  }, []);
+
+  const closeCountryPriceModal = useCallback(() => {
+    if (generatingCountryPrices) return;
+    setCountryPriceModalOpen(false);
+    setCountryPriceBase("");
+  }, [generatingCountryPrices]);
+
+  const handleGenerateCountryPrices = useCallback(async () => {
+    const basePrice = Number(countryPriceBase);
+    if (!Number.isFinite(basePrice) || basePrice <= 0) {
+      showToast("Enter a valid base price greater than 0.", "error");
+      return;
+    }
+
+    try {
+      setGeneratingCountryPrices(true);
+      const result = await adminApi.post("/pricing/generate-country-prices", {
+        productId,
+        basePrice,
+      });
+      showToast(result.data?.message || "Country prices generated.");
+      closeCountryPriceModal();
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to generate country prices."), "error");
+    } finally {
+      setGeneratingCountryPrices(false);
+    }
+  }, [closeCountryPriceModal, countryPriceBase, productId, refetch, showToast]);
 
   useEffect(() => {
     if (!variantIdFromQuery || editingVariant) return;
@@ -1220,7 +1499,7 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
         status: editVariantStatus,
       });
       showToast("Variant updated.");
-      setEditingVariant(null);
+      closeEditVariantModal();
       refetch();
     } catch {
       showToast("Failed to update variant.", "error");
@@ -1231,7 +1510,7 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
     const selectedAttributes = variantGenerationCatalog
       .filter((attribute) => generateAttributeIds.includes(attribute.id))
       .map((attribute) => {
-        const mode = generateModeMap[attribute.id] ?? "skip";
+        const mode = generateModeMap[attribute.id] ?? "all";
         if (mode === "skip") return null;
         if (mode === "all") {
           return {
@@ -1249,21 +1528,37 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
       .filter(Boolean) as { attributeId: string; attributeValueIds: string[] }[];
 
     if (!selectedAttributes.length) {
-      showToast("Select at least one attribute group.", "error");
+      const skippedAttributes = variantGenerationCatalog.filter(
+        (attribute) => generateAttributeIds.includes(attribute.id) && (generateModeMap[attribute.id] ?? "all") === "skip",
+      );
+      if (skippedAttributes.length > 0) {
+        showToast(
+          `${skippedAttributes.map((attribute) => attribute.name).join(", ")} is set to Skip Attribute. Switch to Use All Values or remove it.`,
+          "error",
+        );
+        return;
+      }
+
+      const hasAddedAttributes = generateAttributeIds.length > 0;
+      showToast(
+        hasAddedAttributes
+          ? "Choose values for each attribute, or switch an attribute to Use All Values."
+          : "Add at least one attribute before generating variants.",
+        "error",
+      );
       return;
     }
 
     const specificMissing = variantGenerationCatalog
       .filter((attribute) => generateAttributeIds.includes(attribute.id))
       .some((attribute) => {
-      const mode = generateModeMap[attribute.id] ?? "skip";
+      const mode = generateModeMap[attribute.id] ?? "all";
       return mode === "specific" && !(generateSelectionMap[attribute.id] ?? []).length;
     });
     if (specificMissing) {
       showToast("Choose specific values for every attribute set to Specific Values.", "error");
       return;
     }
-
     setGeneratingVariants(true);
     try {
       const result = await adminApi.post(`/products/${productId}/generate-variants`, {
@@ -1421,7 +1716,7 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
       return;
     }
     setGenerateAttributeIds((current) => [...current, generateAttributePicker]);
-    setGenerateModeMap((current) => ({ ...current, [generateAttributePicker]: "specific" }));
+    setGenerateModeMap((current) => ({ ...current, [generateAttributePicker]: "all" }));
     setGenerateAttributePicker("");
   };
 
@@ -1432,7 +1727,11 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
       delete next[attributeId];
       return next;
     });
-    setGenerateModeMap((current) => ({ ...current, [attributeId]: "skip" }));
+    setGenerateModeMap((current) => {
+      const next = { ...current };
+      delete next[attributeId];
+      return next;
+    });
     setGenerateValuePickerMap((current) => {
       const next = { ...current };
       delete next[attributeId];
@@ -1549,12 +1848,12 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
         {[...Array(4)].map((_, i) => <div key={i} className="h-12 animate-pulse rounded-lg bg-[#E6E6E6]" />)}
       </div>
     );
-    return embedded ? loadingContent : <AdminLayout title="Edit Product">{loadingContent}</AdminLayout>;
+    return <AdminLayout title="Edit Product">{loadingContent}</AdminLayout>;
   }
 
   if (!product) {
     const emptyContent = <p className="text-[#9A9A9A]">Product not found.</p>;
-    return embedded ? emptyContent : <AdminLayout title="Product not found">{emptyContent}</AdminLayout>;
+    return <AdminLayout title="Product not found">{emptyContent}</AdminLayout>;
   }
 
   const content = (
@@ -1680,6 +1979,22 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                 <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Variants are created from package + selected attribute values.</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedVariantIds(selectedVariantIds.length === variantRows.length ? [] : variantRows.map((variant) => variant.id))}
+                  disabled={!variantRows.length}
+                  className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] disabled:opacity-40"
+                >
+                  {selectedVariantIds.length === variantRows.length && variantRows.length ? "Clear Selection" : "Select All"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkDeleteVariants}
+                  disabled={!selectedVariantIds.length || bulkSaving}
+                  className="flex items-center gap-1.5 rounded-md border border-[#F2C9C9] bg-white px-3 py-2 text-[13px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-40"
+                >
+                  <Trash2 size={14} /> Delete Selected ({selectedVariantIds.length})
+                </button>
                 {bulkEditMode && bulkCountryOptions.length > 0 && (
                   <select
                     value={selectedBulkCountryId}
@@ -1805,21 +2120,8 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                   <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Set prices per country. Use Generate to auto-convert from base price.</p>
                 </div>
                 <button
-                  onClick={async () => {
-                    const base = prompt("Enter base price in USD:");
-                    if (!base) return;
-                    try {
-                      await adminApi.post("/pricing/generate-country-prices", {
-                        productId,
-                        basePrice: parseFloat(base),
-                        baseCurrencyId: product.defaultCurrencyId || undefined,
-                      });
-                      showToast("Country prices generated.");
-                      refetch();
-                    } catch {
-                      showToast("Failed.", "error");
-                    }
-                  }}
+                  type="button"
+                  onClick={openCountryPriceModal}
                   className="flex items-center gap-1.5 rounded-md bg-[#1A1A1A] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#333]"
                 >
                   <RefreshCw size={14} /> Generate All Country Prices
@@ -1893,43 +2195,163 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
         {activeTab === 5 && (
           <div className="p-6">
             <h3 className="mb-4 text-[14px] font-semibold text-[#1A1A1A]">Inventory</h3>
-            <div className="space-y-3">
-              {(variantRows.length ? variantRows : [{ id: "main", title: "Main Stock", inventory: null }]).map((v: { id: string; title: string; inventory?: { id?: string; stock: number; lowStockThreshold?: number | null; status?: string | null } | null }) => (
-                <div key={v.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-[#E6E6E6] p-4">
-                  <span className="min-w-[160px] text-[13.5px] font-medium text-[#1A1A1A]">{v.title}</span>
-                  <div className="ml-auto flex items-center gap-2">
-                    <div className="text-center">
-                      <div className="mb-1 text-[11px] text-[#9A9A9A]">Stock</div>
-                      <input
-                        type="number"
-                        min="0"
-                        defaultValue={v.inventory?.stock || 0}
-                        className="w-20 rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13.5px] outline-none focus:border-[#E31E24]"
-                        onBlur={async (e) => {
-                          if (!v.inventory?.id) return;
-                          await adminApi.put(`/inventory/${v.inventory.id}`, { stock: parseInt(e.target.value) });
-                          showToast("Stock updated.");
-                        }}
-                      />
-                    </div>
-                    <div className="text-center">
-                      <div className="mb-1 text-[11px] text-[#9A9A9A]">Low Stock</div>
-                      <input
-                        type="number"
-                        min="0"
-                        defaultValue={v.inventory?.lowStockThreshold || 10}
-                        className="w-20 rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13.5px] outline-none focus:border-[#E31E24]"
-                        onBlur={async (e) => {
-                          if (!v.inventory?.id) return;
-                          await adminApi.put(`/inventory/${v.inventory.id}`, { lowStockThreshold: parseInt(e.target.value) });
-                        }}
-                      />
-                    </div>
-                    {v.inventory && <StatusBadge status={v.inventory.status || "INACTIVE"} />}
-                  </div>
-                </div>
-              ))}
+            <div className="mb-5">
+              {(() => {
+                const productLevelInventories = ((product?.inventories ?? []) as NonNullable<VariantRow["inventories"]>).filter((inventory) => !inventory.variantId);
+                const baseInventory = productLevelInventories.find((inventory) => !inventory.countryId) ?? null;
+                return (
+                  <ProductBaseInventoryEditor
+                    key={baseInventory?.id ?? "new-product-base-inventory"}
+                    productId={productId}
+                    inventory={baseInventory}
+                    onSaved={refetch}
+                    notify={showToast}
+                  />
+                );
+              })()}
             </div>
+            {variantRows.length > 0 && <div className="space-y-3">
+              {variantRows.map((variant) => ({
+                    id: variant.id,
+                    title: variant.title,
+                    inventories: variant.inventories ?? [],
+                  })).map(
+                (item: { id: string; title: string; inventories?: VariantRow["inventories"] }) => {
+                  const baseInventory = getBaseInventory(item.inventories);
+                  const countryInventories = (item.inventories ?? []).filter((inventory) => inventory.countryId);
+                  const existingCountryIds = new Set(countryInventories.map((inventory) => inventory.countryId).filter(Boolean));
+                  const availableOverrideCountries = (productCountries as CountryAvailability[]).filter(
+                    (country) => (countryOverrides[country.id] ?? country.enabled) && !existingCountryIds.has(country.id),
+                  );
+                  const draft = inventoryOverrideDrafts[item.id] ?? { countryId: availableOverrideCountries[0]?.id ?? "", stock: "0" };
+                  const canCreateOverride = item.id !== "main" && availableOverrideCountries.length > 0;
+
+                  return (
+                    <div key={item.id} className="rounded-lg border border-[#E6E6E6] p-4">
+                      <div className="mb-3 text-[13.5px] font-medium text-[#1A1A1A]">{item.title}</div>
+                      <div className="space-y-3">
+                        {[baseInventory, ...countryInventories].filter(Boolean).map((inventory) => (
+                          <div key={inventory?.id ?? `${item.id}-${inventory?.countryId ?? "base"}`} className="flex flex-wrap items-center gap-3 rounded-lg border border-[#F1F1F1] bg-[#FCFCFC] p-3">
+                            <div>
+                              <div className="text-[12px] font-medium text-[#1A1A1A]">{inventory?.country ? `${inventory.country.name} (${inventory.country.code})` : "Base Inventory"}</div>
+                              <div className="text-[11px] text-[#8A8A8A]">{inventory?.country ? "Overrides base stock for this country." : "Fallback stock used when no country override exists."}</div>
+                            </div>
+                            <div className="ml-auto flex items-center gap-2">
+                              <div className="text-center">
+                                <div className="mb-1 text-[11px] text-[#9A9A9A]">Stock</div>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  defaultValue={inventory?.stock || 0}
+                                  className="w-20 rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13.5px] outline-none focus:border-[#E31E24]"
+                                  onBlur={async (e) => {
+                                    if (!inventory?.id) return;
+                                    await adminApi.put(`/inventory/${inventory.id}`, { stock: parseInt(e.target.value) });
+                                    showToast("Stock updated.");
+                                  }}
+                                />
+                              </div>
+                              <div className="text-center">
+                                <div className="mb-1 text-[11px] text-[#9A9A9A]">Low Stock</div>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  defaultValue={inventory?.lowStockThreshold || 10}
+                                  className="w-20 rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13.5px] outline-none focus:border-[#E31E24]"
+                                  onBlur={async (e) => {
+                                    if (!inventory?.id) return;
+                                    await adminApi.put(`/inventory/${inventory.id}`, { lowStockThreshold: parseInt(e.target.value) });
+                                  }}
+                                />
+                              </div>
+                              {inventory && <StatusBadge status={inventory.status || "INACTIVE"} />}
+                            </div>
+                          </div>
+                        ))}
+
+                        {canCreateOverride ? (
+                          <div className="rounded-md border border-dashed border-[#E6E6E6] bg-[#FAFAFA] p-3">
+                            <div className="mb-2 text-[12px] font-medium text-[#1A1A1A]">Add country override</div>
+                            <div className="flex flex-wrap items-end gap-2">
+                              <div className="min-w-[180px] flex-1">
+                                <AdminSelect
+                                  label="Country"
+                                  value={draft.countryId}
+                                  onChange={(e) =>
+                                    setInventoryOverrideDrafts((current) => ({
+                                      ...current,
+                                      [item.id]: { ...draft, countryId: e.target.value },
+                                    }))
+                                  }
+                                  options={[
+                                    { value: "", label: "Select country" },
+                                    ...availableOverrideCountries.map((country) => ({
+                                      value: country.id,
+                                      label: `${country.name} (${country.code})`,
+                                    })),
+                                  ]}
+                                />
+                              </div>
+                              <div>
+                                <AdminInput
+                                  label="Stock"
+                                  type="number"
+                                  min={0}
+                                  value={draft.stock}
+                                  onChange={(e) =>
+                                    setInventoryOverrideDrafts((current) => ({
+                                      ...current,
+                                      [item.id]: { ...draft, stock: e.target.value },
+                                    }))
+                                  }
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                className="rounded-md bg-[#E31E24] px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B]"
+                                onClick={async () => {
+                                  if (!draft.countryId) {
+                                    showToast("Select a country for the override.", "error");
+                                    return;
+                                  }
+                                  const stock = Math.max(0, parseInt(draft.stock || "0", 10) || 0);
+                                  try {
+                                    await adminApi.post("/inventory/upsert", {
+                                      variantId: item.id,
+                                      countryId: draft.countryId,
+                                      stock,
+                                    });
+                                    setInventoryOverrideDrafts((current) => {
+                                      const next = { ...current };
+                                      delete next[item.id];
+                                      return next;
+                                    });
+                                    showToast("Country inventory override created.");
+                                    refetch();
+                                  } catch (error) {
+                                    showToast(getAdminErrorMessage(error, "Failed to create country override."), "error");
+                                  }
+                                }}
+                              >
+                                Add Override
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          !countryInventories.length && (
+                            <p className="rounded-md border border-dashed border-[#E6E6E6] px-3 py-2 text-[12px] text-[#8A8A8A]">
+                              {item.id === "main"
+                                ? "Enable variants to manage country overrides."
+                                : "Enable countries in Country Availability first, then add overrides here."}
+                            </p>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  );
+                },
+              )}
+            </div>}
           </div>
         )}
 
@@ -2101,8 +2523,8 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
                             <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">{mapping.attribute.name}</h4>
-                            <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", roleBadgeClass(mapping.attribute.role))}>
-                              {mapping.attribute.role}
+                            <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", roleBadgeClass(getDisplayTypeRole(mapping.gridAxis)))}>
+                              {getDisplayTypeLabel(mapping.gridAxis)}
                             </span>
                           </div>
                           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -2118,13 +2540,20 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center justify-end gap-3">
-                          <span className="rounded-full border border-[#E6E6E6] bg-[#FAFAFA] px-2.5 py-1 text-[11.5px] text-[#555]">
-                            {mapping.attribute.role === "X_GRID"
-                              ? "Matrix columns"
-                              : mapping.attribute.role === "Y_GRID"
-                                ? "Matrix rows"
-                                : "Dropdown filter"}
-                          </span>
+                          <div className="min-w-[180px]">
+                            <AdminSelect
+                              value={getDisplayTypeValue(mapping.gridAxis)}
+                              onChange={(e) => {
+                                const next = e.target.value as GridAxis | "";
+                                handleSetMappedGridAxis(mapping.attributeId, next === "ROW" ? "ROW" : next === "COLUMN" ? "COLUMN" : null);
+                              }}
+                              options={[
+                                { value: "", label: "Dropdown filter" },
+                                { value: "COLUMN", label: "Matrix columns" },
+                                { value: "ROW", label: "Matrix rows" },
+                              ]}
+                            />
+                          </div>
                           <label className="flex items-center gap-2 text-[12.5px] text-[#555]">
                             <input
                               type="checkbox"
@@ -2158,6 +2587,7 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                     value={selectedMappingAttributeId}
                     onChange={(e) => {
                       setSelectedMappingAttributeId(e.target.value);
+                      setNewMappingGridAxis(null);
                       setNewMappingValueIds([]);
                     }}
                     options={[
@@ -2174,14 +2604,55 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                     />
                     Required for this product
                   </label>
+                  <AdminSelect
+                    value={getDisplayTypeValue(newMappingGridAxis)}
+                    onChange={(e) => {
+                      const next = e.target.value as GridAxis | "";
+                      setNewMappingGridAxis(next === "ROW" ? "ROW" : next === "COLUMN" ? "COLUMN" : null);
+                    }}
+                    options={[
+                      { value: "", label: "Dropdown filter" },
+                      { value: "COLUMN", label: "Matrix columns" },
+                      { value: "ROW", label: "Matrix rows" },
+                    ]}
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={cn("rounded-full border px-2.5 py-1 text-[11.5px] font-medium", roleBadgeClass(getDisplayTypeRole(newMappingGridAxis)))}>
+                      {getDisplayTypeLabel(newMappingGridAxis)}
+                    </span>
+                    <span className="text-[12px] text-[#9A9A9A]">Current display type</span>
+                  </div>
+                  <p className="text-[12px] leading-5 text-[#9A9A9A]">
+                    Product-level display types control the storefront exactly: Dropdown for filtering, Matrix columns for the X axis, and Matrix rows for the Y axis. Multiple row or column attributes are combined automatically. Product Packages are displayed separately as tabs.
+                  </p>
 
                   {selectedMappingAttributeId && selectedAttributeDetail ? (
                     <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", roleBadgeClass(selectedAttributeDetail.role as AttributeRole))}>
-                          {selectedAttributeDetail.role}
+                        <div className="flex items-center gap-2">
+                          <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", roleBadgeClass(getDisplayTypeRole(newMappingGridAxis)))}>
+                            {getDisplayTypeLabel(newMappingGridAxis)}
+                          </span>
+                          <span className="text-[12px] text-[#9A9A9A]">{newMappingValueIds.length} selected</span>
+                        </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={selectAllNewMappingValues}
+                          className="rounded-full border border-[#E6E6E6] bg-white px-3 py-1 text-[11.5px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                        >
+                          Select all
+                        </button>
+                        <button
+                          type="button"
+                          onClick={clearAllNewMappingValues}
+                          className="rounded-full border border-[#E6E6E6] bg-white px-3 py-1 text-[11.5px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                        >
+                          Clear all
+                        </button>
+                        <span className="text-[12px] text-[#9A9A9A]">
+                          {newMappingValueIds.length} of {selectedAttributeValues.length} selected
                         </span>
-                        <span className="text-[12px] text-[#9A9A9A]">{newMappingValueIds.length} selected</span>
                       </div>
 
                       <div className="space-y-1.5">
@@ -2225,7 +2696,7 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                 <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Country Availability</h3>
                 <p className="mt-1 max-w-[760px] text-[12.5px] leading-relaxed text-[#6B6B6B]">
                   Availability controls where this product is visible. New products start invisible everywhere until countries are enabled here.
-                  This is separate from default country/currency fallback values, which are not edited on this screen.
+                  Enabling a country also enables that country on this product's category and active variants so it can appear on the storefront.
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -2287,33 +2758,80 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
 
       {packageModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-[720px] rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-[18px] font-semibold text-[#1A1A1A]">{editingPackage ? "Edit Package" : "Create Package"}</h3>
-                <p className="mt-1 text-[13px] text-[#6B6B6B]">Packages are commercial offerings and are not attribute values.</p>
-              </div>
-              <button onClick={() => setPackageModalOpen(false)} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <AdminInput label="Title" value={packageTitle} onChange={(e) => setPackageTitle(e.target.value)} />
-              <AdminSelect
-                label="Status"
-                value={packageStatus}
-                onChange={(e) => setPackageStatus(e.target.value)}
-                options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]}
-              />
-              <AdminInput label="Image URL" value={packageImage} onChange={(e) => setPackageImage(e.target.value)} placeholder="Optional image URL" />
-              <AdminInput label="Sort Order" type="number" value={packageSortOrder} onChange={(e) => setPackageSortOrder(Number(e.target.value) || 0)} />
-              <div className="sm:col-span-2">
-                <AdminTextarea label="Description" rows={4} value={packageDescription} onChange={(e) => setPackageDescription(e.target.value)} />
+          <div className="flex w-full max-w-[720px] max-h-[86vh] flex-col overflow-hidden rounded-xl bg-white shadow-xl">
+            <div className="shrink-0 border-b border-[#E6E6E6] px-6 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-[18px] font-semibold text-[#1A1A1A]">{editingPackage ? "Edit Package" : "Create Package"}</h3>
+                  <p className="mt-1 text-[13px] text-[#6B6B6B]">Packages are commercial offerings and are not attribute values.</p>
+                </div>
+                <button onClick={() => setPackageModalOpen(false)} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
+                  <X size={18} />
+                </button>
               </div>
             </div>
-            <div className="mt-6 flex items-center justify-end gap-2">
-              <button onClick={() => setPackageModalOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]">Cancel</button>
-              <button onClick={handleSavePackage} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">{editingPackage ? "Save Package" : "Create Package"}</button>
+
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <AdminInput label="Title" value={packageTitle} onChange={(e) => setPackageTitle(e.target.value)} />
+                <AdminSelect
+                  label="Status"
+                  value={packageStatus}
+                  onChange={(e) => setPackageStatus(e.target.value)}
+                  options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]}
+                />
+                <div className="sm:col-span-2 space-y-3">
+                  <div className="overflow-hidden rounded-lg border border-[#E6E6E6] bg-[#FAFAFA]">
+                    {packageImage ? (
+                      <div className="border-b border-[#E6E6E6] bg-white p-3">
+                        <img src={packageImage} alt="Package preview" className="h-28 w-full rounded-md object-cover" />
+                      </div>
+                    ) : (
+                      <div className="flex h-28 items-center justify-center px-4 text-[12.5px] text-[#9A9A9A]">
+                        Upload an image or paste a URL to preview it here.
+                      </div>
+                    )}
+                    <div className="flex flex-wrap items-center gap-2 border-t border-[#E6E6E6] px-3 py-3">
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5]">
+                        <Upload size={14} />
+                        {uploadingPackageImage ? "Uploading..." : "Upload image"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(event) => void uploadPackageImage(event.target.files?.[0])}
+                          disabled={uploadingPackageImage}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setPackageImage("")}
+                        disabled={!packageImage}
+                        className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5] disabled:opacity-40"
+                      >
+                        Clear image
+                      </button>
+                    </div>
+                  </div>
+                  <AdminInput
+                    label="Image URL"
+                    value={packageImage}
+                    onChange={(e) => setPackageImage(e.target.value)}
+                    placeholder="Optional image URL"
+                  />
+                </div>
+                <AdminInput label="Sort Order" type="number" value={packageSortOrder} onChange={(e) => setPackageSortOrder(Number(e.target.value) || 0)} />
+                <div className="sm:col-span-2">
+                  <AdminTextarea label="Description" rows={3} value={packageDescription} onChange={(e) => setPackageDescription(e.target.value)} />
+                </div>
+              </div>
+            </div>
+
+            <div className="shrink-0 border-t border-[#E6E6E6] bg-white px-6 py-4">
+              <div className="flex items-center justify-end gap-2">
+                <button onClick={() => setPackageModalOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]">Cancel</button>
+                <button onClick={handleSavePackage} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">{editingPackage ? "Save Package" : "Create Package"}</button>
+              </div>
             </div>
           </div>
         </div>
@@ -2321,11 +2839,12 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
 
       {generateVariantOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="max-h-[90vh] w-full max-w-[920px] overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
+          <div className="flex h-[92vh] w-full max-w-[1360px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="shrink-0 border-b border-[#E6E6E6] px-6 py-5 sm:px-7">
+              <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-[18px] font-semibold text-[#1A1A1A]">Generate Variants</h3>
-                <p className="mt-1 text-[13px] text-[#6B6B6B]">
+                <p className="mt-1 max-w-3xl text-[13px] leading-5 text-[#6B6B6B]">
                   {hasMappedProductAttributes
                     ? "Showing attributes mapped to this product. Add values in Product Attributes before using them here."
                     : "No product attribute mappings found, so this uses the full global catalog exactly as before."}
@@ -2335,6 +2854,10 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                 <X size={18} />
               </button>
             </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-5 sm:px-7">
+              <div className="space-y-5">
 
             {packageRows.length > 0 && (
               <div className="mb-5 rounded-lg border border-[#E6E6E6] p-4">
@@ -2352,6 +2875,10 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                 </div>
               </div>
             )}
+
+            <div className="mb-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-[12.5px] leading-5 text-blue-800">
+              New variants inherit the product-level base inventory and every country inventory override configured in the Inventory tab.
+            </div>
 
             <div className="mb-4 rounded-lg border border-[#E6E6E6] p-4">
               <div className="mb-3 text-[13px] font-medium text-[#1A1A1A]">Add Attributes To Generation</div>
@@ -2378,7 +2905,7 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
               {generateAttributeIds.map((attributeId) => {
                 const attribute = variantGenerationCatalog.find((item) => item.id === attributeId);
                 if (!attribute) return null;
-                const mode = generateModeMap[attribute.id] ?? "specific";
+                const mode = generateModeMap[attribute.id] === "skip" ? "all" : (generateModeMap[attribute.id] ?? "all");
                 const selectedValueIds = generateSelectionMap[attribute.id] ?? [];
                 const values = getAttributeValues(attribute);
                 const selectedValues = values.filter((value) => selectedValueIds.includes(value.id));
@@ -2402,7 +2929,6 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                         options={[
                           { value: "all", label: "Use All Values" },
                           { value: "specific", label: "Select Specific Values" },
-                          { value: "skip", label: "Skip Attribute" },
                         ]}
                       />
                     </div>
@@ -2451,8 +2977,11 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                             </button>
                           </div>
                         )}
-                        {selectedValues.length === 0 && (
-                          <p className="text-[12px] text-[#9A9A9A]">Add one or more values for this attribute.</p>
+                        {selectedValues.length === 0 && values.length === 0 && (
+                          <p className="text-[12px] text-[#E31E24]">No values found for this attribute. Add values in Admin → Attributes first.</p>
+                        )}
+                        {selectedValues.length === 0 && values.length > 0 && (
+                          <p className="text-[12px] text-[#9A9A9A]">Add one or more values for this attribute, or switch to Use All Values.</p>
                         )}
                       </div>
                     )}
@@ -2460,10 +2989,21 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                 );
               })}
             </div>
+              </div>
+            </div>
 
-            <div className="mt-6 flex items-center justify-end gap-2">
-              <button onClick={() => setGenerateVariantOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]">Cancel</button>
-              <button onClick={handleGenerateVariants} disabled={generatingVariants} className="rounded-md bg-[#1A1A1A] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#333] disabled:opacity-40">{generatingVariants ? "Generating…" : "Generate Variants"}</button>
+            <div className="shrink-0 border-t border-[#E6E6E6] bg-white px-6 py-4 sm:px-7">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-[12.5px] text-[#6B6B6B]">Review the selected packages and attribute values before generating variants.</p>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setGenerateVariantOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]">
+                    Cancel
+                  </button>
+                  <button onClick={handleGenerateVariants} disabled={generatingVariants} className="rounded-md bg-[#1A1A1A] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#333] disabled:opacity-40">
+                    {generatingVariants ? "Generating…" : "Generate Variants"}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -2746,7 +3286,7 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                 <h3 className="text-[18px] font-semibold text-[#1A1A1A]">Edit Variant</h3>
                 <p className="mt-1 text-[13px] text-[#6B6B6B]">Update package, attribute values, SKU and variant status.</p>
               </div>
-              <button onClick={() => setEditingVariant(null)} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
+              <button onClick={closeEditVariantModal} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
                 <X size={18} />
               </button>
             </div>
@@ -2782,26 +3322,26 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
 
             <div className="mt-4 space-y-4">
               {editVariantAttributeIds.map((attributeId) => {
-                const attribute = attributeCatalog.find((item) => item.id === attributeId);
+                const attribute = editVariantAttributeCatalog.get(attributeId);
                 if (!attribute) return null;
                 const values = getAttributeValues(attribute);
-                const selectedValue = values.find((value) => value.id === editVariantSelections[attribute.id]);
-                const availableValues = values.filter((value) => value.id !== editVariantSelections[attribute.id]);
+                const selectedValue = resolveEditSelectedValue(attribute.id, values, editVariantSelections, editingVariant);
+                const availableValues = values.filter((value) => value.id !== selectedValue?.id);
 
                 return (
                   <div key={attribute.id} className="rounded-lg border border-[#E6E6E6] p-4">
                     <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <div className="text-[13px] font-semibold text-[#1A1A1A]">{attribute.name} <span className="ml-1 font-normal text-[#9A9A9A]">{attribute.id}</span></div>
+                        <div className="text-[13px] font-semibold text-[#1A1A1A]">{attribute.name}</div>
                         <p className="mt-1 text-[12px] text-[#6B6B6B]">Choose one exact value for this attribute.</p>
                       </div>
                       <button onClick={() => removeEditVariantAttribute(attribute.id)} className="text-[13px] font-medium text-[#E31E24] hover:text-[#B5151B]">
                         Remove
                       </button>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {selectedValue ? (
-                        <span className="inline-flex items-center gap-2 rounded-full border border-[#E6E6E6] bg-white px-4 py-2 text-[12px] text-[#1A1A1A]">
+                        <span className="inline-flex items-center gap-2 rounded-full border border-[#E6E6E6] bg-white px-4 py-2 text-[12px] font-medium text-[#1A1A1A]">
                           {selectedValue.value}
                           <button
                             type="button"
@@ -2812,18 +3352,25 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
                           </button>
                         </span>
                       ) : null}
-                      <select
-                        value=""
-                        onChange={(e) => setEditVariantSelections((current) => ({ ...current, [attribute.id]: e.target.value }))}
-                        className="rounded-full border border-dashed border-[#BDBDBD] bg-white px-4 py-2 text-[12px] text-[#6B6B6B] outline-none hover:border-[#9A9A9A]"
-                      >
-                        <option value="">+ Add value</option>
-                        {(selectedValue ? availableValues : values).map((value) => (
-                          <option key={value.id} value={value.id}>
-                            {value.value}
-                          </option>
-                        ))}
-                      </select>
+                      {!selectedValue && availableValues.length > 0 ? (
+                        <div className="min-w-[180px]">
+                          <AdminSelect
+                            value=""
+                            onChange={(event) => {
+                              const valueId = event.target.value;
+                              if (!valueId) return;
+                              setEditVariantSelections((current) => ({ ...current, [attribute.id]: valueId }));
+                            }}
+                            options={[
+                              { value: "", label: "Select value…" },
+                              ...availableValues.map((value) => ({ value: value.id, label: value.value })),
+                            ]}
+                          />
+                        </div>
+                      ) : null}
+                      {!selectedValue && availableValues.length === 0 ? (
+                        <p className="text-[12px] text-[#E31E24]">No values available for this attribute.</p>
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -2831,7 +3378,7 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
             </div>
 
             <div className="mt-6 flex items-center justify-end gap-2">
-              <button onClick={() => setEditingVariant(null)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]">Cancel</button>
+              <button onClick={closeEditVariantModal} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]">Cancel</button>
               <button onClick={handleUpdateVariant} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">Save Variant</button>
             </div>
           </div>
@@ -2862,11 +3409,49 @@ export function ProductEditor({ productId, embedded = false }: ProductEditorProp
         onCancel={() => setDeletingVariant(null)}
       />
 
+      <Modal
+        open={countryPriceModalOpen}
+        onClose={closeCountryPriceModal}
+        title="Generate Country Prices"
+        panelClassName="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-[13px] leading-5 text-[#6B6B6B]">
+            Enter the base product price once, and country prices will be generated automatically using the configured exchange rates.
+          </p>
+          <AdminInput
+            label="Base Price"
+            type="number"
+            min="0"
+            step="0.01"
+            value={countryPriceBase}
+            onChange={(event) => setCountryPriceBase(event.target.value)}
+            placeholder="Enter base price"
+          />
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={closeCountryPriceModal}
+              disabled={generatingCountryPrices}
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5] disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleGenerateCountryPrices}
+              disabled={generatingCountryPrices}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
+            >
+              {generatingCountryPrices ? "Generating..." : "Generate Prices"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {ToastComponent}
     </>
   );
-
-  if (embedded) return content;
 
   return (
     <AdminLayout title={product.title} breadcrumb={[{ label: "Products", href: "/admin/products" }, { label: "Edit" }]}>

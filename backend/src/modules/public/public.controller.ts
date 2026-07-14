@@ -8,6 +8,10 @@ export const listProducts = asyncHandler(async (req: Request, res: Response) => 
   return AR.paginated(res, "Products.", result.data, { page: result.page, limit: result.limit, total: result.total });
 });
 
+export const listProductFacets = asyncHandler(async (req: Request, res: Response) => {
+  return AR.success(res, "Product facets.", await S.publicListProductFacets(getRequestedCountry(req)));
+});
+
 export const getProduct = asyncHandler(async (req: Request, res: Response) => {
   const product = await S.publicGetProduct(String(req.params.slug), getRequestedLanguage(req), getRequestedCountry(req));
   return AR.success(res, "Product.", product);
@@ -41,7 +45,10 @@ export const getStaticTranslations = asyncHandler(async (req: Request, res: Resp
 });
 
 export const submitQuote = asyncHandler(async (req: Request, res: Response) => {
-  const quote = await S.submitPublicQuote(req.body);
+  const quote = await S.submitPublicQuote({
+    ...req.body,
+    customerId: getOptionalCustomerId(req),
+  });
   return AR.created(res, "Quote request submitted. We'll respond within 24 hours.", { quoteNumber: quote.quoteNumber });
 });
 
@@ -65,7 +72,8 @@ export const getCountries = asyncHandler(async (_req: Request, res: Response) =>
 
 export const checkInventory = asyncHandler(async (req: Request, res: Response) => {
   const ids = (req.query.variantIds as string || "").split(",").filter(Boolean);
-  return AR.success(res, "Inventory.", await S.checkInventory(ids));
+  const countryCode = typeof req.query.countryCode === "string" ? req.query.countryCode : undefined;
+  return AR.success(res, "Inventory.", await S.checkInventory(ids, countryCode));
 });
 
 function getRequestedLanguage(req: Request) {

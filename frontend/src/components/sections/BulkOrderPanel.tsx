@@ -1,10 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FileText, ArrowRight, CheckCircle, Mail, X } from "lucide-react";
+import { FileText, ArrowRight, CheckCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency } from "@/utils/formatCurrency";
-import { ORDERS_EMAIL } from "@/utils/constants";
 import { cn } from "@/utils/cn";
 import { useQuoteSubmit } from "@/hooks/api/useQuoteSubmit";
 import { useToast } from "@/components/ui/ToastProvider";
@@ -19,20 +18,6 @@ interface BulkOrderPanelProps {
   productId?: string;
 }
 
-function buildOrderMailto(product: FullConfigProduct, config: { prescription: string; slot: string; packaging: string; qty: number; total: number }) {
-  const subject = encodeURIComponent(`Order Request - ${product.title}`);
-  const body = encodeURIComponent(
-    `I would like to place an order for the configuration below.\n\n` +
-      `Product: ${product.title}\n` +
-      `Prescription: ${config.prescription}\n` +
-      `Slot Size: ${config.slot}\n` +
-      `Packaging: ${config.packaging}\n` +
-      `Quantity: ${config.qty}\n` +
-      `Estimated Total: ${formatCurrency(config.total)}\n`
-  );
-  return `mailto:${ORDERS_EMAIL}?subject=${subject}&body=${body}`;
-}
-
 export function BulkOrderPanel({ product, productId }: BulkOrderPanelProps) {
   const [prescription, setPrescription] = useState(product.prescriptionOptions[0]);
   const [slot, setSlot] = useState(product.slotOptions[0]);
@@ -40,6 +25,7 @@ export function BulkOrderPanel({ product, productId }: BulkOrderPanelProps) {
   const [qty, setQty] = useState(10);
 
   const [quoteOpen, setQuoteOpen] = useState(false);
+  const [quoteIntent, setQuoteIntent] = useState<"quote" | "order">("quote");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [quoteSuccess, setQuoteSuccess] = useState(false);
@@ -66,6 +52,12 @@ export function BulkOrderPanel({ product, productId }: BulkOrderPanelProps) {
 
   const config = { prescription, slot, packaging: packaging.label, qty: Math.max(1, qty), total };
 
+  function openRequest(intent: "quote" | "order") {
+    setQuoteIntent(intent);
+    setQuoteOpen(true);
+    setQuoteError("");
+  }
+
   function handleQuoteSubmit(e: React.FormEvent) {
     e.preventDefault();
     setQuoteError("");
@@ -78,6 +70,7 @@ export function BulkOrderPanel({ product, productId }: BulkOrderPanelProps) {
       return;
     }
 
+    const intentLabel = quoteIntent === "order" ? "ORDER REQUEST" : "QUOTE REQUEST";
     submitQuote(
       {
         customerName: name,
@@ -90,7 +83,7 @@ export function BulkOrderPanel({ product, productId }: BulkOrderPanelProps) {
             unitPrice: packaging.unitPriceInr,
           },
         ],
-        message: `Prescription: ${prescription} | Slot: ${slot} | Packaging: ${packaging.label}`,
+        message: `${intentLabel} | Prescription: ${prescription} | Slot: ${slot} | Packaging: ${packaging.label} | Estimated total: ${formatCurrency(config.total)}`,
       },
       {
         onSuccess: (result) => {
@@ -100,18 +93,18 @@ export function BulkOrderPanel({ product, productId }: BulkOrderPanelProps) {
           setEmail("");
           showToast({
             type: "success",
-            title: "Quote request submitted",
+            title: quoteIntent === "order" ? "Order request submitted" : "Quote request submitted",
             message: result.quoteNumber
               ? `Reference ${result.quoteNumber} has been sent to the admin quote desk.`
-              : "Your RFQ has been sent to the admin quote desk.",
+              : "Your request has been sent to the admin quote desk.",
           });
         },
         onError: () => {
-          const errorMessage = "Quote request could not be submitted. Please try again.";
+          const errorMessage = "Request could not be submitted. Please try again.";
           setQuoteError(errorMessage);
-          showToast({ type: "error", title: "Quote request failed", message: errorMessage });
+          showToast({ type: "error", title: "Request failed", message: errorMessage });
         },
-      }
+      },
     );
   }
 
@@ -281,7 +274,9 @@ export function BulkOrderPanel({ product, productId }: BulkOrderPanelProps) {
             ) : quoteOpen ? (
               <form onSubmit={handleQuoteSubmit} className="rounded-lg border border-line bg-white p-4">
                 <div className="mb-3 flex items-center justify-between">
-                  <span className="text-[13px] font-semibold text-ink">Your contact details</span>
+                  <span className="text-[13px] font-semibold text-ink">
+                    {quoteIntent === "order" ? "Order request details" : "Your contact details"}
+                  </span>
                   <button type="button" onClick={() => setQuoteOpen(false)} className="text-steel-2 hover:text-ink">
                     <X size={15} />
                   </button>
@@ -307,16 +302,16 @@ export function BulkOrderPanel({ product, productId }: BulkOrderPanelProps) {
                   disabled={quoteSubmitting}
                   className="flex w-full items-center justify-center gap-2 rounded-md bg-ink px-4 py-2.5 text-[13.5px] font-medium text-white hover:bg-ink/90 disabled:opacity-60"
                 >
-                  {quoteSubmitting ? "Submitting…" : <>Send Quote Request <ArrowRight size={13} /></>}
+                  {quoteSubmitting ? "Submitting…" : <>{quoteIntent === "order" ? "Submit Order Request" : "Send Quote Request"} <ArrowRight size={13} /></>}
                 </button>
               </form>
             ) : (
               <div className="flex flex-col gap-2.5">
-                <Button href={buildOrderMailto(product, config)} variant="primary" size="md" fullWidth>
-                  Place Order <ArrowRight size={14} className="ml-1.5 inline" />
+                <Button type="button" onClick={() => openRequest("order")} variant="primary" size="md" fullWidth>
+                  Place Order Request <ArrowRight size={14} className="ml-1.5 inline" />
                 </Button>
                 <button
-                  onClick={() => setQuoteOpen(true)}
+                  onClick={() => openRequest("quote")}
                   className="flex w-full items-center justify-center gap-2 rounded-md border border-line bg-white px-4 py-2.5 text-[13.5px] font-medium text-ink hover:border-steel-2"
                 >
                   <FileText size={15} className="text-brand" /> Request a Quote
@@ -324,8 +319,7 @@ export function BulkOrderPanel({ product, productId }: BulkOrderPanelProps) {
               </div>
             )}
             <p className="mt-3.5 text-xs leading-relaxed text-steel-2">
-              Quote requests are saved for admin review. Place Order still emails our orders team with this exact
-              configuration for manual confirmation.
+              Order and quote requests are saved for admin review. For instant checkout, use products with live variants via Add to Cart.
             </p>
           </div>
         </div>

@@ -5,9 +5,13 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "predev": "prisma migrate deploy --schema src/prisma/schema.prisma && prisma generate --schema src/prisma/schema.prisma",
+    "prebuild": "prisma generate --schema src/prisma/schema.prisma",
     "build": "tsc",
     "start": "node dist/server.js",
+    "prestart": "prisma migrate deploy --schema src/prisma/schema.prisma",
     "postinstall": "prisma generate --schema src/prisma/schema.prisma",
+    "db:sync": "prisma migrate deploy --schema src/prisma/schema.prisma && prisma generate --schema src/prisma/schema.prisma",
     "prisma:generate": "prisma generate --schema src/prisma/schema.prisma",
     "prisma:migrate": "prisma migrate dev --schema src/prisma/schema.prisma",
     "prisma:studio": "prisma studio --schema src/prisma/schema.prisma",

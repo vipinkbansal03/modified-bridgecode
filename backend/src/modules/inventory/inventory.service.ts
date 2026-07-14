@@ -10,6 +10,7 @@ type InventoryListQuery = {
   limit?: string;
   search?: string;
   status?: string;
+  countryId?: string;
   sortBy?: string;
   sortDir?: string;
 };
@@ -25,6 +26,7 @@ type InventoryImportRow = {
   variantId?: string;
   variantSku?: string;
   productSku?: string;
+  countryCode?: string;
   stock?: string;
   reservedStock?: string;
   lowStockThreshold?: string;
@@ -35,6 +37,8 @@ const INVENTORY_EXPORT_COLUMNS = [
   { key: "productSku", header: "productSku" },
   { key: "variantTitle", header: "variantTitle" },
   { key: "variantSku", header: "variantSku" },
+  { key: "countryCode", header: "countryCode" },
+  { key: "scope", header: "scope" },
   { key: "stock", header: "stock" },
   { key: "reservedStock", header: "reservedStock" },
   { key: "availableStock", header: "availableStock" },
@@ -44,6 +48,13 @@ const INVENTORY_EXPORT_COLUMNS = [
 
 function inventoryInclude() {
   return {
+    country: {
+      select: {
+        id: true,
+        name: true,
+        code: true,
+      },
+    },
     product: {
       select: {
         id: true,
@@ -112,11 +123,17 @@ function buildInventoryWhere(query: InventoryListQuery): Prisma.InventoryWhereIn
       { product: { sku: { contains: search, mode: "insensitive" } } },
       { variant: { title: { contains: search, mode: "insensitive" } } },
       { variant: { sku: { contains: search, mode: "insensitive" } } },
+      { country: { name: { contains: search, mode: "insensitive" } } },
+      { country: { code: { contains: search, mode: "insensitive" } } },
     ];
   }
 
   if (status) {
     where.status = status;
+  }
+
+  if (query.countryId) {
+    where.countryId = query.countryId;
   }
 
   return where;
@@ -137,6 +154,8 @@ function buildInventoryOrder(query: InventoryListQuery): Prisma.InventoryOrderBy
       return [{ product: { title: dir } }, { updatedAt: "desc" }];
     case "variant":
       return [{ variant: { title: dir } }, { updatedAt: "desc" }];
+    case "country":
+      return [{ country: { name: dir } }, { updatedAt: "desc" }];
     case "sku":
       return [{ variant: { sku: dir } }, { product: { sku: dir } }, { updatedAt: "desc" }];
     case "updatedAt":
@@ -277,6 +296,84 @@ async function createAdjustment(
   });
 }
 
+async function findVariantInventoryRecord(
+  client: InventoryClient,
+  variantId: string,
+  countryId?: string | null,
+) {
+  if (countryId) {
+    const override = await client.inventory.findFirst({
+      where: { variantId, countryId },
+    });
+    if (override) return override;
+  }
+
+  return client.inventory.findFirst({
+    where: { variantId, countryId: null },
+  });
+}
+
+async function ensureVariantInventoryRecord(
+  client: InventoryClient,
+  variantId: string,
+  countryId?: string | null,
+) {
+  const existing = await client.inventory.findFirst({
+    where: { variantId, countryId: countryId ?? null },
+  });
+  if (existing) return existing;
+
+  const variant = await client.productVariant.findUnique({
+    where: { id: variantId },
+    select: { id: true, productId: true },
+  });
+  if (!variant) return null;
+
+  return client.inventory.create({
+    data: {
+      productId: variant.productId,
+      variantId,
+      countryId: countryId ?? null,
+      stock: 0,
+      reservedStock: 0,
+      lowStockThreshold: 10,
+      status: "OUT_OF_STOCK",
+    },
+  });
+}
+
+export async function upsertVariantInventory(data: {
+  variantId: string;
+  countryId?: string | null;
+  stock: number;
+  lowStockThreshold?: number;
+}) {
+  if (!data.variantId) throw new AppError("variantId is required.", 400);
+  if (!Number.isInteger(data.stock) || data.stock < 0) throw new AppError("Stock must be a non-negative integer.", 400);
+  if (data.lowStockThreshold !== undefined && (!Number.isInteger(data.lowStockThreshold) || data.lowStockThreshold < 0)) {
+    throw new AppError("Low stock threshold must be a non-negative integer.", 400);
+  }
+
+  const variant = await prisma.productVariant.findUnique({
+    where: { id: data.variantId },
+    select: { id: true, productId: true },
+  });
+  if (!variant) throw new AppError("Variant not found.", 404);
+
+  if (data.countryId) {
+    const country = await prisma.country.findUnique({ where: { id: data.countryId }, select: { id: true } });
+    if (!country) throw new AppError("Country not found.", 404);
+  }
+
+  const existing = await ensureVariantInventoryRecord(prisma, data.variantId, data.countryId ?? null);
+  if (!existing) throw new AppError("Unable to create inventory record.", 500);
+
+  return updateInventory(existing.id, {
+    stock: data.stock,
+    ...(data.lowStockThreshold !== undefined ? { lowStockThreshold: data.lowStockThreshold } : {}),
+  });
+}
+
 export async function updateInventory(
   id: string,
   data: { stock?: number; reservedStock?: number; lowStockThreshold?: number; status?: string },
@@ -290,13 +387,15 @@ export async function updateInventory(
   if (data.lowStockThreshold !== undefined && data.lowStockThreshold < 0) throw new AppError("Low stock threshold cannot be negative.", 400);
 
   const nextStock = data.stock ?? existing.stock;
+  const nextReservedStock = data.reservedStock ?? existing.reservedStock;
   const nextLowStockThreshold = data.lowStockThreshold ?? existing.lowStockThreshold;
-  const shouldRecalculateStatus = data.stock !== undefined || data.lowStockThreshold !== undefined;
+  if (nextReservedStock > nextStock) throw new AppError("Reserved stock cannot exceed stock.", 400);
+  const shouldRecalculateStatus = data.stock !== undefined || data.reservedStock !== undefined || data.lowStockThreshold !== undefined;
   const updated = await client.inventory.update({
     where: { id },
     data: {
       ...data,
-      ...(shouldRecalculateStatus ? { status: getInventoryStatus(nextStock, nextLowStockThreshold) } : {}),
+      ...(shouldRecalculateStatus ? { status: getInventoryStatus(nextStock - nextReservedStock, nextLowStockThreshold) } : {}),
     } as never,
   });
 
@@ -305,6 +404,44 @@ export async function updateInventory(
   }
 
   return updated;
+}
+
+export async function upsertProductInventory(
+  productId: string,
+  data: { countryId?: string | null; stock?: number; reservedStock?: number; lowStockThreshold?: number },
+) {
+  const product = await prisma.product.findFirst({ where: { id: productId, deletedAt: null }, select: { id: true } });
+  if (!product) throw new AppError("Product not found.", 404);
+
+  const countryId = data.countryId ?? null;
+  if (countryId) {
+    const country = await prisma.country.findUnique({ where: { id: countryId }, select: { id: true } });
+    if (!country) throw new AppError("Country not found.", 404);
+  }
+
+  const stock = Math.trunc(Number(data.stock ?? 0));
+  const reservedStock = Math.trunc(Number(data.reservedStock ?? 0));
+  const lowStockThreshold = Math.trunc(Number(data.lowStockThreshold ?? 10));
+  if (![stock, reservedStock, lowStockThreshold].every(Number.isFinite) || stock < 0 || reservedStock < 0 || lowStockThreshold < 0) {
+    throw new AppError("Inventory values must be valid non-negative numbers.", 400);
+  }
+  if (reservedStock > stock) throw new AppError("Reserved stock cannot exceed stock.", 400);
+
+  const existing = await prisma.inventory.findFirst({ where: { productId, variantId: null, countryId } });
+  if (existing) return updateInventory(existing.id, { stock, reservedStock, lowStockThreshold });
+
+  return prisma.inventory.create({
+    data: {
+      productId,
+      variantId: null,
+      countryId,
+      stock,
+      reservedStock,
+      lowStockThreshold,
+      status: getInventoryStatus(stock - reservedStock, lowStockThreshold),
+    },
+    include: { country: true },
+  });
 }
 
 export async function bulkUpdateInventory(input: InventoryBulkUpdateInput) {
@@ -360,14 +497,23 @@ export async function bulkUpdateInventory(input: InventoryBulkUpdateInput) {
 export async function decrementVariantStock(
   variantId: string,
   quantity: number,
-  meta: { reason?: string; adjustedBy?: string } = {},
+  countryIdOrMeta: string | { reason?: string; adjustedBy?: string } | null = {},
+  metaOrClient: { reason?: string; adjustedBy?: string } | InventoryClient = {},
   client: InventoryClient = prisma,
 ) {
-  const existing = await client.inventory.findUnique({ where: { variantId } });
+  const countryId = typeof countryIdOrMeta === "string" || countryIdOrMeta === null ? countryIdOrMeta : undefined;
+  const resolvedMeta: { reason?: string; adjustedBy?: string } =
+    typeof countryIdOrMeta === "object" && countryIdOrMeta !== null && !("$transaction" in countryIdOrMeta)
+      ? (countryIdOrMeta as { reason?: string; adjustedBy?: string })
+      : typeof metaOrClient === "object" && metaOrClient !== null && !("$transaction" in metaOrClient)
+        ? (metaOrClient as { reason?: string; adjustedBy?: string })
+        : {};
+  const resolvedClient = typeof metaOrClient === "object" && metaOrClient !== null && "$transaction" in metaOrClient ? metaOrClient : client;
+  const existing = await findVariantInventoryRecord(resolvedClient, variantId, countryId);
   if (!existing) return null;
 
   const nextStock = existing.stock - quantity;
-  const updated = await client.inventory.update({
+  const updated = await resolvedClient.inventory.update({
     where: { id: existing.id },
     data: {
       stock: nextStock,
@@ -375,7 +521,7 @@ export async function decrementVariantStock(
     },
   });
 
-  await createAdjustment(client, existing.id, variantId, existing.stock, nextStock, meta.reason, meta.adjustedBy);
+  await createAdjustment(resolvedClient, existing.id, variantId, existing.stock, nextStock, resolvedMeta.reason, resolvedMeta.adjustedBy);
 
   return updated;
 }
@@ -383,13 +529,22 @@ export async function decrementVariantStock(
 export async function setVariantStock(
   variantId: string,
   stock: number,
-  meta: { reason?: string; adjustedBy?: string } = {},
+  countryIdOrMeta: string | { reason?: string; adjustedBy?: string } | null = {},
+  metaOrClient: { reason?: string; adjustedBy?: string } | InventoryClient = {},
   client: InventoryClient = prisma,
 ) {
-  const existing = await client.inventory.findUnique({ where: { variantId } });
+  const countryId = typeof countryIdOrMeta === "string" || countryIdOrMeta === null ? countryIdOrMeta : undefined;
+  const resolvedMeta: { reason?: string; adjustedBy?: string } =
+    typeof countryIdOrMeta === "object" && countryIdOrMeta !== null && !("$transaction" in countryIdOrMeta)
+      ? (countryIdOrMeta as { reason?: string; adjustedBy?: string })
+      : typeof metaOrClient === "object" && metaOrClient !== null && !("$transaction" in metaOrClient)
+        ? (metaOrClient as { reason?: string; adjustedBy?: string })
+        : {};
+  const resolvedClient = typeof metaOrClient === "object" && metaOrClient !== null && "$transaction" in metaOrClient ? metaOrClient : client;
+  const existing = await ensureVariantInventoryRecord(resolvedClient, variantId, countryId);
   if (!existing) return null;
 
-  const updated = await client.inventory.update({
+  const updated = await resolvedClient.inventory.update({
     where: { id: existing.id },
     data: {
       stock,
@@ -398,7 +553,7 @@ export async function setVariantStock(
   });
 
   if (stock !== existing.stock) {
-    await createAdjustment(client, existing.id, variantId, existing.stock, stock, meta.reason, meta.adjustedBy);
+    await createAdjustment(resolvedClient, existing.id, variantId, existing.stock, stock, resolvedMeta.reason, resolvedMeta.adjustedBy);
   }
 
   return updated;
@@ -421,6 +576,7 @@ function parseInventoryImportRow(row: Record<string, string>) {
     variantId,
     variantSku,
     productSku,
+    countryCode: row.countryCode?.trim().toUpperCase() || "",
     stock: row.stock?.trim() || "",
     reservedStock: row.reservedStock?.trim() || "",
     lowStockThreshold: row.lowStockThreshold?.trim() || "",
@@ -473,8 +629,18 @@ async function previewInventoryImportRows(rows: Record<string, string>[]) {
         ...(parsedRows.some((row) => row.productSku) ? [{ product: { sku: { in: parsedRows.map((row) => row.productSku).filter(Boolean) as string[] } } }] : []),
       ],
     },
-    include: { product: { select: { id: true, title: true, sku: true, status: true } }, inventory: true },
+    include: {
+      product: { select: { id: true, title: true, sku: true, status: true } },
+      inventories: { where: { countryId: null }, take: 1 },
+    },
   });
+
+  const countryCodes = Array.from(new Set(parsedRows.map((row) => row.countryCode).filter(Boolean)));
+  const countries = await prisma.country.findMany({
+    where: countryCodes.length ? { code: { in: countryCodes } } : { id: "__never__" },
+    select: { id: true, code: true },
+  });
+  const countryByCode = new Map(countries.map((country) => [country.code, country]));
 
   const variantById = new Map(variants.map((variant) => [variant.id, variant]));
   const variantBySku = new Map(variants.filter((variant) => variant.sku).map((variant) => [variant.sku as string, variant]));
@@ -500,6 +666,10 @@ async function previewInventoryImportRows(rows: Record<string, string>[]) {
     if (variant.product.status === "ARCHIVED") {
       issues.push({ row: rowNumber, field: "variantId", message: "Variant belongs to an archived product." });
     }
+
+    if (row.countryCode && !countryByCode.has(row.countryCode)) {
+      issues.push({ row: rowNumber, field: "countryCode", message: "Country code was not found." });
+    }
   }
 
   return {
@@ -510,6 +680,7 @@ async function previewInventoryImportRows(rows: Record<string, string>[]) {
     variantById,
     variantBySku,
     variantsByProductSku,
+    countryByCode,
   };
 }
 
@@ -546,14 +717,15 @@ export async function importInventorySpreadsheet(filePath: string) {
         throw new AppError(`Variant not found during import on row ${index + 2}.`, 400);
       }
 
-      const stock = parseOptionalInt(row.stock, "Stock") ?? variant.inventory?.stock ?? 0;
-      const reservedStock = parseOptionalInt(row.reservedStock, "Reserved stock") ?? variant.inventory?.reservedStock ?? 0;
-      const lowStockThreshold = parseOptionalInt(row.lowStockThreshold, "Low stock threshold") ?? variant.inventory?.lowStockThreshold ?? 10;
+      const countryId = row.countryCode ? preview.countryByCode.get(row.countryCode)?.id ?? null : null;
+      const existing = await tx.inventory.findFirst({ where: { variantId: variant.id, countryId } });
+      const baseInventory = variant.inventories[0];
+      const stock = parseOptionalInt(row.stock, "Stock") ?? existing?.stock ?? baseInventory?.stock ?? 0;
+      const reservedStock = parseOptionalInt(row.reservedStock, "Reserved stock") ?? existing?.reservedStock ?? baseInventory?.reservedStock ?? 0;
+      const lowStockThreshold = parseOptionalInt(row.lowStockThreshold, "Low stock threshold") ?? existing?.lowStockThreshold ?? baseInventory?.lowStockThreshold ?? 10;
       if (stock < 0) throw new AppError("Stock cannot be negative.", 400);
       if (reservedStock < 0) throw new AppError("Reserved stock cannot be negative.", 400);
       if (lowStockThreshold < 0) throw new AppError("Low stock threshold cannot be negative.", 400);
-
-      const existing = await tx.inventory.findUnique({ where: { variantId: variant.id } });
       if (existing) {
         await tx.inventory.update({
           where: { id: existing.id },
@@ -573,6 +745,7 @@ export async function importInventorySpreadsheet(filePath: string) {
           data: {
             productId: variant.productId,
             variantId: variant.id,
+            countryId,
             stock,
             reservedStock,
             lowStockThreshold,
@@ -607,6 +780,8 @@ function buildInventoryExportRow(inventory: Prisma.InventoryGetPayload<{ include
     productSku: inventory.product.sku ?? "",
     variantTitle: variant?.title ?? "",
     variantSku: variant?.sku ?? "",
+    countryCode: inventory.country?.code ?? "",
+    scope: inventory.country ? "COUNTRY_OVERRIDE" : "BASE",
     stock: inventory.stock,
     reservedStock: inventory.reservedStock,
     availableStock: Math.max(0, inventory.stock - inventory.reservedStock),

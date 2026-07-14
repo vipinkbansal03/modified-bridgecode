@@ -148,7 +148,7 @@ export async function createAdminOrder(input: {
   const variantIds = [...new Set(input.items.map((item) => item.variantId).filter(Boolean) as string[])];
   const [products, variants] = await Promise.all([
     prisma.product.findMany({ where: { id: { in: productIds }, deletedAt: null }, include: { defaultCountry: true } }),
-    prisma.productVariant.findMany({ where: { id: { in: variantIds } }, include: { inventory: true } }),
+    prisma.productVariant.findMany({ where: { id: { in: variantIds } }, include: { inventories: true } }),
   ]);
   if (products.length !== productIds.length) throw new AppError("One or more products were not found.", 400);
   if (variants.length !== variantIds.length) throw new AppError("One or more variants were not found.", 400);
@@ -172,7 +172,8 @@ export async function createAdminOrder(input: {
 
     const quantity = Number(item.quantity);
     if (!Number.isInteger(quantity) || quantity < 1) throw new AppError("Quantity must be at least 1.", 400);
-    const availableStock = variant?.inventory ? Math.max(0, variant.inventory.stock - variant.inventory.reservedStock) : null;
+    const stockRecord = variant?.inventories.find((inventory) => inventory.countryId === country.id) ?? variant?.inventories.find((inventory) => inventory.countryId === null);
+    const availableStock = stockRecord ? Math.max(0, stockRecord.stock - stockRecord.reservedStock) : null;
     if (availableStock !== null && availableStock < quantity) throw new AppError(`Insufficient stock for ${variant?.sku ?? variant?.title}.`, 400);
     await assertSellableInCountry({
       countryId: country.id,
@@ -268,7 +269,7 @@ export async function deliverOrder(id: string) {
     order.items
       .filter((item) => item.variantId)
       .map((item) =>
-        decrementVariantStock(item.variantId!, item.quantity, {
+        decrementVariantStock(item.variantId!, item.quantity, order.countryId, {
           reason: "order_delivered",
           adjustedBy: `system:${id}`,
         })

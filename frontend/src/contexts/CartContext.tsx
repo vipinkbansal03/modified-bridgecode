@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 export interface CartItem {
   variantId: string;
@@ -29,6 +29,7 @@ interface CartContextValue {
   items: CartItem[];
   totals: CartTotals;
   isOpen: boolean;
+  hydrated: boolean;
   addItem: (item: CartItem) => void;
   addItems: (items: CartItem[]) => void;
   updateQuantity: (variantId: string, quantity: number) => void;
@@ -39,6 +40,7 @@ interface CartContextValue {
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
+const STORAGE_KEY = "purchase_cart_v1";
 
 function computeTotals(items: CartItem[]): CartTotals {
   const first = items[0];
@@ -50,10 +52,38 @@ function computeTotals(items: CartItem[]): CartTotals {
   };
 }
 
+function isValidCartItem(value: unknown): value is CartItem {
+  if (!value || typeof value !== "object") return false;
+  const item = value as CartItem;
+  return Boolean(item.variantId && item.productId && item.productSlug && item.quantity > 0);
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const totals = useMemo(() => computeTotals(items), [items]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown;
+        if (Array.isArray(parsed)) {
+          setItems(parsed.filter(isValidCartItem));
+        }
+      }
+    } catch {
+      // Ignore corrupted cart storage.
+    } finally {
+      setHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  }, [items, hydrated]);
 
   const mergeCartItems = (current: CartItem[], incomingItems: CartItem[]) => {
     const next = [...current];
@@ -73,9 +103,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const addItem = (item: CartItem) => {
-    setItems((current) => {
-      return mergeCartItems(current, [item]);
-    });
+    setItems((current) => mergeCartItems(current, [item]));
   };
 
   const addItems = (incomingItems: CartItem[]) => {
@@ -87,7 +115,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems((current) =>
       quantity <= 0
         ? current.filter((item) => item.variantId !== variantId)
-        : current.map((item) => (item.variantId === variantId ? { ...item, quantity } : item))
+        : current.map((item) => (item.variantId === variantId ? { ...item, quantity } : item)),
     );
   };
 
@@ -100,7 +128,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const closeCart = () => setIsOpen(false);
 
   return (
-    <CartContext.Provider value={{ items, totals, isOpen, addItem, addItems, updateQuantity, removeItem, clearCart, openCart, closeCart }}>
+    <CartContext.Provider
+      value={{
+        items,
+        totals,
+        isOpen,
+        hydrated,
+        addItem,
+        addItems,
+        updateQuantity,
+        removeItem,
+        clearCart,
+        openCart,
+        closeCart,
+      }}
+    >
       {children}
     </CartContext.Provider>
   );

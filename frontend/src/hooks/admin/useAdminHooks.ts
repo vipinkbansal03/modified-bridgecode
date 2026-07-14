@@ -37,7 +37,10 @@ export const useCreateProduct = () => {
   return useMutation({
     mutationFn: (data: unknown) =>
       adminApi.post("/products", data).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+    },
   });
 };
 
@@ -49,6 +52,7 @@ export const useUpdateProduct = (id: string) => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-products"] });
       qc.invalidateQueries({ queryKey: ["admin-product", id] });
+      qc.invalidateQueries({ queryKey: ["products"] });
     },
   });
 };
@@ -122,10 +126,12 @@ export const useUpdateProductCountries = (productId?: string) => {
       adminApi
         .put(`/products/${productId}/countries`, { items })
         .then((r) => r.data),
-    onSuccess: () =>
+    onSuccess: () => {
       qc.invalidateQueries({
         queryKey: ["admin-product-countries", productId],
-      }),
+      });
+      qc.invalidateQueries({ queryKey: ["products"] });
+    },
   });
 };
 

@@ -29,6 +29,7 @@ import {
 import { Modal } from "@/components/ui/Modal";
 import {
   useAdminCountries,
+  useAdminCustomerRoles,
   useAdminPricing,
   useAdminPricingDashboard,
   useAdminProduct,
@@ -143,6 +144,13 @@ type PreviewFormState = {
   quantity: string;
 };
 
+type CustomerRoleOption = {
+  id: string;
+  key: string;
+  name: string;
+  status?: string;
+};
+
 const emptyForm: PricingFormState = {
   id: "",
   ruleType: "BASE_PRICE",
@@ -175,7 +183,7 @@ const ruleTypeLabels: Record<Exclude<PricingRuleType, "ALL">, string> = {
   VARIANT_PRICE: "Variant Pricing",
   TIER_PRICE: "Tier Pricing",
   MOQ_PRICE: "MOQ Pricing",
-  CUSTOMER_ROLE_PRICE: "Customer Pricing",
+  CUSTOMER_ROLE_PRICE: "Customer Role Pricing",
 };
 
 const defaultColumnVisibility = {
@@ -283,6 +291,7 @@ export default function PricingPage() {
   });
   const { data: countries = [] } = useAdminCountries();
   const { data: tiers = [] } = useAdminTiers();
+  const { data: customerRoles = [] } = useAdminCustomerRoles();
   const { data: productsData } = useAdminProducts({ page: 1, limit: 100, search: productFilter || undefined });
   const { data: filterProduct } = useAdminProduct(productFilter);
   const { data: selectedProduct } = useAdminProduct(form.productId);
@@ -307,6 +316,7 @@ export default function PricingPage() {
   const bulkPricing = useBulkPricing();
 
   const products = (productsData?.data ?? []) as Array<{ id: string; title: string; sku?: string | null; status?: string }>;
+  const customerRoleRows = customerRoles as CustomerRoleOption[];
   const ruleRows = (pricingResponse?.data ?? []) as PricingRuleRow[];
   const pagination = pricingResponse?.pagination ?? { page, limit, total: 0, totalPages: 1 };
   const dashboard = dashboardData?.data as PricingDashboard | undefined;
@@ -314,6 +324,26 @@ export default function PricingPage() {
     ? ruleRows.find((row) => selectedIds.includes(row.id))?.ruleType ?? null
     : null;
   const bulkActionFamily = selectedRuleType === "TIER_PRICE" || selectedRuleType === "MOQ_PRICE" ? "rule-only" : "base";
+  const customerRoleOptions = useMemo(
+    () => [
+      { value: "", label: "None / Any" },
+      ...customerRoleRows.map((role) => ({
+        value: role.key,
+        label: `${role.name} (${role.key})`,
+      })),
+    ],
+    [customerRoleRows],
+  );
+  const previewCustomerRoleOptions = useMemo(
+    () => [
+      { value: "", label: "Auto from customer" },
+      ...customerRoleRows.map((role) => ({
+        value: role.key,
+        label: `${role.name} (${role.key})`,
+      })),
+    ],
+    [customerRoleRows],
+  );
 
   useEffect(() => {
     if (countries.length && !previewInput.countryId) {
@@ -425,6 +455,7 @@ export default function PricingPage() {
     if (!form.countryId) return "Country is required.";
 
     if (form.ruleType === "BASE_PRICE" || form.ruleType === "VARIANT_PRICE" || form.ruleType === "CUSTOMER_ROLE_PRICE") {
+      if (form.ruleType === "CUSTOMER_ROLE_PRICE" && !form.customerRoleKey) return "Customer role is required.";
       if (form.mrp === "" || form.sellingPrice === "") return "MRP and selling price are required.";
       if (Number(form.mrp) < 0 || Number(form.sellingPrice) < 0) return "Prices cannot be negative.";
       if (form.dealerPrice && Number(form.dealerPrice) < 0) return "Prices cannot be negative.";
@@ -475,6 +506,7 @@ export default function PricingPage() {
           productId,
           variantId,
           countryId,
+          customerRoleKey: form.ruleType === "CUSTOMER_ROLE_PRICE" ? form.customerRoleKey : null,
           currencyId: selectedCountry.currencyId,
           mrp: Number(form.mrp),
           sellingPrice: Number(form.sellingPrice),
@@ -1023,12 +1055,7 @@ export default function PricingPage() {
                 label="Customer Role"
                 value={previewInput.customerRoleKey}
                 onChange={(event) => setPreviewInput((current) => ({ ...current, customerRoleKey: event.target.value }))}
-                options={[
-                  { value: "", label: "Auto from customer" },
-                  { value: "guest", label: "Guest" },
-                  { value: "dealer", label: "Dealer" },
-                  { value: "doctor-retailer", label: "Doctor / Retailer" },
-                ]}
+                options={previewCustomerRoleOptions}
               />
               <AdminSelect
                 label="Tier"
@@ -1105,12 +1132,7 @@ export default function PricingPage() {
                 label="Customer Role"
                 value={previewInput.customerRoleKey}
                 onChange={(event) => setPreviewInput((current) => ({ ...current, customerRoleKey: event.target.value }))}
-                options={[
-                  { value: "", label: "Auto from customer" },
-                  { value: "guest", label: "Guest" },
-                  { value: "dealer", label: "Dealer" },
-                  { value: "doctor-retailer", label: "Doctor / Retailer" },
-                ]}
+                options={previewCustomerRoleOptions}
               />
               <AdminSelect label="Tier" value={previewInput.tierId} onChange={(event) => setPreviewInput((current) => ({ ...current, tierId: event.target.value }))} options={tierOptions} />
               <AdminInput label="Quantity" type="number" min="1" value={previewInput.quantity} onChange={(event) => setPreviewInput((current) => ({ ...current, quantity: event.target.value }))} />
@@ -1230,14 +1252,27 @@ export default function PricingPage() {
               <AdminSelect
                 label="Rule Type"
                 value={form.ruleType}
-                onChange={(event) => setForm((current) => ({ ...current, ruleType: event.target.value as Exclude<PricingRuleType, "ALL"> }))}
+                onChange={(event) =>
+                  setForm((current) => {
+                    const nextRuleType = event.target.value as Exclude<PricingRuleType, "ALL">;
+                    return {
+                      ...current,
+                      ruleType: nextRuleType,
+                    };
+                  })
+                }
                 options={Object.entries(ruleTypeLabels).map(([value, label]) => ({ value, label }))}
               />
               <AdminSelect label="Product" value={form.productId} onChange={(event) => setForm((current) => ({ ...current, productId: event.target.value, variantId: "" }))} options={productOptions} />
               <AdminSelect label="Variant" value={form.variantId} onChange={(event) => setForm((current) => ({ ...current, variantId: event.target.value }))} options={variantOptions} />
               <AdminSelect label="Country" value={form.countryId} onChange={(event) => setForm((current) => ({ ...current, countryId: event.target.value }))} options={countryOptions} />
               <AdminSelect label="Status" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as "ACTIVE" | "INACTIVE" }))} options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
-              <AdminInput label="Customer Role Key" value={form.customerRoleKey} onChange={(event) => setForm((current) => ({ ...current, customerRoleKey: event.target.value }))} placeholder="guest / dealer / doctor-retailer" />
+              <AdminSelect
+                label="Customer Role"
+                value={form.customerRoleKey}
+                onChange={(event) => setForm((current) => ({ ...current, customerRoleKey: event.target.value }))}
+                options={customerRoleOptions}
+              />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

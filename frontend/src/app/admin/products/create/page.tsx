@@ -8,9 +8,12 @@ export default function CreateProductPage() {
   const router = useRouter();
 
   return (
-    <AdminLayout title="New Product" breadcrumb={[{ label: "Products", href: "/admin/products" }, { label: "Create" }]}>
-      <div className="mx-auto max-w-2xl">
-        <ProductCreateForm onCreated={(productId) => router.push(`/admin/products/${productId}/edit`)} />
+    <AdminLayout title="New Product" breadcrumb={[{ label: "Products", href: "/admin/products" }, { label: "New Product" }]}>
+      <div className="w-full">
+        <ProductCreateForm
+          onCancel={() => router.push("/admin/products")}
+          onCreated={(productId) => router.push(`/admin/products/${productId}/edit`)}
+        />
       </div>
     </AdminLayout>
   );

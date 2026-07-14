@@ -41,6 +41,20 @@ type SpreadsheetIssue = {
   message: string;
 };
 
+async function syncActiveCategoryVisibility(tx: Prisma.TransactionClient, categoryId: string, status: Status | undefined) {
+  if (status !== "ACTIVE") return;
+  const countries = await tx.country.findMany({ where: { status: "ACTIVE" }, select: { id: true } });
+  await Promise.all(
+    countries.map((country) =>
+      tx.categoryCountry.upsert({
+        where: { categoryId_countryId: { categoryId, countryId: country.id } },
+        update: { enabled: true },
+        create: { categoryId, countryId: country.id, enabled: true },
+      }),
+    ),
+  );
+}
+
 function parseBooleanList(value: string | null | undefined) {
   const normalized = String(value ?? "").trim();
   if (!normalized) return [];
@@ -156,7 +170,11 @@ export async function createCategory(data: CategoryInput & { name: string }) {
   await assertValidParent(undefined, data.parentId);
   const maxOrder = await prisma.category.aggregate({ where: { deletedAt: null }, _max: { sortOrder: true } });
   const writeData = cleanCategoryData({ ...data, slug, sortOrder: data.sortOrder ?? (maxOrder._max.sortOrder ?? -1) + 1 });
-  return prisma.category.create({ data: writeData as Prisma.CategoryUncheckedCreateInput, include: categoryInclude });
+  return prisma.$transaction(async (tx) => {
+    const category = await tx.category.create({ data: writeData as Prisma.CategoryUncheckedCreateInput, include: categoryInclude });
+    await syncActiveCategoryVisibility(tx, category.id, category.status);
+    return category;
+  });
 }
 
 export async function updateCategory(id: string, data: CategoryInput) {
@@ -169,7 +187,11 @@ export async function updateCategory(id: string, data: CategoryInput) {
   if (data.name !== undefined) await assertUniqueNameWithinParent(data.name.trim(), data.parentId === undefined ? current.parentId : data.parentId, id);
   await assertValidParent(id, data.parentId);
   const writeData = cleanCategoryData({ ...data, ...(slug !== undefined ? { slug } : {}) }, id);
-  return prisma.category.update({ where: { id }, data: writeData as Prisma.CategoryUncheckedUpdateInput, include: categoryInclude });
+  return prisma.$transaction(async (tx) => {
+    const category = await tx.category.update({ where: { id }, data: writeData as Prisma.CategoryUncheckedUpdateInput, include: categoryInclude });
+    await syncActiveCategoryVisibility(tx, category.id, category.status);
+    return category;
+  });
 }
 
 export async function deleteCategory(id: string) {
@@ -190,7 +212,11 @@ export async function archiveCategory(id: string) {
 
 export async function restoreCategory(id: string) {
   await getCategory(id);
-  return prisma.category.update({ where: { id }, data: { status: "ACTIVE", deletedAt: null } });
+  return prisma.$transaction(async (tx) => {
+    const category = await tx.category.update({ where: { id }, data: { status: "ACTIVE", deletedAt: null } });
+    await syncActiveCategoryVisibility(tx, category.id, category.status);
+    return category;
+  });
 }
 
 export async function duplicateCategory(id: string) {

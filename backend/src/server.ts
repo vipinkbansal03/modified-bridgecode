@@ -1,3 +1,4 @@
+import "dotenv/config";
 import app from "./app";
 import { connectDB, prisma } from "./config/database";
 import { logger } from "./config/logger";

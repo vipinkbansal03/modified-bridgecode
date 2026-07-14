@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, ChevronDown, Layers3, Minus, Plus, ShoppingBag, Sparkles } from "lucide-react";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
@@ -9,6 +8,7 @@ import { useCart } from "@/contexts/CartContext";
 import { apiClient } from "@/lib/apiClient";
 import { applyDiscount, nextDiscountTier } from "@/utils/discountRules";
 import { DynamicVariantMatrixConfigurator } from "./DynamicVariantMatrixConfigurator";
+import { StockBadge } from "./StockBadge";
 import type { ApiAttribute, ApiProductDetail, ApiProductPrice, ApiVariant } from "@/types/api.types";
 
 interface VariantConfiguratorProps {
@@ -29,13 +29,53 @@ interface DraftConfiguration {
   selectedAttributes: Record<string, string>;
 }
 
-function getPriceForCurrency(variant: ApiVariant, currencyCode: string): ApiProductPrice | null {
+function getPriceForCurrency(variant: ApiVariant, currencyCode: string, productPrices: ApiProductPrice[] = []): ApiProductPrice | null {
   return (
     variant.prices.find((price) => price.currencyCode === currencyCode) ??
     variant.prices.find((price) => price.currencyCode === "INR") ??
     variant.prices[0] ??
+    productPrices.find((price) => price.currencyCode === currencyCode) ??
+    productPrices.find((price) => price.currencyCode === "INR") ??
+    productPrices[0] ??
     null
   );
+}
+
+const PACKAGE_ATTRIBUTE_NAME = "Package";
+
+function getVariantPackageLabel(variant: ApiVariant) {
+  return variant.package?.title ?? null;
+}
+
+function variantMatchesSelection(variant: ApiVariant, attributeName: string, value: string) {
+  if (attributeName === PACKAGE_ATTRIBUTE_NAME) {
+    return getVariantPackageLabel(variant) === value;
+  }
+  return variant.attributeCombination[attributeName] === value;
+}
+
+function buildPackageAttribute(variants: ApiVariant[]): ProductOptionAttribute | null {
+  const packageTitles = Array.from(
+    new Set(variants.map((variant) => getVariantPackageLabel(variant)).filter((title): title is string => Boolean(title))),
+  );
+  if (packageTitles.length <= 1) return null;
+
+  return {
+    id: "__package__",
+    name: PACKAGE_ATTRIBUTE_NAME,
+    role: "DROPDOWN",
+    displayType: "DROPDOWN",
+    status: "ACTIVE",
+    required: true,
+    sortOrder: 999,
+    values: packageTitles.map((title, index) => ({
+      id: `__package__${index}`,
+      attributeId: "__package__",
+      value: title,
+      slug: title.toLowerCase().replace(/\s+/g, "-"),
+      sortOrder: index,
+    })),
+  };
 }
 
 function formatMoney(symbol: string, amount: number) {
@@ -43,10 +83,13 @@ function formatMoney(symbol: string, amount: number) {
 }
 
 function buildInitialSelections(attributes: ProductOptionAttribute[], variants: ApiVariant[]) {
-  const seed = variants[0]?.attributeCombination ?? {};
+  const seed = variants[0];
   return attributes.reduce<Record<string, string>>((acc, attribute) => {
-    const firstMatch = seed[attribute.name] ?? attribute.values[0]?.value ?? "";
-    if (firstMatch) acc[attribute.name] = firstMatch;
+    const seedValue =
+      attribute.name === PACKAGE_ATTRIBUTE_NAME
+        ? getVariantPackageLabel(seed) ?? attribute.values[0]?.value ?? ""
+        : seed?.attributeCombination?.[attribute.name] ?? attribute.values[0]?.value ?? "";
+    if (seedValue) acc[attribute.name] = seedValue;
     return acc;
   }, {});
 }
@@ -94,21 +137,50 @@ function getAttributeDisplayMeta(displayType: AttributeDisplayType) {
 }
 
 export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
-  const { selectedCurrency, selectedCountryCode } = useCurrencyContext();
-  const { addItems } = useQuoteCart();
-  const { addItem, openCart } = useCart();
-  const attributes: ProductOptionAttribute[] = apiProduct.attributes.map((attribute) => ({
+  const attributes = apiProduct.attributes.map((attribute) => ({
     ...attribute,
     values: attribute.values ?? [],
   }));
   const xAxisCount = attributes.filter((attribute) => getAttributeDisplayType(attribute) === "X_GRID").length;
   const yAxisCount = attributes.filter((attribute) => getAttributeDisplayType(attribute) === "Y_GRID").length;
 
-  if (xAxisCount === 1 && yAxisCount === 1) {
+  if (xAxisCount >= 1 && yAxisCount >= 1) {
     return <DynamicVariantMatrixConfigurator apiProduct={apiProduct} />;
   }
 
+  return <SingleVariantConfigurator apiProduct={apiProduct} />;
+}
+
+function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
+  const { selectedCurrency, selectedCountryCode } = useCurrencyContext();
+  const { addItems } = useQuoteCart();
+  const { addItem, openCart } = useCart();
   const variants = apiProduct.variants;
+  const variantAttributeNames = new Set(variants.flatMap((variant) => Object.keys(variant.attributeCombination ?? {})));
+
+  // Only show attributes that drive current sellable variants (avoids Size options when variants are Prescription-only).
+  const attributes: ProductOptionAttribute[] = [
+    ...apiProduct.attributes
+      .filter((attribute) => variantAttributeNames.size === 0 || variantAttributeNames.has(attribute.name))
+      .map((attribute) => {
+        const values = (attribute.values ?? []).filter((value) =>
+          variants.some((variant) => variant.attributeCombination?.[attribute.name] === value.value),
+        );
+        return {
+          ...attribute,
+          values: values.length ? values : attribute.values ?? [],
+        };
+      })
+      .filter((attribute) => attribute.values.length > 0),
+    ...(buildPackageAttribute(variants) ? [buildPackageAttribute(variants)!] : []),
+  ];
+
+  const xAxisCount = attributes.filter((attribute) => getAttributeDisplayType(attribute) === "X_GRID").length;
+  const yAxisCount = attributes.filter((attribute) => getAttributeDisplayType(attribute) === "Y_GRID").length;
+  const isMatrixLayout = xAxisCount === 1 && yAxisCount === 1;
+  const attributeSignature = attributes.map((attribute) => attribute.id).join("|");
+  const variantSignature = variants.map((variant) => variant.id).join("|");
+
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>(() => buildInitialSelections(attributes, variants));
   const [quantity, setQuantity] = useState(1);
   const [drafts, setDrafts] = useState<DraftConfiguration[]>([]);
@@ -121,26 +193,30 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   const selectedConfigurationsRef = useRef<HTMLDivElement | null>(null);
   const quoteSummaryRef = useRef<HTMLDivElement | null>(null);
 
-  if (!variants.length) return null;
-
   const matchingVariants = variants.filter((variant) =>
-    Object.entries(selectedOptions).every(([attributeName, value]) => !value || variant.attributeCombination[attributeName] === value)
+    Object.entries(selectedOptions).every(([attributeName, value]) => !value || variantMatchesSelection(variant, attributeName, value))
   );
 
   const currentVariant =
     matchingVariants.find((variant) =>
-      attributes.every((attribute) => variant.attributeCombination[attribute.name] === selectedOptions[attribute.name])
+      attributes.every((attribute) => variantMatchesSelection(variant, attribute.name, selectedOptions[attribute.name] ?? ""))
     ) ?? null;
 
-  const currentPrice = currentVariant ? getPriceForCurrency(currentVariant, selectedCurrency) : null;
-  const currencySymbol = currentPrice?.currencySymbol ?? variants[0]?.prices[0]?.currencySymbol ?? "₹";
-  const currencyCode = currentPrice?.currencyCode ?? variants[0]?.prices[0]?.currencyCode ?? "INR";
-  const currentResolvedUnitPrice = currentVariant ? previewPriceMap[currentVariant.id] ?? currentPrice?.sellingPrice ?? 0 : 0;
+  const currentPrice = currentVariant ? getPriceForCurrency(currentVariant, selectedCurrency, apiProduct.prices ?? []) : null;
+  const currencySymbol = currentPrice?.currencySymbol ?? variants[0]?.prices[0]?.currencySymbol ?? apiProduct.prices?.[0]?.currencySymbol ?? "₹";
+  const currencyCode = currentPrice?.currencyCode ?? variants[0]?.prices[0]?.currencyCode ?? apiProduct.prices?.[0]?.currencyCode ?? "INR";
+  const currentResolvedUnitPrice = currentVariant
+    ? previewPriceMap[currentVariant.id] ?? currentPrice?.sellingPrice ?? 0
+    : 0;
 
   const subtotal = drafts.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
   const discount = applyDiscount(subtotal);
   const nextTier = nextDiscountTier(subtotal);
   const totalUnits = drafts.reduce((sum, item) => sum + item.quantity, 0);
+
+  useEffect(() => {
+    setSelectedOptions(buildInitialSelections(attributes, variants));
+  }, [apiProduct.id, attributeSignature, variantSignature]);
 
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
@@ -155,10 +231,7 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   }, []);
 
   useEffect(() => {
-    if (!currentVariant || quantity < 1) {
-      setPreviewPriceMap({});
-      return;
-    }
+    if (!currentVariant || quantity < 1) return;
 
     let active = true;
     const timer = window.setTimeout(async () => {
@@ -193,11 +266,17 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     };
   }, [apiProduct.slug, currentVariant?.id, quantity, selectedCountryCode]);
 
+  if (isMatrixLayout) {
+    return <DynamicVariantMatrixConfigurator apiProduct={apiProduct} />;
+  }
+
+  if (!variants.length) return null;
+
   function isValueAvailable(attributeName: string, value: string) {
     return variants.some((variant) =>
       attributes.every((attribute) => {
         const chosen = attribute.name === attributeName ? value : selectedOptions[attribute.name];
-        return !chosen || variant.attributeCombination[attribute.name] === chosen;
+        return !chosen || variantMatchesSelection(variant, attribute.name, chosen);
       })
     );
   }
@@ -255,6 +334,10 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   function handleAddToCart() {
     if (!currentVariant) {
       setError("This configuration is not available. Please adjust the selected variant options.");
+      return;
+    }
+    if (currentVariant.inventory?.status === "OUT_OF_STOCK") {
+      setError("This configuration is currently out of stock.");
       return;
     }
     if (!currentPrice) {
@@ -318,6 +401,8 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     setError(null);
   }
 
+  if (!variants.length) return null;
+
   return (
     <section className="pt-8 sm:pt-12 lg:pt-16">
       <div className="mb-8 rounded-lg border border-line bg-white p-3 sm:p-5 lg:p-7">
@@ -335,12 +420,6 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
             </p>
           </div>
 
-          <Link
-            href={`/quick-order?product=${apiProduct.slug}`}
-            className="inline-flex items-center justify-center rounded-pill border border-line bg-offwhite px-4 py-2.5 text-[12.5px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand"
-          >
-            Open Quick Order Workspace
-          </Link>
         </div>
 
         <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -496,13 +575,21 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                 <div>
                   <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-steel-2">Current Variant</p>
                   <p className="mt-1 text-[16px] font-semibold leading-snug text-ink sm:text-[18px]">{currentVariant?.title ?? "No valid combination selected"}</p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     {currentVariant ? (
-                      Object.entries(currentVariant.attributeCombination).map(([key, value]) => (
-                        <span key={key} className="rounded-pill border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-steel">
-                          {key}: {value}
-                        </span>
-                      ))
+                      <>
+                        <StockBadge status={currentVariant.inventory?.status} />
+                        {Object.entries(currentVariant.attributeCombination).map(([key, value]) => (
+                          <span key={key} className="rounded-pill border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-steel">
+                            {key}: {value}
+                          </span>
+                        ))}
+                        {getVariantPackageLabel(currentVariant) && (
+                          <span className="rounded-pill border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-steel">
+                            Package: {getVariantPackageLabel(currentVariant)}
+                          </span>
+                        )}
+                      </>
                     ) : (
                       <span className="text-[12px] text-steel-2">Choose a supported combination to continue.</span>
                     )}
@@ -532,12 +619,6 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                   <ShoppingBag size={15} />
                   Add to Cart
                 </button>
-                <Link
-                  href={`/quick-order?product=${apiProduct.slug}`}
-                  className="inline-flex items-center justify-center rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand sm:col-span-2 lg:col-span-1 xl:col-span-2 2xl:col-span-1"
-                >
-                  Use Spreadsheet View
-                </Link>
               </div>
 
               {error && (
@@ -693,9 +774,6 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
               >
                 Add To Quote
               </button>
-              <p className="mt-2 text-center text-[11.5px] text-steel-2">
-                Spreadsheet-style high-volume entry remains available in Quick Order.
-              </p>
             </div>
           </aside>
         </div>

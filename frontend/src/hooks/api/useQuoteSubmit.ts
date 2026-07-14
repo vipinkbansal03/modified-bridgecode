@@ -13,7 +13,10 @@ async function submitQuote(data: ApiQuoteSubmit): Promise<QuoteResult> {
     await new Promise((r) => setTimeout(r, 700));
     return { quoteNumber: `QUO-DEMO-${Date.now()}` };
   }
-  const res = await apiClient.post("/quotes", data);
+  const customerToken = typeof window !== "undefined" ? window.localStorage.getItem("customer_token") : null;
+  const res = await apiClient.post("/quotes", data, {
+    headers: customerToken ? { Authorization: `Bearer ${customerToken}` } : undefined,
+  });
   return res.data.data as QuoteResult;
 }
 

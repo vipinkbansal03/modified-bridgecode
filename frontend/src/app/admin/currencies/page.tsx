@@ -568,30 +568,30 @@ export default function CurrenciesPage() {
                           {visibleColumnKeys.includes("countries") ? <td className="px-4 py-4 align-top text-[#1A1A1A]">{currency._count?.countries ?? 0}</td> : null}
                           {visibleColumnKeys.includes("updatedAt") ? <td className="px-4 py-4 align-top text-[#1A1A1A]">{formatDate(currency.updatedAt)}</td> : null}
                           <td className="px-4 py-4 align-top">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex flex-nowrap items-center gap-1.5 whitespace-nowrap">
                               <button
                                 type="button"
                                 onClick={() => openDuplicate(currency)}
-                                className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F5F5F5]"
                                 title="Duplicate currency"
                               >
-                                <Copy size={15} />
+                                <Copy size={14} />
                               </button>
                               <button
                                 type="button"
                                 onClick={() => openEdit(currency)}
-                                className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F5F5F5]"
                                 title="Edit currency"
                               >
-                                <Edit2 size={15} />
+                                <Edit2 size={14} />
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setDeleting(currency)}
-                                className="rounded border border-[#F2D7D7] p-2 text-[#E31E24] hover:bg-[#FFF5F5]"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#F2D7D7] text-[#E31E24] hover:bg-[#FFF5F5]"
                                 title="Delete currency"
                               >
-                                <Trash2 size={15} />
+                                <Trash2 size={14} />
                               </button>
                             </div>
                           </td>
