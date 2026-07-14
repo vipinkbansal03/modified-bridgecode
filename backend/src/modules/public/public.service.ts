@@ -973,6 +973,11 @@ function toPublicProductDetail(p: PublicProductDetailRecord, countryId?: string)
     };
   });
 
+  const highlights = Array.isArray(p.highlights) ? (p.highlights as { title: string; description: string }[]) : [];
+  const technicalSpecs = Array.isArray(p.technicalSpecs) ? (p.technicalSpecs as { label: string; value: string }[]) : [];
+  const warranty = Array.isArray(p.warranty) ? (p.warranty.filter((line): line is string => typeof line === "string") as string[]) : [];
+  const primaryFeatures = Array.isArray(p.primaryFeatures) ? (p.primaryFeatures as { title: string; description: string }[]) : [];
+
   const variantAttributeNames = new Set(
     publicVariants.flatMap((variant) => Object.keys(variant.attributeCombination)),
   );
@@ -1043,6 +1048,10 @@ function toPublicProductDetail(p: PublicProductDetailRecord, countryId?: string)
     seoTitle: text.seoTitle,
     seoDescription: text.seoDescription,
     seoKeywords: p.seoKeywords,
+    highlights,
+    technicalSpecs,
+    warranty,
+    primaryFeatures,
     packages: p.packages.map((pkg) => ({
       id: pkg.id,
       title: pkg.title,

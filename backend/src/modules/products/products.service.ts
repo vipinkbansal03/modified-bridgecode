@@ -108,6 +108,16 @@ function summarizeInventory(inventories: { stock: number; reservedStock: number 
   );
 }
 
+type ProductHighlightInput = {
+  title: string;
+  description: string;
+};
+
+type ProductSpecInput = {
+  label: string;
+  value: string;
+};
+
 type ProductInput = {
   title: string;
   shortDescription?: string;
@@ -124,6 +134,10 @@ type ProductInput = {
   seoTitle?: string;
   seoDescription?: string;
   seoKeywords?: string;
+  highlights?: ProductHighlightInput[];
+  technicalSpecs?: ProductSpecInput[];
+  warranty?: string[];
+  primaryFeatures?: ProductHighlightInput[];
 };
 
 type ProductListQuery = {
@@ -641,7 +655,19 @@ export async function updateProduct(id: string, data: Partial<ProductInput>) {
     updateData.sku = data.sku?.trim() || null;
   }
   if (data.title !== undefined) updateData.title = data.title.trim();
-  if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;
+  if (data.categoryId !== undefined) {
+    updateData.category = { connect: { id: data.categoryId } };
+    // remove scalar foreign-key to avoid Prisma validation error
+    delete updateData.categoryId;
+  }
+  if (data.defaultCountryId !== undefined) {
+    updateData.defaultCountry = data.defaultCountryId ? { connect: { id: data.defaultCountryId } } : { disconnect: true };
+    delete updateData.defaultCountryId;
+  }
+  if (data.defaultCurrencyId !== undefined) {
+    updateData.defaultCurrency = data.defaultCurrencyId ? { connect: { id: data.defaultCurrencyId } } : { disconnect: true };
+    delete updateData.defaultCurrencyId;
+  }
   if (data.shortDescription !== undefined) updateData.shortDescription = data.shortDescription || null;
   if (data.description !== undefined) updateData.description = data.description || null;
   if (data.brand !== undefined) updateData.brand = data.brand?.trim() || existing.brand;
