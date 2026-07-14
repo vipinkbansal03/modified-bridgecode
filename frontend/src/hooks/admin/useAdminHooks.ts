@@ -1886,6 +1886,14 @@ export const useAdminContactSubmissions = (params?: {
       adminApi.get("/contact-submissions", { params }).then((r) => r.data),
   });
 
+export const useAdminContactSubmission = (id?: string) =>
+  useQuery({
+    queryKey: ["admin-contact-submission", id],
+    queryFn: () =>
+      adminApi.get(`/contact-submissions/${id}`).then((res) => res.data.data),
+    enabled: !!id,
+  });
+
 export const useCreateQuote = () => {
   const qc = useQueryClient();
   return useMutation({

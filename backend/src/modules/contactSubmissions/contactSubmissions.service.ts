@@ -1,5 +1,6 @@
 import { Request } from "express";
 import { prisma } from "../../config/database";
+import { Prisma } from "@prisma/client";
 import { AppError, getPagination } from "../../utils/apiResponse";
 
 export const listContactSubmissions = async (query: Request["query"]) => {
@@ -20,7 +21,7 @@ export const listContactSubmissions = async (query: Request["query"]) => {
     ? sortBy
     : "createdAt";
 
-  const where = search
+  const where: Prisma.ContactSubmissionWhereInput = search
     ? {
         OR: [
           {
@@ -47,18 +48,35 @@ export const listContactSubmissions = async (query: Request["query"]) => {
               mode: "insensitive" as const,
             },
           },
+          {
+            subject: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+          {
+            message: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
         ],
       }
-    : undefined;
+    : {};
 
   const [submissions, total] = await Promise.all([
     prisma.contactSubmission.findMany({
       where,
       skip,
       take: limit,
-      orderBy: {
-        [orderByField]: sortDir,
-      },
+      orderBy: [
+        {
+          [orderByField]: sortDir,
+        },
+        {
+          createdAt: "desc",
+        },
+      ],
     }),
     prisma.contactSubmission.count({
       where,
