@@ -702,15 +702,6 @@ async function resolvePublicCountry(countryCode?: string) {
         where: {
           code: normalizedCode,
           status: "ACTIVE",
-          productCountries: {
-            some: {
-              enabled: true,
-              product: {
-                status: "ACTIVE",
-                deletedAt: null,
-              },
-            },
-          },
         },
         select: { id: true, code: true },
       })
@@ -718,15 +709,6 @@ async function resolvePublicCountry(countryCode?: string) {
         where: {
           isDefault: true,
           status: "ACTIVE",
-          productCountries: {
-            some: {
-              enabled: true,
-              product: {
-                status: "ACTIVE",
-                deletedAt: null,
-              },
-            },
-          },
         },
         select: { id: true, code: true },
       });
@@ -736,15 +718,6 @@ async function resolvePublicCountry(countryCode?: string) {
   const fallbackCountry = await prisma.country.findFirst({
     where: {
       status: "ACTIVE",
-      productCountries: {
-        some: {
-          enabled: true,
-          product: {
-            status: "ACTIVE",
-            deletedAt: null,
-          },
-        },
-      },
     },
     orderBy: [{ isDefault: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
     select: { id: true, code: true },
