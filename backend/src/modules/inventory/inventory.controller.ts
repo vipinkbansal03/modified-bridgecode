@@ -12,6 +12,7 @@ export const update = asyncHandler(async (req: AuthRequest, res: Response) => Ap
 export const upsert = asyncHandler(async (req: AuthRequest, res: Response) =>
   ApiResponse.success(res, "Inventory saved.", await S.upsertVariantInventory(req.body)),
 );
+export const upsertProduct = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Product inventory saved.", await S.upsertProductInventory(String(req.params.productId), req.body)));
 export const alerts = asyncHandler(async (_r: AuthRequest, res: Response) => ApiResponse.success(res, "Alerts.", await S.getLowStockAlerts()));
 export const listAdjustments = asyncHandler(async (req: AuthRequest, res: Response) => {
   const r = await S.listInventoryAdjustments(req.query as never);

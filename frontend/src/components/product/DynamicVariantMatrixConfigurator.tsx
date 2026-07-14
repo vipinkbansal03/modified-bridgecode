@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, Layers3, ShoppingBag } from "lucide-react";
+import { AlertCircle, CheckCircle2, Layers3, ShoppingBag, Trash2 } from "lucide-react";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
 import { useCart, type CartItem } from "@/contexts/CartContext";
 import { useQuoteCart, type QuoteCartItem } from "@/contexts/QuoteCartContext";
@@ -19,16 +19,24 @@ type ProductOptionAttribute = ApiAttribute & { values: ApiAttributeValue[] };
 type NormalizedVariant = ApiVariant & {
   selectionByAttributeId: Record<string, string>;
 };
+type AxisCombination = {
+  key: string;
+  selection: Record<string, string>;
+  labels: Array<{ attributeName: string; value: ApiAttributeValue }>;
+};
 
 function getAttributeDisplayType(attribute: ProductOptionAttribute): AttributeDisplayType {
   return attribute.displayType ?? attribute.role;
 }
 
-function getPriceForCurrency(variant: ApiVariant, currencyCode: string): ApiProductPrice | null {
+function getPriceForCurrency(variant: ApiVariant, currencyCode: string, productPrices: ApiProductPrice[] = []): ApiProductPrice | null {
   return (
     variant.prices.find((price) => price.currencyCode === currencyCode) ??
     variant.prices.find((price) => price.currencyCode === "INR") ??
     variant.prices[0] ??
+    productPrices.find((price) => price.currencyCode === currencyCode) ??
+    productPrices.find((price) => price.currencyCode === "INR") ??
+    productPrices[0] ??
     null
   );
 }
@@ -49,6 +57,20 @@ function buildVariantLookupKey(selectionByAttributeId: Record<string, string>, p
     ...selectionByAttributeId,
     __package: packageId ?? "",
   });
+}
+
+function buildAxisCombinations(attributes: ProductOptionAttribute[]): AxisCombination[] {
+  return attributes.reduce<AxisCombination[]>(
+    (combinations, attribute) =>
+      combinations.flatMap((combination) =>
+        attribute.values.map((value) => ({
+          key: `${combination.key}${combination.key ? "|" : ""}${attribute.id}:${value.id}`,
+          selection: { ...combination.selection, [attribute.id]: value.id },
+          labels: [...combination.labels, { attributeName: attribute.name, value }],
+        })),
+      ),
+    [{ key: "all", selection: {}, labels: [] }],
+  );
 }
 
 function normalizeVariantSelections(attributes: ProductOptionAttribute[], variant: ApiVariant) {
@@ -137,12 +159,13 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
 
   const xAxisAttributes = attributes.filter((attribute) => getAttributeDisplayType(attribute) === "X_GRID");
   const yAxisAttributes = attributes.filter((attribute) => getAttributeDisplayType(attribute) === "Y_GRID");
-  const xAxisAttribute = xAxisAttributes.length === 1 ? xAxisAttributes[0] : null;
-  const yAxisAttribute = yAxisAttributes.length === 1 ? yAxisAttributes[0] : null;
-  const matrixEnabled = Boolean(xAxisAttribute && yAxisAttribute);
+  const rowAxisAttributes = yAxisAttributes;
+  const matrixEnabled = Boolean(xAxisAttributes.length && yAxisAttributes.length);
   const dropdownAttributes = matrixEnabled
-    ? attributes.filter((attribute) => attribute.id !== xAxisAttribute!.id && attribute.id !== yAxisAttribute!.id)
+    ? attributes.filter((attribute) => !xAxisAttributes.some((axis) => axis.id === attribute.id) && !yAxisAttributes.some((axis) => axis.id === attribute.id))
     : attributes;
+  const rowCombinations = buildAxisCombinations(rowAxisAttributes);
+  const columnCombinations = buildAxisCombinations(xAxisAttributes);
 
   const normalizedVariants = useMemo<NormalizedVariant[]>(
     () =>
@@ -167,7 +190,7 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
       ),
     [normalizedVariants],
   );
-  const filterControlCount = dropdownAttributes.length + (packageOptions.length > 1 ? 1 : 0);
+  const filterControlCount = dropdownAttributes.length;
   const [selectedPackageId, setSelectedPackageId] = useState(() => packageOptions[0]?.id ?? "");
   const [quantityMap, setQuantityMap] = useState<Record<string, number>>({});
   const [previewPriceMap, setPreviewPriceMap] = useState<Record<string, number>>({});
@@ -176,10 +199,10 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
   const variantPriceMap = useMemo(() => {
     const map: Record<string, ApiProductPrice | null> = {};
     for (const variant of normalizedVariants) {
-      map[variant.id] = getPriceForCurrency(variant, selectedCurrency);
+      map[variant.id] = getPriceForCurrency(variant, selectedCurrency, apiProduct.prices);
     }
     return map;
-  }, [normalizedVariants, selectedCurrency]);
+  }, [apiProduct.prices, normalizedVariants, selectedCurrency]);
 
   const variantLookup = useMemo(() => {
     const map = new Map<string, NormalizedVariant | null>();
@@ -194,16 +217,12 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
     return map;
   }, [normalizedVariants]);
 
-  const filteredVariants = useMemo(
-    () =>
-      normalizedVariants.filter((variant) =>
-        (packageOptions.length <= 1 || (variant.package?.id ?? "") === selectedPackageId) &&
-        dropdownAttributes.every((attribute) => {
-          const selectedValueId = dropdownSelections[attribute.id];
-          return !selectedValueId || variant.selectionByAttributeId[attribute.id] === selectedValueId;
-        }),
-      ),
-    [dropdownAttributes, dropdownSelections, normalizedVariants, packageOptions.length, selectedPackageId],
+  const filteredVariants = normalizedVariants.filter((variant) =>
+    (packageOptions.length <= 1 || (variant.package?.id ?? "") === selectedPackageId) &&
+    dropdownAttributes.every((attribute) => {
+      const selectedValueId = dropdownSelections[attribute.id];
+      return !selectedValueId || variant.selectionByAttributeId[attribute.id] === selectedValueId;
+    }),
   );
 
   const selectedEntries = useMemo(
@@ -281,10 +300,7 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
       .filter(([, quantity]) => quantity > 0)
       .map(([variantId, quantity]) => ({ variantId, quantity }));
 
-    if (!previewItems.length) {
-      setPreviewPriceMap({});
-      return;
-    }
+    if (!previewItems.length) return;
 
     let active = true;
     const timer = window.setTimeout(async () => {
@@ -319,7 +335,7 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
     };
   }, [apiProduct.slug, quantityMap, selectedCountryCode]);
 
-  if (!matrixEnabled || !xAxisAttribute || !yAxisAttribute) return null;
+  if (!matrixEnabled) return null;
 
   return (
     <section className="pt-16">
@@ -331,38 +347,25 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
           <p className="max-w-[760px] text-[14.5px] leading-relaxed text-steel">
             Use the matrix below to enter quantities across multiple variant combinations, then add every selected line to cart or quote in one action.
           </p>
-          <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
-            <span className="rounded-pill border border-brand/20 bg-red-50 px-3 py-1 font-semibold text-brand">
-              X axis / columns: {xAxisAttribute.name}
-            </span>
-            <span className="rounded-pill border border-line bg-white px-3 py-1 font-semibold text-ink">
-              Y axis / rows: {yAxisAttribute.name}
-            </span>
-          </div>
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-5">
-            {(dropdownAttributes.length > 0 || packageOptions.length > 1) && (
+            {packageOptions.length > 1 && (
+              <div className="rounded-lg border border-line bg-offwhite p-2">
+                <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">Package</p>
+                <div className="flex flex-wrap gap-2" role="tablist" aria-label="Package">
+                  {packageOptions.map((pkg) => (
+                    <button key={pkg.id} type="button" role="tab" aria-selected={selectedPackageId === pkg.id} onClick={() => setSelectedPackageId(pkg.id)} className={`rounded-md px-5 py-2.5 text-[13px] font-semibold transition ${selectedPackageId === pkg.id ? "bg-brand text-white shadow-sm" : "border border-line bg-white text-ink hover:border-brand/40 hover:text-brand"}`}>
+                      {pkg.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {dropdownAttributes.length > 0 && (
               <div className={`grid gap-4 ${filterControlCount > 1 ? "md:grid-cols-2" : "grid-cols-1"}`}>
-                {packageOptions.length > 1 && (
-                  <label className="block rounded-lg border border-line bg-offwhite p-4">
-                    <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
-                      Package
-                    </span>
-                    <select
-                      value={selectedPackageId}
-                      onChange={(event) => setSelectedPackageId(event.target.value)}
-                      className="w-full rounded-lg border border-line bg-white px-4 py-3 text-[13px] text-ink outline-none transition focus:border-brand"
-                    >
-                      {packageOptions.map((pkg) => (
-                        <option key={pkg.id} value={pkg.id}>
-                          {pkg.title}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
                 {dropdownAttributes.map((attribute) => {
                   const selectedValueId = dropdownSelections[attribute.id] ?? "";
                   return (
@@ -393,30 +396,44 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
                   <thead>
                     <tr className="bg-offwhite">
                       <th className="sticky left-0 z-20 border-b border-r border-line bg-[#F8F8F8] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-ink">
-                        {yAxisAttribute.name} / {xAxisAttribute.name}
+                        {rowAxisAttributes.map((attribute) => attribute.name).join(" + ") || "Options"} / {xAxisAttributes.map((attribute) => attribute.name).join(" + ")}
                       </th>
-                      {xAxisAttribute.values.map((columnValue) => (
+                      {columnCombinations.map((columnCombination) => (
                         <th
-                          key={columnValue.id}
+                          key={columnCombination.key}
                           className="sticky top-0 z-10 min-w-[160px] border-b border-line bg-red-50 px-4 py-3 text-center text-[12px] font-semibold text-brand"
                         >
-                          {columnValue.value}
+                          <div className="space-y-1">
+                            {columnCombination.labels.map(({ attributeName, value }) => (
+                              <div key={`${attributeName}-${value.id}`}>
+                                {columnCombination.labels.length > 1 ? <span className="block text-[9px] uppercase tracking-[0.12em] text-brand/60">{attributeName}</span> : null}
+                                <span>{value.value}</span>
+                              </div>
+                            ))}
+                          </div>
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {yAxisAttribute.values.map((rowValue) => (
-                      <tr key={rowValue.id} className="border-b border-line last:border-b-0">
+                    {rowCombinations.map((rowCombination) => (
+                      <tr key={rowCombination.key} className="border-b border-line last:border-b-0">
                         <th className="sticky left-0 z-10 border-r border-line bg-[#F8F8F8] px-4 py-4 text-left text-[13px] font-semibold text-ink">
-                          {rowValue.value}
+                          <div className="space-y-1.5">
+                            {rowCombination.labels.length ? rowCombination.labels.map(({ attributeName, value }) => (
+                              <div key={`${attributeName}-${value.id}`}>
+                                <span className="block text-[9px] font-semibold uppercase tracking-[0.14em] text-steel-2">{attributeName}</span>
+                                <span className="text-[13px] text-ink">{value.value}</span>
+                              </div>
+                            )) : <span>All</span>}
+                          </div>
                         </th>
-                        {xAxisAttribute.values.map((columnValue) => {
+                        {columnCombinations.map((columnCombination) => {
                           const variant = variantLookup.get(
                             buildVariantLookupKey({
                               ...dropdownSelections,
-                              [xAxisAttribute.id]: columnValue.id,
-                              [yAxisAttribute.id]: rowValue.id,
+                              ...rowCombination.selection,
+                              ...columnCombination.selection,
                             }, selectedPackageId),
                           );
                           const price = variant ? variantPriceMap[variant.id] : null;
@@ -427,7 +444,7 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
                           const displayUnitPrice = variant && price ? previewPriceMap[variant.id] ?? price.sellingPrice : null;
 
                           return (
-                            <td key={columnValue.id} className="align-top border-l border-line px-3 py-3">
+                            <td key={columnCombination.key} className="align-top border-l border-line px-3 py-3">
                               {variant ? (
                                 <div className={`rounded-lg border p-3 ${quantity > 0 ? "border-brand/20 bg-[#FFFBFB]" : "border-line bg-white"} ${outOfStock ? "opacity-60" : ""}`}>
                                   <div className="mb-2 flex items-start justify-between gap-2">
@@ -505,9 +522,11 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
                         <button
                           type="button"
                           onClick={() => handleQuantityChange(entry.variant.id, 0)}
-                          className="text-[11px] font-semibold uppercase tracking-[0.12em] text-brand"
+                          aria-label={`Remove ${entry.variant.title}`}
+                          title="Remove variant"
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-red-100 text-brand transition hover:border-red-200 hover:bg-red-50"
                         >
-                          Remove
+                          <Trash2 size={15} />
                         </button>
                       </div>
                     </div>

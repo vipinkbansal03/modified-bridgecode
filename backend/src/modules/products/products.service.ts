@@ -77,6 +77,26 @@ async function syncStorefrontVisibility(tx: Prisma.TransactionClient, productId:
   );
 }
 
+async function syncVariantsStorefrontVisibility(variantIds: string[], productId: string) {
+  const uniqueVariantIds = Array.from(new Set(variantIds));
+  if (!uniqueVariantIds.length) return;
+  const productCountries = await prisma.productCountry.findMany({
+    where: { productId, enabled: true, country: { status: "ACTIVE" } },
+    select: { countryId: true },
+  });
+
+  await prisma.variantCountry.createMany({
+    data: uniqueVariantIds.flatMap((variantId) =>
+      productCountries.map(({ countryId }) => ({ variantId, countryId, enabled: true })),
+    ),
+    skipDuplicates: true,
+  });
+}
+
+async function syncVariantStorefrontVisibility(variantId: string, productId: string) {
+  await syncVariantsStorefrontVisibility([variantId], productId);
+}
+
 function summarizeInventory(inventories: { stock: number; reservedStock: number }[]) {
   return inventories.reduce(
     (acc, inventory) => {
@@ -235,6 +255,7 @@ function parseCategoryImportRow(raw: Record<string, string>): CategoryImportRow 
 
 type BulkVariantUpdate = {
   variantId: string;
+  action?: "delete" | "archive" | "restore";
   countryId?: string | null;
   price?:
     | string
@@ -885,17 +906,27 @@ export async function bulkUpdateProducts(data: {
   }
 
   if (data.action === "enable" || data.action === "disable") {
-    await prisma.product.updateMany({
-      where: { id: { in: ids } },
-      data: { status: data.action === "enable" ? "ACTIVE" : "INACTIVE" },
+    await prisma.$transaction(async (tx) => {
+      await tx.product.updateMany({
+        where: { id: { in: ids } },
+        data: { status: data.action === "enable" ? "ACTIVE" : "INACTIVE" },
+      });
+      if (data.action === "enable") {
+        await Promise.all(ids.map((id) => syncStorefrontVisibility(tx, id, "ACTIVE")));
+      }
     });
     return { updated: ids.length };
   }
 
   if (data.action === "archive" || data.action === "restore") {
-    await prisma.product.updateMany({
-      where: { id: { in: ids } },
-      data: { status: data.action === "archive" ? "ARCHIVED" : "ACTIVE" },
+    await prisma.$transaction(async (tx) => {
+      await tx.product.updateMany({
+        where: { id: { in: ids } },
+        data: { status: data.action === "archive" ? "ARCHIVED" : "ACTIVE" },
+      });
+      if (data.action === "restore") {
+        await Promise.all(ids.map((id) => syncStorefrontVisibility(tx, id, "ACTIVE")));
+      }
     });
     return { updated: ids.length };
   }
@@ -1195,24 +1226,6 @@ export async function assignAttributes(
   });
   if (existingAttributes.length !== attributeIds.length) throw new AppError("One or more attributes were not found.", 400);
 
-  const attributeById = new Map(existingAttributes.map((attribute) => [attribute.id, attribute]));
-  const xAxisAttributes = attributes.filter((attributeConfig) => attributeById.get(attributeConfig.attributeId)?.role === "X_GRID");
-  const yAxisAttributes = attributes.filter((attributeConfig) => attributeById.get(attributeConfig.attributeId)?.role === "Y_GRID");
-
-  if (xAxisAttributes.length > 1) {
-    throw new AppError(
-      `Only one Grid X Axis attribute can be mapped to a product. Remove one of: ${xAxisAttributes.map((attributeConfig) => attributeById.get(attributeConfig.attributeId)?.name ?? attributeConfig.attributeId).join(", ")}.`,
-      400,
-    );
-  }
-
-  if (yAxisAttributes.length > 1) {
-    throw new AppError(
-      `Only one Grid Y Axis attribute can be mapped to a product. Remove one of: ${yAxisAttributes.map((attributeConfig) => attributeById.get(attributeConfig.attributeId)?.name ?? attributeConfig.attributeId).join(", ")}.`,
-      400,
-    );
-  }
-
   const allowedValueIds = Array.from(new Set(attributes.flatMap((attributeConfig) => attributeConfig.allowedValueIds ?? [])));
   const allowedValues = allowedValueIds.length
     ? await prisma.attributeValue.findMany({
@@ -1317,6 +1330,19 @@ export async function generateVariants(
 ) {
   const product = await getProduct(productId);
 
+  const productInventoryTemplates = product.inventories
+    .filter((inventory) => !inventory.variantId)
+    .map((inventory) => ({
+      countryId: inventory.countryId,
+      stock: inventory.stock,
+      reservedStock: inventory.reservedStock,
+      lowStockThreshold: inventory.lowStockThreshold,
+      status: inventory.status,
+    }));
+  const inventoryTemplates = productInventoryTemplates.length
+    ? productInventoryTemplates
+    : [{ countryId: null, stock: 0, reservedStock: 0, lowStockThreshold: 10, status: "OUT_OF_STOCK" as const }];
+
   if (!product.hasVariants) throw new AppError("Product does not use variants.", 400);
 
   let attributeGroups = (data?.attributes ?? []).filter((group) => group.attributeValueIds?.length);
@@ -1392,7 +1418,35 @@ export async function generateVariants(
         const variantKey = buildVariantKey(combo.map((v) => v.id), pkg?.id);
         const title = buildVariantTitle(combo, pkg?.title);
         const existing = await prisma.productVariant.findFirst({ where: { productId, variantKey } });
-        if (existing) return existing;
+        if (existing) {
+          const restored = existing.status === "INACTIVE"
+            ? await prisma.productVariant.update({ where: { id: existing.id }, data: { status: "ACTIVE" } })
+            : existing;
+          const existingInventories = await prisma.inventory.findMany({
+            where: { variantId: existing.id },
+            select: { id: true, countryId: true },
+          });
+          const inventoryByCountry = new Map(existingInventories.map((inventory) => [inventory.countryId ?? "__base__", inventory]));
+          await prisma.$transaction(
+            inventoryTemplates.map((template) => {
+              const matchingInventory = inventoryByCountry.get(template.countryId ?? "__base__");
+              return matchingInventory
+                ? prisma.inventory.update({
+                    where: { id: matchingInventory.id },
+                    data: {
+                      stock: template.stock,
+                      reservedStock: template.reservedStock,
+                      lowStockThreshold: template.lowStockThreshold,
+                      status: template.status,
+                    },
+                  })
+                : prisma.inventory.create({
+                    data: { productId, variantId: existing.id, ...template },
+                  });
+            }),
+          );
+          return restored;
+        }
 
         const variant = await prisma.productVariant.create({
           data: {
@@ -1413,8 +1467,8 @@ export async function generateVariants(
           })),
         });
 
-        await prisma.inventory.create({
-          data: { productId, variantId: variant.id, stock: 0 },
+        await prisma.inventory.createMany({
+          data: inventoryTemplates.map((template) => ({ productId, variantId: variant.id, ...template })),
         });
 
         return variant;
@@ -1422,10 +1476,12 @@ export async function generateVariants(
     )
   );
 
-  await syncVariantCountriesFromProduct(
-    productId,
-    createdVariants.map((variant) => variant.id),
-  );
+  const activeVariantIds = createdVariants
+    .filter((variant) => variant.status === "ACTIVE")
+    .map((variant) => variant.id);
+
+  await syncVariantsStorefrontVisibility(activeVariantIds, productId);
+  await syncVariantCountriesFromProduct(productId, createdVariants.map((variant) => variant.id));
 
   return createdVariants;
 }
@@ -1482,6 +1538,9 @@ export async function createVariant(
     data: { productId, variantId: variant.id, stock: 0 },
   });
 
+  if (variant.status === "ACTIVE") {
+    await syncVariantStorefrontVisibility(variant.id, productId);
+  }
   await syncVariantCountriesFromProduct(productId, [variant.id]);
 
   return getVariant(productId, variant.id);
@@ -1603,6 +1662,7 @@ export async function bulkUpdateVariants(
   const validRows: {
     index: number;
     variantId: string;
+    action?: "delete" | "archive" | "restore";
     stock?: number;
     countryId?: string;
     currencyId?: string;
@@ -1614,6 +1674,12 @@ export async function bulkUpdateVariants(
     try {
       if (!update.variantId) throw new Error("variantId is required.");
       if (!productVariantIds.has(update.variantId)) throw new Error("Variant was not found for this product.");
+
+      if (update.action) {
+        if (!["delete", "archive", "restore"].includes(update.action)) throw new Error("Unsupported bulk variant action.");
+        validRows.push({ index, variantId: update.variantId, action: update.action });
+        continue;
+      }
 
       const stock = parseOptionalStock(update.stock);
       const price = normalizeBulkPrice(update.price);
@@ -1642,6 +1708,15 @@ export async function bulkUpdateVariants(
 
   await prisma.$transaction(async (tx) => {
     for (const row of validRows) {
+      if (row.action) {
+        await tx.productVariant.update({
+          where: { id: row.variantId },
+          data: { status: row.action === "restore" ? "ACTIVE" : "INACTIVE" },
+        });
+        results[row.index].success = true;
+        continue;
+      }
+
       if (row.price && row.countryId && row.currencyId) {
         const createMrp = row.price.mrp ?? row.price.sellingPrice ?? Number(row.existingPrice?.mrp ?? 0);
         const createSellingPrice = row.price.sellingPrice ?? row.price.mrp ?? Number(row.existingPrice?.sellingPrice ?? 0);
@@ -1717,10 +1792,12 @@ export async function archiveVariant(productId: string, variantId: string) {
 
 export async function restoreVariant(productId: string, variantId: string) {
   await getVariant(productId, variantId);
-  return prisma.productVariant.update({
+  const variant = await prisma.productVariant.update({
     where: { id: variantId },
     data: { status: "ACTIVE" },
   });
+  await syncVariantStorefrontVisibility(variant.id, productId);
+  return variant;
 }
 
 export async function cloneVariant(productId: string, variantId: string) {

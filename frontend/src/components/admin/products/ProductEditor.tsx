@@ -79,9 +79,11 @@ type VariantRow = {
   package?: { id: string; title: string } | null;
   inventories?: {
     id?: string;
+    variantId?: string | null;
     countryId?: string | null;
     country?: { id: string; name: string; code: string } | null;
     stock: number;
+    reservedStock?: number | null;
     lowStockThreshold?: number | null;
     status?: string | null;
   }[];
@@ -102,6 +104,60 @@ type VariantRow = {
     attributeValue?: { id?: string; value: string };
   }[];
 };
+
+function ProductBaseInventoryEditor({
+  productId,
+  inventory,
+  onSaved,
+  notify,
+}: {
+  productId: string;
+  inventory?: NonNullable<VariantRow["inventories"]>[number] | null;
+  onSaved: () => Promise<unknown>;
+  notify: (message: string, type?: "success" | "error") => void;
+}) {
+  const [stock, setStock] = useState(inventory?.stock ?? 0);
+  const [reservedStock, setReservedStock] = useState(inventory?.reservedStock ?? 0);
+  const [lowStockThreshold, setLowStockThreshold] = useState(inventory?.lowStockThreshold ?? 10);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (reservedStock > stock) {
+      notify("Reserved stock cannot exceed stock.", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      await adminApi.put(`/inventory/product/${productId}`, { stock, reservedStock, lowStockThreshold });
+      await onSaved();
+      notify("Base inventory saved.");
+    } catch (error) {
+      notify(getAdminErrorMessage(error, "Failed to save base inventory."), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-[#E6E6E6] bg-white p-4">
+      <div className="mb-4">
+        <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">Product Base Inventory</h4>
+        <p className="mt-1 text-[12px] text-[#6B6B6B]">This inventory is inherited by newly generated variants when no country-specific override applies.</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <AdminInput label="Stock" type="number" min={0} step={1} value={stock} onChange={(event) => setStock(Math.max(0, Math.trunc(Number(event.target.value))))} />
+        <AdminInput label="Reserved stock" type="number" min={0} step={1} value={reservedStock} onChange={(event) => setReservedStock(Math.max(0, Math.trunc(Number(event.target.value))))} />
+        <AdminInput label="Low-stock threshold" type="number" min={0} step={1} value={lowStockThreshold} onChange={(event) => setLowStockThreshold(Math.max(0, Math.trunc(Number(event.target.value))))} />
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <span className="text-[12px] text-[#6B6B6B]">Available after reservations: {Math.max(0, stock - reservedStock)}</span>
+        <button type="button" onClick={save} disabled={saving} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
+          {saving ? "Saving…" : inventory?.id ? "Update Base Inventory" : "Create Base Inventory"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 type GlobalAttribute = {
   id: string;
@@ -456,6 +512,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
   const [bulkDrafts, setBulkDrafts] = useState<Record<string, BulkVariantDraft>>({});
   const [bulkRowErrors, setBulkRowErrors] = useState<Record<string, string>>({});
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [selectedVariantIds, setSelectedVariantIds] = useState<string[]>([]);
   const [tierRuleDraft, setTierRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
   const [moqRuleDraft, setMoqRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
   const [countryPriceModalOpen, setCountryPriceModalOpen] = useState(false);
@@ -659,6 +716,19 @@ export function ProductEditor({ productId }: ProductEditorProps) {
   ];
 
   const variantCols: Column<VariantRow>[] = [
+    {
+      key: "select",
+      label: "Select",
+      render: (row) => (
+        <input
+          type="checkbox"
+          aria-label={`Select ${row.title}`}
+          checked={selectedVariantIds.includes(row.id)}
+          onChange={(event) => setSelectedVariantIds((current) => event.target.checked ? [...current, row.id] : current.filter((id) => id !== row.id))}
+          className="h-4 w-4 accent-[#E31E24]"
+        />
+      ),
+    },
     { key: "title", label: "Variant" },
     { key: "package", label: "Package", render: (row) => row.package?.title ?? "Default" },
     { key: "sku", label: "SKU" },
@@ -907,6 +977,28 @@ export function ProductEditor({ productId }: ProductEditorProps) {
     }
   };
 
+  const handleBulkDeleteVariants = async () => {
+    if (!selectedVariantIds.length) {
+      showToast("Select at least one variant.", "error");
+      return;
+    }
+    if (!window.confirm(`Delete ${selectedVariantIds.length} selected variant${selectedVariantIds.length === 1 ? "" : "s"}?`)) return;
+    setBulkSaving(true);
+    try {
+      const response = await adminApi.put(`/products/${productId}/variants/bulk`, {
+        updates: selectedVariantIds.map((variantId) => ({ variantId, action: "delete" })),
+      });
+      const summary = response.data.data.summary as { succeeded: number; failed: number };
+      showToast(summary.failed ? `Deleted ${summary.succeeded}; ${summary.failed} failed.` : `${summary.succeeded} variant${summary.succeeded === 1 ? "" : "s"} deleted.`, summary.failed ? "error" : "success");
+      setSelectedVariantIds([]);
+      await refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Bulk delete failed."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   const buildRulePayload = (draft: RuleDraft, includeMoq: boolean) => ({
     ...(draft.tierId ? { tierId: draft.tierId } : {}),
     countryId: draft.countryId,
@@ -1002,8 +1094,9 @@ export function ProductEditor({ productId }: ProductEditorProps) {
     }
 
     try {
+      const existingMappings = toProductAttributePayload(mappedAttributeRows);
       await assignProductAttributes.mutateAsync([
-        ...toProductAttributePayload(mappedAttributeRows),
+        ...existingMappings,
         {
           attributeId: selectedMappingAttributeId,
           required: newMappingRequired,
@@ -1035,10 +1128,12 @@ export function ProductEditor({ productId }: ProductEditorProps) {
     try {
       await assignProductAttributes.mutateAsync(
         toProductAttributePayload(mappedAttributeRows).map((mapping) =>
-          mapping.attributeId === attributeId ? { ...mapping, gridAxis } : mapping
+          mapping.attributeId === attributeId
+            ? { ...mapping, gridAxis }
+            : mapping
         )
       );
-      showToast("Grid axis updated.");
+      showToast(gridAxis === "COLUMN" ? "Column attribute updated." : gridAxis === "ROW" ? "Row attribute updated." : "Attribute changed to Dropdown.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to update grid axis."), "error");
     }
@@ -1060,16 +1155,17 @@ export function ProductEditor({ productId }: ProductEditorProps) {
         ? "border-purple-200 bg-purple-50 text-purple-700"
         : "border-emerald-200 bg-emerald-50 text-emerald-700";
 
-  const getDisplayTypeLabel = (gridAxis?: GridAxis | null, fallbackRole?: AttributeRole) => {
-    const role = gridAxis === "ROW" ? "Y_GRID" : gridAxis === "COLUMN" ? "X_GRID" : fallbackRole ?? "DROPDOWN";
+  const getDisplayTypeLabel = (gridAxis?: GridAxis | null) => {
+    const role = gridAxis === "ROW" ? "Y_GRID" : gridAxis === "COLUMN" ? "X_GRID" : "DROPDOWN";
     return role === "X_GRID" ? "Matrix columns" : role === "Y_GRID" ? "Matrix rows" : "Dropdown filter";
   };
 
-  const getDisplayTypeValue = (gridAxis?: GridAxis | null, fallbackRole?: AttributeRole) => {
+  const getDisplayTypeRole = (gridAxis?: GridAxis | null): AttributeRole =>
+    gridAxis === "ROW" ? "Y_GRID" : gridAxis === "COLUMN" ? "X_GRID" : "DROPDOWN";
+
+  const getDisplayTypeValue = (gridAxis?: GridAxis | null) => {
     if (gridAxis === "ROW") return "ROW";
     if (gridAxis === "COLUMN") return "COLUMN";
-    if (fallbackRole === "X_GRID") return "COLUMN";
-    if (fallbackRole === "Y_GRID") return "ROW";
     return "";
   };
 
@@ -1463,7 +1559,6 @@ export function ProductEditor({ productId }: ProductEditorProps) {
       showToast("Choose specific values for every attribute set to Specific Values.", "error");
       return;
     }
-
     setGeneratingVariants(true);
     try {
       const result = await adminApi.post(`/products/${productId}/generate-variants`, {
@@ -1884,6 +1979,22 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                 <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Variants are created from package + selected attribute values.</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedVariantIds(selectedVariantIds.length === variantRows.length ? [] : variantRows.map((variant) => variant.id))}
+                  disabled={!variantRows.length}
+                  className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] disabled:opacity-40"
+                >
+                  {selectedVariantIds.length === variantRows.length && variantRows.length ? "Clear Selection" : "Select All"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkDeleteVariants}
+                  disabled={!selectedVariantIds.length || bulkSaving}
+                  className="flex items-center gap-1.5 rounded-md border border-[#F2C9C9] bg-white px-3 py-2 text-[13px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-40"
+                >
+                  <Trash2 size={14} /> Delete Selected ({selectedVariantIds.length})
+                </button>
                 {bulkEditMode && bulkCountryOptions.length > 0 && (
                   <select
                     value={selectedBulkCountryId}
@@ -2084,14 +2195,27 @@ export function ProductEditor({ productId }: ProductEditorProps) {
         {activeTab === 5 && (
           <div className="p-6">
             <h3 className="mb-4 text-[14px] font-semibold text-[#1A1A1A]">Inventory</h3>
-            <div className="space-y-3">
-              {(variantRows.length
-                ? variantRows.map((variant) => ({
+            <div className="mb-5">
+              {(() => {
+                const productLevelInventories = ((product?.inventories ?? []) as NonNullable<VariantRow["inventories"]>).filter((inventory) => !inventory.variantId);
+                const baseInventory = productLevelInventories.find((inventory) => !inventory.countryId) ?? null;
+                return (
+                  <ProductBaseInventoryEditor
+                    key={baseInventory?.id ?? "new-product-base-inventory"}
+                    productId={productId}
+                    inventory={baseInventory}
+                    onSaved={refetch}
+                    notify={showToast}
+                  />
+                );
+              })()}
+            </div>
+            {variantRows.length > 0 && <div className="space-y-3">
+              {variantRows.map((variant) => ({
                     id: variant.id,
                     title: variant.title,
                     inventories: variant.inventories ?? [],
-                  }))
-                : [{ id: "main", title: "Main Stock", inventories: (product?.inventories ?? []) as VariantRow["inventories"] }]).map(
+                  })).map(
                 (item: { id: string; title: string; inventories?: VariantRow["inventories"] }) => {
                   const baseInventory = getBaseInventory(item.inventories);
                   const countryInventories = (item.inventories ?? []).filter((inventory) => inventory.countryId);
@@ -2227,7 +2351,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                   );
                 },
               )}
-            </div>
+            </div>}
           </div>
         )}
 
@@ -2399,8 +2523,8 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
                             <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">{mapping.attribute.name}</h4>
-                            <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", roleBadgeClass(mapping.attribute.role))}>
-                              {getDisplayTypeLabel(mapping.gridAxis, mapping.attribute.role as AttributeRole)}
+                            <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", roleBadgeClass(getDisplayTypeRole(mapping.gridAxis)))}>
+                              {getDisplayTypeLabel(mapping.gridAxis)}
                             </span>
                           </div>
                           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -2418,7 +2542,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                         <div className="flex flex-wrap items-center justify-end gap-3">
                           <div className="min-w-[180px]">
                             <AdminSelect
-                              value={getDisplayTypeValue(mapping.gridAxis, mapping.attribute.role as AttributeRole)}
+                              value={getDisplayTypeValue(mapping.gridAxis)}
                               onChange={(e) => {
                                 const next = e.target.value as GridAxis | "";
                                 handleSetMappedGridAxis(mapping.attributeId, next === "ROW" ? "ROW" : next === "COLUMN" ? "COLUMN" : null);
@@ -2463,8 +2587,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                     value={selectedMappingAttributeId}
                     onChange={(e) => {
                       setSelectedMappingAttributeId(e.target.value);
-                      const attribute = availableMappingAttributes.find((item) => item.id === e.target.value);
-                      setNewMappingGridAxis(attribute?.role === "X_GRID" ? "COLUMN" : attribute?.role === "Y_GRID" ? "ROW" : null);
+                      setNewMappingGridAxis(null);
                       setNewMappingValueIds([]);
                     }}
                     options={[
@@ -2494,20 +2617,20 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                     ]}
                   />
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className={cn("rounded-full border px-2.5 py-1 text-[11.5px] font-medium", roleBadgeClass(selectedAttributeDetail?.role as AttributeRole))}>
-                      {getDisplayTypeLabel(newMappingGridAxis, selectedAttributeDetail?.role as AttributeRole)}
+                    <span className={cn("rounded-full border px-2.5 py-1 text-[11.5px] font-medium", roleBadgeClass(getDisplayTypeRole(newMappingGridAxis)))}>
+                      {getDisplayTypeLabel(newMappingGridAxis)}
                     </span>
                     <span className="text-[12px] text-[#9A9A9A]">Current display type</span>
                   </div>
                   <p className="text-[12px] leading-5 text-[#9A9A9A]">
-                    Use Dropdown for normal filtering, Matrix columns for X axis, and Matrix rows for Y axis.
+                    Product-level display types control the storefront exactly: Dropdown for filtering, Matrix columns for the X axis, and Matrix rows for the Y axis. Multiple row or column attributes are combined automatically. Product Packages are displayed separately as tabs.
                   </p>
 
                   {selectedMappingAttributeId && selectedAttributeDetail ? (
                     <div className="space-y-3">
                         <div className="flex items-center gap-2">
-                          <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", roleBadgeClass(selectedAttributeDetail.role as AttributeRole))}>
-                            {getDisplayTypeLabel(newMappingGridAxis, selectedAttributeDetail.role as AttributeRole)}
+                          <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", roleBadgeClass(getDisplayTypeRole(newMappingGridAxis)))}>
+                            {getDisplayTypeLabel(newMappingGridAxis)}
                           </span>
                           <span className="text-[12px] text-[#9A9A9A]">{newMappingValueIds.length} selected</span>
                         </div>
@@ -2752,6 +2875,10 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                 </div>
               </div>
             )}
+
+            <div className="mb-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-[12.5px] leading-5 text-blue-800">
+              New variants inherit the product-level base inventory and every country inventory override configured in the Inventory tab.
+            </div>
 
             <div className="mb-4 rounded-lg border border-[#E6E6E6] p-4">
               <div className="mb-3 text-[13px] font-medium text-[#1A1A1A]">Add Attributes To Generation</div>

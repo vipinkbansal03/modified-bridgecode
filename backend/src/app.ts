@@ -70,7 +70,7 @@ const limiter = rateLimit({
   max: 200,
   message: { success: false, message: "Too many requests. Please slow down." },
 });
-app.use(limiter);
+// app.use(limiter);
 
 // ─── Body parsing ────────────────────────────────────────
 app.use(express.json({ limit: "10mb" }));

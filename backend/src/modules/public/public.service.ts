@@ -988,11 +988,14 @@ function toPublicProductDetail(p: PublicProductDetailRecord, countryId?: string)
         publicVariants.some((variant) => variant.attributeCombination[pa.attribute.name] === value.value),
       );
 
+      const role =
+        pa.gridAxis === "COLUMN" ? "X_GRID" : pa.gridAxis === "ROW" ? "Y_GRID" : pa.attribute.role ?? "DROPDOWN";
+
       return {
         id: pa.attribute.id,
         name: pa.attribute.name,
-        role: pa.attribute.role,
-        displayType: pa.attribute.role,
+        role,
+        displayType: role,
         status: pa.attribute.status,
         required: pa.required,
         sortOrder: pa.attribute.sortOrder,
