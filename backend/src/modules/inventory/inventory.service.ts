@@ -342,6 +342,38 @@ async function ensureVariantInventoryRecord(
   });
 }
 
+export async function upsertVariantInventory(data: {
+  variantId: string;
+  countryId?: string | null;
+  stock: number;
+  lowStockThreshold?: number;
+}) {
+  if (!data.variantId) throw new AppError("variantId is required.", 400);
+  if (!Number.isInteger(data.stock) || data.stock < 0) throw new AppError("Stock must be a non-negative integer.", 400);
+  if (data.lowStockThreshold !== undefined && (!Number.isInteger(data.lowStockThreshold) || data.lowStockThreshold < 0)) {
+    throw new AppError("Low stock threshold must be a non-negative integer.", 400);
+  }
+
+  const variant = await prisma.productVariant.findUnique({
+    where: { id: data.variantId },
+    select: { id: true, productId: true },
+  });
+  if (!variant) throw new AppError("Variant not found.", 404);
+
+  if (data.countryId) {
+    const country = await prisma.country.findUnique({ where: { id: data.countryId }, select: { id: true } });
+    if (!country) throw new AppError("Country not found.", 404);
+  }
+
+  const existing = await ensureVariantInventoryRecord(prisma, data.variantId, data.countryId ?? null);
+  if (!existing) throw new AppError("Unable to create inventory record.", 500);
+
+  return updateInventory(existing.id, {
+    stock: data.stock,
+    ...(data.lowStockThreshold !== undefined ? { lowStockThreshold: data.lowStockThreshold } : {}),
+  });
+}
+
 export async function updateInventory(
   id: string,
   data: { stock?: number; reservedStock?: number; lowStockThreshold?: number; status?: string },

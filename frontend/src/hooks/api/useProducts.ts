@@ -65,6 +65,7 @@ export interface ProductListParams {
   category?: string;
   search?: string;
   featured?: boolean;
+  attributeValues?: string;
   sort?: "newest" | "name_asc" | "name_desc";
   lang?: string;
   countryCode?: string;
@@ -73,17 +74,41 @@ export interface ProductListParams {
 async function fetchProducts(params: ProductListParams = {}) {
   if (!HAS_LIVE_API) {
     const all = await loadStaticProducts();
-    const filtered = params.category ? all.filter((p) => p.category.slug === params.category) : all;
+    let filtered = params.category ? all.filter((p) => p.category.slug === params.category) : all;
+    if (params.featured) filtered = filtered.filter((p) => p.isFeatured);
     const searched = params.search
       ? filtered.filter((p) => p.title.toLowerCase().includes(params.search!.toLowerCase()) || (p.productCode ?? "").toLowerCase().includes(params.search!.toLowerCase()))
       : filtered;
+    const sorted = [...searched].sort((a, b) => {
+      if (params.sort === "name_asc") return a.title.localeCompare(b.title);
+      if (params.sort === "name_desc") return b.title.localeCompare(a.title);
+      return 0;
+    });
     const page = params.page ?? 1;
     const limit = params.limit ?? 20;
     const start = (page - 1) * limit;
-    return { data: searched.slice(start, start + limit), pagination: { page, limit, total: searched.length, totalPages: Math.ceil(searched.length / limit) } };
+    return { data: sorted.slice(start, start + limit), pagination: { page, limit, total: sorted.length, totalPages: Math.ceil(sorted.length / limit) } };
   }
-  const res = await apiClient.get("/products", { params: { page: params.page, limit: params.limit, category: params.category, search: params.search, featured: params.featured, sort: params.sort, lang: params.lang, countryCode: params.countryCode } });
+  const res = await apiClient.get("/products", {
+    params: {
+      page: params.page,
+      limit: params.limit,
+      category: params.category,
+      search: params.search,
+      featured: params.featured ? "true" : undefined,
+      attributeValues: params.attributeValues,
+      sort: params.sort,
+      lang: params.lang,
+      countryCode: params.countryCode,
+    },
+  });
   return unwrapPaginated<ApiProductSummary>(res);
+}
+
+async function fetchProductFacets(lang?: string, countryCode?: string) {
+  if (!HAS_LIVE_API) return [] as Array<{ attributeName: string; value: string }>;
+  const res = await apiClient.get("/products/facets", { params: { lang, countryCode } });
+  return unwrapData<Array<{ attributeName: string; value: string }>>(res);
 }
 
 async function fetchProduct(slug: string, lang?: string, countryCode?: string): Promise<ApiProductDetail | null> {
@@ -123,4 +148,14 @@ export function useFeaturedProducts() {
   const { selectedLanguage } = useLanguageContext();
   const { selectedCountryCode } = useCurrencyContext();
   return useQuery({ queryKey: qk.products.featured(selectedLanguage, selectedCountryCode), queryFn: () => fetchFeaturedProducts(selectedLanguage, selectedCountryCode), staleTime: STALE.long });
+}
+
+export function useProductFacets() {
+  const { selectedLanguage } = useLanguageContext();
+  const { selectedCountryCode } = useCurrencyContext();
+  return useQuery({
+    queryKey: ["products", "facets", selectedLanguage, selectedCountryCode],
+    queryFn: () => fetchProductFacets(selectedLanguage, selectedCountryCode),
+    staleTime: STALE.long,
+  });
 }

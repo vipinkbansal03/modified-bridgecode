@@ -20,6 +20,7 @@ router.get("/cms/footer", CMS.publicFooter);
 
 // ─── Read endpoints ───────────────────────────────────────
 router.get("/products", C.listProducts);
+router.get("/products/facets", C.listProductFacets);
 router.get("/products/:slug", C.getProduct);
 router.post("/products/:slug/price-preview", C.previewProductPrices);
 router.get("/categories", C.listCategories);

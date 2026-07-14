@@ -1192,25 +1192,41 @@ export async function generateCountryPrices(productId: string, basePrice: number
   if (!baseCurrency) throw new AppError("Base currency not found.", 404);
   if (baseCurrency.status !== "ACTIVE") throw new AppError("Base currency is inactive.", 400);
 
-  const countries = await prisma.country.findMany({
-    where: { status: "ACTIVE" },
-    include: { currency: true },
+  const [countries, variants] = await Promise.all([
+    prisma.country.findMany({
+      where: { status: "ACTIVE" },
+      include: { currency: true },
+    }),
+    prisma.productVariant.findMany({
+      where: { productId, status: "ACTIVE" },
+      select: { id: true },
+    }),
+  ]);
+
+  const priceRows = countries.flatMap((country) => {
+    const mrp = convertPrice(basePrice, Number(country.currency.exchangeRate) / Number(baseCurrency.exchangeRate));
+    const sellingPrice = convertPrice(basePrice * 0.9, Number(country.currency.exchangeRate) / Number(baseCurrency.exchangeRate));
+    const baseRow = {
+      productId,
+      countryId: country.id,
+      currencyId: country.currencyId,
+      mrp,
+      sellingPrice,
+      status: "ACTIVE" as const,
+      variantId: null as string | null,
+    };
+    const variantRows = variants.map((variant) => ({
+      ...baseRow,
+      variantId: variant.id,
+    }));
+    return [baseRow, ...variantRows];
   });
 
-  const prices = countries.map((country) => ({
-    productId,
-    countryId: country.id,
-    currencyId: country.currencyId,
-    mrp: convertPrice(basePrice, Number(country.currency.exchangeRate) / Number(baseCurrency.exchangeRate)),
-    sellingPrice: convertPrice(basePrice * 0.9, Number(country.currency.exchangeRate) / Number(baseCurrency.exchangeRate)),
-    status: "ACTIVE" as const,
-  }));
-
-  for (const price of prices) {
+  for (const price of priceRows) {
     const existing = await prisma.productPrice.findFirst({
       where: {
         productId: price.productId,
-        variantId: null,
+        variantId: price.variantId,
         countryId: price.countryId,
       },
       select: { id: true },
@@ -1219,7 +1235,12 @@ export async function generateCountryPrices(productId: string, basePrice: number
     if (existing) {
       await prisma.productPrice.update({
         where: { id: existing.id },
-        data: price,
+        data: {
+          currencyId: price.currencyId,
+          mrp: price.mrp,
+          sellingPrice: price.sellingPrice,
+          status: price.status,
+        },
       });
       continue;
     }
@@ -1231,7 +1252,8 @@ export async function generateCountryPrices(productId: string, basePrice: number
 
   return {
     productId: product.id,
-    generated: prices.length,
+    generated: priceRows.length,
+    variantsPriced: variants.length,
   };
 }
 

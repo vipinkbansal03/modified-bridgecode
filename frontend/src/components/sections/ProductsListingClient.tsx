@@ -1,48 +1,86 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { SlidersHorizontal, ChevronDown } from "lucide-react";
 import { Container } from "@/components/ui/Container";
-import { ProductFilters } from "@/components/sections/ProductFilters";
+import { ProductFilters, type ProductFilterState } from "@/components/sections/ProductFilters";
 import { ProductCard } from "@/components/ui/ProductCard";
 import { SkeletonGrid } from "@/components/ui/Skeleton";
-import { useProducts } from "@/hooks/api/useProducts";
+import { useProducts, useProductFacets } from "@/hooks/api/useProducts";
 import { useCategories } from "@/hooks/api/useCategories";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
+import { useCurrencyContext } from "@/contexts/CurrencyContext";
 import { cn } from "@/utils/cn";
+
+function formatListingPrice(
+  prices: Array<{ sellingPrice: number; currencySymbol?: string; currencyCode?: string }> | undefined,
+  preferredCurrency?: string,
+) {
+  if (!prices?.length) return undefined;
+  const match =
+    prices.find((price) => price.currencyCode === preferredCurrency) ??
+    prices.find((price) => price.currencyCode === "INR") ??
+    prices[0];
+  if (!match || match.sellingPrice == null) return undefined;
+  const symbol = match.currencySymbol || "₹";
+  return `${symbol}${Math.round(Number(match.sellingPrice)).toLocaleString("en-IN")}`;
+}
 
 export function ProductsListingClient() {
   const searchParams = useSearchParams();
   const categorySlug = searchParams.get("category") ?? undefined;
   const searchQuery = searchParams.get("search") ?? undefined;
-
-  // Fully wired: passes structured params to useProducts
-  const { data: result, isLoading } = useProducts({
-    category: categorySlug,
-    search: searchQuery,
-    limit: 48,
-  });
-
-  const { data: categories = [] } = useCategories();
+  const { selectedCurrency } = useCurrencyContext();
   const { t } = useStaticTranslations();
+  const { data: categories = [] } = useCategories();
 
   const [showFilters, setShowFilters] = useState(true);
-  const [view, setView] = useState<"doctor" | "dealer">("doctor");
   const [sort, setSort] = useState<"newest" | "name_asc" | "name_desc">("newest");
+  const [filters, setFilters] = useState<ProductFilterState>({
+    featuredOnly: false,
+    categorySlugs: [],
+    attributeValues: [],
+  });
 
-  const products = result?.data ?? [];
-  const category = categories.find((c) => c.slug === categorySlug);
+  const effectiveCategory =
+    filters.categorySlugs.length === 1 ? filters.categorySlugs[0] : categorySlug && !filters.categorySlugs.length ? categorySlug : undefined;
+
+  const { data: result, isLoading } = useProducts({
+    category: effectiveCategory,
+    search: searchQuery,
+    featured: filters.featuredOnly || undefined,
+    attributeValues: filters.attributeValues.length ? filters.attributeValues.join(",") : undefined,
+    sort,
+    limit: 48,
+  });
+  const { data: facetRows = [] } = useProductFacets();
+
+  const products = useMemo(() => {
+    const rows = result?.data ?? [];
+    if (filters.categorySlugs.length <= 1) return rows;
+    return rows.filter((product) => filters.categorySlugs.includes(product.category.slug));
+  }, [filters.categorySlugs, result?.data]);
+
+  const availableAttributeValues = facetRows;
+
+  const category = categories.find((c) => c.slug === effectiveCategory);
   const title = category ? category.name : t("ui.products.allProducts");
 
   return (
     <div className="pb-20">
       <Container className="pt-12 pb-7">
         <nav className="mb-1.5 text-[13px] text-steel-2">
-          <Link href="/" className="hover:text-brand">{t("ui.products.breadcrumbHome")}</Link>{" "}/ {t("ui.products.breadcrumbProducts")}
+          <Link href="/" className="hover:text-brand">
+            {t("ui.products.breadcrumbHome")}
+          </Link>{" "}
+          / {t("ui.products.breadcrumbProducts")}
           {category && (
-            <>{" "}/ <span className="text-ink">{category.name}</span></>
+            <>
+              {" "}
+              / <span className="text-ink">{category.name}</span>
+            </>
           )}
         </nav>
         <h1 className="text-[clamp(26px,3.4vw,40px)] font-bold uppercase tracking-tight text-ink">{title}</h1>
@@ -60,49 +98,37 @@ export function ProductsListingClient() {
             <SlidersHorizontal size={14} /> {showFilters ? t("ui.products.hideFilters") : t("ui.products.showFilters")}
           </button>
 
-          <div className="flex items-center gap-3.5">
-            {/* Doctor / Dealer toggle */}
-            {/* <div className="flex gap-2">
-              {(["doctor", "dealer"] as const).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setView(v)}
-                  className={cn(
-                    "rounded-pill px-4.5 py-2.5 text-[13.5px] font-medium transition-colors",
-                    view === v ? "bg-ink text-white" : "bg-grey text-steel"
-                  )}
-                >
-                  {v === "doctor" ? t("ui.products.doctor") : t("ui.products.dealer")}
-                </button>
-              ))}
-            </div> */}
-
-            {/* Sort dropdown */}
-            <div className="relative">
-              <select
-                value={sort}
-                onChange={(e) => setSort(e.target.value as typeof sort)}
-                className="inline-flex items-center gap-2.5 appearance-none cursor-pointer rounded-pill border border-line bg-white px-6 py-3 text-[13.5px] text-ink pr-9 outline-none"
-              >
-                <option value="newest">{t("ui.products.newest")}</option>
-                <option value="name_asc">{t("ui.products.nameAsc")}</option>
-                <option value="name_desc">{t("ui.products.nameDesc")}</option>
-              </select>
-              <ChevronDown size={12} className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-steel" />
-            </div>
+          <div className="relative">
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as typeof sort)}
+              className="inline-flex appearance-none cursor-pointer items-center gap-2.5 rounded-pill border border-line bg-white px-6 py-3 pr-9 text-[13.5px] text-ink outline-none"
+            >
+              <option value="newest">{t("ui.products.newest")}</option>
+              <option value="name_asc">{t("ui.products.nameAsc")}</option>
+              <option value="name_desc">{t("ui.products.nameDesc")}</option>
+            </select>
+            <ChevronDown size={12} className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-steel" />
           </div>
         </Container>
       </div>
 
-      <Container className="grid grid-cols-1 gap-12.5 pt-8.5 sm:grid-cols-[250px_1fr]">
-        {showFilters && <ProductFilters />}
+      <Container
+        className={cn(
+          "grid grid-cols-1 gap-12.5 pt-8.5",
+          showFilters ? "sm:grid-cols-[250px_1fr]" : "sm:grid-cols-1",
+        )}
+      >
+        {showFilters && (
+          <ProductFilters value={filters} onChange={setFilters} availableAttributeValues={availableAttributeValues} />
+        )}
 
-        <div>
-          {/* Result summary */}
+        <div className="min-w-0">
           {!isLoading && result?.pagination && (
             <p className="mb-5 text-[13px] text-steel">
-              {result.pagination.total} {result.pagination.total === 1 ? t("ui.products.resultSingular") : t("ui.products.resultPlural")}
-              {categorySlug ? ` ${t("ui.products.inCategory")} ${title}` : ""}
+              {products.length}{" "}
+              {products.length === 1 ? t("ui.products.resultSingular") : t("ui.products.resultPlural")}
+              {effectiveCategory ? ` ${t("ui.products.inCategory")} ${title}` : ""}
             </p>
           )}
 
@@ -128,10 +154,10 @@ export function ProductsListingClient() {
                   slug={p.slug}
                   category={p.category.name}
                   shortDescription={
-                    view === "dealer"
-                      ? t("ui.products.dealerPricing")
-                      : (p.shortDescription?.slice(0, 72) ?? "") + (p.shortDescription && p.shortDescription.length > 72 ? "…" : "")
+                    (p.shortDescription?.slice(0, 72) ?? "") + (p.shortDescription && p.shortDescription.length > 72 ? "…" : "")
                   }
+                  price={formatListingPrice(p.prices, selectedCurrency)}
+                  badge={p.isFeatured ? "Featured" : undefined}
                 />
               ))}
             </div>

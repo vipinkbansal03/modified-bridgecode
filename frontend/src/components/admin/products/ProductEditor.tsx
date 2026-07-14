@@ -446,6 +446,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
   const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
   const [variantCountryModalVariant, setVariantCountryModalVariant] = useState<VariantRow | null>(null);
   const [variantCountryOverrides, setVariantCountryOverrides] = useState<Record<string, boolean>>({});
+  const [inventoryOverrideDrafts, setInventoryOverrideDrafts] = useState<Record<string, { countryId: string; stock: string }>>({});
   const [selectedMappingAttributeId, setSelectedMappingAttributeId] = useState("");
   const [newMappingRequired, setNewMappingRequired] = useState(true);
   const [newMappingGridAxis, setNewMappingGridAxis] = useState<GridAxis | null>(null);
@@ -1213,12 +1214,20 @@ export function ProductEditor({ productId }: ProductEditorProps) {
   };
 
   const openGenerateVariantModal = () => {
-    const requiredAttributeIds = mappedAttributeRows.filter((mapping) => mapping.required).map((mapping) => mapping.attributeId);
+    const mappedAttributeIdsForGeneration = (
+      mappedAttributeRows.length
+        ? mappedAttributeRows
+        : []
+    ).map((mapping) => mapping.attributeId);
+    const seedAttributeIds =
+      mappedAttributeIdsForGeneration.length > 0
+        ? mappedAttributeIdsForGeneration
+        : mappedAttributeRows.filter((mapping) => mapping.required).map((mapping) => mapping.attributeId);
     setGeneratePackageIds(packageRows.map((pkg) => pkg.id));
-    setGenerateAttributeIds(requiredAttributeIds);
+    setGenerateAttributeIds(seedAttributeIds);
     setGenerateSelectionMap({});
     setGenerateModeMap(
-      Object.fromEntries(requiredAttributeIds.map((attributeId) => [attributeId, "all"])) as GenerateModeMap,
+      Object.fromEntries(seedAttributeIds.map((attributeId) => [attributeId, "all"])) as GenerateModeMap,
     );
     setGenerateAttributePicker("");
     setGenerateValuePickerMap({});
@@ -2086,6 +2095,13 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                 (item: { id: string; title: string; inventories?: VariantRow["inventories"] }) => {
                   const baseInventory = getBaseInventory(item.inventories);
                   const countryInventories = (item.inventories ?? []).filter((inventory) => inventory.countryId);
+                  const existingCountryIds = new Set(countryInventories.map((inventory) => inventory.countryId).filter(Boolean));
+                  const availableOverrideCountries = (productCountries as CountryAvailability[]).filter(
+                    (country) => (countryOverrides[country.id] ?? country.enabled) && !existingCountryIds.has(country.id),
+                  );
+                  const draft = inventoryOverrideDrafts[item.id] ?? { countryId: availableOverrideCountries[0]?.id ?? "", stock: "0" };
+                  const canCreateOverride = item.id !== "main" && availableOverrideCountries.length > 0;
+
                   return (
                     <div key={item.id} className="rounded-lg border border-[#E6E6E6] p-4">
                       <div className="mb-3 text-[13.5px] font-medium text-[#1A1A1A]">{item.title}</div>
@@ -2128,10 +2144,83 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                             </div>
                           </div>
                         ))}
-                        {!countryInventories.length && (
-                          <p className="rounded-md border border-dashed border-[#E6E6E6] px-3 py-2 text-[12px] text-[#8A8A8A]">
-                            No country overrides yet. Add them from the inventory admin list or import sheet.
-                          </p>
+
+                        {canCreateOverride ? (
+                          <div className="rounded-md border border-dashed border-[#E6E6E6] bg-[#FAFAFA] p-3">
+                            <div className="mb-2 text-[12px] font-medium text-[#1A1A1A]">Add country override</div>
+                            <div className="flex flex-wrap items-end gap-2">
+                              <div className="min-w-[180px] flex-1">
+                                <AdminSelect
+                                  label="Country"
+                                  value={draft.countryId}
+                                  onChange={(e) =>
+                                    setInventoryOverrideDrafts((current) => ({
+                                      ...current,
+                                      [item.id]: { ...draft, countryId: e.target.value },
+                                    }))
+                                  }
+                                  options={[
+                                    { value: "", label: "Select country" },
+                                    ...availableOverrideCountries.map((country) => ({
+                                      value: country.id,
+                                      label: `${country.name} (${country.code})`,
+                                    })),
+                                  ]}
+                                />
+                              </div>
+                              <div>
+                                <AdminInput
+                                  label="Stock"
+                                  type="number"
+                                  min={0}
+                                  value={draft.stock}
+                                  onChange={(e) =>
+                                    setInventoryOverrideDrafts((current) => ({
+                                      ...current,
+                                      [item.id]: { ...draft, stock: e.target.value },
+                                    }))
+                                  }
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                className="rounded-md bg-[#E31E24] px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B]"
+                                onClick={async () => {
+                                  if (!draft.countryId) {
+                                    showToast("Select a country for the override.", "error");
+                                    return;
+                                  }
+                                  const stock = Math.max(0, parseInt(draft.stock || "0", 10) || 0);
+                                  try {
+                                    await adminApi.post("/inventory/upsert", {
+                                      variantId: item.id,
+                                      countryId: draft.countryId,
+                                      stock,
+                                    });
+                                    setInventoryOverrideDrafts((current) => {
+                                      const next = { ...current };
+                                      delete next[item.id];
+                                      return next;
+                                    });
+                                    showToast("Country inventory override created.");
+                                    refetch();
+                                  } catch (error) {
+                                    showToast(getAdminErrorMessage(error, "Failed to create country override."), "error");
+                                  }
+                                }}
+                              >
+                                Add Override
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          !countryInventories.length && (
+                            <p className="rounded-md border border-dashed border-[#E6E6E6] px-3 py-2 text-[12px] text-[#8A8A8A]">
+                              {item.id === "main"
+                                ? "Enable variants to manage country overrides."
+                                : "Enable countries in Country Availability first, then add overrides here."}
+                            </p>
+                          )
                         )}
                       </div>
                     </div>
@@ -2484,7 +2573,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                 <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Country Availability</h3>
                 <p className="mt-1 max-w-[760px] text-[12.5px] leading-relaxed text-[#6B6B6B]">
                   Availability controls where this product is visible. New products start invisible everywhere until countries are enabled here.
-                  This is separate from default country/currency fallback values, which are not edited on this screen.
+                  Enabling a country also enables that country on this product's category and active variants so it can appear on the storefront.
                 </p>
               </div>
               <div className="flex items-center gap-3">

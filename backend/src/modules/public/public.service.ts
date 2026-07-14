@@ -74,11 +74,16 @@ export async function publicListProducts(query: {
   category?: string;   // category slug
   search?: string;
   featured?: string;
+  attributeValues?: string; // comma-separated attribute values
   sort?: string;       // "newest" | "name_asc" | "name_desc"
   countryCode?: string;
 }, languageCode?: string) {
   const { page, limit, skip } = getPagination(query);
   const country = await resolvePublicCountry(query.countryCode);
+  const selectedAttributeValues = (query.attributeValues ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
 
   const where: Prisma.ProductWhereInput = buildStorefrontProductWhere(country.id, {
     category: {
@@ -89,6 +94,22 @@ export async function publicListProducts(query: {
       OR: buildProductTextSearchOr(query.search, languageCode),
     }),
     ...(query.featured === "true" && { isFeatured: true }),
+    ...(selectedAttributeValues.length > 0 && {
+      variants: {
+        some: {
+          status: "ACTIVE",
+          countries: { some: { countryId: country.id, enabled: true } },
+          attributeValues: {
+            some: {
+              attributeValue: {
+                value: { in: selectedAttributeValues },
+                status: "ACTIVE",
+              },
+            },
+          },
+        },
+      },
+    }),
   });
 
   const orderBy =
@@ -136,6 +157,40 @@ export async function publicListProducts(query: {
   ]);
 
   return { data: products.map(toPublicProduct), total, page, limit };
+}
+
+export async function publicListProductFacets(countryCode?: string) {
+  const country = await resolvePublicCountry(countryCode);
+  const rows = await prisma.productVariantAttributeValue.findMany({
+    where: {
+      attributeValue: { status: "ACTIVE" },
+      variant: {
+        status: "ACTIVE",
+        countries: { some: { countryId: country.id, enabled: true } },
+        product: buildStorefrontProductWhere(country.id),
+      },
+    },
+    select: {
+      attribute: { select: { name: true, sortOrder: true } },
+      attributeValue: { select: { value: true, sortOrder: true } },
+    },
+  });
+
+  const seen = new Set<string>();
+  const facets: Array<{ attributeName: string; value: string }> = [];
+  for (const row of rows.sort(
+    (a, b) =>
+      a.attribute.sortOrder - b.attribute.sortOrder ||
+      a.attribute.name.localeCompare(b.attribute.name) ||
+      a.attributeValue.sortOrder - b.attributeValue.sortOrder ||
+      a.attributeValue.value.localeCompare(b.attributeValue.value),
+  )) {
+    const key = `${row.attribute.name}::${row.attributeValue.value}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    facets.push({ attributeName: row.attribute.name, value: row.attributeValue.value });
+  }
+  return facets;
 }
 
 export async function publicGetProduct(slug: string, languageCode?: string, countryCode?: string) {
@@ -340,6 +395,7 @@ export interface QuoteSubmitInput {
   customerPhone?: string;
   companyName?: string;
   countryCode?: string;
+  customerId?: string | null;
   items: {
     productId: string;
     variantId?: string;
@@ -390,6 +446,7 @@ export async function submitPublicQuote(input: QuoteSubmitInput) {
             productId: item.productId,
             variantId: item.variantId,
             countryId: defaultCountry.id,
+            customerId: input.customerId ?? undefined,
             quantity,
           })
         : null;
@@ -854,6 +911,115 @@ type PublicProductDetailRecord = Prisma.ProductGetPayload<{
 function toPublicProductDetail(p: PublicProductDetailRecord, countryId?: string) {
   const text = getProductText(p);
   const categoryText = getCategoryText(p.category);
+  const productPrices = p.prices.map((pr) => ({
+    countryCode: pr.country.code,
+    countryName: pr.country.name,
+    currencyCode: pr.currency.code,
+    currencySymbol: pr.currency.symbol,
+    mrp: Number(pr.mrp),
+    sellingPrice: Number(pr.sellingPrice),
+    dealerPrice: pr.dealerPrice != null ? Number(pr.dealerPrice) : null,
+    doctorRetailerPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+    distributorPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+  }));
+
+  const publicVariants = p.variants.map((v) => {
+    const variantPrices = v.prices.map((pr) => ({
+      countryCode: pr.country.code,
+      countryName: pr.country.name,
+      currencyCode: pr.currency.code,
+      currencySymbol: pr.currency.symbol,
+      mrp: Number(pr.mrp),
+      sellingPrice: Number(pr.sellingPrice),
+      dealerPrice: pr.dealerPrice != null ? Number(pr.dealerPrice) : null,
+      doctorRetailerPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+      distributorPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+    }));
+
+    return {
+      id: v.id,
+      title: v.title,
+      sku: v.sku,
+      variantKey: v.variantKey,
+      moq: v.moq,
+      package: v.package
+        ? {
+            id: v.package.id,
+            title: v.package.title,
+            slug: v.package.slug,
+          }
+        : null,
+      attributeValueIdsByAttributeId: v.attributeValues.reduce<Record<string, string>>((acc, av) => {
+        acc[av.attributeId] = av.attributeValueId;
+        return acc;
+      }, {}),
+      attributeCombination: v.attributeValues.reduce<Record<string, string>>((acc, av) => {
+        acc[av.attribute.name] = av.attributeValue.value;
+        return acc;
+      }, {}),
+      // Fall back to product-level country price when variant has none yet.
+      prices: variantPrices.length ? variantPrices : productPrices,
+      inventory: (v.inventories.find((inventory) => inventory.countryId === countryId) ?? v.inventories.find((inventory) => inventory.countryId === null))
+        ? {
+            available: Math.max(
+              0,
+              ((v.inventories.find((inventory) => inventory.countryId === countryId) ?? v.inventories.find((inventory) => inventory.countryId === null))?.stock ?? 0) -
+                ((v.inventories.find((inventory) => inventory.countryId === countryId) ?? v.inventories.find((inventory) => inventory.countryId === null))?.reservedStock ?? 0),
+            ),
+            status:
+              (v.inventories.find((inventory) => inventory.countryId === countryId) ?? v.inventories.find((inventory) => inventory.countryId === null))?.status ?? "OUT_OF_STOCK",
+          }
+        : null,
+    };
+  });
+
+  const variantAttributeNames = new Set(
+    publicVariants.flatMap((variant) => Object.keys(variant.attributeCombination)),
+  );
+
+  const configuratorAttributes = p.attributes
+    .map((pa) => {
+      const allowedValues = pa.allowedValues
+        .map((selection) => selection.attributeValue)
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.value.localeCompare(b.value));
+
+      // Only offer values that exist on at least one sellable variant for this country.
+      const valuesUsedByVariants = allowedValues.filter((value) =>
+        publicVariants.some((variant) => variant.attributeCombination[pa.attribute.name] === value.value),
+      );
+
+      return {
+        id: pa.attribute.id,
+        name: pa.attribute.name,
+        role: pa.attribute.role,
+        displayType: pa.attribute.role,
+        status: pa.attribute.status,
+        required: pa.required,
+        sortOrder: pa.attribute.sortOrder,
+        values: (valuesUsedByVariants.length ? valuesUsedByVariants : allowedValues).map((value) => ({
+          id: value.id,
+          attributeId: value.attributeId,
+          value: value.value,
+          slug: value.slug,
+          sortOrder: value.sortOrder,
+          image: value.image,
+          note: value.note,
+          priceAdjustment: Number(value.priceAdjustment),
+          gridRole: value.gridRole,
+          countryId: value.countryId,
+          moq: value.moq,
+          tierPrice: value.tierPrice != null ? Number(value.tierPrice) : null,
+          dealerPrice: value.dealerPrice != null ? Number(value.dealerPrice) : null,
+        })),
+        allowedValueIds: pa.allowedValues.map((selection) => selection.attributeValueId),
+      };
+    })
+    .filter((attribute) => {
+      // Prefer attributes that actually drive available variants.
+      if (variantAttributeNames.size === 0) return true;
+      return variantAttributeNames.has(attribute.name);
+    })
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 
   return {
     id: p.id,
@@ -882,94 +1048,9 @@ function toPublicProductDetail(p: PublicProductDetailRecord, countryId?: string)
       description: pkg.description,
       sortOrder: pkg.sortOrder,
     })),
-    attributes: p.attributes
-      .map((pa) => {
-        const allowedValues = pa.allowedValues
-          .map((selection) => selection.attributeValue)
-          .sort((a, b) => a.sortOrder - b.sortOrder || a.value.localeCompare(b.value));
-
-        return {
-          id: pa.attribute.id,
-          name: pa.attribute.name,
-          role: pa.attribute.role,
-          displayType: pa.attribute.role,
-          status: pa.attribute.status,
-          required: pa.required,
-          sortOrder: pa.attribute.sortOrder,
-          values: allowedValues.map((value) => ({
-            id: value.id,
-            attributeId: value.attributeId,
-            value: value.value,
-            slug: value.slug,
-            sortOrder: value.sortOrder,
-            image: value.image,
-            note: value.note,
-            priceAdjustment: Number(value.priceAdjustment),
-            gridRole: value.gridRole,
-            countryId: value.countryId,
-            moq: value.moq,
-            tierPrice: value.tierPrice != null ? Number(value.tierPrice) : null,
-            dealerPrice: value.dealerPrice != null ? Number(value.dealerPrice) : null,
-          })),
-          allowedValueIds: pa.allowedValues.map((selection) => selection.attributeValueId),
-        };
-      })
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
-    variants: p.variants.map((v) => ({
-      id: v.id,
-      title: v.title,
-      sku: v.sku,
-      variantKey: v.variantKey,
-      moq: v.moq,
-      package: v.package
-        ? {
-            id: v.package.id,
-            title: v.package.title,
-            slug: v.package.slug,
-          }
-        : null,
-      attributeValueIdsByAttributeId: v.attributeValues.reduce<Record<string, string>>((acc, av) => {
-        acc[av.attributeId] = av.attributeValueId;
-        return acc;
-      }, {}),
-      attributeCombination: v.attributeValues.reduce<Record<string, string>>((acc, av) => {
-        acc[av.attribute.name] = av.attributeValue.value;
-        return acc;
-      }, {}),
-      prices: v.prices.map((pr) => ({
-        countryCode: pr.country.code,
-        countryName: pr.country.name,
-        currencyCode: pr.currency.code,
-        currencySymbol: pr.currency.symbol,
-        mrp: Number(pr.mrp),
-        sellingPrice: Number(pr.sellingPrice),
-        dealerPrice: pr.dealerPrice != null ? Number(pr.dealerPrice) : null,
-        doctorRetailerPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
-        distributorPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
-      })),
-      inventory: (v.inventories.find((inventory) => inventory.countryId === countryId) ?? v.inventories.find((inventory) => inventory.countryId === null))
-        ? {
-            available: Math.max(
-              0,
-              ((v.inventories.find((inventory) => inventory.countryId === countryId) ?? v.inventories.find((inventory) => inventory.countryId === null))?.stock ?? 0) -
-                ((v.inventories.find((inventory) => inventory.countryId === countryId) ?? v.inventories.find((inventory) => inventory.countryId === null))?.reservedStock ?? 0),
-            ),
-            status:
-              (v.inventories.find((inventory) => inventory.countryId === countryId) ?? v.inventories.find((inventory) => inventory.countryId === null))?.status ?? "OUT_OF_STOCK",
-          }
-        : null,
-    })),
-    prices: p.prices.map((pr) => ({
-      countryCode: pr.country.code,
-      countryName: pr.country.name,
-      currencyCode: pr.currency.code,
-      currencySymbol: pr.currency.symbol,
-      mrp: Number(pr.mrp),
-      sellingPrice: Number(pr.sellingPrice),
-      dealerPrice: pr.dealerPrice != null ? Number(pr.dealerPrice) : null,
-      doctorRetailerPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
-      distributorPrice: pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
-    })),
+    attributes: configuratorAttributes,
+    variants: publicVariants,
+    prices: productPrices,
   };
 }
 

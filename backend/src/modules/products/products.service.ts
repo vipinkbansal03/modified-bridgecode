@@ -966,7 +966,7 @@ export async function listProductCountries(productId: string) {
 }
 
 export async function updateProductCountries(productId: string, items: { countryId: string; enabled: boolean }[]) {
-  await getProduct(productId);
+  const product = await getProduct(productId);
   if (!Array.isArray(items)) throw new AppError("Country mapping payload must include an array of items.", 400);
   const countryIds = [...new Set(items.map((item) => item.countryId))];
   const countries = await prisma.country.findMany({ where: { id: { in: countryIds } }, select: { id: true } });
@@ -981,6 +981,34 @@ export async function updateProductCountries(productId: string, items: { country
       }),
     ),
   );
+
+  const enabledCountryIds = items.filter((item) => item.enabled).map((item) => item.countryId);
+  if (enabledCountryIds.length) {
+    // Storefront requires the category to be enabled for the same country, or the product stays hidden.
+    if (product.categoryId) {
+      await prisma.$transaction(
+        enabledCountryIds.map((countryId) =>
+          prisma.categoryCountry.upsert({
+            where: { categoryId_countryId: { categoryId: product.categoryId, countryId } },
+            update: { enabled: true },
+            create: { categoryId: product.categoryId, countryId, enabled: true },
+          }),
+        ),
+      );
+    }
+
+    const variants = await prisma.productVariant.findMany({
+      where: { productId },
+      select: { id: true },
+    });
+    if (variants.length) {
+      await syncVariantCountriesFromProduct(
+        productId,
+        variants.map((variant) => variant.id),
+      );
+    }
+  }
+
   return listProductCountries(productId);
 }
 
@@ -999,6 +1027,29 @@ export async function listVariantCountries(productId: string, variantId: string)
       enabled: mapping?.enabled ?? false,
     };
   });
+}
+
+async function syncVariantCountriesFromProduct(productId: string, variantIds: string[]) {
+  if (!variantIds.length) return;
+
+  const enabledCountries = await prisma.productCountry.findMany({
+    where: { productId, enabled: true },
+    select: { countryId: true },
+  });
+
+  if (!enabledCountries.length) return;
+
+  await prisma.$transaction(
+    variantIds.flatMap((variantId) =>
+      enabledCountries.map((country) =>
+        prisma.variantCountry.upsert({
+          where: { variantId_countryId: { variantId, countryId: country.countryId } },
+          update: { enabled: true },
+          create: { variantId, countryId: country.countryId, enabled: true },
+        }),
+      ),
+    ),
+  );
 }
 
 export async function updateVariantCountries(
@@ -1276,8 +1327,7 @@ export async function generateVariants(
 
   if (hasProductAttributeMappings && !allowUnmappedOverride) {
     if (!attributeGroups.length) {
-      const defaultMappings = productAttributeMappings.filter((mapping) => mapping.required);
-      attributeGroups = defaultMappings.map((mapping) => ({
+      attributeGroups = productAttributeMappings.map((mapping) => ({
         attributeId: mapping.attributeId,
         attributeValueIds: mapping.allowedValues.map((allowedValue) => allowedValue.attributeValueId),
       }));
@@ -1351,6 +1401,7 @@ export async function generateVariants(
             title,
             variantKey,
             sku: buildGeneratedVariantSku(product, variantKey),
+            status: "ACTIVE",
           },
         });
 
@@ -1369,6 +1420,11 @@ export async function generateVariants(
         return variant;
       })
     )
+  );
+
+  await syncVariantCountriesFromProduct(
+    productId,
+    createdVariants.map((variant) => variant.id),
   );
 
   return createdVariants;
@@ -1425,6 +1481,8 @@ export async function createVariant(
   await prisma.inventory.create({
     data: { productId, variantId: variant.id, stock: 0 },
   });
+
+  await syncVariantCountriesFromProduct(productId, [variant.id]);
 
   return getVariant(productId, variant.id);
 }
