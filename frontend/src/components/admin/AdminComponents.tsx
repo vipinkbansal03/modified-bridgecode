@@ -212,7 +212,7 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
   const rootRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const [menuStyle, setMenuStyle] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+  const [menuStyle, setMenuStyle] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
   const selectedValue = String(value ?? internalValue ?? "");
   const selectedOption = options.find((option) => option.value === selectedValue);
 
@@ -231,8 +231,14 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
     const contentMinWidth = Math.min(320, Math.max(168, longestLabel * 8 + 48));
     const width = Math.max(rect.width, contentMinWidth);
     const left = Math.max(edge, Math.min(rect.left, viewportWidth - width - edge));
-    const top = openUp ? Math.max(edge, rect.top - gap - maxHeight) : rect.bottom + gap;
-    setMenuStyle({ top, left, width, maxHeight });
+    
+    if (openUp) {
+      const bottom = viewportHeight - rect.top + gap;
+      setMenuStyle({ bottom, left, width, maxHeight });
+    } else {
+      const top = rect.bottom + gap;
+      setMenuStyle({ top, left, width, maxHeight });
+    }
   }, [options]);
 
   useEffect(() => {
@@ -306,7 +312,8 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
               className="z-[150] origin-top animate-admin-select-dropdown overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg"
               style={{
                 position: "fixed",
-                top: menuStyle.top,
+                top: menuStyle.top !== undefined ? menuStyle.top : "auto",
+                bottom: menuStyle.bottom !== undefined ? menuStyle.bottom : "auto",
                 left: menuStyle.left,
                 width: menuStyle.width,
                 maxHeight: menuStyle.maxHeight,

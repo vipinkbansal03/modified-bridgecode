@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, ChevronDown, Layers3, Minus, Plus, ShoppingBag, Sparkles } from "lucide-react";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
+import { useProduct } from "@/hooks/api/useProducts";
 import { useQuoteCart, type QuoteCartItem } from "@/contexts/QuoteCartContext";
 import { useCart } from "@/contexts/CartContext";
 import { apiClient } from "@/lib/apiClient";
@@ -137,18 +138,29 @@ function getAttributeDisplayMeta(displayType: AttributeDisplayType) {
 }
 
 export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
-  const attributes = apiProduct.attributes.map((attribute) => ({
+  const { data: dynamicProduct, isLoading } = useProduct(apiProduct.slug);
+  const activeProduct = dynamicProduct ?? apiProduct;
+
+  const attributes = activeProduct.attributes.map((attribute) => ({
     ...attribute,
     values: attribute.values ?? [],
   }));
   const xAxisCount = attributes.filter((attribute) => getAttributeDisplayType(attribute) === "X_GRID").length;
   const yAxisCount = attributes.filter((attribute) => getAttributeDisplayType(attribute) === "Y_GRID").length;
 
-  if (xAxisCount >= 1 && yAxisCount >= 1) {
-    return <DynamicVariantMatrixConfigurator apiProduct={apiProduct} />;
+  if (isLoading && !dynamicProduct) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
+      </div>
+    );
   }
 
-  return <SingleVariantConfigurator apiProduct={apiProduct} />;
+  if (xAxisCount >= 1 && yAxisCount >= 1) {
+    return <DynamicVariantMatrixConfigurator apiProduct={activeProduct} />;
+  }
+
+  return <SingleVariantConfigurator apiProduct={activeProduct} />;
 }
 
 function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
@@ -203,8 +215,8 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     ) ?? null;
 
   const currentPrice = currentVariant ? getPriceForCurrency(currentVariant, selectedCurrency, apiProduct.prices ?? []) : null;
-  const currencySymbol = currentPrice?.currencySymbol ?? variants[0]?.prices[0]?.currencySymbol ?? apiProduct.prices?.[0]?.currencySymbol ?? "₹";
-  const currencyCode = currentPrice?.currencyCode ?? variants[0]?.prices[0]?.currencyCode ?? apiProduct.prices?.[0]?.currencyCode ?? "INR";
+  const currencySymbol = currentPrice?.currencySymbol ?? (selectedCurrency === "USD" ? "$" : selectedCurrency === "EUR" ? "€" : selectedCurrency === "GBP" ? "£" : "₹");
+  const currencyCode = currentPrice?.currencyCode ?? selectedCurrency;
   const currentResolvedUnitPrice = currentVariant
     ? previewPriceMap[currentVariant.id] ?? currentPrice?.sellingPrice ?? 0
     : 0;

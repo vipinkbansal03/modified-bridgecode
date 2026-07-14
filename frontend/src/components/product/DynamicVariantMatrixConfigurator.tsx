@@ -249,7 +249,7 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
   const totals = useMemo(() => {
     const totalUnits = selectedEntries.reduce((sum, entry) => sum + entry.quantity, 0);
     const subtotal = selectedEntries.reduce((sum, entry) => sum + entry.total, 0);
-    const currencySymbol = selectedEntries[0]?.price.currencySymbol ?? variantPriceMap[normalizedVariants[0]?.id ?? ""]?.currencySymbol ?? "Rs ";
+    const currencySymbol = selectedEntries[0]?.price.currencySymbol ?? variantPriceMap[normalizedVariants[0]?.id ?? ""]?.currencySymbol ?? (selectedCurrency === "USD" ? "$" : selectedCurrency === "EUR" ? "€" : selectedCurrency === "GBP" ? "£" : "₹");
     return { totalUnits, subtotal, currencySymbol };
   }, [normalizedVariants, selectedEntries, variantPriceMap]);
 
