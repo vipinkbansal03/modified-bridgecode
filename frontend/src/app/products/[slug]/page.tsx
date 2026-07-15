@@ -28,14 +28,35 @@ const API_ORIGIN = process.env.API_BASE_URL
 
 async function fetchProductFromApi(slug: string): Promise<ApiProductDetail | null> {
   try {
-    const language = (await cookies()).get("language")?.value;
-    const query = language ? `?lang=${encodeURIComponent(language)}` : "";
-    const res = await fetch(`${API_ORIGIN}/api/products/${slug}${query}`, {
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json.data ?? null;
+    const cookieStore = await cookies();
+    const language = cookieStore.get("language")?.value;
+    const countryCode = cookieStore.get("country")?.value?.toUpperCase();
+
+    const queryOptions = [
+      { lang: language, countryCode },
+      { lang: undefined, countryCode },
+      { lang: language, countryCode: undefined },
+      { lang: undefined, countryCode: undefined },
+    ];
+
+    const tried = new Set<string>();
+    for (const option of queryOptions) {
+      const params = new URLSearchParams();
+      if (option.lang) params.set("lang", option.lang);
+      if (option.countryCode) params.set("countryCode", option.countryCode);
+      const query = params.toString();
+      if (tried.has(query)) continue;
+      tried.add(query);
+
+      const res = await fetch(`${API_ORIGIN}/api/products/${slug}${query ? `?${query}` : ""}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) continue;
+      const json = await res.json();
+      if (json.data) return json.data;
+    }
+
+    return null;
   } catch {
     return null;
   }

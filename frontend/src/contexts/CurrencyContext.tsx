@@ -30,6 +30,10 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    document.cookie = `country=${selectedCountryCode}; path=/; max-age=31536000; SameSite=Lax`;
+  }, [selectedCountryCode]);
+
+  useEffect(() => {
     if (!countries.length) return;
 
     const storedCountry = localStorage.getItem("country");
