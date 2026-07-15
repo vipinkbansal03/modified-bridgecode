@@ -25,7 +25,7 @@ function formatListingPrice(
     prices[0];
   if (!match || match.sellingPrice == null) return undefined;
   const symbol = match.currencySymbol || "₹";
-  return `${symbol}${Math.round(Number(match.sellingPrice)).toLocaleString("en-IN")}`;
+  return `${symbol} ${Math.round(Number(match.sellingPrice)).toLocaleString("en-IN")}`;
 }
 
 export function ProductsListingClient() {

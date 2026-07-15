@@ -130,7 +130,6 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const publicPrice = apiProduct ? getPublicPrice(apiProduct) : null;
   const publicDiscount = getPublicDiscount(publicPrice);
   const product = apiProduct ? mergeProduct(apiProduct, staticProduct) : staticProduct!;
-  const recentlySeen = staticProducts.filter((p) => p.slug !== slug);
 
   return (
     <>
@@ -196,7 +195,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
       </section>
 
       <BundleSection product={product} />
-      <RecentlySeenSection products={recentlySeen} />
+      <RecentlySeenSection currentSlug={slug} />
       <ContactCTASection data={homeContent.contactCta} />
     </>
   );
