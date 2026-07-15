@@ -13,6 +13,7 @@ type TaxRuleInput = {
   countryId?: string;
   status?: string;
   sortOrder?: number | string;
+  productIds?: string[];
 };
 
 type TaxListQuery = {
@@ -68,8 +69,11 @@ function taxRuleClient() {
   }).taxRule;
 }
 
-function includeCountry() {
-  return { country: { include: { currency: true } } };
+function includeCountryAndProducts() {
+  return {
+    country: { include: { currency: true } },
+    products: { select: { id: true, title: true } },
+  };
 }
 
 function roundMoney(value: number) {
@@ -164,7 +168,7 @@ export async function listTaxRules(query: TaxListQuery) {
       where,
       skip,
       take: limit,
-      include: includeCountry(),
+      include: includeCountryAndProducts(),
       orderBy: orderBy as never,
     }),
     taxRuleClient().count({ where }),
@@ -199,7 +203,7 @@ export async function getTaxDashboard() {
     taxRuleClient().findMany({
       take: 5,
       orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
-      include: includeCountry(),
+      include: includeCountryAndProducts(),
     }),
     prisma.country.count({ where: { status: "ACTIVE" } }),
     taxRuleClient().findMany({
@@ -298,8 +302,11 @@ export async function createTaxRule(input: TaxRuleInput) {
       countryId,
       status: normalizeStatus(input.status) ?? "ACTIVE",
       sortOrder: parseSortOrder(input.sortOrder) ?? 0,
+      products: input.productIds && Array.isArray(input.productIds) ? {
+        connect: input.productIds.map((pid) => ({ id: pid })),
+      } : undefined,
     },
-    include: includeCountry(),
+    include: includeCountryAndProducts(),
   });
 }
 
@@ -320,8 +327,13 @@ export async function updateTaxRule(id: string, input: TaxRuleInput) {
   if (input.percentage !== undefined) data.percentage = parsePercentage(input.percentage);
   if (input.status !== undefined) data.status = normalizeStatus(input.status);
   if (input.sortOrder !== undefined) data.sortOrder = parseSortOrder(input.sortOrder);
+  if (input.productIds !== undefined) {
+    data.products = {
+      set: Array.isArray(input.productIds) ? input.productIds.map((pid) => ({ id: pid })) : [],
+    };
+  }
 
-  return taxRuleClient().update({ where: { id }, data, include: includeCountry() });
+  return taxRuleClient().update({ where: { id }, data, include: includeCountryAndProducts() });
 }
 
 export async function deleteTaxRule(id: string) {
@@ -460,7 +472,7 @@ export async function exportTaxSpreadsheet(query: TaxListQuery & { ids?: string 
   const rules = await taxRuleClient().findMany({
     where,
     orderBy: taxRuleOrderBy(query) as never,
-    include: includeCountry(),
+    include: includeCountryAndProducts(),
   });
 
   return writeSpreadsheetBuffer(

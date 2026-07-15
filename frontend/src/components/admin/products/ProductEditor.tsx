@@ -478,7 +478,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
   const [manualVariantOpen, setManualVariantOpen] = useState(false);
   const [editingVariant, setEditingVariant] = useState<VariantRow | null>(null);
   const [editVariantSubTab, setEditVariantSubTab] = useState<"general" | "prices" | "tiers" | "moqs">("general");
-  const [editVariantCountryPrices, setEditVariantCountryPrices] = useState<Record<string, { mrp: string; sellingPrice: string; dealerPrice: string; doctorRetailerPrice: string }>>({});
+  const [editVariantCountryPrices, setEditVariantCountryPrices] = useState<Record<string, { mrp: string; sellingPrice: string; dealerPrice: string; doctorRetailerPrice: string; stock?: string }>>({});
   const [modalTierRuleDraft, setModalTierRuleDraft] = useState({
     tierId: "",
     countryId: "",
@@ -4065,7 +4065,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
 
                 <div className="divide-y divide-[#E6E6E6] rounded-md border border-[#E6E6E6] bg-white">
                   {(() => {
-                    const rules = tierPricingRows.filter((rule) => rule.variantId === editingVariant.id);
+                    const rules = tierPricingRows.filter((rule) => rule.variant?.id === editingVariant.id);
                     if (rules.length === 0) {
                       return <div className="px-4 py-6 text-center text-[13px] text-[#9A9A9A]">No tier pricing rules configured for this variant.</div>;
                     }
@@ -4163,7 +4163,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
 
                 <div className="divide-y divide-[#E6E6E6] rounded-md border border-[#E6E6E6] bg-white">
                   {(() => {
-                    const rules = moqPricingRows.filter((rule) => rule.variantId === editingVariant.id);
+                    const rules = moqPricingRows.filter((rule) => rule.variant?.id === editingVariant.id);
                     if (rules.length === 0) {
                       return <div className="px-4 py-6 text-center text-[13px] text-[#9A9A9A]">No MOQ pricing rules configured for this variant.</div>;
                     }

@@ -9,7 +9,7 @@ import { cn } from "@/utils/cn";
 
 export interface Column<T> {
   key: keyof T | string;
-  label: string;
+  label: React.ReactNode;
   width?: string;
   render?: (row: T) => ReactNode;
 }
@@ -318,7 +318,7 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
             <div
               ref={menuRef}
               role="listbox"
-              className="z-[150] origin-top animate-admin-select-dropdown overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg"
+              className="z-[10000] origin-top animate-admin-select-dropdown overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg"
               style={{
                 position: "fixed",
                 top: menuStyle.top !== undefined ? menuStyle.top : "auto",
