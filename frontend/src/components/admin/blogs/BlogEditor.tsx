@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, X } from "lucide-react";
-import { AdminInput, AdminSelect, AdminTextarea, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminRichTextEditor, AdminSelect, AdminTextarea, useToast } from "@/components/admin/AdminComponents";
 import { useAdminBlogAuthors, useAdminBlogCategories, useCreateBlog, useUpdateBlog } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { slugify } from "@/utils/slugify";
@@ -115,7 +115,7 @@ export function BlogEditor({ blog }: { blog?: Blog }) {
         <AdminInput label="Title" value={form.title} onChange={(event) => { set("title", event.target.value); if (!slugEdited) set("slug", slugify(event.target.value)); }} className="text-[20px]" />
         <AdminInput label="Slug" value={form.slug} onChange={(event) => { setSlugEdited(true); set("slug", slugify(event.target.value)); }} />
         <p className="-mt-2 text-[12px] text-[#9A9A9A]">/blog/{form.slug || "your-slug"}</p>
-        <AdminTextarea label="Content" rows={18} value={form.content} onChange={(event) => set("content", event.target.value)} />
+        <AdminRichTextEditor label="Content" value={form.content} onChange={(value) => set("content", value)} />
         <AdminTextarea label="Excerpt" rows={3} value={form.excerpt} onChange={(event) => set("excerpt", event.target.value)} />
       </section>
 
