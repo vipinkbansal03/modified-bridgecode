@@ -2369,16 +2369,27 @@ export function ProductEditor({ productId }: ProductEditorProps) {
             </button>
           ))}
         </div>
-        {activeTab === 0 || activeTab === 1 || activeTab === 10 ? (
+        <div className="flex items-center gap-2">
+          {activeTab === 0 || activeTab === 1 || activeTab === 10 ? (
+            <button
+              type="button"
+              onClick={() => formik.handleSubmit()}
+              disabled={formik.isSubmitting}
+              className="rounded-md bg-[#E31E24] px-5 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
+            >
+              {formik.isSubmitting ? "Saving…" : "Save Changes"}
+            </button>
+          ) : null}
           <button
             type="button"
-            onClick={() => formik.handleSubmit()}
-            disabled={formik.isSubmitting}
-            className="rounded-md bg-[#E31E24] px-5 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
+            onClick={() => router.push("/admin/products")}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A]"
+            aria-label="Close"
+            title="Close"
           >
-            {formik.isSubmitting ? "Saving…" : "Save Changes"}
+            <X size={16} />
           </button>
-        ) : null}
+        </div>
       </div>
 
       <div className="rounded-xl border border-[#E6E6E6] bg-white">
