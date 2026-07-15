@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useFormik } from "formik";
 import * as Yup from "yup";
@@ -559,9 +560,306 @@ export function ProductEditor({ productId }: ProductEditorProps) {
   const [countryPriceModalOpen, setCountryPriceModalOpen] = useState(false);
   const [countryPriceBase, setCountryPriceBase] = useState("");
   const [generatingCountryPrices, setGeneratingCountryPrices] = useState(false);
+  const [editingProductPrice, setEditingProductPrice] = useState<any | null>(null);
+  const [editPriceForm, setEditPriceForm] = useState({
+    mrp: "",
+    sellingPrice: "",
+    dealerPrice: "",
+    distributorPrice: "",
+    status: "ACTIVE",
+  });
+  const [basePriceBulkEditMode, setBasePriceBulkEditMode] = useState(false);
+  const [basePriceBulkDrafts, setBasePriceBulkDrafts] = useState<Record<string, { mrp: string; sellingPrice: string; dealerPrice: string; distributorPrice: string; status: string }>>({});
+  const [selectedPriceIds, setSelectedPriceIds] = useState<string[]>([]);
+  const [bulkEditPricesModalOpen, setBulkEditPricesModalOpen] = useState(false);
+  const [bulkEditPricesForm, setBulkEditPricesForm] = useState({
+    mrp: "",
+    sellingPrice: "",
+    dealerPrice: "",
+    distributorPrice: "",
+    status: "ACTIVE",
+    updateMrp: false,
+    updateSellingPrice: false,
+    updateDealerPrice: false,
+    updateDistributorPrice: false,
+    updateStatus: false,
+  });
   const { showToast, ToastComponent } = useToast();
 
   const { data: product, isLoading, refetch } = useAdminProduct(productId);
+
+  const productBasePrices = useMemo(() => {
+    return (product?.prices || []).filter((p: any) => !p.variantId);
+  }, [product?.prices]);
+
+  const handleToggleBasePriceBulkEdit = () => {
+    if (basePriceBulkEditMode) {
+      setBasePriceBulkEditMode(false);
+      setBasePriceBulkDrafts({});
+    } else {
+      const initialDrafts: any = {};
+      productBasePrices.forEach((price: any) => {
+        initialDrafts[price.id] = {
+          mrp: String(price.mrp),
+          sellingPrice: String(price.sellingPrice),
+          dealerPrice: price.dealerPrice != null ? String(price.dealerPrice) : "",
+          distributorPrice: price.distributorPrice != null ? String(price.distributorPrice) : "",
+          status: price.status,
+        };
+      });
+      setBasePriceBulkDrafts(initialDrafts);
+      setBasePriceBulkEditMode(true);
+    }
+  };
+
+  const handleSaveAllBasePrices = async () => {
+    try {
+      setBulkSaving(true);
+      const updatePromises = Object.entries(basePriceBulkDrafts).map(([priceId, draft]: [string, any]) => {
+        return adminApi.put(`/pricing/${priceId}`, {
+          mrp: Number(draft.mrp),
+          sellingPrice: Number(draft.sellingPrice),
+          dealerPrice: draft.dealerPrice ? Number(draft.dealerPrice) : null,
+          distributorPrice: draft.distributorPrice ? Number(draft.distributorPrice) : null,
+          status: draft.status,
+        });
+      });
+      await Promise.all(updatePromises);
+      showToast("All base prices updated successfully.");
+      setBasePriceBulkEditMode(false);
+      setBasePriceBulkDrafts({});
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to save base prices."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  const renderBulkBasePriceTable = () => (
+    <div className="overflow-x-auto rounded-lg border border-[#E6E6E6]">
+      <table className="min-w-full border-collapse text-left text-[13px]">
+        <thead className="bg-[#FAFAFA] text-[12px] font-semibold text-[#6B6B6B]">
+          <tr>
+            <th className="border-b border-[#E6E6E6] px-4 py-3">Country</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3">MRP</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3">Selling Price</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3">Dealer</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3">Doctor / Retailer</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {productBasePrices.map((price: any) => {
+            const draft = basePriceBulkDrafts[price.id] || { mrp: "", sellingPrice: "", dealerPrice: "", distributorPrice: "", status: "ACTIVE" };
+            return (
+              <tr key={price.id} className="border-b border-[#F0F0F0] last:border-b-0">
+                <td className="px-4 py-3 font-medium text-[#1A1A1A]">
+                  {price.country.name} ({price.country.code})
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-gray-400">{price.currency.symbol}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={draft.mrp}
+                      onChange={(e) => setBasePriceBulkDrafts((prev) => ({
+                        ...prev,
+                        [price.id]: { ...prev[price.id], mrp: e.target.value }
+                      }))}
+                      className="w-28 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
+                    />
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-gray-400">{price.currency.symbol}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={draft.sellingPrice}
+                      onChange={(e) => setBasePriceBulkDrafts((prev) => ({
+                        ...prev,
+                        [price.id]: { ...prev[price.id], sellingPrice: e.target.value }
+                      }))}
+                      className="w-28 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
+                    />
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-gray-400">{price.currency.symbol}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={draft.dealerPrice}
+                      onChange={(e) => setBasePriceBulkDrafts((prev) => ({
+                        ...prev,
+                        [price.id]: { ...prev[price.id], dealerPrice: e.target.value }
+                      }))}
+                      className="w-28 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
+                    />
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-gray-400">{price.currency.symbol}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={draft.distributorPrice}
+                      onChange={(e) => setBasePriceBulkDrafts((prev) => ({
+                        ...prev,
+                        [price.id]: { ...prev[price.id], distributorPrice: e.target.value }
+                      }))}
+                      className="w-28 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
+                    />
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <select
+                    value={draft.status}
+                    onChange={(e) => setBasePriceBulkDrafts((prev) => ({
+                      ...prev,
+                      [price.id]: { ...prev[price.id], status: e.target.value }
+                    }))}
+                    className="w-28 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24] bg-white"
+                  >
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                  </select>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const handleStartEditPrice = (price: any) => {
+    setEditingProductPrice(price);
+    setEditPriceForm({
+      mrp: String(price.mrp),
+      sellingPrice: String(price.sellingPrice),
+      dealerPrice: price.dealerPrice != null ? String(price.dealerPrice) : "",
+      distributorPrice: price.distributorPrice != null ? String(price.distributorPrice) : "",
+      status: price.status,
+    });
+  };
+
+  const handleSaveProductPrice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProductPrice) return;
+    try {
+      await adminApi.put(`/pricing/${editingProductPrice.id}`, {
+        mrp: Number(editPriceForm.mrp),
+        sellingPrice: Number(editPriceForm.sellingPrice),
+        dealerPrice: editPriceForm.dealerPrice ? Number(editPriceForm.dealerPrice) : null,
+        distributorPrice: editPriceForm.distributorPrice ? Number(editPriceForm.distributorPrice) : null,
+        status: editPriceForm.status,
+      });
+      showToast("Price updated successfully.");
+      setEditingProductPrice(null);
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to update price."), "error");
+    }
+  };
+
+  const handleDeleteProductPrice = async (priceId: string) => {
+    if (!window.confirm("Are you sure you want to delete this country price?")) return;
+    try {
+      await adminApi.delete(`/pricing/${priceId}`);
+      showToast("Price deleted successfully.");
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to delete price."), "error");
+    }
+  };
+
+  const handleSelectAllPrices = () => {
+    const allIds = productBasePrices.map((p: any) => p.id);
+    if (selectedPriceIds.length === allIds.length) {
+      setSelectedPriceIds([]);
+    } else {
+      setSelectedPriceIds(allIds);
+    }
+  };
+
+  const handleToggleSelectPrice = (id: string) => {
+    setSelectedPriceIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleStartBulkEditPrices = () => {
+    setBulkEditPricesForm({
+      mrp: "",
+      sellingPrice: "",
+      dealerPrice: "",
+      distributorPrice: "",
+      status: "ACTIVE",
+      updateMrp: false,
+      updateSellingPrice: false,
+      updateDealerPrice: false,
+      updateDistributorPrice: false,
+      updateStatus: false,
+    });
+    setBulkEditPricesModalOpen(true);
+  };
+
+  const handleSaveBulkEditPrices = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const payload: any = {};
+      if (bulkEditPricesForm.updateMrp) payload.mrp = Number(bulkEditPricesForm.mrp);
+      if (bulkEditPricesForm.updateSellingPrice) payload.sellingPrice = Number(bulkEditPricesForm.sellingPrice);
+      if (bulkEditPricesForm.updateDealerPrice) {
+        payload.dealerPrice = bulkEditPricesForm.updateDealerPrice && bulkEditPricesForm.dealerPrice ? Number(bulkEditPricesForm.dealerPrice) : null;
+      }
+      if (bulkEditPricesForm.updateDistributorPrice) {
+        payload.distributorPrice = bulkEditPricesForm.updateDistributorPrice && bulkEditPricesForm.distributorPrice ? Number(bulkEditPricesForm.distributorPrice) : null;
+      }
+      if (bulkEditPricesForm.updateStatus) payload.status = bulkEditPricesForm.status;
+
+      if (Object.keys(payload).length === 0) {
+        showToast("No fields selected for update.", "error");
+        return;
+      }
+
+      await Promise.all(
+        selectedPriceIds.map((id) => adminApi.put(`/pricing/${id}`, payload))
+      );
+
+      showToast("Bulk edit completed successfully.");
+      setBulkEditPricesModalOpen(false);
+      setSelectedPriceIds([]);
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to perform bulk edit."), "error");
+    }
+  };
+
+  const handleBulkDeletePrices = async () => {
+    if (!window.confirm(`Are you sure you want to delete the selected ${selectedPriceIds.length} base price(s)?`)) return;
+    try {
+      await Promise.all(
+        selectedPriceIds.map((id) => adminApi.delete(`/pricing/${id}`))
+      );
+      showToast(`${selectedPriceIds.length} price(s) deleted successfully.`);
+      setSelectedPriceIds([]);
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to delete selected prices."), "error");
+    }
+  };
+
   const { data: productCountries = [], isLoading: countriesLoading } = useAdminProductCountries(productId);
   const { data: variantCountries = [], isLoading: variantCountriesLoading } = useAdminVariantCountries(productId, editingVariant?.id || variantCountryModalVariant?.id);
   const { data: productAttributeMappings = [], isLoading: productAttributesLoading } = useAdminProductAttributes(productId);
@@ -897,23 +1195,69 @@ export function ProductEditor({ productId }: ProductEditorProps) {
   }, [mappedAttributeRows, variantRows]);
   const variantDisplayMode = variantGridState.mode;
 
-  const pricingCols: Column<{
-    id: string;
-    country: { name: string; code: string };
-    currency: { symbol: string };
-    mrp: number;
-    sellingPrice: number;
-    dealerPrice?: number | null;
-    distributorPrice?: number | null;
-    status: string;
-  }>[] = [
-    { key: "country", label: "Country", render: (r) => `${r.country.name} (${r.country.code})` },
-    { key: "mrp", label: "MRP", render: (r) => `${r.currency.symbol}${r.mrp}` },
-    { key: "sellingPrice", label: "Selling Price", render: (r) => `${r.currency.symbol}${r.sellingPrice}` },
-    { key: "dealerPrice", label: "Dealer", render: (r) => (r.dealerPrice != null ? `${r.currency.symbol}${r.dealerPrice}` : "—") },
-    { key: "distributorPrice", label: "Doctor / Retailer", render: (r) => (r.distributorPrice != null ? `${r.currency.symbol}${r.distributorPrice}` : "—") },
-    { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} /> },
-  ];
+  const pricingCols = useMemo(() => {
+    const cols: Column<{
+      id: string;
+      country: { name: string; code: string };
+      currency: { symbol: string };
+      mrp: number;
+      sellingPrice: number;
+      dealerPrice?: number | null;
+      distributorPrice?: number | null;
+      status: string;
+    }>[] = [
+      {
+        key: "selection",
+        label: (
+          <input
+            type="checkbox"
+            checked={selectedPriceIds.length === productBasePrices.length && productBasePrices.length > 0}
+            onChange={handleSelectAllPrices}
+            className="rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
+          />
+        ),
+        width: "40px",
+        render: (r) => (
+          <input
+            type="checkbox"
+            checked={selectedPriceIds.includes(r.id)}
+            onChange={() => handleToggleSelectPrice(r.id)}
+            className="rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
+          />
+        ),
+      },
+      { key: "country", label: "Country", render: (r) => `${r.country.name} (${r.country.code})` },
+      { key: "mrp", label: "MRP", render: (r) => `${r.currency.symbol}${r.mrp}` },
+      { key: "sellingPrice", label: "Selling Price", render: (r) => `${r.currency.symbol}${r.sellingPrice}` },
+      { key: "dealerPrice", label: "Dealer", render: (r) => (r.dealerPrice != null ? `${r.currency.symbol}${r.dealerPrice}` : "—") },
+      { key: "distributorPrice", label: "Doctor / Retailer", render: (r) => (r.distributorPrice != null ? `${r.currency.symbol}${r.distributorPrice}` : "—") },
+      { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} /> },
+      {
+        key: "actions",
+        label: "Actions",
+        width: "100px",
+        render: (r) => (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleStartEditPrice(r)}
+              className="rounded border border-[#E6E6E6] p-1 text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#1A1A1A]"
+            >
+              <Pencil size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDeleteProductPrice(r.id)}
+              className="rounded border border-[#F2C9C9] p-1 text-red-600 hover:bg-red-50"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        ),
+      },
+    ];
+    return cols;
+  }, [productBasePrices, selectedPriceIds]);
 
   const enabledCountryCount = (productCountries as CountryAvailability[]).filter((country) => countryOverrides[country.id] ?? country.enabled).length;
 
@@ -2479,15 +2823,67 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                     <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Country-wise Pricing</h3>
                     <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Set prices per country. Use Generate to auto-convert from base price.</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={openCountryPriceModal}
-                    className="flex items-center gap-1.5 rounded-md bg-[#1A1A1A] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#333]"
-                  >
-                    <RefreshCw size={14} /> Generate All Country Prices
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {basePriceBulkEditMode && (
+                      <button
+                        type="button"
+                        onClick={handleSaveAllBasePrices}
+                        disabled={bulkSaving}
+                        className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#B5151B] disabled:opacity-50"
+                      >
+                        <Save size={14} />
+                        {bulkSaving ? "Saving..." : "Save All"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleToggleBasePriceBulkEdit}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-md border px-4 py-2 text-[13px] font-medium",
+                        basePriceBulkEditMode
+                          ? "border-[#F2C9C9] bg-red-50 text-[#B5151B] hover:bg-red-100"
+                          : "border-[#E6E6E6] bg-white text-[#1A1A1A] hover:bg-[#F5F5F5]"
+                      )}
+                    >
+                      {basePriceBulkEditMode ? "Exit Bulk Edit" : "Bulk Edit"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openCountryPriceModal}
+                      className="flex items-center gap-1.5 rounded-md bg-[#1A1A1A] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#333]"
+                    >
+                      <RefreshCw size={14} /> Generate All Country Prices
+                    </button>
+                  </div>
                 </div>
-                <DataTable columns={pricingCols} data={product.prices || []} rowKey="id" emptyMessage="No pricing set. Use Generate to auto-fill all countries." />
+                {basePriceBulkEditMode ? (
+                  renderBulkBasePriceTable()
+                ) : (
+                  <>
+                    {selectedPriceIds.length > 0 && (
+                      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-red-200 bg-red-50/50 p-3.5 text-[13px] text-[#1A1A1A]">
+                        <span className="font-medium">{selectedPriceIds.length} row(s) selected</span>
+                        <div className="flex gap-2 ml-auto">
+                          <button
+                            type="button"
+                            onClick={handleStartBulkEditPrices}
+                            className="rounded border border-[#E6E6E6] bg-white px-3 py-1.5 font-medium text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#1A1A1A]"
+                          >
+                            Bulk Edit Selected
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleBulkDeletePrices}
+                            className="rounded bg-red-600 px-3 py-1.5 font-semibold text-white hover:bg-red-700"
+                          >
+                            Bulk Delete Selected
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <DataTable columns={pricingCols} data={productBasePrices} rowKey="id" emptyMessage="No pricing set. Use Generate to auto-fill all countries." />
+                  </>
+                )}
               </section>
             )}
 
@@ -4108,6 +4504,217 @@ export function ProductEditor({ productId }: ProductEditorProps) {
             </button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        open={editingProductPrice !== null}
+        onClose={() => setEditingProductPrice(null)}
+        title={`Edit Base Price - ${editingProductPrice?.country.name}`}
+        panelClassName="max-w-md"
+      >
+        <form onSubmit={handleSaveProductPrice} className="space-y-4">
+          <AdminInput
+            label="MRP"
+            type="number"
+            min="0"
+            step="0.01"
+            value={editPriceForm.mrp}
+            onChange={(e) => setEditPriceForm((f) => ({ ...f, mrp: e.target.value }))}
+            required
+          />
+          <AdminInput
+            label="Selling Price"
+            type="number"
+            min="0"
+            step="0.01"
+            value={editPriceForm.sellingPrice}
+            onChange={(e) => setEditPriceForm((f) => ({ ...f, sellingPrice: e.target.value }))}
+            required
+          />
+          <AdminInput
+            label="Dealer Price"
+            type="number"
+            min="0"
+            step="0.01"
+            value={editPriceForm.dealerPrice}
+            onChange={(e) => setEditPriceForm((f) => ({ ...f, dealerPrice: e.target.value }))}
+          />
+          <AdminInput
+            label="Doctor / Retailer Price"
+            type="number"
+            min="0"
+            step="0.01"
+            value={editPriceForm.distributorPrice}
+            onChange={(e) => setEditPriceForm((f) => ({ ...f, distributorPrice: e.target.value }))}
+          />
+          <AdminSelect
+            label="Status"
+            value={editPriceForm.status}
+            onChange={(e) => setEditPriceForm((f) => ({ ...f, status: e.target.value }))}
+            options={[
+              { value: "ACTIVE", label: "Active" },
+              { value: "INACTIVE", label: "Inactive" },
+            ]}
+          />
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setEditingProductPrice(null)}
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+            >
+              Save Changes
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={bulkEditPricesModalOpen}
+        onClose={() => setBulkEditPricesModalOpen(false)}
+        title={`Bulk Edit ${selectedPriceIds.length} Base Price(s)`}
+        panelClassName="max-w-md"
+      >
+        <form onSubmit={handleSaveBulkEditPrices} className="space-y-4">
+          <p className="text-[13px] leading-5 text-[#6B6B6B]">
+            Select the fields you want to update in bulk for the selected countries.
+          </p>
+
+          <div className="space-y-3 rounded-lg border border-[#E6E6E6] bg-white p-4">
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-[13px] font-medium text-[#1A1A1A]">
+                <input
+                  type="checkbox"
+                  checked={bulkEditPricesForm.updateMrp}
+                  onChange={(e) => setBulkEditPricesForm((f) => ({ ...f, updateMrp: e.target.checked }))}
+                  className="rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
+                />
+                Update MRP
+              </label>
+              {bulkEditPricesForm.updateMrp && (
+                <AdminInput
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={bulkEditPricesForm.mrp}
+                  onChange={(e) => setBulkEditPricesForm((f) => ({ ...f, mrp: e.target.value }))}
+                  required
+                  placeholder="Enter new MRP"
+                />
+              )}
+            </div>
+
+            <div className="space-y-2 border-t border-[#F2F2F2] pt-2">
+              <label className="flex items-center gap-2 text-[13px] font-medium text-[#1A1A1A]">
+                <input
+                  type="checkbox"
+                  checked={bulkEditPricesForm.updateSellingPrice}
+                  onChange={(e) => setBulkEditPricesForm((f) => ({ ...f, updateSellingPrice: e.target.checked }))}
+                  className="rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
+                />
+                Update Selling Price
+              </label>
+              {bulkEditPricesForm.updateSellingPrice && (
+                <AdminInput
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={bulkEditPricesForm.sellingPrice}
+                  onChange={(e) => setBulkEditPricesForm((f) => ({ ...f, sellingPrice: e.target.value }))}
+                  required
+                  placeholder="Enter new Selling Price"
+                />
+              )}
+            </div>
+
+            <div className="space-y-2 border-t border-[#F2F2F2] pt-2">
+              <label className="flex items-center gap-2 text-[13px] font-medium text-[#1A1A1A]">
+                <input
+                  type="checkbox"
+                  checked={bulkEditPricesForm.updateDealerPrice}
+                  onChange={(e) => setBulkEditPricesForm((f) => ({ ...f, updateDealerPrice: e.target.checked }))}
+                  className="rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
+                />
+                Update Dealer Price
+              </label>
+              {bulkEditPricesForm.updateDealerPrice && (
+                <AdminInput
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={bulkEditPricesForm.dealerPrice}
+                  onChange={(e) => setBulkEditPricesForm((f) => ({ ...f, dealerPrice: e.target.value }))}
+                  placeholder="Enter new Dealer Price (or leave blank for null)"
+                />
+              )}
+            </div>
+
+            <div className="space-y-2 border-t border-[#F2F2F2] pt-2">
+              <label className="flex items-center gap-2 text-[13px] font-medium text-[#1A1A1A]">
+                <input
+                  type="checkbox"
+                  checked={bulkEditPricesForm.updateDistributorPrice}
+                  onChange={(e) => setBulkEditPricesForm((f) => ({ ...f, updateDistributorPrice: e.target.checked }))}
+                  className="rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
+                />
+                Update Doctor / Retailer Price
+              </label>
+              {bulkEditPricesForm.updateDistributorPrice && (
+                <AdminInput
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={bulkEditPricesForm.distributorPrice}
+                  onChange={(e) => setBulkEditPricesForm((f) => ({ ...f, distributorPrice: e.target.value }))}
+                  placeholder="Enter new Doctor / Retailer Price (or leave blank for null)"
+                />
+              )}
+            </div>
+
+            <div className="space-y-2 border-t border-[#F2F2F2] pt-2">
+              <label className="flex items-center gap-2 text-[13px] font-medium text-[#1A1A1A]">
+                <input
+                  type="checkbox"
+                  checked={bulkEditPricesForm.updateStatus}
+                  onChange={(e) => setBulkEditPricesForm((f) => ({ ...f, updateStatus: e.target.checked }))}
+                  className="rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
+                />
+                Update Status
+              </label>
+              {bulkEditPricesForm.updateStatus && (
+                <AdminSelect
+                  value={bulkEditPricesForm.status}
+                  onChange={(e) => setBulkEditPricesForm((f) => ({ ...f, status: e.target.value }))}
+                  options={[
+                    { value: "ACTIVE", label: "Active" },
+                    { value: "INACTIVE", label: "Inactive" },
+                  ]}
+                />
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setBulkEditPricesModalOpen(false)}
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+            >
+              Save Bulk Changes
+            </button>
+          </div>
+        </form>
       </Modal>
 
       {ToastComponent}
