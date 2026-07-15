@@ -1194,6 +1194,10 @@ function toPublicProductDetail(
     seoTitle: text.seoTitle,
     seoDescription: text.seoDescription,
     seoKeywords: p.seoKeywords,
+    highlights: p.highlights,
+    technicalSpecs: p.technicalSpecs,
+    warranty: p.warranty,
+    primaryFeatures: p.primaryFeatures,
     packages: p.packages.map((pkg) => ({
       id: pkg.id,
       title: pkg.title,
