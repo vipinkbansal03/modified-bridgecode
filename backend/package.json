@@ -12,6 +12,7 @@
     "prestart": "prisma migrate deploy --schema src/prisma/schema.prisma",
     "postinstall": "prisma generate --schema src/prisma/schema.prisma",
     "db:sync": "prisma migrate deploy --schema src/prisma/schema.prisma && prisma generate --schema src/prisma/schema.prisma",
+    "db:push-force": "node src/prisma/drop-index.js && prisma db push --schema src/prisma/schema.prisma --accept-data-loss",
     "prisma:generate": "prisma generate --schema src/prisma/schema.prisma",
     "prisma:migrate": "prisma migrate dev --schema src/prisma/schema.prisma",
     "prisma:studio": "prisma studio --schema src/prisma/schema.prisma",
