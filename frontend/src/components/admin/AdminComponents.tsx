@@ -147,9 +147,17 @@ interface ConfirmModalProps {
 }
 
 export function ConfirmModal({ open, title, message, onConfirm, onCancel, isLoading, danger = true }: ConfirmModalProps) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!open || !mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 px-4">
       <div className="w-full max-w-[400px] rounded-xl bg-white p-6 shadow-xl">
         <div className="flex items-start gap-3 mb-4">
           {danger && <AlertTriangle size={20} className="flex-none text-red-500 mt-0.5" />}
@@ -169,7 +177,8 @@ export function ConfirmModal({ open, title, message, onConfirm, onCancel, isLoad
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
