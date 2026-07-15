@@ -7,6 +7,11 @@ type ProductContentInput = {
   description?: string | null;
   seoTitle?: string | null;
   seoDescription?: string | null;
+  seoKeywords?: string | null;
+  highlights?: Array<{ title: string; description: string }>;
+  technicalSpecs?: Array<{ label: string; value: string }>;
+  warranty?: string[];
+  primaryFeatures?: Array<{ title: string; description: string }>;
   productCode?: string | null;
   brand?: string | null;
 };
@@ -17,6 +22,11 @@ export type GeneratedProductContent = {
   description: string;
   seoTitle: string;
   seoDescription: string;
+  seoKeywords: string;
+  highlights: Array<{ title: string; description: string }>;
+  technicalSpecs: Array<{ label: string; value: string }>;
+  warranty: string[];
+  primaryFeatures: Array<{ title: string; description: string }>;
 };
 
 const productContentKeys: Array<keyof GeneratedProductContent> = [
@@ -25,6 +35,11 @@ const productContentKeys: Array<keyof GeneratedProductContent> = [
   "description",
   "seoTitle",
   "seoDescription",
+  "seoKeywords",
+  "highlights",
+  "technicalSpecs",
+  "warranty",
+  "primaryFeatures",
 ];
 
 export async function generateProductContent(product: ProductContentInput | string, targetLanguage = "English") {
@@ -45,6 +60,11 @@ export async function generateProductContent(product: ProductContentInput | stri
       description: source.description ?? "",
       seoTitle: source.seoTitle ?? source.title,
       seoDescription: source.seoDescription ?? source.shortDescription ?? "",
+      seoKeywords: source.seoKeywords ?? "",
+      highlights: source.highlights ?? [],
+      technicalSpecs: source.technicalSpecs ?? [],
+      warranty: source.warranty ?? [],
+      primaryFeatures: source.primaryFeatures ?? [],
     },
     requiredKeys: productContentKeys,
     context: [
@@ -54,6 +74,7 @@ export async function generateProductContent(product: ProductContentInput | stri
       allProtected.length
         ? `Never translate these protected terms; keep them exactly as written: ${allProtected.join(", ")}`
         : "Preserve brand names, product codes, model names, HTML tags, URLs, measurements, and technical orthodontic terms when they should remain unchanged.",
+      "Keep the array structure for highlights, technicalSpecs, warranty, and primaryFeatures exactly the same; translate only the human-readable text inside them.",
       "Return concise, natural ecommerce copy in the target language.",
     ].filter(Boolean).join("\n"),
   });
@@ -82,14 +103,14 @@ export async function translateText(text: string, targetLanguage: string) {
   return { translated: result.translated, language: targetLanguage };
 }
 
-async function translateJson<T extends Record<string, string>>({
+async function translateJson<T extends Record<string, unknown>>({
   targetLanguage,
   fields,
   requiredKeys,
   context,
 }: {
   targetLanguage: string;
-  fields: Record<string, string>;
+  fields: Record<string, unknown>;
   requiredKeys: string[];
   context: string;
 }): Promise<T> {

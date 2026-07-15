@@ -879,6 +879,11 @@ type ProductTranslationSnapshot = {
   description: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
+  seoKeywords?: string | null;
+  highlights?: Prisma.JsonValue | null;
+  technicalSpecs?: Prisma.JsonValue | null;
+  warranty?: Prisma.JsonValue | null;
+  primaryFeatures?: Prisma.JsonValue | null;
 };
 
 type CategoryTranslationSnapshot = {
@@ -907,11 +912,20 @@ type ProductTextSource = {
   description?: string | null;
   seoTitle?: string | null;
   seoDescription?: string | null;
-  translations?: ProductTranslationSnapshot[];
+  seoKeywords?: string | null;
+  highlights?: Prisma.JsonValue | null;
+  technicalSpecs?: Prisma.JsonValue | null;
+  warranty?: Prisma.JsonValue | null;
+  primaryFeatures?: Prisma.JsonValue | null;
+  translations?: Array<Record<string, unknown>>;
 };
 
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 function getProductText(product: ProductTextSource) {
-  const translation = product.translations?.[0];
+  const translation = product.translations?.[0] as ProductTranslationSnapshot | undefined;
 
   return {
     title: translation?.title || product.title,
@@ -920,6 +934,11 @@ function getProductText(product: ProductTextSource) {
     seoTitle: translation?.seoTitle || product.seoTitle || null,
     seoDescription:
       translation?.seoDescription || product.seoDescription || null,
+    seoKeywords: translation?.seoKeywords || product.seoKeywords || null,
+    highlights: asArray<{ title: string; description: string }>(translation?.highlights ?? product.highlights),
+    technicalSpecs: asArray<{ label: string; value: string }>(translation?.technicalSpecs ?? product.technicalSpecs),
+    warranty: asArray<string>(translation?.warranty ?? product.warranty),
+    primaryFeatures: asArray<{ title: string; description: string }>(translation?.primaryFeatures ?? product.primaryFeatures),
   };
 }
 
@@ -938,7 +957,7 @@ type PublicProductRecord = Prisma.ProductGetPayload<{
     currency: { code: string; symbol: string };
   }>;
   _count?: { variants: number };
-  translations?: ProductTranslationSnapshot[];
+  translations?: Array<Record<string, unknown>>;
 };
 
 function toPublicProduct(p: PublicProductRecord) {
@@ -1198,11 +1217,11 @@ function toPublicProductDetail(
     hasVariants: p.hasVariants,
     seoTitle: text.seoTitle,
     seoDescription: text.seoDescription,
-    seoKeywords: p.seoKeywords,
-    highlights: p.highlights,
-    technicalSpecs: p.technicalSpecs,
-    warranty: p.warranty,
-    primaryFeatures: p.primaryFeatures,
+    seoKeywords: text.seoKeywords,
+    highlights: text.highlights,
+    technicalSpecs: text.technicalSpecs,
+    warranty: text.warranty,
+    primaryFeatures: text.primaryFeatures,
     packages: p.packages.map((pkg) => ({
       id: pkg.id,
       title: pkg.title,

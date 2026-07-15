@@ -792,18 +792,26 @@ export async function duplicateProduct(id: string) {
 
     if (source.translations.length) {
       await tx.productTranslation.createMany({
-        data: source.translations.map((translation) => ({
-          productId: product.id,
-          languageId: translation.languageId,
-          title: translation.title,
-          shortDescription: translation.shortDescription,
-          description: translation.description,
-          seoTitle: translation.seoTitle,
-          seoDescription: translation.seoDescription,
-          status: translation.status,
-          reviewedAt: translation.reviewedAt,
-          isAiGenerated: translation.isAiGenerated,
-        })),
+        data: source.translations.map((translation) => {
+          const copiedTranslation = translation as any;
+          return {
+            productId: product.id,
+            languageId: translation.languageId,
+            title: translation.title,
+            shortDescription: translation.shortDescription,
+            description: translation.description,
+            seoTitle: translation.seoTitle,
+            seoDescription: translation.seoDescription,
+            seoKeywords: copiedTranslation.seoKeywords ?? null,
+            highlights: copiedTranslation.highlights ?? null,
+            technicalSpecs: copiedTranslation.technicalSpecs ?? null,
+            warranty: copiedTranslation.warranty ?? null,
+            primaryFeatures: copiedTranslation.primaryFeatures ?? null,
+            status: translation.status,
+            reviewedAt: translation.reviewedAt,
+            isAiGenerated: translation.isAiGenerated,
+          } as never;
+        }),
       });
     }
 

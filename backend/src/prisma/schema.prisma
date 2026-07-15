@@ -702,6 +702,11 @@ model ProductTranslation {
   description      String?
   seoTitle         String?
   seoDescription   String?
+  seoKeywords      String?
+  highlights       Json?
+  technicalSpecs    Json?
+  warranty         Json?
+  primaryFeatures   Json?
   isAiGenerated    Boolean           @default(false)
   reviewedAt       DateTime?
   createdAt        DateTime          @default(now())
