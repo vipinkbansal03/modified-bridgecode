@@ -1215,7 +1215,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
             onChange={handleSelectAllPrices}
             className="rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
           />
-        ),
+        ) as unknown as string,
         width: "40px",
         render: (r) => (
           <input
@@ -2640,6 +2640,49 @@ export function ProductEditor({ productId }: ProductEditorProps) {
 
         {activeTab === 2 && (
           <div className="p-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Media</h3>
+                <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Upload product images used in listings and detail pages.</p>
+              </div>
+              <label className="flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
+                <Upload size={14} />
+                {uploadingMedia ? "Uploading..." : "Upload Media"}
+                <input type="file" accept="image/*" className="hidden" onChange={handleMediaUpload} disabled={uploadingMedia} />
+              </label>
+            </div>
+
+            {(product.media ?? []).length ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                {(product.media ?? []).map((media: { id?: string; url: string; altText?: string | null }) => (
+                  <div key={media.id ?? media.url} className="overflow-hidden rounded-lg border border-[#E6E6E6] bg-white">
+                    <div className="aspect-square w-full bg-[#F7F7F7]">
+                      <img src={media.url} alt={media.altText ?? product.title} className="h-full w-full object-cover" />
+                    </div>
+                    <div className="flex items-center justify-end border-t border-[#E6E6E6] p-2">
+                      <button
+                        type="button"
+                        disabled={!media.id}
+                        onClick={() => media.id && setDeletingMedia(media.id)}
+                        className="rounded border border-[#F2C9C9] px-2 py-1 text-[12px] text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        title={media.id ? "Delete image" : "Image cannot be deleted because media id is missing"}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-lg border border-dashed border-[#E6E6E6] px-4 py-8 text-center text-[13px] text-[#9A9A9A]">
+                No media uploaded yet.
+              </p>
+            )}
+          </div>
+        )}
+
+        {activeTab === 3 && (
+          <div className="p-6">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Packages</h3>
@@ -2654,7 +2697,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 3 && (
+        {activeTab === 4 && (
           <div className="p-6">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
@@ -2794,7 +2837,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 4 && (
+        {activeTab === 5 && (
           <div className="space-y-6 p-6">
             <div className="flex flex-wrap gap-1 rounded-lg border border-[#E6E6E6] bg-white p-1 max-w-max">
               {[
@@ -2953,7 +2996,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 5 && (
+        {activeTab === 6 && (
           <div className="p-6">
             <h3 className="mb-4 text-[14px] font-semibold text-[#1A1A1A]">Inventory</h3>
             <div className="mb-5">
@@ -3116,7 +3159,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 6 && (
+        {activeTab === 7 && (
           <div className="p-6">
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Translations</h3>
@@ -3258,7 +3301,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 7 && (
+        {activeTab === 8 && (
           <div className="p-6">
             <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -3450,7 +3493,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 8 && (
+        {activeTab === 9 && (
           <div className="p-6">
             <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -3500,7 +3543,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 9 && (
+        {activeTab === 10 && (
           <div className="p-6 space-y-4">
             <AdminInput label="SEO Title (max 60 chars)" maxLength={60} {...formik.getFieldProps("seoTitle")} error={formik.touched.seoTitle ? (formik.errors.seoTitle as string) : ""} />
             <div className="text-[12px] text-[#9A9A9A]">{formik.values.seoTitle.length}/60 characters</div>
