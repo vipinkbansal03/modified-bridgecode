@@ -1,6 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -14,18 +16,27 @@ interface ModalProps {
 }
 
 export function Modal({ open, onClose, title, children, panelClassName }: ModalProps) {
-  return (
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!mounted) return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-5"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-5"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
         >
           <motion.div
-            className={cn("w-full max-w-lg rounded-lg bg-white p-7", panelClassName)}
+            className={cn("w-full max-w-lg rounded-lg bg-white p-7 shadow-xl", panelClassName)}
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
@@ -42,6 +53,7 @@ export function Modal({ open, onClose, title, children, panelClassName }: ModalP
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
