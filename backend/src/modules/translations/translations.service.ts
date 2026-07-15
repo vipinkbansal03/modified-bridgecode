@@ -11,6 +11,11 @@ type ProductTranslationInput = {
   description?: string | null;
   seoTitle?: string | null;
   seoDescription?: string | null;
+  seoKeywords?: string | null;
+  highlights?: unknown;
+  technicalSpecs?: unknown;
+  warranty?: unknown;
+  primaryFeatures?: unknown;
   isAiGenerated?: boolean;
   status?: TranslationStatus;
 };
@@ -41,7 +46,7 @@ type LanguageInput = {
   isDefault?: unknown;
 };
 
-const PRODUCT_TRANSLATION_FIELDS = new Set(["title", "shortDescription", "description", "seoTitle", "seoDescription"]);
+const PRODUCT_TRANSLATION_FIELDS = new Set(["title", "shortDescription", "description", "seoTitle", "seoDescription", "seoKeywords", "highlights", "technicalSpecs", "warranty", "primaryFeatures"]);
 const CATEGORY_TRANSLATION_FIELDS = new Set(["name", "description"]);
 const CMS_TRANSLATION_ENTITY_TYPES = new Set(["page", "section", "block", "menuItem", "footer"]);
 
@@ -202,6 +207,11 @@ export async function generateTranslations(productId: string, languageId?: strin
       description: true,
       seoTitle: true,
       seoDescription: true,
+      seoKeywords: true,
+      highlights: true,
+      technicalSpecs: true,
+      warranty: true,
+      primaryFeatures: true,
     },
   });
   if (!product) throw new AppError("Product not found.", 404);

@@ -16,7 +16,7 @@ import { buildMetadata } from "@/lib/seo";
 import productsData from "@/data/products.json";
 import homeContent from "@/data/home.json";
 import type { ProductDetail } from "@/types/product.types";
-import type { ApiProductDetail } from "@/types/api.types";
+import type { ApiProductDetail, ApiProductPrice } from "@/types/api.types";
 
 export const revalidate = 300;
 
@@ -28,14 +28,35 @@ const API_ORIGIN = process.env.API_BASE_URL
 
 async function fetchProductFromApi(slug: string): Promise<ApiProductDetail | null> {
   try {
-    const language = (await cookies()).get("language")?.value;
-    const query = language ? `?lang=${encodeURIComponent(language)}` : "";
-    const res = await fetch(`${API_ORIGIN}/api/products/${slug}${query}`, {
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json.data ?? null;
+    const cookieStore = await cookies();
+    const language = cookieStore.get("language")?.value;
+    const countryCode = cookieStore.get("country")?.value?.toUpperCase();
+
+    const queryOptions = [
+      { lang: language, countryCode },
+      { lang: undefined, countryCode },
+      { lang: language, countryCode: undefined },
+      { lang: undefined, countryCode: undefined },
+    ];
+
+    const tried = new Set<string>();
+    for (const option of queryOptions) {
+      const params = new URLSearchParams();
+      if (option.lang) params.set("lang", option.lang);
+      if (option.countryCode) params.set("countryCode", option.countryCode);
+      const query = params.toString();
+      if (tried.has(query)) continue;
+      tried.add(query);
+
+      const res = await fetch(`${API_ORIGIN}/api/products/${slug}${query ? `?${query}` : ""}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) continue;
+      const json = await res.json();
+      if (json.data) return json.data;
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -52,6 +73,23 @@ async function fetchSlugsFromApi(): Promise<string[]> {
   } catch {
     return [];
   }
+}
+
+function formatMoney(symbol: string, amount: number | null | undefined) {
+  if (amount === null || amount === undefined) return "";
+  return `${symbol}${Math.round(amount).toLocaleString("en-IN")}`;
+}
+
+function getPublicPrice(apiProduct?: ApiProductDetail | null) {
+  if (!apiProduct) return null;
+  return apiProduct.prices?.[0] ?? apiProduct.variants?.[0]?.prices?.[0] ?? null;
+}
+
+function getPublicDiscount(price?: ApiProductPrice | null) {
+  if (!price || price.mrp <= price.sellingPrice) return null;
+  const amount = price.mrp - price.sellingPrice;
+  const percent = Math.round((amount / price.mrp) * 100);
+  return { amount, percent };
 }
 
 function mergeProduct(api: ApiProductDetail, staticProduct: ProductDetail | undefined): ProductDetail {
@@ -110,8 +148,9 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
   if (!apiProduct && !staticProduct) notFound();
 
+  const publicPrice = apiProduct ? getPublicPrice(apiProduct) : null;
+  const publicDiscount = getPublicDiscount(publicPrice);
   const product = apiProduct ? mergeProduct(apiProduct, staticProduct) : staticProduct!;
-  const recentlySeen = staticProducts.filter((p) => p.slug !== slug);
 
   return (
     <>
@@ -143,7 +182,17 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             <ProductGallery images={product.images} title={product.title} />
 
             <div>
-              <h1 className="mb-5.5 text-[30px] font-normal tracking-tight text-ink">{product.title}</h1>
+              <h1 className="mb-3 text-[30px] font-normal tracking-tight text-ink">{product.title}</h1>
+              {publicPrice ? (
+                <div className="mb-5">
+                  <p className="text-[22px] font-semibold text-ink">{formatMoney(publicPrice.currencySymbol, publicPrice.sellingPrice)}</p>
+                  {publicDiscount ? (
+                    <p className="text-[13px] text-steel-2">
+                      {formatMoney(publicPrice.currencySymbol, publicPrice.mrp)} list price · {publicDiscount.percent}% off
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
 
               <div>
                 <span className="mb-2 block text-xs uppercase tracking-wide text-steel-2">Information</span>
@@ -167,7 +216,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
       </section>
 
       <BundleSection product={product} />
-      <RecentlySeenSection products={recentlySeen} />
+      <RecentlySeenSection currentSlug={slug} />
       <ContactCTASection data={homeContent.contactCta} />
     </>
   );

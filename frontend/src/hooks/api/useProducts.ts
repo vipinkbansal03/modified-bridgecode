@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, useQueries, keepPreviousData } from "@tanstack/react-query";
 import { apiClient, HAS_LIVE_API, unwrapPaginated, unwrapData } from "@/lib/apiClient";
 import { qk, STALE } from "@/lib/queryConfig";
 import { useLanguageContext } from "@/contexts/LanguageContext";
@@ -157,5 +157,18 @@ export function useProductFacets() {
     queryKey: ["products", "facets", selectedLanguage, selectedCountryCode],
     queryFn: () => fetchProductFacets(selectedLanguage, selectedCountryCode),
     staleTime: STALE.long,
+  });
+}
+
+export function useRecentlySeenProducts(slugs: string[]) {
+  const { selectedLanguage } = useLanguageContext();
+  const { selectedCountryCode } = useCurrencyContext();
+  return useQueries({
+    queries: slugs.map((slug) => ({
+      queryKey: qk.products.detail(slug, selectedLanguage, selectedCountryCode),
+      queryFn: () => fetchProduct(slug, selectedLanguage, selectedCountryCode),
+      enabled: Boolean(slug),
+      staleTime: STALE.medium,
+    })),
   });
 }

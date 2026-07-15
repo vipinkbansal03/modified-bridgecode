@@ -370,6 +370,163 @@ export function AdminTextarea({ label, error, className, ...props }: AdminTextar
   );
 }
 
+function sanitizeRichText(html: string) {
+  if (typeof window === "undefined") return html;
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+  const allowedTags = new Set(["B", "STRONG", "I", "EM", "U", "P", "BR", "DIV", "SPAN", "UL", "OL", "LI", "A", "H1", "H2", "H3", "BLOCKQUOTE", "PRE", "CODE"]);
+  const allowedAttrs = new Set(["href", "target", "rel"]);
+
+  function clean(node: ChildNode) {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as HTMLElement;
+      if (!allowedTags.has(el.tagName)) {
+        const fragment = document.createDocumentFragment();
+        while (el.firstChild) {
+          fragment.appendChild(el.firstChild);
+        }
+        el.replaceWith(fragment);
+        return;
+      }
+
+      for (const attr of Array.from(el.attributes)) {
+        if (!allowedAttrs.has(attr.name)) {
+          el.removeAttribute(attr.name);
+          continue;
+        }
+        if (attr.name === "href") {
+          if (!/^([a-zA-Z][a-zA-Z0-9+.-]*:|\/\/|mailto:)/.test(attr.value)) {
+            el.removeAttribute("href");
+          } else {
+            el.setAttribute("target", "_blank");
+            el.setAttribute("rel", "noopener noreferrer");
+          }
+        }
+      }
+    }
+
+    node.childNodes.forEach(clean);
+  }
+
+  doc.body.childNodes.forEach(clean);
+  return doc.body.innerHTML;
+}
+
+interface AdminRichTextEditorProps {
+  label?: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  error?: string;
+  className?: string;
+}
+
+export function AdminRichTextEditor({ label, value, onChange, placeholder, error, className }: AdminRichTextEditorProps) {
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    if (editorRef.current && editorRef.current.innerHTML !== value) {
+      editorRef.current.innerHTML = value;
+    }
+  }, [value]);
+
+  const updateValue = () => {
+    if (!editorRef.current) return;
+    onChange(sanitizeRichText(editorRef.current.innerHTML));
+  };
+
+  const applyFormat = (command: string, option?: string) => {
+    document.execCommand(command, false, option || "");
+    updateValue();
+    editorRef.current?.focus();
+  };
+
+  return (
+    <div className="space-y-1.5">
+      {label && <label className="block text-[13px] font-medium text-[#1A1A1A]">{label}</label>}
+      <div className={cn("rounded-md border bg-white", error ? "border-red-400" : "border-[#E6E6E6] focus-within:border-[#E31E24]", className)}>
+        <div className="flex flex-wrap gap-1 border-b border-[#E6E6E6] bg-[#FAFAFA] px-2 py-2">
+          <button type="button" title="Bold" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("bold")}>
+            B
+          </button>
+          <button type="button" title="Italic" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("italic")}>
+            I
+          </button>
+          <button type="button" title="Underline" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("underline")}>
+            U
+          </button>
+          <button type="button" title="Strike" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("strikeThrough")}>
+            S
+          </button>
+          <button type="button" title="Link" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => {
+            const url = window.prompt("Enter link URL:", "https://");
+            if (url) applyFormat("createLink", url);
+          }}>
+            Link
+          </button>
+          <button type="button" title="Unordered list" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("insertUnorderedList")}>
+            • List
+          </button>
+          <button type="button" title="Ordered list" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("insertOrderedList")}>
+            1. List
+          </button>
+          <button type="button" title="Blockquote" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "blockquote")}>
+            "
+          </button>
+          <button type="button" title="Code block" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "pre")}>
+            {'</>'}
+          </button>
+          <button type="button" title="Heading 2" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "h2")}>
+            H2
+          </button>
+          <button type="button" title="Heading 3" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "h3")}>
+            H3
+          </button>
+          <button type="button" title="Align left" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("justifyLeft")}>
+            L
+          </button>
+          <button type="button" title="Align center" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("justifyCenter")}>
+            C
+          </button>
+          <button type="button" title="Align right" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("justifyRight")}>
+            R
+          </button>
+          <button type="button" title="Undo" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("undo")}>
+            ↺
+          </button>
+          <button type="button" title="Redo" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("redo")}>
+            ↻
+          </button>
+          <button type="button" title="Remove formatting" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("removeFormat")}>
+            Clear
+          </button>
+        </div>
+        <div className="relative">
+          {!value && !isFocused ? (
+            <div className="pointer-events-none absolute inset-0 px-3 py-3 text-[14px] text-[#9A9A9A]">{placeholder}</div>
+          ) : null}
+          <div
+            ref={editorRef}
+            contentEditable
+            role="textbox"
+            aria-multiline="true"
+            suppressContentEditableWarning
+            onInput={updateValue}
+            onBlur={() => {
+              setIsFocused(false);
+              updateValue();
+            }}
+            onFocus={() => setIsFocused(true)}
+            className="min-h-[120px] w-full rounded-b-md bg-white px-3 py-3 text-[14px] leading-6 text-[#1A1A1A] outline-none"
+          />
+        </div>
+      </div>
+      {error && <p className="text-[12px] text-red-500">{error}</p>}
+    </div>
+  );
+}
+
 // ─── StatCard ─────────────────────────────────────────────
 
 interface StatCardProps {

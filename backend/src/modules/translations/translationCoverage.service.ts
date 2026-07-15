@@ -6,7 +6,7 @@ export type CoverageGapType = "product" | "category" | "static" | "cms";
 export type CoveragePriority = "high" | "medium" | "low";
 type CmsEntityType = "page" | "section" | "block" | "menuItem" | "footer";
 
-const PRODUCT_FIELDS = ["title", "shortDescription", "description", "seoTitle", "seoDescription"] as const;
+const PRODUCT_FIELDS = ["title", "shortDescription", "description", "seoTitle", "seoDescription", "seoKeywords", "highlights", "technicalSpecs", "warranty", "primaryFeatures"] as const;
 const CATEGORY_FIELDS = ["name", "description"] as const;
 
 const CMS_TRANSLATABLE_FIELDS: Record<CmsEntityType, string[]> = {
@@ -23,6 +23,11 @@ const FIELD_LABELS: Record<string, string> = {
   description: "Description",
   seoTitle: "SEO Title",
   seoDescription: "SEO Description",
+  seoKeywords: "SEO Keywords",
+  highlights: "Highlights",
+  technicalSpecs: "Technical Specifications",
+  warranty: "Warranty",
+  primaryFeatures: "Primary Features",
   name: "Name",
   subtitle: "Subtitle",
   linkLabel: "Link Label",
@@ -79,8 +84,10 @@ const CUSTOMER_FACING_FIELDS = new Set([
   "value",
 ]);
 
-function hasValue(value: unknown): value is string {
-  return typeof value === "string" && Boolean(value.trim());
+function hasValue(value: unknown): boolean {
+  if (typeof value === "string") return Boolean(value.trim());
+  if (Array.isArray(value)) return value.length > 0;
+  return value != null;
 }
 
 function fieldLabel(field: string) {
@@ -91,9 +98,15 @@ function cmsTranslationKey(entityType: CmsEntityType, entityId: string, field: s
   return `cms.${entityType}.${entityId}.${field}`;
 }
 
-function getStringField(source: Record<string, unknown> | null | undefined, field: string) {
-  const value = source?.[field];
-  return typeof value === "string" ? value : null;
+function getField(source: Record<string, unknown> | null | undefined, field: string) {
+  return source?.[field];
+}
+
+function formatValue(value: unknown) {
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value)) return JSON.stringify(value);
+  if (value && typeof value === "object") return JSON.stringify(value);
+  return "";
 }
 
 function collectMissingFields(
@@ -105,14 +118,14 @@ function collectMissingFields(
   const missing: CoverageMissingField[] = [];
 
   for (const field of fields) {
-    const englishValue = getStringField(source, field);
+    const englishValue = getField(source, field);
     if (!hasValue(englishValue)) continue;
-    const translated = getStringField(translation, field) ?? getTranslationValue(field);
+    const translated = getField(translation, field) ?? getTranslationValue(field);
     if (!hasValue(translated)) {
       missing.push({
         field,
         fieldLabel: fieldLabel(field),
-        englishValue: englishValue.trim(),
+        englishValue: formatValue(englishValue),
       });
     }
   }
@@ -121,7 +134,7 @@ function collectMissingFields(
 }
 
 function countTranslatableFields(source: Record<string, unknown>, fields: readonly string[]) {
-  return fields.reduce((count, field) => count + (hasValue(getStringField(source, field)) ? 1 : 0), 0);
+  return fields.reduce((count, field) => count + (hasValue(getField(source, field)) ? 1 : 0), 0);
 }
 
 function withPriority(gap: CoverageGapInput): CoverageGap {
@@ -205,6 +218,11 @@ async function collectProductGaps(languageId: string): Promise<CoverageCollectio
       description: true,
       seoTitle: true,
       seoDescription: true,
+      seoKeywords: true,
+      highlights: true,
+      technicalSpecs: true,
+      warranty: true,
+      primaryFeatures: true,
     },
     orderBy: { title: "asc" },
   });

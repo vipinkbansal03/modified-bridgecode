@@ -7,7 +7,7 @@ import { useFormik } from "formik";
 import * as Yup from "yup";
 import { Upload, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { AdminInput, AdminTextarea, AdminSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column, toastMessages } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column, toastMessages } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import {
   useAdminProduct,
@@ -42,7 +42,7 @@ import {
   NoTranslationLanguagesMessage,
 } from "@/components/admin/TranslationEditorUi";
 
-const TABS = ["Basic Info", "Media", "Packages", "Variants", "Pricing", "Inventory", "Translations", "Product Attributes", "Country Availability", "SEO"];
+const TABS = ["Basic Info", "Product Info", "Media", "Packages", "Variants", "Pricing", "Inventory", "Translations", "Product Attributes", "Country Availability", "SEO"];
 
 const basicSchema = Yup.object({
   title: Yup.string().required("Required"),
@@ -58,7 +58,31 @@ const basicSchema = Yup.object({
   seoTitle: Yup.string().max(60),
   seoDescription: Yup.string().max(160),
   seoKeywords: Yup.string(),
+  highlights: Yup.array().of(Yup.object({ title: Yup.string(), description: Yup.string() })),
+  technicalSpecs: Yup.array().of(Yup.object({ label: Yup.string(), value: Yup.string() })),
+  warranty: Yup.array().of(Yup.string()),
+  primaryFeatures: Yup.array().of(Yup.object({ title: Yup.string(), description: Yup.string() })),
 });
+
+type ProductEditorFormValues = {
+  title: string;
+  categoryId: string;
+  status: string;
+  productCode: string;
+  sku: string;
+  brand: string;
+  shortDescription: string;
+  description: string;
+  isFeatured: boolean;
+  hasVariants: boolean;
+  seoTitle: string;
+  seoDescription: string;
+  seoKeywords: string;
+  highlights: Array<{ title: string; description: string }>;
+  technicalSpecs: Array<{ label: string; value: string }>;
+  warranty: string[];
+  primaryFeatures: Array<{ title: string; description: string }>;
+};
 
 type PackageRow = {
   id: string;
@@ -969,7 +993,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
   const tierPricingRows = useMemo(() => tierPricingRules as PricingRuleRow[], [tierPricingRules]);
   const moqPricingRows = useMemo(() => moqPricingRules as PricingRuleRow[], [moqPricingRules]);
 
-  const formik = useFormik({
+  const formik = useFormik<ProductEditorFormValues>({
     enableReinitialize: true,
     initialValues: {
       title: product?.title || "",
@@ -985,14 +1009,42 @@ export function ProductEditor({ productId }: ProductEditorProps) {
       seoTitle: product?.seoTitle || "",
       seoDescription: product?.seoDescription || "",
       seoKeywords: product?.seoKeywords || "",
+      highlights: Array.isArray(product?.highlights) ? product.highlights : [],
+      technicalSpecs: Array.isArray(product?.technicalSpecs) ? product.technicalSpecs : [],
+      warranty: Array.isArray(product?.warranty) ? product.warranty : [],
+      primaryFeatures: Array.isArray(product?.primaryFeatures) ? product.primaryFeatures : [],
     },
     validationSchema: basicSchema,
     onSubmit: async (values, { setSubmitting }) => {
       try {
-        await updateProduct.mutateAsync(values);
+        // Build a sanitized payload to avoid sending unexpected types to the API
+        const payload = {
+          ...values,
+          highlights: Array.isArray(values.highlights)
+            ? values.highlights.map((h) => ({ title: String(h?.title ?? ""), description: String(h?.description ?? "") }))
+            : [],
+          technicalSpecs: Array.isArray(values.technicalSpecs)
+            ? values.technicalSpecs.map((s) => ({ label: String(s?.label ?? ""), value: String(s?.value ?? "") }))
+            : [],
+          warranty: Array.isArray(values.warranty) ? values.warranty.map((w) => String(w ?? "")) : [],
+          primaryFeatures: Array.isArray(values.primaryFeatures)
+            ? values.primaryFeatures.map((p) => ({ title: String(p?.title ?? ""), description: String(p?.description ?? "") }))
+            : [],
+        } as typeof values;
+
+        // Debug: log sanitized payload
+        // eslint-disable-next-line no-console
+        console.log("[ProductEditor] saving sanitized product payload:", payload);
+
+        await updateProduct.mutateAsync(payload);
         showToast("Product saved.");
       } catch (error) {
-        showToast(getAdminErrorMessage(error, "Save failed."), "error");
+        // Log full error for debugging (server returned 500)
+        // eslint-disable-next-line no-console
+        console.error("[ProductEditor] save error:", error, (error as any)?.response?.data);
+        // Prefer server message if available
+        const serverMessage = (error as any)?.response?.data?.message;
+        showToast(serverMessage || getAdminErrorMessage(error, "Save failed."), "error");
       } finally {
         setSubmitting(false);
       }
@@ -1163,7 +1215,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
             onChange={handleSelectAllPrices}
             className="rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
           />
-        ),
+        ) as unknown as string,
         width: "40px",
         render: (r) => (
           <input
@@ -2317,16 +2369,27 @@ export function ProductEditor({ productId }: ProductEditorProps) {
             </button>
           ))}
         </div>
-        {activeTab === 0 || activeTab === 9 ? (
+        <div className="flex items-center gap-2">
+          {activeTab === 0 || activeTab === 1 || activeTab === 10 ? (
+            <button
+              type="button"
+              onClick={() => formik.handleSubmit()}
+              disabled={formik.isSubmitting}
+              className="rounded-md bg-[#E31E24] px-5 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
+            >
+              {formik.isSubmitting ? "Saving…" : "Save Changes"}
+            </button>
+          ) : null}
           <button
             type="button"
-            onClick={() => formik.handleSubmit()}
-            disabled={formik.isSubmitting}
-            className="rounded-md bg-[#E31E24] px-5 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
+            onClick={() => router.push("/admin/products")}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A]"
+            aria-label="Close"
+            title="Close"
           >
-            {formik.isSubmitting ? "Saving…" : "Save Changes"}
+            <X size={16} />
           </button>
-        ) : null}
+        </div>
       </div>
 
       <div className="rounded-xl border border-[#E6E6E6] bg-white">
@@ -2362,43 +2425,274 @@ export function ProductEditor({ productId }: ProductEditorProps) {
         )}
 
         {activeTab === 1 && (
-          <div className="p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Product Images &amp; Files</h3>
-              <label className={cn("flex items-center gap-1.5 rounded-md px-4 py-2 text-[13px] font-medium text-white cursor-pointer", uploadingMedia ? "bg-gray-400" : "bg-[#E31E24] hover:bg-[#B5151B]")}>
-                <Upload size={14} />
-                {uploadingMedia ? "Uploading…" : "Upload Files"}
-                <input type="file" multiple accept="image/*,application/pdf" className="hidden" onChange={handleMediaUpload} disabled={uploadingMedia} />
-              </label>
-            </div>
-            {product.media?.length === 0 ? (
-              <div className="flex h-40 items-center justify-center rounded-lg border-2 border-dashed border-[#E6E6E6] text-[13.5px] text-[#9A9A9A]">
-                No media uploaded yet.
+          <div className="p-6 space-y-8">
+            <div className="rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5">
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Highlights</h3>
+                  <p className="mt-1 text-[12.5px] text-[#6B6B6B]">Add title/description pairs to display in the product highlights section.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => formik.setFieldValue("highlights", [...(formik.values.highlights || []), { title: "", description: "" }])}
+                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+                >
+                  Add highlight
+                </button>
               </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6">
-                {product.media?.map((m: { id: string; url: string; altText: string; type: string }) => (
-                  <div key={m.id} className="group relative aspect-square rounded-lg border border-[#E6E6E6] overflow-hidden bg-[#F8F8F8]">
-                    {m.type === "IMAGE" ? (
-                      <img src={m.url} alt={m.altText || ""} className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-[11px] text-[#6B6B6B]">PDF</div>
-                    )}
+              <div className="space-y-4">
+                {(formik.values.highlights || []).map((item: { title: string; description: string }, index: number) => (
+                  <div key={index} className="grid gap-3 lg:grid-cols-[1fr_1.5fr_auto] items-stretch">
+                    <div>
+                      <AdminInput
+                        label="Title"
+                        value={item.title}
+                        onChange={(event) => {
+                          const next = [...(formik.values.highlights || [])];
+                          next[index] = { ...next[index], title: event.target.value };
+                          formik.setFieldValue("highlights", next);
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <AdminRichTextEditor
+                        label="Description"
+                        value={item.description}
+                        placeholder="Enter highlight description"
+                        onChange={(value) => {
+                          const next = [...(formik.values.highlights || [])];
+                          next[index] = { ...next[index], description: value };
+                          formik.setFieldValue("highlights", next);
+                        }}
+                        className="min-h-[120px]"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = [...(formik.values.highlights || [])];
+                          next.splice(index, 1);
+                          formik.setFieldValue("highlights", next);
+                        }}
+                        className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {!formik.values.highlights?.length && <p className="text-[13px] text-[#6B6B6B]">No highlights added yet.</p>}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5">
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Technical Specifications</h3>
+                  <p className="mt-1 text-[12.5px] text-[#6B6B6B]">Add spec rows that will appear as a table on the product page.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => formik.setFieldValue("technicalSpecs", [...(formik.values.technicalSpecs || []), { label: "", value: "" }])}
+                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+                >
+                  Add spec
+                </button>
+              </div>
+              <div className="space-y-4">
+                {(formik.values.technicalSpecs || []).map((item: { label: string; value: string }, index: number) => (
+                  <div key={index} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] items-end">
+                    <AdminInput
+                      label="Label"
+                      value={item.label}
+                      onChange={(event) => {
+                        const next = [...(formik.values.technicalSpecs || [])];
+                        next[index] = { ...next[index], label: event.target.value };
+                        formik.setFieldValue("technicalSpecs", next);
+                      }}
+                    />
+                    <AdminInput
+                      label="Value"
+                      value={item.value}
+                      onChange={(event) => {
+                        const next = [...(formik.values.technicalSpecs || [])];
+                        next[index] = { ...next[index], value: event.target.value };
+                        formik.setFieldValue("technicalSpecs", next);
+                      }}
+                    />
                     <button
-                      onClick={() => setDeletingMedia(m.id)}
-                      className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
+                      type="button"
+                      onClick={() => {
+                        const next = [...(formik.values.technicalSpecs || [])];
+                        next.splice(index, 1);
+                        formik.setFieldValue("technicalSpecs", next);
+                      }}
+                      className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]"
                     >
-                      <Trash2 size={18} className="text-white" />
+                      Remove
                     </button>
                   </div>
                 ))}
+                {!formik.values.technicalSpecs?.length && <p className="text-[13px] text-[#6B6B6B]">No technical specifications added yet.</p>}
               </div>
-            )}
-            <p className="mt-3 text-[12px] text-[#9A9A9A]">Supported: JPEG, PNG, WebP, PDF. Max 20MB per file.</p>
+            </div>
+
+            <div className="rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5">
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Warranty</h3>
+                  <p className="mt-1 text-[12.5px] text-[#6B6B6B]">Add warranty text lines for the product details accordion.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => formik.setFieldValue("warranty", [...(formik.values.warranty || []), ""])}
+                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+                >
+                  Add warranty line
+                </button>
+              </div>
+              <div className="space-y-4">
+                {(formik.values.warranty || []).map((line: string, index: number) => (
+                  <div key={index} className="grid gap-3 sm:grid-cols-[1fr_auto] items-stretch">
+                    <div>
+                      <AdminRichTextEditor
+                        label={`Warranty line ${index + 1}`}
+                        value={line}
+                        placeholder="Enter warranty text"
+                        onChange={(value) => {
+                          const next = [...(formik.values.warranty || [])];
+                          next[index] = value;
+                          formik.setFieldValue("warranty", next);
+                        }}
+                        className="min-h-[80px]"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = [...(formik.values.warranty || [])];
+                          next.splice(index, 1);
+                          formik.setFieldValue("warranty", next);
+                        }}
+                        className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {!formik.values.warranty?.length && <p className="text-[13px] text-[#6B6B6B]">No warranty lines added yet.</p>}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5">
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Primary Features</h3>
+                  <p className="mt-1 text-[12.5px] text-[#6B6B6B]">Add product features that highlight the product’s main benefits.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => formik.setFieldValue("primaryFeatures", [...(formik.values.primaryFeatures || []), { title: "", description: "" }])}
+                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+                >
+                  Add feature
+                </button>
+              </div>
+              <div className="space-y-4">
+                {(formik.values.primaryFeatures || []).map((item: { title: string; description: string }, index: number) => (
+                  <div key={index} className="grid gap-3 lg:grid-cols-[1fr_1.5fr_auto] items-stretch">
+                    <div>
+                      <AdminInput
+                        label="Title"
+                        value={item.title}
+                        onChange={(event) => {
+                          const next = [...(formik.values.primaryFeatures || [])];
+                          next[index] = { ...next[index], title: event.target.value };
+                          formik.setFieldValue("primaryFeatures", next);
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <AdminRichTextEditor
+                        label="Description"
+                        value={item.description}
+                        placeholder="Enter feature description"
+                        onChange={(value) => {
+                          const next = [...(formik.values.primaryFeatures || [])];
+                          next[index] = { ...next[index], description: value };
+                          formik.setFieldValue("primaryFeatures", next);
+                        }}
+                        className="min-h-[120px]"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = [...(formik.values.primaryFeatures || [])];
+                          next.splice(index, 1);
+                          formik.setFieldValue("primaryFeatures", next);
+                        }}
+                        className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {!formik.values.primaryFeatures?.length && <p className="text-[13px] text-[#6B6B6B]">No primary features added yet.</p>}
+              </div>
+            </div>
           </div>
         )}
 
         {activeTab === 2 && (
+          <div className="p-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Media</h3>
+                <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Upload product images used in listings and detail pages.</p>
+              </div>
+              <label className="flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
+                <Upload size={14} />
+                {uploadingMedia ? "Uploading..." : "Upload Media"}
+                <input type="file" accept="image/*" className="hidden" onChange={handleMediaUpload} disabled={uploadingMedia} />
+              </label>
+            </div>
+
+            {(product.media ?? []).length ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                {(product.media ?? []).map((media: { id?: string; url: string; altText?: string | null }) => (
+                  <div key={media.id ?? media.url} className="overflow-hidden rounded-lg border border-[#E6E6E6] bg-white">
+                    <div className="aspect-square w-full bg-[#F7F7F7]">
+                      <img src={media.url} alt={media.altText ?? product.title} className="h-full w-full object-cover" />
+                    </div>
+                    <div className="flex items-center justify-end border-t border-[#E6E6E6] p-2">
+                      <button
+                        type="button"
+                        disabled={!media.id}
+                        onClick={() => media.id && setDeletingMedia(media.id)}
+                        className="rounded border border-[#F2C9C9] px-2 py-1 text-[12px] text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        title={media.id ? "Delete image" : "Image cannot be deleted because media id is missing"}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-lg border border-dashed border-[#E6E6E6] px-4 py-8 text-center text-[13px] text-[#9A9A9A]">
+                No media uploaded yet.
+              </p>
+            )}
+          </div>
+        )}
+
+        {activeTab === 3 && (
           <div className="p-6">
             <div className="mb-4 flex items-center justify-between">
               <div>
@@ -2414,7 +2708,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 3 && (
+        {activeTab === 4 && (
           <div className="p-6">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
@@ -2554,7 +2848,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 4 && (
+        {activeTab === 5 && (
           <div className="space-y-6 p-6">
             <div className="flex flex-wrap gap-1 rounded-lg border border-[#E6E6E6] bg-white p-1 max-w-max">
               {[
@@ -2713,7 +3007,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 5 && (
+        {activeTab === 6 && (
           <div className="p-6">
             <h3 className="mb-4 text-[14px] font-semibold text-[#1A1A1A]">Inventory</h3>
             <div className="mb-5">
@@ -2876,7 +3170,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 6 && (
+        {activeTab === 7 && (
           <div className="p-6">
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Translations</h3>
@@ -3018,7 +3312,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 7 && (
+        {activeTab === 8 && (
           <div className="p-6">
             <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -3210,7 +3504,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 8 && (
+        {activeTab === 9 && (
           <div className="p-6">
             <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -3260,7 +3554,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 9 && (
+        {activeTab === 10 && (
           <div className="p-6 space-y-4">
             <AdminInput label="SEO Title (max 60 chars)" maxLength={60} {...formik.getFieldProps("seoTitle")} error={formik.touched.seoTitle ? (formik.errors.seoTitle as string) : ""} />
             <div className="text-[12px] text-[#9A9A9A]">{formik.values.seoTitle.length}/60 characters</div>

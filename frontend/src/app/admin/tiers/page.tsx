@@ -212,6 +212,12 @@ export default function AdminTiersPage() {
   const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
   const selectedTierCountries = tierCountries as TierCountryRow[];
   const enabledCountryCount = selectedTierCountries.filter((country) => countryOverrides[country.id] ?? country.enabled).length;
+  const allCountriesSelected =
+    selectedTierCountries.length > 0 &&
+    selectedTierCountries.every((country) => countryOverrides[country.id] ?? country.enabled);
+  const someCountriesSelected =
+    !allCountriesSelected &&
+    selectedTierCountries.some((country) => countryOverrides[country.id] ?? country.enabled);
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -318,6 +324,12 @@ export default function AdminTiersPage() {
     }
 
     setSelectedIds((current) => Array.from(new Set([...current, ...pageIds])));
+  };
+
+  const handleSelectAllCountries = (checked: boolean) => {
+    setCountryOverrides(
+      Object.fromEntries(selectedTierCountries.map((country) => [country.id, checked])),
+    );
   };
 
   const handleExport = async (selectedOnly = false) => {
@@ -729,6 +741,22 @@ export default function AdminTiersPage() {
               ) : (
                 <>
                   <div className="mb-4 rounded-md bg-[#FAFAFA] px-3 py-2 text-[13px] font-medium text-[#1A1A1A]">{selectedTier.name}</div>
+                  <label className="mb-3 flex items-center gap-2.5 rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2.5">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-[#E31E24]"
+                      checked={allCountriesSelected}
+                      ref={(element) => {
+                        if (element) element.indeterminate = someCountriesSelected;
+                      }}
+                      onChange={(event) => handleSelectAllCountries(event.target.checked)}
+                      aria-label="Select all countries"
+                    />
+                    <span className="text-[13px] font-medium text-[#1A1A1A]">Select all</span>
+                    <span className="text-[12px] text-[#9A9A9A]">
+                      ({enabledCountryCount} of {selectedTierCountries.length} enabled)
+                    </span>
+                  </label>
                   <div className="grid gap-2">
                     {selectedTierCountries.map((country) => (
                       <label key={country.id} className="flex items-center justify-between gap-3 rounded-md border border-[#E6E6E6] px-3 py-2">
