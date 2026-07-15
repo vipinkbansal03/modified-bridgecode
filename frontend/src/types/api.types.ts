@@ -106,10 +106,10 @@ export interface ApiProductDetail extends Omit<ApiProductSummary, "images"> {
   seoTitle: string | null;
   seoDescription: string | null;
   seoKeywords: string | null;
-  highlights: { title: string; description: string }[];
-  technicalSpecs: { label: string; value: string }[];
-  warranty: string[];
-  primaryFeatures: { title: string; description: string }[];
+  highlights?: any;
+  technicalSpecs?: any;
+  warranty?: any;
+  primaryFeatures?: any;
   images: { url: string; alt: string }[];
   documents: { url: string; label: string }[];
   packages: ApiProductPackage[];
