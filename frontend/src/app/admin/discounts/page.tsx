@@ -736,7 +736,7 @@ export default function DiscountsPage() {
 
       {isEditInlineOpen ? <div className="mb-5">{discountForm}</div> : null}
 
-      <Modal open={isCreateModalOpen} onClose={resetForm} title="New discount" panelClassName="max-w-5xl">
+      <Modal open={isCreateModalOpen} onClose={resetForm} title="New discount" panelClassName="max-w-5xl overflow-visible z-[9999]">
         {isCreateModalOpen ? discountForm : null}
       </Modal>
 
