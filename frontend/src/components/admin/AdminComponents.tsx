@@ -318,7 +318,7 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
             <div
               ref={menuRef}
               role="listbox"
-              className="z-[10050] origin-top animate-admin-select-dropdown overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg"
+              className="z-[10000] origin-top animate-admin-select-dropdown overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg"
               style={{
                 position: "fixed",
                 top: menuStyle.top !== undefined ? menuStyle.top : "auto",
