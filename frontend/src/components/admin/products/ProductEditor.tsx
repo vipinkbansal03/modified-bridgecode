@@ -275,7 +275,14 @@ type GenerateModeMap = Record<string, GenerateAttributeMode>;
 type ManualAttributeMode = "single" | "specific" | "all";
 type ManualModeMap = Record<string, ManualAttributeMode>;
 type SingleSelectionMap = Record<string, string>;
-type ProductTranslationField = "title" | "shortDescription" | "description" | "seoTitle" | "seoDescription";
+type ProductTranslationField = "title" | "shortDescription" | "description" | "seoTitle" | "seoDescription" | "seoKeywords" | "highlights" | "technicalSpecs" | "warranty" | "primaryFeatures";
+
+type ProductTranslationDraft = {
+  highlights: Array<{ title: string; description: string }>;
+  technicalSpecs: Array<{ label: string; value: string }>;
+  warranty: string[];
+  primaryFeatures: Array<{ title: string; description: string }>;
+};
 
 type CountryAvailability = {
   id: string;
@@ -541,6 +548,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
   const [editVariantMoq, setEditVariantMoq] = useState(1);
   const [editVariantStatus, setEditVariantStatus] = useState("ACTIVE");
   const [translationLanguageId, setTranslationLanguageId] = useState("");
+  const [translationDrafts, setTranslationDrafts] = useState<Record<string, ProductTranslationDraft>>({});
   const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
   const [variantCountryModalVariant, setVariantCountryModalVariant] = useState<VariantRow | null>(null);
   const [variantCountryOverrides, setVariantCountryOverrides] = useState<Record<string, boolean>>({});
@@ -883,6 +891,30 @@ export function ProductEditor({ productId }: ProductEditorProps) {
 
   const translationLanguages = useMemo(() => filterTranslationLanguages(languages), [languages]);
   const activeTranslationLang = translationLanguages.find((lang) => lang.id === translationLanguageId) ?? translationLanguages[0];
+
+  useEffect(() => {
+    if (!activeTranslationLang?.id || !product) return;
+    setTranslationDrafts((current) => {
+      if (current[activeTranslationLang.id]) return current;
+      const translation = product.translations?.find((tr: { languageId: string }) => tr.languageId === activeTranslationLang.id) as {
+        seoKeywords?: string | null;
+        highlights?: unknown;
+        technicalSpecs?: unknown;
+        warranty?: unknown;
+        primaryFeatures?: unknown;
+      } | undefined;
+      const parseArray = <T,>(value: unknown, fallback: T[]) => (Array.isArray(value) ? (value as T[]) : fallback);
+      return {
+        ...current,
+        [activeTranslationLang.id]: {
+          highlights: parseArray(translation?.highlights, Array.isArray(product.highlights) ? product.highlights : []),
+          technicalSpecs: parseArray(translation?.technicalSpecs, Array.isArray(product.technicalSpecs) ? product.technicalSpecs : []),
+          warranty: parseArray(translation?.warranty, Array.isArray(product.warranty) ? product.warranty : []),
+          primaryFeatures: parseArray(translation?.primaryFeatures, Array.isArray(product.primaryFeatures) ? product.primaryFeatures : []),
+        },
+      };
+    });
+  }, [activeTranslationLang?.id, product]);
 
   const attributeCatalog = useMemo(() => attributes as GlobalAttribute[], [attributes]);
   const mappedAttributeRows = useMemo(() => productAttributeMappings as ProductAttributeMapping[], [productAttributeMappings]);
@@ -3219,9 +3251,50 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                     description?: string | null;
                     seoTitle?: string | null;
                     seoDescription?: string | null;
+                    seoKeywords?: string | null;
+                    highlights?: Array<{ title: string; description: string }> | string | null;
+                    technicalSpecs?: Array<{ label: string; value: string }> | string | null;
+                    warranty?: string[] | string | null;
+                    primaryFeatures?: Array<{ title: string; description: string }> | string | null;
                     isAiGenerated?: boolean;
                     status?: string;
                   } | undefined;
+                  const draft = translationDrafts[activeTranslationLang.id] ?? {
+                    highlights: Array.isArray(t?.highlights)
+                      ? t.highlights
+                      : Array.isArray(product.highlights)
+                        ? (product.highlights as Array<{ title: string; description: string }>)
+                        : [],
+                    technicalSpecs: Array.isArray(t?.technicalSpecs)
+                      ? t.technicalSpecs
+                      : Array.isArray(product.technicalSpecs)
+                        ? (product.technicalSpecs as Array<{ label: string; value: string }>)
+                        : [],
+                    warranty: Array.isArray(t?.warranty)
+                      ? t.warranty
+                      : Array.isArray(product.warranty)
+                        ? (product.warranty as string[])
+                        : [],
+                    primaryFeatures: Array.isArray(t?.primaryFeatures)
+                      ? t.primaryFeatures
+                      : Array.isArray(product.primaryFeatures)
+                        ? (product.primaryFeatures as Array<{ title: string; description: string }>)
+                        : [],
+                  };
+
+                  const setDraft = <K extends keyof ProductTranslationDraft>(field: K, value: ProductTranslationDraft[K]) => {
+                    setTranslationDrafts((current) => ({
+                      ...current,
+                      [activeTranslationLang.id]: {
+                        ...(current[activeTranslationLang.id] ?? draft),
+                        [field]: value,
+                      },
+                    }));
+                  };
+
+                  const saveDraft = async (field: keyof ProductTranslationDraft) => {
+                    await saveProductTranslation(activeTranslationLang.id, field, JSON.stringify(draft[field]));
+                  };
 
                   return (
                     <>
@@ -3304,6 +3377,161 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                         englishReference={product.seoDescription || product.shortDescription || ""}
                         onSave={(value) => saveProductTranslation(activeTranslationLang.id, "seoDescription", value)}
                       />
+                      <TranslationBlurInput
+                        key={`seoKeywords-${activeTranslationLang.id}-${t?.seoKeywords ?? ""}`}
+                        label="SEO Keywords"
+                        defaultValue={t?.seoKeywords || ""}
+                        englishReference={product.seoKeywords || ""}
+                        onSave={(value) => saveProductTranslation(activeTranslationLang.id, "seoKeywords", value)}
+                      />
+                      <div className="rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5 space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <h4 className="text-[14px] font-semibold text-[#1A1A1A]">Highlights</h4>
+                            <p className="text-[12.5px] text-[#6B6B6B]">Add title and description for each highlight.</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => setDraft("highlights", [...draft.highlights, { title: "", description: "" }])} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[12.5px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5]">
+                              Add highlight
+                            </button>
+                            <button type="button" onClick={() => void saveDraft("highlights")} className="rounded-md bg-[#E31E24] px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B]">
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                        <div className="space-y-4">
+                          {draft.highlights.map((item, index) => (
+                            <div key={index} className="grid gap-3 lg:grid-cols-[1fr_1.5fr_auto] items-stretch">
+                              <AdminInput label="Title" value={item.title} onChange={(event) => {
+                                const next = [...draft.highlights];
+                                next[index] = { ...next[index], title: event.target.value };
+                                setDraft("highlights", next);
+                              }} />
+                              <AdminRichTextEditor label="Description" value={item.description} placeholder="Enter translated highlight description" onChange={(value) => {
+                                const next = [...draft.highlights];
+                                next[index] = { ...next[index], description: value };
+                                setDraft("highlights", next);
+                              }} className="min-h-[120px]" />
+                              <div className="flex items-end">
+                                <button type="button" onClick={() => setDraft("highlights", draft.highlights.filter((_, i) => i !== index))} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]">
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {!draft.highlights.length && <p className="text-[13px] text-[#6B6B6B]">No highlights added yet.</p>}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5 space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <h4 className="text-[14px] font-semibold text-[#1A1A1A]">Technical Specifications</h4>
+                            <p className="text-[12.5px] text-[#6B6B6B]">Add label and value rows for the translated table.</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => setDraft("technicalSpecs", [...draft.technicalSpecs, { label: "", value: "" }])} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[12.5px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5]">
+                              Add spec
+                            </button>
+                            <button type="button" onClick={() => void saveDraft("technicalSpecs")} className="rounded-md bg-[#E31E24] px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B]">
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                        <div className="space-y-4">
+                          {draft.technicalSpecs.map((item, index) => (
+                            <div key={index} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] items-end">
+                              <AdminInput label="Label" value={item.label} onChange={(event) => {
+                                const next = [...draft.technicalSpecs];
+                                next[index] = { ...next[index], label: event.target.value };
+                                setDraft("technicalSpecs", next);
+                              }} />
+                              <AdminInput label="Value" value={item.value} onChange={(event) => {
+                                const next = [...draft.technicalSpecs];
+                                next[index] = { ...next[index], value: event.target.value };
+                                setDraft("technicalSpecs", next);
+                              }} />
+                              <button type="button" onClick={() => setDraft("technicalSpecs", draft.technicalSpecs.filter((_, i) => i !== index))} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]">
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                          {!draft.technicalSpecs.length && <p className="text-[13px] text-[#6B6B6B]">No technical specifications added yet.</p>}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5 space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <h4 className="text-[14px] font-semibold text-[#1A1A1A]">Warranty</h4>
+                            <p className="text-[12.5px] text-[#6B6B6B]">Add translated warranty lines.</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => setDraft("warranty", [...draft.warranty, ""])} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[12.5px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5]">
+                              Add line
+                            </button>
+                            <button type="button" onClick={() => void saveDraft("warranty")} className="rounded-md bg-[#E31E24] px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B]">
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                        <div className="space-y-4">
+                          {draft.warranty.map((line, index) => (
+                            <div key={index} className="grid gap-3 sm:grid-cols-[1fr_auto] items-stretch">
+                              <AdminRichTextEditor label={`Warranty line ${index + 1}`} value={line} placeholder="Enter translated warranty text" onChange={(value) => {
+                                const next = [...draft.warranty];
+                                next[index] = value;
+                                setDraft("warranty", next);
+                              }} className="min-h-[80px]" />
+                              <div className="flex items-end">
+                                <button type="button" onClick={() => setDraft("warranty", draft.warranty.filter((_, i) => i !== index))} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]">
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {!draft.warranty.length && <p className="text-[13px] text-[#6B6B6B]">No warranty lines added yet.</p>}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5 space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <h4 className="text-[14px] font-semibold text-[#1A1A1A]">Primary Features</h4>
+                            <p className="text-[12.5px] text-[#6B6B6B]">Add translated feature title and description pairs.</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => setDraft("primaryFeatures", [...draft.primaryFeatures, { title: "", description: "" }])} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[12.5px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5]">
+                              Add feature
+                            </button>
+                            <button type="button" onClick={() => void saveDraft("primaryFeatures")} className="rounded-md bg-[#E31E24] px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B]">
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                        <div className="space-y-4">
+                          {draft.primaryFeatures.map((item, index) => (
+                            <div key={index} className="grid gap-3 lg:grid-cols-[1fr_1.5fr_auto] items-stretch">
+                              <AdminInput label="Title" value={item.title} onChange={(event) => {
+                                const next = [...draft.primaryFeatures];
+                                next[index] = { ...next[index], title: event.target.value };
+                                setDraft("primaryFeatures", next);
+                              }} />
+                              <AdminRichTextEditor label="Description" value={item.description} placeholder="Enter translated feature description" onChange={(value) => {
+                                const next = [...draft.primaryFeatures];
+                                next[index] = { ...next[index], description: value };
+                                setDraft("primaryFeatures", next);
+                              }} className="min-h-[120px]" />
+                              <div className="flex items-end">
+                                <button type="button" onClick={() => setDraft("primaryFeatures", draft.primaryFeatures.filter((_, i) => i !== index))} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]">
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {!draft.primaryFeatures.length && <p className="text-[13px] text-[#6B6B6B]">No primary features added yet.</p>}
+                        </div>
+                      </div>
                     </>
                   );
                 })()}

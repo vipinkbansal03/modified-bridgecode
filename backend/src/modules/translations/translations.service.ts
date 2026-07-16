@@ -144,18 +144,29 @@ export async function upsertProductTranslation(productId: string, languageId: st
   if (!language) throw new AppError("Language not found.", 404);
 
   const manualSave = data.isAiGenerated !== true;
+  const parseJsonField = (value: unknown) => {
+    if (typeof value !== "string") return value ?? null;
+    try { return JSON.parse(value); } catch { return value; }
+  };
+  const normalizedData = {
+    ...data,
+    highlights: parseJsonField(data.highlights),
+    technicalSpecs: parseJsonField(data.technicalSpecs),
+    warranty: parseJsonField(data.warranty),
+    primaryFeatures: parseJsonField(data.primaryFeatures),
+  };
 
   return prisma.productTranslation.upsert({
     where: { productId_languageId: { productId, languageId } },
     create: {
       productId,
       languageId,
-      ...data,
-      status: data.isAiGenerated ? TranslationStatus.PENDING_REVIEW : TranslationStatus.APPROVED,
-      reviewedAt: data.isAiGenerated ? null : new Date(),
+      ...normalizedData,
+      status: normalizedData.isAiGenerated ? TranslationStatus.PENDING_REVIEW : TranslationStatus.APPROVED,
+      reviewedAt: normalizedData.isAiGenerated ? null : new Date(),
     },
     update: {
-      ...data,
+      ...normalizedData,
       ...(manualSave
         ? {
             status: TranslationStatus.APPROVED,
