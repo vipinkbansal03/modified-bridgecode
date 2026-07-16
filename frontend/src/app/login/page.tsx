@@ -10,8 +10,12 @@ import { useAuthPageSettings } from "@/hooks/api/useAuthPageSettings";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { getCustomerErrorMessage } from "@/services/customerApi";
 
+import LoginSkeleton from "@/components/auth/LoginSkeleton";
+
 const loginSchema = Yup.object({
-  email: Yup.string().email("Invalid email address").required("Email is required"),
+  email: Yup.string()
+    .email("Invalid email address")
+    .required("Email is required"),
   password: Yup.string().required("Password is required"),
 });
 
@@ -24,7 +28,8 @@ const fallbackSlides = [
   {
     image: "/auth/login2.jpg",
     heading: "Track your treatment journey with ease and comfort.",
-    subHeading: "Manage orders, quotes, and account details in one secure place.",
+    subHeading:
+      "Manage orders, quotes, and account details in one secure place.",
   },
 ];
 
@@ -54,12 +59,13 @@ export default function LoginPage() {
   const loginSettings = authSettings?.login;
   const loginSlides = isAuthSettingsError
     ? fallbackSlides
-    : loginSettings?.slides?.filter((slide) => slide.isVisible !== false) || fallbackSlides;
+    : loginSettings?.slides?.filter((slide) => slide.isVisible !== false) ||
+      fallbackSlides;
   const showHero =
-    !isAuthSettingsLoading &&
     (isAuthSettingsError || loginSettings?.sliderEnabled !== false) &&
     loginSlides.length > 0;
-  const heroSlide = loginSlides[activeSlideIndex % loginSlides.length] ?? fallbackSlides[0];
+  const heroSlide =
+    loginSlides[activeSlideIndex % loginSlides.length] ?? fallbackSlides[0];
 
   useEffect(() => {
     if (!showHero || loginSlides.length <= 1) return;
@@ -79,19 +85,30 @@ export default function LoginPage() {
       try {
         await login(values.email, values.password, returnTo);
       } catch (error) {
-        helpers.setStatus(getCustomerErrorMessage(error, "Invalid email or password."));
+        helpers.setStatus(
+          getCustomerErrorMessage(error, "Invalid email or password."),
+        );
       } finally {
         helpers.setSubmitting(false);
       }
     },
   });
 
+  if (isAuthSettingsLoading) {
+    console.log("isLoading:", isAuthSettingsLoading);
+console.log("authSettings:", authSettings);
+console.log("loginSettings:", loginSettings);
+console.log("sliderEnabled:", loginSettings?.sliderEnabled);
+console.log("showHero:", showHero);
+    return <LoginSkeleton showHero={showHero} />;
+  }
+
   return (
     <main
       className={
         showHero
           ? "grid min-h-svh grid-cols-1 overflow-hidden bg-white lg:grid-cols-[minmax(0,1.05fr)_minmax(480px,0.95fr)]"
-          : "flex min-h-svh items-center justify-center overflow-hidden bg-[#F7F7F7]"
+          : "flex min-h-svh items-center justify-center bg-[#F7F7F7] px-5 py-8"
       }
     >
       {showHero && (
@@ -110,8 +127,12 @@ export default function LoginPage() {
               <p className="text-[18px] italic leading-8 text-white/95">
                 “{heroSlide.subHeading}”
               </p>
-              <p className="mt-5 text-[13px] font-semibold text-white">{heroSlide.heading}</p>
-              <p className="mt-1 text-[12px] text-white/65">Modern Orthodontics</p>
+              <p className="mt-5 text-[13px] font-semibold text-white">
+                {heroSlide.heading}
+              </p>
+              <p className="mt-1 text-[12px] text-white/65">
+                Modern Orthodontics
+              </p>
             </div>
             {loginSlides.length > 1 && (
               <div className="absolute bottom-9 left-9 flex items-center gap-2">
@@ -122,7 +143,9 @@ export default function LoginPage() {
                     aria-label={`Show login slide ${index + 1}`}
                     onClick={() => setActiveSlideIndex(index)}
                     className={`h-2 rounded-full transition-all ${
-                      index === activeSlideIndex % loginSlides.length ? "w-7 bg-white" : "w-2 bg-white/45 hover:bg-white/75"
+                      index === activeSlideIndex % loginSlides.length
+                        ? "w-7 bg-white"
+                        : "w-2 bg-white/45 hover:bg-white/75"
                     }`}
                   />
                 ))}
@@ -136,7 +159,7 @@ export default function LoginPage() {
         className={
           showHero
             ? "relative flex min-h-svh items-center justify-center bg-white px-5 py-8 sm:px-10"
-            : "relative flex min-h-svh w-full items-center justify-center bg-[#F7F7F7] px-5 py-8 sm:px-10"
+            : "relative flex min-h-svh w-full items-center justify-center px-5 py-8 sm:px-10"
         }
       >
         <button
@@ -164,13 +187,12 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <form
-            onSubmit={formik.handleSubmit}
-            className="space-y-5"
-            noValidate
-          >
+          <form onSubmit={formik.handleSubmit} className="space-y-5" noValidate>
             <div>
-              <label htmlFor="email" className="mb-2 block text-[13px] font-semibold text-[#1A1A1A]">
+              <label
+                htmlFor="email"
+                className="mb-2 block text-[13px] font-semibold text-[#1A1A1A]"
+              >
                 Email address
               </label>
               <input
@@ -183,20 +205,30 @@ export default function LoginPage() {
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
                 className={`h-[50px] w-full rounded-md border bg-[#EEF4FF] px-4 text-[14px] text-[#1A1A1A] outline-none placeholder:text-[#9A9A9A] focus:border-[#1A1A1A] ${
-                  formik.touched.email && formik.errors.email ? "border-[#E31E24]" : "border-[#E0E0E0]"
+                  formik.touched.email && formik.errors.email
+                    ? "border-[#E31E24]"
+                    : "border-[#E0E0E0]"
                 }`}
               />
               {formik.touched.email && formik.errors.email && (
-                <p className="mt-1 text-[12px] text-[#E31E24]">{formik.errors.email}</p>
+                <p className="mt-1 text-[12px] text-[#E31E24]">
+                  {formik.errors.email}
+                </p>
               )}
             </div>
 
             <div>
               <div className="mb-2 flex items-center justify-between gap-3">
-                <label htmlFor="password" className="block text-[13px] font-semibold text-[#1A1A1A]">
+                <label
+                  htmlFor="password"
+                  className="block text-[13px] font-semibold text-[#1A1A1A]"
+                >
                   Password
                 </label>
-                <Link href="/forgot-password" className="text-[12px] font-medium text-[#111] underline underline-offset-2">
+                <Link
+                  href="/forgot-password"
+                  className="text-[12px] font-medium text-[#111] underline underline-offset-2"
+                >
                   Forgot password?
                 </Link>
               </div>
@@ -211,7 +243,9 @@ export default function LoginPage() {
                   onChange={formik.handleChange}
                   onBlur={formik.handleBlur}
                   className={`h-[50px] w-full rounded-md border bg-[#EEF4FF] px-4 pr-10 text-[14px] text-[#1A1A1A] outline-none placeholder:text-[#9A9A9A] focus:border-[#1A1A1A] ${
-                    formik.touched.password && formik.errors.password ? "border-[#E31E24]" : "border-[#E0E0E0]"
+                    formik.touched.password && formik.errors.password
+                      ? "border-[#E31E24]"
+                      : "border-[#E0E0E0]"
                   }`}
                 />
                 <button
@@ -224,12 +258,17 @@ export default function LoginPage() {
                 </button>
               </div>
               {formik.touched.password && formik.errors.password && (
-                <p className="mt-1 text-[12px] text-[#E31E24]">{formik.errors.password}</p>
+                <p className="mt-1 text-[12px] text-[#E31E24]">
+                  {formik.errors.password}
+                </p>
               )}
             </div>
 
             <label className="flex items-center gap-2 text-[12px] text-[#8A8A8A]">
-              <input type="checkbox" className="h-4 w-4 rounded border-[#D1D5DB]" />
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-[#D1D5DB]"
+              />
               I agree to the terms and conditions.
             </label>
 
@@ -250,7 +289,10 @@ export default function LoginPage() {
 
           <p className="mt-6 text-center text-[13px] text-[#8A8A8A]">
             Don&apos;t have an account?{" "}
-            <Link href={`/register?returnTo=${encodeURIComponent(returnTo)}`} className="font-medium text-[#E31E24] hover:underline">
+            <Link
+              href={`/register?returnTo=${encodeURIComponent(returnTo)}`}
+              className="font-medium text-[#E31E24] hover:underline"
+            >
               Create account
             </Link>
           </p>
