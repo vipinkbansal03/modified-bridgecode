@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useCart } from "@/contexts/CartContext";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
+import { useCurrencyContext } from "@/contexts/CurrencyContext";
 import {
   createCustomerOrder,
   calculateShipping,
@@ -38,6 +39,7 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { items, totals, updateQuantity, removeItem, clearCart } = useCart();
   const { currentCustomer, isLoading } = useCustomerAuth();
+  const { selectedCountryCode, setSelectedCountryCode } = useCurrencyContext();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<CustomerOrderSummary | null>(null);
@@ -85,11 +87,10 @@ export default function CheckoutPage() {
   }, [currentCustomer]);
 
   useEffect(() => {
-    const countryCode = items[0]?.countryCode;
-    if (countryCode) {
-      setForm((current) => ({ ...current, countryCode }));
+    if (selectedCountryCode && selectedCountryCode !== form.countryCode) {
+      setForm((current) => ({ ...current, countryCode: selectedCountryCode }));
     }
-  }, [items]);
+  }, [selectedCountryCode, form.countryCode]);
 
   const canSubmit = useMemo(() => {
     return Boolean(
@@ -102,6 +103,13 @@ export default function CheckoutPage() {
         form.postalCode.trim()
     );
   }, [form, items.length]);
+
+  const hasSpecificTaxes = useMemo(() => {
+    if (!estimate?.items) return false;
+    return (estimate.items as any[]).some((item) =>
+      (item.appliedTaxes as any[])?.some((tax) => tax.isSpecific)
+    );
+  }, [estimate]);
 
   const approvalBlockMessage = currentCustomer?.approvalStatus ? APPROVAL_MESSAGES[currentCustomer.approvalStatus] : null;
   const canPlaceOrder = canSubmit && Boolean(shippingEstimate?.available) && !approvalBlockMessage;
@@ -234,6 +242,9 @@ export default function CheckoutPage() {
       postalCode: address.postalCode,
       countryCode: address.country.code,
     }));
+    if (address.country.code) {
+      setSelectedCountryCode(address.country.code.toUpperCase());
+    }
   }
 
   if (isLoading || (!currentCustomer && !order)) {
@@ -351,7 +362,18 @@ export default function CheckoutPage() {
                   <Input label="City" value={form.city} onChange={(event) => setForm((current) => ({ ...current, city: event.target.value }))} />
                   <Input label="State" value={form.state} onChange={(event) => setForm((current) => ({ ...current, state: event.target.value }))} />
                   <Input label="Postal code" value={form.postalCode} onChange={(event) => setForm((current) => ({ ...current, postalCode: event.target.value }))} />
-                  <Input label="Country code" maxLength={2} value={form.countryCode} onChange={(event) => setForm((current) => ({ ...current, countryCode: event.target.value.toUpperCase() }))} />
+                  <Input
+                    label="Country code"
+                    maxLength={2}
+                    value={form.countryCode}
+                    onChange={(event) => {
+                      const nextCode = event.target.value.toUpperCase();
+                      setForm((current) => ({ ...current, countryCode: nextCode }));
+                      if (nextCode.length === 2) {
+                        setSelectedCountryCode(nextCode);
+                      }
+                    }}
+                  />
                 </div>
               </div>
 
@@ -410,29 +432,39 @@ export default function CheckoutPage() {
               </div>
 
               <div className="space-y-4">
-                {items.map((item) => (
-                  <div key={item.variantId} className="border-b border-line pb-4 last:border-0">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[14px] font-semibold text-ink">{item.productTitle}</p>
-                        <p className="mt-1 text-[12.5px] text-steel">{item.variantTitle}</p>
+                {items.map((item) => {
+                  const estimatedItem = estimate?.items?.find((ei) => ei.variantId === item.variantId);
+                  const displayUnitPrice = estimatedItem ? estimatedItem.unitPrice : item.unitPrice;
+                  const displayCurrencySymbol = estimate?.currency?.symbol ?? item.currencySymbol;
+                  return (
+                    <div key={item.variantId} className="border-b border-line pb-4 last:border-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[14px] font-semibold text-ink">{item.productTitle}</p>
+                          <p className="mt-1 text-[12.5px] text-steel">{item.variantTitle}</p>
+                          {hasSpecificTaxes && (estimatedItem as any)?.appliedTaxes?.map((tax: any) => (
+                            <p key={tax.label} className="mt-1 text-[12.5px] font-medium text-steel">
+                              {tax.label}: {formatMoney(displayCurrencySymbol, tax.taxAmount * item.quantity)}
+                            </p>
+                          ))}
+                        </div>
+                        <button type="button" onClick={() => removeItem(item.variantId)} className="text-[12px] font-medium text-brand">
+                          Remove
+                        </button>
                       </div>
-                      <button type="button" onClick={() => removeItem(item.variantId)} className="text-[12px] font-medium text-brand">
-                        Remove
-                      </button>
+                      <div className="mt-3 flex items-center justify-between">
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.quantity}
+                          onChange={(event) => updateQuantity(item.variantId, Math.max(1, Number(event.target.value) || 1))}
+                          className="w-20 rounded-md border border-line px-3 py-2 text-center text-[13px] outline-none"
+                        />
+                        <p className="text-[14px] font-semibold text-ink">{formatMoney(displayCurrencySymbol, displayUnitPrice * item.quantity)}</p>
+                      </div>
                     </div>
-                    <div className="mt-3 flex items-center justify-between">
-                      <input
-                        type="number"
-                        min={1}
-                        value={item.quantity}
-                        onChange={(event) => updateQuantity(item.variantId, Math.max(1, Number(event.target.value) || 1))}
-                        className="w-20 rounded-md border border-line px-3 py-2 text-center text-[13px] outline-none"
-                      />
-                      <p className="text-[14px] font-semibold text-ink">{formatMoney(item.currencySymbol, item.unitPrice * item.quantity)}</p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="mt-5 space-y-3 border-t border-line pt-4">
@@ -486,13 +518,18 @@ export default function CheckoutPage() {
                     <strong className="text-[#2A6A40]">-{formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, Number(estimate?.couponDiscount ?? appliedCoupon?.discountAmount ?? 0))}</strong>
                   </div>
                 )}
-                {(estimate?.taxBreakdown?.length ?? 0) > 0 ? (
+                {(estimate?.taxBreakdown?.length ?? 0) > 0 && !hasSpecificTaxes ? (
                   estimate!.taxBreakdown.map((tax) => (
                     <div key={tax.label} className="flex items-center justify-between text-[14px]">
                       <span className="text-steel">{tax.label}</span>
                       <strong className="text-ink">{formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, tax.taxAmount)}</strong>
                     </div>
                   ))
+                ) : hasSpecificTaxes ? (
+                  <div className="flex items-center justify-between text-[14px]">
+                    <span className="text-steel">Tax</span>
+                    <strong className="text-ink">Included in products</strong>
+                  </div>
                 ) : (
                   <div className="flex items-center justify-between text-[14px]">
                     <span className="text-steel">Tax</span>

@@ -36,7 +36,7 @@ export function AdminLayout({ children, title, breadcrumb }: AdminLayoutProps) {
       <AdminSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <AdminHeader title={title} breadcrumb={breadcrumb} onMenuOpen={() => setSidebarOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-5 sm:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-5 sm:p-6 relative z-10">{children}</main>
       </div>
     </div>
   );

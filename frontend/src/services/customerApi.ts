@@ -146,6 +146,14 @@ export interface CustomerOrderEstimate {
   total: number;
   currency?: { code: string; symbol: string };
   taxBreakdown: { label: string; taxPercent?: number | null; taxAmount: number }[];
+  items?: {
+    variantId: string;
+    sku: string | null;
+    title: string;
+    quantity: number;
+    unitPrice: number;
+    lineSubtotal: number;
+  }[];
 }
 
 export interface CouponValidationResult {

@@ -122,6 +122,7 @@ model Product {
   defaultCountry    Country?             @relation(fields: [defaultCountryId], references: [id])
   defaultCurrency   Currency?            @relation(fields: [defaultCurrencyId], references: [id])
   QuoteItem         QuoteItem[]
+  taxRules          TaxRule[]            @relation("ProductTaxRules")
 
   @@map("products")
 }
@@ -702,6 +703,11 @@ model ProductTranslation {
   description      String?
   seoTitle         String?
   seoDescription   String?
+  seoKeywords      String?
+  highlights       Json?
+  technicalSpecs    Json?
+  warranty         Json?
+  primaryFeatures   Json?
   isAiGenerated    Boolean           @default(false)
   reviewedAt       DateTime?
   createdAt        DateTime          @default(now())
@@ -1153,6 +1159,7 @@ model TaxRule {
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
   country    Country     @relation(fields: [countryId], references: [id])
+  products   Product[]   @relation("ProductTaxRules")
 
   @@unique([countryId, name])
   @@map("tax_rules")

@@ -1,20 +1,44 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Container } from "@/components/ui/Container";
-import type { ProductDetail } from "@/types/product.types";
+import { useRecentlySeenProducts } from "@/hooks/api/useProducts";
+import { getRecentlySeenSlugs, recordProductView } from "@/lib/recentlySeen";
+import type { ApiProductDetail } from "@/types/api.types";
 
 interface RecentlySeenSectionProps {
-  products: ProductDetail[];
+  currentSlug: string;
 }
 
-export function RecentlySeenSection({ products }: RecentlySeenSectionProps) {
+function getProductImage(product: ApiProductDetail) {
+  if (product.thumbnail) return product.thumbnail;
+  const first = product.images[0];
+  return typeof first === "string" ? first : first?.url ?? null;
+}
+
+export function RecentlySeenSection({ currentSlug }: RecentlySeenSectionProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const [slugs, setSlugs] = useState<string[]>([]);
   const scrollBy = (delta: number) => viewportRef.current?.scrollBy({ left: delta, behavior: "smooth" });
-  if (!products.length) return null;
+
+  useEffect(() => {
+    setSlugs(getRecentlySeenSlugs(currentSlug));
+    recordProductView(currentSlug);
+  }, [currentSlug]);
+
+  const queries = useRecentlySeenProducts(slugs);
+  const products = useMemo(
+    () =>
+      slugs
+        .map((slug, index) => queries[index]?.data)
+        .filter((product): product is ApiProductDetail => Boolean(product)),
+    [slugs, queries],
+  );
+
+  if (!slugs.length || !products.length) return null;
 
   return (
     <section className="py-15 sm:py-17.5">
@@ -32,14 +56,21 @@ export function RecentlySeenSection({ products }: RecentlySeenSectionProps) {
         </div>
         <div ref={viewportRef} className="slider-viewport">
           <div className="flex gap-5.5">
-            {products.map((p) => (
-              <Link key={p.slug} href={`/products/${p.slug}`} className="block w-[190px] flex-none snap-start text-ink">
-                <div className="relative mb-3 h-[150px] w-full bg-offwhite">
-                  <Image src={p.images[0]} alt={p.title} fill className="object-cover" sizes="190px" />
-                </div>
-                <h5 className="text-[13.5px] font-medium leading-snug">{p.title}</h5>
-              </Link>
-            ))}
+            {products.map((p) => {
+              const image = getProductImage(p);
+              return (
+                <Link key={p.slug} href={`/products/${p.slug}`} className="block w-[190px] flex-none snap-start text-ink">
+                  <div className="relative mb-3 h-[150px] w-full bg-offwhite">
+                    {image ? (
+                      <Image src={image} alt={p.title} fill className="object-cover" sizes="190px" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center px-3 text-center text-xs text-steel-2">No image</div>
+                    )}
+                  </div>
+                  <h5 className="text-[13.5px] font-medium leading-snug">{p.title}</h5>
+                </Link>
+              );
+            })}
           </div>
         </div>
       </Container>

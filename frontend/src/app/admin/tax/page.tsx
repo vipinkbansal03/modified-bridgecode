@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, Eye, Filter, Plus, RefreshCw, Search, SquareCheckBig, Trash2, Upload, X, SlidersHorizontal } from "lucide-react";
+import { Download, Eye, Filter, Plus, RefreshCw, Search, SquareCheckBig, Trash2, Upload, X, SlidersHorizontal, Pencil } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import {
   AdminInput,
@@ -27,6 +27,7 @@ import {
   useImportTaxRules,
   usePreviewTaxImport,
   useUpdateTaxRule,
+  useAdminProducts,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
@@ -41,6 +42,7 @@ type TaxRule = {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
+  products?: Array<{ id: string; title: string }>;
 };
 
 type TaxDashboard = {
@@ -76,6 +78,7 @@ type TaxFormState = {
   countryId: string;
   status: TaxRule["status"];
   sortOrder: string;
+  productIds: string[];
 };
 
 type PreviewState = {
@@ -100,6 +103,7 @@ const emptyForm: TaxFormState = {
   countryId: "",
   status: "ACTIVE",
   sortOrder: "0",
+  productIds: [],
 };
 
 const emptyPreview: PreviewState = {
@@ -149,9 +153,15 @@ export default function AdminTaxPage() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importReport, setImportReport] = useState<SpreadsheetReport | null>(null);
   const [previewForm, setPreviewForm] = useState<PreviewState>(emptyPreview);
+  const [productSearch, setProductSearch] = useState("");
 
   const { data: dashboardData, isLoading: dashboardLoading } = useAdminTaxDashboard();
   const { data: countries = [] } = useAdminCountries();
+  const { data: productsData } = useAdminProducts({ limit: 1000 });
+  const products = productsData?.data ?? [];
+  const filteredProducts = products.filter((p: any) =>
+    p.title.toLowerCase().includes(productSearch.toLowerCase())
+  );
   const { data, isLoading, refetch } = useAdminTaxRules({
     page,
     limit,
@@ -245,7 +255,7 @@ export default function AdminTaxPage() {
         render: (row) => (
           <div className="flex flex-wrap items-center gap-1.5">
             <button type="button" onClick={() => openEdit(row)} className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]" title="Edit rule">
-              <Eye size={15} />
+              <Pencil size={15} />
             </button>
             <button
               type="button"
@@ -265,6 +275,7 @@ export default function AdminTaxPage() {
 
   function openCreate() {
     setForm(emptyForm);
+    setProductSearch("");
     setShowForm(true);
   }
 
@@ -277,7 +288,9 @@ export default function AdminTaxPage() {
       countryId: row.countryId,
       status: row.status,
       sortOrder: String(row.sortOrder ?? 0),
+      productIds: (row.products ?? []).map((p) => p.id),
     });
+    setProductSearch("");
     setShowForm(true);
   }
 
@@ -303,6 +316,7 @@ export default function AdminTaxPage() {
         countryId: form.countryId,
         status: form.status,
         sortOrder: form.sortOrder,
+        productIds: form.productIds,
       };
 
       if (form.id) {
@@ -769,6 +783,54 @@ export default function AdminTaxPage() {
               ]}
             />
             <AdminInput label="Priority" type="number" min="0" step="1" value={form.sortOrder} onChange={(event) => setForm((current) => ({ ...current, sortOrder: event.target.value }))} />
+
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-[13px] font-semibold text-[#1A1A1A]">Applicable Products (Optional)</label>
+              <div className="border border-[#E6E6E6] rounded-md p-3 bg-[#F9F9F9] max-h-48 overflow-y-auto space-y-2">
+                <div className="relative mb-2">
+                  <Search size={14} className="absolute left-2.5 top-2.5 text-[#9A9A9A]" />
+                  <input
+                    type="text"
+                    placeholder="Search products..."
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 text-[12.5px] border border-[#E6E6E6] rounded bg-white outline-none focus:border-[#E31E24]"
+                  />
+                </div>
+                {filteredProducts.length === 0 ? (
+                  <p className="text-[12px] text-[#9A9A9A] text-center py-2">No products found</p>
+                ) : (
+                  <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
+                    {filteredProducts.map((p: any) => {
+                      const isChecked = form.productIds?.includes(p.id);
+                      return (
+                        <label key={p.id} className="flex items-start gap-2 text-[12.5px] text-[#1A1A1A] cursor-pointer hover:bg-[#EAEAEA] p-1 rounded">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              setForm((current) => {
+                                const pIds = current.productIds ?? [];
+                                if (isChecked) {
+                                  return { ...current, productIds: pIds.filter((id) => id !== p.id) };
+                                } else {
+                                  return { ...current, productIds: [...pIds, p.id] };
+                                }
+                              });
+                            }}
+                            className="mt-0.5 rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
+                          />
+                          <span className="truncate">{p.title}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <p className="text-[11.5px] text-[#9A9A9A]">
+                If no products are selected, this tax rule will apply globally to all products in the selected country.
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center justify-between gap-3 border-t border-[#E6E6E6] pt-4">

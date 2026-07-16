@@ -13,7 +13,7 @@ export function AdminHeader({ title, breadcrumb, onMenuOpen }: AdminHeaderProps)
   const { user, logout } = useAdminAuth();
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-[#E6E6E6] bg-white px-5">
+    <header className="flex h-14 items-center justify-between border-b border-[#E6E6E6] bg-white px-5 relative z-0">
       <div className="flex items-center gap-4">
         <button onClick={onMenuOpen} className="lg:hidden text-[#6B6B6B] hover:text-[#1A1A1A]">
           <Menu size={20} />
