@@ -14,8 +14,11 @@ export const create = asyncHandler(async (req: CustomerAuthRequest, res: Respons
 
 export const estimate = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
   if (!req.customer) throw new AppError("Customer authentication required.", 401);
+  console.log("ESTIMATE REQ.BODY:", JSON.stringify(req.body, null, 2));
   const input = createCustomerOrderSchema.parse(req.body);
+  console.log("PARSED ESTIMATE INPUT:", JSON.stringify(input, null, 2));
   const estimateResult = await CustomerOrdersService.estimateCustomerOrder(req.customer.id, input);
+  console.log("ESTIMATE RESULT:", JSON.stringify(estimateResult, null, 2));
   return ApiResponse.success(res, "Order estimate calculated.", estimateResult);
 });
 

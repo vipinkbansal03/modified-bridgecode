@@ -40,6 +40,7 @@ export type AppliedPriceLayer = {
   discountRuleType?: DiscountRuleKind;
   ruleId?: string;
   warning?: string;
+  isSpecific?: boolean;
 };
 
 export type ResolvedPrice = {
@@ -457,10 +458,21 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
   // Extension point: code-based coupons can append another PROMOTIONAL_DISCOUNT layer after automatic discounts.
   const priceBeforeTax = roundMoney(currentPrice);
   let totalTaxAmount = 0;
-  const activeTaxRules = (await (prisma as unknown as { taxRule: { findMany: (args: unknown) => Promise<ActiveTaxRule[]> } }).taxRule.findMany({
+  const countryTaxRules = (await (prisma as unknown as { taxRule: { findMany: (args: unknown) => Promise<any[]> } }).taxRule.findMany({
     where: { countryId: input.countryId, status: "ACTIVE" },
+    include: { products: { select: { id: true } } },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-  })) as ActiveTaxRule[];
+  })) as any[];
+
+  const productSpecificRules = countryTaxRules.filter((rule) =>
+    rule.products.some((p: any) => p.id === input.productId)
+  );
+
+  const activeTaxRules = (
+    productSpecificRules.length > 0
+      ? productSpecificRules
+      : countryTaxRules.filter((rule) => rule.products.length === 0)
+  ) as ActiveTaxRule[];
 
   if (activeTaxRules.length) {
     for (const rule of activeTaxRules) {
@@ -476,6 +488,7 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
         taxAmount,
         taxRuleType: rule.type,
         ruleId: rule.id,
+        isSpecific: productSpecificRules.length > 0,
       });
     }
     currentPrice = roundMoney(priceBeforeTax + totalTaxAmount);

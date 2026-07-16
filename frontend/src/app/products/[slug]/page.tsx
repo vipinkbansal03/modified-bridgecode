@@ -16,7 +16,7 @@ import { buildMetadata } from "@/lib/seo";
 import productsData from "@/data/products.json";
 import homeContent from "@/data/home.json";
 import type { ProductDetail } from "@/types/product.types";
-import type { ApiProductDetail } from "@/types/api.types";
+import type { ApiProductDetail, ApiProductPrice } from "@/types/api.types";
 
 export const revalidate = 300;
 

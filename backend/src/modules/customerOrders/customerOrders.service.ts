@@ -180,6 +180,14 @@ export async function estimateCustomerOrder(customerId: string, input: CreateCus
       unitPrice: item.unitPriceBeforeTax,
       lineSubtotal: item.subtotal,
       appliedDiscounts: item.resolvedPrice.appliedDiscounts.filter((entry) => entry.type === "PROMOTIONAL_DISCOUNT"),
+      appliedTaxes: item.resolvedPrice.appliedDiscounts
+        .filter((entry) => entry.type === "TAX")
+        .map((entry) => ({
+          label: entry.label,
+          taxPercent: entry.taxPercent,
+          taxAmount: entry.taxAmount,
+          isSpecific: !!entry.isSpecific,
+        })),
     })),
     total: calculation.total,
     currency: calculation.orderItems[0]?.resolvedPrice.currency,

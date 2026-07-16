@@ -509,7 +509,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
   const [manualVariantOpen, setManualVariantOpen] = useState(false);
   const [editingVariant, setEditingVariant] = useState<VariantRow | null>(null);
   const [editVariantSubTab, setEditVariantSubTab] = useState<"general" | "prices" | "tiers" | "moqs">("general");
-  const [editVariantCountryPrices, setEditVariantCountryPrices] = useState<Record<string, { mrp: string; sellingPrice: string; dealerPrice: string; doctorRetailerPrice: string; stock: string }>>({});
+  const [editVariantCountryPrices, setEditVariantCountryPrices] = useState<Record<string, { mrp: string; sellingPrice: string; dealerPrice: string; doctorRetailerPrice: string; stock?: string }>>({});
   const [modalTierRuleDraft, setModalTierRuleDraft] = useState({
     tierId: "",
     countryId: "",

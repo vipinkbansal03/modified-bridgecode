@@ -9,7 +9,7 @@ import { cn } from "@/utils/cn";
 
 export interface Column<T> {
   key: keyof T | string;
-  label: string;
+  label: React.ReactNode;
   width?: string;
   render?: (row: T) => ReactNode;
 }

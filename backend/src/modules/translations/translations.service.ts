@@ -46,36 +46,69 @@ type LanguageInput = {
   isDefault?: unknown;
 };
 
-const PRODUCT_TRANSLATION_FIELDS = new Set(["title", "shortDescription", "description", "seoTitle", "seoDescription", "seoKeywords", "highlights", "technicalSpecs", "warranty", "primaryFeatures"]);
+const PRODUCT_TRANSLATION_FIELDS = new Set([
+  "title",
+  "shortDescription",
+  "description",
+  "seoTitle",
+  "seoDescription",
+  "seoKeywords",
+  "highlights",
+  "technicalSpecs",
+  "warranty",
+  "primaryFeatures",
+]);
 const CATEGORY_TRANSLATION_FIELDS = new Set(["name", "description"]);
-const CMS_TRANSLATION_ENTITY_TYPES = new Set(["page", "section", "block", "menuItem", "footer"]);
+const CMS_TRANSLATION_ENTITY_TYPES = new Set([
+  "page",
+  "section",
+  "block",
+  "menuItem",
+  "footer",
+]);
 
-function cmsTranslationKey(entityType: string, entityId: string, field: string) {
+function cmsTranslationKey(
+  entityType: string,
+  entityId: string,
+  field: string,
+) {
   return `cms.${entityType}.${entityId}.${field}`;
 }
 
 function normalizeLanguageCode(code: unknown) {
-  if (typeof code !== "string") throw new AppError("Language code is required.", 400);
+  if (typeof code !== "string")
+    throw new AppError("Language code is required.", 400);
   const normalized = code.trim().toLowerCase();
   if (!/^[a-z]{2,3}(-[a-z]{2})?$/.test(normalized)) {
-    throw new AppError("Use a valid language code like en, hi, ar, or en-us.", 400);
+    throw new AppError(
+      "Use a valid language code like en, hi, ar, or en-us.",
+      400,
+    );
   }
   return normalized;
 }
 
 function normalizeLanguageName(name: unknown) {
-  if (typeof name !== "string" || !name.trim()) throw new AppError("Language name is required.", 400);
+  if (typeof name !== "string" || !name.trim())
+    throw new AppError("Language name is required.", 400);
   return name.trim();
 }
 
-export const listLanguages = () => prisma.language.findMany({ orderBy: [{ isDefault: "desc" }, { name: "asc" }] });
+export const listLanguages = () =>
+  prisma.language.findMany({
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+  });
 
 export async function createLanguage(data: LanguageInput) {
   const name = normalizeLanguageName(data.name);
   const code = normalizeLanguageCode(data.code);
 
-  const existing = await prisma.language.findUnique({ where: { code }, select: { id: true } });
-  if (existing) throw new AppError("A language with this code already exists.", 409);
+  const existing = await prisma.language.findUnique({
+    where: { code },
+    select: { id: true },
+  });
+  if (existing)
+    throw new AppError("A language with this code already exists.", 409);
 
   return prisma.language.create({
     data: {
@@ -91,17 +124,29 @@ export async function updateLanguage(id: string, data: LanguageInput) {
   const language = await prisma.language.findUnique({ where: { id } });
   if (!language) throw new AppError("Language not found.", 404);
 
-  const updateData: { name?: string; code?: string; isEnabled?: boolean; isDefault?: boolean } = {};
+  const updateData: {
+    name?: string;
+    code?: string;
+    isEnabled?: boolean;
+    isDefault?: boolean;
+  } = {};
 
-  if (data.name !== undefined) updateData.name = normalizeLanguageName(data.name);
+  if (data.name !== undefined)
+    updateData.name = normalizeLanguageName(data.name);
   if (data.code !== undefined) {
     const code = normalizeLanguageCode(data.code);
-    const existing = await prisma.language.findUnique({ where: { code }, select: { id: true } });
-    if (existing && existing.id !== id) throw new AppError("A language with this code already exists.", 409);
+    const existing = await prisma.language.findUnique({
+      where: { code },
+      select: { id: true },
+    });
+    if (existing && existing.id !== id)
+      throw new AppError("A language with this code already exists.", 409);
     updateData.code = code;
   }
-  if (typeof data.isEnabled === "boolean") updateData.isEnabled = data.isEnabled;
-  if (typeof data.isDefault === "boolean") updateData.isDefault = data.isDefault;
+  if (typeof data.isEnabled === "boolean")
+    updateData.isEnabled = data.isEnabled;
+  if (typeof data.isDefault === "boolean")
+    updateData.isDefault = data.isDefault;
 
   if (language.isDefault && updateData.isEnabled === false) {
     throw new AppError("Default language cannot be disabled.", 400);
@@ -125,36 +170,76 @@ export async function updateLanguage(id: string, data: LanguageInput) {
 
 export async function getProductTranslations(productId: string) {
   const langs = await prisma.language.findMany({ where: { isEnabled: true } });
-  const translations = await prisma.productTranslation.findMany({ where: { productId }, include: { language: true } });
+  const translations = await prisma.productTranslation.findMany({
+    where: { productId },
+    include: { language: true },
+  });
   return langs.map((lang) => ({
     language: lang,
     translation: translations.find((t) => t.languageId === lang.id) || null,
   }));
 }
 
-export const updateTranslation = (id: string, data: object) => prisma.productTranslation.update({ where: { id }, data: data as never });
+export const updateTranslation = (id: string, data: object) =>
+  prisma.productTranslation.update({ where: { id }, data: data as never });
 
-export async function upsertProductTranslation(productId: string, languageId: string, data: ProductTranslationInput) {
+export async function upsertProductTranslation(
+  productId: string,
+  languageId: string,
+  data: ProductTranslationInput,
+) {
   const [product, language] = await Promise.all([
-    prisma.product.findUnique({ where: { id: productId }, select: { id: true } }),
-    prisma.language.findUnique({ where: { id: languageId }, select: { id: true } }),
+    prisma.product.findUnique({
+      where: { id: productId },
+      select: { id: true },
+    }),
+    prisma.language.findUnique({
+      where: { id: languageId },
+      select: { id: true },
+    }),
   ]);
 
   if (!product) throw new AppError("Product not found.", 404);
   if (!language) throw new AppError("Language not found.", 404);
 
   const manualSave = data.isAiGenerated !== true;
+
+  // Parse JSON string fields before persisting while preserving non-string values.
   const parseJsonField = (value: unknown) => {
-    if (typeof value !== "string") return value ?? null;
-    try { return JSON.parse(value); } catch { return value; }
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
   };
-  const normalizedData = {
-    ...data,
-    highlights: parseJsonField(data.highlights),
-    technicalSpecs: parseJsonField(data.technicalSpecs),
-    warranty: parseJsonField(data.warranty),
-    primaryFeatures: parseJsonField(data.primaryFeatures),
-  };
+
+
+// Normalize only the fields included in the current request to avoid
+// overwriting unrelated translation fields during partial updates.
+  const normalizedData = { ...data };
+
+  if ("highlights" in data) {
+    normalizedData.highlights = parseJsonField(data.highlights);
+  }
+
+  if ("technicalSpecs" in data) {
+    normalizedData.technicalSpecs = parseJsonField(data.technicalSpecs);
+  }
+
+  if ("warranty" in data) {
+    normalizedData.warranty = parseJsonField(data.warranty);
+  }
+
+  if ("primaryFeatures" in data) {
+    normalizedData.primaryFeatures = parseJsonField(data.primaryFeatures);
+  }
 
   return prisma.productTranslation.upsert({
     where: { productId_languageId: { productId, languageId } },
@@ -162,7 +247,9 @@ export async function upsertProductTranslation(productId: string, languageId: st
       productId,
       languageId,
       ...normalizedData,
-      status: normalizedData.isAiGenerated ? TranslationStatus.PENDING_REVIEW : TranslationStatus.APPROVED,
+      status: normalizedData.isAiGenerated
+        ? TranslationStatus.PENDING_REVIEW
+        : TranslationStatus.APPROVED,
       reviewedAt: normalizedData.isAiGenerated ? null : new Date(),
     },
     update: {
@@ -179,10 +266,20 @@ export async function upsertProductTranslation(productId: string, languageId: st
   });
 }
 
-export async function upsertCategoryTranslation(categoryId: string, languageId: string, data: CategoryTranslationInput) {
+export async function upsertCategoryTranslation(
+  categoryId: string,
+  languageId: string,
+  data: CategoryTranslationInput,
+) {
   const [category, language] = await Promise.all([
-    prisma.category.findUnique({ where: { id: categoryId }, select: { id: true } }),
-    prisma.language.findUnique({ where: { id: languageId }, select: { id: true } }),
+    prisma.category.findUnique({
+      where: { id: categoryId },
+      select: { id: true },
+    }),
+    prisma.language.findUnique({
+      where: { id: languageId },
+      select: { id: true },
+    }),
   ]);
 
   if (!category) throw new AppError("Category not found.", 404);
@@ -206,7 +303,10 @@ export async function upsertCategoryTranslation(categoryId: string, languageId: 
   });
 }
 
-export async function generateTranslations(productId: string, languageId?: string) {
+export async function generateTranslations(
+  productId: string,
+  languageId?: string,
+) {
   const product = await prisma.product.findUnique({
     where: { id: productId },
     select: {
@@ -239,7 +339,10 @@ export async function generateTranslations(productId: string, languageId?: strin
 
   const translations = [];
   for (const language of languages) {
-    const content = await generateProductContent(product, `${language.name} (${language.code})`);
+    const content = await generateProductContent(
+      product,
+      `${language.name} (${language.code})`,
+    );
     const translation = await prisma.productTranslation.upsert({
       where: { productId_languageId: { productId, languageId: language.id } },
       create: {
@@ -269,18 +372,28 @@ export async function listReviewQueue() {
     where: { status: TranslationStatus.PENDING_REVIEW },
     include: {
       language: true,
-      product: { select: { id: true, title: true, slug: true, productCode: true } },
+      product: {
+        select: { id: true, title: true, slug: true, productCode: true },
+      },
     },
     orderBy: [{ updatedAt: "desc" }],
   });
 }
 
-export async function setProductTranslationStatus(id: string, status: TranslationStatus) {
-  const translation = await prisma.productTranslation.findUnique({ where: { id } });
+export async function setProductTranslationStatus(
+  id: string,
+  status: TranslationStatus,
+) {
+  const translation = await prisma.productTranslation.findUnique({
+    where: { id },
+  });
   if (!translation) throw new AppError("Translation not found.", 404);
 
   if (status === TranslationStatus.PENDING_REVIEW) {
-    throw new AppError("Cannot move a translation back to pending review.", 400);
+    throw new AppError(
+      "Cannot move a translation back to pending review.",
+      400,
+    );
   }
 
   return prisma.productTranslation.update({
@@ -288,9 +401,14 @@ export async function setProductTranslationStatus(id: string, status: Translatio
     data: {
       status,
       reviewedAt: new Date(),
-      ...(status === TranslationStatus.APPROVED ? { isAiGenerated: false } : {}),
+      ...(status === TranslationStatus.APPROVED
+        ? { isAiGenerated: false }
+        : {}),
     },
-    include: { language: true, product: { select: { id: true, title: true, slug: true } } },
+    include: {
+      language: true,
+      product: { select: { id: true, title: true, slug: true } },
+    },
   });
 }
 
@@ -364,10 +482,20 @@ export async function exportCoverageCsv(
   });
 }
 
-export async function importTranslationsCsv(languageId: string, rows: TranslationCsvRow[]) {
-  const language = await prisma.language.findUnique({ where: { id: languageId }, select: { id: true, isDefault: true } });
+export async function importTranslationsCsv(
+  languageId: string,
+  rows: TranslationCsvRow[],
+) {
+  const language = await prisma.language.findUnique({
+    where: { id: languageId },
+    select: { id: true, isDefault: true },
+  });
   if (!language) throw new AppError("Language not found.", 404);
-  if (language.isDefault) throw new AppError("Import is only available for non-default languages.", 400);
+  if (language.isDefault)
+    throw new AppError(
+      "Import is only available for non-default languages.",
+      400,
+    );
 
   let imported = 0;
   let skipped = 0;
@@ -393,11 +521,17 @@ export async function importTranslationsCsv(languageId: string, rows: Translatio
 
     try {
       if (type === "product") {
-        if (!PRODUCT_TRANSLATION_FIELDS.has(field)) throw new AppError(`Unsupported product field '${field}'.`, 400);
-        await upsertProductTranslation(entityId, languageId, { [field]: translation } as ProductTranslationInput);
+        if (!PRODUCT_TRANSLATION_FIELDS.has(field))
+          throw new AppError(`Unsupported product field '${field}'.`, 400);
+        await upsertProductTranslation(entityId, languageId, {
+          [field]: translation,
+        } as ProductTranslationInput);
       } else if (type === "category") {
-        if (!CATEGORY_TRANSLATION_FIELDS.has(field)) throw new AppError(`Unsupported category field '${field}'.`, 400);
-        await upsertCategoryTranslation(entityId, languageId, { [field]: translation } as CategoryTranslationInput);
+        if (!CATEGORY_TRANSLATION_FIELDS.has(field))
+          throw new AppError(`Unsupported category field '${field}'.`, 400);
+        await upsertCategoryTranslation(entityId, languageId, {
+          [field]: translation,
+        } as CategoryTranslationInput);
       } else if (type === "static") {
         await upsertKeyword(entityId, languageId, translation);
       } else if (type === "cms") {
@@ -405,7 +539,11 @@ export async function importTranslationsCsv(languageId: string, rows: Translatio
         if (!entityType || !CMS_TRANSLATION_ENTITY_TYPES.has(entityType)) {
           throw new AppError("CMS entity type is required for CMS rows.", 400);
         }
-        await upsertKeyword(cmsTranslationKey(entityType, entityId, field), languageId, translation);
+        await upsertKeyword(
+          cmsTranslationKey(entityType, entityId, field),
+          languageId,
+          translation,
+        );
       } else {
         throw new AppError(`Unsupported translation type '${type}'.`, 400);
       }
@@ -420,8 +558,13 @@ export async function importTranslationsCsv(languageId: string, rows: Translatio
   return { imported, skipped, errors };
 }
 
-export const listKeywords = (languageId?: string) => prisma.translationKeyword.findMany({ where: languageId ? { languageId } : {}, include: { language: true } });
-export const createKeyword = (data: object) => prisma.translationKeyword.create({ data: data as never });
+export const listKeywords = (languageId?: string) =>
+  prisma.translationKeyword.findMany({
+    where: languageId ? { languageId } : {},
+    include: { language: true },
+  });
+export const createKeyword = (data: object) =>
+  prisma.translationKeyword.create({ data: data as never });
 export const upsertKeyword = (key: string, languageId: string, value: string) =>
   prisma.translationKeyword.upsert({
     where: { key_languageId: { key, languageId } },
@@ -429,12 +572,16 @@ export const upsertKeyword = (key: string, languageId: string, value: string) =>
     update: { value },
     include: { language: true },
   });
-export const deleteKeyword = (id: string) => prisma.translationKeyword.delete({ where: { id } });
+export const deleteKeyword = (id: string) =>
+  prisma.translationKeyword.delete({ where: { id } });
 
 export const listProtectedKeywords = () =>
   prisma.protectedKeyword.findMany({ orderBy: { term: "asc" } });
 
-export async function createProtectedKeyword(term: string, note?: string | null) {
+export async function createProtectedKeyword(
+  term: string,
+  note?: string | null,
+) {
   const normalized = term.trim();
   if (!normalized) throw new AppError("Protected term is required.", 400);
 
@@ -443,11 +590,15 @@ export async function createProtectedKeyword(term: string, note?: string | null)
   });
 }
 
-export const deleteProtectedKeyword = (id: string) => prisma.protectedKeyword.delete({ where: { id } });
+export const deleteProtectedKeyword = (id: string) =>
+  prisma.protectedKeyword.delete({ where: { id } });
 
 export { getTranslationCoverage } from "./translationCoverage.service";
 
 export async function getProtectedTerms() {
-  const rows = await prisma.protectedKeyword.findMany({ select: { term: true }, orderBy: { term: "asc" } });
+  const rows = await prisma.protectedKeyword.findMany({
+    select: { term: true },
+    orderBy: { term: "asc" },
+  });
   return rows.map((row) => row.term);
 }
