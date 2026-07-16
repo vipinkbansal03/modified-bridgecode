@@ -32,6 +32,10 @@ import {
   Search,
   Upload,
 } from "lucide-react";
+import TechnicalSpecificationsField from "./translations/fields/TechnicalSpecificationsField";
+import WarrantyField from "./translations/WarrantyField";
+import PrimaryFeaturesField from "./translations/fields/PrimaryFeaturesField";
+import HighlightsField from "./translations/fields/HighlightsField";
 
 type CoverageGapType = "product" | "category" | "static" | "cms";
 type CoveragePriority = "high" | "medium" | "low";
@@ -290,6 +294,114 @@ function GapSaveFields({
           missing.englishValue.length > 80 ||
           missing.field === "description" ||
           missing.field === "seoDescription";
+
+        if (gap.type === "product" && missing.field === "technicalSpecs") {
+          const parsedSpecs = (() => {
+            try {
+              return JSON.parse(missing.englishValue);
+            } catch {
+              return [];
+            }
+          })();
+
+          return (
+            <TechnicalSpecificationsField
+              key={`${gap.entityId}-${missing.field}`}
+              initialValue={parsedSpecs}
+              onSave={async (updatedSpecs) => {
+                try {
+                  await saveProductField(
+                    "technicalSpecs",
+                    JSON.stringify(updatedSpecs),
+                  );
+                } catch {
+                  showToast(toastMessages.translationFailed, "error");
+                }
+              }}
+            />
+          );
+        }
+
+        if (gap.type === "product" && missing.field === "warranty") {
+          const parsedWarranty = (() => {
+            try {
+              return JSON.parse(missing.englishValue);
+            } catch {
+              return [];
+            }
+          })();
+
+          return (
+            <WarrantyField
+              key={`${gap.entityId}-${missing.field}`}
+              initialValue={parsedWarranty}
+              onSave={async (updatedWarranty) => {
+                try {
+                  await saveProductField(
+                    "warranty",
+                    JSON.stringify(updatedWarranty),
+                  );
+                } catch {
+                  showToast(toastMessages.translationFailed, "error");
+                }
+              }}
+            />
+          );
+        }
+
+        if (gap.type === "product" && missing.field === "primaryFeatures") {
+          const parsedFeatures = (() => {
+            try {
+              return JSON.parse(missing.englishValue);
+            } catch {
+              return [];
+            }
+          })();
+
+          return (
+            <PrimaryFeaturesField
+              key={`${gap.entityId}-${missing.field}`}
+              initialValue={parsedFeatures}
+              onSave={async (updatedFeatures) => {
+                try {
+                  await saveProductField(
+                    "primaryFeatures",
+                    JSON.stringify(updatedFeatures),
+                  );
+                } catch {
+                  showToast(toastMessages.translationFailed, "error");
+                }
+              }}
+            />
+          );
+        }
+
+        if (gap.type === "product" && missing.field === "highlights") {
+          const parsedHighlights = (() => {
+            try {
+              return JSON.parse(missing.englishValue);
+            } catch {
+              return [];
+            }
+          })();
+
+          return (
+            <HighlightsField
+              key={`${gap.entityId}-${missing.field}`}
+              initialValue={parsedHighlights}
+              onSave={async (updatedHighlights) => {
+                try {
+                  await saveProductField(
+                    "highlights",
+                    JSON.stringify(updatedHighlights),
+                  );
+                } catch {
+                  showToast(toastMessages.translationFailed, "error");
+                }
+              }}
+            />
+          );
+        }
 
         if (gap.type === "static") {
           const onStaticSave = async (value: string) => {
@@ -740,7 +852,11 @@ export function TranslationCoverageHub({
                   className="bg-transparent text-[12.5px] font-medium text-[#1A1A1A] outline-none"
                 >
                   {PAGE_SIZE_OPTIONS.map((option) => (
-                    <option key={option} value={option} className="cursor-pointer">
+                    <option
+                      key={option}
+                      value={option}
+                      className="cursor-pointer"
+                    >
                       {option}
                     </option>
                   ))}

@@ -95,11 +95,6 @@ export default function LoginPage() {
   });
 
   if (isAuthSettingsLoading) {
-    console.log("isLoading:", isAuthSettingsLoading);
-console.log("authSettings:", authSettings);
-console.log("loginSettings:", loginSettings);
-console.log("sliderEnabled:", loginSettings?.sliderEnabled);
-console.log("showHero:", showHero);
     return <LoginSkeleton showHero={showHero} />;
   }
 
