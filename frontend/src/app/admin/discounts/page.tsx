@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, Edit2, Eye, Filter, Search, SlidersHorizontal, SquareCheckBig, Trash2, Upload, X } from "lucide-react";
+import { Download, Plus, Edit2, Eye, Filter, Search, SlidersHorizontal, SquareCheckBig, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, StatCard, useToast } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
@@ -632,8 +632,8 @@ export default function DiscountsPage() {
                 }}
                 className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
               >
-                <span className="text-[15px] leading-none">+</span>
-                <span>Create Discount</span>
+                <Plus size={14} />
+                Create Discount
               </button>
             </div>
           </div>
