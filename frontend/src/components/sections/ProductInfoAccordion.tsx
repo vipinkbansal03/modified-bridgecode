@@ -10,6 +10,10 @@ interface ProductInfoAccordionProps {
   product: ProductDetail;
 }
 
+function RichText({ html }: { html: string }) {
+  return <div dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
 export function ProductInfoAccordion({ product }: ProductInfoAccordionProps) {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
@@ -20,7 +24,7 @@ export function ProductInfoAccordion({ product }: ProductInfoAccordionProps) {
         <ul className="space-y-3">
           {product.highlights.map((h) => (
             <li key={h.title} className="text-[14.5px] leading-relaxed text-steel">
-              <strong className="text-ink">{h.title}</strong> — {h.description}
+              <strong className="text-ink">{h.title}</strong> — <RichText html={h.description} />
             </li>
           ))}
         </ul>
@@ -47,7 +51,7 @@ export function ProductInfoAccordion({ product }: ProductInfoAccordionProps) {
         <ul className="space-y-3">
           {product.warranty.map((line, i) => (
             <li key={i} className="text-[14.5px] leading-relaxed text-steel">
-              {line.includes(ORDERS_EMAIL) ? (
+              {line.includes(ORDERS_EMAIL) && !line.includes("<") ? (
                 <>
                   {line.split(ORDERS_EMAIL)[0]}
                   <a href={`mailto:${ORDERS_EMAIL}`} className="font-semibold text-brand">
@@ -56,7 +60,7 @@ export function ProductInfoAccordion({ product }: ProductInfoAccordionProps) {
                   {line.split(ORDERS_EMAIL)[1]}
                 </>
               ) : (
-                line
+                <RichText html={line} />
               )}
             </li>
           ))}
@@ -69,7 +73,7 @@ export function ProductInfoAccordion({ product }: ProductInfoAccordionProps) {
         <ul className="space-y-3">
           {product.primaryFeatures.map((f) => (
             <li key={f.title} className="text-[14.5px] leading-relaxed text-steel">
-              <strong className="text-ink">{f.title}</strong> — {f.description}
+              <strong className="text-ink">{f.title}</strong> — <RichText html={f.description} />
             </li>
           ))}
         </ul>

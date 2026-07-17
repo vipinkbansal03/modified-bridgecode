@@ -1755,15 +1755,9 @@ export function ProductEditor({ productId }: ProductEditorProps) {
   };
 
   const openGenerateVariantModal = () => {
-    const mappedAttributeIdsForGeneration = (
-      mappedAttributeRows.length
-        ? mappedAttributeRows
-        : []
-    ).map((mapping) => mapping.attributeId);
-    const seedAttributeIds =
-      mappedAttributeIdsForGeneration.length > 0
-        ? mappedAttributeIdsForGeneration
-        : mappedAttributeRows.filter((mapping) => mapping.required).map((mapping) => mapping.attributeId);
+    const seedAttributeIds = hasMappedProductAttributes
+      ? mappedAttributeRows.map((mapping) => mapping.attributeId)
+      : attributeCatalog.map((attribute) => attribute.id);
     setGeneratePackageIds(packageRows.map((pkg) => pkg.id));
     setGenerateAttributeIds(seedAttributeIds);
     setGenerateSelectionMap({});
