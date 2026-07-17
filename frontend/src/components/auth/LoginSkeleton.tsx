@@ -1,6 +1,10 @@
 import { Skeleton } from "@/components/ui/Skeleton";
 
-export default function LoginSkeleton({ showHero }) {
+interface LoginSkeletonProps {
+  showHero?: boolean;
+}
+
+export default function LoginSkeleton({ showHero }: LoginSkeletonProps) {
   return (
     <main
       className={

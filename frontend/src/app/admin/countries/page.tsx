@@ -1,18 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, useCallback } from "react";
 import { Edit2, Plus, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
 import { useAdminCountries, useAdminCurrencies } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
+import { worldCountries, type WorldCountry } from "@/data/world-countries";
 
 type Country = {
   id: string;
   name: string;
   code: string;
-  currency: { id: string; name: string; symbol: string };
+  currency: { id: string; code: string; name: string; symbol: string };
   isDefault: boolean;
   status: "ACTIVE" | "INACTIVE";
 };
@@ -22,6 +24,9 @@ type CountryFormState = {
   name: string;
   code: string;
   currencyId: string;
+  currencyCode: string;
+  currencyName: string;
+  currencySymbol: string;
   status: "ACTIVE" | "INACTIVE";
   isDefault: boolean;
 };
@@ -31,6 +36,9 @@ const emptyForm: CountryFormState = {
   name: "",
   code: "",
   currencyId: "",
+  currencyCode: "",
+  currencyName: "",
+  currencySymbol: "",
   status: "ACTIVE",
   isDefault: false,
 };
@@ -68,15 +76,44 @@ export default function CountriesPage() {
     setPage(1);
   }, [debouncedSearch, statusFilter, sortBy, sortDir, limit]);
 
-  const currencyOptions = useMemo(
+  // World countries options for the searchable select (without currency info)
+  const worldCountryOptions = useMemo(
     () => [
-      { value: "", label: "Select currency" },
-      ...currencies.map((currency: { id: string; name: string; code: string }) => ({
-        value: currency.id,
-        label: `${currency.name} (${currency.code})`,
+      { value: "", label: "Select a country..." },
+      ...worldCountries.map((c) => ({
+        value: c.code,
+        label: `${c.name} (${c.code})`,
       })),
     ],
-    [currencies],
+    [],
+  );
+
+  // Auto-populate name, code, and currency when world country is selected
+  const handleWorldCountrySelect = useCallback(
+    (countryCode: string) => {
+      if (!countryCode) {
+        setForm((current) => ({ ...current, name: "", code: "", currencyId: "", currencyCode: "", currencyName: "", currencySymbol: "" }));
+        return;
+      }
+      const worldCountry = worldCountries.find((c) => c.code === countryCode);
+      if (!worldCountry) return;
+
+      // Find matching currency in available currencies
+      const matchingCurrency = currencies.find(
+        (c: { id: string; code: string; name: string; symbol: string }) => c.code === worldCountry.currencyCode
+      );
+
+      setForm((current) => ({
+        ...current,
+        name: worldCountry.name,
+        code: worldCountry.code,
+        currencyId: matchingCurrency?.id ?? "",
+        currencyCode: matchingCurrency?.code ?? worldCountry.currencyCode,
+        currencyName: matchingCurrency?.name ?? worldCountry.currencyName,
+        currencySymbol: matchingCurrency?.symbol ?? worldCountry.currencySymbol,
+      }));
+    },
+    [currencies]
   );
 
   const filteredCountries = useMemo(() => {
@@ -144,6 +181,9 @@ export default function CountriesPage() {
       name: country.name,
       code: country.code,
       currencyId: country.currency?.id ?? "",
+      currencyCode: country.currency?.code ?? "",
+      currencyName: country.currency?.name ?? "",
+      currencySymbol: country.currency?.symbol ?? "",
       status: country.status,
       isDefault: country.isDefault,
     });
@@ -356,7 +396,15 @@ export default function CountriesPage() {
       <Modal open={showForm} onClose={resetEditor} title={editing ? `Edit ${editing.name}` : "Add country"} panelClassName="max-w-3xl">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <AdminInput label="Country Name *" placeholder="Germany" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
+            <AdminSearchableSelect
+              label="Country Name *"
+              placeholder="Search for a country..."
+              searchPlaceholder="Search by name or code..."
+              options={worldCountryOptions}
+              value={form.code}
+              onChange={(event) => handleWorldCountrySelect(event.target.value)}
+              showSearch
+            />
             <AdminInput
               label="ISO Code (2 letters) *"
               placeholder="DE"
@@ -364,7 +412,13 @@ export default function CountriesPage() {
               value={form.code}
               onChange={(event) => setForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))}
             />
-            <AdminSelect label="Currency *" options={currencyOptions} value={form.currencyId} onChange={(event) => setForm((current) => ({ ...current, currencyId: event.target.value }))} />
+            <div className="space-y-1.5">
+              <label className="block text-[13px] font-medium text-[#1A1A1A]">Currency *</label>
+              <div className="h-10 w-full rounded-md border border-[#E6E6E6] bg-[#F7F7F7] px-3.5 py-2.5 flex items-center text-[14px] text-[#1A1A1A]">
+                {form.currencyName && form.currencySymbol ? `${form.currencyName} (${form.currencySymbol})` : "Auto-selected from country"}
+                <input type="hidden" name="currencyId" value={form.currencyId} />
+              </div>
+            </div>
             <AdminSelect
               label="Status"
               options={[
