@@ -1,14 +1,29 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, Layers3, ShoppingBag, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useToast } from "@/components/ui/ToastProvider";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Layers3,
+  ShoppingBag,
+  Trash2,
+} from "lucide-react";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
 import { useCart, type CartItem } from "@/contexts/CartContext";
 import { useQuoteCart, type QuoteCartItem } from "@/contexts/QuoteCartContext";
+import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { apiClient } from "@/lib/apiClient";
 import { QuantityInput } from "./QuantityInput";
 import { StockBadge } from "./StockBadge";
-import type { ApiAttribute, ApiAttributeValue, ApiProductDetail, ApiProductPrice, ApiVariant } from "@/types/api.types";
+import type {
+  ApiAttribute,
+  ApiAttributeValue,
+  ApiProductDetail,
+  ApiProductPrice,
+  ApiVariant,
+} from "@/types/api.types";
 
 interface DynamicVariantMatrixConfiguratorProps {
   apiProduct: ApiProductDetail;
@@ -25,11 +40,17 @@ type AxisCombination = {
   labels: Array<{ attributeName: string; value: ApiAttributeValue }>;
 };
 
-function getAttributeDisplayType(attribute: ProductOptionAttribute): AttributeDisplayType {
+function getAttributeDisplayType(
+  attribute: ProductOptionAttribute,
+): AttributeDisplayType {
   return attribute.displayType ?? attribute.role;
 }
 
-function getPriceForCurrency(variant: ApiVariant, currencyCode: string, productPrices: ApiProductPrice[] = []): ApiProductPrice | null {
+function getPriceForCurrency(
+  variant: ApiVariant,
+  currencyCode: string,
+  productPrices: ApiProductPrice[] = [],
+): ApiProductPrice | null {
   return (
     variant.prices.find((price) => price.currencyCode === currencyCode) ??
     variant.prices.find((price) => price.currencyCode === "INR") ??
@@ -52,42 +73,61 @@ function buildSelectionKey(selectionByAttributeId: Record<string, string>) {
     .join("|");
 }
 
-function buildVariantLookupKey(selectionByAttributeId: Record<string, string>, packageId?: string | null) {
+function buildVariantLookupKey(
+  selectionByAttributeId: Record<string, string>,
+  packageId?: string | null,
+) {
   return buildSelectionKey({
     ...selectionByAttributeId,
     __package: packageId ?? "",
   });
 }
 
-function buildAxisCombinations(attributes: ProductOptionAttribute[]): AxisCombination[] {
+function buildAxisCombinations(
+  attributes: ProductOptionAttribute[],
+): AxisCombination[] {
   return attributes.reduce<AxisCombination[]>(
     (combinations, attribute) =>
       combinations.flatMap((combination) =>
         attribute.values.map((value) => ({
           key: `${combination.key}${combination.key ? "|" : ""}${attribute.id}:${value.id}`,
           selection: { ...combination.selection, [attribute.id]: value.id },
-          labels: [...combination.labels, { attributeName: attribute.name, value }],
+          labels: [
+            ...combination.labels,
+            { attributeName: attribute.name, value },
+          ],
         })),
       ),
     [{ key: "all", selection: {}, labels: [] }],
   );
 }
 
-function normalizeVariantSelections(attributes: ProductOptionAttribute[], variant: ApiVariant) {
-  if (variant.attributeValueIdsByAttributeId && Object.keys(variant.attributeValueIdsByAttributeId).length > 0) {
+function normalizeVariantSelections(
+  attributes: ProductOptionAttribute[],
+  variant: ApiVariant,
+) {
+  if (
+    variant.attributeValueIdsByAttributeId &&
+    Object.keys(variant.attributeValueIdsByAttributeId).length > 0
+  ) {
     return variant.attributeValueIdsByAttributeId;
   }
 
   const fallback: Record<string, string> = {};
   for (const attribute of attributes) {
     const selectedLabel = variant.attributeCombination[attribute.name];
-    const matchedValue = attribute.values.find((value) => value.value === selectedLabel);
+    const matchedValue = attribute.values.find(
+      (value) => value.value === selectedLabel,
+    );
     if (matchedValue) fallback[attribute.id] = matchedValue.id;
   }
   return fallback;
 }
 
-function buildInitialDropdownSelections(attributes: ProductOptionAttribute[], variants: NormalizedVariant[]) {
+function buildInitialDropdownSelections(
+  attributes: ProductOptionAttribute[],
+  variants: NormalizedVariant[],
+) {
   const firstVariant = variants[0];
   return attributes.reduce<Record<string, string>>((acc, attribute) => {
     const firstMatchingValueId =
@@ -141,28 +181,52 @@ function buildCartItems(
   return items;
 }
 
-export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantMatrixConfiguratorProps) {
+export function DynamicVariantMatrixConfigurator({
+  apiProduct,
+}: DynamicVariantMatrixConfiguratorProps) {
   const { selectedCurrency, selectedCountryCode } = useCurrencyContext();
   const { addItems: addCartItems, openCart } = useCart();
   const { addItems: addQuoteItems } = useQuoteCart();
+
+  const { currentCustomer, isLoading } = useCustomerAuth();
+  const { showToast } = useToast();
+  const router = useRouter();
 
   const attributes = useMemo<ProductOptionAttribute[]>(
     () =>
       [...apiProduct.attributes]
         .map((attribute) => ({
           ...attribute,
-          values: [...(attribute.values ?? [])].sort((left, right) => left.sortOrder - right.sortOrder || left.value.localeCompare(right.value)),
+          values: [...(attribute.values ?? [])].sort(
+            (left, right) =>
+              left.sortOrder - right.sortOrder ||
+              left.value.localeCompare(right.value),
+          ),
         }))
-        .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name)),
+        .sort(
+          (left, right) =>
+            left.sortOrder - right.sortOrder ||
+            left.name.localeCompare(right.name),
+        ),
     [apiProduct.attributes],
   );
 
-  const xAxisAttributes = attributes.filter((attribute) => getAttributeDisplayType(attribute) === "X_GRID");
-  const yAxisAttributes = attributes.filter((attribute) => getAttributeDisplayType(attribute) === "Y_GRID");
+  const xAxisAttributes = attributes.filter(
+    (attribute) => getAttributeDisplayType(attribute) === "X_GRID",
+  );
+  const yAxisAttributes = attributes.filter(
+    (attribute) => getAttributeDisplayType(attribute) === "Y_GRID",
+  );
   const rowAxisAttributes = yAxisAttributes;
-  const matrixEnabled = Boolean(xAxisAttributes.length && yAxisAttributes.length);
+  const matrixEnabled = Boolean(
+    xAxisAttributes.length && yAxisAttributes.length,
+  );
   const dropdownAttributes = matrixEnabled
-    ? attributes.filter((attribute) => !xAxisAttributes.some((axis) => axis.id === attribute.id) && !yAxisAttributes.some((axis) => axis.id === attribute.id))
+    ? attributes.filter(
+        (attribute) =>
+          !xAxisAttributes.some((axis) => axis.id === attribute.id) &&
+          !yAxisAttributes.some((axis) => axis.id === attribute.id),
+      )
     : attributes;
   const rowCombinations = buildAxisCombinations(rowAxisAttributes);
   const columnCombinations = buildAxisCombinations(xAxisAttributes);
@@ -176,7 +240,9 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
     [apiProduct.variants, attributes],
   );
 
-  const [dropdownSelections, setDropdownSelections] = useState<Record<string, string>>(() =>
+  const [dropdownSelections, setDropdownSelections] = useState<
+    Record<string, string>
+  >(() =>
     buildInitialDropdownSelections(dropdownAttributes, normalizedVariants),
   );
   const packageOptions = useMemo(
@@ -185,21 +251,35 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
         new Map(
           normalizedVariants
             .filter((variant) => variant.package)
-            .map((variant) => [variant.package!.id, { id: variant.package!.id, title: variant.package!.title }]),
+            .map((variant) => [
+              variant.package!.id,
+              { id: variant.package!.id, title: variant.package!.title },
+            ]),
         ).values(),
       ),
     [normalizedVariants],
   );
   const filterControlCount = dropdownAttributes.length;
-  const [selectedPackageId, setSelectedPackageId] = useState(() => packageOptions[0]?.id ?? "");
+  const [selectedPackageId, setSelectedPackageId] = useState(
+    () => packageOptions[0]?.id ?? "",
+  );
   const [quantityMap, setQuantityMap] = useState<Record<string, number>>({});
-  const [previewPriceMap, setPreviewPriceMap] = useState<Record<string, number>>({});
-  const [feedback, setFeedback] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  const [previewPriceMap, setPreviewPriceMap] = useState<
+    Record<string, number>
+  >({});
+  const [feedback, setFeedback] = useState<{
+    kind: "success" | "error";
+    message: string;
+  } | null>(null);
 
   const variantPriceMap = useMemo(() => {
     const map: Record<string, ApiProductPrice | null> = {};
     for (const variant of normalizedVariants) {
-      map[variant.id] = getPriceForCurrency(variant, selectedCurrency, apiProduct.prices);
+      map[variant.id] = getPriceForCurrency(
+        variant,
+        selectedCurrency,
+        apiProduct.prices,
+      );
     }
     return map;
   }, [apiProduct.prices, normalizedVariants, selectedCurrency]);
@@ -207,7 +287,10 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
   const variantLookup = useMemo(() => {
     const map = new Map<string, NormalizedVariant | null>();
     for (const variant of normalizedVariants) {
-      const key = buildVariantLookupKey(variant.selectionByAttributeId, variant.package?.id);
+      const key = buildVariantLookupKey(
+        variant.selectionByAttributeId,
+        variant.package?.id,
+      );
       if (map.has(key)) {
         map.set(key, null);
       } else {
@@ -217,12 +300,17 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
     return map;
   }, [normalizedVariants]);
 
-  const filteredVariants = normalizedVariants.filter((variant) =>
-    (packageOptions.length <= 1 || (variant.package?.id ?? "") === selectedPackageId) &&
-    dropdownAttributes.every((attribute) => {
-      const selectedValueId = dropdownSelections[attribute.id];
-      return !selectedValueId || variant.selectionByAttributeId[attribute.id] === selectedValueId;
-    }),
+  const filteredVariants = normalizedVariants.filter(
+    (variant) =>
+      (packageOptions.length <= 1 ||
+        (variant.package?.id ?? "") === selectedPackageId) &&
+      dropdownAttributes.every((attribute) => {
+        const selectedValueId = dropdownSelections[attribute.id];
+        return (
+          !selectedValueId ||
+          variant.selectionByAttributeId[attribute.id] === selectedValueId
+        );
+      }),
   );
 
   const selectedEntries = useMemo(
@@ -230,15 +318,20 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
       Object.entries(quantityMap)
         .filter(([, quantity]) => quantity > 0)
         .map(([variantId, quantity]) => {
-          const variant = normalizedVariants.find((entry) => entry.id === variantId);
+          const variant = normalizedVariants.find(
+            (entry) => entry.id === variantId,
+          );
           const price = variant ? variantPriceMap[variant.id] : null;
           return variant && price
             ? {
                 variant,
                 quantity,
                 price,
-                resolvedUnitPrice: previewPriceMap[variant.id] ?? price.sellingPrice,
-                total: (previewPriceMap[variant.id] ?? price.sellingPrice) * quantity,
+                resolvedUnitPrice:
+                  previewPriceMap[variant.id] ?? price.sellingPrice,
+                total:
+                  (previewPriceMap[variant.id] ?? price.sellingPrice) *
+                  quantity,
               }
             : null;
         })
@@ -247,14 +340,32 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
   );
 
   const totals = useMemo(() => {
-    const totalUnits = selectedEntries.reduce((sum, entry) => sum + entry.quantity, 0);
-    const subtotal = selectedEntries.reduce((sum, entry) => sum + entry.total, 0);
-    const currencySymbol = selectedEntries[0]?.price.currencySymbol ?? variantPriceMap[normalizedVariants[0]?.id ?? ""]?.currencySymbol ?? (selectedCurrency === "USD" ? "$" : selectedCurrency === "EUR" ? "€" : selectedCurrency === "GBP" ? "£" : "₹");
+    const totalUnits = selectedEntries.reduce(
+      (sum, entry) => sum + entry.quantity,
+      0,
+    );
+    const subtotal = selectedEntries.reduce(
+      (sum, entry) => sum + entry.total,
+      0,
+    );
+    const currencySymbol =
+      selectedEntries[0]?.price.currencySymbol ??
+      variantPriceMap[normalizedVariants[0]?.id ?? ""]?.currencySymbol ??
+      (selectedCurrency === "USD"
+        ? "$"
+        : selectedCurrency === "EUR"
+          ? "€"
+          : selectedCurrency === "GBP"
+            ? "£"
+            : "₹");
     return { totalUnits, subtotal, currencySymbol };
   }, [normalizedVariants, selectedEntries, variantPriceMap]);
 
   const handleDropdownChange = (attributeId: string, valueId: string) => {
-    setDropdownSelections((current) => ({ ...current, [attributeId]: valueId }));
+    setDropdownSelections((current) => ({
+      ...current,
+      [attributeId]: valueId,
+    }));
     setFeedback(null);
   };
 
@@ -271,28 +382,70 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
   };
 
   const handleAddSelectedToCart = () => {
-    const items = buildCartItems(apiProduct, normalizedVariants, quantityMap, variantPriceMap, previewPriceMap);
+    const items = buildCartItems(
+      apiProduct,
+      normalizedVariants,
+      quantityMap,
+      variantPriceMap,
+      previewPriceMap,
+    );
     if (!items.length) {
-      setFeedback({ kind: "error", message: "Enter quantity for at least one available variant." });
+      setFeedback({
+        kind: "error",
+        message: "Enter quantity for at least one available variant.",
+      });
       return;
     }
 
     addCartItems(items.map((item) => item.cart));
     openCart();
     setQuantityMap({});
-    setFeedback({ kind: "success", message: `${items.length} variant line${items.length === 1 ? "" : "s"} added to cart.` });
+    setFeedback({
+      kind: "success",
+      message: `${items.length} variant line${items.length === 1 ? "" : "s"} added to cart.`,
+    });
   };
 
   const handleAddSelectedToQuote = () => {
-    const items = buildCartItems(apiProduct, normalizedVariants, quantityMap, variantPriceMap, previewPriceMap);
+    const items = buildCartItems(
+      apiProduct,
+      normalizedVariants,
+      quantityMap,
+      variantPriceMap,
+      previewPriceMap,
+    );
     if (!items.length) {
-      setFeedback({ kind: "error", message: "Enter quantity for at least one available variant." });
+      setFeedback({
+        kind: "error",
+        message: "Enter quantity for at least one available variant.",
+      });
+      return;
+    }
+
+    if (isLoading) return;
+
+    if (!currentCustomer) {
+      showToast({
+        title: "Sign in required",
+        message: "Please sign in to add products to your quote request.",
+        type: "info",
+      });
+
+      router.push(
+        `/login?returnTo=${encodeURIComponent(window.location.pathname)}`,
+      );
+
       return;
     }
 
     addQuoteItems(items.map((item) => item.quote));
+
     setQuantityMap({});
-    setFeedback({ kind: "success", message: `${items.length} variant line${items.length === 1 ? "" : "s"} added to quote.` });
+
+    setFeedback({
+      kind: "success",
+      message: `${items.length} variant line${items.length === 1 ? "" : "s"} added to quote.`,
+    });
   };
 
   useEffect(() => {
@@ -310,14 +463,21 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
           `/products/${apiProduct.slug}/price-preview`,
           { items: previewItems },
           {
-            params: selectedCountryCode ? { countryCode: selectedCountryCode } : undefined,
-            headers: customerToken ? { Authorization: `Bearer ${customerToken}` } : undefined,
+            params: selectedCountryCode
+              ? { countryCode: selectedCountryCode }
+              : undefined,
+            headers: customerToken
+              ? { Authorization: `Bearer ${customerToken}` }
+              : undefined,
           },
         );
 
         if (!active) return;
 
-        const previews = (response.data.data ?? []) as Array<{ variantId: string; unitPrice: number }>;
+        const previews = (response.data.data ?? []) as Array<{
+          variantId: string;
+          unitPrice: number;
+        }>;
         setPreviewPriceMap(
           previews.reduce<Record<string, number>>((acc, preview) => {
             acc[preview.variantId] = preview.unitPrice;
@@ -345,7 +505,9 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
             Order Multiple Variants In One Step
           </h2>
           <p className="max-w-[760px] text-[14.5px] leading-relaxed text-steel">
-            Use the matrix below to enter quantities across multiple variant combinations, then add every selected line to cart or quote in one action.
+            Use the matrix below to enter quantities across multiple variant
+            combinations, then add every selected line to cart or quote in one
+            action.
           </p>
         </div>
 
@@ -353,10 +515,23 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
           <div className="space-y-5">
             {packageOptions.length > 1 && (
               <div className="rounded-lg border border-line bg-offwhite p-2">
-                <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">Package</p>
-                <div className="flex flex-wrap gap-2" role="tablist" aria-label="Package">
+                <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
+                  Package
+                </p>
+                <div
+                  className="flex flex-wrap gap-2"
+                  role="tablist"
+                  aria-label="Package"
+                >
                   {packageOptions.map((pkg) => (
-                    <button key={pkg.id} type="button" role="tab" aria-selected={selectedPackageId === pkg.id} onClick={() => setSelectedPackageId(pkg.id)} className={`rounded-md px-5 py-2.5 text-[13px] font-semibold transition ${selectedPackageId === pkg.id ? "bg-brand text-white shadow-sm" : "border border-line bg-white text-ink hover:border-brand/40 hover:text-brand"}`}>
+                    <button
+                      key={pkg.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={selectedPackageId === pkg.id}
+                      onClick={() => setSelectedPackageId(pkg.id)}
+                      className={`rounded-md px-5 py-2.5 text-[13px] font-semibold transition ${selectedPackageId === pkg.id ? "bg-brand text-white shadow-sm" : "border border-line bg-white text-ink hover:border-brand/40 hover:text-brand"}`}
+                    >
                       {pkg.title}
                     </button>
                   ))}
@@ -365,17 +540,25 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
             )}
 
             {dropdownAttributes.length > 0 && (
-              <div className={`grid gap-4 ${filterControlCount > 1 ? "md:grid-cols-2" : "grid-cols-1"}`}>
+              <div
+                className={`grid gap-4 ${filterControlCount > 1 ? "md:grid-cols-2" : "grid-cols-1"}`}
+              >
                 {dropdownAttributes.map((attribute) => {
-                  const selectedValueId = dropdownSelections[attribute.id] ?? "";
+                  const selectedValueId =
+                    dropdownSelections[attribute.id] ?? "";
                   return (
-                    <label key={attribute.id} className="block rounded-lg border border-line bg-offwhite p-4">
+                    <label
+                      key={attribute.id}
+                      className="block rounded-lg border border-line bg-offwhite p-4"
+                    >
                       <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
                         {attribute.name}
                       </span>
                       <select
                         value={selectedValueId}
-                        onChange={(event) => handleDropdownChange(attribute.id, event.target.value)}
+                        onChange={(event) =>
+                          handleDropdownChange(attribute.id, event.target.value)
+                        }
                         className="w-full rounded-lg border border-line bg-white px-4 py-3 text-[13px] text-ink outline-none transition focus:border-brand"
                       >
                         {attribute.values.map((value) => (
@@ -396,7 +579,13 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
                   <thead>
                     <tr className="bg-offwhite">
                       <th className="sticky left-0 z-20 border-b border-r border-line bg-[#F8F8F8] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-ink">
-                        {rowAxisAttributes.map((attribute) => attribute.name).join(" + ") || "Options"} / {xAxisAttributes.map((attribute) => attribute.name).join(" + ")}
+                        {rowAxisAttributes
+                          .map((attribute) => attribute.name)
+                          .join(" + ") || "Options"}{" "}
+                        /{" "}
+                        {xAxisAttributes
+                          .map((attribute) => attribute.name)
+                          .join(" + ")}
                       </th>
                       {columnCombinations.map((columnCombination) => (
                         <th
@@ -404,12 +593,18 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
                           className="sticky top-0 z-10 min-w-[160px] border-b border-line bg-red-50 px-4 py-3 text-center text-[12px] font-semibold text-brand"
                         >
                           <div className="space-y-1">
-                            {columnCombination.labels.map(({ attributeName, value }) => (
-                              <div key={`${attributeName}-${value.id}`}>
-                                {columnCombination.labels.length > 1 ? <span className="block text-[9px] uppercase tracking-[0.12em] text-brand/60">{attributeName}</span> : null}
-                                <span>{value.value}</span>
-                              </div>
-                            ))}
+                            {columnCombination.labels.map(
+                              ({ attributeName, value }) => (
+                                <div key={`${attributeName}-${value.id}`}>
+                                  {columnCombination.labels.length > 1 ? (
+                                    <span className="block text-[9px] uppercase tracking-[0.12em] text-brand/60">
+                                      {attributeName}
+                                    </span>
+                                  ) : null}
+                                  <span>{value.value}</span>
+                                </div>
+                              ),
+                            )}
                           </div>
                         </th>
                       ))}
@@ -417,58 +612,110 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
                   </thead>
                   <tbody>
                     {rowCombinations.map((rowCombination) => (
-                      <tr key={rowCombination.key} className="border-b border-line last:border-b-0">
+                      <tr
+                        key={rowCombination.key}
+                        className="border-b border-line last:border-b-0"
+                      >
                         <th className="sticky left-0 z-10 border-r border-line bg-[#F8F8F8] px-4 py-4 text-left text-[13px] font-semibold text-ink">
                           <div className="space-y-1.5">
-                            {rowCombination.labels.length ? rowCombination.labels.map(({ attributeName, value }) => (
-                              <div key={`${attributeName}-${value.id}`}>
-                                <span className="block text-[9px] font-semibold uppercase tracking-[0.14em] text-steel-2">{attributeName}</span>
-                                <span className="text-[13px] text-ink">{value.value}</span>
-                              </div>
-                            )) : <span>All</span>}
+                            {rowCombination.labels.length ? (
+                              rowCombination.labels.map(
+                                ({ attributeName, value }) => (
+                                  <div key={`${attributeName}-${value.id}`}>
+                                    <span className="block text-[9px] font-semibold uppercase tracking-[0.14em] text-steel-2">
+                                      {attributeName}
+                                    </span>
+                                    <span className="text-[13px] text-ink">
+                                      {value.value}
+                                    </span>
+                                  </div>
+                                ),
+                              )
+                            ) : (
+                              <span>All</span>
+                            )}
                           </div>
                         </th>
                         {columnCombinations.map((columnCombination) => {
                           const variant = variantLookup.get(
-                            buildVariantLookupKey({
-                              ...dropdownSelections,
-                              ...rowCombination.selection,
-                              ...columnCombination.selection,
-                            }, selectedPackageId),
+                            buildVariantLookupKey(
+                              {
+                                ...dropdownSelections,
+                                ...rowCombination.selection,
+                                ...columnCombination.selection,
+                              },
+                              selectedPackageId,
+                            ),
                           );
-                          const price = variant ? variantPriceMap[variant.id] : null;
+                          const price = variant
+                            ? variantPriceMap[variant.id]
+                            : null;
                           const availableStock = variant?.inventory?.available;
-                          const outOfStock = !variant || variant.inventory?.status === "OUT_OF_STOCK" || availableStock === 0;
-                          const quantity = variant ? quantityMap[variant.id] ?? 0 : 0;
+                          const outOfStock =
+                            !variant ||
+                            variant.inventory?.status === "OUT_OF_STOCK" ||
+                            availableStock === 0;
+                          const quantity = variant
+                            ? (quantityMap[variant.id] ?? 0)
+                            : 0;
                           const minPositive = Math.max(1, variant?.moq ?? 1);
-                          const displayUnitPrice = variant && price ? previewPriceMap[variant.id] ?? price.sellingPrice : null;
+                          const displayUnitPrice =
+                            variant && price
+                              ? (previewPriceMap[variant.id] ??
+                                price.sellingPrice)
+                              : null;
 
                           return (
-                            <td key={columnCombination.key} className="align-top border-l border-line px-3 py-3">
+                            <td
+                              key={columnCombination.key}
+                              className="align-top border-l border-line px-3 py-3"
+                            >
                               {variant ? (
-                                <div className={`rounded-lg border p-3 ${quantity > 0 ? "border-brand/20 bg-[#FFFBFB]" : "border-line bg-white"} ${outOfStock ? "opacity-60" : ""}`}>
+                                <div
+                                  className={`rounded-lg border p-3 ${quantity > 0 ? "border-brand/20 bg-[#FFFBFB]" : "border-line bg-white"} ${outOfStock ? "opacity-60" : ""}`}
+                                >
                                   <div className="mb-2 flex items-start justify-between gap-2">
                                     <div>
                                       <p className="text-[12.5px] font-semibold text-ink">
-                                        {price && displayUnitPrice != null ? formatMoney(price.currencySymbol, displayUnitPrice) : "Contact for pricing"}
+                                        {price && displayUnitPrice != null
+                                          ? formatMoney(
+                                              price.currencySymbol,
+                                              displayUnitPrice,
+                                            )
+                                          : "Contact for pricing"}
                                       </p>
                                       {variant.sku ? (
-                                        <p className="mt-0.5 font-mono text-[10.5px] text-steel-2">{variant.sku}</p>
+                                        <p className="mt-0.5 font-mono text-[10.5px] text-steel-2">
+                                          {variant.sku}
+                                        </p>
                                       ) : null}
                                     </div>
-                                    <StockBadge status={variant.inventory?.status} />
+                                    <StockBadge
+                                      status={variant.inventory?.status}
+                                    />
                                   </div>
                                   <QuantityInput
                                     value={quantity}
-                                    onChange={(nextQuantity) => handleQuantityChange(variant.id, nextQuantity)}
+                                    onChange={(nextQuantity) =>
+                                      handleQuantityChange(
+                                        variant.id,
+                                        nextQuantity,
+                                      )
+                                    }
                                     min={0}
                                     max={availableStock}
                                     minPositive={minPositive}
                                     disabled={outOfStock || !price}
                                   />
                                   <div className="mt-2 text-[11px] text-steel-2">
-                                    <p>{availableStock != null ? `${availableStock} available` : "Stock on request"}</p>
-                                    {minPositive > 1 ? <p>MOQ {minPositive}</p> : null}
+                                    <p>
+                                      {availableStock != null
+                                        ? `${availableStock} available`
+                                        : "Stock on request"}
+                                    </p>
+                                    {minPositive > 1 ? (
+                                      <p>MOQ {minPositive}</p>
+                                    ) : null}
                                   </div>
                                 </div>
                               ) : (
@@ -489,7 +736,10 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
             {filteredVariants.length === 0 && (
               <div className="flex items-start gap-2 rounded-lg border border-[#E7C9B5] bg-[#FBF2EB] px-4 py-3 text-brand">
                 <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                <p className="text-[13px]">The selected dropdown filters do not match any active variants for this product.</p>
+                <p className="text-[13px]">
+                  The selected dropdown filters do not match any active variants
+                  for this product.
+                </p>
               </div>
             )}
           </div>
@@ -501,9 +751,13 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
                   <Layers3 size={18} />
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">Selected Variants</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
+                    Selected Variants
+                  </p>
                   <p className="text-[14px] text-steel">
-                    {selectedEntries.length ? `${selectedEntries.length} line${selectedEntries.length === 1 ? "" : "s"} ready` : "Nothing selected yet"}
+                    {selectedEntries.length
+                      ? `${selectedEntries.length} line${selectedEntries.length === 1 ? "" : "s"} ready`
+                      : "Nothing selected yet"}
                   </p>
                 </div>
               </div>
@@ -511,17 +765,28 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
               {selectedEntries.length ? (
                 <div className="space-y-3">
                   {selectedEntries.map((entry) => (
-                    <div key={entry.variant.id} className="rounded-lg border border-line bg-white p-4">
+                    <div
+                      key={entry.variant.id}
+                      className="rounded-lg border border-line bg-white p-4"
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-[13.5px] font-semibold text-ink">{entry.variant.title}</p>
+                          <p className="text-[13.5px] font-semibold text-ink">
+                            {entry.variant.title}
+                          </p>
                           <p className="mt-1 text-[12px] text-steel">
-                            {entry.quantity} x {formatMoney(entry.price.currencySymbol, entry.resolvedUnitPrice)}
+                            {entry.quantity} x{" "}
+                            {formatMoney(
+                              entry.price.currencySymbol,
+                              entry.resolvedUnitPrice,
+                            )}
                           </p>
                         </div>
                         <button
                           type="button"
-                          onClick={() => handleQuantityChange(entry.variant.id, 0)}
+                          onClick={() =>
+                            handleQuantityChange(entry.variant.id, 0)
+                          }
                           aria-label={`Remove ${entry.variant.title}`}
                           title="Remove variant"
                           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-red-100 text-brand transition hover:border-red-200 hover:bg-red-50"
@@ -534,25 +799,34 @@ export function DynamicVariantMatrixConfigurator({ apiProduct }: DynamicVariantM
                 </div>
               ) : (
                 <div className="rounded-lg border border-dashed border-line bg-white px-4 py-6 text-[13px] leading-relaxed text-steel">
-                  Enter quantities directly in the matrix to stage multiple variants at once.
+                  Enter quantities directly in the matrix to stage multiple
+                  variants at once.
                 </div>
               )}
             </div>
 
             <div className="rounded-lg border border-line bg-white p-5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">Order Summary</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
+                Order Summary
+              </p>
               <div className="mt-4 space-y-2 text-[14px] text-steel">
                 <div className="flex items-center justify-between">
                   <span>Variant lines</span>
-                  <span className="font-semibold text-ink">{selectedEntries.length}</span>
+                  <span className="font-semibold text-ink">
+                    {selectedEntries.length}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Total units</span>
-                  <span className="font-semibold text-ink">{totals.totalUnits}</span>
+                  <span className="font-semibold text-ink">
+                    {totals.totalUnits}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between border-t border-line pt-3 text-[16px]">
                   <span className="font-semibold text-ink">Subtotal</span>
-                  <span className="font-semibold text-ink">{formatMoney(totals.currencySymbol, totals.subtotal)}</span>
+                  <span className="font-semibold text-ink">
+                    {formatMoney(totals.currencySymbol, totals.subtotal)}
+                  </span>
                 </div>
               </div>
 

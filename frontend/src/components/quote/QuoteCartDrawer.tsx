@@ -3,9 +3,11 @@
 import { useState, useEffect, useRef } from "react";
 import { X, Trash2, CheckCircle, FileText } from "lucide-react";
 import { useQuoteCart } from "@/contexts/QuoteCartContext";
+import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { useQuoteSubmit } from "@/hooks/api";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import { useToast } from "@/components/ui/ToastProvider";
+import LoadingButton from "@/components/ui/LoadingSpinner/LoadingButton";
 
 interface Props {
   open: boolean;
@@ -18,7 +20,8 @@ function fmt(sym: string, val: number) {
 
 function getQuoteErrorMessage(error: unknown) {
   if (typeof error === "object" && error && "response" in error) {
-    const apiMessage = (error as { response?: { data?: { message?: string } } }).response?.data?.message;
+    const apiMessage = (error as { response?: { data?: { message?: string } } })
+      .response?.data?.message;
     if (apiMessage) return apiMessage;
   }
 
@@ -31,6 +34,7 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
   const { items, totals, removeItem, clearCart } = useQuoteCart();
   const { t } = useStaticTranslations();
   const { showToast } = useToast();
+  const { currentCustomer } = useCustomerAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -46,7 +50,9 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden";
     else document.body.style.overflow = "";
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [open]);
 
   useEffect(() => {
@@ -56,6 +62,24 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
     if (open) window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  useEffect(() => {
+    if (!currentCustomer || !open) return;
+
+    setName((prev) => {
+      if (prev.trim()) return prev;
+
+      return [currentCustomer.firstName, currentCustomer.lastName]
+        .filter(Boolean)
+        .join(" ");
+    });
+
+    setEmail((prev) => prev || currentCustomer.email || "");
+
+    setPhone((prev) => prev || currentCustomer.phone || "");
+
+    setCompany((prev) => prev || currentCustomer.companyName || "");
+  }, [currentCustomer, open]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -84,18 +108,20 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
           clearCart();
           showToast({
             type: "success",
-            title: "Quote request submitted",
-            message: result.quoteNumber
-              ? `Reference ${result.quoteNumber} has been sent to the admin quote desk.`
-              : "Your RFQ has been sent to the admin quote desk.",
+            title: "Quote Request Submitted",
+            message: "We'll review your request and contact you soon.",
           });
         },
         onError: (error) => {
           const errorMessage = getQuoteErrorMessage(error);
           setSubmitError(errorMessage);
-          showToast({ type: "error", title: "Quote request failed", message: errorMessage });
+          showToast({
+            type: "error",
+            title: "Quote request failed",
+            message: errorMessage,
+          });
         },
-      }
+      },
     );
   }
 
@@ -115,14 +141,19 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
         <div className="flex items-center justify-between border-b border-[#E6E6E6] px-5 py-4">
           <div className="flex items-center gap-2">
             <FileText size={16} className="text-[#E31E24]" />
-            <h2 className="text-[16px] font-semibold text-ink">{t("ui.quote.cartTitle")}</h2>
+            <h2 className="text-[16px] font-semibold text-ink">
+              {t("ui.quote.cartTitle")}
+            </h2>
             {items.length > 0 && (
               <span className="rounded-full bg-[#E31E24] px-2 py-0.5 text-[11px] font-semibold text-white">
                 {items.length}
               </span>
             )}
           </div>
-          <button onClick={onClose} className="rounded p-1 text-[#9A9A9A] hover:bg-[#F5F5F5] hover:text-ink">
+          <button
+            onClick={onClose}
+            className="rounded p-1 text-[#9A9A9A] hover:bg-[#F5F5F5] hover:text-ink"
+          >
             <X size={18} />
           </button>
         </div>
@@ -132,12 +163,17 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
               <CheckCircle size={32} className="text-emerald-600" />
             </div>
-            <h3 className="text-[18px] font-semibold text-ink">{t("ui.quote.submittedTitle")}</h3>
+            <h3 className="text-[18px] font-semibold text-ink">
+              {t("ui.quote.submittedTitle")}
+            </h3>
             <p className="text-[14px] text-[#6B6B6B]">
               {t("ui.quote.submittedBody")}
             </p>
             <button
-              onClick={() => { setSubmitted(false); onClose(); }}
+              onClick={() => {
+                setSubmitted(false);
+                onClose();
+              }}
               className="mt-2 rounded bg-[#E31E24] px-6 py-2.5 text-[14px] font-semibold text-white hover:bg-[#B5151B]"
             >
               {t("ui.quote.close")}
@@ -149,32 +185,56 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
             <div className="custom-scrollbar flex-1 overflow-y-auto px-5 py-4">
               {items.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <p className="text-[14px] text-[#9A9A9A]">{t("ui.quote.emptyTitle")}</p>
-                  <p className="mt-1 text-[12px] text-[#B0B0B0]">{t("ui.quote.emptyBody")}</p>
+                  <p className="text-[14px] text-[#9A9A9A]">
+                    {t("ui.quote.emptyTitle")}
+                  </p>
+                  <p className="mt-1 text-[12px] text-[#B0B0B0]">
+                    {t("ui.quote.emptyBody")}
+                  </p>
                 </div>
               ) : (
                 <>
                   <div className="space-y-3">
                     {items.map((item) => (
-                      <div key={item.variantId} className="flex items-start justify-between gap-3 rounded-lg border border-[#E6E6E6] p-3">
+                      <div
+                        key={item.variantId}
+                        className="flex items-start justify-between gap-3 rounded-lg border border-[#E6E6E6] p-3"
+                      >
                         <div className="flex-1 min-w-0">
-                          <p className="text-[12px] text-[#9A9A9A] truncate">{item.productTitle}</p>
-                          <p className="text-[13.5px] font-medium text-ink truncate">{item.variantTitle}</p>
-                          {item.sku && <p className="mt-0.5 font-mono text-[11px] text-[#B0B0B0]">{item.sku}</p>}
+                          <p className="text-[12px] text-[#9A9A9A] truncate">
+                            {item.productTitle}
+                          </p>
+                          <p className="text-[13.5px] font-medium text-ink truncate">
+                            {item.variantTitle}
+                          </p>
+                          {item.sku && (
+                            <p className="mt-0.5 font-mono text-[11px] text-[#B0B0B0]">
+                              {item.sku}
+                            </p>
+                          )}
                           <div className="mt-1 flex flex-wrap gap-1">
-                            {Object.entries(item.selectedAttributes).map(([k, v]) => (
-                              <span key={k} className="rounded bg-[#F5F5F5] px-1.5 py-0.5 text-[10.5px] text-[#6B6B6B]">
-                                {k}: {v}
-                              </span>
-                            ))}
+                            {Object.entries(item.selectedAttributes).map(
+                              ([k, v]) => (
+                                <span
+                                  key={k}
+                                  className="rounded bg-[#F5F5F5] px-1.5 py-0.5 text-[10.5px] text-[#6B6B6B]"
+                                >
+                                  {k}: {v}
+                                </span>
+                              ),
+                            )}
                           </div>
                         </div>
                         <div className="shrink-0 text-right">
                           <p className="text-[13.5px] font-semibold text-ink">
-                            {item.currencySymbol}{(item.unitPrice * item.quantity).toLocaleString("en-IN")}
+                            {item.currencySymbol}
+                            {(item.unitPrice * item.quantity).toLocaleString(
+                              "en-IN",
+                            )}
                           </p>
                           <p className="text-[11.5px] text-[#9A9A9A]">
-                            {item.quantity} × {item.currencySymbol}{item.unitPrice.toLocaleString("en-IN")}
+                            {item.quantity} × {item.currencySymbol}
+                            {item.unitPrice.toLocaleString("en-IN")}
                           </p>
                           <button
                             onClick={() => removeItem(item.variantId)}
@@ -192,28 +252,46 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                   <div className="mt-4 rounded-lg border border-[#E6E6E6] p-4">
                     <div className="space-y-1.5 text-[13px]">
                       <div className="flex justify-between text-[#6B6B6B]">
-                        <span>{t("ui.quote.subtotalUnits", { units: totals.totalQuantity })}</span>
-                        <span>{fmt(totals.currencySymbol, totals.subtotal)}</span>
+                        <span>
+                          {t("ui.quote.subtotalUnits", {
+                            units: totals.totalQuantity,
+                          })}
+                        </span>
+                        <span>
+                          {fmt(totals.currencySymbol, totals.subtotal)}
+                        </span>
                       </div>
                       {totals.discountPercentage > 0 && (
                         <div className="flex justify-between text-emerald-600">
-                          <span>{t("ui.quote.volumeDiscount", { percent: totals.discountPercentage })}</span>
-                          <span>−{fmt(totals.currencySymbol, totals.discountAmount)}</span>
+                          <span>
+                            {t("ui.quote.volumeDiscount", {
+                              percent: totals.discountPercentage,
+                            })}
+                          </span>
+                          <span>
+                            −{fmt(totals.currencySymbol, totals.discountAmount)}
+                          </span>
                         </div>
                       )}
                       <div className="flex justify-between border-t border-[#F0F0F0] pt-2 text-[14.5px] font-semibold text-ink">
                         <span>{t("ui.quote.estimatedTotal")}</span>
-                        <span>{fmt(totals.currencySymbol, totals.grandTotal)}</span>
+                        <span>
+                          {fmt(totals.currencySymbol, totals.grandTotal)}
+                        </span>
                       </div>
                     </div>
                   </div>
 
                   {/* RFQ form */}
                   <form onSubmit={handleSubmit} className="mt-5 space-y-3">
-                    <p className="text-[13px] font-medium text-ink">{t("ui.quote.submitRequestTitle")}</p>
+                    <p className="text-[13px] font-medium text-ink">
+                      {t("ui.quote.submitRequestTitle")}
+                    </p>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div>
-                        <label className="mb-1 block text-[11.5px] font-medium text-[#6B6B6B]">{t("ui.quote.fullName")}</label>
+                        <label className="mb-1 block text-[11.5px] font-medium text-[#6B6B6B]">
+                          {t("ui.quote.fullName")}
+                        </label>
                         <input
                           required
                           value={name}
@@ -223,7 +301,9 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                         />
                       </div>
                       <div>
-                        <label className="mb-1 block text-[11.5px] font-medium text-[#6B6B6B]">{t("ui.quote.email")}</label>
+                        <label className="mb-1 block text-[11.5px] font-medium text-[#6B6B6B]">
+                          {t("ui.quote.email")}
+                        </label>
                         <input
                           required
                           type="email"
@@ -236,7 +316,9 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div>
-                        <label className="mb-1 block text-[11.5px] font-medium text-[#6B6B6B]">{t("ui.quote.phone")}</label>
+                        <label className="mb-1 block text-[11.5px] font-medium text-[#6B6B6B]">
+                          {t("ui.quote.phone")}
+                        </label>
                         <input
                           value={phone}
                           onChange={(e) => setPhone(e.target.value)}
@@ -245,7 +327,9 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                         />
                       </div>
                       <div>
-                        <label className="mb-1 block text-[11.5px] font-medium text-[#6B6B6B]">{t("ui.quote.companyClinic")}</label>
+                        <label className="mb-1 block text-[11.5px] font-medium text-[#6B6B6B]">
+                          {t("ui.quote.companyClinic")}
+                        </label>
                         <input
                           value={company}
                           onChange={(e) => setCompany(e.target.value)}
@@ -255,7 +339,9 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                       </div>
                     </div>
                     <div>
-                      <label className="mb-1 block text-[11.5px] font-medium text-[#6B6B6B]">{t("ui.quote.additionalNotes")}</label>
+                      <label className="mb-1 block text-[11.5px] font-medium text-[#6B6B6B]">
+                        {t("ui.quote.additionalNotes")}
+                      </label>
                       <textarea
                         value={message}
                         onChange={(e) => setMessage(e.target.value)}
@@ -272,13 +358,15 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                         {submitError}
                       </div>
                     )}
-                    <button
+                    <LoadingButton
                       type="submit"
-                      disabled={isPending || !name || !email}
+                      loading={isPending}
+                      loadingText={t("ui.quote.submitting")}
+                      disabled={!name || !email}
                       className="w-full rounded bg-[#E31E24] py-3 text-[14px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
                     >
-                      {isPending ? t("ui.quote.submitting") : t("ui.quote.submitQuoteRequest")}
-                    </button>
+                      {t("ui.quote.submitQuoteRequest")}
+                    </LoadingButton>
                   </form>
 
                   <button
