@@ -103,14 +103,18 @@ export default function CountriesPage() {
         (c: { id: string; code: string; name: string; symbol: string }) => c.code === worldCountry.currencyCode
       );
 
+      // Fallback to base currency (USD) if specific currency not available
+      const baseCurrency = currencies.find((c: { id: string; code: string; isBase?: boolean }) => c.isBase === true || c.code === "USD");
+      const finalCurrency = matchingCurrency ?? baseCurrency ?? currencies[0];
+
       setForm((current) => ({
         ...current,
         name: worldCountry.name,
         code: worldCountry.code,
-        currencyId: matchingCurrency?.id ?? "",
-        currencyCode: matchingCurrency?.code ?? worldCountry.currencyCode,
-        currencyName: matchingCurrency?.name ?? worldCountry.currencyName,
-        currencySymbol: matchingCurrency?.symbol ?? worldCountry.currencySymbol,
+        currencyId: finalCurrency?.id ?? "",
+        currencyCode: finalCurrency?.code ?? worldCountry.currencyCode,
+        currencyName: finalCurrency?.name ?? worldCountry.currencyName,
+        currencySymbol: finalCurrency?.symbol ?? worldCountry.currencySymbol,
       }));
     },
     [currencies]
@@ -170,7 +174,17 @@ export default function CountriesPage() {
 
   function openCreate() {
     setEditing(null);
-    setForm(emptyForm);
+    // Set base currency (USD or first active) as default
+    const baseCurrency = currencies.find((c: { code: string; isBase?: boolean }) => c.code === "USD" || c.isBase) || currencies[0];
+    if (baseCurrency) {
+      setForm((current) => ({
+        ...current,
+        currencyId: baseCurrency.id,
+        currencyCode: baseCurrency.code,
+        currencyName: baseCurrency.name,
+        currencySymbol: baseCurrency.symbol,
+      }));
+    }
     setShowForm(true);
   }
 

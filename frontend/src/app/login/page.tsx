@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
@@ -33,7 +33,7 @@ const fallbackSlides = [
   },
 ];
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -294,5 +294,13 @@ export default function LoginPage() {
         </div>
       </section>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginSkeleton showHero={true} />}>
+      <LoginForm />
+    </Suspense>
   );
 }
