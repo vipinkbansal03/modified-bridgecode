@@ -12,8 +12,12 @@ export const customerApi = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-const SHIPPING_API_BASE = API_ORIGIN ? `${API_ORIGIN}/api/shipping` : "/api/shipping";
-const COUPON_API_BASE = API_ORIGIN ? `${API_ORIGIN}/api/coupons` : "/api/coupons";
+const SHIPPING_API_BASE = API_ORIGIN
+  ? `${API_ORIGIN}/api/shipping`
+  : "/api/shipping";
+const COUPON_API_BASE = API_ORIGIN
+  ? `${API_ORIGIN}/api/coupons`
+  : "/api/coupons";
 
 export const shippingApi = axios.create({
   baseURL: SHIPPING_API_BASE,
@@ -51,11 +55,15 @@ customerApi.interceptors.response.use(
       localStorage.removeItem("customer_profile");
     }
     return Promise.reject(err);
-  }
+  },
 );
 
-export function getCustomerErrorMessage(error: unknown, fallback = "Something went wrong.") {
-  const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+export function getCustomerErrorMessage(
+  error: unknown,
+  fallback = "Something went wrong.",
+) {
+  const message = (error as { response?: { data?: { message?: string } } })
+    ?.response?.data?.message;
   if (message) return message;
   if (error instanceof Error && error.message) return error.message;
   return fallback;
@@ -132,6 +140,53 @@ export interface CustomerOrderSummary {
   items: CustomerOrderLineItem[];
 }
 
+export interface CustomerQuoteItem {
+  id: string;
+  title: string;
+  sku: string | null;
+  quantity: number;
+  unitPrice: string | number;
+  total: string | number;
+  product?: {
+    id: string;
+    title: string;
+    slug: string;
+  } | null;
+  variant?: {
+    id: string;
+    title: string;
+    sku: string | null;
+  } | null;
+}
+
+export interface CustomerQuoteSummary {
+  id: string;
+  quoteNumber: string;
+  status: string;
+  subtotal: string | number;
+  shippingCharge: string | number;
+  discount: string | number;
+  total: string | number;
+  notes?: string | null;
+  expiresAt?: string | null;
+  createdAt: string;
+
+  currency?: {
+    code: string;
+    symbol: string;
+  };
+
+  country?: {
+    id: string;
+    name: string;
+    code: string;
+  };
+
+  items: CustomerQuoteItem[];
+}
+
+export interface CustomerQuote extends CustomerQuoteSummary {}
+
 export interface CustomerOrderEstimate {
   subtotal: number;
   taxAmount: number;
@@ -145,7 +200,11 @@ export interface CustomerOrderEstimate {
   couponDiscount?: number;
   total: number;
   currency?: { code: string; symbol: string };
-  taxBreakdown: { label: string; taxPercent?: number | null; taxAmount: number }[];
+  taxBreakdown: {
+    label: string;
+    taxPercent?: number | null;
+    taxAmount: number;
+  }[];
   items?: {
     variantId: string;
     sku: string | null;
@@ -181,17 +240,26 @@ export async function createCustomerOrder(payload: CreateCustomerOrderPayload) {
   return res.data.data as CustomerOrderSummary;
 }
 
-export async function estimateCustomerOrder(payload: CreateCustomerOrderPayload) {
+export async function estimateCustomerOrder(
+  payload: CreateCustomerOrderPayload,
+) {
   const res = await customerApi.post("/orders/estimate", payload);
   return res.data.data as CustomerOrderEstimate;
 }
 
-export async function calculateShipping(payload: { countryCode: string; orderValue: number }) {
+export async function calculateShipping(payload: {
+  countryCode: string;
+  orderValue: number;
+}) {
   const res = await shippingApi.post("/calculate", payload);
   return res.data.data as ShippingEstimate;
 }
 
-export async function validateCoupon(payload: { code: string; orderValue: number; countryCode?: string }) {
+export async function validateCoupon(payload: {
+  code: string;
+  orderValue: number;
+  countryCode?: string;
+}) {
   const res = await couponApi.post("/validate", payload);
   return res.data.data as CouponValidationResult;
 }
@@ -201,8 +269,20 @@ export async function listCustomerOrders() {
   return res.data.data as CustomerOrderSummary[];
 }
 
+export async function listCustomerQuotes() {
+  const res = await customerApi.get("/quotes");
+  return res.data.data as CustomerQuoteSummary[];
+}
+
+export async function getCustomerQuote(id: string) {
+  const res = await customerApi.get(`/quotes/${id}`);
+  return res.data.data as CustomerQuote;
+}
+
 export async function downloadCustomerInvoice(orderId: string) {
-  const res = await customerApi.get(`/orders/${orderId}/invoice`, { responseType: "blob" });
+  const res = await customerApi.get(`/orders/${orderId}/invoice`, {
+    responseType: "blob",
+  });
   return res.data as Blob;
 }
 
