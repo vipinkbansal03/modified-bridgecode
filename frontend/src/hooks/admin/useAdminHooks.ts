@@ -1257,6 +1257,19 @@ export const useAdminCountries = () =>
     queryFn: () => adminApi.get("/countries").then((r) => r.data.data),
   });
 
+export const useBulkCountries = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      ids: string[];
+      action: "ENABLE" | "DISABLE" | "DELETE";
+    }) => adminApi.post("/countries/bulk", data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-countries"] });
+    },
+  });
+};
+
 export const useAdminTierDashboard = () =>
   useQuery({
     queryKey: ["admin-tier-dashboard"],

@@ -49,3 +49,36 @@ export const deleteCountry = async (id: string) => {
   if (country?.isDefault) throw new AppError("Default country cannot be deleted.", 400);
   return prisma.country.update({ where: { id }, data: { status: "INACTIVE" } });
 };
+
+export async function bulkUpdateCountries(input: { ids: string[]; action: "ENABLE" | "DISABLE" | "DELETE" }) {
+  const ids = Array.isArray(input.ids) ? Array.from(new Set(input.ids.map((id) => id.trim()).filter(Boolean))) : [];
+  if (!ids.length) throw new AppError("Select at least one country.", 400);
+
+  const action = String(input.action ?? "").toUpperCase();
+  if (!["ENABLE", "DISABLE", "DELETE"].includes(action)) throw new AppError("Invalid bulk action.", 400);
+
+  const existing = await prisma.country.findMany({ where: { id: { in: ids } }, select: { id: true, isDefault: true } });
+  if (existing.length !== ids.length) throw new AppError("One or more countries were not found.", 404);
+
+  const defaultIds = existing.filter((c) => c.isDefault).map((c) => c.id);
+  if (defaultIds.length > 0 && action === "DELETE") {
+    throw new AppError("Default country cannot be deleted.", 400);
+  }
+
+  if (action === "DELETE") {
+    const results = [];
+    for (const id of ids) {
+      try {
+        await deleteCountry(id);
+        results.push({ id, success: true });
+      } catch (error) {
+        results.push({ id, success: false, error: error instanceof Error ? error.message : "Failed to delete country." });
+      }
+    }
+    return { action, results, summary: { total: ids.length, succeeded: results.filter((r) => r.success).length, failed: results.filter((r) => !r.success).length } };
+  }
+
+  const status = action === "ENABLE" ? "ACTIVE" : "INACTIVE";
+  await prisma.country.updateMany({ where: { id: { in: ids } }, data: { status } });
+  return { action, affected: ids.length, status };
+};
