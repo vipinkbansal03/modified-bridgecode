@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useFormik } from "formik";
 import * as Yup from "yup";
@@ -35,13 +35,13 @@ const fallbackSlides = [
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, currentCustomer, isLoading } = useCustomerAuth();
-  const [returnTo] = useState(() => {
-    if (typeof window === "undefined") return "/";
+  const searchParams = useSearchParams();
 
-    const next = new URLSearchParams(window.location.search).get("returnTo");
-    return next?.startsWith("/") ? next : "/";
-  });
+  const { login, currentCustomer, isLoading } = useCustomerAuth();
+
+  const next = searchParams.get("returnTo");
+  const returnTo = next?.startsWith("/") ? next : "/";
+
   const [showPassword, setShowPassword] = useState(false);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const {

@@ -210,7 +210,7 @@ export function Footer() {
 
     if (!href) {
       return (
-        <span key={key} className="block break-words py-1.5 text-[13.5px] text-white/70">
+        <span key={key} className="block break-words py-1.5 text-[14px] text-white/70">
           {label(item.label)}
         </span>
       );
@@ -222,7 +222,7 @@ export function Footer() {
         href={href}
         target={item.openInNewTab || isExternal ? "_blank" : undefined}
         rel={item.openInNewTab || isExternal ? "noopener noreferrer" : undefined}
-        className="block break-words py-1.5 text-[13.5px] text-white/80 hover:text-white"
+        className="block break-words pb-1.5 text-[14px] text-white/80 hover:text-white"
       >
         {label(item.label)}
       </Link>
@@ -247,18 +247,18 @@ export function Footer() {
         <div className="mb-14 grid grid-cols-2 gap-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-5">
           {footerColumnsToRender.map((col) => (
             <div key={col.heading} className="min-w-0">
-              <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label(col.heading)}</h6>
+              <h6 className="mb-3 text-[18px] font-semibold text-white">{label(col.heading)}</h6>
               {col.links.map((link) => renderFooterItem(link, `${col.heading}-${link.label}`))}
             </div>
           ))}
 
           <div className="min-w-0">
-            <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label(cmsExportColumn.heading || "Export & Trade")}</h6>
+            <h6 className="mb-4.5 text-[18px] font-semibold text-white">{label(cmsExportColumn.heading || "Export & Trade")}</h6>
             {exportLinks.map((item, index) => renderFooterItem(item, `footer-export-${index}`))}
           </div>
 
           <div className="min-w-0">
-            <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label(cmsIndiaOfficeColumn.heading || "India Office")}</h6>
+            <h6 className="mb-4.5 text-[18px] font-semibold text-white">{label(cmsIndiaOfficeColumn.heading || "India Office")}</h6>
             {indiaOfficeLinks.map((item, index) => renderFooterItem(item, `footer-india-${index}`))}
             {!cmsIndiaOfficeColumn.links.length && footerContactFallback.email && footerContactFallback.email !== ORDERS_EMAIL && (
               renderFooterItem({ label: footerContactFallback.email, href: `mailto:${footerContactFallback.email}` }, "footer-india-fallback-email")
@@ -272,7 +272,7 @@ export function Footer() {
           </div>
 
           <div className="min-w-0">
-            <h6 className="mb-4.5 text-[14.5px] font-semibold text-white">{label(cmsUsaOfficeColumn.heading || "USA Office")}</h6>
+            <h6 className="mb-4.5 text-[18px] font-semibold text-white">{label(cmsUsaOfficeColumn.heading || "USA Office")}</h6>
             {usaOfficeLinks.map((item, index) => renderFooterItem(item, `footer-usa-${index}`))}
           </div>
         </div>
