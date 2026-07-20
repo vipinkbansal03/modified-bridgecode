@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ShoppingCart, FileText, ChevronRight, Minus } from "lucide-react";
+import { ShoppingCart, FileText, ChevronRight, Minus, X } from "lucide-react";
 import { useQuoteCart } from "@/contexts/QuoteCartContext";
 import { useQuoteCartUI } from "@/contexts/QuoteCartUIContext";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
@@ -12,19 +12,30 @@ function fmt(sym: string, val: number) {
 }
 
 export function QuoteCartMini() {
-  const { items, totals } = useQuoteCart();
-  const { isMinimized, minimize, restore } = useQuoteCartUI();
+  const { isReady: isCartReady, items, totals } = useQuoteCart();
+  const { isMinimized, isClosed, minimize, restore, close, open, isReady } =
+    useQuoteCartUI();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { t } = useStaticTranslations();
 
   useEffect(() => {
+    if (!isCartReady) return;
+
     if (items.length === 0 && isMinimized) {
       restore();
     }
-  }, [items.length, isMinimized, restore]);
+
+    if (items.length === 0) {
+      open();
+    }
+  }, [isCartReady, items.length, isMinimized, restore, open]);
+
+  if (!isReady) return null;
 
   if (!items.length) return null;
+
+  if (isClosed) return null;
 
   if (isMinimized) {
     return (
@@ -80,13 +91,23 @@ export function QuoteCartMini() {
               </span>
             </div>
 
-            <button
-              onClick={minimize}
-              className="rounded p-1 text-[#6B6B6B] hover:bg-gray-100"
-              aria-label="Minimize Quote Cart"
-            >
-              <Minus size={16} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={minimize}
+                className="rounded p-1 text-[#6B6B6B] hover:bg-gray-100"
+                aria-label="Minimize Quote Cart"
+              >
+                <Minus size={16} />
+              </button>
+
+              <button
+                onClick={close}
+                className="rounded p-1 text-[#6B6B6B] hover:bg-gray-100"
+                aria-label="Close Quote Cart"
+              >
+                <X size={16} />
+              </button>
+            </div>
           </div>
           <div className="px-4 py-3 space-y-1.5">
             <div className="flex justify-between text-[12px] text-[#6B6B6B]">

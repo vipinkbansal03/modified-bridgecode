@@ -1,6 +1,13 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useReducer } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useState,
+  useEffect,
+  useReducer,
+} from "react";
 import { discountPercentage } from "@/utils/discountRules";
 
 export interface QuoteCartItem {
@@ -42,7 +49,10 @@ function reducer(state: QuoteCartItem[], action: Action): QuoteCartItem[] {
       for (const incoming of action.payload) {
         const idx = next.findIndex((i) => i.variantId === incoming.variantId);
         if (idx >= 0) {
-          next[idx] = { ...next[idx], quantity: next[idx].quantity + incoming.quantity };
+          next[idx] = {
+            ...next[idx],
+            quantity: next[idx].quantity + incoming.quantity,
+          };
         } else {
           next.push(incoming);
         }
@@ -50,8 +60,13 @@ function reducer(state: QuoteCartItem[], action: Action): QuoteCartItem[] {
       return next;
     }
     case "UPDATE_QTY":
-      if (action.quantity <= 0) return state.filter((i) => i.variantId !== action.variantId);
-      return state.map((i) => (i.variantId === action.variantId ? { ...i, quantity: action.quantity } : i));
+      if (action.quantity <= 0)
+        return state.filter((i) => i.variantId !== action.variantId);
+      return state.map((i) =>
+        i.variantId === action.variantId
+          ? { ...i, quantity: action.quantity }
+          : i,
+      );
     case "REMOVE":
       return state.filter((i) => i.variantId !== action.variantId);
     case "CLEAR":
@@ -75,6 +90,7 @@ function computeTotals(items: QuoteCartItem[]): QuoteCartTotals {
 }
 
 interface QuoteCartContextValue {
+  isReady: boolean;
   items: QuoteCartItem[];
   totals: QuoteCartTotals;
   addItems: (items: QuoteCartItem[]) => void;
@@ -89,25 +105,55 @@ const STORAGE_KEY = "quote_cart_v1";
 
 export function QuoteCartProvider({ children }: { children: React.ReactNode }) {
   const [items, dispatch] = useReducer(reducer, []);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) dispatch({ type: "LOAD", payload: JSON.parse(raw) });
+
+      if (raw) {
+        dispatch({
+          type: "LOAD",
+          payload: JSON.parse(raw),
+        });
+      }
     } catch {}
+
+    setIsReady(true);
   }, []);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, [items]);
 
-  const addItems = useCallback((newItems: QuoteCartItem[]) => dispatch({ type: "ADD_ITEMS", payload: newItems }), []);
-  const updateQuantity = useCallback((variantId: string, quantity: number) => dispatch({ type: "UPDATE_QTY", variantId, quantity }), []);
-  const removeItem = useCallback((variantId: string) => dispatch({ type: "REMOVE", variantId }), []);
+  const addItems = useCallback(
+    (newItems: QuoteCartItem[]) =>
+      dispatch({ type: "ADD_ITEMS", payload: newItems }),
+    [],
+  );
+  const updateQuantity = useCallback(
+    (variantId: string, quantity: number) =>
+      dispatch({ type: "UPDATE_QTY", variantId, quantity }),
+    [],
+  );
+  const removeItem = useCallback(
+    (variantId: string) => dispatch({ type: "REMOVE", variantId }),
+    [],
+  );
   const clearCart = useCallback(() => dispatch({ type: "CLEAR" }), []);
 
   return (
-    <QuoteCartContext.Provider value={{ items, totals: computeTotals(items), addItems, updateQuantity, removeItem, clearCart }}>
+    <QuoteCartContext.Provider
+      value={{
+        isReady,
+        items,
+        totals: computeTotals(items),
+        addItems,
+        updateQuantity,
+        removeItem,
+        clearCart,
+      }}
+    >
       {children}
     </QuoteCartContext.Provider>
   );
@@ -115,6 +161,7 @@ export function QuoteCartProvider({ children }: { children: React.ReactNode }) {
 
 export function useQuoteCart() {
   const ctx = useContext(QuoteCartContext);
-  if (!ctx) throw new Error("useQuoteCart must be used inside QuoteCartProvider");
+  if (!ctx)
+    throw new Error("useQuoteCart must be used inside QuoteCartProvider");
   return ctx;
 }

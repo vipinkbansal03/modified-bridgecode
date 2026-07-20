@@ -14,10 +14,30 @@ import {
   cmsMenuToFooterColumns,
   parseFooterSocialLinks,
 } from "@/lib/cmsNavigation";
-import { COMPANY_ADDRESS, INDIA_PHONE, INFO_EMAIL, ORDERS_EMAIL, SOCIAL_LINKS, USA_ADDRESS, USA_EMAIL, USA_PHONE } from "@/utils/constants";
+import {
+  COMPANY_ADDRESS,
+  INDIA_PHONE,
+  INFO_EMAIL,
+  ORDERS_EMAIL,
+  SOCIAL_LINKS,
+  USA_ADDRESS,
+  USA_EMAIL,
+  USA_PHONE,
+} from "@/utils/constants";
+import { useQuoteCartUI } from "@/contexts/QuoteCartUIContext";
 
-function SocialIcon({ label }: { label: "Facebook" | "LinkedIn" | "X" | "Instagram" }) {
-  const common = { width: 19, height: 19, viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": true as const };
+function SocialIcon({
+  label,
+}: {
+  label: "Facebook" | "LinkedIn" | "X" | "Instagram";
+}) {
+  const common = {
+    width: 19,
+    height: 19,
+    viewBox: "0 0 24 24",
+    fill: "currentColor",
+    "aria-hidden": true as const,
+  };
 
   switch (label) {
     case "Facebook":
@@ -52,27 +72,63 @@ const footerColumns = [
     heading: "About Us",
     links: [
       { label: "About Us", href: "/about", openInNewTab: false },
-      { label: "Manufacturing", href: "/manufacturing-services", openInNewTab: false },
-      { label: "Quality Certifications", href: "/quality-certifications", openInNewTab: false },
+      {
+        label: "Manufacturing",
+        href: "/manufacturing-services",
+        openInNewTab: false,
+      },
+      {
+        label: "Quality Certifications",
+        href: "/quality-certifications",
+        openInNewTab: false,
+      },
       { label: "Mission", href: "/about#mission", openInNewTab: false },
     ],
   },
   {
     heading: "Products",
     links: [
-      { label: "Aesthetic Brackets", href: "/products?category=aesthetic-brackets", openInNewTab: false },
-      { label: "Metal Brackets", href: "/products?category=metal-brackets", openInNewTab: false },
-      { label: "NiTi & SS Wires", href: "/products?category=niti-wires", openInNewTab: false },
-      { label: "Molar Bands & Tubes", href: "/products?category=molar-bands", openInNewTab: false },
+      {
+        label: "Aesthetic Brackets",
+        href: "/products?category=aesthetic-brackets",
+        openInNewTab: false,
+      },
+      {
+        label: "Metal Brackets",
+        href: "/products?category=metal-brackets",
+        openInNewTab: false,
+      },
+      {
+        label: "NiTi & SS Wires",
+        href: "/products?category=niti-wires",
+        openInNewTab: false,
+      },
+      {
+        label: "Molar Bands & Tubes",
+        href: "/products?category=molar-bands",
+        openInNewTab: false,
+      },
     ],
   },
   {
     heading: "Capabilities",
     links: [
-      { label: "Design & Engineering", href: "/design-and-engineering", openInNewTab: false },
+      {
+        label: "Design & Engineering",
+        href: "/design-and-engineering",
+        openInNewTab: false,
+      },
       { label: "OEM Services", href: "/oem-services", openInNewTab: false },
-      { label: "Custom Packaging", href: "/custom-packaging", openInNewTab: false },
-      { label: "Quality Control", href: "/quality-certifications", openInNewTab: false },
+      {
+        label: "Custom Packaging",
+        href: "/custom-packaging",
+        openInNewTab: false,
+      },
+      {
+        label: "Quality Control",
+        href: "/quality-certifications",
+        openInNewTab: false,
+      },
     ],
   },
   {
@@ -80,14 +136,22 @@ const footerColumns = [
     links: [
       { label: "Become a Dealer", href: "/contact", openInNewTab: false },
       { label: "Bulk & RFQ Pricing", href: "/products", openInNewTab: false },
-      { label: "Product Catalogue", href: "https://www.modortho.com/public/catalog/Modern-Catalog.zip", openInNewTab: true },
+      {
+        label: "Product Catalogue",
+        href: "https://www.modortho.com/public/catalog/Modern-Catalog.zip",
+        openInNewTab: true,
+      },
     ],
   },
   {
     heading: "Resources",
     links: [
       { label: "Blog", href: "/blog", openInNewTab: false },
-      { label: "Terms & Conditions", href: "/terms-and-conditions", openInNewTab: false },
+      {
+        label: "Terms & Conditions",
+        href: "/terms-and-conditions",
+        openInNewTab: false,
+      },
       { label: "Privacy Policy", href: "/privacy-policy", openInNewTab: false },
     ],
   },
@@ -131,7 +195,9 @@ type FooterLink = { label: string; href: string; openInNewTab?: boolean };
 
 export function Footer() {
   const { t } = useStaticTranslations();
-  const label = (value: string) => (footerLabelKeys[value] ? t(footerLabelKeys[value]) : value);
+  const { isClosed, open } = useQuoteCartUI();
+  const label = (value: string) =>
+    footerLabelKeys[value] ? t(footerLabelKeys[value]) : value;
   const { data: cmsFooter } = useCmsFooter();
   const { data: footerAboutMenu } = useCmsMenu("footer-about");
   const { data: footerProductsMenu } = useCmsMenu("footer-products");
@@ -156,53 +222,76 @@ export function Footer() {
   const cmsUsaOfficeColumn = cmsMenuToFooterColumns(footerUsaOfficeMenu);
   const cmsLegalColumn = cmsMenuToFooterColumns(footerLegalMenu);
 
-  const footerColumnsToRender = cmsFooterColumns.length > 0 ? cmsFooterColumns : footerColumns;
+  const footerColumnsToRender =
+    cmsFooterColumns.length > 0 ? cmsFooterColumns : footerColumns;
   const footerSocialLinks = parseFooterSocialLinks(cmsFooter?.socialLinksJson);
   const footerContactFallback = buildFooterContactFallback(cmsFooter);
-  const footerCopyright = buildFooterCopyright(cmsFooter, t("ui.footer.copyright"));
-  const footerNewsletterText = buildFooterNewsletterText(cmsFooter, t("ui.footer.newsletter"));
+  const footerCopyright = buildFooterCopyright(
+    cmsFooter,
+    t("ui.footer.copyright"),
+  );
+  const footerNewsletterText = buildFooterNewsletterText(
+    cmsFooter,
+    t("ui.footer.newsletter"),
+  );
   const shouldShowNewsletter = cmsFooter?.newsletterEnabled ?? true;
 
   const socialLinks = [
-    { href: footerSocialLinks.facebook || SOCIAL_LINKS.facebook, label: "Facebook" as const },
-    { href: footerSocialLinks.linkedin || SOCIAL_LINKS.linkedin, label: "LinkedIn" as const },
-    { href: footerSocialLinks.twitter || SOCIAL_LINKS.twitter, label: "X" as const },
-    { href: footerSocialLinks.instagram || SOCIAL_LINKS.instagram, label: "Instagram" as const },
+    {
+      href: footerSocialLinks.facebook || SOCIAL_LINKS.facebook,
+      label: "Facebook" as const,
+    },
+    {
+      href: footerSocialLinks.linkedin || SOCIAL_LINKS.linkedin,
+      label: "LinkedIn" as const,
+    },
+    {
+      href: footerSocialLinks.twitter || SOCIAL_LINKS.twitter,
+      label: "X" as const,
+    },
+    {
+      href: footerSocialLinks.instagram || SOCIAL_LINKS.instagram,
+      label: "Instagram" as const,
+    },
   ].filter((item) => item.href);
 
-  const exportLinks: FooterLink[] = cmsExportColumn.links.length > 0
-    ? cmsExportColumn.links
-    : [
-        { label: "Export Enquiries", href: "/contact" },
-        { label: "Global Distributors", href: "/contact" },
-        { label: "Shipping & Logistics", href: "/contact" },
-        { label: "Compliance Documents", href: "/quality-certifications" },
-      ];
+  const exportLinks: FooterLink[] =
+    cmsExportColumn.links.length > 0
+      ? cmsExportColumn.links
+      : [
+          { label: "Export Enquiries", href: "/contact" },
+          { label: "Global Distributors", href: "/contact" },
+          { label: "Shipping & Logistics", href: "/contact" },
+          { label: "Compliance Documents", href: "/quality-certifications" },
+        ];
 
-  const indiaOfficeLinks: FooterLink[] = cmsIndiaOfficeColumn.links.length > 0
-    ? cmsIndiaOfficeColumn.links
-    : [
-        { label: ORDERS_EMAIL, href: `mailto:${ORDERS_EMAIL}` },
-        { label: INFO_EMAIL, href: `mailto:${INFO_EMAIL}` },
-        { label: INDIA_PHONE, href: "" },
-        { label: COMPANY_ADDRESS, href: "" },
-      ];
+  const indiaOfficeLinks: FooterLink[] =
+    cmsIndiaOfficeColumn.links.length > 0
+      ? cmsIndiaOfficeColumn.links
+      : [
+          { label: ORDERS_EMAIL, href: `mailto:${ORDERS_EMAIL}` },
+          { label: INFO_EMAIL, href: `mailto:${INFO_EMAIL}` },
+          { label: INDIA_PHONE, href: "" },
+          { label: COMPANY_ADDRESS, href: "" },
+        ];
 
-  const usaOfficeLinks: FooterLink[] = cmsUsaOfficeColumn.links.length > 0
-    ? cmsUsaOfficeColumn.links
-    : [
-        { label: USA_EMAIL, href: `mailto:${USA_EMAIL}` },
-        { label: USA_PHONE, href: "" },
-        { label: USA_ADDRESS, href: "" },
-      ];
+  const usaOfficeLinks: FooterLink[] =
+    cmsUsaOfficeColumn.links.length > 0
+      ? cmsUsaOfficeColumn.links
+      : [
+          { label: USA_EMAIL, href: `mailto:${USA_EMAIL}` },
+          { label: USA_PHONE, href: "" },
+          { label: USA_ADDRESS, href: "" },
+        ];
 
-  const legalLinks: FooterLink[] = cmsLegalColumn.links.length > 0
-    ? cmsLegalColumn.links
-    : [
-        { label: "Terms & Conditions", href: "/terms-and-conditions" },
-        { label: "Privacy Policy", href: "/privacy-policy" },
-        { label: "Sitemap", href: "/sitemap.xml" },
-      ];
+  const legalLinks: FooterLink[] =
+    cmsLegalColumn.links.length > 0
+      ? cmsLegalColumn.links
+      : [
+          { label: "Terms & Conditions", href: "/terms-and-conditions" },
+          { label: "Privacy Policy", href: "/privacy-policy" },
+          { label: "Sitemap", href: "/sitemap.xml" },
+        ];
 
   function renderFooterItem(item: FooterLink, key: string) {
     const href = item.href.trim();
@@ -210,7 +299,10 @@ export function Footer() {
 
     if (!href) {
       return (
-        <span key={key} className="block break-words py-1.5 text-[14px] text-white/70">
+        <span
+          key={key}
+          className="block break-words py-1.5 text-[14px] text-white/70"
+        >
           {label(item.label)}
         </span>
       );
@@ -221,7 +313,9 @@ export function Footer() {
         key={key}
         href={href}
         target={item.openInNewTab || isExternal ? "_blank" : undefined}
-        rel={item.openInNewTab || isExternal ? "noopener noreferrer" : undefined}
+        rel={
+          item.openInNewTab || isExternal ? "noopener noreferrer" : undefined
+        }
         className="block break-words pb-1.5 text-[14px] text-white/80 hover:text-white"
       >
         {label(item.label)}
@@ -247,33 +341,75 @@ export function Footer() {
         <div className="mb-14 grid grid-cols-2 gap-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-5">
           {footerColumnsToRender.map((col) => (
             <div key={col.heading} className="min-w-0">
-              <h6 className="mb-3 text-[18px] font-semibold text-white">{label(col.heading)}</h6>
-              {col.links.map((link) => renderFooterItem(link, `${col.heading}-${link.label}`))}
+              <h6 className="mb-3 text-[18px] font-semibold text-white">
+                {label(col.heading)}
+              </h6>
+
+              {col.links.map((link) =>
+                renderFooterItem(link, `${col.heading}-${link.label}`),
+              )}
+
+              {col.heading === "Products" && isClosed && (
+                <button
+                  type="button"
+                  onClick={open}
+                  className="block pb-1.5 text-[14px] text-white/80 transition hover:text-white"
+                >
+                  Quote Cart
+                </button>
+              )}
             </div>
           ))}
 
           <div className="min-w-0">
-            <h6 className="mb-4.5 text-[18px] font-semibold text-white">{label(cmsExportColumn.heading || "Export & Trade")}</h6>
-            {exportLinks.map((item, index) => renderFooterItem(item, `footer-export-${index}`))}
-          </div>
-
-          <div className="min-w-0">
-            <h6 className="mb-4.5 text-[18px] font-semibold text-white">{label(cmsIndiaOfficeColumn.heading || "India Office")}</h6>
-            {indiaOfficeLinks.map((item, index) => renderFooterItem(item, `footer-india-${index}`))}
-            {!cmsIndiaOfficeColumn.links.length && footerContactFallback.email && footerContactFallback.email !== ORDERS_EMAIL && (
-              renderFooterItem({ label: footerContactFallback.email, href: `mailto:${footerContactFallback.email}` }, "footer-india-fallback-email")
-            )}
-            {!cmsIndiaOfficeColumn.links.length && footerContactFallback.phone && footerContactFallback.phone !== INDIA_PHONE && (
-              renderFooterItem({ label: footerContactFallback.phone, href: "" }, "footer-india-fallback-phone")
-            )}
-            {!cmsIndiaOfficeColumn.links.length && footerContactFallback.address && footerContactFallback.address !== COMPANY_ADDRESS && (
-              renderFooterItem({ label: footerContactFallback.address, href: "" }, "footer-india-fallback-address")
+            <h6 className="mb-4.5 text-[18px] font-semibold text-white">
+              {label(cmsExportColumn.heading || "Export & Trade")}
+            </h6>
+            {exportLinks.map((item, index) =>
+              renderFooterItem(item, `footer-export-${index}`),
             )}
           </div>
 
           <div className="min-w-0">
-            <h6 className="mb-4.5 text-[18px] font-semibold text-white">{label(cmsUsaOfficeColumn.heading || "USA Office")}</h6>
-            {usaOfficeLinks.map((item, index) => renderFooterItem(item, `footer-usa-${index}`))}
+            <h6 className="mb-4.5 text-[18px] font-semibold text-white">
+              {label(cmsIndiaOfficeColumn.heading || "India Office")}
+            </h6>
+            {indiaOfficeLinks.map((item, index) =>
+              renderFooterItem(item, `footer-india-${index}`),
+            )}
+            {!cmsIndiaOfficeColumn.links.length &&
+              footerContactFallback.email &&
+              footerContactFallback.email !== ORDERS_EMAIL &&
+              renderFooterItem(
+                {
+                  label: footerContactFallback.email,
+                  href: `mailto:${footerContactFallback.email}`,
+                },
+                "footer-india-fallback-email",
+              )}
+            {!cmsIndiaOfficeColumn.links.length &&
+              footerContactFallback.phone &&
+              footerContactFallback.phone !== INDIA_PHONE &&
+              renderFooterItem(
+                { label: footerContactFallback.phone, href: "" },
+                "footer-india-fallback-phone",
+              )}
+            {!cmsIndiaOfficeColumn.links.length &&
+              footerContactFallback.address &&
+              footerContactFallback.address !== COMPANY_ADDRESS &&
+              renderFooterItem(
+                { label: footerContactFallback.address, href: "" },
+                "footer-india-fallback-address",
+              )}
+          </div>
+
+          <div className="min-w-0">
+            <h6 className="mb-4.5 text-[18px] font-semibold text-white">
+              {label(cmsUsaOfficeColumn.heading || "USA Office")}
+            </h6>
+            {usaOfficeLinks.map((item, index) =>
+              renderFooterItem(item, `footer-usa-${index}`),
+            )}
           </div>
         </div>
 
@@ -281,12 +417,21 @@ export function Footer() {
           <div>
             <div className="mb-5 flex gap-5">
               {socialLinks.map(({ href, label: socialLabel }) => (
-                <a key={socialLabel} href={href} aria-label={socialLabel} target="_blank" rel="noopener noreferrer" className="text-white">
+                <a
+                  key={socialLabel}
+                  href={href}
+                  aria-label={socialLabel}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-white"
+                >
                   <SocialIcon label={socialLabel} />
                 </a>
               ))}
             </div>
-            <div className="mb-2.5 text-[13px] text-white/80">© {new Date().getFullYear()} {footerCopyright}</div>
+            <div className="mb-2.5 text-[13px] text-white/80">
+              © {new Date().getFullYear()} {footerCopyright}
+            </div>
             <div className="flex flex-wrap gap-2 text-[13px] text-white/80">
               {legalLinks.map((item, index) => (
                 <div key={`footer-legal-${index}`} className="contents">
@@ -305,7 +450,9 @@ export function Footer() {
 
           {shouldShowNewsletter && (
             <div className="sm:text-right">
-              <p className="mb-3.5 text-[13px] text-white sm:text-sm">{footerNewsletterText}</p>
+              <p className="mb-3.5 text-[13px] text-white sm:text-sm">
+                {footerNewsletterText}
+              </p>
               <NewsletterForm tone="light" />
             </div>
           )}

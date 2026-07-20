@@ -167,6 +167,7 @@ export async function createAdminQuote(input: {
   const quote = await prisma.quote.create({
     data: {
       quoteNumber: generateQuoteNumber(),
+      customerId: customer?.id ?? null,
       customerName,
       customerEmail,
       customerPhone: customer?.phone ?? input.customerPhone ?? null,
@@ -287,6 +288,7 @@ export async function convertToOrder(quoteId: string) {
   const order = await prisma.order.create({
     data: {
       orderNumber,
+      customerId: quote.customerId,
       customerName: quote.customerName,
       customerEmail: quote.customerEmail,
       customerPhone: quote.customerPhone || "",
