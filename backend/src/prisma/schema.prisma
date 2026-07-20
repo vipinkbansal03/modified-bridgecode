@@ -203,15 +203,15 @@ model AttributeValue {
 }
 
 model ProductAttribute {
-  id            String                           @id @default(cuid())
-  productId     String
-  attributeId   String
-  required      Boolean                          @default(false)
-  gridAxis      GridAxis?
-  createdAt     DateTime                         @default(now())
-  allowedValues ProductAttributeValueSelection[]
-  attribute     Attribute                        @relation(fields: [attributeId], references: [id])
-  product       Product                          @relation(fields: [productId], references: [id])
+  id                  String                           @id @default(cuid())
+  productId           String
+  attributeId         String
+  required            Boolean                          @default(false)
+  gridAxis            GridAxis?
+  createdAt           DateTime                         @default(now())
+  allowedValues       ProductAttributeValueSelection[]
+  attribute           Attribute                        @relation(fields: [attributeId], references: [id])
+  product             Product                          @relation(fields: [productId], references: [id])
 
   @@unique([productId, attributeId])
   @@map("product_attributes")

@@ -8,7 +8,7 @@ import { Container } from "@/components/ui/Container";
 import { ProductFilters, type ProductFilterState } from "@/components/sections/ProductFilters";
 import { ProductCard } from "@/components/ui/ProductCard";
 import { SkeletonGrid } from "@/components/ui/Skeleton";
-import { useProducts, useProductFacets } from "@/hooks/api/useProducts";
+import { useProducts, useProductFacets, useProductFiltersConfig } from "@/hooks/api/useProducts";
 import { useCategories } from "@/hooks/api/useCategories";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
@@ -56,6 +56,7 @@ export function ProductsListingClient() {
     limit: 48,
   });
   const { data: facetRows = [] } = useProductFacets();
+  const { data: filterConfig } = useProductFiltersConfig();
 
   const products = useMemo(() => {
     const rows = result?.data ?? [];
@@ -120,7 +121,7 @@ export function ProductsListingClient() {
         )}
       >
         {showFilters && (
-          <ProductFilters value={filters} onChange={setFilters} availableAttributeValues={availableAttributeValues} />
+          <ProductFilters value={filters} onChange={setFilters} availableAttributeValues={availableAttributeValues} filterConfig={filterConfig ?? null} />
         )}
 
         <div className="min-w-0">

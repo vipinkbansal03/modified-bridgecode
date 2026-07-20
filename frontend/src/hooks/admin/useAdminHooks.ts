@@ -707,6 +707,67 @@ export const useReorderAttributes = () => {
   });
 };
 
+// ─── Product Filters ────────────────────────────────────────
+
+export interface ProductFilterConfig {
+  id: string;
+  featuredOnly: boolean;
+  categoryFilterEnabled: boolean;
+  attributeFilters: AttributeFilterConfig[];
+}
+
+export interface AttributeFilterConfig {
+  attributeId: string;
+  attributeName: string;
+  enabled: boolean;
+  displayType: "DROPDOWN" | "X_GRID" | "Y_GRID";
+  sortOrder: number;
+  allowedValueIds: string[];
+}
+
+export const useAdminProductFilters = () =>
+  useQuery({
+    queryKey: ["admin-product-filters"],
+    queryFn: () => adminApi.get("/product-filters").then((r) => r.data.data),
+  });
+
+export const useUpdateProductFilters = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ProductFilterConfig) =>
+      adminApi.put("/product-filters", data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product-filters"] }),
+  });
+};
+
+export interface ProductFilterVisibilityItem {
+  attributeId: string;
+  attributeName: string;
+  visibleOnStorefront: boolean;
+}
+
+export const useProductFilterVisibility = (productId?: string) =>
+  useQuery({
+    queryKey: ["admin-product-filter-visibility", productId],
+    queryFn: () =>
+      adminApi
+        .get(`/product-filters/${productId}/visibility`)
+        .then((r) => r.data.data as { productId: string; productTitle: string; items: ProductFilterVisibilityItem[] }),
+    enabled: !!productId,
+  });
+
+export const useUpdateProductFilterVisibility = (productId?: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (items: ProductFilterVisibilityItem[]) =>
+      adminApi
+        .put(`/product-filters/${productId}/visibility`, { items })
+        .then((r) => r.data),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["admin-product-filter-visibility", productId] }),
+  });
+};
+
 export const useCreateAttributeValue = () => {
   const qc = useQueryClient();
   return useMutation({

@@ -111,6 +111,16 @@ async function fetchProductFacets(lang?: string, countryCode?: string) {
   return unwrapData<Array<{ attributeName: string; value: string }>>(res);
 }
 
+async function fetchProductFiltersConfig(lang?: string, countryCode?: string) {
+  if (!HAS_LIVE_API) return null;
+  try {
+    const res = await apiClient.get("/product-filters", { params: { lang, countryCode } });
+    return unwrapData<any>(res);
+  } catch {
+    return null;
+  }
+}
+
 async function fetchProduct(slug: string, lang?: string, countryCode?: string): Promise<ApiProductDetail | null> {
   if (!HAS_LIVE_API) return loadStaticProduct(slug);
   const res = await apiClient.get(`/products/${slug}`, { params: { lang, countryCode } });
@@ -157,6 +167,16 @@ export function useProductFacets() {
     queryKey: ["products", "facets", selectedLanguage, selectedCountryCode],
     queryFn: () => fetchProductFacets(selectedLanguage, selectedCountryCode),
     staleTime: STALE.long,
+  });
+}
+
+export function useProductFiltersConfig() {
+  const { selectedLanguage } = useLanguageContext();
+  const { selectedCountryCode } = useCurrencyContext();
+  return useQuery({
+    queryKey: ["products", "filters-config", selectedLanguage, selectedCountryCode],
+    queryFn: () => fetchProductFiltersConfig(selectedLanguage, selectedCountryCode),
+    staleTime: STALE.short,
   });
 }
 

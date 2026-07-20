@@ -31,6 +31,7 @@ import {
   useRemoveProductAttribute,
   useAdminCountries,
   useAdminTiers,
+  useUpdateProductFilterVisibility,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { cn } from "@/utils/cn";
@@ -237,6 +238,7 @@ type ProductAttributeMapping = {
   attributeId: string;
   required: boolean;
   gridAxis?: GridAxis | null;
+  visibleOnStorefront?: boolean;
   attribute: {
     id: string;
     name: string;
@@ -888,6 +890,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
   const deleteMoqPricing = useDeleteProductMoqPricing(productId);
   const assignProductAttributes = useAssignProductAttributes(productId);
   const removeProductAttribute = useRemoveProductAttribute(productId);
+  const updateProductFilterVisibility = useUpdateProductFilterVisibility(productId);
 
   const translationLanguages = useMemo(() => filterTranslationLanguages(languages), [languages]);
   const activeTranslationLang = translationLanguages.find((lang) => lang.id === translationLanguageId) ?? translationLanguages[0];
@@ -1590,6 +1593,22 @@ export function ProductEditor({ productId }: ProductEditorProps) {
       showToast("Attribute unmapped.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to unmap attribute."), "error");
+    }
+  };
+
+  const handleToggleMappedVisibility = async (attributeId: string, visibleOnStorefront: boolean) => {
+    try {
+      await updateProductFilterVisibility.mutateAsync(
+        mappedAttributeRows.map((mapping) => ({
+          attributeId: mapping.attributeId,
+          attributeName: mapping.attribute.name,
+          visibleOnStorefront:
+            mapping.attributeId === attributeId ? visibleOnStorefront : mapping.visibleOnStorefront !== false,
+        }))
+      );
+      showToast(visibleOnStorefront ? "Filter will appear on the storefront." : "Filter hidden from the storefront.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to update storefront visibility."), "error");
     }
   };
 
@@ -3600,6 +3619,16 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                               disabled={assignProductAttributes.isPending}
                             />
                             Required
+                          </label>
+                          <label className="flex items-center gap-2 text-[12.5px] text-[#555]">
+                            <input
+                              type="checkbox"
+                              checked={mapping.visibleOnStorefront !== false}
+                              onChange={(e) => handleToggleMappedVisibility(mapping.attributeId, e.target.checked)}
+                              className="h-4 w-4 accent-[#E31E24]"
+                              disabled={updateProductFilterVisibility.isPending}
+                            />
+                            Visible on Storefront Filter
                           </label>
                           <button
                             type="button"

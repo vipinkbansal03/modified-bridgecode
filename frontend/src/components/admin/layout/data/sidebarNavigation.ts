@@ -5,6 +5,7 @@ import {
   CreditCard,
   DollarSign,
   FileText,
+  Filter,
   Globe,
   Image,
   Languages,
@@ -53,6 +54,12 @@ export const navItems = [
     label: "Attributes",
     href: "/admin/attributes",
     icon: Sliders,
+    permission: "attributes.view",
+  },
+  {
+    label: "Product Filters",
+    href: "/admin/product-filters",
+    icon: Filter,
     permission: "attributes.view",
   },
   {
