@@ -780,15 +780,6 @@ export async function getPublicCountries() {
   return prisma.country.findMany({
     where: {
       status: "ACTIVE",
-      productCountries: {
-        some: {
-          enabled: true,
-          product: {
-            status: "ACTIVE",
-            deletedAt: null,
-          },
-        },
-      },
     },
     include: { currency: true },
     orderBy: { name: "asc" },

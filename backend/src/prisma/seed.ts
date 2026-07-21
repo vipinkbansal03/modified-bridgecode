@@ -1,5 +1,6 @@
 import { AttributeRole, AttributeStatus, Prisma, PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { ensureAllWorldCountriesSeeded } from "../modules/countries/countries.service";
 
 const prisma = new PrismaClient();
 
@@ -174,6 +175,8 @@ async function main() {
   await prisma.country.upsert({ where: { code: "GB" }, update: { dutyPercentage: 5, shippingCharge: 12 }, create: { name: "United Kingdom", code: "GB", currencyId: gbp.id, dutyPercentage: 5, shippingCharge: 12 } });
   await prisma.country.upsert({ where: { code: "DE" }, update: { dutyPercentage: 5, shippingCharge: 14 }, create: { name: "Germany", code: "DE", currencyId: eur.id, dutyPercentage: 5, shippingCharge: 14 } });
   await prisma.country.upsert({ where: { code: "AU" }, update: { dutyPercentage: 10, shippingCharge: 20 }, create: { name: "Australia", code: "AU", currencyId: usd.id, dutyPercentage: 10, shippingCharge: 20 } });
+  
+  await ensureAllWorldCountriesSeeded();
 
   // ─── Default language ────────────────────────────────────
   await prisma.language.upsert({

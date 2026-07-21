@@ -56,7 +56,11 @@ export const bulk = asyncHandler(async (req: AuthRequest, res: Response) => {
 
 export const generateForCountries = asyncHandler(async (req: AuthRequest, res: Response) => {
   const input = req.body;
-  const count = await S.generateCountryPrices(input.productId, input);
+  const productId = String(input.productId || req.query.productId || "").trim();
+  if (!productId) {
+    throw new AppError("Product ID is required to generate country prices.", 400);
+  }
+  const count = await S.generateCountryPrices(productId, input);
   return ApiResponse.success(res, `${count.generated} country prices generated.`, count);
 });
 

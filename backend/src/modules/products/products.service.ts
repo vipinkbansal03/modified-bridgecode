@@ -1016,7 +1016,7 @@ export async function bulkUpdateProducts(data: {
 export async function listProductCountries(productId: string) {
   await getProduct(productId);
   const [countries, mappings] = await Promise.all([
-    prisma.country.findMany({ include: { currency: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    prisma.country.findMany({ where: { status: "ACTIVE" }, include: { currency: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.productCountry.findMany({ where: { productId } }),
   ]);
   const mappingByCountry = new Map(mappings.map((mapping) => [mapping.countryId, mapping]));

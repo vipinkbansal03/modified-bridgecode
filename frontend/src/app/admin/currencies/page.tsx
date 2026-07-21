@@ -726,14 +726,41 @@ export default function CurrenciesPage() {
         </div>
 
         <Modal open={showForm} onClose={resetForm} title={form.id ? "Edit currency" : "Add currency"} panelClassName="max-w-3xl">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <AdminInput label="Currency Name *" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="US Dollar" />
-              <AdminInput label="ISO Code *" value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))} placeholder="USD" maxLength={3} />
+          <form onSubmit={handleSubmit} className="space-y-6 p-6">
+            <div className="grid gap-x-6 gap-y-5 md:grid-cols-2">
+              {form.id ? (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="block text-[13px] font-medium text-[#1A1A1A]">Currency Name (Auto-fetched)</label>
+                    <input
+                      type="text"
+                      readOnly
+                      disabled
+                      value={form.name}
+                      className="h-10 w-full rounded-md border border-[#E6E6E6] bg-[#F7F7F7] px-3.5 text-[14px] text-[#6B6B6B] cursor-not-allowed"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-[13px] font-medium text-[#1A1A1A]">ISO Code (Auto-fetched)</label>
+                    <input
+                      type="text"
+                      readOnly
+                      disabled
+                      value={form.code}
+                      className="h-10 w-full rounded-md border border-[#E6E6E6] bg-[#F7F7F7] px-3.5 text-[14px] text-[#6B6B6B] cursor-not-allowed font-mono uppercase"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <AdminInput label="Currency Name *" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="US Dollar" />
+                  <AdminInput label="ISO Code *" value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))} placeholder="USD" maxLength={3} />
+                </>
+              )}
               <AdminInput label="Symbol *" value={form.symbol} onChange={(event) => setForm((current) => ({ ...current, symbol: event.target.value }))} placeholder="$" />
               <AdminInput label="Exchange Rate *" type="number" min="0" step="0.000001" value={form.exchangeRate} onChange={(event) => setForm((current) => ({ ...current, exchangeRate: event.target.value }))} />
               <AdminSelect
-                label="Status"
+                label="Status *"
                 value={form.status}
                 onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as CurrencyFormState["status"] }))}
                 options={[
@@ -741,10 +768,12 @@ export default function CurrenciesPage() {
                   { value: "INACTIVE", label: "Inactive" },
                 ]}
               />
-              <label className="flex items-center gap-2 pt-7 text-[13.5px] font-medium text-[#1A1A1A]">
-                <input type="checkbox" checked={form.isBase} onChange={(event) => setForm((current) => ({ ...current, isBase: event.target.checked }))} className="h-4 w-4 accent-[#E31E24]" />
-                Base currency
-              </label>
+              <div className="pt-7">
+                <label className="inline-flex items-center gap-2.5 text-[13.5px] font-medium text-[#1A1A1A] cursor-pointer">
+                  <input type="checkbox" checked={form.isBase} onChange={(event) => setForm((current) => ({ ...current, isBase: event.target.checked }))} className="h-4 w-4 rounded border-[#D1D5DB] accent-[#E31E24]" />
+                  Base currency
+                </label>
+              </div>
             </div>
 
             <div className="flex items-center justify-between gap-3 border-t border-[#E6E6E6] pt-4">

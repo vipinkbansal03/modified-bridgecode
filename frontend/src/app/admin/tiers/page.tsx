@@ -913,7 +913,7 @@ export default function AdminTiersPage() {
         </div>
 
         <Modal open={showForm} onClose={resetForm} title={form.id ? "Edit tier" : "Add tier"} panelClassName="max-w-xl">
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-6 p-6">
             <div className="grid gap-4 md:grid-cols-2">
               <AdminInput label="Tier Name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Diamond, Gold, Silver..." />
               <AdminSelect

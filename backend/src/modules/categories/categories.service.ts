@@ -293,7 +293,7 @@ export async function reorderCategories(items: { id: string; sortOrder: number }
 export async function listCategoryCountries(categoryId: string) {
   await getCategory(categoryId);
   const [countries, mappings] = await Promise.all([
-    prisma.country.findMany({ include: { currency: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    prisma.country.findMany({ where: { status: "ACTIVE" }, include: { currency: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.categoryCountry.findMany({ where: { categoryId } }),
   ]);
   const mappingByCountry = new Map(mappings.map((mapping) => [mapping.countryId, mapping]));

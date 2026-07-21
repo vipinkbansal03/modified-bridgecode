@@ -20,6 +20,8 @@ import {
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { getCustomerErrorMessage } from "@/services/customerApi";
 import PhoneInputField from "@/components/ui/PhoneInput";
+import { useCountries } from "@/hooks/api/useCurrencies";
+import { worldCountries } from "@/data/world-countries";
 
 const registerSchema = Yup.object({
   customerType: Yup.string()
@@ -139,17 +141,12 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const COUNTRY_TO_ISO: Record<string, "IN" | "US" | "GB" | "DE" | "AU"> = {
-    India: "IN",
-    "United States": "US",
-    "United Kingdom": "GB",
-    Germany: "DE",
-    Australia: "AU",
-  };
+  const { data: dbCountries = [] } = useCountries();
+  const activeCountries = dbCountries.length > 0
+    ? dbCountries.filter((c) => c.status === "ACTIVE")
+    : worldCountries;
 
-  const [phoneCountry, setPhoneCountry] = useState<
-    "IN" | "US" | "GB" | "DE" | "AU"
-  >("IN");
+  const [phoneCountry, setPhoneCountry] = useState<string>("IN");
 
   const formik = useFormik<RegisterFormValues>({
     initialValues: {
@@ -222,11 +219,11 @@ export default function RegisterPage() {
   });
 
   useEffect(() => {
-    setPhoneCountry(COUNTRY_TO_ISO[formik.values.country] ?? "IN");
-
-    // Clear previous phone number when country changes
-    formik.setFieldValue("mobile", "");
-  }, [formik.values.country]);
+    const found = activeCountries.find((c) => c.name === formik.values.country);
+    if (found?.code) {
+      setPhoneCountry(found.code.toUpperCase());
+    }
+  }, [formik.values.country, activeCountries]);
 
   return (
     <main className="grid h-svh grid-cols-1 overflow-hidden bg-white lg:grid-cols-[minmax(0,1.05fr)_minmax(620px,0.95fr)]">
@@ -343,7 +340,7 @@ export default function RegisterPage() {
                 onBlur={() => formik.setFieldTouched("mobile", true)}
                 error={formik.errors.mobile}
                 touched={formik.touched.mobile}
-                defaultCountry={phoneCountry}
+                defaultCountry={phoneCountry as any}
                 placeholder="Mobile"
                 key={phoneCountry}
               />
@@ -395,15 +392,22 @@ export default function RegisterPage() {
                   <select
                     name="country"
                     value={formik.values.country}
-                    onChange={formik.handleChange}
+                    onChange={(e) => {
+                      formik.handleChange(e);
+                      const selectedName = e.target.value;
+                      const found = activeCountries.find((c) => c.name === selectedName);
+                      if (found?.code) {
+                        setPhoneCountry(found.code.toUpperCase() as any);
+                      }
+                    }}
                     onBlur={formik.handleBlur}
                     className="min-w-0 flex-1 bg-transparent px-3 text-[12.5px] text-[#1A1A1A] outline-none"
                   >
-                    <option value="India">India</option>
-                    <option value="United States">United States</option>
-                    <option value="United Kingdom">United Kingdom</option>
-                    <option value="Germany">Germany</option>
-                    <option value="Australia">Australia</option>
+                    {activeCountries.map((c) => (
+                      <option key={c.code || c.name} value={c.name}>
+                        {c.name} ({c.code})
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

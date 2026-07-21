@@ -220,7 +220,7 @@ export async function listTierCountries(tierId: string) {
   if (!tier) throw new AppError("Tier not found.", 404);
 
   const [countries, mappings] = await Promise.all([
-    prisma.country.findMany({ include: { currency: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    prisma.country.findMany({ where: { status: "ACTIVE" }, include: { currency: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.tierCountry.findMany({ where: { tierId } }),
   ]);
   const mappingByCountry = new Map(mappings.map((mapping) => [mapping.countryId, mapping]));

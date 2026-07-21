@@ -184,7 +184,6 @@ async function assertActiveProduct(productId: string) {
     select: { id: true, title: true, status: true, hasVariants: true, defaultCurrencyId: true },
   });
   if (!product) throw new AppError("Product not found.", 404);
-  if (product.status !== "ACTIVE") throw new AppError("Inactive products cannot be priced.", 400);
   return product;
 }
 
@@ -218,6 +217,7 @@ async function fetchActiveSnapshots() {
       select: { id: true, title: true, status: true, productId: true, sku: true },
     }),
     prisma.country.findMany({
+      where: { status: "ACTIVE" },
       select: { id: true, name: true, code: true, status: true },
     }),
     prisma.tier.findMany({
@@ -1194,10 +1194,12 @@ export type GenerateCountryPricesInput = {
 
 function computeLandedPrice(
   basePriceInBaseCurrency: number,
-  country: { currency: { exchangeRate: Prisma.Decimal | number }; dutyPercentage: Prisma.Decimal | number; shippingCharge: Prisma.Decimal | number },
+  country: { currency?: { exchangeRate: Prisma.Decimal | number } | null; dutyPercentage?: Prisma.Decimal | number | null; shippingCharge?: Prisma.Decimal | number | null },
   baseCurrencyRate: number,
 ) {
-  const localBase = convertPrice(basePriceInBaseCurrency, Number(country.currency.exchangeRate) / baseCurrencyRate);
+  const currencyRate = country.currency ? Number(country.currency.exchangeRate) || 1 : 1;
+  const safeBaseRate = baseCurrencyRate || 1;
+  const localBase = convertPrice(basePriceInBaseCurrency, currencyRate / safeBaseRate);
   const dutyPercent = Number(country.dutyPercentage) || 0;
   const shipping = Number(country.shippingCharge) || 0;
   const landed = localBase + (localBase * dutyPercent) / 100 + shipping;
@@ -1210,8 +1212,15 @@ export async function generateCountryPrices(
   productId: string,
   input: GenerateCountryPricesInput,
 ) {
-  const product = await assertActiveProduct(productId);
-  const baseCurrency = await prisma.currency.findFirst({ where: { isBase: true } });
+  if (!productId || typeof productId !== "string" || !productId.trim()) {
+    throw new AppError("Product ID is required to generate country prices.", 400);
+  }
+  const product = await assertActiveProduct(productId.trim());
+  const baseCurrency =
+    (await prisma.currency.findFirst({ where: { isBase: true } })) ||
+    (await prisma.currency.findFirst({ where: { code: "USD" } })) ||
+    (await prisma.currency.findFirst());
+
   if (!baseCurrency) throw new AppError("No base currency configured.", 400);
 
   const [countries, variants] = await Promise.all([
@@ -1220,14 +1229,15 @@ export async function generateCountryPrices(
       include: { currency: true },
     }),
     prisma.productVariant.findMany({
-      where: { productId, status: "ACTIVE" },
+      where: { productId, status: { not: "INACTIVE" } },
       select: { id: true },
     }),
   ]);
 
-  const baseCurrencyRate = Number(baseCurrency.exchangeRate);
+  const baseCurrencyRate = Number(baseCurrency.exchangeRate) || 1;
 
   const priceRows = countries.flatMap((country) => {
+    if (!country.currencyId) return [];
     const { mrp, sellingPrice } = computeLandedPrice(input.mrp, country, baseCurrencyRate);
     const baseRow = {
       productId,
@@ -1273,12 +1283,11 @@ export async function generateCountryPrices(
           status: price.status,
         },
       });
-      continue;
+    } else {
+      await prisma.productPrice.create({
+        data: price,
+      });
     }
-
-    await prisma.productPrice.create({
-      data: price,
-    });
   }
 
   return {

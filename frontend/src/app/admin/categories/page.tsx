@@ -471,7 +471,7 @@ export default function CategoriesPage() {
         title={editing ? `Edit Category: ${editing.name}` : "Category Editor"}
         panelClassName="max-w-5xl max-h-[calc(100vh-2rem)] overflow-y-auto"
       >
-        <form onSubmit={formik.handleSubmit} className="space-y-5">
+        <form onSubmit={formik.handleSubmit} className="space-y-6 p-6">
           {editing && (
             <div className="flex justify-start">
               <TranslationModeBar
