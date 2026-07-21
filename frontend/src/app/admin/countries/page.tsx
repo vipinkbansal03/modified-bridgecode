@@ -6,7 +6,7 @@ import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
-import { useAdminCountries, useAdminCurrencies } from "@/hooks/admin/useAdminHooks";
+import { useAdminCountries, useAdminCurrencies, useBulkCountries } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { worldCountries, type WorldCountry } from "@/data/world-countries";
 
@@ -17,6 +17,8 @@ type Country = {
   currency: { id: string; code: string; name: string; symbol: string };
   isDefault: boolean;
   status: "ACTIVE" | "INACTIVE";
+  dutyPercentage?: number;
+  shippingCharge?: number;
 };
 
 type CountryFormState = {
@@ -29,6 +31,8 @@ type CountryFormState = {
   currencySymbol: string;
   status: "ACTIVE" | "INACTIVE";
   isDefault: boolean;
+  dutyPercentage: string;
+  shippingCharge: string;
 };
 
 const emptyForm: CountryFormState = {
@@ -41,6 +45,8 @@ const emptyForm: CountryFormState = {
   currencySymbol: "",
   status: "ACTIVE",
   isDefault: false,
+  dutyPercentage: "0",
+  shippingCharge: "0",
 };
 
 function matchesSearch(country: Country, search: string) {
@@ -63,9 +69,12 @@ export default function CountriesPage() {
   const [editing, setEditing] = useState<Country | null>(null);
   const [deleting, setDeleting] = useState<Country | null>(null);
   const [form, setForm] = useState<CountryFormState>(emptyForm);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectAll, setSelectAll] = useState(false);
 
   const { data: countries = [], isLoading, refetch } = useAdminCountries();
   const { data: currencies = [] } = useAdminCurrencies();
+  const bulkMutation = useBulkCountries();
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
@@ -103,14 +112,18 @@ export default function CountriesPage() {
         (c: { id: string; code: string; name: string; symbol: string }) => c.code === worldCountry.currencyCode
       );
 
+      // Fallback to base currency (USD) if specific currency not available
+      const baseCurrency = currencies.find((c: { id: string; code: string; isBase?: boolean }) => c.isBase === true || c.code === "USD");
+      const finalCurrency = matchingCurrency ?? baseCurrency ?? currencies[0];
+
       setForm((current) => ({
         ...current,
         name: worldCountry.name,
         code: worldCountry.code,
-        currencyId: matchingCurrency?.id ?? "",
-        currencyCode: matchingCurrency?.code ?? worldCountry.currencyCode,
-        currencyName: matchingCurrency?.name ?? worldCountry.currencyName,
-        currencySymbol: matchingCurrency?.symbol ?? worldCountry.currencySymbol,
+        currencyId: finalCurrency?.id ?? "",
+        currencyCode: finalCurrency?.code ?? worldCountry.currencyCode,
+        currencyName: finalCurrency?.name ?? worldCountry.currencyName,
+        currencySymbol: finalCurrency?.symbol ?? worldCountry.currencySymbol,
       }));
     },
     [currencies]
@@ -151,6 +164,7 @@ export default function CountriesPage() {
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const safePage = Math.min(page, totalPages);
   const paginatedCountries = filteredCountries.slice((safePage - 1) * limit, safePage * limit);
+  const paginatedCountryIds = useMemo(() => new Set(paginatedCountries.map((country) => country.id)), [paginatedCountries]);
 
   const stats = useMemo(
     () => ({
@@ -162,6 +176,65 @@ export default function CountriesPage() {
     [countries],
   );
 
+  // Handle select all on current page
+  useEffect(() => {
+    if (!selectAll) return;
+
+    setSelectedIds((current) => {
+      if (current.size === paginatedCountryIds.size && Array.from(current).every((id) => paginatedCountryIds.has(id))) {
+        return current;
+      }
+
+      return new Set(paginatedCountryIds);
+    });
+  }, [selectAll, paginatedCountryIds]);
+
+  const toggleSelectAll = () => {
+    setSelectAll((current) => {
+      const next = !current;
+      if (!next) {
+        setSelectedIds(new Set<string>());
+      }
+      return next;
+    });
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set<string>());
+    setSelectAll(false);
+  };
+
+  const handleBulkAction = async (action: "ENABLE" | "DISABLE" | "DELETE") => {
+    if (selectedIds.size === 0) {
+      showToast("No countries selected.", "error");
+      return;
+    }
+    if (action === "DELETE") {
+      const hasDefault = paginatedCountries.some((c) => selectedIds.has(c.id) && c.isDefault);
+      if (hasDefault) {
+        showToast("Default country cannot be deleted.", "error");
+        return;
+      }
+    }
+    try {
+      await bulkMutation.mutateAsync({ ids: Array.from(selectedIds), action });
+      showToast(`${action === "DELETE" ? "Deleted" : action === "ENABLE" ? "Enabled" : "Disabled"} ${selectedIds.size} countries.`);
+      clearSelection();
+      await refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Bulk action failed."), "error");
+    }
+  };
+
   function resetEditor() {
     setShowForm(false);
     setEditing(null);
@@ -170,7 +243,17 @@ export default function CountriesPage() {
 
   function openCreate() {
     setEditing(null);
-    setForm(emptyForm);
+    // Set base currency (USD or first active) as default
+    const baseCurrency = currencies.find((c: { code: string; isBase?: boolean }) => c.code === "USD" || c.isBase) || currencies[0];
+    if (baseCurrency) {
+      setForm((current) => ({
+        ...current,
+        currencyId: baseCurrency.id,
+        currencyCode: baseCurrency.code,
+        currencyName: baseCurrency.name,
+        currencySymbol: baseCurrency.symbol,
+      }));
+    }
     setShowForm(true);
   }
 
@@ -186,6 +269,8 @@ export default function CountriesPage() {
       currencySymbol: country.currency?.symbol ?? "",
       status: country.status,
       isDefault: country.isDefault,
+      dutyPercentage: country.dutyPercentage != null ? String(country.dutyPercentage) : "0",
+      shippingCharge: country.shippingCharge != null ? String(country.shippingCharge) : "0",
     });
     setShowForm(true);
   }
@@ -193,12 +278,17 @@ export default function CountriesPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const dutyPercentage = Number(form.dutyPercentage);
+    const shippingCharge = Number(form.shippingCharge);
+
     const payload = {
       name: form.name.trim(),
       code: form.code.trim().toUpperCase(),
       currencyId: form.currencyId,
       status: form.status,
       isDefault: form.isDefault,
+      dutyPercentage: Number.isFinite(dutyPercentage) && dutyPercentage > 0 ? dutyPercentage : 0,
+      shippingCharge: Number.isFinite(shippingCharge) && shippingCharge > 0 ? shippingCharge : 0,
     };
 
     if (!payload.name || !payload.code || !payload.currencyId) {
@@ -248,6 +338,28 @@ export default function CountriesPage() {
   }
 
   const columns = [
+    {
+      key: "select",
+      label: (
+        <input
+          type="checkbox"
+          checked={selectAll}
+          onChange={toggleSelectAll}
+          className="h-4 w-4 rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
+          aria-label="Select all"
+        />
+      ),
+      width: "40px",
+      render: (row: Country) => (
+        <input
+          type="checkbox"
+          checked={selectedIds.has(row.id)}
+          onChange={() => toggleSelect(row.id)}
+          className="h-4 w-4 rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
+          aria-label={`Select ${row.name}`}
+        />
+      ),
+    },
     {
       key: "name",
       label: "Country",
@@ -354,6 +466,23 @@ export default function CountriesPage() {
           </div>
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-2 flex-1 md:flex-none">
+                <span className="text-[13px] text-[#6B6B6B]">{selectedIds.size} selected</span>
+                <button type="button" onClick={() => handleBulkAction("ENABLE")} disabled={bulkMutation.isPending} className="inline-flex h-10 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-50">
+                  Enable
+                </button>
+                <button type="button" onClick={() => handleBulkAction("DISABLE")} disabled={bulkMutation.isPending} className="inline-flex h-10 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-50">
+                  Disable
+                </button>
+                <button type="button" onClick={() => handleBulkAction("DELETE")} disabled={bulkMutation.isPending} className="inline-flex h-10 items-center gap-1.5 rounded-md border border-[#F2C9C9] bg-white px-3 text-[13px] font-medium text-red-500 hover:bg-red-50 disabled:opacity-50">
+                  Delete
+                </button>
+                <button type="button" onClick={clearSelection} className="inline-flex h-10 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#555] hover:bg-[#F7F7F7]">
+                  Clear
+                </button>
+              </div>
+            )}
             <button
               type="button"
               onClick={() => setShowColumns((current) => !current)}
@@ -427,6 +556,24 @@ export default function CountriesPage() {
               ]}
               value={form.status}
               onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as CountryFormState["status"] }))}
+            />
+            <AdminInput
+              label="Customs Duty %"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="e.g. 18"
+              value={form.dutyPercentage}
+              onChange={(event) => setForm((current) => ({ ...current, dutyPercentage: event.target.value }))}
+            />
+            <AdminInput
+              label={`Shipping Charge (${form.currencySymbol || ""})`}
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="e.g. 250"
+              value={form.shippingCharge}
+              onChange={(event) => setForm((current) => ({ ...current, shippingCharge: event.target.value }))}
             />
             <label className="flex items-center gap-2 pt-7 text-[13.5px] font-medium text-[#1A1A1A]">
               <input type="checkbox" checked={form.isDefault} onChange={(event) => setForm((current) => ({ ...current, isDefault: event.target.checked }))} className="h-4 w-4 accent-[#E31E24]" />

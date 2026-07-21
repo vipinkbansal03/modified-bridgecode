@@ -2,6 +2,7 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import * as C from "./public.controller";
 import * as CMS from "../cms/cms.controller";
+import * as PF from "../productFilters/productFilters.controller";
 
 const router = Router();
 
@@ -17,6 +18,9 @@ router.get("/cms/pages/key/:pageKey", CMS.publicPageByKey);
 router.get("/cms/pages/:slug", CMS.publicPageBySlug);
 router.get("/cms/menus/:location", CMS.publicMenu);
 router.get("/cms/footer", CMS.publicFooter);
+
+// ─── Product Filters ──────────────────────────────────────
+router.get("/product-filters", PF.publicConfig);
 
 // ─── Read endpoints ───────────────────────────────────────
 router.get("/products", C.listProducts);

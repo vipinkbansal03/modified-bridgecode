@@ -167,13 +167,13 @@ async function main() {
   // ─── Default countries ──────────────────────────────────
   await prisma.country.upsert({
     where: { code: "IN" },
-    update: {},
-    create: { name: "India", code: "IN", currencyId: inr.id, isDefault: true },
+    update: { dutyPercentage: 18, shippingCharge: 250 },
+    create: { name: "India", code: "IN", currencyId: inr.id, isDefault: true, dutyPercentage: 18, shippingCharge: 250 },
   });
-  await prisma.country.upsert({ where: { code: "US" }, update: {}, create: { name: "United States", code: "US", currencyId: usd.id } });
-  await prisma.country.upsert({ where: { code: "GB" }, update: {}, create: { name: "United Kingdom", code: "GB", currencyId: gbp.id } });
-  await prisma.country.upsert({ where: { code: "DE" }, update: {}, create: { name: "Germany", code: "DE", currencyId: eur.id } });
-  await prisma.country.upsert({ where: { code: "AU" }, update: {}, create: { name: "Australia", code: "AU", currencyId: usd.id } });
+  await prisma.country.upsert({ where: { code: "US" }, update: { dutyPercentage: 0, shippingCharge: 0 }, create: { name: "United States", code: "US", currencyId: usd.id, dutyPercentage: 0, shippingCharge: 0 } });
+  await prisma.country.upsert({ where: { code: "GB" }, update: { dutyPercentage: 5, shippingCharge: 12 }, create: { name: "United Kingdom", code: "GB", currencyId: gbp.id, dutyPercentage: 5, shippingCharge: 12 } });
+  await prisma.country.upsert({ where: { code: "DE" }, update: { dutyPercentage: 5, shippingCharge: 14 }, create: { name: "Germany", code: "DE", currencyId: eur.id, dutyPercentage: 5, shippingCharge: 14 } });
+  await prisma.country.upsert({ where: { code: "AU" }, update: { dutyPercentage: 10, shippingCharge: 20 }, create: { name: "Australia", code: "AU", currencyId: usd.id, dutyPercentage: 10, shippingCharge: 20 } });
 
   // ─── Default language ────────────────────────────────────
   await prisma.language.upsert({
