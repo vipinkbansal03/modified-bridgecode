@@ -17,6 +17,8 @@ type Country = {
   currency: { id: string; code: string; name: string; symbol: string };
   isDefault: boolean;
   status: "ACTIVE" | "INACTIVE";
+  dutyPercentage?: number;
+  shippingCharge?: number;
 };
 
 type CountryFormState = {
@@ -29,6 +31,8 @@ type CountryFormState = {
   currencySymbol: string;
   status: "ACTIVE" | "INACTIVE";
   isDefault: boolean;
+  dutyPercentage: string;
+  shippingCharge: string;
 };
 
 const emptyForm: CountryFormState = {
@@ -41,6 +45,8 @@ const emptyForm: CountryFormState = {
   currencySymbol: "",
   status: "ACTIVE",
   isDefault: false,
+  dutyPercentage: "0",
+  shippingCharge: "0",
 };
 
 function matchesSearch(country: Country, search: string) {
@@ -263,6 +269,8 @@ export default function CountriesPage() {
       currencySymbol: country.currency?.symbol ?? "",
       status: country.status,
       isDefault: country.isDefault,
+      dutyPercentage: country.dutyPercentage != null ? String(country.dutyPercentage) : "0",
+      shippingCharge: country.shippingCharge != null ? String(country.shippingCharge) : "0",
     });
     setShowForm(true);
   }
@@ -270,12 +278,17 @@ export default function CountriesPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const dutyPercentage = Number(form.dutyPercentage);
+    const shippingCharge = Number(form.shippingCharge);
+
     const payload = {
       name: form.name.trim(),
       code: form.code.trim().toUpperCase(),
       currencyId: form.currencyId,
       status: form.status,
       isDefault: form.isDefault,
+      dutyPercentage: Number.isFinite(dutyPercentage) && dutyPercentage > 0 ? dutyPercentage : 0,
+      shippingCharge: Number.isFinite(shippingCharge) && shippingCharge > 0 ? shippingCharge : 0,
     };
 
     if (!payload.name || !payload.code || !payload.currencyId) {
@@ -543,6 +556,24 @@ export default function CountriesPage() {
               ]}
               value={form.status}
               onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as CountryFormState["status"] }))}
+            />
+            <AdminInput
+              label="Customs Duty %"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="e.g. 18"
+              value={form.dutyPercentage}
+              onChange={(event) => setForm((current) => ({ ...current, dutyPercentage: event.target.value }))}
+            />
+            <AdminInput
+              label={`Shipping Charge (${form.currencySymbol || ""})`}
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="e.g. 250"
+              value={form.shippingCharge}
+              onChange={(event) => setForm((current) => ({ ...current, shippingCharge: event.target.value }))}
             />
             <label className="flex items-center gap-2 pt-7 text-[13.5px] font-medium text-[#1A1A1A]">
               <input type="checkbox" checked={form.isDefault} onChange={(event) => setForm((current) => ({ ...current, isDefault: event.target.checked }))} className="h-4 w-4 accent-[#E31E24]" />

@@ -1186,11 +1186,33 @@ export async function bulkUpdatePricing(input: PricingBulkInput) {
   return bulkPricingAction(input);
 }
 
-export async function generateCountryPrices(productId: string, basePrice: number, baseCurrencyId: string) {
+export type GenerateCountryPricesInput = {
+  mrp: number;
+  sellingPrice?: number;
+  variantOverrides?: Record<string, { mrp: number; sellingPrice?: number }>;
+};
+
+function computeLandedPrice(
+  basePriceInBaseCurrency: number,
+  country: { currency: { exchangeRate: Prisma.Decimal | number }; dutyPercentage: Prisma.Decimal | number; shippingCharge: Prisma.Decimal | number },
+  baseCurrencyRate: number,
+) {
+  const localBase = convertPrice(basePriceInBaseCurrency, Number(country.currency.exchangeRate) / baseCurrencyRate);
+  const dutyPercent = Number(country.dutyPercentage) || 0;
+  const shipping = Number(country.shippingCharge) || 0;
+  const landed = localBase + (localBase * dutyPercent) / 100 + shipping;
+  const mrp = Math.round((landed + Number.EPSILON) * 100) / 100;
+  const sellingPrice = Math.round((landed + Number.EPSILON) * 100) / 100;
+  return { mrp, sellingPrice };
+}
+
+export async function generateCountryPrices(
+  productId: string,
+  input: GenerateCountryPricesInput,
+) {
   const product = await assertActiveProduct(productId);
-  const baseCurrency = await prisma.currency.findUnique({ where: { id: baseCurrencyId }, select: { id: true, exchangeRate: true, status: true } });
-  if (!baseCurrency) throw new AppError("Base currency not found.", 404);
-  if (baseCurrency.status !== "ACTIVE") throw new AppError("Base currency is inactive.", 400);
+  const baseCurrency = await prisma.currency.findFirst({ where: { isBase: true } });
+  if (!baseCurrency) throw new AppError("No base currency configured.", 400);
 
   const [countries, variants] = await Promise.all([
     prisma.country.findMany({
@@ -1203,22 +1225,31 @@ export async function generateCountryPrices(productId: string, basePrice: number
     }),
   ]);
 
+  const baseCurrencyRate = Number(baseCurrency.exchangeRate);
+
   const priceRows = countries.flatMap((country) => {
-    const mrp = convertPrice(basePrice, Number(country.currency.exchangeRate) / Number(baseCurrency.exchangeRate));
-    const sellingPrice = convertPrice(basePrice * 0.9, Number(country.currency.exchangeRate) / Number(baseCurrency.exchangeRate));
+    const { mrp, sellingPrice } = computeLandedPrice(input.mrp, country, baseCurrencyRate);
     const baseRow = {
       productId,
       countryId: country.id,
       currencyId: country.currencyId,
-      mrp,
-      sellingPrice,
+      mrp: input.sellingPrice != null ? input.sellingPrice : mrp,
+      sellingPrice: input.sellingPrice != null ? input.sellingPrice : mrp,
       status: "ACTIVE" as const,
       variantId: null as string | null,
     };
-    const variantRows = variants.map((variant) => ({
-      ...baseRow,
-      variantId: variant.id,
-    }));
+    const variantRows = variants.map((variant) => {
+      const override = input.variantOverrides?.[variant.id];
+      const variantLanded = override
+        ? { mrp: override.mrp, sellingPrice: override.sellingPrice != null ? override.sellingPrice : override.mrp }
+        : computeLandedPrice(input.mrp, country, baseCurrencyRate);
+      return {
+        ...baseRow,
+        variantId: variant.id,
+        mrp: variantLanded.mrp,
+        sellingPrice: variantLanded.sellingPrice,
+      };
+    });
     return [baseRow, ...variantRows];
   });
 

@@ -54,6 +54,13 @@ export type ResolvedPrice = {
     code: string;
     symbol: string;
   };
+  landedCost?: {
+    dutyPercentage: number;
+    dutyAmount: number;
+    shippingCharge: number;
+    countryId: string;
+    countryCode: string;
+  };
 };
 
 function money(value: Prisma.Decimal | number | string | null | undefined) {
@@ -231,7 +238,7 @@ async function findBasePrice(input: ResolvePriceInput) {
   for (const where of lookups) {
     const price = await prisma.productPrice.findFirst({
       where,
-      include: { currency: true },
+      include: { currency: true, country: true },
     });
     if (price) return price;
   }
@@ -507,6 +514,18 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
     });
   }
 
+  const countryRecord = (basePrice as { country?: { id: string; code: string; dutyPercentage: Prisma.Decimal | number; shippingCharge: Prisma.Decimal | number } }).country;
+  const landedCost =
+    countryRecord && (Number(countryRecord.dutyPercentage) > 0 || Number(countryRecord.shippingCharge) > 0)
+      ? {
+          dutyPercentage: money(countryRecord.dutyPercentage),
+          dutyAmount: roundMoney((money(basePrice.sellingPrice) * Number(countryRecord.dutyPercentage)) / (100 + Number(countryRecord.dutyPercentage))),
+          shippingCharge: money(countryRecord.shippingCharge),
+          countryId: countryRecord.id,
+          countryCode: countryRecord.code,
+        }
+      : undefined;
+
   return {
     basePrice: money(basePrice.sellingPrice),
     appliedDiscounts: layers,
@@ -518,5 +537,6 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
       code: basePrice.currency.code,
       symbol: basePrice.currency.symbol,
     },
+    landedCost,
   };
 }

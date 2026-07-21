@@ -280,8 +280,10 @@ model Country {
   status              CountryStatus       @default(ACTIVE)
   isDefault           Boolean             @default(false)
   createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  updatedAt           DateTime            @default(now())
   sortOrder           Int                 @default(0)
+  dutyPercentage      Decimal             @default(0) @db.Decimal(5, 2)
+  shippingCharge      Decimal             @default(0) @db.Decimal(12, 2)
   currency            Currency            @relation(fields: [currencyId], references: [id])
   banners             Banner[]
   categoryCountries   CategoryCountry[]

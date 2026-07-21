@@ -55,9 +55,8 @@ export const bulk = asyncHandler(async (req: AuthRequest, res: Response) => {
 });
 
 export const generateForCountries = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const baseCurrency = await prisma.currency.findFirst({ where: { isBase: true } });
-  if (!baseCurrency) throw new AppError("No base currency configured.", 400);
-  const count = await S.generateCountryPrices(req.body.productId, req.body.basePrice, baseCurrency.id);
+  const input = req.body;
+  const count = await S.generateCountryPrices(input.productId, input);
   return ApiResponse.success(res, `${count.generated} country prices generated.`, count);
 });
 
