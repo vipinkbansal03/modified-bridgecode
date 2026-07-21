@@ -123,6 +123,7 @@ model Product {
   defaultCurrency   Currency?            @relation(fields: [defaultCurrencyId], references: [id])
   QuoteItem         QuoteItem[]
   taxRules          TaxRule[]            @relation("ProductTaxRules")
+  reviews           ProductReview[]
 
   @@map("products")
 }
@@ -819,6 +820,24 @@ model ContactSubmission {
   updatedAt DateTime @updatedAt
 
   @@map("contact_submissions")
+}
+
+model ProductReview {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customerName  String?
+  customerEmail String?
+  ratingQuality Int      @default(5)
+  ratingPrice   Int      @default(5)
+  ratingOverall Int      @default(5)
+  feedbackText  String?  @db.Text
+  status        String   @default("APPROVED")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([productId])
+  @@map("product_reviews")
 }
 
 model CMSPage {

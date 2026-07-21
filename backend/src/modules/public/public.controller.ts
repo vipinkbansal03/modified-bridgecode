@@ -76,6 +76,16 @@ export const checkInventory = asyncHandler(async (req: Request, res: Response) =
   return AR.success(res, "Inventory.", await S.checkInventory(ids, countryCode));
 });
 
+export const getProductReviews = asyncHandler(async (req: Request, res: Response) => {
+  const data = await S.getProductReviews(String(req.params.slug));
+  return AR.success(res, "Product reviews.", data);
+});
+
+export const submitProductReview = asyncHandler(async (req: Request, res: Response) => {
+  const data = await S.submitProductReview(String(req.params.slug), req.body);
+  return AR.created(res, "Thank you for your valuable feedback!", data);
+});
+
 function getRequestedLanguage(req: Request) {
   const queryLang = typeof req.query.lang === "string" ? req.query.lang : "";
   const headerLang = req.headers["accept-language"]?.split(",")[0]?.split("-")[0] ?? "";

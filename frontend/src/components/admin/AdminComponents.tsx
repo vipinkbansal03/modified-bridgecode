@@ -4,6 +4,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useRef, createContex
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, XCircle, Info } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { adminApi } from "@/services/adminApi";
 
 // ─── DataTable ────────────────────────────────────────────
 
@@ -374,8 +375,8 @@ function sanitizeRichText(html: string) {
   if (typeof window === "undefined") return html;
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
-  const allowedTags = new Set(["B", "STRONG", "I", "EM", "U", "P", "BR", "DIV", "SPAN", "UL", "OL", "LI", "A", "H1", "H2", "H3", "BLOCKQUOTE", "PRE", "CODE"]);
-  const allowedAttrs = new Set(["href", "target", "rel"]);
+  const allowedTags = new Set(["B", "STRONG", "I", "EM", "U", "P", "BR", "DIV", "SPAN", "UL", "OL", "LI", "A", "H1", "H2", "H3", "BLOCKQUOTE", "PRE", "CODE", "IMG", "FIGURE", "FIGCAPTION", "BUTTON"]);
+  const allowedAttrs = new Set(["href", "target", "rel", "src", "alt", "width", "height", "class", "style", "contenteditable", "onclick", "title"]);
 
   function clean(node: ChildNode) {
     if (node.nodeType === Node.ELEMENT_NODE) {
@@ -415,7 +416,7 @@ function sanitizeRichText(html: string) {
 interface AdminRichTextEditorProps {
   label?: string;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (val: string) => void;
   placeholder?: string;
   error?: string;
   className?: string;
@@ -423,7 +424,10 @@ interface AdminRichTextEditorProps {
 
 export function AdminRichTextEditor({ label, value, onChange, placeholder, error, className }: AdminRichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const savedRangeRef = useRef<Range | null>(null);
   const [isFocused, setIsFocused] = useState(false);
+  const [uploadingImg, setUploadingImg] = useState(false);
 
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
@@ -436,10 +440,82 @@ export function AdminRichTextEditor({ label, value, onChange, placeholder, error
     onChange(sanitizeRichText(editorRef.current.innerHTML));
   };
 
+  const saveCursorLocation = () => {
+    if (typeof window === "undefined") return;
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && editorRef.current && editorRef.current.contains(sel.anchorNode)) {
+      savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+    }
+  };
+
   const applyFormat = (command: string, option?: string) => {
     document.execCommand(command, false, option || "");
     updateValue();
     editorRef.current?.focus();
+  };
+
+  const insertHtmlAtSavedCursor = (html: string) => {
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+
+    const sel = window.getSelection();
+    let range: Range | null = null;
+
+    if (savedRangeRef.current && editorRef.current.contains(savedRangeRef.current.commonAncestorContainer)) {
+      range = savedRangeRef.current;
+    } else if (sel && sel.rangeCount > 0 && editorRef.current.contains(sel.anchorNode)) {
+      range = sel.getRangeAt(0);
+    }
+
+    if (range && sel) {
+      sel.removeAllRanges();
+      sel.addRange(range);
+      range.deleteContents();
+
+      const tempDiv = document.createElement("div");
+      tempDiv.innerHTML = html;
+      const frag = document.createDocumentFragment();
+      let node;
+      let lastNode;
+      while ((node = tempDiv.firstChild)) {
+        lastNode = frag.appendChild(node);
+      }
+      range.insertNode(frag);
+      if (lastNode) {
+        range.setStartAfter(lastNode);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    } else {
+      editorRef.current.innerHTML += html;
+    }
+    savedRangeRef.current = null;
+    updateValue();
+  };
+
+  const handleInsertImageFile = async (file: File) => {
+    setUploadingImg(true);
+    try {
+      const formData = new FormData();
+      formData.append("files", file);
+      const res = await adminApi.post("/media", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const mediaItem = Array.isArray(res.data?.data) ? res.data.data[0] : res.data?.data || res.data;
+      const url = mediaItem?.url || mediaItem?.location || (typeof mediaItem === "string" ? mediaItem : "");
+      if (url) {
+        const cleanImgHtml = `<div class="my-3 text-left"><img src="${url}" alt="Product Image" class="max-h-48 max-w-full w-auto inline-block rounded-lg border border-[#E5E7EB] bg-white p-1.5 shadow-2xs cursor-pointer hover:border-[#E31E24]" /></div><p><br></p>`;
+        insertHtmlAtSavedCursor(cleanImgHtml);
+      } else {
+        alert("Failed to get uploaded media URL.");
+      }
+    } catch (err) {
+      console.error("Image upload failed", err);
+      alert("Image upload failed. Please make sure you are logged in.");
+    } finally {
+      setUploadingImg(false);
+    }
   };
 
   return (
@@ -465,6 +541,31 @@ export function AdminRichTextEditor({ label, value, onChange, placeholder, error
           }}>
             Link
           </button>
+
+          {/* Direct Image Upload Button in Editor Toolbar */}
+          <button
+            type="button"
+            title="Attach/Insert Image"
+            className="flex items-center gap-1 rounded bg-[#E31E24]/10 px-2 py-1 text-[12px] font-bold text-[#E31E24] hover:bg-[#E31E24]/20"
+            onClick={() => {
+              saveCursorLocation();
+              fileInputRef.current?.click();
+            }}
+            disabled={uploadingImg}
+          >
+            🖼️ {uploadingImg ? "Uploading..." : "Image"}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleInsertImageFile(file);
+              e.target.value = "";
+            }}
+          />
           <button type="button" title="Unordered list" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("insertUnorderedList")}>
             • List
           </button>
@@ -512,8 +613,14 @@ export function AdminRichTextEditor({ label, value, onChange, placeholder, error
             role="textbox"
             aria-multiline="true"
             suppressContentEditableWarning
-            onInput={updateValue}
+            onInput={() => {
+              saveCursorLocation();
+              updateValue();
+            }}
+            onKeyUp={saveCursorLocation}
+            onMouseUp={saveCursorLocation}
             onBlur={() => {
+              saveCursorLocation();
               setIsFocused(false);
               updateValue();
             }}

@@ -26,6 +26,8 @@ router.get("/product-filters", PF.publicConfig);
 router.get("/products", C.listProducts);
 router.get("/products/facets", C.listProductFacets);
 router.get("/products/:slug", C.getProduct);
+router.get("/products/:slug/reviews", C.getProductReviews);
+router.post("/products/:slug/reviews", formLimiter, C.submitProductReview);
 router.post("/products/:slug/price-preview", C.previewProductPrices);
 router.get("/categories", C.listCategories);
 router.get("/categories/:slug", C.getCategory);

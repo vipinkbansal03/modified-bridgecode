@@ -59,7 +59,7 @@ const basicSchema = Yup.object({
   seoTitle: Yup.string().max(60),
   seoDescription: Yup.string().max(160),
   seoKeywords: Yup.string(),
-  highlights: Yup.array().of(Yup.object({ title: Yup.string(), description: Yup.string() })),
+  highlights: Yup.array().of(Yup.object({ title: Yup.string(), description: Yup.string(), image: Yup.string() })),
   technicalSpecs: Yup.array().of(Yup.object({ label: Yup.string(), value: Yup.string() })),
   warranty: Yup.array().of(Yup.string()),
   primaryFeatures: Yup.array().of(Yup.object({ title: Yup.string(), description: Yup.string() })),
@@ -79,7 +79,7 @@ type ProductEditorFormValues = {
   seoTitle: string;
   seoDescription: string;
   seoKeywords: string;
-  highlights: Array<{ title: string; description: string }>;
+  highlights: Array<{ title: string; description: string; image?: string }>;
   technicalSpecs: Array<{ label: string; value: string }>;
   warranty: string[];
   primaryFeatures: Array<{ title: string; description: string }>;
@@ -280,7 +280,7 @@ type SingleSelectionMap = Record<string, string>;
 type ProductTranslationField = "title" | "shortDescription" | "description" | "seoTitle" | "seoDescription" | "seoKeywords" | "highlights" | "technicalSpecs" | "warranty" | "primaryFeatures";
 
 type ProductTranslationDraft = {
-  highlights: Array<{ title: string; description: string }>;
+  highlights: Array<{ title: string; description: string; image?: string }>;
   technicalSpecs: Array<{ label: string; value: string }>;
   warranty: string[];
   primaryFeatures: Array<{ title: string; description: string }>;
@@ -2486,8 +2486,8 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                 </button>
               </div>
               <div className="space-y-4">
-                {(formik.values.highlights || []).map((item: { title: string; description: string }, index: number) => (
-                  <div key={index} className="grid gap-3 lg:grid-cols-[1fr_1.5fr_auto] items-stretch">
+                {(formik.values.highlights || []).map((item: { title: string; description: string; image?: string }, index: number) => (
+                  <div key={index} className="grid gap-3 lg:grid-cols-[1fr_2.5fr_auto] items-stretch">
                     <div>
                       <AdminInput
                         label="Title"
@@ -2503,7 +2503,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                       <AdminRichTextEditor
                         label="Description"
                         value={item.description}
-                        placeholder="Enter highlight description"
+                        placeholder="Enter highlight description (use Image button in toolbar to insert photos)"
                         onChange={(value) => {
                           const next = [...(formik.values.highlights || [])];
                           next[index] = { ...next[index], description: value };

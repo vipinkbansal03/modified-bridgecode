@@ -39,6 +39,12 @@ export const navItems = [
     permission: "products.view",
   },
   {
+    label: "Product Reviews",
+    href: "/admin/reviews",
+    icon: MessageSquare,
+    permission: "products.view",
+  },
+  {
     label: "Categories",
     href: "/admin/categories",
     icon: Tag,
