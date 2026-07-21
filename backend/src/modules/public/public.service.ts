@@ -367,6 +367,7 @@ export async function previewPublicProductPrices(
         taxAmount: resolved.taxAmount,
         currency: resolved.currency,
         appliedDiscounts: resolved.appliedDiscounts,
+        landedCost: resolved.landedCost,
       };
     }),
   );
@@ -1031,6 +1032,21 @@ type PublicProductDetailRecord = Prisma.ProductGetPayload<{
   translations?: ProductTranslationSnapshot[];
 };
 
+function buildPublicPriceBreakdown(pr: {
+  country: { code: string; dutyPercentage: Prisma.Decimal | number; shippingCharge: Prisma.Decimal | number };
+  mrp: Prisma.Decimal | number;
+}) {
+  const dutyPercentage = Number(pr.country.dutyPercentage) || 0;
+  const shippingCharge = Number(pr.country.shippingCharge) || 0;
+  if (dutyPercentage <= 0 && shippingCharge <= 0) return undefined;
+  const mrp = Number(pr.mrp);
+  return {
+    dutyPercentage,
+    dutyAmount: Math.round((mrp * dutyPercentage) / (100 + dutyPercentage) * 100) / 100,
+    shippingCharge,
+  };
+}
+
 function toPublicProductDetail(
   p: PublicProductDetailRecord,
   countryId?: string,
@@ -1049,6 +1065,7 @@ function toPublicProductDetail(
       pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
     distributorPrice:
       pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+    landedCost: buildPublicPriceBreakdown(pr),
   }));
 
   const publicVariants = p.variants.map((v) => {
@@ -1064,6 +1081,7 @@ function toPublicProductDetail(
         pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
       distributorPrice:
         pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+      landedCost: buildPublicPriceBreakdown(pr),
     }));
 
     return {

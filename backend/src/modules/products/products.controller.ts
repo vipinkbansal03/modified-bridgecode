@@ -1,8 +1,9 @@
 import { Response } from "express";
-import { asyncHandler, ApiResponse } from "../../utils/apiResponse";
+import { asyncHandler, ApiResponse, AppError } from "../../utils/apiResponse";
 import { AuthRequest } from "../../middleware/auth.middleware";
 import { prisma } from "../../config/database";
 import * as ProductService from "./products.service";
+import * as PricingService from "../pricing/pricing.service";
 import { removeTempFile } from "../../utils/spreadsheet";
 
 export const list = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -152,6 +153,27 @@ export const removeAttrib = asyncHandler(async (req: AuthRequest, res: Response)
 
 export const genVariants = asyncHandler(async (req: AuthRequest, res: Response) => {
   const variants = await ProductService.generateVariants(req.params.id as string, req.body);
+
+  const basePrice = req.body.basePrice != null ? Number(req.body.basePrice) : NaN;
+  if (Number.isFinite(basePrice) && basePrice > 0) {
+    const variantBasePrices =
+      req.body.variantBasePrices && typeof req.body.variantBasePrices === "object"
+        ? (req.body.variantBasePrices as Record<string, number>)
+        : undefined;
+    await PricingService.generateCountryPrices(
+      req.params.id as string,
+      {
+        mrp: basePrice,
+        variantOverrides: variantBasePrices
+          ? Object.entries(variantBasePrices).reduce((acc, [variantId, price]) => {
+              acc[variantId] = { mrp: price };
+              return acc;
+            }, {} as Record<string, { mrp: number }>)
+          : undefined,
+      },
+    );
+  }
+
   return ApiResponse.success(res, `${variants.length} variants generated.`, variants);
 });
 
