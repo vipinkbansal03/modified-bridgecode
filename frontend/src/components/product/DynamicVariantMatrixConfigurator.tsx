@@ -13,6 +13,7 @@ import {
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
 import { useCart, type CartItem } from "@/contexts/CartContext";
 import { useQuoteCart, type QuoteCartItem } from "@/contexts/QuoteCartContext";
+import { useQuoteCartUI } from "@/contexts/QuoteCartUIContext";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { apiClient } from "@/lib/apiClient";
 import { QuantityInput } from "./QuantityInput";
@@ -156,6 +157,7 @@ function buildCartItems(
 
     const base = {
       productId: apiProduct.id,
+        productSlug: apiProduct.slug,
       productTitle: apiProduct.title,
       variantId,
       variantTitle: variant.title,
@@ -187,6 +189,7 @@ export function DynamicVariantMatrixConfigurator({
   const { selectedCurrency, selectedCountryCode } = useCurrencyContext();
   const { addItems: addCartItems, openCart } = useCart();
   const { addItems: addQuoteItems } = useQuoteCart();
+  const { open } = useQuoteCartUI();
 
   const { currentCustomer, isLoading } = useCustomerAuth();
   const { showToast } = useToast();
@@ -439,6 +442,8 @@ export function DynamicVariantMatrixConfigurator({
     }
 
     addQuoteItems(items.map((item) => item.quote));
+
+    open();
 
     setQuantityMap({});
 

@@ -18,6 +18,7 @@ export function QuoteCartMini() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { t } = useStaticTranslations();
+  const hasUnavailableItems = items.some((item) => item.priceUnavailable);
 
   useEffect(() => {
     if (!isCartReady) return;
@@ -110,6 +111,17 @@ export function QuoteCartMini() {
             </div>
           </div>
           <div className="px-4 py-3 space-y-1.5">
+            {hasUnavailableItems && (
+              <div className="rounded border border-red-200 bg-red-50 px-2 py-2">
+                <p className="text-[11px] font-semibold text-red-700">
+                  Price unavailable
+                </p>
+
+                <p className="mt-1 text-[10px] text-red-600">
+                  Selected country has no configured pricing.
+                </p>
+              </div>
+            )}
             <div className="flex justify-between text-[12px] text-[#6B6B6B]">
               <span>{t("ui.quote.variants")}</span>
               <span className="font-medium text-ink">{items.length}</span>
@@ -123,10 +135,12 @@ export function QuoteCartMini() {
             <div className="flex justify-between text-[12px] text-[#6B6B6B]">
               <span>{t("ui.quote.estimatedValue")}</span>
               <span className="font-semibold text-ink">
-                {fmt(totals.currencySymbol, totals.grandTotal)}
+                {hasUnavailableItems
+                  ? "Unavailable"
+                  : fmt(totals.currencySymbol, totals.grandTotal)}
               </span>
             </div>
-            {totals.discountPercentage > 0 && (
+            {!hasUnavailableItems && totals.discountPercentage > 0 && (
               <div className="rounded bg-emerald-50 px-2 py-1 text-[10.5px] font-medium text-emerald-700">
                 {t("ui.quote.volumeDiscountApplied", {
                   percent: totals.discountPercentage,
@@ -136,8 +150,17 @@ export function QuoteCartMini() {
           </div>
           <div className="border-t border-[#F0F0F0] p-3 space-y-2">
             <button
-              onClick={() => setDrawerOpen(true)}
-              className="flex w-full items-center justify-center gap-1.5 rounded bg-[#E31E24] py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B]"
+              onClick={() => {
+                if (!hasUnavailableItems) {
+                  setDrawerOpen(true);
+                }
+              }}
+              disabled={hasUnavailableItems}
+              className={`flex w-full items-center justify-center gap-1.5 rounded py-2 text-[12.5px] font-semibold text-white ${
+                hasUnavailableItems
+                  ? "cursor-not-allowed bg-gray-400"
+                  : "bg-[#E31E24] hover:bg-[#B5151B]"
+              }`}
             >
               <FileText size={13} />
               {t("ui.quote.submitRfq")}
@@ -175,8 +198,10 @@ export function QuoteCartMini() {
                 })}
               </p>
               <p className="text-[11.5px] text-[#9A9A9A]">
-                {fmt(totals.currencySymbol, totals.grandTotal)}
-                {totals.discountPercentage > 0 && (
+                {hasUnavailableItems
+                  ? "Unavailable"
+                  : fmt(totals.currencySymbol, totals.grandTotal)}
+                {!hasUnavailableItems && totals.discountPercentage > 0 && (
                   <span className="ml-1 text-emerald-600">
                     (
                     {t("ui.quote.discountOff", {
