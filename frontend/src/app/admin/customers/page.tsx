@@ -226,6 +226,29 @@ export default function AdminCustomersPage() {
     }
   };
 
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  const activeFilterCount = [
+    statusFilter,
+    approvalFilter,
+    customerTypeFilter,
+    roleFilter,
+    tierFilter,
+    countryFilter,
+  ].filter(Boolean).length;
+
+  const resetFilters = () => {
+    setSearch("");
+    setStatusFilter("");
+    setApprovalFilter("");
+    setCustomerTypeFilter("");
+    setRoleFilter("");
+    setTierFilter("");
+    setCountryFilter("");
+    setSortBy("createdAt");
+    setSortDir("desc");
+  };
+
   return (
     <AdminLayout title="Customers" breadcrumb={[{ label: "Customers" }]}>
       <div className="space-y-5">
@@ -236,67 +259,131 @@ export default function AdminCustomersPage() {
           <StatCard title="Wholesale Customers" value={totals.wholesale} subtitle="Sales-focused accounts" icon={<Store size={18} />} color="bg-[#0F6CBD]" />
         </div>
 
-        <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.8fr)_repeat(6,minmax(0,1fr))]">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
+        {/* Clean Filter Toolbar */}
+        <div className="rounded-xl border border-[#E6E6E6] bg-white p-4 shadow-2xs space-y-3">
+          {/* Row 1: Search & Primary Controls */}
+          <div className="flex flex-col lg:flex-row items-center gap-3">
+            <div className="relative flex-1 w-full">
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search customers"
-                className="h-10 w-full rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                placeholder="Search by customer name, email, company, phone..."
+                className="h-10 w-full rounded-lg border border-[#E5E7EB] bg-white py-2 pl-9 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24] focus:ring-1 focus:ring-[#E31E24]"
               />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-[#111827] text-xs font-semibold"
+                >
+                  Clear
+                </button>
+              )}
             </div>
-            <AdminSelect label="" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} options={STATUS_OPTIONS} />
-            <AdminSelect label="" value={approvalFilter} onChange={(event) => setApprovalFilter(event.target.value)} options={APPROVAL_OPTIONS} />
-            <AdminSelect label="" value={customerTypeFilter} onChange={(event) => setCustomerTypeFilter(event.target.value)} options={CUSTOMER_TYPE_OPTIONS} />
-            <AdminSelect label="" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} options={roleOptions} />
-            <AdminSelect label="" value={tierFilter} onChange={(event) => setTierFilter(event.target.value)} options={tierOptions} />
-            <AdminSelect label="" value={countryFilter} onChange={(event) => setCountryFilter(event.target.value)} options={countryOptions} />
+
+            <div className="flex items-center gap-2 w-full lg:w-auto overflow-x-auto">
+              <div className="w-40 shrink-0">
+                <AdminSelect label="" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} options={roleOptions} />
+              </div>
+              <div className="w-44 shrink-0">
+                <AdminSelect label="" value={approvalFilter} onChange={(e) => setApprovalFilter(e.target.value)} options={APPROVAL_OPTIONS} />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className={`h-10 px-3.5 rounded-lg border text-[13px] font-semibold flex items-center gap-2 transition-colors shrink-0 ${
+                  showAdvancedFilters || activeFilterCount > 0
+                    ? "border-[#E31E24] bg-[#FFF5F5] text-[#E31E24]"
+                    : "border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F9FAFB]"
+                }`}
+              >
+                <Filter size={14} />
+                <span>More Filters</span>
+                {activeFilterCount > 0 && (
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-[11px] font-bold text-white">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+
+              {(activeFilterCount > 0 || search) && (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="h-10 px-3 rounded-lg text-[12.5px] font-semibold text-[#6B7280] hover:text-[#E31E24] hover:bg-[#F9FAFB] shrink-0"
+                >
+                  Reset All
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="mt-3 grid gap-3 xl:grid-cols-[repeat(3,minmax(0,1fr))_auto]">
-            <AdminSelect
-              label=""
-              value={sortBy}
-              onChange={(event) => setSortBy(event.target.value)}
-              options={[
-                { value: "createdAt", label: "Created date" },
-                { value: "updatedAt", label: "Updated date" },
-                { value: "firstName", label: "Customer name" },
-                { value: "email", label: "Email" },
-                { value: "status", label: "Account status" },
-                { value: "approvalStatus", label: "Approval status" },
-                { value: "customerType", label: "Customer type" },
-              ]}
-            />
-            <AdminSelect
-              label=""
-              value={sortDir}
-              onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
-              options={[
-                { value: "desc", label: "Descending" },
-                { value: "asc", label: "Ascending" },
-              ]}
-            />
-            <AdminSelect
-              label=""
-              value={String(limit)}
-              onChange={(event) => setLimit(Number(event.target.value))}
-              options={[
-                { value: "10", label: "10 / page" },
-                { value: "20", label: "20 / page" },
-                { value: "50", label: "50 / page" },
-              ]}
-            />
-            <div className="flex items-center justify-end text-[12.5px] text-[#6B6B6B]">
-              {pagination.total ?? 0} total
+          {/* Row 2: Collapsible Advanced Filters Drawer */}
+          {showAdvancedFilters && (
+            <div className="pt-3 border-t border-[#F3F4F6] grid gap-3 grid-cols-2 md:grid-cols-4 bg-[#FAFAFA] p-3 rounded-lg border border-[#E5E7EB]">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">Account Status</label>
+                <AdminSelect label="" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={STATUS_OPTIONS} />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">Customer Type</label>
+                <AdminSelect label="" value={customerTypeFilter} onChange={(e) => setCustomerTypeFilter(e.target.value)} options={CUSTOMER_TYPE_OPTIONS} />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">Customer Tier</label>
+                <AdminSelect label="" value={tierFilter} onChange={(e) => setTierFilter(e.target.value)} options={tierOptions} />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">Country</label>
+                <AdminSelect label="" value={countryFilter} onChange={(e) => setCountryFilter(e.target.value)} options={countryOptions} />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">Sort Field</label>
+                <AdminSelect
+                  label=""
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  options={[
+                    { value: "createdAt", label: "Created date" },
+                    { value: "updatedAt", label: "Updated date" },
+                    { value: "firstName", label: "Customer name" },
+                    { value: "email", label: "Email" },
+                  ]}
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">Sort Order</label>
+                <AdminSelect
+                  label=""
+                  value={sortDir}
+                  onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
+                  options={[
+                    { value: "desc", label: "Descending (Newest)" },
+                    { value: "asc", label: "Ascending (Oldest)" },
+                  ]}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
-          <div className="mt-3 flex flex-wrap gap-2 text-[12px] text-[#6B6B6B]">
-            <span className="rounded-full border border-[#E6E6E6] px-3 py-1">Filters update instantly</span>
-            <span className="rounded-full border border-[#E6E6E6] px-3 py-1">Use View for full profile, orders, and addresses</span>
+          {/* Row 3: Footer Bar */}
+          <div className="flex items-center justify-between pt-1 text-[12.5px] text-[#6B7280]">
+            <div className="font-semibold text-[#111827]">
+              Showing <span className="text-[#E31E24]">{pagination.total ?? 0}</span> customer records
+            </div>
+            <div className="flex items-center gap-2">
+              <span>Per page:</span>
+              <select
+                value={String(limit)}
+                onChange={(e) => setLimit(Number(e.target.value))}
+                className="h-8 rounded-md border border-[#E5E7EB] bg-white px-2 py-0 text-[12px] font-semibold text-[#111827] outline-none"
+              >
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+              </select>
+            </div>
           </div>
         </div>
 

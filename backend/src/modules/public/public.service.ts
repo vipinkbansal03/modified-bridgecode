@@ -1047,12 +1047,37 @@ function buildPublicPriceBreakdown(pr: {
   };
 }
 
-function toPublicProductDetail(
+async function toPublicProductDetail(
   p: PublicProductDetailRecord,
   countryId?: string,
 ) {
   const text = getProductText(p);
   const categoryText = getCategoryText(p.category);
+
+  const activeTaxRules = countryId
+    ? await (prisma as any).taxRule.findMany({
+        where: { countryId, status: "ACTIVE" },
+        include: { products: { select: { id: true } } },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      })
+    : [];
+
+  const productSpecificRules = activeTaxRules.filter((rule: any) =>
+    rule.products.some((prod: any) => prod.id === p.id),
+  );
+  const globalCountryRules = activeTaxRules.filter((r: any) => r.products.length === 0);
+  const activeRules = productSpecificRules.length > 0 ? productSpecificRules : globalCountryRules;
+
+  let resolvedTaxMode = "EXCLUSIVE";
+  if (activeRules.length > 0) {
+    resolvedTaxMode = activeRules[0].taxMode || "EXCLUSIVE";
+  } else {
+    console.warn(
+      `No tax rules (product-specific or global) found for product ${p.id} in country ${countryId}. Defaulting to INCLUSIVE.`,
+    );
+    resolvedTaxMode = "INCLUSIVE";
+  }
+
   const productPrices = p.prices.map((pr) => ({
     countryCode: pr.country.code,
     countryName: pr.country.name,
@@ -1065,6 +1090,7 @@ function toPublicProductDetail(
       pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
     distributorPrice:
       pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+    taxMode: resolvedTaxMode,
     landedCost: buildPublicPriceBreakdown(pr),
   }));
 
@@ -1081,6 +1107,7 @@ function toPublicProductDetail(
         pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
       distributorPrice:
         pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+      taxMode: resolvedTaxMode,
       landedCost: buildPublicPriceBreakdown(pr),
     }));
 

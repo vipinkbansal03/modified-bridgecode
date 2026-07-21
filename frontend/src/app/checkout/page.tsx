@@ -442,11 +442,6 @@ export default function CheckoutPage() {
                         <div>
                           <p className="text-[14px] font-semibold text-ink">{item.productTitle}</p>
                           <p className="mt-1 text-[12.5px] text-steel">{item.variantTitle}</p>
-                          {hasSpecificTaxes && (estimatedItem as any)?.appliedTaxes?.map((tax: any) => (
-                            <p key={tax.label} className="mt-1 text-[12.5px] font-medium text-steel">
-                              {tax.label}: {formatMoney(displayCurrencySymbol, tax.taxAmount * item.quantity)}
-                            </p>
-                          ))}
                         </div>
                         <button type="button" onClick={() => removeItem(item.variantId)} className="text-[12px] font-medium text-brand">
                           Remove
@@ -518,24 +513,18 @@ export default function CheckoutPage() {
                     <strong className="text-[#2A6A40]">-{formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, Number(estimate?.couponDiscount ?? appliedCoupon?.discountAmount ?? 0))}</strong>
                   </div>
                 )}
-                {(estimate?.taxBreakdown?.length ?? 0) > 0 && !hasSpecificTaxes ? (
-                  estimate!.taxBreakdown.map((tax) => (
-                    <div key={tax.label} className="flex items-center justify-between text-[14px]">
-                      <span className="text-steel">{tax.label}</span>
-                      <strong className="text-ink">{formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, tax.taxAmount)}</strong>
-                    </div>
-                  ))
-                ) : hasSpecificTaxes ? (
-                  <div className="flex items-center justify-between text-[14px]">
-                    <span className="text-steel">Tax</span>
-                    <strong className="text-ink">Included in products</strong>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between text-[14px]">
-                    <span className="text-steel">Tax</span>
-                    <strong className="text-ink">{canSubmit ? formatMoney(totals.currencySymbol, estimate?.taxAmount ?? 0) : "Calculated at checkout"}</strong>
-                  </div>
-                )}
+                <div className="flex items-center justify-between text-[14px]">
+                  <span className="text-steel">
+                    {(estimate as any)?.isTaxInclusive
+                      ? "Estimated tax (included)"
+                      : "Estimated tax"}
+                  </span>
+                  <strong className="text-ink">
+                    {(estimate?.taxAmount ?? 0) > 0
+                      ? formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, estimate!.taxAmount)
+                      : "Tax Exempt"}
+                  </strong>
+                </div>
                 <div className="flex items-center justify-between text-[14px]">
                   <span className="text-steel">Shipping</span>
                   <strong className="text-ink">

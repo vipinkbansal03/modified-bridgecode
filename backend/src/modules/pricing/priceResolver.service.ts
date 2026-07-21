@@ -10,6 +10,17 @@ import {
 } from "../customerRoles/customerRoles.service";
 import { supportsPromotionalDiscountType, type DiscountRuleKind } from "../discounts/discountRules";
 
+export type TaxBreakdownStructure = {
+  taxType: "CGST_SGST" | "IGST" | "VAT" | "EXEMPT";
+  cgst?: number;
+  sgst?: number;
+  igst?: number;
+  vat?: number;
+  totalTax: number;
+  rate: number;
+  ruleIdsApplied: string[];
+};
+
 type ResolvePriceInput = {
   productId: string;
   variantId?: string | null;
@@ -18,6 +29,8 @@ type ResolvePriceInput = {
   customerRoleKey?: string | null;
   tierId?: string | null;
   quantity: number;
+  buyerState?: string | null;
+  sellerState?: string | null;
 };
 
 type ResolvedPricingContext = {
@@ -48,6 +61,8 @@ export type ResolvedPrice = {
   appliedDiscounts: AppliedPriceLayer[];
   priceBeforeTax: number;
   taxAmount: number;
+  taxMode: string;
+  taxBreakdownStructure?: TaxBreakdownStructure;
   finalPrice: number;
   currency: {
     id: string;
@@ -481,31 +496,93 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
       : countryTaxRules.filter((rule) => rule.products.length === 0)
   ) as ActiveTaxRule[];
 
-  if (activeTaxRules.length) {
-    for (const rule of activeTaxRules) {
-      const taxPercent = money(rule.percentage);
-      const taxAmount = roundMoney(priceBeforeTax * (taxPercent / 100));
-      totalTaxAmount = roundMoney(totalTaxAmount + taxAmount);
-      layers.push({
-        type: "TAX",
-        label: `${rule.name} (${taxPercent}%)`,
-        amountBefore: priceBeforeTax,
-        amountAfter: roundMoney(priceBeforeTax + totalTaxAmount),
-        taxPercent,
-        taxAmount,
-        taxRuleType: rule.type,
-        ruleId: rule.id,
-        isSpecific: productSpecificRules.length > 0,
-      });
+  let primaryTaxMode = "INCLUSIVE";
+  let taxBreakdownStructure: TaxBreakdownStructure | undefined;
+
+  if (activeTaxRules.length > 0) {
+    const selectedRule = activeTaxRules[0] as any;
+    primaryTaxMode = selectedRule.taxMode || "EXCLUSIVE";
+    const taxPercent = money(selectedRule.percentage);
+
+    if (primaryTaxMode === "EXEMPT") {
+      totalTaxAmount = 0;
+      taxBreakdownStructure = {
+        taxType: "EXEMPT",
+        totalTax: 0,
+        rate: 0,
+        ruleIdsApplied: [selectedRule.id],
+      };
+    } else {
+      if (primaryTaxMode === "INCLUSIVE") {
+        totalTaxAmount = roundMoney(priceBeforeTax - priceBeforeTax / (1 + taxPercent / 100));
+      } else {
+        totalTaxAmount = roundMoney(priceBeforeTax * (taxPercent / 100));
+      }
+
+      const sellerStateNorm = (input.sellerState || "Rajasthan").trim().toLowerCase();
+      const buyerStateNorm = (input.buyerState || "").trim().toLowerCase();
+      const isSameState = !!buyerStateNorm && (buyerStateNorm === sellerStateNorm || buyerStateNorm === "rj" || buyerStateNorm === "rajasthan");
+
+      if (selectedRule.type === "VAT") {
+        taxBreakdownStructure = {
+          taxType: "VAT",
+          vat: totalTaxAmount,
+          totalTax: totalTaxAmount,
+          rate: taxPercent,
+          ruleIdsApplied: [selectedRule.id],
+        };
+      } else if (isSameState) {
+        const cgst = Math.round((totalTaxAmount / 2) * 100) / 100;
+        const sgst = Math.round((totalTaxAmount - cgst) * 100) / 100;
+        taxBreakdownStructure = {
+          taxType: "CGST_SGST",
+          cgst,
+          sgst,
+          totalTax: totalTaxAmount,
+          rate: taxPercent,
+          ruleIdsApplied: [selectedRule.id],
+        };
+      } else {
+        taxBreakdownStructure = {
+          taxType: "IGST",
+          igst: totalTaxAmount,
+          totalTax: totalTaxAmount,
+          rate: taxPercent,
+          ruleIdsApplied: [selectedRule.id],
+        };
+      }
     }
-    currentPrice = roundMoney(priceBeforeTax + totalTaxAmount);
+
+    layers.push({
+      type: "TAX",
+      label: primaryTaxMode === "INCLUSIVE" ? "Inclusive Tax" : "Tax",
+      amountBefore: priceBeforeTax,
+      amountAfter: primaryTaxMode === "INCLUSIVE" ? priceBeforeTax : roundMoney(priceBeforeTax + totalTaxAmount),
+      taxPercent,
+      taxAmount: totalTaxAmount,
+      ruleId: selectedRule.id,
+      isSpecific: productSpecificRules.length > 0,
+    } as any);
+    currentPrice = primaryTaxMode === "INCLUSIVE" ? priceBeforeTax : roundMoney(priceBeforeTax + totalTaxAmount);
   } else if (money(basePrice.taxPercentage) > 0) {
     const taxPercent = money(basePrice.taxPercentage);
     totalTaxAmount = roundMoney(priceBeforeTax * (taxPercent / 100));
     currentPrice = roundMoney(priceBeforeTax + totalTaxAmount);
+
+    const sellerStateNorm = (input.sellerState || "Rajasthan").trim().toLowerCase();
+    const buyerStateNorm = (input.buyerState || "").trim().toLowerCase();
+    const isSameState = !!buyerStateNorm && (buyerStateNorm === sellerStateNorm || buyerStateNorm === "rj" || buyerStateNorm === "rajasthan");
+
+    const fallbackCgst = Math.round((totalTaxAmount / 2) * 100) / 100;
+    const fallbackSgst = Math.round((totalTaxAmount - fallbackCgst) * 100) / 100;
+
+    taxBreakdownStructure = isSameState
+      ? { taxType: "CGST_SGST", cgst: fallbackCgst, sgst: fallbackSgst, totalTax: totalTaxAmount, rate: taxPercent, ruleIdsApplied: [] }
+      : { taxType: "IGST", igst: totalTaxAmount, totalTax: totalTaxAmount, rate: taxPercent, ruleIdsApplied: [] };
+
     layers.push({
       type: "TAX",
-      label: `Tax (${taxPercent}%)`,
+      label: "Tax",
       amountBefore: priceBeforeTax,
       amountAfter: currentPrice,
       taxPercent,
@@ -518,9 +595,9 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
   const landedCost =
     countryRecord && (Number(countryRecord.dutyPercentage) > 0 || Number(countryRecord.shippingCharge) > 0)
       ? {
-          dutyPercentage: money(countryRecord.dutyPercentage),
-          dutyAmount: roundMoney((money(basePrice.sellingPrice) * Number(countryRecord.dutyPercentage)) / (100 + Number(countryRecord.dutyPercentage))),
-          shippingCharge: money(countryRecord.shippingCharge),
+          dutyPercentage: Number(countryRecord.dutyPercentage),
+          dutyAmount: roundMoney(currentPrice * (Number(countryRecord.dutyPercentage) / 100)),
+          shippingCharge: Number(countryRecord.shippingCharge),
           countryId: countryRecord.id,
           countryCode: countryRecord.code,
         }
@@ -531,6 +608,8 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
     appliedDiscounts: layers,
     priceBeforeTax,
     taxAmount: roundMoney(totalTaxAmount),
+    taxMode: primaryTaxMode,
+    taxBreakdownStructure,
     finalPrice: roundMoney(currentPrice),
     currency: {
       id: basePrice.currency.id,

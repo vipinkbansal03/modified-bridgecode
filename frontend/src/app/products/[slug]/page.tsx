@@ -213,6 +213,18 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                       M.R.P.: <span className="line-through">{formatMoney(publicPrice.currencySymbol, publicPrice.mrp)}</span>
                     </p>
                   ) : null}
+
+                  {(publicPrice as any)?.taxMode === "EXEMPT" ? (
+                    <div className="pt-1">
+                      <span className="inline-block rounded bg-[#F3F4F6] px-2 py-0.5 text-[11.5px] font-semibold text-[#374151]">
+                        Tax Exempt
+                      </span>
+                    </div>
+                  ) : (publicPrice as any)?.taxMode === "INCLUSIVE" ? (
+                    <p className="text-[12.5px] font-medium text-[#111827] pt-0.5">
+                      Inclusive of all taxes
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
 

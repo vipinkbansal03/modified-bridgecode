@@ -432,6 +432,25 @@ export function AdminRichTextEditor({ label, value, onChange, placeholder, error
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value;
+      // Ensure all images inside editor have a cross (X) delete button
+      const imgs = editorRef.current.querySelectorAll("img");
+      imgs.forEach((img) => {
+        if (!img.parentElement?.classList.contains("img-wrapper")) {
+          const wrapper = document.createElement("span");
+          wrapper.className = "img-wrapper relative inline-block my-2 mr-3 align-bottom group select-none";
+          wrapper.setAttribute("contenteditable", "false");
+
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "img-delete-btn absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white text-[11px] font-bold shadow-md hover:bg-[#B5151B] transition-transform hover:scale-110 cursor-pointer";
+          btn.title = "Remove image";
+          btn.innerHTML = "✕";
+
+          img.parentNode?.insertBefore(wrapper, img);
+          wrapper.appendChild(img);
+          wrapper.appendChild(btn);
+        }
+      });
     }
   }, [value]);
 
@@ -494,6 +513,22 @@ export function AdminRichTextEditor({ label, value, onChange, placeholder, error
     updateValue();
   };
 
+  const handleEditorClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const deleteBtn = target.closest(".img-delete-btn");
+    if (deleteBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const wrapper = deleteBtn.closest(".img-wrapper") || deleteBtn.parentElement;
+      if (wrapper && editorRef.current?.contains(wrapper)) {
+        wrapper.remove();
+      } else {
+        deleteBtn.remove();
+      }
+      updateValue();
+    }
+  };
+
   const handleInsertImageFile = async (file: File) => {
     setUploadingImg(true);
     try {
@@ -505,7 +540,7 @@ export function AdminRichTextEditor({ label, value, onChange, placeholder, error
       const mediaItem = Array.isArray(res.data?.data) ? res.data.data[0] : res.data?.data || res.data;
       const url = mediaItem?.url || mediaItem?.location || (typeof mediaItem === "string" ? mediaItem : "");
       if (url) {
-        const cleanImgHtml = `<div class="my-3 text-left"><img src="${url}" alt="Product Image" class="max-h-48 max-w-full w-auto inline-block rounded-lg border border-[#E5E7EB] bg-white p-1.5 shadow-2xs cursor-pointer hover:border-[#E31E24]" /></div><p><br></p>`;
+        const cleanImgHtml = `<span class="img-wrapper relative inline-block my-2 mr-3 align-bottom group select-none" contenteditable="false"><img src="${url}" alt="Product Image" class="max-h-48 max-w-full w-auto inline-block rounded-lg border border-[#E5E7EB] bg-white p-1.5 shadow-2xs" /><button type="button" class="img-delete-btn absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white text-[11px] font-bold shadow-md hover:bg-[#B5151B] transition-transform hover:scale-110 cursor-pointer" title="Remove image">✕</button></span><p><br></p>`;
         insertHtmlAtSavedCursor(cleanImgHtml);
       } else {
         alert("Failed to get uploaded media URL.");
@@ -613,6 +648,7 @@ export function AdminRichTextEditor({ label, value, onChange, placeholder, error
             role="textbox"
             aria-multiline="true"
             suppressContentEditableWarning
+            onClick={handleEditorClick}
             onInput={() => {
               saveCursorLocation();
               updateValue();

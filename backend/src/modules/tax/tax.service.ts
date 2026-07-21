@@ -3,12 +3,14 @@ import { AppError, getPagination } from "../../utils/apiResponse";
 import { readSpreadsheetRows, writeSpreadsheetBuffer } from "../../utils/spreadsheet";
 
 const TAX_RULE_TYPES = ["CGST", "SGST", "VAT", "SALES_TAX"] as const;
+const TAX_MODES = ["EXCLUSIVE", "INCLUSIVE", "EXEMPT"] as const;
 const STATUS_VALUES = ["ACTIVE", "INACTIVE"] as const;
 const SORTABLE_FIELDS = ["updatedAt", "createdAt", "name", "type", "percentage", "sortOrder", "country"] as const;
 
 type TaxRuleInput = {
   name?: string;
   type?: string;
+  taxMode?: string;
   percentage?: number | string;
   countryId?: string;
   status?: string;
@@ -103,6 +105,13 @@ function normalizeType(value: string | undefined) {
   const type = value.toUpperCase();
   if (!TAX_RULE_TYPES.includes(type as never)) throw new AppError("Invalid tax rule type.", 400);
   return type;
+}
+
+function normalizeTaxMode(value: string | undefined) {
+  if (!value) return "EXCLUSIVE";
+  const mode = value.toUpperCase();
+  if (!TAX_MODES.includes(mode as never)) throw new AppError("Invalid tax mode.", 400);
+  return mode;
 }
 
 function normalizeStatus(value: string | undefined) {
@@ -259,13 +268,25 @@ export async function previewTaxImpact(input: TaxPreviewInput) {
 
   const appliedRules = activeRules.map((rule) => {
     const rate = Number(rule.percentage);
-    const taxAmount = roundMoney(subtotal * (rate / 100));
+    const mode = (rule.taxMode as string) || "EXCLUSIVE";
+
+    let taxAmount = 0;
+    if (mode === "EXEMPT") {
+      taxAmount = 0;
+    } else if (mode === "INCLUSIVE") {
+      taxAmount = roundMoney(subtotal - subtotal / (1 + rate / 100));
+    } else {
+      taxAmount = roundMoney(subtotal * (rate / 100));
+    }
+
     totalTax = roundMoney(totalTax + taxAmount);
-    runningTotal = roundMoney(subtotal + totalTax);
+    runningTotal = mode === "INCLUSIVE" ? roundMoney(subtotal) : roundMoney(subtotal + totalTax);
+
     return {
       id: rule.id,
       name: rule.name,
       type: rule.type,
+      taxMode: mode,
       percentage: rate,
       taxAmount,
       amountBefore: subtotal,
@@ -277,7 +298,7 @@ export async function previewTaxImpact(input: TaxPreviewInput) {
     country,
     subtotal: roundMoney(subtotal),
     taxAmount: roundMoney(totalTax),
-    total: roundMoney(subtotal + totalTax),
+    total: roundMoney(runningTotal),
     appliedRules,
   };
 }
@@ -285,6 +306,7 @@ export async function previewTaxImpact(input: TaxPreviewInput) {
 export async function createTaxRule(input: TaxRuleInput) {
   const name = input.name?.trim();
   const type = normalizeType(input.type);
+  const taxMode = normalizeTaxMode(input.taxMode);
   const percentage = parsePercentage(input.percentage);
   const countryId = input.countryId?.trim();
   if (!name) throw new AppError("Tax rule name is required.", 400);
@@ -298,6 +320,7 @@ export async function createTaxRule(input: TaxRuleInput) {
     data: {
       name,
       type,
+      taxMode,
       percentage,
       countryId,
       status: normalizeStatus(input.status) ?? "ACTIVE",
@@ -324,6 +347,7 @@ export async function updateTaxRule(id: string, input: TaxRuleInput) {
   if (input.name !== undefined) data.name = nextName;
   if (input.countryId !== undefined) data.countryId = nextCountryId;
   if (input.type !== undefined) data.type = normalizeType(input.type);
+  if (input.taxMode !== undefined) data.taxMode = normalizeTaxMode(input.taxMode);
   if (input.percentage !== undefined) data.percentage = parsePercentage(input.percentage);
   if (input.status !== undefined) data.status = normalizeStatus(input.status);
   if (input.sortOrder !== undefined) data.sortOrder = parseSortOrder(input.sortOrder);

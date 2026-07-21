@@ -187,14 +187,8 @@ export const navItems = [
     permission: "users.view",
   },
   {
-    label: "Roles",
+    label: "Roles & Permissions",
     href: "/admin/roles",
-    icon: Shield,
-    permission: "users.manage",
-  },
-  {
-    label: "Permissions",
-    href: "/admin/permissions",
     icon: Shield,
     permission: "users.manage",
   },

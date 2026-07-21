@@ -35,6 +35,7 @@ type TaxRule = {
   id: string;
   name: string;
   type: "CGST" | "SGST" | "VAT" | "SALES_TAX";
+  taxMode: "EXCLUSIVE" | "INCLUSIVE" | "EXEMPT";
   percentage: string | number;
   countryId: string;
   country?: { id: string; name: string; code: string; currency?: { code: string; symbol: string } | null };
@@ -63,6 +64,7 @@ type TaxPreview = {
     id: string;
     name: string;
     type: string;
+    taxMode?: string;
     percentage: number;
     taxAmount: number;
     amountBefore: number;
@@ -74,6 +76,7 @@ type TaxFormState = {
   id: string;
   name: string;
   type: TaxRule["type"];
+  taxMode: TaxRule["taxMode"];
   percentage: string;
   countryId: string;
   status: TaxRule["status"];
@@ -99,6 +102,7 @@ const emptyForm: TaxFormState = {
   id: "",
   name: "",
   type: "VAT",
+  taxMode: "EXCLUSIVE",
   percentage: "",
   countryId: "",
   status: "ACTIVE",
@@ -284,6 +288,7 @@ export default function AdminTaxPage() {
       id: row.id,
       name: row.name,
       type: row.type,
+      taxMode: row.taxMode || "EXCLUSIVE",
       percentage: String(row.percentage),
       countryId: row.countryId,
       status: row.status,
@@ -312,6 +317,7 @@ export default function AdminTaxPage() {
       const payload = {
         name: form.name,
         type: form.type,
+        taxMode: form.taxMode,
         percentage: form.percentage,
         countryId: form.countryId,
         status: form.status,
@@ -751,10 +757,16 @@ export default function AdminTaxPage() {
         </div>
       </div>
 
-      <Modal open={showForm} onClose={() => setShowForm(false)} title={form.id ? "Edit tax rule" : "Add tax rule"} panelClassName="max-w-3xl">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <AdminInput label="Rule Name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="GST / VAT / Sales Tax" />
+      <Modal open={showForm} onClose={() => setShowForm(false)} title={form.id ? "Edit Tax Rule" : "Add Tax Rule"} panelClassName="max-w-3xl overflow-hidden">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* Rule Details Grid */}
+          <div className="grid gap-x-5 gap-y-4 md:grid-cols-2">
+            <AdminInput
+              label="Rule Name"
+              value={form.name}
+              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+              placeholder="GST / VAT / Sales Tax"
+            />
             <AdminSelect
               label="Rule Type"
               value={form.type}
@@ -767,12 +779,31 @@ export default function AdminTaxPage() {
               ]}
             />
             <AdminSelect
+              label="Tax Mode (Calculation)"
+              value={form.taxMode}
+              onChange={(event) => setForm((current) => ({ ...current, taxMode: event.target.value as TaxRule["taxMode"] }))}
+              options={[
+                { value: "EXCLUSIVE", label: "Exclusive (Added on top of subtotal)" },
+                { value: "INCLUSIVE", label: "Inclusive (Included in product price)" },
+                { value: "EXEMPT", label: "Exempt (0% Tax / Tax Free)" },
+              ]}
+            />
+            <AdminSelect
               label="Country"
               value={form.countryId}
               onChange={(event) => setForm((current) => ({ ...current, countryId: event.target.value }))}
               options={countryOptions.filter((option) => option.value !== "")}
             />
-            <AdminInput label="Tax Percentage" type="number" min="0" max="100" step="0.01" value={form.percentage} onChange={(event) => setForm((current) => ({ ...current, percentage: event.target.value }))} />
+            <AdminInput
+              label="Tax Percentage (%)"
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={form.percentage}
+              onChange={(event) => setForm((current) => ({ ...current, percentage: event.target.value }))}
+              placeholder="e.g. 18.00"
+            />
             <AdminSelect
               label="Status"
               value={form.status}
@@ -782,29 +813,50 @@ export default function AdminTaxPage() {
                 { value: "INACTIVE", label: "Inactive" },
               ]}
             />
-            <AdminInput label="Priority" type="number" min="0" step="1" value={form.sortOrder} onChange={(event) => setForm((current) => ({ ...current, sortOrder: event.target.value }))} />
+            <AdminInput
+              label="Priority (Sort Order)"
+              type="number"
+              min="0"
+              step="1"
+              value={form.sortOrder}
+              onChange={(event) => setForm((current) => ({ ...current, sortOrder: event.target.value }))}
+              placeholder="0"
+            />
+          </div>
 
-            <div className="md:col-span-2 space-y-2">
-              <label className="text-[13px] font-semibold text-[#1A1A1A]">Applicable Products (Optional)</label>
-              <div className="border border-[#E6E6E6] rounded-md p-3 bg-[#F9F9F9] max-h-48 overflow-y-auto space-y-2">
-                <div className="relative mb-2">
-                  <Search size={14} className="absolute left-2.5 top-2.5 text-[#9A9A9A]" />
-                  <input
-                    type="text"
-                    placeholder="Search products..."
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 text-[12.5px] border border-[#E6E6E6] rounded bg-white outline-none focus:border-[#E31E24]"
-                  />
-                </div>
+          {/* Applicable Products Section */}
+          <div className="pt-2 space-y-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#374151]">
+              Applicable Products (Optional)
+            </label>
+            <div className="border border-[#E5E7EB] rounded-xl p-3.5 bg-[#F9FAFB] space-y-3">
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
+                <input
+                  type="text"
+                  placeholder="Search products..."
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  className="w-full pl-9 pr-3.5 py-2 text-xs border border-[#E5E7EB] rounded-lg bg-white outline-none focus:border-[#E31E24]"
+                />
+              </div>
+
+              <div className="max-h-44 overflow-y-auto pr-1">
                 {filteredProducts.length === 0 ? (
-                  <p className="text-[12px] text-[#9A9A9A] text-center py-2">No products found</p>
+                  <p className="text-xs text-[#9CA3AF] text-center py-3">No products found</p>
                 ) : (
                   <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
                     {filteredProducts.map((p: any) => {
                       const isChecked = form.productIds?.includes(p.id);
                       return (
-                        <label key={p.id} className="flex items-start gap-2 text-[12.5px] text-[#1A1A1A] cursor-pointer hover:bg-[#EAEAEA] p-1 rounded">
+                        <label
+                          key={p.id}
+                          className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                            isChecked
+                              ? "border-[#E31E24]/40 bg-[#FFF5F5] font-semibold text-[#111827]"
+                              : "border-[#E5E7EB] bg-white hover:bg-[#F3F4F6] text-[#374151]"
+                          }`}
+                        >
                           <input
                             type="checkbox"
                             checked={isChecked}
@@ -818,7 +870,7 @@ export default function AdminTaxPage() {
                                 }
                               });
                             }}
-                            className="mt-0.5 rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
+                            className="h-4 w-4 rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24]"
                           />
                           <span className="truncate">{p.title}</span>
                         </label>
@@ -827,22 +879,31 @@ export default function AdminTaxPage() {
                   </div>
                 )}
               </div>
-              <p className="text-[11.5px] text-[#9A9A9A]">
-                If no products are selected, this tax rule will apply globally to all products in the selected country.
-              </p>
             </div>
+            <p className="text-[11.5px] text-[#6B7280] leading-normal">
+              If no products are selected, this tax rule will apply globally to all products in the selected country.
+            </p>
           </div>
 
-          <div className="flex items-center justify-between gap-3 border-t border-[#E6E6E6] pt-4">
-            <p className="text-[12.5px] text-[#6B6B6B]">
+          {/* Footer Section */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[#E5E7EB] pt-4 mt-4">
+            <p className="text-[11.5px] text-[#6B7280] max-w-sm leading-normal">
               Higher priority rules are resolved first. Tax percentage stays resolver-backed and never recalculates on the client.
             </p>
-            <div className="flex gap-2">
-              <button type="button" onClick={() => setShowForm(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
+            <div className="flex items-center gap-2.5 shrink-0 w-full sm:w-auto justify-end">
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                className="px-4 py-2 rounded-lg border border-[#E5E7EB] bg-white text-xs font-medium text-[#374151] hover:bg-[#F3F4F6] transition-colors"
+              >
                 Cancel
               </button>
-              <button type="submit" disabled={createRule.isPending || updateRule.isPending} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
-                {form.id ? "Save rule" : "Create rule"}
+              <button
+                type="submit"
+                disabled={createRule.isPending || updateRule.isPending}
+                className="px-5 py-2 rounded-lg bg-[#E31E24] text-xs font-bold text-white hover:bg-[#B5151B] transition-colors shadow-2xs disabled:opacity-60"
+              >
+                {form.id ? "Save Rule" : "Create Rule"}
               </button>
             </div>
           </div>
