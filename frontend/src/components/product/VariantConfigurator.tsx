@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/ToastProvider";
-
+import { useQuoteCartUI } from "@/contexts/QuoteCartUIContext";
 import {
   AlertCircle,
   CheckCircle2,
@@ -218,6 +218,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   const { selectedCurrency, selectedCountryCode } = useCurrencyContext();
   const { addItems } = useQuoteCart();
   const { addItem, openCart } = useCart();
+  const { open } = useQuoteCartUI();
 
   const { currentCustomer, isLoading } = useCustomerAuth();
   const { showToast } = useToast();
@@ -538,6 +539,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
 
     const items: QuoteCartItem[] = drafts.map((draft) => ({
       productId: apiProduct.id,
+      productSlug: apiProduct.slug,
       productTitle: apiProduct.title,
       variantId: draft.variantId,
       variantTitle: draft.variantTitle,
@@ -566,6 +568,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     }
 
     addItems(items);
+    open();
     setDrafts([]);
     setAdded(true);
     setError(null);

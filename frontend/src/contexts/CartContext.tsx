@@ -1,6 +1,15 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { apiClient } from "@/lib/apiClient";
+import { useCurrencyContext } from "@/contexts/CurrencyContext";
 
 export interface CartItem {
   variantId: string;
@@ -16,6 +25,8 @@ export interface CartItem {
   countryCode?: string;
   countryName?: string;
   selectedAttributes: Record<string, string>;
+  priceUnavailable?: boolean;
+  priceUnavailableMessage?: string;
 }
 
 interface CartTotals {
@@ -46,7 +57,10 @@ function computeTotals(items: CartItem[]): CartTotals {
   const first = items[0];
   return {
     itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
-    subtotal: items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
+    subtotal: items.reduce(
+      (sum, item) => sum + item.quantity * item.unitPrice,
+      0,
+    ),
     currencyCode: first?.currencyCode ?? "INR",
     currencySymbol: first?.currencySymbol ?? "Rs ",
   };
@@ -55,13 +69,18 @@ function computeTotals(items: CartItem[]): CartTotals {
 function isValidCartItem(value: unknown): value is CartItem {
   if (!value || typeof value !== "object") return false;
   const item = value as CartItem;
-  return Boolean(item.variantId && item.productId && item.productSlug && item.quantity > 0);
+  return Boolean(
+    item.variantId && item.productId && item.productSlug && item.quantity > 0,
+  );
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+
+  const { selectedCountryCode } = useCurrencyContext();
+
   const totals = useMemo(() => computeTotals(items), [items]);
 
   useEffect(() => {
@@ -85,10 +104,115 @@ export function CartProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, [items, hydrated]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!items.length) return;
+    if (!selectedCountryCode) return;
+
+    let cancelled = false;
+
+    async function refreshCartPrices() {
+      try {
+        const customerToken = window.localStorage.getItem("customer_token");
+
+        const groupedItems = items.reduce<Record<string, CartItem[]>>(
+          (acc, item) => {
+            if (!acc[item.productSlug]) {
+              acc[item.productSlug] = [];
+            }
+
+            acc[item.productSlug].push(item);
+            return acc;
+          },
+          {},
+        );
+
+        const updatedItems = [...items];
+
+        for (const [productSlug, productItems] of Object.entries(
+          groupedItems,
+        )) {
+          try {
+            const response = await apiClient.post(
+              `/products/${productSlug}/price-preview`,
+              {
+                items: productItems.map((item) => ({
+                  variantId: item.variantId,
+                  quantity: item.quantity,
+                })),
+              },
+              {
+                params: {
+                  countryCode: selectedCountryCode,
+                },
+                headers: customerToken
+                  ? {
+                      Authorization: `Bearer ${customerToken}`,
+                    }
+                  : undefined,
+              },
+            );
+
+            const previews = response.data.data ?? [];
+
+            for (const preview of previews) {
+              const index = updatedItems.findIndex(
+                (item) => item.variantId === preview.variantId,
+              );
+
+              if (index !== -1) {
+                updatedItems[index] = {
+                  ...updatedItems[index],
+                  unitPrice: preview.unitPrice,
+                  currencyCode: preview.currency.code,
+                  currencySymbol: preview.currency.symbol,
+                  priceUnavailable: false,
+                  priceUnavailableMessage: undefined,
+                };
+              }
+            }
+          } catch (error: any) {
+            const message = error?.message || "";
+
+            if (message.includes("No active price is configured")) {
+              updatedItems.forEach((item, index) => {
+                if (item.productSlug === productSlug) {
+                  updatedItems[index] = {
+                    ...item,
+                    priceUnavailable: true,
+                    priceUnavailableMessage: message,
+                  };
+                }
+              });
+
+              continue;
+            }
+
+            console.error(`Failed to refresh prices for ${productSlug}`, error);
+          }
+        }
+
+        if (!cancelled) {
+          setItems(updatedItems);
+        }
+      } catch (error) {
+        console.error("Unexpected error while refreshing cart prices", error);
+      }
+    }
+
+    refreshCartPrices();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCountryCode, hydrated]);
+
   const mergeCartItems = (current: CartItem[], incomingItems: CartItem[]) => {
     const next = [...current];
     for (const item of incomingItems) {
-      const existingIndex = next.findIndex((entry) => entry.variantId === item.variantId);
+      const existingIndex = next.findIndex(
+        (entry) => entry.variantId === item.variantId,
+      );
       if (existingIndex === -1) {
         next.push(item);
         continue;
@@ -115,12 +239,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems((current) =>
       quantity <= 0
         ? current.filter((item) => item.variantId !== variantId)
-        : current.map((item) => (item.variantId === variantId ? { ...item, quantity } : item)),
+        : current.map((item) =>
+            item.variantId === variantId ? { ...item, quantity } : item,
+          ),
     );
   };
 
   const removeItem = (variantId: string) => {
-    setItems((current) => current.filter((item) => item.variantId !== variantId));
+    setItems((current) =>
+      current.filter((item) => item.variantId !== variantId),
+    );
   };
 
   const clearCart = () => setItems([]);
