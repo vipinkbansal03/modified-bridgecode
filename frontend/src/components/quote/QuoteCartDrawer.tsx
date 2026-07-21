@@ -45,6 +45,8 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
 
   const { mutate: submitQuote, isPending } = useQuoteSubmit();
 
+  const hasUnavailableItems = items.some((item) => item.priceUnavailable);
+
   const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -227,14 +229,18 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                         </div>
                         <div className="shrink-0 text-right">
                           <p className="text-[13.5px] font-semibold text-ink">
-                            {item.currencySymbol}
-                            {(item.unitPrice * item.quantity).toLocaleString(
-                              "en-IN",
-                            )}
+                            {item.priceUnavailable
+                              ? "—"
+                              : fmt(
+                                  item.currencySymbol,
+                                  item.unitPrice * item.quantity,
+                                )}
                           </p>
+
                           <p className="text-[11.5px] text-[#9A9A9A]">
-                            {item.quantity} × {item.currencySymbol}
-                            {item.unitPrice.toLocaleString("en-IN")}
+                            {item.priceUnavailable
+                              ? "Price unavailable"
+                              : `${item.quantity} × ${fmt(item.currencySymbol, item.unitPrice)}`}
                           </p>
                           <button
                             onClick={() => removeItem(item.variantId)}
@@ -248,6 +254,20 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                     ))}
                   </div>
 
+                  {hasUnavailableItems && (
+                    <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3">
+                      <p className="text-[13px] font-semibold text-red-700">
+                        Price unavailable
+                      </p>
+
+                      <p className="mt-1 text-[12px] leading-relaxed text-red-600">
+                        {items.find((item) => item.priceUnavailable)
+                          ?.priceUnavailableMessage ??
+                          "One or more products do not have pricing configured for the selected country."}
+                      </p>
+                    </div>
+                  )}
+
                   {/* Totals */}
                   <div className="mt-4 rounded-lg border border-[#E6E6E6] p-4">
                     <div className="space-y-1.5 text-[13px]">
@@ -258,25 +278,34 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                           })}
                         </span>
                         <span>
-                          {fmt(totals.currencySymbol, totals.subtotal)}
+                          {hasUnavailableItems
+                            ? "Unavailable"
+                            : fmt(totals.currencySymbol, totals.subtotal)}
                         </span>
                       </div>
-                      {totals.discountPercentage > 0 && (
-                        <div className="flex justify-between text-emerald-600">
-                          <span>
-                            {t("ui.quote.volumeDiscount", {
-                              percent: totals.discountPercentage,
-                            })}
-                          </span>
-                          <span>
-                            −{fmt(totals.currencySymbol, totals.discountAmount)}
-                          </span>
-                        </div>
-                      )}
+                      {!hasUnavailableItems &&
+                        totals.discountPercentage > 0 && (
+                          <div className="flex justify-between text-emerald-600">
+                            <span>
+                              {t("ui.quote.volumeDiscount", {
+                                percent: totals.discountPercentage,
+                              })}
+                            </span>
+                            <span>
+                              −
+                              {fmt(
+                                totals.currencySymbol,
+                                totals.discountAmount,
+                              )}
+                            </span>
+                          </div>
+                        )}
                       <div className="flex justify-between border-t border-[#F0F0F0] pt-2 text-[14.5px] font-semibold text-ink">
                         <span>{t("ui.quote.estimatedTotal")}</span>
                         <span>
-                          {fmt(totals.currencySymbol, totals.grandTotal)}
+                          {hasUnavailableItems
+                            ? "Unavailable"
+                            : fmt(totals.currencySymbol, totals.grandTotal)}
                         </span>
                       </div>
                     </div>
@@ -362,8 +391,12 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                       type="submit"
                       loading={isPending}
                       loadingText={t("ui.quote.submitting")}
-                      disabled={!name || !email}
-                      className="w-full rounded bg-[#E31E24] py-3 text-[14px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
+                      disabled={
+                        !name ||
+                        !email ||
+                        items.some((item) => item.priceUnavailable)
+                      }
+                      className="w-full rounded bg-[#E31E24] py-3 text-[14px] font-semibold text-white enabled:hover:bg-[#B5151B] disabled:cursor-not-allowed disabled:bg-gray-400 disabled:opacity-100"
                     >
                       {t("ui.quote.submitQuoteRequest")}
                     </LoadingButton>

@@ -7,11 +7,16 @@ import React, {
   useState,
   useEffect,
   useReducer,
+  useRef,
 } from "react";
 import { discountPercentage } from "@/utils/discountRules";
 
+import { apiClient } from "@/lib/apiClient";
+import { useCurrencyContext } from "@/contexts/CurrencyContext";
+
 export interface QuoteCartItem {
   productId: string;
+  productSlug: string;
   productTitle: string;
   variantId: string;
   variantTitle: string;
@@ -21,6 +26,8 @@ export interface QuoteCartItem {
   currencyCode: string;
   currencySymbol: string;
   selectedAttributes: Record<string, string>;
+  priceUnavailable?: boolean;
+  priceUnavailableMessage?: string;
 }
 
 export interface QuoteCartTotals {
@@ -106,6 +113,8 @@ const STORAGE_KEY = "quote_cart_v1";
 export function QuoteCartProvider({ children }: { children: React.ReactNode }) {
   const [items, dispatch] = useReducer(reducer, []);
   const [isReady, setIsReady] = useState(false);
+  const { selectedCountryCode } = useCurrencyContext();
+  const itemsRef = useRef<QuoteCartItem[]>([]);
 
   useEffect(() => {
     try {
@@ -125,6 +134,127 @@ export function QuoteCartProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, [items]);
+
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  useEffect(() => {
+    if (!isReady) return;
+    if (!itemsRef.current.length) return;
+    if (!selectedCountryCode) return;
+
+    let cancelled = false;
+
+    async function refreshQuotePrices() {
+      const customerToken = window.localStorage.getItem("customer_token");
+
+      const groupedItems = itemsRef.current.reduce<
+        Record<string, QuoteCartItem[]>
+      >((acc, item) => {
+        if (!acc[item.productSlug]) {
+          acc[item.productSlug] = [];
+        }
+
+        acc[item.productSlug].push(item);
+        return acc;
+      }, {});
+
+      let updatedItems = [...itemsRef.current];
+
+      for (const [productSlug, productItems] of Object.entries(groupedItems)) {
+        try {
+          const response = await apiClient.post(
+            `/products/${productSlug}/price-preview`,
+            {
+              items: productItems.map((item) => ({
+                variantId: item.variantId,
+                quantity: item.quantity,
+              })),
+            },
+            {
+              params: {
+                countryCode: selectedCountryCode,
+              },
+              headers: customerToken
+                ? {
+                    Authorization: `Bearer ${customerToken}`,
+                  }
+                : undefined,
+            },
+          );
+
+          const previews = response.data.data ?? [];
+
+          updatedItems = updatedItems.map((item) => {
+            const preview = previews.find(
+              (p: { variantId: string; unitPrice: number }) =>
+                p.variantId === item.variantId,
+            );
+
+            if (!preview) return item;
+
+            return {
+              ...item,
+              unitPrice: preview.unitPrice,
+              currencyCode: preview.currency.code,
+              currencySymbol: preview.currency.symbol,
+              priceUnavailable: false,
+              priceUnavailableMessage: undefined,
+            };
+          });
+        } catch (error: any) {
+          const message = error?.message || "";
+
+          if (message.includes("No active price is configured")) {
+            updatedItems = updatedItems.map((item) =>
+              item.productSlug === productSlug
+                ? {
+                    ...item,
+                    priceUnavailable: true,
+                    priceUnavailableMessage: message,
+                  }
+                : item,
+            );
+
+            continue;
+          }
+
+          console.error(`Failed to refresh prices for ${productSlug}`, error);
+        }
+      }
+
+      if (cancelled) return;
+
+      const hasChanges = updatedItems.some((updatedItem, index) => {
+        const currentItem = itemsRef.current[index];
+
+        if (!currentItem) return true;
+
+        return (
+          updatedItem.unitPrice !== currentItem.unitPrice ||
+          updatedItem.currencyCode !== currentItem.currencyCode ||
+          updatedItem.currencySymbol !== currentItem.currencySymbol ||
+          updatedItem.priceUnavailable !== currentItem.priceUnavailable ||
+          updatedItem.priceUnavailableMessage !==
+            currentItem.priceUnavailableMessage
+        );
+      });
+
+      if (hasChanges) {
+        dispatch({
+          type: "LOAD",
+          payload: updatedItems,
+        });
+      }
+    }
+
+    refreshQuotePrices();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCountryCode, isReady]);
 
   const addItems = useCallback(
     (newItems: QuoteCartItem[]) =>
