@@ -594,162 +594,102 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
         </div>
 
         <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="grid gap-4 md:grid-cols-2 lg:gap-5">
-            {attributes.map((attribute) => {
-              const displayType = getAttributeDisplayType(attribute);
-              const selectedValue = selectedOptions[attribute.name];
-              const displayMeta = getAttributeDisplayMeta(displayType);
+          {/* Compact Multi-Column Attribute Controls Grid */}
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+              {attributes.map((attribute) => {
+                const displayType = getAttributeDisplayType(attribute);
+                const selectedValue = selectedOptions[attribute.name];
+                const isBinaryPill =
+                  displayType !== "DROPDOWN" && attribute.values.length <= 4;
 
-              return (
-                <div
-                  key={attribute.id}
-                  className={[
-                    "rounded-lg border p-3 transition-colors sm:p-4 lg:p-5",
-                    displayMeta.cardClass,
-                    displayType === "DROPDOWN" ? "" : "md:col-span-2",
-                  ].join(" ")}
-                >
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
-                          {attribute.name}
-                        </p>
-                        {displayType !== "DROPDOWN" && (
-                          <span
-                            className={[
-                              "rounded-pill border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
-                              displayMeta.badgeClass,
-                            ].join(" ")}
-                          >
-                            {displayMeta.label}
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 text-[13px] text-steel">
-                        {getAttributeHelperText(displayType, selectedValue)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className="rounded-pill border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-steel">
-                        {attribute.values.length} options
+                return (
+                  <div
+                    key={attribute.id}
+                    className={[
+                      "rounded-lg border border-line bg-white p-3 shadow-xs transition-colors hover:border-steel-2/60",
+                      isBinaryPill && attribute.values.length > 2
+                        ? "sm:col-span-2"
+                        : "",
+                    ].join(" ")}
+                  >
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <label className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink/80">
+                        {attribute.name}
+                      </label>
+                      <span className="rounded-pill border border-line bg-offwhite px-2 py-0.5 text-[10px] font-semibold text-steel">
+                        {attribute.values.length} opts
                       </span>
                     </div>
-                  </div>
 
-                  {displayType === "DROPDOWN" ? (
-                    <div className="relative" data-variant-dropdown>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setOpenDropdown((current) =>
-                            current === attribute.id ? null : attribute.id,
-                          )
-                        }
-                        className={[
-                          "flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg border bg-white py-3 pl-4 pr-4 text-left text-[13px] text-ink outline-none transition",
-                          openDropdown === attribute.id
-                            ? "border-brand shadow-[0_0_0_3px_rgba(227,30,36,0.08)]"
-                            : "border-line hover:border-steel-2",
-                        ].join(" ")}
-                      >
-                        <span className="truncate">
-                          {selectedValue || "Choose one option"}
-                        </span>
-                        <ChevronDown
-                          size={16}
-                          className={[
-                            "shrink-0 text-steel-2 transition-transform duration-200",
-                            openDropdown === attribute.id ? "rotate-180" : "",
-                          ].join(" ")}
-                        />
-                      </button>
-
-                      {openDropdown === attribute.id && (
-                        <div className="absolute left-0 right-0 z-30 mt-2 overflow-hidden rounded-lg border border-line bg-white shadow-[0_16px_40px_rgba(26,26,26,0.12)]">
-                          <button
-                            type="button"
-                            disabled
-                            className="flex w-full cursor-not-allowed items-center px-4 py-2.5 text-left text-[12.5px] text-steel-2"
-                          >
-                            Choose one option
-                          </button>
+                    {isBinaryPill ? (
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {attribute.values.map((value) => {
+                          const active = selectedValue === value.value;
+                          const available = isValueAvailable(
+                            attribute.name,
+                            value.value,
+                          );
+                          return (
+                            <button
+                              key={value.id}
+                              type="button"
+                              disabled={!available}
+                              onClick={() =>
+                                handleOptionSelect(attribute.name, value.value)
+                              }
+                              className={[
+                                "flex-1 min-w-[60px] rounded-md border py-1.5 px-2 text-center text-[12px] font-semibold transition-all",
+                                active
+                                  ? "border-brand bg-brand text-white shadow-2xs"
+                                  : "border-line bg-white text-ink hover:border-brand/40 hover:text-brand",
+                                !available
+                                  ? "cursor-not-allowed bg-offwhite text-steel-2 opacity-50 border-line"
+                                  : "",
+                              ].join(" ")}
+                            >
+                              {value.value}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="relative pt-0.5" data-variant-dropdown>
+                        <select
+                          value={selectedValue || ""}
+                          onChange={(e) =>
+                            handleOptionSelect(attribute.name, e.target.value)
+                          }
+                          className="w-full cursor-pointer rounded-md border border-line bg-white py-2 pl-3 pr-8 text-[12.5px] font-medium text-ink outline-none transition hover:border-steel-2 focus:border-brand focus:ring-1 focus:ring-brand"
+                        >
+                          {!selectedValue && (
+                            <option value="" disabled>
+                              Select {attribute.name}
+                            </option>
+                          )}
                           {attribute.values.map((value) => {
                             const available = isValueAvailable(
                               attribute.name,
                               value.value,
                             );
-                            const active = selectedValue === value.value;
                             return (
-                              <button
+                              <option
                                 key={value.id}
-                                type="button"
+                                value={value.value}
                                 disabled={!available}
-                                onClick={() =>
-                                  handleOptionSelect(
-                                    attribute.name,
-                                    value.value,
-                                  )
-                                }
-                                className={[
-                                  "flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-[13px] transition-colors",
-                                  active ? "bg-brand text-white" : "text-ink",
-                                  !active && available
-                                    ? "cursor-pointer hover:bg-red-50 hover:text-brand"
-                                    : "",
-                                  !available
-                                    ? "cursor-not-allowed bg-offwhite text-steel-2 opacity-70"
-                                    : "",
-                                ].join(" ")}
                               >
-                                <span className="truncate">{value.value}</span>
-                                {!available && (
-                                  <span className="text-[11px]">
-                                    Unavailable
-                                  </span>
-                                )}
-                              </button>
+                                {value.value}{" "}
+                                {!available ? "(Unavailable)" : ""}
+                              </option>
                             );
                           })}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className={displayMeta.optionGridClass}>
-                      {attribute.values.map((value) => {
-                        const active = selectedValue === value.value;
-                        const available = isValueAvailable(
-                          attribute.name,
-                          value.value,
-                        );
-                        return (
-                          <button
-                            key={value.id}
-                            type="button"
-                            disabled={!available}
-                            onClick={() =>
-                              handleOptionSelect(attribute.name, value.value)
-                            }
-                            className={[
-                              "rounded-lg border px-4 py-3 text-left text-[13px] font-medium transition-colors",
-                              active ? displayMeta.activeClass : "",
-                              !active && available
-                                ? "border-line bg-white text-ink hover:border-steel-2"
-                                : "",
-                              !available
-                                ? "cursor-not-allowed border-line bg-[#F6F3EF] text-steel-2 opacity-70"
-                                : "",
-                            ].join(" ")}
-                          >
-                            {value.value}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
 
             <div className="rounded-lg border border-line bg-white p-3 md:col-span-2 sm:p-5">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

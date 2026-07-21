@@ -211,6 +211,23 @@ async function main() {
     create: { name: "Platinum", status: "ACTIVE", sortOrder: 3 },
   });
 
+  // ─── Default Customer Roles ────────────────────────────────
+  await prisma.customerRole.upsert({
+    where: { key: "GUEST" },
+    update: { name: "Guest Customer", status: "ACTIVE", sortOrder: 1 },
+    create: { key: "GUEST", name: "Guest Customer", description: "Default role for guest visitors", status: "ACTIVE", sortOrder: 1 },
+  });
+  await prisma.customerRole.upsert({
+    where: { key: "DOCTOR_RETAILER" },
+    update: { name: "Doctor / Retailer", status: "ACTIVE", sortOrder: 2 },
+    create: { key: "DOCTOR_RETAILER", name: "Doctor / Retailer", description: "Registered doctors and retail clinics", status: "ACTIVE", sortOrder: 2 },
+  });
+  await prisma.customerRole.upsert({
+    where: { key: "DEALER" },
+    update: { name: "Dealer / B2B Wholesale", status: "ACTIVE", sortOrder: 3 },
+    create: { key: "DEALER", name: "Dealer / B2B Wholesale", description: "B2B wholesale dealers and distributors", status: "ACTIVE", sortOrder: 3 },
+  });
+
   const molarTubeCategory = await prisma.category.upsert({
     where: { slug: "molar-tubes" },
     update: { name: "Molar Tubes", status: "ACTIVE" },

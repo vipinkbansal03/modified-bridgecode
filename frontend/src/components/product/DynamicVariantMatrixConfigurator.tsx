@@ -512,7 +512,7 @@ export function DynamicVariantMatrixConfigurator({
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="space-y-5">
+          <div className="min-w-0 space-y-5">
             {packageOptions.length > 1 && (
               <div className="rounded-lg border border-line bg-offwhite p-2">
                 <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
@@ -573,68 +573,47 @@ export function DynamicVariantMatrixConfigurator({
               </div>
             )}
 
-            <div className="overflow-hidden rounded-lg border border-line bg-white">
+            <div className="overflow-hidden rounded-lg border border-line bg-white shadow-xs">
               <div className="overflow-x-auto">
-                <table className="min-w-[720px] w-full border-collapse">
+                <table className="w-full border-collapse text-left">
                   <thead>
-                    <tr className="bg-offwhite">
-                      <th className="sticky left-0 z-20 border-b border-r border-line bg-[#F8F8F8] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-ink">
-                        {rowAxisAttributes
-                          .map((attribute) => attribute.name)
-                          .join(" + ") || "Options"}{" "}
-                        /{" "}
-                        {xAxisAttributes
-                          .map((attribute) => attribute.name)
-                          .join(" + ")}
+                    <tr className="border-b border-line bg-[#F8F9FA]">
+                      <th className="sticky left-0 z-20 border-r border-line bg-[#F1F3F5] px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-[0.12em] text-ink">
+                        <span className="text-brand">
+                          {rowAxisAttributes.map((a) => a.name).join(" + ") || "Size"}
+                        </span>
+                        <span className="mx-1 text-steel-2">/</span>
+                        <span className="text-steel">
+                          {xAxisAttributes.map((a) => a.name).join(" + ")}
+                        </span>
                       </th>
-                      {columnCombinations.map((columnCombination) => (
-                        <th
-                          key={columnCombination.key}
-                          className="sticky top-0 z-10 min-w-[160px] border-b border-line bg-red-50 px-4 py-3 text-center text-[12px] font-semibold text-brand"
-                        >
-                          <div className="space-y-1">
-                            {columnCombination.labels.map(
-                              ({ attributeName, value }) => (
-                                <div key={`${attributeName}-${value.id}`}>
-                                  {columnCombination.labels.length > 1 ? (
-                                    <span className="block text-[9px] uppercase tracking-[0.12em] text-brand/60">
-                                      {attributeName}
-                                    </span>
-                                  ) : null}
-                                  <span>{value.value}</span>
-                                </div>
-                              ),
-                            )}
-                          </div>
-                        </th>
-                      ))}
+                      {columnCombinations.map((columnCombination) => {
+                        const headerText = columnCombination.labels
+                          .map((l) => l.value.value)
+                          .join(" • ");
+                        return (
+                          <th
+                            key={columnCombination.key}
+                            className="min-w-[120px] border-r border-line bg-[#F8F9FA] px-2 py-2 text-center text-[11.5px] font-bold text-ink last:border-r-0"
+                          >
+                            <div className="inline-flex flex-col items-center">
+                              <span className="rounded-md bg-red-50 px-2 py-1 text-[11.5px] font-bold text-brand border border-red-100/60 leading-tight">
+                                {headerText}
+                              </span>
+                            </div>
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody>
                     {rowCombinations.map((rowCombination) => (
                       <tr
                         key={rowCombination.key}
-                        className="border-b border-line last:border-b-0"
+                        className="border-b border-line hover:bg-slate-50/50 transition-colors last:border-b-0"
                       >
-                        <th className="sticky left-0 z-10 border-r border-line bg-[#F8F8F8] px-4 py-4 text-left text-[13px] font-semibold text-ink">
-                          <div className="space-y-1.5">
-                            {rowCombination.labels.length ? (
-                              rowCombination.labels.map(
-                                ({ attributeName, value }) => (
-                                  <div key={`${attributeName}-${value.id}`}>
-                                    <span className="block text-[9px] font-semibold uppercase tracking-[0.14em] text-steel-2">
-                                      {attributeName}
-                                    </span>
-                                    <span className="text-[13px] text-ink">
-                                      {value.value}
-                                    </span>
-                                  </div>
-                                ),
-                              )
-                            ) : (
-                              <span>All</span>
-                            )}
-                          </div>
+                        <th className="sticky left-0 z-10 border-r border-line bg-[#F8F9FA] px-3 py-2.5 text-left font-bold text-ink text-[12.5px] whitespace-nowrap shadow-xs">
+                          {rowCombination.labels.map((l) => l.value.value).join(" • ") || "All"}
                         </th>
                         {columnCombinations.map((columnCombination) => {
                           const variant = variantLookup.get(
@@ -668,32 +647,16 @@ export function DynamicVariantMatrixConfigurator({
                           return (
                             <td
                               key={columnCombination.key}
-                              className="align-top border-l border-line px-3 py-3"
+                              className="align-middle border-r border-line px-2.5 py-3 text-center last:border-r-0"
                             >
                               {variant ? (
                                 <div
-                                  className={`rounded-lg border p-3 ${quantity > 0 ? "border-brand/20 bg-[#FFFBFB]" : "border-line bg-white"} ${outOfStock ? "opacity-60" : ""}`}
+                                  className={`mx-auto flex flex-col items-center justify-center rounded-md p-1.5 transition-all ${
+                                    quantity > 0
+                                      ? "bg-red-50/70 ring-1 ring-brand/30"
+                                      : "bg-white"
+                                  } ${outOfStock ? "opacity-45" : ""}`}
                                 >
-                                  <div className="mb-2 flex items-start justify-between gap-2">
-                                    <div>
-                                      <p className="text-[12.5px] font-semibold text-ink">
-                                        {price && displayUnitPrice != null
-                                          ? formatMoney(
-                                              price.currencySymbol,
-                                              displayUnitPrice,
-                                            )
-                                          : "Contact for pricing"}
-                                      </p>
-                                      {variant.sku ? (
-                                        <p className="mt-0.5 font-mono text-[10.5px] text-steel-2">
-                                          {variant.sku}
-                                        </p>
-                                      ) : null}
-                                    </div>
-                                    <StockBadge
-                                      status={variant.inventory?.status}
-                                    />
-                                  </div>
                                   <QuantityInput
                                     value={quantity}
                                     onChange={(nextQuantity) =>
@@ -707,20 +670,25 @@ export function DynamicVariantMatrixConfigurator({
                                     minPositive={minPositive}
                                     disabled={outOfStock || !price}
                                   />
-                                  <div className="mt-2 text-[11px] text-steel-2">
-                                    <p>
-                                      {availableStock != null
-                                        ? `${availableStock} available`
-                                        : "Stock on request"}
+                                  <div className="mt-1.5 text-center">
+                                    <p className="text-[12px] font-bold text-ink">
+                                      {price && displayUnitPrice != null
+                                        ? formatMoney(
+                                            price.currencySymbol,
+                                            displayUnitPrice,
+                                          )
+                                        : "N/A"}
                                     </p>
-                                    {minPositive > 1 ? (
-                                      <p>MOQ {minPositive}</p>
+                                    {outOfStock ? (
+                                      <span className="text-[10px] font-semibold text-red-500">
+                                        Out of stock
+                                      </span>
                                     ) : null}
                                   </div>
                                 </div>
                               ) : (
-                                <div className="rounded-lg border border-dashed border-line bg-offwhite px-3 py-6 text-center text-[12px] text-steel-2">
-                                  Not available
+                                <div className="py-2 text-center text-[11px] font-medium text-steel-2">
+                                  —
                                 </div>
                               )}
                             </td>
