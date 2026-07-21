@@ -4005,7 +4005,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
               />
             </div>
 
-            <div className="mb-4 rounded-lg border border-[#E6E6E6] p-4">
+            {/* <div className="mb-4 rounded-lg border border-[#E6E6E6] p-4">
               <div className="mb-3 text-[13px] font-medium text-[#1A1A1A]">Add Attributes To Generation</div>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <div className="flex-1">
@@ -4024,7 +4024,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                   Add Attribute
                 </button>
               </div>
-            </div>
+            </div> */}
 
             <div className="space-y-4">
               {generateAttributeIds.map((attributeId) => {
