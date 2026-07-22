@@ -14,20 +14,21 @@ export default function BlogPage() {
 
   return (
     <main className="bg-white">
-      <section className="border-b border-line bg-[#F7F7F7] py-16 lg:py-20">
-        <Container>
-          <div className="mx-auto max-w-[820px] text-center">
-            <span className="mb-4 inline-flex items-center rounded-full border border-[#E31E24]/15 bg-white px-4 py-2 text-[12px] font-semibold uppercase tracking-[0.18em] text-[#E31E24]">
-              Resources
-            </span>
-            <h1 className="text-[38px] font-black leading-[0.98] tracking-[-0.04em] text-ink sm:text-[54px] lg:text-[74px]">
-              Orthodontic insights, product updates and industry notes.
-            </h1>
-            <p className="mx-auto mt-4 max-w-[640px] text-[15px] leading-7 text-steel">
-              Explore practical articles from Modern Orthodontics around products, clinical trends,
-              manufacturing, and better buying decisions for dental professionals.
-            </p>
-          </div>
+      <section className="border-b border-line bg-white">
+        <Container className="py-16 lg:py-20">
+          <span className="mb-4 block text-[12.5px] font-semibold uppercase tracking-wide text-brand">
+            Resources
+          </span>
+
+          <h1 className="max-w-[50%] text-[clamp(30px,4vw,44px)] font-light leading-tight text-ink">
+            Orthodontic insights, product updates and industry notes.
+          </h1>
+
+          <p className="mt-4 max-w-[50%] text-[15.5px] leading-relaxed text-steel">
+            Explore practical articles from Modern Orthodontics around products,
+            clinical trends, manufacturing, and better buying decisions for
+            dental professionals.
+          </p>
         </Container>
       </section>
 
@@ -38,7 +39,9 @@ export default function BlogPage() {
               <p className="text-[13px] font-semibold uppercase tracking-[0.16em] text-[#E31E24]">
                 Latest articles
               </p>
-              <h2 className="mt-2 text-[28px] font-semibold text-ink">From the blog</h2>
+              <h2 className="mt-2 text-[28px] font-semibold text-ink">
+                From the blog
+              </h2>
             </div>
             <div className="flex h-11 w-full items-center gap-2 rounded-full border border-line bg-white px-4 text-steel sm:w-[320px]">
               <Search size={15} />
@@ -50,9 +53,12 @@ export default function BlogPage() {
             <SkeletonGrid count={6} columns={3} />
           ) : blogs.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-line bg-[#FAFAFA] px-6 py-14 text-center">
-              <h3 className="text-[22px] font-semibold text-ink">No blog posts yet</h3>
+              <h3 className="text-[22px] font-semibold text-ink">
+                No blog posts yet
+              </h3>
               <p className="mt-2 text-[14px] text-steel">
-                Published blog posts will appear here once added from the admin panel.
+                Published blog posts will appear here once added from the admin
+                panel.
               </p>
             </div>
           ) : (
@@ -87,7 +93,9 @@ export default function BlogPage() {
                     <h3 className="break-words text-[28px] font-semibold leading-tight tracking-[-0.02em] text-ink sm:text-[40px]">
                       {featuredBlog.title}
                     </h3>
-                    <p className="mt-4 text-[15px] leading-7 text-steel">{featuredBlog.excerpt}</p>
+                    <p className="mt-4 text-[15px] leading-7 text-steel">
+                      {featuredBlog.excerpt}
+                    </p>
                     <span className="mt-8 inline-flex items-center gap-2 self-start text-[13px] font-semibold text-[#E31E24]">
                       Read article
                       <ArrowRight size={15} />
@@ -115,11 +123,17 @@ export default function BlogPage() {
                       </div>
                       <div className="p-5">
                         <div className="mb-3 flex flex-wrap items-center gap-2 text-[12px] text-steel">
-                          <span className="font-semibold text-[#E31E24]">{blog.category}</span>
+                          <span className="font-semibold text-[#E31E24]">
+                            {blog.category}
+                          </span>
                           {blog.date && <span>&bull; {blog.date}</span>}
                         </div>
-                        <h3 className="break-words text-[19px] font-semibold leading-snug text-ink">{blog.title}</h3>
-                        <p className="mt-3 line-clamp-3 text-[14px] leading-6 text-steel">{blog.excerpt}</p>
+                        <h3 className="break-words text-[19px] font-semibold leading-snug text-ink">
+                          {blog.title}
+                        </h3>
+                        <p className="mt-3 line-clamp-3 text-[14px] leading-6 text-steel">
+                          {blog.excerpt}
+                        </p>
                         <span className="mt-5 inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink transition-colors group-hover:text-[#E31E24]">
                           Read article
                           <ArrowRight size={14} />

@@ -7,7 +7,8 @@ import { TermsPageNav } from "./TermsPageNav";
 
 export const metadata: Metadata = {
   title: "Terms & Conditions | Modern Orthodontics",
-  description: "Review Modern Orthodontics terms, policies, shipping, returns, payments, and ordering conditions.",
+  description:
+    "Review Modern Orthodontics terms, policies, shipping, returns, payments, and ordering conditions.",
 };
 
 const updatedAt = "June 2026";
@@ -89,17 +90,17 @@ export default function TermsAndConditionsPage() {
     <main className="bg-white">
       <section className="border-b border-line bg-[#FAFAFA] py-16 sm:py-20 lg:py-24">
         <Container className="px-4 sm:px-6 lg:px-10">
-          <div className="grid gap-10 lg:grid-cols-[minmax(0,0.9fr)_360px] lg:items-end">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-end">
             <div>
-              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-line bg-white px-3.5 py-2 text-[12px] font-semibold text-steel shadow-sm sm:text-[13px]">
-                <FileText size={15} className="text-[#E31E24]" />
-                Legal information
-              </div>
-              <h1 className="max-w-[820px] text-[38px] font-black leading-[0.98] tracking-[-0.04em] text-ink sm:text-[54px] lg:text-[74px]">
+              <span className="mb-4 block text-[12.5px] font-semibold uppercase tracking-wide text-brand">
+                LEGAL INFORMATION
+              </span>
+              <h1 className="max-w-[640px] text-[clamp(30px,4vw,44px)] font-light leading-tight text-ink">
                 Terms & Conditions
               </h1>
-              <p className="mt-5 max-w-[720px] text-[15px] leading-7 text-steel sm:text-[16px] sm:leading-8 lg:text-[17px]">
-                Please read these terms carefully before using the Modern Orthodontics website or placing an order.
+              <p className="mt-4 max-w-[560px] text-[15.5px] leading-relaxed text-steel">
+                Please read these terms carefully before using the Modern
+                Orthodontics website or placing an order.
               </p>
             </div>
 
@@ -110,11 +111,14 @@ export default function TermsAndConditionsPage() {
                 </span>
                 <div>
                   <p className="text-[13px] text-steel">Last updated</p>
-                  <p className="text-[17px] font-semibold text-ink">{updatedAt}</p>
+                  <p className="text-[17px] font-semibold text-ink">
+                    {updatedAt}
+                  </p>
                 </div>
               </div>
               <p className="mt-5 text-[14px] leading-6 text-steel">
-                For order-specific queries, contact our support team with your order details.
+                For order-specific queries, contact our support team with your
+                order details.
               </p>
               <a
                 href={`mailto:${ORDERS_EMAIL}`}
@@ -128,7 +132,7 @@ export default function TermsAndConditionsPage() {
         </Container>
       </section>
 
-      <section className="py-10 sm:py-12 lg:py-20">
+      <section className="py-16 lg:py-20">
         <Container className="px-4 sm:px-6 lg:px-10">
           <TermsAccordion sections={sections} />
 
@@ -142,19 +146,22 @@ export default function TermsAndConditionsPage() {
                 <section
                   key={section.title}
                   id={section.title.toLowerCase().replace(/\s+/g, "-")}
-                  className="scroll-mt-28 rounded-3xl border border-line bg-white p-6 shadow-sm sm:p-8"
+                  className="scroll-mt-28 rounded-3xl border border-line bg-white p-5 shadow-sm sm:p-8"
                 >
                   <div className="mb-5 flex items-center gap-4">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#FFF1F1] text-[14px] font-bold text-[#E31E24]">
                       {String(index + 1).padStart(2, "0")}
                     </span>
-                    <h2 className="text-[24px] font-semibold tracking-[-0.02em] text-ink sm:text-[30px]">
+                    <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-ink sm:text-[28px]">
                       {section.title}
                     </h2>
                   </div>
                   <ul className="space-y-3">
                     {section.items.map((item) => (
-                      <li key={item} className="flex gap-3 text-[15px] leading-7 text-steel">
+                      <li
+                        key={item}
+                        className="flex gap-3 text-[15px] leading-7 text-steel"
+                      >
                         <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#E31E24]" />
                         <span>{item}</span>
                       </li>
@@ -163,10 +170,14 @@ export default function TermsAndConditionsPage() {
                 </section>
               ))}
 
-              <section className="rounded-3xl bg-[#1A1A1A] p-6 text-white sm:p-8">
-                <h2 className="text-[26px] font-semibold tracking-[-0.02em]">Need help with an order?</h2>
+              <section className="rounded-3xl bg-[#1A1A1A] p-5 text-white sm:p-8">
+                <h2 className="text-[26px] font-semibold tracking-[-0.02em]">
+                  Need help with an order?
+                </h2>
                 <p className="mt-3 max-w-[720px] text-[15px] leading-7 text-white/70">
-                  If you have questions about these terms, delivery, returns, or payments, please contact the Modern Orthodontics team before placing your order.
+                  If you have questions about these terms, delivery, returns, or
+                  payments, please contact the Modern Orthodontics team before
+                  placing your order.
                 </p>
                 <a
                   href={`mailto:${ORDERS_EMAIL}`}
@@ -180,9 +191,13 @@ export default function TermsAndConditionsPage() {
           </div>
 
           <section className="mt-4 rounded-2xl bg-[#1A1A1A] p-5 text-white sm:mt-5 sm:p-6 lg:hidden">
-            <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Need help with an order?</h2>
+            <h2 className="text-[22px] font-semibold tracking-[-0.02em]">
+              Need help with an order?
+            </h2>
             <p className="mt-3 text-[14px] leading-6 text-white/70">
-              If you have questions about these terms, delivery, returns, or payments, please contact the Modern Orthodontics team before placing your order.
+              If you have questions about these terms, delivery, returns, or
+              payments, please contact the Modern Orthodontics team before
+              placing your order.
             </p>
             <a
               href={`mailto:${ORDERS_EMAIL}`}
