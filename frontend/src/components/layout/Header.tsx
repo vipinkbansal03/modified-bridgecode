@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DeliveryAddressButton } from "@/components/ui/delivery/DeliveryAddressButton";
 import Link from "next/link";
-import { ChevronDown, User, ShoppingCart, Menu, X, MapPin } from "lucide-react";
+import { ChevronDown, ShoppingCart, Menu, X, MapPin } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { MegaMenu } from "@/components/layout/MegaMenu";
 import { MobileMenu } from "@/components/layout/MobileMenu";
@@ -38,6 +38,7 @@ export function Header() {
   const [capsOpen, setCapsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement>(null);
   const { totals, openCart } = useCart();
   const { currentCustomer, logout } = useCustomerAuth();
   const { t } = useStaticTranslations();
@@ -74,6 +75,18 @@ export function Header() {
     const onScroll = () => setScrolled(window.scrollY > 8);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (accountRef.current && !accountRef.current.contains(event.target as Node)) {
+        setAccountOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, []);
 
   useEffect(() => {
@@ -128,16 +141,19 @@ export function Header() {
 
               <CurrencySwitcher /> */}
               <LocaleSwitcher />
-              <div className="relative">
-                <div className="relative">
-                  {currentCustomer ? (
-                    <>
-                      <button
-                        aria-label={t("ui.nav.account")}
-                        className="flex items-center gap-1.5 text-ink hover:text-brand"
-                        onClick={() => setAccountOpen((value) => !value)}
-                      >
-                        <User size={18} />
+              <div ref={accountRef} className="relative">
+                {currentCustomer ? (
+                  <>
+                    <button
+                      aria-label={t("ui.nav.account")}
+                      className="flex flex-col items-start text-left text-ink hover:text-brand transition-colors"
+                      onClick={() => setAccountOpen((value) => !value)}
+                    >
+                      <span className="text-[11px] font-normal leading-tight text-steel">
+                        Hello, {currentCustomer.firstName}
+                      </span>
+                      <span className="flex items-center gap-1 text-[13px] font-bold leading-none">
+                        Account & Lists
                         <ChevronDown
                           size={11}
                           className={cn(
@@ -145,70 +161,68 @@ export function Header() {
                             accountOpen && "rotate-180",
                           )}
                         />
-                      </button>
-                      {accountOpen && (
-                        <div className="absolute right-0 top-full z-50 mt-4 w-[230px] rounded-md border border-line bg-white p-3 shadow-[0_16px_32px_rgba(0,0,0,0.07)]">
-                          <div className="border-b border-line pb-3">
-                            <p className="truncate text-[13.5px] font-semibold text-ink">
-                              {currentCustomer.firstName}{" "}
-                              {currentCustomer.lastName}
-                            </p>
-                            <p className="mt-0.5 truncate text-[12px] text-steel">
-                              {currentCustomer.email}
-                            </p>
-                          </div>
-                          <Link
-                            href="/account"
-                            onClick={() => setAccountOpen(false)}
-                            className="mt-2 block rounded-md px-3 py-2 text-[13.5px] text-ink hover:bg-grey hover:text-brand"
-                          >
-                            My Account
-                          </Link>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAccountOpen(false);
-                              logout();
-                            }}
-                            className="mt-2 w-full rounded-md px-3 py-2 text-left text-[13.5px] text-ink hover:bg-grey hover:text-brand"
-                          >
-                            Log out
-                          </button>
+                      </span>
+                    </button>
+                    {accountOpen && (
+                      <div className="absolute right-0 top-full z-50 mt-2.5 w-[230px] rounded-md border border-line bg-white p-3 shadow-[0_16px_32px_rgba(0,0,0,0.07)]">
+                        <div className="border-b border-line pb-3">
+                          <p className="truncate text-[13.5px] font-semibold text-ink">
+                            {currentCustomer.firstName} {currentCustomer.lastName}
+                          </p>
+                          <p className="mt-0.5 truncate text-[12px] text-steel">
+                            {currentCustomer.email}
+                          </p>
                         </div>
-                      )}
-                    </>
-                  ) : (
-                    <Link
-                      aria-label={t("ui.nav.account")}
-                      href="/login"
-                      className="text-ink hover:text-brand"
-                    >
-                      <User size={18} />
-                    </Link>
-                  )}
-                </div>
+                        <Link
+                          href="/account"
+                          onClick={() => setAccountOpen(false)}
+                          className="mt-2 block rounded-md px-3 py-2 text-[13.5px] text-ink hover:bg-grey hover:text-brand"
+                        >
+                          My Account
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAccountOpen(false);
+                            logout();
+                          }}
+                          className="mt-2 w-full rounded-md px-3 py-2 text-left text-[13.5px] text-ink hover:bg-grey hover:text-brand"
+                        >
+                          Log out
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <Link
+                    aria-label={t("ui.nav.account")}
+                    href="/login"
+                    className="flex flex-col items-start text-left text-ink hover:text-brand transition-colors"
+                  >
+                    <span className="text-[11px] font-normal leading-tight text-steel">
+                      Hello, Sign in
+                    </span>
+                    <span className="flex items-center gap-1 text-[13px] font-bold leading-none">
+                      Account & Lists
+                      <ChevronDown size={11} className="opacity-60" />
+                    </span>
+                  </Link>
+                )}
               </div>
 
               <button
                 aria-label="Open cart"
-                className="relative text-ink hover:text-brand"
+                className="flex items-end gap-1 text-ink hover:text-brand transition-colors pb-1"
                 onClick={openCart}
               >
-                <ShoppingCart size={18} />
-
-                {totals.itemCount > 0 && (
-                  <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#E31E24] text-[9px] font-bold text-white">
+                <div className="relative leading-none">
+                  <ShoppingCart size={24} className="stroke-[1.75]" />
+                  <span className="absolute left-[54%] top-[-4px] -translate-x-1/2 text-[11.5px] font-extrabold text-[#F08804]">
                     {totals.itemCount}
                   </span>
-                )}
+                </div>
+                <span className="text-[13px] font-bold leading-none translate-y-[-2px]">Cart</span>
               </button>
-
-              <Link
-                href={ctaHref}
-                className="shrink-0 whitespace-nowrap rounded-pill border border-ink px-4.5 py-2.5 text-[14.5px] font-semibold text-ink transition-colors hover:bg-ink hover:text-white"
-              >
-                {ctaLabel}
-              </Link>
             </div>
           </div>
 
