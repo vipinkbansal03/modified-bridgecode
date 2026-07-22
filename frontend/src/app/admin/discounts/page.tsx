@@ -295,10 +295,12 @@ export default function DiscountsPage() {
           label: tier.name ?? tier.id,
         })),
       ],
-      countries: countries.map((country: Related) => ({
-        value: country.id,
-        label: `${country.name} (${country.code})`,
-      })),
+      countries: countries
+        .filter((country: any) => country.status === "ACTIVE")
+        .map((country: any) => ({
+          value: country.id,
+          label: `${country.name} (${country.code})`,
+        })),
       products: [
         { value: "", label: "Select product" },
         ...products.map((product) => ({
@@ -744,7 +746,7 @@ export default function DiscountsPage() {
             placeholder="Select countries"
             allowSelectAll
             selectAllLabel="All countries"
-            selectionSummaryFormatter={(count) => `${count} Countries Selected`}
+            selectionSummaryFormatter={(selected) => `${selected.length} Countries Selected`}
           />
           <AdminSelect
             label="Status"

@@ -290,9 +290,9 @@ console.log("Loading:", isLoading);
       open={open}
       onClose={onClose}
       title="Choose Delivery Location"
-      panelClassName="max-w-xl"
+      panelClassName="max-w-xl max-h-[90vh] flex flex-col"
     >
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-6 overflow-y-auto flex-1">
         <CurrentLocationCard onClick={handleCurrentLocation} loading={detecting} />
 
         <PincodeSearch onSearch={handlePincodeSearch} loading={searchingPin} />

@@ -5,6 +5,8 @@ import { Edit2, Filter, Plus, Search, Shield, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
+import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
+import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { useAdminCountries, useAdminCoupons, useCreateCoupon, useDeleteCoupon, useUpdateCoupon } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
 
@@ -39,7 +41,7 @@ type FormState = {
   startDate: string;
   endDate: string;
   usageLimit: string;
-  countryId: string;
+  countryIds: string[];
   status: "ACTIVE" | "INACTIVE";
 };
 
@@ -53,7 +55,7 @@ const blankForm: FormState = {
   startDate: "",
   endDate: "",
   usageLimit: "",
-  countryId: "",
+  countryIds: [],
   status: "ACTIVE",
 };
 
@@ -88,7 +90,7 @@ function toForm(coupon: CouponRow): FormState {
     startDate: dateInput(coupon.startDate),
     endDate: dateInput(coupon.endDate),
     usageLimit: coupon.usageLimit ? String(coupon.usageLimit) : "",
-    countryId: coupon.countryId ?? "",
+    countryIds: coupon.countryId ? [coupon.countryId] : [],
     status: coupon.status === "INACTIVE" ? "INACTIVE" : "ACTIVE",
   };
 }
@@ -145,11 +147,12 @@ export default function CouponsPage() {
 
   const countryOptions = useMemo(
     () => [
-      { value: "", label: "All countries" },
-      ...countries.map((country: Related) => ({
-        value: country.id,
-        label: `${country.name ?? country.code ?? country.id}${country.code ? ` (${country.code})` : ""}`,
-      })),
+      ...countries
+        .filter((country: any) => country.status === "ACTIVE")
+        .map((country: any) => ({
+          value: country.id,
+          label: `${country.name ?? country.code ?? country.id}${country.code ? ` (${country.code})` : ""}`,
+        })),
     ],
     [countries],
   );
@@ -199,7 +202,7 @@ export default function CouponsPage() {
       startDate: form.startDate,
       endDate: form.endDate,
       usageLimit: form.usageLimit || null,
-      countryId: form.countryId || null,
+      countryId: form.countryIds.length > 0 ? form.countryIds[0] : null,
       status: form.status,
     };
 
@@ -458,7 +461,21 @@ export default function CouponsPage() {
 
             <AdminInput label="Start Date *" type="date" value={form.startDate} onChange={(event) => setField("startDate", event.target.value)} />
             <AdminInput label="End Date *" type="date" value={form.endDate} onChange={(event) => setField("endDate", event.target.value)} />
-            <AdminSelect label="Country Restriction" value={form.countryId} onChange={(event) => setField("countryId", event.target.value)} options={countryOptions} />
+            <AdminMultiSearchableSelect
+              label="Country Restriction"
+              values={form.countryIds}
+              onValuesChange={(values) =>
+                setForm((prev) => ({
+                  ...prev,
+                  countryIds: values,
+                }))
+              }
+              options={countryOptions}
+              placeholder="Select countries"
+              allowSelectAll
+              selectAllLabel="All countries"
+              selectionSummaryFormatter={(selected) => `${selected.length} Countries Selected`}
+            />
 
             <AdminSelect
               label="Status"
