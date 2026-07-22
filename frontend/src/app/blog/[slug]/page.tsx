@@ -63,7 +63,11 @@ async function fetchBlog(slug: string) {
 export default function BlogDetailPage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
-  const { data: blog, isLoading, isError } = useQuery({
+  const {
+    data: blog,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ["blog", slug],
     queryFn: () => fetchBlog(slug),
     enabled: Boolean(slug),
@@ -88,8 +92,12 @@ export default function BlogDetailPage() {
       <main className="bg-white py-20">
         <Container>
           <div className="mx-auto max-w-[640px] rounded-2xl border border-line bg-[#FAFAFA] p-8 text-center">
-            <h1 className="text-[28px] font-semibold text-ink">Blog not found</h1>
-            <p className="mt-2 text-[14px] text-steel">This article may have been removed or unpublished.</p>
+            <h1 className="text-[28px] font-semibold text-ink">
+              Blog not found
+            </h1>
+            <p className="mt-2 text-[14px] text-steel">
+              This article may have been removed or unpublished.
+            </p>
             <Link
               href="/blog"
               className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#E31E24] px-5 py-3 text-[13px] font-semibold text-white"
@@ -104,7 +112,10 @@ export default function BlogDetailPage() {
   }
 
   const date = formatBlogDate(blog.publishedAt || blog.createdAt);
-  const paragraphs = blog.content.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
+  const paragraphs = blog.content
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
   const recentArticles = fallbackBlogs
     .filter((item) => item.slug !== blog.slug)
     .slice(0, 3)
@@ -112,34 +123,55 @@ export default function BlogDetailPage() {
 
   return (
     <main className="bg-white">
-      <section className="border-b border-line bg-[#F7F7F7] py-12 lg:py-16">
-        <Container>
-          <div className="mx-auto max-w-[920px]">
-            <Link href="/blog" className="mb-8 inline-flex items-center gap-2 text-[13px] font-semibold text-steel hover:text-[#E31E24]">
+      <section className="border-b border-line bg-white">
+        <Container className="py-16 lg:py-20">
+          <div className="max-w-[760px]">
+            <Link
+              href="/blog"
+              className="mb-6 inline-flex items-center gap-2 text-[13px] font-medium text-steel hover:text-brand"
+            >
               <ArrowLeft size={14} />
               Back to blog
             </Link>
-            <div className="mb-5 flex flex-wrap items-center gap-3 text-[12px] font-medium text-steel">
-              <span className="rounded-full bg-[#E31E24]/10 px-3 py-1 text-[#E31E24]">
-                {blog.category?.name || blog.tags?.[0] || "Resources"}
-              </span>
+            <span className="mb-4 block text-[12.5px] font-semibold uppercase tracking-wide text-brand">
+              {(
+                blog.category?.name ||
+                blog.tags?.[0] ||
+                "Resources"
+              ).toUpperCase()}
+            </span>
+            <h1 className="max-w-[640px] break-words text-[clamp(30px,4vw,44px)] font-light leading-tight text-ink">
+              {blog.title}
+            </h1>
+
+            {blog.excerpt && (
+              <p className="mt-4 max-w-[560px] text-[15.5px] leading-relaxed text-steel">
+                {blog.excerpt}
+              </p>
+            )}
+
+            <div className="mt-7 flex flex-wrap items-center gap-5 text-[13px] text-steel">
               {date && (
-                <span className="inline-flex items-center gap-1.5">
-                  <CalendarDays size={14} />
+                <span className="inline-flex items-center gap-2">
+                  <CalendarDays size={15} />
                   {date}
                 </span>
               )}
-              {blog.author?.name && <span>By {blog.author.name}</span>}
+
+              {blog.author?.name && (
+                <span>
+                  By{" "}
+                  <span className="font-medium text-ink">
+                    {blog.author.name}
+                  </span>
+                </span>
+              )}
             </div>
-            <h1 className="break-words text-[34px] font-semibold leading-tight text-ink sm:text-[46px] lg:text-[58px]">
-              {blog.title}
-            </h1>
-            {blog.excerpt && <p className="mt-5 max-w-[740px] text-[16px] leading-8 text-steel">{blog.excerpt}</p>}
           </div>
         </Container>
       </section>
 
-      <section className="py-10 lg:py-14">
+      <section className="py-16 lg:py-20">
         <Container>
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
             <article className="min-w-0">
@@ -171,7 +203,10 @@ export default function BlogDetailPage() {
                 <div className="mt-5 space-y-4 text-[13px] text-steel">
                   {date && (
                     <div className="flex items-start gap-3">
-                      <CalendarDays size={16} className="mt-0.5 text-[#E31E24]" />
+                      <CalendarDays
+                        size={16}
+                        className="mt-0.5 text-[#E31E24]"
+                      />
                       <div>
                         <p className="font-semibold text-ink">Published</p>
                         <p>{date}</p>
@@ -199,7 +234,10 @@ export default function BlogDetailPage() {
                     {blog.category?.name || blog.tags?.[0] || "Resources"}
                   </span>
                   {blog.tags?.slice(0, 4).map((tag) => (
-                    <span key={tag} className="rounded-full border border-line px-3 py-1.5 text-[12px] text-steel">
+                    <span
+                      key={tag}
+                      className="rounded-full border border-line px-3 py-1.5 text-[12px] text-steel"
+                    >
                       {tag}
                     </span>
                   ))}
@@ -213,7 +251,11 @@ export default function BlogDetailPage() {
                   </p>
                   <div className="mt-4 space-y-4">
                     {recentArticles.map((article) => (
-                      <Link key={article.slug} href={article.url} className="group block border-b border-line pb-4 last:border-0 last:pb-0">
+                      <Link
+                        key={article.slug}
+                        href={article.url}
+                        className="group block border-b border-line pb-4 last:border-0 last:pb-0"
+                      >
                         <p className="break-words text-[13px] font-semibold leading-snug text-ink group-hover:text-[#E31E24]">
                           {article.title}
                         </p>
