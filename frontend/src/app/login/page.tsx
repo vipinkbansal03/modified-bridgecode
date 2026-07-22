@@ -16,7 +16,13 @@ const loginSchema = Yup.object({
   email: Yup.string()
     .email("Invalid email address")
     .required("Email is required"),
+
   password: Yup.string().required("Password is required"),
+
+  acceptTerms: Yup.boolean().oneOf(
+    [true],
+    "You must agree to the terms and conditions.",
+  ),
 });
 
 const fallbackSlides = [
@@ -78,7 +84,7 @@ function LoginForm() {
   }, [loginSlides.length, showHero]);
 
   const formik = useFormik({
-    initialValues: { email: "", password: "" },
+    initialValues: { email: "", password: "", acceptTerms: false },
     validationSchema: loginSchema,
     onSubmit: async (values, helpers) => {
       helpers.setStatus("");
@@ -259,13 +265,26 @@ function LoginForm() {
               )}
             </div>
 
-            <label className="flex items-center gap-2 text-[12px] text-[#8A8A8A]">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-[#D1D5DB]"
-              />
-              I agree to the terms and conditions.
-            </label>
+            <div>
+              <label className="flex items-center gap-2 text-[12px] text-[#8A8A8A]">
+                <input
+                  id="acceptTerms"
+                  name="acceptTerms"
+                  type="checkbox"
+                  checked={formik.values.acceptTerms}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  className="h-4 w-4 rounded border-[#D1D5DB]"
+                />
+                I agree to the terms and conditions.
+              </label>
+
+              {formik.touched.acceptTerms && formik.errors.acceptTerms && (
+                <p className="mt-1 text-[12px] text-[#E31E24]">
+                  {formik.errors.acceptTerms}
+                </p>
+              )}
+            </div>
 
             {formik.status && (
               <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">

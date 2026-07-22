@@ -39,6 +39,7 @@ export function HeaderSearch({ fullWidth = false, onNavigate }: { fullWidth?: bo
 
   const close = () => {
     setFocused(false);
+    setQuery("");
     onNavigate?.();
   };
 
@@ -76,7 +77,7 @@ export function HeaderSearch({ fullWidth = false, onNavigate }: { fullWidth?: bo
           )}
 
           {(data?.categories.length ?? 0) > 0 && (
-            <div className="border-b border-line px-4 py-3">
+            <div className="border-b border-line px-2 sm:px-4 py-3">
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-steel-2">{t("ui.search.categories")}</p>
               {data!.categories.map((category) => (
                 <Link
@@ -93,7 +94,7 @@ export function HeaderSearch({ fullWidth = false, onNavigate }: { fullWidth?: bo
           )}
 
           {(data?.products.length ?? 0) > 0 && (
-            <div className="px-4 py-3">
+            <div className="px-2 sm:px-4 py-3">
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-steel-2">{t("ui.search.products")}</p>
               {data!.products.map((product) => (
                 <Link
@@ -118,7 +119,7 @@ export function HeaderSearch({ fullWidth = false, onNavigate }: { fullWidth?: bo
           )}
 
           {hasResults && (
-            <div className="border-t border-line px-4 py-3">
+            <div className="border-t border-line px-2 sm:px-4 py-3">
               <Link
                 href={`/products?search=${encodeURIComponent(debouncedQuery)}`}
                 onClick={close}

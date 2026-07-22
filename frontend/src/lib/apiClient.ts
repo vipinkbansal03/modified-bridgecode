@@ -20,6 +20,19 @@ export const apiClient = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+apiClient.interceptors.request.use((config) => {
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("customer_token");
+
+    if (token) {
+      config.headers = config.headers ?? {};
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  }
+
+  return config;
+});
+
 // ─── Response interceptor — normalise errors ──────────────
 apiClient.interceptors.response.use(
   (res) => res,
@@ -29,7 +42,7 @@ apiClient.interceptors.response.use(
       err.message ||
       "Something went wrong. Please try again.";
     return Promise.reject(new Error(message));
-  }
+  },
 );
 
 // ─── Helper — unwrap .data from paginated response ────────
