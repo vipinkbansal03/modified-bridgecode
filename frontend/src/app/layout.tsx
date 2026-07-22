@@ -8,6 +8,7 @@ import { CustomerAuthProvider } from "@/contexts/CustomerAuthContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { TrackingProvider } from "@/providers/TrackingProvider";
 import { ToastProvider } from "@/components/ui/ToastProvider";
+import { DeliveryAddressProvider } from "@/contexts/DeliveryAddressContext";
 import { QuoteCartUIProvider } from "@/contexts/QuoteCartUIContext";
 import { buildCmsMetadata } from "@/lib/seo";
 import seoData from "@/data/seo.json";
@@ -41,19 +42,21 @@ export default function RootLayout({
         <ReactQueryProvider>
           <LanguageProvider>
             <CurrencyProvider>
-              <QuoteCartProvider>
-                <QuoteCartUIProvider>
-                  <CustomerAuthProvider>
-                    <CartProvider>
-                      <TrackingProvider>
-                        <ToastProvider>
-                          <AppShell>{children}</AppShell>
-                        </ToastProvider>
-                      </TrackingProvider>
-                    </CartProvider>
-                  </CustomerAuthProvider>
-                </QuoteCartUIProvider>
-              </QuoteCartProvider>
+              <DeliveryAddressProvider>
+                <QuoteCartProvider>
+                  <QuoteCartUIProvider>
+                    <CustomerAuthProvider>
+                      <CartProvider>
+                        <TrackingProvider>
+                          <ToastProvider>
+                            <AppShell>{children}</AppShell>
+                          </ToastProvider>
+                        </TrackingProvider>
+                      </CartProvider>
+                    </CustomerAuthProvider>
+                  </QuoteCartUIProvider>
+                </QuoteCartProvider>
+              </DeliveryAddressProvider>
             </CurrencyProvider>
           </LanguageProvider>
         </ReactQueryProvider>

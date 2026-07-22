@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import { Modal } from "@/components/ui/Modal";
 import { useCustomerAddresses } from "@/hooks/api/useCustomerAddresses";
@@ -10,6 +10,7 @@ import { CurrentLocationCard } from "./CurrentLocationCard";
 import { PincodeSearch } from "./PincodeSearch";
 import { SavedAddresses } from "./SavedAddresses";
 import { EmptyAddresses } from "./EmptyAddresses";
+import { useDeliveryAddress } from "@/contexts/DeliveryAddressContext";
 
 interface DeliveryAddressModalProps {
   open: boolean;
@@ -20,17 +21,25 @@ export function DeliveryAddressModal({
   open,
   onClose,
 }: DeliveryAddressModalProps) {
-  const {
-    data: addresses = [],
-    isLoading,
-  } = useCustomerAddresses();
+  const { data: addresses = [], isLoading } = useCustomerAddresses();
 
-  const [selectedAddressId, setSelectedAddressId] = useState<string>();
+  console.log("Addresses:", addresses);
+console.log("Loading:", isLoading);
+
+  const { selectedAddress, setSelectedAddress } = useDeliveryAddress();
+
+  const [selectedAddressId, setSelectedAddressId] = useState<
+    string | undefined
+  >(selectedAddress?.id);
+
+  useEffect(() => {
+    setSelectedAddressId(selectedAddress?.id);
+  }, [selectedAddress]);
 
   const handleAddressSelect = (address: CustomerAddress) => {
     setSelectedAddressId(address.id);
+    setSelectedAddress(address);
 
-    // We'll persist the selected delivery address later.
     onClose();
   };
 
@@ -51,13 +60,9 @@ export function DeliveryAddressModal({
       panelClassName="max-w-xl"
     >
       <div className="space-y-5">
-        <CurrentLocationCard
-          onClick={handleCurrentLocation}
-        />
+        <CurrentLocationCard onClick={handleCurrentLocation} />
 
-        <PincodeSearch
-          onSearch={handlePincodeSearch}
-        />
+        <PincodeSearch onSearch={handlePincodeSearch} />
 
         {isLoading ? (
           <div className="rounded-lg border border-line p-6 text-center text-sm text-steel">

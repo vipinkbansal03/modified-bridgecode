@@ -6,7 +6,7 @@ import { qk, STALE } from "@/lib/queryConfig";
 import type { CustomerAddress } from "@/types/delivery.types";
 
 async function fetchCustomerAddresses(): Promise<CustomerAddress[]> {
-  const res = await apiClient.get("/customer-addresses");
+  const res = await apiClient.get("/customer/addresses");
   return unwrapData<CustomerAddress[]>(res);
 }
 
