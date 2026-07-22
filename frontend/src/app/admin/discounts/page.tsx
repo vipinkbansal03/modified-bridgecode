@@ -723,14 +723,14 @@ export default function DiscountsPage() {
           </button>
         </div>
       )}
-      <div className={form.id ? "grid grid-cols-1 gap-4 md:grid-cols-3" : "p-6 overflow-y-auto space-y-5 flex-1 grid grid-cols-1 gap-4 md:grid-cols-3"}>
-        <AdminInput
-          label="Rule Name *"
-          value={form.name}
-          onChange={(event) => setField("name", event.target.value)}
-          placeholder="Gold launch promo"
-        />
-        <div className="space-y-3">
+      <div className={form.id ? "" : "p-6 overflow-y-auto flex-1"}>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <AdminInput
+            label="Rule Name *"
+            value={form.name}
+            onChange={(event) => setField("name", event.target.value)}
+            placeholder="Gold launch promo"
+          />
           <AdminMultiSearchableSelect
             label="Countries"
             values={form.countryIds}
@@ -746,114 +746,114 @@ export default function DiscountsPage() {
             selectAllLabel="All countries"
             selectionSummaryFormatter={(count) => `${count} Countries Selected`}
           />
+          <AdminSelect
+            label="Status"
+            value={form.status}
+            onChange={(event) => setField("status", event.target.value)}
+            options={[
+              { value: "ACTIVE", label: "Active" },
+              { value: "INACTIVE", label: "Inactive" },
+            ]}
+          />
+
+          {form.type === "TIER" ? (
+            <AdminSelect
+              label="Tier *"
+              value={form.tierId}
+              onChange={(event) => setField("tierId", event.target.value)}
+              options={options.tiers}
+            />
+          ) : form.type === "MOQ" ? (
+            <AdminInput
+              label="Minimum Quantity *"
+              type="text"
+              inputMode="numeric"
+              value={form.minQuantity}
+              onChange={(event) => setField("minQuantity", event.target.value)}
+            />
+          ) : (
+            <div className="rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3.5 py-2.5 text-[13px] text-[#6B6B6B]">
+              Open promotions apply by scope, country, and active date window.
+            </div>
+          )}
+
+          <AdminSelect
+            label="Value Type"
+            value={form.valueType}
+            onChange={(event) => setField("valueType", event.target.value)}
+            options={[
+              { value: "PERCENT", label: "Percentage" },
+              { value: "FIXED", label: "Fixed amount off" },
+            ]}
+          />
+          {form.valueType === "PERCENT" ? (
+            <AdminInput
+              label="Discount Percent *"
+              type="text"
+              inputMode="decimal"
+              value={form.discountPercent}
+              onChange={(event) =>
+                setField("discountPercent", event.target.value)
+              }
+            />
+          ) : (
+            <AdminInput
+              label="Fixed Amount *"
+              type="text"
+              inputMode="decimal"
+              value={form.fixedAmount}
+              onChange={(event) => setField("fixedAmount", event.target.value)}
+            />
+          )}
+          <AdminSelect
+            label="Scope"
+            value={form.scope}
+            onChange={(event) => setField("scope", event.target.value)}
+            options={[
+              { value: "PLATFORM", label: "Platform-wide" },
+              { value: "PRODUCT", label: "Product" },
+              { value: "COLLECTION", label: "Collection" },
+              { value: "CATEGORY", label: "Category" },
+            ]}
+          />
+          {form.scope === "PRODUCT" && (
+            <AdminSelect
+              label="Product *"
+              value={form.productId}
+              onChange={(event) => setField("productId", event.target.value)}
+              options={options.products}
+            />
+          )}
+          {form.scope === "COLLECTION" && (
+            <AdminSelect
+              label="Collection *"
+              value={form.collectionId}
+              onChange={(event) => setField("collectionId", event.target.value)}
+              options={options.collections}
+            />
+          )}
+          {form.scope === "CATEGORY" && (
+            <AdminSelect
+              label="Category *"
+              value={form.categoryId}
+              onChange={(event) => setField("categoryId", event.target.value)}
+              options={options.categories}
+            />
+          )}
+
+          <AdminInput
+            label="Start Date"
+            type="date"
+            value={form.startDate}
+            onChange={(event) => setField("startDate", event.target.value)}
+          />
+          <AdminInput
+            label="End Date"
+            type="date"
+            value={form.endDate}
+            onChange={(event) => setField("endDate", event.target.value)}
+          />
         </div>
-        <AdminSelect
-          label="Status"
-          value={form.status}
-          onChange={(event) => setField("status", event.target.value)}
-          options={[
-            { value: "ACTIVE", label: "Active" },
-            { value: "INACTIVE", label: "Inactive" },
-          ]}
-        />
-
-        {form.type === "TIER" ? (
-          <AdminSelect
-            label="Tier *"
-            value={form.tierId}
-            onChange={(event) => setField("tierId", event.target.value)}
-            options={options.tiers}
-          />
-        ) : form.type === "MOQ" ? (
-          <AdminInput
-            label="Minimum Quantity *"
-            type="text"
-            inputMode="numeric"
-            value={form.minQuantity}
-            onChange={(event) => setField("minQuantity", event.target.value)}
-          />
-        ) : (
-          <div className="rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3.5 py-2.5 text-[13px] text-[#6B6B6B]">
-            Open promotions apply by scope, country, and active date window.
-          </div>
-        )}
-
-        <AdminSelect
-          label="Value Type"
-          value={form.valueType}
-          onChange={(event) => setField("valueType", event.target.value)}
-          options={[
-            { value: "PERCENT", label: "Percentage" },
-            { value: "FIXED", label: "Fixed amount off" },
-          ]}
-        />
-        {form.valueType === "PERCENT" ? (
-          <AdminInput
-            label="Discount Percent *"
-            type="text"
-            inputMode="decimal"
-            value={form.discountPercent}
-            onChange={(event) =>
-              setField("discountPercent", event.target.value)
-            }
-          />
-        ) : (
-          <AdminInput
-            label="Fixed Amount *"
-            type="text"
-            inputMode="decimal"
-            value={form.fixedAmount}
-            onChange={(event) => setField("fixedAmount", event.target.value)}
-          />
-        )}
-        <AdminSelect
-          label="Scope"
-          value={form.scope}
-          onChange={(event) => setField("scope", event.target.value)}
-          options={[
-            { value: "PLATFORM", label: "Platform-wide" },
-            { value: "PRODUCT", label: "Product" },
-            { value: "COLLECTION", label: "Collection" },
-            { value: "CATEGORY", label: "Category" },
-          ]}
-        />
-        {form.scope === "PRODUCT" && (
-          <AdminSelect
-            label="Product *"
-            value={form.productId}
-            onChange={(event) => setField("productId", event.target.value)}
-            options={options.products}
-          />
-        )}
-        {form.scope === "COLLECTION" && (
-          <AdminSelect
-            label="Collection *"
-            value={form.collectionId}
-            onChange={(event) => setField("collectionId", event.target.value)}
-            options={options.collections}
-          />
-        )}
-        {form.scope === "CATEGORY" && (
-          <AdminSelect
-            label="Category *"
-            value={form.categoryId}
-            onChange={(event) => setField("categoryId", event.target.value)}
-            options={options.categories}
-          />
-        )}
-
-        <AdminInput
-          label="Start Date"
-          type="date"
-          value={form.startDate}
-          onChange={(event) => setField("startDate", event.target.value)}
-        />
-        <AdminInput
-          label="End Date"
-          type="date"
-          value={form.endDate}
-          onChange={(event) => setField("endDate", event.target.value)}
-        />
       </div>
       <div className={form.id ? "mt-5 flex gap-2" : "border-t border-[#E5E7EB] bg-[#FAFAFA] px-6 py-4 flex items-center justify-end gap-2.5 shrink-0"}>
         <button

@@ -156,9 +156,12 @@ function buildWhere(query: TaxListQuery) {
   if (query.type) where.type = normalizeType(query.type);
 
   if (search) {
+    const searchUpper = search.toUpperCase();
+    const matchedTypes = TAX_RULE_TYPES.filter((t) => t.includes(searchUpper));
+
     where.OR = [
       { name: { contains: search, mode: "insensitive" } },
-      { type: { contains: search.toUpperCase() } },
+      ...matchedTypes.map((t) => ({ type: t })),
       { country: { name: { contains: search, mode: "insensitive" } } },
       { country: { code: { contains: search, mode: "insensitive" } } },
     ];
