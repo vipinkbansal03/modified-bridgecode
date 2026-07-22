@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { useCart } from "@/contexts/CartContext";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
+import { useDeliveryAddress } from "@/contexts/DeliveryAddressContext";
 import {
   createCustomerOrder,
   calculateShipping,
@@ -40,6 +41,7 @@ export default function CheckoutPage() {
   const { items, totals, updateQuantity, removeItem, clearCart } = useCart();
   const { currentCustomer, isLoading } = useCustomerAuth();
   const { selectedCountryCode, setSelectedCountryCode } = useCurrencyContext();
+  const { selectedAddress: sessionAddress } = useDeliveryAddress();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<CustomerOrderSummary | null>(null);
@@ -79,12 +81,19 @@ export default function CheckoutPage() {
       listCustomerAddresses()
         .then((saved) => {
           setAddresses(saved);
-          const defaultAddress = saved.find((address) => address.isDefault) ?? saved[0];
-          if (defaultAddress) applySavedAddress(defaultAddress);
+          
+          // Prioritize sessionAddress from the header, fall back to default database address
+          const preselected = sessionAddress || (saved.find((address) => address.isDefault) ?? saved[0]);
+          if (preselected) applySavedAddress(preselected);
         })
-        .catch(() => setAddresses([]));
+        .catch(() => {
+          setAddresses([]);
+          if (sessionAddress) applySavedAddress(sessionAddress);
+        });
+    } else if (sessionAddress) {
+      applySavedAddress(sessionAddress);
     }
-  }, [currentCustomer]);
+  }, [currentCustomer, sessionAddress]);
 
   useEffect(() => {
     if (selectedCountryCode && selectedCountryCode !== form.countryCode) {
