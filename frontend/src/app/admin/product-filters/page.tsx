@@ -47,11 +47,11 @@ type EditorMode = "edit" | null;
 export default function ProductFiltersPage() {
   const { selectedLanguage } = useLanguageContext();
   const { selectedCountryCode } = useCurrencyContext();
-  const { data: attributes = [], isLoading: attrsLoading, refetch: refetchAttrs } = useAdminAttributes();
-  const { data: categories = [], isLoading: catsLoading } = useAdminCategories();
+  const { data: attributes, isLoading: attrsLoading, refetch: refetchAttrs } = useAdminAttributes();
+  const { data: categories, isLoading: catsLoading } = useAdminCategories();
   const { data: filterConfig, isLoading, refetch } = useAdminProductFilters();
   const updateFilters = useUpdateProductFilters();
-  const { data: facets = [] } = useProductFacets();
+  const { data: facets } = useProductFacets();
   const { showToast, ToastComponent } = useToast();
 
   const [editorMode, setEditorMode] = useState<EditorMode>(null);
@@ -68,13 +68,16 @@ export default function ProductFiltersPage() {
 
   // Build the attribute-filter list from the actual storefront facets (what is shown on /products),
   // merged with any saved enabled/disabled state from the global config.
-  const attributeFilterConfigs = useMemo(() => {
+  const computedConfigs = useMemo(() => {
+    const safeAttributes = attributes ?? [];
+    const safeFacets = facets ?? [];
+
     const savedByName = new Map<string, AttributeFilterConfig>();
     (filterConfig?.attributeFilters ?? []).forEach((af: AttributeFilterConfig) => savedByName.set(af.attributeName, af));
 
     // Group facet values by attribute name
     const grouped = new Map<string, string[]>();
-    (facets as Array<{ attributeName: string; value: string }>).forEach((f) => {
+    (safeFacets as Array<{ attributeName: string; value: string }>).forEach((f) => {
       if (!grouped.has(f.attributeName)) grouped.set(f.attributeName, []);
       const arr = grouped.get(f.attributeName)!;
       if (!arr.includes(f.value)) arr.push(f.value);
@@ -83,14 +86,14 @@ export default function ProductFiltersPage() {
     if (grouped.size === 0) {
       // Fallback: when no live facets, show saved configs (if any)
       return (filterConfig?.attributeFilters ?? []).map((af: AttributeFilterConfig) => {
-        const attr = attributes.find((a: ApiAttribute) => a.id === af.attributeId || a.name === af.attributeName);
-        return { ...af, id: af.attributeId, attribute: attr, values: attr?.values ?? [] };
+        const attr = safeAttributes.find((a: ApiAttribute) => a.id === af.attributeId || a.name === af.attributeName);
+        return { ...af, id: af.attributeId, attribute: attr, values: (attr?.values ?? []).map((v: ApiAttributeValue) => v.value) };
       });
     }
 
     return Array.from(grouped.entries()).map(([attributeName, values]) => {
       const saved = savedByName.get(attributeName);
-      const attr = attributes.find((a: ApiAttribute) => a.name === attributeName);
+      const attr = safeAttributes.find((a: ApiAttribute) => a.name === attributeName);
       const allValueIds = (attr?.values ?? [])
         .filter((v: ApiAttributeValue) => values.includes(v.value))
         .map((v: ApiAttributeValue) => v.id);
@@ -109,6 +112,24 @@ export default function ProductFiltersPage() {
     }).sort((a, b) => a.sortOrder - b.sortOrder || a.attributeName.localeCompare(b.attributeName));
   }, [facets, filterConfig, attributes]);
 
+  const [localFilters, setLocalFilters] = useState<typeof computedConfigs>([]);
+  const hasInitialized = useRef(false);
+  const isLoadingAll = isLoading || attrsLoading || catsLoading;
+
+  useEffect(() => {
+    if (!isLoadingAll && !hasInitialized.current) {
+      setLocalFilters(computedConfigs);
+      hasInitialized.current = true;
+    }
+  }, [isLoadingAll, computedConfigs]);
+
+  useEffect(() => {
+    if (filterConfig) {
+      setFeaturedOnly(filterConfig.featuredOnly);
+      setCategoryFilterEnabled(filterConfig.categoryFilterEnabled);
+    }
+  }, [filterConfig]);
+
   const resetEditorState = () => {
     setEditorMode(null);
     setEditingAttributeId(null);
@@ -120,7 +141,7 @@ export default function ProductFiltersPage() {
   };
 
   const openEditModal = (attributeId: string) => {
-    const config = attributeFilterConfigs.find((c: typeof attributeFilterConfigs[0]) => c.attributeId === attributeId);
+    const config = localFilters.find((c: any) => c.attributeId === attributeId);
     if (config) {
       setName(config.attributeName);
       setEnabled(config.enabled);
@@ -134,7 +155,7 @@ export default function ProductFiltersPage() {
 
   const handleDisplayTypeChange = (nextType: AttributeRole) => {
     setDisplayType(nextType);
-    const config = attributeFilterConfigs.find((c: typeof attributeFilterConfigs[0]) => c.attributeId === editingAttributeId);
+    const config = localFilters.find((c: any) => c.attributeId === editingAttributeId);
     if (config && config.attribute && nextType !== config.displayType) {
       setRoleWarnings([
         `${config.attribute.values.filter((v: { status: string }) => v.status !== "INACTIVE").length} active value(s) will keep working. The storefront renderer will switch automatically after you save.`,
@@ -144,62 +165,34 @@ export default function ProductFiltersPage() {
     }
   };
 
-  const handleSaveAttributeFilter = async () => {
+  const handleSaveAttributeFilter = () => {
     if (!editingAttributeId) return;
-    setIsSaving(true);
-    try {
-      const currentConfig = filterConfig?.attributeFilters.find((af: AttributeFilterConfig) => af.attributeId === editingAttributeId);
-      if (!currentConfig) throw new Error("Configuration not found");
-
-      const updatedConfig: ProductFilterConfig = {
-        id: filterConfig?.id ?? "default",
-        featuredOnly,
-        categoryFilterEnabled,
-        attributeFilters: filterConfig?.attributeFilters.map((af: AttributeFilterConfig) =>
-          af.attributeId === editingAttributeId
-            ? { ...af, enabled, displayType, allowedValueIds }
-            : af
-        ) ?? [],
-      };
-
-      await updateFilters.mutateAsync(updatedConfig);
-      showToast("Filter configuration saved.");
-      resetEditorState();
-      refetch();
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to save filter configuration."), "error");
-    } finally {
-      setIsSaving(false);
-    }
+    setLocalFilters((prev: any[]) =>
+      prev.map((c: any) =>
+        c.attributeId === editingAttributeId
+          ? { ...c, enabled, displayType, allowedValueIds }
+          : c
+      )
+    );
+    resetEditorState();
   };
 
-  const handleDeleteAttributeFilter = async () => {
+  const handleDeleteAttributeFilter = () => {
     if (!deletingId) return;
-    try {
-      const updatedConfig: ProductFilterConfig = {
-        id: filterConfig?.id ?? "default",
-        featuredOnly,
-        categoryFilterEnabled,
-        attributeFilters: attributeFilterConfigs.map((item: typeof attributeFilterConfigs[0]) =>
-          item.attributeId === deletingId ? { ...item, enabled: false } : item
-        ),
-      };
-      await updateFilters.mutateAsync(updatedConfig);
-      showToast("Filter hidden from storefront.");
-      refetch();
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to hide filter."), "error");
-    } finally {
-      setDeletingId(null);
-    }
+    setLocalFilters((prev: any[]) =>
+      prev.map((c: any) =>
+        c.attributeId === deletingId ? { ...c, enabled: false } : c
+      )
+    );
+    setDeletingId(null);
   };
 
-  const buildConfigFromList = (list: typeof attributeFilterConfigs) => {
+  const buildConfigFromList = (list: typeof localFilters) => {
     const updatedConfig: ProductFilterConfig = {
       id: filterConfig?.id ?? "default",
       featuredOnly,
       categoryFilterEnabled,
-      attributeFilters: list.map((item: typeof attributeFilterConfigs[0]) => ({
+      attributeFilters: list.map((item: any) => ({
         attributeId: item.attributeId,
         attributeName: item.attributeName,
         enabled: item.enabled,
@@ -211,11 +204,12 @@ export default function ProductFiltersPage() {
     return updatedConfig;
   };
 
-  const handleBulkSaveWith = async (list: typeof attributeFilterConfigs = attributeFilterConfigs) => {
+  const handleBulkSave = async () => {
     setIsSaving(true);
     try {
-      await updateFilters.mutateAsync(buildConfigFromList(list));
+      await updateFilters.mutateAsync(buildConfigFromList(localFilters));
       showToast("Filter settings saved.");
+      hasInitialized.current = false;
       refetch();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to save filter settings."), "error");
@@ -224,12 +218,7 @@ export default function ProductFiltersPage() {
     }
   };
 
-  const handleBulkSave = async () => {
-    await handleBulkSaveWith(attributeFilterConfigs);
-  };
-
   const isEditorOpen = !!editorMode;
-  const isLoadingAll = isLoading || attrsLoading || catsLoading;
 
   return (
     <AdminLayout title="Product Filters" breadcrumb={[{ label: "Product Filters" }]}>
@@ -245,7 +234,7 @@ export default function ProductFiltersPage() {
         <>
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Attribute Filters ({attributeFilterConfigs.length})</h3>
+              <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Attribute Filters ({localFilters.length})</h3>
               <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">These are the filters currently shown on the storefront <span className="font-medium text-[#6B6B6B]">/products</span> page. Toggle to show or hide each one.</p>
             </div>
             <button
@@ -258,13 +247,13 @@ export default function ProductFiltersPage() {
             </button>
           </div>
 
-          {attributeFilterConfigs.length === 0 ? (
+          {localFilters.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[#E6E6E6] py-12 text-center text-[13.5px] text-[#9A9A9A]">
               No attribute filters are available on the storefront yet. Add attributes with values to products first.
             </div>
           ) : (
             <div className="space-y-3">
-              {attributeFilterConfigs.map((config: typeof attributeFilterConfigs[0]) => {
+              {localFilters.map((config: any) => {
                 const attr = config.attribute;
                 return (
                   <div key={config.attributeId} className="flex w-full min-w-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E6E6E6] bg-white p-4">
@@ -307,10 +296,13 @@ export default function ProductFiltersPage() {
                           className="h-4 w-4 accent-brand"
                           checked={config.enabled}
                           onChange={(e) => {
-                            const updated = [...attributeFilterConfigs];
-                            const idx = updated.findIndex((c) => c.attributeId === config.attributeId);
-                            if (idx !== -1) updated[idx] = { ...updated[idx], enabled: e.target.checked };
-                            handleBulkSaveWith(updated);
+                            setLocalFilters((prev: any[]) =>
+                              prev.map((c: any) =>
+                                c.attributeId === config.attributeId
+                                  ? { ...c, enabled: e.target.checked }
+                                  : c
+                              )
+                            );
                           }}
                         />
                         <span className="text-[13px] text-[#1A1A1A]">Enabled</span>
@@ -318,10 +310,13 @@ export default function ProductFiltersPage() {
                       <select
                         value={config.displayType}
                         onChange={(e) => {
-                          const updated = [...attributeFilterConfigs];
-                          const idx = updated.findIndex((c) => c.attributeId === config.attributeId);
-                          if (idx !== -1) updated[idx] = { ...updated[idx], displayType: e.target.value as AttributeRole };
-                          handleBulkSaveWith(updated);
+                          setLocalFilters((prev: any[]) =>
+                            prev.map((c: any) =>
+                              c.attributeId === config.attributeId
+                                ? { ...c, displayType: e.target.value as AttributeRole }
+                                : c
+                            )
+                          );
                         }}
                         className="rounded-md border border-[#E6E6E6] bg-white px-2.5 py-1.5 text-[12.5px] outline-none"
                       >
@@ -358,103 +353,114 @@ export default function ProductFiltersPage() {
             title="Configure Filter Values"
             panelClassName="max-h-[90vh] max-w-3xl overflow-y-auto"
           >
-            {editorMode === "edit" && editingAttributeId ? (
-              <>
-                <div className="space-y-3">
-                  <AdminInput
-                    label="Attribute Name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Wire Size"
-                    disabled
-                  />
-                  <AdminSelect
-                    label="Filter Enabled"
-                    value={enabled ? "true" : "false"}
-                    onChange={(e) => setEnabled(e.target.value === "true")}
-                    options={[
-                      { value: "true", label: "Enabled" },
-                      { value: "false", label: "Disabled" },
-                    ]}
-                  />
-                  <AdminSelect
-                    label="Display Type"
-                    value={displayType}
-                    onChange={(e) => handleDisplayTypeChange(e.target.value as AttributeRole)}
-                    options={[
-                      { value: "DROPDOWN", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.DROPDOWN },
-                      { value: "X_GRID", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.X_GRID },
-                      { value: "Y_GRID", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.Y_GRID },
-                    ]}
-                  />
-                </div>
+            <div className="p-6">
+              {editorMode === "edit" && editingAttributeId ? (
+                <>
+                  <div className="space-y-4">
+                    <AdminInput
+                      label="Attribute Name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Wire Size"
+                      disabled
+                    />
+                    <AdminSelect
+                      label="Filter Enabled"
+                      value={enabled ? "true" : "false"}
+                      onChange={(e) => setEnabled(e.target.value === "true")}
+                      options={[
+                        { value: "true", label: "Enabled" },
+                        { value: "false", label: "Disabled" },
+                      ]}
+                    />
+                    <AdminSelect
+                      label="Display Type"
+                      value={displayType}
+                      onChange={(e) => handleDisplayTypeChange(e.target.value as AttributeRole)}
+                      options={[
+                        { value: "DROPDOWN", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.DROPDOWN },
+                        { value: "X_GRID", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.X_GRID },
+                        { value: "Y_GRID", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.Y_GRID },
+                      ]}
+                    />
+                  </div>
 
-                {roleWarnings.length > 0 ? (
-                  <p className="mt-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
-                    <svg className="mt-0.5 shrink-0" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                      <line x1="12" y1="9" x2="12" y2="13" />
-                      <line x1="12" y1="17" x2="12.01" y2="17" />
-                    </svg>
-                    {roleWarnings.join(" ")}
-                  </p>
-                ) : null}
-
-                <div className="mt-5 border-t border-[#E6E6E6] pt-5">
-                  <div className="mb-3">
-                    <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Allowed Values</h3>
-                    <p className="mt-1 text-[12.5px] text-[#6B6B6B]">
-                      Select which attribute values should be available as filter options. Uncheck to hide from filter.
+                  {roleWarnings.length > 0 ? (
+                    <p className="mt-4 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
+                      <svg className="mt-0.5 shrink-0" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                        <line x1="12" y1="9" x2="12" y2="13" />
+                        <line x1="12" y1="17" x2="12.01" y2="17" />
+                      </svg>
+                      {roleWarnings.join(" ")}
                     </p>
-                  </div>
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {attributeFilterConfigs
-                      .find((c: typeof attributeFilterConfigs[0]) => c.attributeId === editingAttributeId)
-                      ?.attribute?.values?.map((value: ApiAttributeValue) => (
-                        <label key={value.id} className="flex cursor-pointer items-center gap-2.5 rounded border border-[#F0F0F0] px-3 py-2 text-[13px] text-[#1A1A1A]">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 accent-brand"
-                            checked={allowedValueIds.includes(value.id) || allowedValueIds.length === 0}
-                            onChange={(e) =>
-                              setAllowedValueIds((current) =>
-                                e.target.checked
-                                  ? current.filter((id) => id !== value.id)
-                                  : [...current, value.id]
-                              )
-                            }
-                          />
-                          <span className="truncate">{value.value}</span>
-                          {value.status === "INACTIVE" && (
-                            <span className="ml-auto rounded-full bg-[#F2F2F2] px-2 py-0.5 text-[10px] font-medium text-[#9A9A9A]">
-                              Inactive
-                            </span>
-                          )}
-                        </label>
-                      ))}
-                    {(!attributeFilterConfigs.find((c: typeof attributeFilterConfigs[0]) => c.attributeId === editingAttributeId)?.attribute?.values?.length) && (
-                      <p className="text-[13px] text-[#9A9A9A]">No values defined for this attribute.</p>
-                    )}
-                  </div>
-                </div>
+                  ) : null}
 
-                <div className="mt-5 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={handleSaveAttributeFilter}
-                    disabled={isSaving}
-                    className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
-                  >
-                    {isSaving ? "Saving..." : "Save"}
-                  </button>
-                  <button type="button" onClick={resetEditorState} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] text-[#6B6B6B]">
-                    Cancel
-                  </button>
-                </div>
-              </>
-            ) : (
-              <p className="text-center text-[#9A9A9A] py-8">Select a filter to configure</p>
-            )}
+                  <div className="mt-6 border-t border-[#E6E6E6] pt-6">
+                    <div className="mb-4">
+                      <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Allowed Values</h3>
+                      <p className="mt-1.5 text-[12.5px] text-[#6B6B6B]">
+                        Select which attribute values should be available as filter options. Uncheck to hide from filter.
+                      </p>
+                    </div>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {localFilters
+                        .find((c: any) => c.attributeId === editingAttributeId)
+                        ?.attribute?.values?.map((value: ApiAttributeValue) => (
+                          <label key={value.id} className="flex cursor-pointer items-center gap-2.5 rounded border border-[#F0F0F0] px-3 py-2 text-[13px] text-[#1A1A1A]">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 accent-brand"
+                              checked={allowedValueIds.length === 0 || allowedValueIds.includes(value.id)}
+                              onChange={(e) => {
+                                const allIds = localFilters
+                                  .find((c: any) => c.attributeId === editingAttributeId)
+                                  ?.attribute?.values?.map((v: any) => v.id) ?? [];
+                                
+                                setAllowedValueIds((current) => {
+                                  const initialList = current.length === 0 ? allIds : current;
+                                  if (e.target.checked) {
+                                    const next = [...initialList, value.id];
+                                    if (next.length === allIds.length) return [];
+                                    return next;
+                                  } else {
+                                    return initialList.filter((id: string) => id !== value.id);
+                                  }
+                                });
+                              }}
+                            />
+                            <span className="truncate">{value.value}</span>
+                            {value.status === "INACTIVE" && (
+                              <span className="ml-auto rounded-full bg-[#F2F2F2] px-2 py-0.5 text-[10px] font-medium text-[#9A9A9A]">
+                                Inactive
+                              </span>
+                            )}
+                          </label>
+                        ))}
+                      {(!localFilters.find((c: any) => c.attributeId === editingAttributeId)?.attribute?.values?.length) && (
+                        <p className="text-[13px] text-[#9A9A9A]">No values defined for this attribute.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveAttributeFilter}
+                      disabled={isSaving}
+                      className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
+                    >
+                      {isSaving ? "Saving..." : "Save"}
+                    </button>
+                    <button type="button" onClick={resetEditorState} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] text-[#6B6B6B]">
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-center text-[#9A9A9A] py-8">Select a filter to configure</p>
+              )}
+            </div>
           </Modal>
 
           <ConfirmModal

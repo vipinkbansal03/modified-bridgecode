@@ -30,6 +30,6 @@ export const setVisibility = asyncHandler(async (req: AuthRequest, res: Response
 
 // Public
 export const publicConfig = asyncHandler(async (_req: AuthRequest, res: Response) => {
-  res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
+  res.setHeader("Cache-Control", "no-store");
   return ApiResponse.success(res, "Product filters config.", await S.getPublicProductFiltersConfig());
 });

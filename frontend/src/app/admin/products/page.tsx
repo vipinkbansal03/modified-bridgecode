@@ -613,7 +613,7 @@ export default function AdminProductsPage() {
         title="Import Products Excel"
         panelClassName="max-w-4xl max-h-[calc(100vh-2.5rem)] overflow-y-auto"
       >
-        <div className="space-y-4">
+        <div className="space-y-4 p-6">
           <p className="text-[13.5px] leading-5 text-[#6B6B6B]">
             Upload an `.xlsx` or `.csv` file. The first sheet is read automatically, then the server validates the rows before any write happens.
           </p>

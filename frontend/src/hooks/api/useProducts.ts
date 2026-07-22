@@ -114,7 +114,7 @@ async function fetchProductFacets(lang?: string, countryCode?: string) {
 async function fetchProductFiltersConfig(lang?: string, countryCode?: string) {
   if (!HAS_LIVE_API) return null;
   try {
-    const res = await apiClient.get("/product-filters", { params: { lang, countryCode } });
+    const res = await apiClient.get("/admin/product-filters/public", { params: { lang, countryCode } });
     return unwrapData<any>(res);
   } catch {
     return null;
