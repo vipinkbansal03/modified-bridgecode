@@ -736,7 +736,10 @@ export const useUpdateProductFilters = () => {
   return useMutation({
     mutationFn: (data: ProductFilterConfig) =>
       adminApi.put("/product-filters", data).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-product-filters"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-product-filters"] });
+      qc.invalidateQueries({ queryKey: ["products", "filters-config"] });
+    },
   });
 };
 

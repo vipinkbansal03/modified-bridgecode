@@ -222,76 +222,78 @@ export default function AttributesPage() {
         title={editorMode === "edit" ? "Edit attribute" : "New attribute"}
         panelClassName="max-h-[90vh] max-w-3xl overflow-y-auto"
       >
-        {editorMode === "edit" && editLoading ? (
-          <div className="space-y-3">
-            {[...Array(3)].map((_, index) => (
-              <div key={index} className="h-12 animate-pulse rounded-lg bg-[#E6E6E6]" />
-            ))}
-          </div>
-        ) : (
-          <>
-            <div className="space-y-3">
-              <AdminInput label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Wire Size" />
-              <AdminSelect
-                label="Display Type"
-                value={role}
-                onChange={(e) => handleRoleChange(e.target.value as AttributeRole)}
-                options={[
-                  { value: "DROPDOWN", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.DROPDOWN },
-                  { value: "X_GRID", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.X_GRID },
-                  { value: "Y_GRID", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.Y_GRID },
-                ]}
-              />
-              <AdminSelect
-                label="Status"
-                value={status}
-                onChange={(e) => setStatus(e.target.value as "ACTIVE" | "INACTIVE")}
-                options={[
-                  { value: "ACTIVE", label: "Active" },
-                  { value: "INACTIVE", label: "Inactive" },
-                ]}
-              />
+        <div className="p-6">
+          {editorMode === "edit" && editLoading ? (
+            <div className="space-y-4">
+              {[...Array(3)].map((_, index) => (
+                <div key={index} className="h-12 animate-pulse rounded-lg bg-[#E6E6E6]" />
+              ))}
             </div>
-
-            {editorMode === "edit" && currentRole && role !== currentRole ? (
-              <p className="mt-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
-                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                Display type changed. Save to apply. The storefront will automatically switch between dropdown and matrix rendering based on this setting.
-              </p>
-            ) : null}
-            {roleWarnings.length > 0 ? (
-              <p className="mt-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[12.5px] text-blue-900">
-                {roleWarnings.join(" ")}
-              </p>
-            ) : null}
-
-            {editorMode === "edit" && editingAttribute ? (
-              <div className="mt-5 border-t border-[#E6E6E6] pt-5">
-                <div className="mb-3">
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Values</h3>
-                  <p className="mt-1 text-[12.5px] text-[#6B6B6B]">
-                    If you switch the display type, update the existing values here before saving the attribute.
-                  </p>
-                </div>
-                <AttributeValueEditors attribute={{ ...(editingAttribute as ApiAttribute), role }} />
+          ) : (
+            <>
+              <div className="space-y-4">
+                <AdminInput label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Wire Size" />
+                <AdminSelect
+                  label="Display Type"
+                  value={role}
+                  onChange={(e) => handleRoleChange(e.target.value as AttributeRole)}
+                  options={[
+                    { value: "DROPDOWN", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.DROPDOWN },
+                    { value: "X_GRID", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.X_GRID },
+                    { value: "Y_GRID", label: ATTRIBUTE_DISPLAY_TYPE_LABELS.Y_GRID },
+                  ]}
+                />
+                <AdminSelect
+                  label="Status"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as "ACTIVE" | "INACTIVE")}
+                  options={[
+                    { value: "ACTIVE", label: "Active" },
+                    { value: "INACTIVE", label: "Inactive" },
+                  ]}
+                />
               </div>
-            ) : null}
 
-            <div className="mt-5 flex gap-2">
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={isSaving || (editorMode === "edit" && editLoading)}
-                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
-              >
-                {isSaving ? (editorMode === "edit" ? "Saving..." : "Creating...") : editorMode === "edit" ? "Save" : "Create"}
-              </button>
-              <button type="button" onClick={resetEditorState} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] text-[#6B6B6B]">
-                Cancel
-              </button>
-            </div>
-          </>
-        )}
+              {editorMode === "edit" && currentRole && role !== currentRole ? (
+                <p className="mt-4 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                  Display type changed. Save to apply. The storefront will automatically switch between dropdown and matrix rendering based on this setting.
+                </p>
+              ) : null}
+              {roleWarnings.length > 0 ? (
+                <p className="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[12.5px] text-blue-900">
+                  {roleWarnings.join(" ")}
+                </p>
+              ) : null}
+
+              {editorMode === "edit" && editingAttribute ? (
+                <div className="mt-6 border-t border-[#E6E6E6] pt-6">
+                  <div className="mb-4">
+                    <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Values</h3>
+                    <p className="mt-1.5 text-[12.5px] text-[#6B6B6B]">
+                      If you switch the display type, update the existing values here before saving the attribute.
+                    </p>
+                  </div>
+                  <AttributeValueEditors attribute={{ ...(editingAttribute as ApiAttribute), role }} />
+                </div>
+              ) : null}
+
+              <div className="mt-6 flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isSaving || (editorMode === "edit" && editLoading)}
+                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
+                >
+                  {isSaving ? (editorMode === "edit" ? "Saving..." : "Creating...") : editorMode === "edit" ? "Save" : "Create"}
+                </button>
+                <button type="button" onClick={resetEditorState} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] text-[#6B6B6B]">
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </Modal>
 
       <ConfirmModal

@@ -149,12 +149,11 @@ export default function CollectionsPage() {
     setForm(emptyForm);
     setShowForm(true);
   };
-
   const reset = () => {
     setForm(emptyForm);
+    setSelectedCollectionId("");
     setShowForm(false);
   };
-
   const toggleProduct = (productId: string) => {
     setForm((current) => ({
       ...current,
@@ -356,7 +355,7 @@ export default function CollectionsPage() {
   const isEditInlineOpen = showForm && !!form.id;
 
   const collectionForm = (
-    <form onSubmit={submit} className="rounded-lg border border-[#E6E6E6] bg-white p-5">
+    <form onSubmit={submit} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <AdminInput label="Name *" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
         <AdminInput label="Slug" value={form.slug} onChange={(event) => setForm({ ...form, slug: event.target.value })} placeholder="Auto from name if blank" />
@@ -435,123 +434,127 @@ export default function CollectionsPage() {
         </button>
       </div>
 
-      {isEditInlineOpen ? <div className="mb-5">{collectionForm}</div> : null}
+      <Modal
+        open={showForm}
+        onClose={reset}
+        title={form.id ? "Edit Collection" : "Create Collection"}
+        panelClassName="max-w-5xl max-h-[calc(100vh-2.5rem)] overflow-y-auto"
+      >
+        {showForm ? (
+          <div className="space-y-6 p-6">
+            {collectionForm}
 
-      <Modal open={isCreateModalOpen} onClose={reset} title="Create Collection" panelClassName="max-w-5xl max-h-[calc(100vh-2.5rem)] overflow-y-auto">
-        {isCreateModalOpen ? collectionForm : null}
-      </Modal>
+            {form.id && (
+              <div className="space-y-6 border-t border-[#E6E6E6] pt-6">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-[14.5px] font-bold text-[#111]">Country Visibility</h3>
+                    <p className="text-[12.5px] text-[#6B6B6B]">Use the switches below to control where this collection appears.</p>
+                  </div>
+                </div>
 
-      {selectedCollectionId ? (
-        <div className="mb-5 rounded-lg border border-[#E6E6E6] bg-white p-5">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-[14px] font-semibold text-[#111]">Country Visibility</h3>
-              <p className="text-[12.5px] text-[#6B6B6B]">Use the switches below to control where this collection appears.</p>
-            </div>
-            <button onClick={() => setSelectedCollectionId("")} className="text-[12px] text-[#6B6B6B]">
-              Close
-            </button>
-          </div>
+                <div className="mb-3 flex items-center gap-2">
+                  <div className="relative">
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
+                    <input
+                      value={countrySearch}
+                      onChange={(event) => setCountrySearch(event.target.value)}
+                      placeholder="Search countries..."
+                      className="w-[240px] rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3 text-[13px] outline-none focus:border-[#E31E24]"
+                    />
+                  </div>
+                  <button onClick={saveCountries} className="rounded-md bg-[#111] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#222]">
+                    Save Visibility
+                  </button>
+                </div>
 
-          <div className="mb-3 flex items-center gap-2">
-            <div className="relative">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-              <input
-                value={countrySearch}
-                onChange={(event) => setCountrySearch(event.target.value)}
-                placeholder="Search countries..."
-                className="w-[240px] rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3 text-[13px] outline-none focus:border-[#E31E24]"
-              />
-            </div>
-            <button onClick={saveCountries} className="rounded-md bg-[#111] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#222]">
-              Save Visibility
-            </button>
-          </div>
+                <div className="grid max-h-[260px] grid-cols-1 gap-2 overflow-y-auto md:grid-cols-3">
+                  {countriesLoading ? (
+                    <div className="col-span-full rounded-md border border-dashed border-[#E6E6E6] px-4 py-8 text-center text-[13px] text-[#9A9A9A]">Loading country visibility...</div>
+                  ) : filteredCountries.length === 0 ? (
+                    <div className="col-span-full rounded-md border border-dashed border-[#E6E6E6] px-4 py-8 text-center text-[13px] text-[#9A9A9A]">No countries found.</div>
+                  ) : (
+                    filteredCountries.map((country) => (
+                      <label key={country.id} className="flex items-center gap-2 rounded border border-[#E6E6E6] px-3 py-2 text-[13px]">
+                        <input type="checkbox" checked={countryOverrides[country.id] ?? country.enabled} onChange={(event) => setCountryOverrides((current) => ({ ...current, [country.id]: event.target.checked }))} />
+                        {country.name} ({country.code})
+                      </label>
+                    ))
+                  )}
+                </div>
 
-          <div className="grid max-h-[260px] grid-cols-1 gap-2 overflow-y-auto md:grid-cols-3">
-            {countriesLoading ? (
-              <div className="col-span-full rounded-md border border-dashed border-[#E6E6E6] px-4 py-8 text-center text-[13px] text-[#9A9A9A]">Loading country visibility...</div>
-            ) : filteredCountries.length === 0 ? (
-              <div className="col-span-full rounded-md border border-dashed border-[#E6E6E6] px-4 py-8 text-center text-[13px] text-[#9A9A9A]">No countries found.</div>
-            ) : (
-              filteredCountries.map((country) => (
-                <label key={country.id} className="flex items-center gap-2 rounded border border-[#E6E6E6] px-3 py-2 text-[13px]">
-                  <input type="checkbox" checked={countryOverrides[country.id] ?? country.enabled} onChange={(event) => setCountryOverrides((current) => ({ ...current, [country.id]: event.target.checked }))} />
-                  {country.name} ({country.code})
-                </label>
-              ))
-            )}
-          </div>
-
-          <div className="mt-6 border-t border-[#E6E6E6] pt-5">
-            <h3 className="mb-3 text-[14px] font-semibold text-[#111]">Discount Rules</h3>
-            <form onSubmit={createDiscount} className="grid gap-3 rounded-md bg-[#FAFAFA] p-4 md:grid-cols-4">
-              <AdminInput label="Name" value={discountForm.name} onChange={(event) => setDiscountForm({ ...discountForm, name: event.target.value })} />
-              <AdminSelect
-                label="Type"
-                value={discountForm.type}
-                onChange={(event) => setDiscountForm({ ...discountForm, type: event.target.value, tierId: "", minQuantity: "" })}
-                options={[
-                  { value: "TIER", label: "Tier" },
-                  { value: "MOQ", label: "MOQ" },
-                ]}
-              />
-              {discountForm.type === "TIER" ? (
-                <AdminSelect
-                  label="Tier"
-                  value={discountForm.tierId}
-                  onChange={(event) => setDiscountForm({ ...discountForm, tierId: event.target.value })}
-                  options={[{ value: "", label: "Select tier" }, ...tiers.map((tier: { id: string; name: string }) => ({ value: tier.id, label: tier.name }))]}
-                />
-              ) : (
-                <AdminInput label="Minimum Qty" type="number" value={discountForm.minQuantity} onChange={(event) => setDiscountForm({ ...discountForm, minQuantity: event.target.value })} />
-              )}
-              <AdminSelect
-                label="Country"
-                value={discountForm.countryId}
-                onChange={(event) => setDiscountForm({ ...discountForm, countryId: event.target.value })}
-                options={[{ value: "", label: "All countries" }, ...allCountries.map((country: { id: string; code: string; name: string }) => ({ value: country.id, label: `${country.code} - ${country.name}` }))]}
-              />
-              <AdminInput label="Discount %" type="number" value={discountForm.discountPercent} onChange={(event) => setDiscountForm({ ...discountForm, discountPercent: event.target.value, fixedAmount: "" })} />
-              <AdminInput label="Fixed Amount" type="number" value={discountForm.fixedAmount} onChange={(event) => setDiscountForm({ ...discountForm, fixedAmount: event.target.value, discountPercent: "" })} />
-              <AdminInput label="Start Date" type="date" value={discountForm.startDate} onChange={(event) => setDiscountForm({ ...discountForm, startDate: event.target.value })} />
-              <AdminInput label="End Date" type="date" value={discountForm.endDate} onChange={(event) => setDiscountForm({ ...discountForm, endDate: event.target.value })} />
-              <div className="md:col-span-4">
-                <button type="submit" disabled={createCollectionDiscount.isPending} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
-                  Add Discount
-                </button>
-              </div>
-            </form>
-            <div className="mt-4 divide-y divide-[#EFEFEF] rounded-md border border-[#E6E6E6] bg-white">
-              {(collectionDiscounts as DiscountRow[]).length === 0 ? (
-                <div className="p-4 text-[13px] text-[#9A9A9A]">No discounts assigned to this collection.</div>
-              ) : (
-                (collectionDiscounts as DiscountRow[]).map((discount) => (
-                  <div key={discount.id} className="flex flex-wrap items-center justify-between gap-3 p-3 text-[13px]">
-                    <div>
-                      <div className="font-semibold text-[#111]">{discount.name}</div>
-                      <div className="mt-1 text-[#6B6B6B]">
-                        {discount.type}
-                        {discount.tier ? ` · ${discount.tier.name}` : ""}
-                        {discount.minQuantity ? ` · Qty ${discount.minQuantity}+` : ""}
-                        {discount.country ? ` · ${discount.country.code}` : " · All countries"}
-                        {" · "}
-                        {discount.discountPercent ? `${Number(discount.discountPercent)}% off` : `${Number(discount.fixedAmount ?? 0).toFixed(2)} off`}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <StatusBadge status={discount.status} />
-                      <button type="button" onClick={() => removeDiscount(discount.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50">
-                        <Trash2 size={13} />
+                <div className="border-t border-[#E6E6E6] pt-6">
+                  <h3 className="mb-3 text-[14.5px] font-bold text-[#111]">Discount Rules</h3>
+                  <form onSubmit={createDiscount} className="grid gap-3 rounded-md bg-[#FAFAFA] p-4 md:grid-cols-4">
+                    <AdminInput label="Name" value={discountForm.name} onChange={(event) => setDiscountForm({ ...discountForm, name: event.target.value })} />
+                    <AdminSelect
+                      label="Type"
+                      value={discountForm.type}
+                      onChange={(event) => setDiscountForm({ ...discountForm, type: event.target.value, tierId: "", minQuantity: "" })}
+                      options={[
+                        { value: "TIER", label: "Tier" },
+                        { value: "MOQ", label: "MOQ" },
+                      ]}
+                    />
+                    {discountForm.type === "TIER" ? (
+                      <AdminSelect
+                        label="Tier"
+                        value={discountForm.tierId}
+                        onChange={(event) => setDiscountForm({ ...discountForm, tierId: event.target.value })}
+                        options={[{ value: "", label: "Select tier" }, ...tiers.map((tier: { id: string; name: string }) => ({ value: tier.id, label: tier.name }))]}
+                      />
+                    ) : (
+                      <AdminInput label="Minimum Qty" type="number" value={discountForm.minQuantity} onChange={(event) => setDiscountForm({ ...discountForm, minQuantity: event.target.value })} />
+                    )}
+                    <AdminSelect
+                      label="Country"
+                      value={discountForm.countryId}
+                      onChange={(event) => setDiscountForm({ ...discountForm, countryId: event.target.value })}
+                      options={[{ value: "", label: "All countries" }, ...allCountries.map((country: { id: string; code: string; name: string }) => ({ value: country.id, label: `${country.code} - ${country.name}` }))]}
+                    />
+                    <AdminInput label="Discount %" type="number" value={discountForm.discountPercent} onChange={(event) => setDiscountForm({ ...discountForm, discountPercent: event.target.value, fixedAmount: "" })} />
+                    <AdminInput label="Fixed Amount" type="number" value={discountForm.fixedAmount} onChange={(event) => setDiscountForm({ ...discountForm, fixedAmount: event.target.value, discountPercent: "" })} />
+                    <AdminInput label="Start Date" type="date" value={discountForm.startDate} onChange={(event) => setDiscountForm({ ...discountForm, startDate: event.target.value })} />
+                    <AdminInput label="End Date" type="date" value={discountForm.endDate} onChange={(event) => setDiscountForm({ ...discountForm, endDate: event.target.value })} />
+                    <div className="md:col-span-4">
+                      <button type="submit" disabled={createCollectionDiscount.isPending} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
+                        Add Discount
                       </button>
                     </div>
+                  </form>
+                  <div className="mt-4 divide-y divide-[#EFEFEF] rounded-md border border-[#E6E6E6] bg-white">
+                    {(collectionDiscounts as DiscountRow[]).length === 0 ? (
+                      <div className="p-4 text-[13px] text-[#9A9A9A]">No discounts assigned to this collection.</div>
+                    ) : (
+                      (collectionDiscounts as DiscountRow[]).map((discount) => (
+                        <div key={discount.id} className="flex flex-wrap items-center justify-between gap-3 p-3 text-[13px]">
+                          <div>
+                            <div className="font-semibold text-[#111]">{discount.name}</div>
+                            <div className="mt-1 text-[#6B6B6B]">
+                              {discount.type}
+                              {discount.tier ? ` · ${discount.tier.name}` : ""}
+                              {discount.minQuantity ? ` · Qty ${discount.minQuantity}+` : ""}
+                              {discount.country ? ` · ${discount.country.code}` : " · All countries"}
+                              {" · "}
+                              {discount.discountPercent ? `${Number(discount.discountPercent)}% off` : `${Number(discount.fixedAmount ?? 0).toFixed(2)} off`}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <StatusBadge status={discount.status} />
+                            <button type="button" onClick={() => removeDiscount(discount.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50">
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
-                ))
-              )}
-            </div>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </Modal>
 
       <DataTable<Collection> columns={columns} data={collections} rowKey="id" isLoading={isLoading} emptyMessage="No collections yet." />
       <Pagination page={page} totalPages={data?.pagination?.totalPages || 1} onPageChange={setPage} />
