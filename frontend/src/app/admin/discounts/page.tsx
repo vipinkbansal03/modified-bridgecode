@@ -26,6 +26,7 @@ import {
   useToast,
 } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
+import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import {
   useAdminCategories,
   useAdminCountries,
@@ -83,7 +84,7 @@ type FormState = {
   valueType: "PERCENT" | "FIXED";
   discountPercent: string;
   fixedAmount: string;
-  countryId: string;
+  countryIds: string[];
   scope: "PLATFORM" | "PRODUCT" | "COLLECTION" | "CATEGORY";
   productId: string;
   collectionId: string;
@@ -120,7 +121,7 @@ const blankForm: FormState = {
   valueType: "PERCENT",
   discountPercent: "",
   fixedAmount: "",
-  countryId: "",
+  countryIds: [],
   scope: "PLATFORM",
   productId: "",
   collectionId: "",
@@ -169,7 +170,7 @@ function toForm(discount: Discount): FormState {
       discount.discountPercent != null ? String(discount.discountPercent) : "",
     fixedAmount:
       discount.fixedAmount != null ? String(discount.fixedAmount) : "",
-    countryId: discount.countryId ?? "",
+    countryIds: discount.countryId ? [discount.countryId] : [],
     scope: discount.productId
       ? "PRODUCT"
       : discount.collectionId
@@ -294,13 +295,10 @@ export default function DiscountsPage() {
           label: tier.name ?? tier.id,
         })),
       ],
-      countries: [
-        { value: "", label: "All countries" },
-        ...countries.map((country: Related) => ({
-          value: country.id,
-          label: `${country.name} (${country.code})`,
-        })),
-      ],
+      countries: countries.map((country: Related) => ({
+        value: country.id,
+        label: `${country.name} (${country.code})`,
+      })),
       products: [
         { value: "", label: "Select product" },
         ...products.map((product) => ({
@@ -379,7 +377,7 @@ export default function DiscountsPage() {
       discountPercent:
         form.valueType === "PERCENT" ? form.discountPercent : null,
       fixedAmount: form.valueType === "FIXED" ? form.fixedAmount : null,
-      countryId: form.countryId || null,
+      countryId: form.countryIds.length > 0 ? form.countryIds[0] : null,
       productId: form.scope === "PRODUCT" ? form.productId || null : null,
       collectionId:
         form.scope === "COLLECTION" ? form.collectionId || null : null,
@@ -730,18 +728,23 @@ export default function DiscountsPage() {
           onChange={(event) => setField("name", event.target.value)}
           placeholder="Gold launch promo"
         />
-        <AdminSelect
-          label="Discount Type"
-          value={form.type}
-          onChange={(event) =>
-            setField("type", event.target.value as FormState["type"])
-          }
-          options={[
-            { value: "TIER", label: "Tier-based" },
-            { value: "MOQ", label: "MOQ-based" },
-            { value: "PROMOTIONAL", label: "Open / Promotional" },
-          ]}
-        />
+        <div className="space-y-3">
+          <AdminMultiSearchableSelect
+            label="Countries"
+            values={form.countryIds}
+            onValuesChange={(values) =>
+              setForm((prev) => ({
+                ...prev,
+                countryIds: values,
+              }))
+            }
+            options={options.countries}
+            placeholder="Select countries"
+            allowSelectAll
+            selectAllLabel="All countries"
+            selectionSummaryFormatter={(count) => `${count} Countries Selected`}
+          />
+        </div>
         <AdminSelect
           label="Status"
           value={form.status}
@@ -801,13 +804,6 @@ export default function DiscountsPage() {
             onChange={(event) => setField("fixedAmount", event.target.value)}
           />
         )}
-
-        <AdminSelect
-          label="Country"
-          value={form.countryId}
-          onChange={(event) => setField("countryId", event.target.value)}
-          options={options.countries}
-        />
         <AdminSelect
           label="Scope"
           value={form.scope}
