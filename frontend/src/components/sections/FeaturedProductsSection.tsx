@@ -92,7 +92,7 @@ export function FeaturedProductsSection({
 
   return (
     <section className="relative">
-      <div className="relative h-[320px] min-h-[260px] w-full bg-grey sm:h-[380px] md:h-[calc(100vh-131.6px-241.5px)] md:min-h-[320px]">
+      <div className="relative h-[220px] w-full bg-grey sm:h-[260px] md:h-[300px]">
         <AnimatePresence mode="wait">
           <motion.div
             key={product.slug}
@@ -114,7 +114,7 @@ export function FeaturedProductsSection({
           </motion.div>
         </AnimatePresence>
       </div>
-      <div className="bg-ink py-13.5 sm:py-16 text-white">
+      <div className="bg-ink py-8 sm:py-10 text-white">
         <Container className="flex flex-wrap items-end justify-between gap-7">
           <div>
             <span className="mb-2.5 block text-[13px] font-medium tracking-[0.03em] text-[#9A9A9A]">

@@ -9,7 +9,7 @@ interface StatsSectionProps {
 export function StatsSection({ data }: StatsSectionProps) {
   return (
     <section className="bg-brand text-white">
-      <Container className="py-16 lg:py-20">
+      <Container className="py-5 lg:py-7">
         <Reveal>
           <div className="grid grid-cols-2 gap-y-10 sm:grid-cols-4 sm:gap-y-0">
             {data.map((stat, i) => (

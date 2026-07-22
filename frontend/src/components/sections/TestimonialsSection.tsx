@@ -25,7 +25,7 @@ export function TestimonialsSection() {
   const scrollBy = (delta: number) => viewportRef.current?.scrollBy({ left: delta, behavior: "smooth" });
 
   return (
-    <section className="py-12 lg:py-20">
+    <section className="pt-1 pb-3 lg:pt-1 lg:pb-4">
       <Container>
         <SectionHeading
           title={t("ui.home.whatDoctorsSay")}

@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { NewsletterForm } from "@/components/forms/NewsletterForm";
 import { Container } from "@/components/ui/Container";
 import { Logo } from "@/components/ui/Logo";
@@ -194,6 +196,14 @@ const footerLabelKeys: Record<string, StaticMessageKey> = {
 type FooterLink = { label: string; href: string; openInNewTab?: boolean };
 
 export function Footer() {
+  const [expandedCols, setExpandedCols] = useState<Record<string, boolean>>({});
+  const toggleCol = (colId: string) => {
+    setExpandedCols((prev) => ({
+      ...prev,
+      [colId]: !prev[colId],
+    }));
+  };
+
   const { t } = useStaticTranslations();
   const { isClosed, open } = useQuoteCartUI();
   const label = (value: string) =>
@@ -301,7 +311,7 @@ export function Footer() {
       return (
         <span
           key={key}
-          className="block break-words py-1.5 text-[14px] text-white/70"
+          className="block break-words py-0.5 text-[13px] text-white/70"
         >
           {label(item.label)}
         </span>
@@ -316,7 +326,7 @@ export function Footer() {
         rel={
           item.openInNewTab || isExternal ? "noopener noreferrer" : undefined
         }
-        className="block break-words pb-1.5 text-[14px] text-white/80 hover:text-white"
+        className="block break-words pb-0.5 text-[13px] text-white/80 hover:text-white"
       >
         {label(item.label)}
       </Link>
@@ -325,97 +335,149 @@ export function Footer() {
 
   return (
     <footer className="bg-brand text-white">
-      <Container className="border-t border-white/20 pt-16">
-        <div className="mb-14 flex items-center gap-2.5">
+      <Container className="border-t border-white/20 pt-4 md:pt-6">
+        <div className="mb-3 md:mb-4 flex items-center gap-2.5">
           {cmsFooter?.logo?.trim() ? (
             <img
               src={cmsFooter.logo.trim()}
               alt="Modern Orthodontics"
-              className="h-11 w-auto max-w-[280px] object-contain"
+              className="h-8 md:h-9 w-auto max-w-[200px] md:max-w-[220px] object-contain"
             />
           ) : (
             <Logo variant="light" />
           )}
         </div>
 
-        <div className="mb-14 grid grid-cols-2 gap-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="mb-4 md:mb-5 grid grid-cols-1 md:grid-cols-4 gap-x-6 gap-y-0 md:gap-y-5">
           {footerColumnsToRender.map((col) => (
-            <div key={col.heading} className="min-w-0">
-              <h6 className="mb-3 text-[18px] font-semibold text-white">
-                {label(col.heading)}
+            <div key={col.heading} className="min-w-0 border-b border-white/10 md:border-b-0 py-2 md:py-0">
+              <h6
+                onClick={() => toggleCol(col.heading)}
+                className={`flex items-center justify-between cursor-pointer md:cursor-default text-[14px] md:text-[15px] font-bold uppercase tracking-wider text-white ${
+                  expandedCols[col.heading] ? "mb-1.5" : "mb-0 md:mb-2"
+                }`}
+              >
+                <span>{label(col.heading)}</span>
+                <ChevronDown
+                  size={15}
+                  className={`md:hidden text-white/60 transition-transform duration-200 ${
+                    expandedCols[col.heading] ? "rotate-180" : ""
+                  }`}
+                />
               </h6>
 
-              {col.links.map((link) =>
-                renderFooterItem(link, `${col.heading}-${link.label}`),
-              )}
+              <div className={`${expandedCols[col.heading] ? "block pb-2" : "hidden md:block"}`}>
+                {col.links.map((link) =>
+                  renderFooterItem(link, `${col.heading}-${link.label}`),
+                )}
 
-              {col.heading === "Products" && isClosed && (
-                <button
-                  type="button"
-                  onClick={open}
-                  className="block pb-1.5 text-[14px] text-white/80 transition hover:text-white"
-                >
-                  Quote Cart
-                </button>
-              )}
+                {col.heading === "Products" && isClosed && (
+                  <button
+                    type="button"
+                    onClick={open}
+                    className="block pb-0.5 text-[13px] text-white/80 transition hover:text-white"
+                  >
+                    Quote Cart
+                  </button>
+                )}
+              </div>
             </div>
           ))}
 
-          <div className="min-w-0">
-            <h6 className="mb-4.5 text-[18px] font-semibold text-white">
-              {label(cmsExportColumn.heading || "Export & Trade")}
+          <div className="min-w-0 border-b border-white/10 md:border-b-0 py-2 md:py-0">
+            <h6
+              onClick={() => toggleCol("export")}
+              className={`flex items-center justify-between cursor-pointer md:cursor-default text-[14px] md:text-[15px] font-bold uppercase tracking-wider text-white ${
+                expandedCols["export"] ? "mb-1.5" : "mb-0 md:mb-2"
+              }`}
+            >
+              <span>{label(cmsExportColumn.heading || "Export & Trade")}</span>
+              <ChevronDown
+                size={15}
+                className={`md:hidden text-white/60 transition-transform duration-200 ${
+                  expandedCols["export"] ? "rotate-180" : ""
+                }`}
+              />
             </h6>
-            {exportLinks.map((item, index) =>
-              renderFooterItem(item, `footer-export-${index}`),
-            )}
+            <div className={`${expandedCols["export"] ? "block pb-2" : "hidden md:block"}`}>
+              {exportLinks.map((item, index) =>
+                renderFooterItem(item, `footer-export-${index}`),
+              )}
+            </div>
           </div>
 
-          <div className="min-w-0">
-            <h6 className="mb-4.5 text-[18px] font-semibold text-white">
-              {label(cmsIndiaOfficeColumn.heading || "India Office")}
+          <div className="min-w-0 border-b border-white/10 md:border-b-0 py-2 md:py-0">
+            <h6
+              onClick={() => toggleCol("india")}
+              className={`flex items-center justify-between cursor-pointer md:cursor-default text-[14px] md:text-[15px] font-bold uppercase tracking-wider text-white ${
+                expandedCols["india"] ? "mb-1.5" : "mb-0 md:mb-2"
+              }`}
+            >
+              <span>{label(cmsIndiaOfficeColumn.heading || "India Office")}</span>
+              <ChevronDown
+                size={15}
+                className={`md:hidden text-white/60 transition-transform duration-200 ${
+                  expandedCols["india"] ? "rotate-180" : ""
+                }`}
+              />
             </h6>
-            {indiaOfficeLinks.map((item, index) =>
-              renderFooterItem(item, `footer-india-${index}`),
-            )}
-            {!cmsIndiaOfficeColumn.links.length &&
-              footerContactFallback.email &&
-              footerContactFallback.email !== ORDERS_EMAIL &&
-              renderFooterItem(
-                {
-                  label: footerContactFallback.email,
-                  href: `mailto:${footerContactFallback.email}`,
-                },
-                "footer-india-fallback-email",
+            <div className={`${expandedCols["india"] ? "block pb-2" : "hidden md:block"}`}>
+              {indiaOfficeLinks.map((item, index) =>
+                renderFooterItem(item, `footer-india-${index}`),
               )}
-            {!cmsIndiaOfficeColumn.links.length &&
-              footerContactFallback.phone &&
-              footerContactFallback.phone !== INDIA_PHONE &&
-              renderFooterItem(
-                { label: footerContactFallback.phone, href: "" },
-                "footer-india-fallback-phone",
-              )}
-            {!cmsIndiaOfficeColumn.links.length &&
-              footerContactFallback.address &&
-              footerContactFallback.address !== COMPANY_ADDRESS &&
-              renderFooterItem(
-                { label: footerContactFallback.address, href: "" },
-                "footer-india-fallback-address",
-              )}
+              {!cmsIndiaOfficeColumn.links.length &&
+                footerContactFallback.email &&
+                footerContactFallback.email !== ORDERS_EMAIL &&
+                renderFooterItem(
+                  {
+                    label: footerContactFallback.email,
+                    href: `mailto:${footerContactFallback.email}`,
+                  },
+                  "footer-india-fallback-email",
+                )}
+              {!cmsIndiaOfficeColumn.links.length &&
+                footerContactFallback.phone &&
+                footerContactFallback.phone !== INDIA_PHONE &&
+                renderFooterItem(
+                  { label: footerContactFallback.phone, href: "" },
+                  "footer-india-fallback-phone",
+                )}
+              {!cmsIndiaOfficeColumn.links.length &&
+                footerContactFallback.address &&
+                footerContactFallback.address !== COMPANY_ADDRESS &&
+                renderFooterItem(
+                  { label: footerContactFallback.address, href: "" },
+                  "footer-india-fallback-address",
+                )}
+            </div>
           </div>
 
-          <div className="min-w-0">
-            <h6 className="mb-4.5 text-[18px] font-semibold text-white">
-              {label(cmsUsaOfficeColumn.heading || "USA Office")}
+          <div className="min-w-0 border-b border-white/10 md:border-b-0 py-2 md:py-0">
+            <h6
+              onClick={() => toggleCol("usa")}
+              className={`flex items-center justify-between cursor-pointer md:cursor-default text-[14px] md:text-[15px] font-bold uppercase tracking-wider text-white ${
+                expandedCols["usa"] ? "mb-1.5" : "mb-0 md:mb-2"
+              }`}
+            >
+              <span>{label(cmsUsaOfficeColumn.heading || "USA Office")}</span>
+              <ChevronDown
+                size={15}
+                className={`md:hidden text-white/60 transition-transform duration-200 ${
+                  expandedCols["usa"] ? "rotate-180" : ""
+                }`}
+              />
             </h6>
-            {usaOfficeLinks.map((item, index) =>
-              renderFooterItem(item, `footer-usa-${index}`),
-            )}
+            <div className={`${expandedCols["usa"] ? "block pb-2" : "hidden md:block"}`}>
+              {usaOfficeLinks.map((item, index) =>
+                renderFooterItem(item, `footer-usa-${index}`),
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-start justify-between gap-9 border-t border-white/20 py-8">
+        <div className="flex flex-wrap items-start justify-between gap-9 border-t border-white/20 py-4">
           <div>
-            <div className="mb-5 flex gap-5">
+            <div className="mb-2.5 flex gap-5">
               {socialLinks.map(({ href, label: socialLabel }) => (
                 <a
                   key={socialLabel}
@@ -429,7 +491,7 @@ export function Footer() {
                 </a>
               ))}
             </div>
-            <div className="mb-2.5 text-[13px] text-white/80">
+            <div className="mb-1.5 text-[13px] text-white/80">
               © {new Date().getFullYear()} {footerCopyright}
             </div>
             <div className="flex flex-wrap gap-2 text-[13px] text-white/80">
@@ -450,7 +512,7 @@ export function Footer() {
 
           {shouldShowNewsletter && (
             <div className="sm:text-right">
-              <p className="mb-3.5 text-[13px] text-white sm:text-sm">
+              <p className="mb-2 text-[13px] text-white sm:text-sm">
                 {footerNewsletterText}
               </p>
               <NewsletterForm tone="light" />
