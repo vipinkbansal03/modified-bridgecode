@@ -235,7 +235,7 @@ export async function duplicateCollection(id: string) {
 export async function listCollectionCountries(collectionId: string) {
   await getCollection(collectionId);
   const [countries, mappings] = await Promise.all([
-    prisma.country.findMany({ include: { currency: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    prisma.country.findMany({ where: { status: "ACTIVE" }, include: { currency: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.collectionCountry.findMany({ where: { collectionId } }),
   ]);
   const byCountry = new Map(mappings.map((mapping) => [mapping.countryId, mapping]));

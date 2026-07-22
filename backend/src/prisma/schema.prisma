@@ -123,6 +123,7 @@ model Product {
   defaultCurrency   Currency?            @relation(fields: [defaultCurrencyId], references: [id])
   QuoteItem         QuoteItem[]
   taxRules          TaxRule[]            @relation("ProductTaxRules")
+  reviews           ProductReview[]
 
   @@map("products")
 }
@@ -587,6 +588,7 @@ model Order {
   customerId       String?
   paymentMethod    String?
   taxAmount        Decimal          @default(0) @db.Decimal(12, 2)
+  taxType          String?
   shippingZoneId   String?
   couponCode       String?
   couponDiscount   Decimal?         @default(0) @db.Decimal(12, 2)
@@ -821,6 +823,24 @@ model ContactSubmission {
   updatedAt DateTime @updatedAt
 
   @@map("contact_submissions")
+}
+
+model ProductReview {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customerName  String?
+  customerEmail String?
+  ratingQuality Int      @default(5)
+  ratingPrice   Int      @default(5)
+  ratingOverall Int      @default(5)
+  feedbackText  String?  @db.Text
+  status        String   @default("APPROVED")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([productId])
+  @@map("product_reviews")
 }
 
 model CMSPage {
@@ -1169,6 +1189,7 @@ model TaxRule {
   id         String      @id @default(cuid())
   name       String
   type       TaxRuleType
+  taxMode    TaxMode     @default(EXCLUSIVE)
   percentage Decimal     @db.Decimal(5, 2)
   countryId  String
   status     Status      @default(ACTIVE)
@@ -1180,6 +1201,12 @@ model TaxRule {
 
   @@unique([countryId, name])
   @@map("tax_rules")
+}
+
+enum TaxMode {
+  EXCLUSIVE
+  INCLUSIVE
+  EXEMPT
 }
 
 enum UserStatus {

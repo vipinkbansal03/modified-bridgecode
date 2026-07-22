@@ -93,6 +93,8 @@ async function calculateCustomerOrder(customerId: string, input: CreateCustomerO
       countryId: itemCountryId,
       customerId: customer.id,
       quantity: item.quantity,
+      buyerState: input.shippingAddress?.state ?? null,
+      sellerState: "Rajasthan",
     });
 
     const unitPrice = resolvedPrice.finalPrice;
@@ -119,15 +121,18 @@ async function calculateCustomerOrder(customerId: string, input: CreateCustomerO
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
   const taxAmount = orderItems.reduce((sum, item) => sum + item.taxTotal, 0);
+  const exclusiveTaxAmount = orderItems.reduce((sum, item) => {
+    return item.resolvedPrice.taxMode === "EXCLUSIVE" ? sum + item.taxTotal : sum;
+  }, 0);
   const shipping = await calculateRequiredShipping(orderCountry.code, subtotal);
   const shippingCharge = shipping.charge;
   const couponValidation = input.couponCode?.trim()
     ? await validateCoupon(input.couponCode, subtotal, orderCountry.code)
     : null;
   const discount = couponValidation?.discount ?? 0;
-  const total = subtotal + taxAmount + shippingCharge - discount;
+  const total = roundMoney(subtotal + exclusiveTaxAmount + shippingCharge - discount);
 
-  return { customer, orderCountry, currencyId, orderItems, subtotal, taxAmount, shipping, shippingCharge, discount, couponValidation, total };
+  return { customer, orderCountry, currencyId, orderItems, subtotal, taxAmount, exclusiveTaxAmount, shipping, shippingCharge, discount, couponValidation, total };
 }
 
 export async function estimateCustomerOrder(customerId: string, input: CreateCustomerOrderInput) {
@@ -149,19 +154,28 @@ export async function estimateCustomerOrder(customerId: string, input: CreateCus
       })),
   );
   const automaticDiscount = roundMoney(automaticDiscounts.reduce((sum, entry) => sum + entry.discountAmount, 0));
-  const taxBreakdown = calculation.orderItems.reduce((layers, item) => {
-    for (const layer of item.resolvedPrice.appliedDiscounts.filter((entry) => entry.type === "TAX")) {
-      const key = `${layer.label}:${layer.taxPercent ?? ""}`;
-      const existing = layers.get(key) ?? { label: layer.label, taxPercent: layer.taxPercent, taxAmount: 0 };
-      existing.taxAmount += (layer.taxAmount ?? 0) * item.quantity;
-      layers.set(key, existing);
-    }
-    return layers;
-  }, new Map<string, { label: string; taxPercent?: number | null; taxAmount: number }>());
+  
+  const hasVat = calculation.orderItems.some((item) => item.resolvedPrice.taxBreakdownStructure?.taxType === "VAT");
+  const isExempt = calculation.taxAmount === 0 || calculation.orderItems.every((item) => item.resolvedPrice.taxBreakdownStructure?.taxType === "EXEMPT");
+  const taxLabel = isExempt ? "Tax Exempt" : hasVat ? "VAT" : "GST";
+
+  const customerTaxBreakdown = [
+    {
+      taxLabel,
+      totalTax: calculation.taxAmount,
+      taxAmount: calculation.taxAmount,
+      label: taxLabel,
+    },
+  ];
+
+  const primaryTaxMode = calculation.orderItems[0]?.resolvedPrice.taxMode || "EXCLUSIVE";
+  const isTaxInclusive = primaryTaxMode === "INCLUSIVE";
 
   return {
     subtotal: calculation.subtotal,
     taxAmount: calculation.taxAmount,
+    taxMode: primaryTaxMode,
+    isTaxInclusive,
     shippingCharge: calculation.shippingCharge,
     shippingProvider: calculation.shipping.provider,
     shippingZoneId: calculation.shipping.zoneId,
@@ -183,7 +197,7 @@ export async function estimateCustomerOrder(customerId: string, input: CreateCus
       appliedTaxes: item.resolvedPrice.appliedDiscounts
         .filter((entry) => entry.type === "TAX")
         .map((entry) => ({
-          label: entry.label,
+          label: taxLabel,
           taxPercent: entry.taxPercent,
           taxAmount: entry.taxAmount,
           isSpecific: !!entry.isSpecific,
@@ -191,13 +205,15 @@ export async function estimateCustomerOrder(customerId: string, input: CreateCus
     })),
     total: calculation.total,
     currency: calculation.orderItems[0]?.resolvedPrice.currency,
-    taxBreakdown: Array.from(taxBreakdown.values()),
+    taxBreakdown: customerTaxBreakdown,
   };
 }
 
 export async function createCustomerOrder(customerId: string, input: CreateCustomerOrderInput) {
   const { customer, orderCountry, currencyId, orderItems, subtotal, taxAmount, shipping, shippingCharge, discount, couponValidation, total } =
     await calculateCustomerOrder(customerId, input);
+
+  const resolvedTaxType = orderItems[0]?.resolvedPrice.taxBreakdownStructure?.taxType || (taxAmount === 0 ? "EXEMPT" : "IGST");
 
   return prisma.$transaction(async (tx) => {
     const order = await tx.order.create({
@@ -214,6 +230,7 @@ export async function createCustomerOrder(customerId: string, input: CreateCusto
         discount,
         shippingCharge,
         taxAmount,
+        taxType: resolvedTaxType,
         total,
         couponId: couponValidation?.coupon.id ?? null,
         couponCode: couponValidation?.coupon.code ?? null,

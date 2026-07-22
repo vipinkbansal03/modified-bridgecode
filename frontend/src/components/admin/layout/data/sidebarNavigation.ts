@@ -39,6 +39,12 @@ export const navItems = [
     permission: "products.view",
   },
   {
+    label: "Product Reviews",
+    href: "/admin/reviews",
+    icon: MessageSquare,
+    permission: "products.view",
+  },
+  {
     label: "Categories",
     href: "/admin/categories",
     icon: Tag,
@@ -181,14 +187,8 @@ export const navItems = [
     permission: "users.view",
   },
   {
-    label: "Roles",
+    label: "Roles & Permissions",
     href: "/admin/roles",
-    icon: Shield,
-    permission: "users.manage",
-  },
-  {
-    label: "Permissions",
-    href: "/admin/permissions",
     icon: Shield,
     permission: "users.manage",
   },

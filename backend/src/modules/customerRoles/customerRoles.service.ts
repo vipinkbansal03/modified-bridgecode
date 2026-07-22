@@ -47,8 +47,25 @@ export async function getCustomerRoleByKey(key: string) {
 }
 
 export async function ensureCustomerRoleByKey(key: string) {
-  const role = await getCustomerRoleByKey(key);
-  if (!role) throw new AppError(`Customer role ${key} is not configured.`, 500);
+  let role = await getCustomerRoleByKey(key);
+  if (!role) {
+    const defaultRoleNames: Record<string, string> = {
+      GUEST: "Guest Customer",
+      DEALER: "Dealer / B2B Wholesale",
+      DOCTOR_RETAILER: "Doctor / Retailer",
+    };
+    role = await prisma.customerRole.upsert({
+      where: { key },
+      create: {
+        key,
+        name: defaultRoleNames[key] ?? key,
+        description: `System customer role for ${key}`,
+        status: "ACTIVE",
+        sortOrder: key === "GUEST" ? 1 : key === "DOCTOR_RETAILER" ? 2 : 3,
+      },
+      update: {},
+    });
+  }
   if (role.status !== "ACTIVE") throw new AppError(`Customer role ${role.name} is inactive.`, 400);
   return role;
 }

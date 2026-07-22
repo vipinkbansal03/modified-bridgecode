@@ -251,7 +251,7 @@ export async function upsertProductTranslation(
         ? TranslationStatus.PENDING_REVIEW
         : TranslationStatus.APPROVED,
       reviewedAt: normalizedData.isAiGenerated ? null : new Date(),
-    },
+    } as any,
     update: {
       ...normalizedData,
       ...(manualSave
@@ -261,7 +261,7 @@ export async function upsertProductTranslation(
             isAiGenerated: false,
           }
         : {}),
-    },
+    } as any,
     include: { language: true },
   });
 }
@@ -340,7 +340,7 @@ export async function generateTranslations(
   const translations = [];
   for (const language of languages) {
     const content = await generateProductContent(
-      product,
+      product as any,
       `${language.name} (${language.code})`,
     );
     const translation = await prisma.productTranslation.upsert({

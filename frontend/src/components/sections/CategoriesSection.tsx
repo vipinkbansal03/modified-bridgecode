@@ -29,9 +29,9 @@ export function CategoriesSection() {
   const [view, setView] = useState<"doctor" | "dealer">("doctor");
 
   return (
-    <section id="categories" className="py-16 lg:py-20">
+    <section id="categories" className="pt-3 pb-6 lg:pt-4 lg:pb-8">
       <Container>
-        <div className="mb-10">
+        <div className="mb-3">
           <h2 className="text-[clamp(28px,3.4vw,40px)] font-light text-ink">{t("ui.home.shopByCategory")}</h2>
         </div>
         {/* <div className="mb-10 flex gap-2.5">

@@ -97,6 +97,17 @@ export default function CountriesPage() {
     [],
   );
 
+  const currencyOptions = useMemo(
+    () => [
+      { value: "", label: "Select currency..." },
+      ...currencies.map((c: { id: string; name: string; symbol: string; code: string }) => ({
+        value: c.id,
+        label: `${c.name} (${c.code})`,
+      })),
+    ],
+    [currencies]
+  );
+
   // Auto-populate name, code, and currency when world country is selected
   const handleWorldCountrySelect = useCallback(
     (countryCode: string) => {
@@ -337,6 +348,21 @@ export default function CountriesPage() {
     }
   }
 
+  async function handleToggleStatus(country: Country) {
+    if (country.isDefault && country.status === "ACTIVE") {
+      showToast("Default country must remain active.", "error");
+      return;
+    }
+    const nextStatus = country.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    try {
+      await adminApi.put(`/countries/${country.id}`, { status: nextStatus });
+      showToast(`${country.name} is now ${nextStatus.toLowerCase()}.`);
+      await refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to update status."), "error");
+    }
+  }
+
   const columns = [
     {
       key: "select",
@@ -373,7 +399,20 @@ export default function CountriesPage() {
     { key: "code", label: "Code", render: (row: Country) => <span className="font-mono font-semibold text-[#1A1A1A]">{row.code}</span> },
     { key: "currency", label: "Currency", render: (row: Country) => `${row.currency?.name ?? "-"} (${row.currency?.symbol ?? "-"})` },
     { key: "isDefault", label: "Default", render: (row: Country) => (row.isDefault ? <span className="font-medium text-green-600">Default</span> : "-") },
-    { key: "status", label: "Status", render: (row: Country) => <StatusBadge status={row.status} /> },
+    {
+      key: "status",
+      label: "Status",
+      render: (row: Country) => (
+        <button
+          type="button"
+          onClick={() => handleToggleStatus(row)}
+          title={`Click to toggle status (currently ${row.status.toLowerCase()})`}
+          className="cursor-pointer transition-transform hover:scale-105"
+        >
+          <StatusBadge status={row.status} />
+        </button>
+      ),
+    },
     {
       key: "actions",
       label: "Actions",
@@ -384,7 +423,7 @@ export default function CountriesPage() {
             type="button"
             onClick={() => openEdit(row)}
             className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-            title="Edit country"
+            title="Edit country details"
           >
             <Edit2 size={13} />
           </button>
@@ -522,34 +561,78 @@ export default function CountriesPage() {
         </div>
       </div>
 
-      <Modal open={showForm} onClose={resetEditor} title={editing ? `Edit ${editing.name}` : "Add country"} panelClassName="max-w-3xl">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
+      <Modal open={showForm} onClose={resetEditor} title={editing ? `Manage ${editing.name}` : "Configure country"} panelClassName="max-w-3xl">
+        <form onSubmit={handleSubmit} className="space-y-6 p-6">
+          <div className="grid gap-x-6 gap-y-5 md:grid-cols-2">
+            {editing ? (
+              <>
+                <div className="space-y-1.5">
+                  <label className="block text-[13px] font-medium text-[#1A1A1A]">Country Name (Auto-fetched)</label>
+                  <input
+                    type="text"
+                    readOnly
+                    disabled
+                    value={form.name}
+                    className="h-10 w-full rounded-md border border-[#E6E6E6] bg-[#F7F7F7] px-3.5 text-[14px] text-[#6B6B6B] cursor-not-allowed"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-[13px] font-medium text-[#1A1A1A]">ISO Code (2 letters)</label>
+                  <input
+                    type="text"
+                    readOnly
+                    disabled
+                    value={form.code}
+                    className="h-10 w-full rounded-md border border-[#E6E6E6] bg-[#F7F7F7] px-3.5 text-[14px] text-[#6B6B6B] cursor-not-allowed font-mono uppercase"
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <AdminSearchableSelect
+                  label="Country Name (Pre-fetched) *"
+                  placeholder="Search for a country..."
+                  searchPlaceholder="Search by name or code..."
+                  options={worldCountryOptions}
+                  value={form.code}
+                  onChange={(event) => handleWorldCountrySelect(event.target.value)}
+                  showSearch
+                />
+                <AdminInput
+                  label="ISO Code (2 letters) *"
+                  placeholder="DE"
+                  maxLength={2}
+                  value={form.code}
+                  readOnly
+                  disabled
+                  className="bg-[#F7F7F7] cursor-not-allowed font-mono"
+                />
+              </>
+            )}
+
             <AdminSearchableSelect
-              label="Country Name *"
-              placeholder="Search for a country..."
+              label="Currency *"
+              placeholder="Select currency..."
               searchPlaceholder="Search by name or code..."
-              options={worldCountryOptions}
-              value={form.code}
-              onChange={(event) => handleWorldCountrySelect(event.target.value)}
+              options={currencyOptions}
+              value={form.currencyId}
+              onChange={(event) => {
+                const selectedCurrency = currencies.find(
+                  (c: { id: string; code: string; name: string; symbol: string }) => c.id === event.target.value
+                );
+                setForm((current) => ({
+                  ...current,
+                  currencyId: event.target.value,
+                  currencyCode: selectedCurrency?.code ?? "",
+                  currencyName: selectedCurrency?.name ?? "",
+                  currencySymbol: selectedCurrency?.symbol ?? "",
+                }));
+              }}
               showSearch
             />
-            <AdminInput
-              label="ISO Code (2 letters) *"
-              placeholder="DE"
-              maxLength={2}
-              value={form.code}
-              onChange={(event) => setForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))}
-            />
-            <div className="space-y-1.5">
-              <label className="block text-[13px] font-medium text-[#1A1A1A]">Currency *</label>
-              <div className="h-10 w-full rounded-md border border-[#E6E6E6] bg-[#F7F7F7] px-3.5 py-2.5 flex items-center text-[14px] text-[#1A1A1A]">
-                {form.currencyName && form.currencySymbol ? `${form.currencyName} (${form.currencySymbol})` : "Auto-selected from country"}
-                <input type="hidden" name="currencyId" value={form.currencyId} />
-              </div>
-            </div>
+
             <AdminSelect
-              label="Status"
+              label="Status *"
               options={[
                 { value: "ACTIVE", label: "Active" },
                 { value: "INACTIVE", label: "Inactive" },
@@ -575,10 +658,18 @@ export default function CountriesPage() {
               value={form.shippingCharge}
               onChange={(event) => setForm((current) => ({ ...current, shippingCharge: event.target.value }))}
             />
-            <label className="flex items-center gap-2 pt-7 text-[13.5px] font-medium text-[#1A1A1A]">
-              <input type="checkbox" checked={form.isDefault} onChange={(event) => setForm((current) => ({ ...current, isDefault: event.target.checked }))} className="h-4 w-4 accent-[#E31E24]" />
-              Set as default country
-            </label>
+            
+            <div className="md:col-span-2 pt-1">
+              <label className="inline-flex items-center gap-2.5 text-[13.5px] font-medium text-[#1A1A1A] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.isDefault}
+                  onChange={(event) => setForm((current) => ({ ...current, isDefault: event.target.checked }))}
+                  className="h-4 w-4 rounded border-[#D1D5DB] accent-[#E31E24]"
+                />
+                Set as default country
+              </label>
+            </div>
           </div>
 
           <div className="flex items-center justify-between gap-3 border-t border-[#E6E6E6] pt-4">

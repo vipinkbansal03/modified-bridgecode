@@ -5,7 +5,9 @@ import Link from "next/link";
 import { Share2 } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { ProductGallery } from "@/components/sections/ProductGallery";
-import { ProductInfoAccordion } from "@/components/sections/ProductInfoAccordion";
+import { ProductTabs } from "@/components/sections/ProductTabs";
+import { ProductFeedbackSection } from "@/components/sections/ProductFeedbackSection";
+import { ProductHeaderRating } from "@/components/product/ProductHeaderRating";
 import { BulkOrderPanel } from "@/components/sections/BulkOrderPanel";
 import { SimpleInquiryPanel } from "@/components/sections/SimpleInquiryPanel";
 import { VariantConfigurator } from "@/components/product/VariantConfigurator";
@@ -21,8 +23,9 @@ import type { ApiProductDetail, ApiProductPrice } from "@/types/api.types";
 export const revalidate = 300;
 
 const staticProducts = productsData as ProductDetail[];
-const API_ORIGIN = process.env.API_BASE_URL
-  ?? (process.env.NEXT_PUBLIC_API_URL
+const API_ORIGIN =
+  process.env.API_BASE_URL ??
+  (process.env.NEXT_PUBLIC_API_URL
     ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api(?:\/admin)?$/, "")
     : "http://localhost:4000");
 
@@ -154,9 +157,10 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
   return (
     <>
-      <section className="pt-6.5">
+      <section className="pt-6 pb-4">
         <Container>
-          <nav className="mb-6.5 text-[13px] text-steel-2">
+          {/* Breadcrumbs */}
+          <nav className="mb-4 text-[13px] text-steel-2">
             <Link href="/" className="hover:text-brand">
               Home
             </Link>{" "}
@@ -171,40 +175,77 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             / {product.title}
           </nav>
 
-          <div className="mb-8.5 flex items-center justify-between border-b border-line pb-4.5">
+          <div className="mb-6 flex items-center justify-between border-b border-line pb-3">
             <h6 className="text-[14.5px] font-medium text-ink">{product.title}</h6>
-            <button aria-label="Share" className="text-steel">
+            <button aria-label="Share" className="text-steel hover:text-brand transition-colors">
               <Share2 size={16} />
             </button>
           </div>
 
-          <div className="grid grid-cols-1 gap-9 border-b border-line pb-12 sm:grid-cols-[1.1fr_1fr]">
+          {/* Top Fold: Gallery Left, Header & Description Right */}
+          <div className="grid grid-cols-1 gap-8 border-b border-line pb-8 sm:grid-cols-[1.1fr_1fr]">
             <ProductGallery images={product.images} title={product.title} />
 
             <div>
-              <h1 className="mb-3 text-[30px] font-normal tracking-tight text-ink">{product.title}</h1>
+              <h1 className="mb-2 text-[28px] font-normal tracking-tight text-ink sm:text-[32px]">{product.title}</h1>
+
+              {/* Rating Header */}
+              <div className="mb-4 flex items-center gap-3">
+                <ProductHeaderRating slug={product.slug} />
+              </div>
+
               {publicPrice ? (
-                <div className="mb-5">
-                  <p className="text-[22px] font-semibold text-ink">{formatMoney(publicPrice.currencySymbol, publicPrice.sellingPrice)}</p>
+                <div className="mb-4 space-y-1">
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="text-[13px] font-bold uppercase tracking-wider text-[#6B7280]">Starting at</span>
+                    <span className="text-[26px] font-extrabold text-[#E31E24]">
+                      {formatMoney(publicPrice.currencySymbol, publicPrice.sellingPrice)}
+                    </span>
+                    {publicDiscount ? (
+                      <span className="rounded-md bg-[#DCFCE7] px-2 py-0.5 text-[12px] font-bold text-[#15803D]">
+                        {publicDiscount.percent}% OFF
+                      </span>
+                    ) : null}
+                  </div>
+
                   {publicDiscount ? (
-                    <p className="text-[13px] text-steel-2">
-                      {formatMoney(publicPrice.currencySymbol, publicPrice.mrp)} list price · {publicDiscount.percent}% off
+                    <p className="text-[13px] text-[#6B7280]">
+                      M.R.P.: <span className="line-through">{formatMoney(publicPrice.currencySymbol, publicPrice.mrp)}</span>
+                    </p>
+                  ) : null}
+
+                  {(publicPrice as any)?.taxMode === "EXEMPT" ? (
+                    <div className="pt-1">
+                      <span className="inline-block rounded bg-[#F3F4F6] px-2 py-0.5 text-[11.5px] font-semibold text-[#374151]">
+                        Tax Exempt
+                      </span>
+                    </div>
+                  ) : (publicPrice as any)?.taxMode === "INCLUSIVE" ? (
+                    <p className="text-[12.5px] font-medium text-[#111827] pt-0.5">
+                      Inclusive of all taxes
                     </p>
                   ) : null}
                 </div>
               ) : null}
 
-              <div>
-                <span className="mb-2 block text-xs uppercase tracking-wide text-steel-2">Information</span>
-                <p className="text-[14.5px] leading-relaxed text-steel">{product.information}</p>
-                <span className="mt-4 block text-xs uppercase tracking-wide text-steel-2">Product Code: {product.productCode}</span>
+              <div className="space-y-3">
+                <div>
+                  <span className="mb-1 block text-xs uppercase tracking-wide text-steel-2 font-semibold">Information</span>
+                  <p className="text-[14.5px] leading-relaxed text-steel">{product.information}</p>
+                </div>
+                {product.productCode && (
+                  <span className="block text-xs uppercase tracking-wide text-steel-2 font-semibold">
+                    Product Code: {product.productCode}
+                  </span>
+                )}
               </div>
-
-              <ProductInfoAccordion product={product} />
             </div>
           </div>
 
-          {/* Variant PDP uses the premium configurator. Spreadsheet ordering lives in /quick-order. */}
+          {/* Full Width 7 Horizontal Tabs Section (First) */}
+          <ProductTabs product={product} apiProduct={apiProduct} />
+
+          {/* Original Variant Flow (Second: Configurator / Matrix / Bulk Order / Inquiry) */}
           {apiProduct && apiProduct.variants.length > 0 ? (
             <VariantConfigurator apiProduct={apiProduct} />
           ) : product.prescriptionOptions && product.slotOptions && product.packagingOptions && product.discountTiers ? (
@@ -212,6 +253,9 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           ) : (
             <SimpleInquiryPanel product={product} productId={apiProduct?.id} />
           )}
+
+          {/* Dentalkart Style Feedback Section */}
+          <ProductFeedbackSection product={product} />
         </Container>
       </section>
 

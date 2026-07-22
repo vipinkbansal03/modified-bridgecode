@@ -780,15 +780,6 @@ export async function getPublicCountries() {
   return prisma.country.findMany({
     where: {
       status: "ACTIVE",
-      productCountries: {
-        some: {
-          enabled: true,
-          product: {
-            status: "ACTIVE",
-            deletedAt: null,
-          },
-        },
-      },
     },
     include: { currency: true },
     orderBy: { name: "asc" },
@@ -1047,12 +1038,37 @@ function buildPublicPriceBreakdown(pr: {
   };
 }
 
-function toPublicProductDetail(
+async function toPublicProductDetail(
   p: PublicProductDetailRecord,
   countryId?: string,
 ) {
   const text = getProductText(p);
   const categoryText = getCategoryText(p.category);
+
+  const activeTaxRules = countryId
+    ? await (prisma as any).taxRule.findMany({
+        where: { countryId, status: "ACTIVE" },
+        include: { products: { select: { id: true } } },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      })
+    : [];
+
+  const productSpecificRules = activeTaxRules.filter((rule: any) =>
+    rule.products.some((prod: any) => prod.id === p.id),
+  );
+  const globalCountryRules = activeTaxRules.filter((r: any) => r.products.length === 0);
+  const activeRules = productSpecificRules.length > 0 ? productSpecificRules : globalCountryRules;
+
+  let resolvedTaxMode = "EXCLUSIVE";
+  if (activeRules.length > 0) {
+    resolvedTaxMode = activeRules[0].taxMode || "EXCLUSIVE";
+  } else {
+    console.warn(
+      `No tax rules (product-specific or global) found for product ${p.id} in country ${countryId}. Defaulting to INCLUSIVE.`,
+    );
+    resolvedTaxMode = "INCLUSIVE";
+  }
+
   const productPrices = p.prices.map((pr) => ({
     countryCode: pr.country.code,
     countryName: pr.country.name,
@@ -1065,6 +1081,7 @@ function toPublicProductDetail(
       pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
     distributorPrice:
       pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+    taxMode: resolvedTaxMode,
     landedCost: buildPublicPriceBreakdown(pr),
   }));
 
@@ -1081,6 +1098,7 @@ function toPublicProductDetail(
         pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
       distributorPrice:
         pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+      taxMode: resolvedTaxMode,
       landedCost: buildPublicPriceBreakdown(pr),
     }));
 
@@ -1281,5 +1299,74 @@ function toPublicCategory(c: {
     description: text.description,
     image: c.image,
     productCount: c._count.products,
+  };
+}
+
+export async function getProductReviews(slug: string) {
+  const product = await prisma.product.findUnique({
+    where: { slug },
+    select: { id: true },
+  });
+
+  if (!product) {
+    return { reviews: [], averageRating: 5.0, totalRatings: 1 };
+  }
+
+  const reviews = await (prisma as any).productReview.findMany({
+    where: { productId: product.id, status: "APPROVED" },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!reviews.length) {
+    return { reviews: [], averageRating: 5.0, totalRatings: 1 };
+  }
+
+  const sumOverall = reviews.reduce((acc: number, r: any) => acc + (r.ratingOverall || 5), 0);
+  const averageRating = Number((sumOverall / reviews.length).toFixed(1));
+
+  return {
+    reviews,
+    averageRating,
+    totalRatings: reviews.length,
+  };
+}
+
+export async function submitProductReview(
+  slug: string,
+  data: {
+    customerName?: string;
+    customerEmail?: string;
+    ratingQuality?: number;
+    ratingPrice?: number;
+    ratingOverall?: number;
+    feedbackText?: string;
+  }
+) {
+  const product = await prisma.product.findUnique({
+    where: { slug },
+    select: { id: true },
+  });
+
+  if (!product) throw new Error("Product not found");
+
+  const review = await (prisma as any).productReview.create({
+    data: {
+      productId: product.id,
+      customerName: data.customerName || "Anonymous",
+      customerEmail: data.customerEmail || "",
+      ratingQuality: Number(data.ratingQuality || 5),
+      ratingPrice: Number(data.ratingPrice || 5),
+      ratingOverall: Number(data.ratingOverall || 5),
+      feedbackText: data.feedbackText || "",
+      status: "APPROVED",
+    },
+  });
+
+  const aggregate = await getProductReviews(slug);
+
+  return {
+    review,
+    averageRating: aggregate.averageRating,
+    totalRatings: aggregate.totalRatings,
   };
 }

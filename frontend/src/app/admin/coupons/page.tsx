@@ -398,7 +398,7 @@ export default function CouponsPage() {
       </div>
 
       <Modal open={isFormOpen} onClose={resetForm} title={form.id ? "Edit coupon" : "New coupon"} panelClassName="max-w-4xl">
-        <form onSubmit={submit} className="space-y-4">
+        <form onSubmit={submit} className="space-y-6 p-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <AdminInput label="Coupon Code *" placeholder="SAVE20" value={form.code} onChange={(event) => setField("code", event.target.value)} />
             <AdminSelect

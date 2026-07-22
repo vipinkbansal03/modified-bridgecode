@@ -119,29 +119,52 @@ export async function generateInvoice(orderId: string): Promise<Buffer> {
     doc.rect(50, y, 495, 24).fill("#f4f4f4");
     doc.fillColor("#111111");
     doc.text("#", 58, y + 7, { width: 22 });
-    doc.text("Product", 85, y + 7, { width: 150 });
-    doc.text("Variant", 240, y + 7, { width: 110 });
-    doc.text("Qty", 355, y + 7, { width: 35, align: "right" });
-    doc.text("Unit Price", 400, y + 7, { width: 65, align: "right" });
-    doc.text("Line Total", 475, y + 7, { width: 65, align: "right" });
+    doc.text("Product (Code / HSN)", 85, y + 7, { width: 145 });
+    doc.text("Variant", 235, y + 7, { width: 95 });
+    doc.text("Qty", 335, y + 7, { width: 30, align: "right" });
+    doc.text("Taxable Val", 370, y + 7, { width: 70, align: "right" });
+    doc.text("Line Total", 450, y + 7, { width: 90, align: "right" });
     y += 30;
 
-    doc.font("Helvetica").fontSize(9);
     order.items.forEach((item, index) => {
       y = maybeNewPage(doc, y);
       const rowTop = y;
+      
+      const hsnCode = (item.product as any)?.hsnCode || null;
+      if (!hsnCode) {
+        console.warn(`[Invoice Data Gap] Product "${item.product?.title ?? item.title}" (ID: ${item.productId}) has no assigned HSN code.`);
+      }
+      const displayHsn = hsnCode ? `HSN: ${hsnCode}` : "HSN: Not Assigned";
+
+      const itemTaxMode = (item as any).taxMode || (order as any).taxMode || "EXCLUSIVE";
+      const rawRate = (item as any).taxRate ?? (item as any).taxPercent ?? (order as any).taxRate ?? null;
+      const unitPrice = Number(item.unitPrice);
+
+      let unitTaxableValue = unitPrice;
+      if (rawRate === null || rawRate === undefined || isNaN(Number(rawRate))) {
+        console.warn(`[Invoice Data Gap] Tax rate unavailable for item "${item.product?.title ?? item.title}" (ID: ${item.productId}). Printing unit price as-is without assuming 18%.`);
+        unitTaxableValue = Math.round(unitPrice * 100) / 100;
+      } else {
+        const itemTaxRate = Number(rawRate);
+        if (itemTaxMode === "INCLUSIVE" && itemTaxRate > 0) {
+          unitTaxableValue = Math.round((unitPrice / (1 + itemTaxRate / 100)) * 100) / 100;
+        } else {
+          unitTaxableValue = Math.round(unitPrice * 100) / 100;
+        }
+      }
+
       doc.text(String(index + 1), 58, y, { width: 22 });
-      doc.text(item.product?.title ?? item.title, 85, y, { width: 150 });
-      doc.text(item.variant?.title ?? item.title ?? "-", 240, y, { width: 110 });
-      doc.text(String(item.quantity), 355, y, { width: 35, align: "right" });
-      doc.text(money(symbol, item.unitPrice), 400, y, { width: 65, align: "right" });
-      doc.text(money(symbol, item.total), 475, y, { width: 65, align: "right" });
+      doc.text(`${item.product?.title ?? item.title}\n(${displayHsn})`, 85, y, { width: 145 });
+      doc.text(item.variant?.title ?? item.title ?? "-", 235, y, { width: 95 });
+      doc.text(String(item.quantity), 335, y, { width: 30, align: "right" });
+      doc.text(money(symbol, unitTaxableValue), 370, y, { width: 70, align: "right" });
+      doc.text(money(symbol, item.total), 450, y, { width: 90, align: "right" });
       y = rowTop + 28;
       doc.moveTo(50, y - 8).lineTo(545, y - 8).strokeColor("#eeeeee").stroke();
     });
 
     y = maybeNewPage(doc, y + 20);
-    addRightAmount(doc, "Subtotal", money(symbol, order.subtotal), y);
+    addRightAmount(doc, "Subtotal (Taxable Value)", money(symbol, order.subtotal), y);
     y += 18;
     const couponDiscount = Number(order.couponDiscount ?? 0);
     const genericDiscount = Number(order.discount ?? 0);
@@ -153,8 +176,25 @@ export async function generateInvoice(orderId: string): Promise<Buffer> {
       addRightAmount(doc, `Coupon (${order.couponCode})`, `-${money(symbol, couponDiscount)}`, y);
       y += 18;
     }
-    if (Number(order.taxAmount ?? 0) > 0) {
-      addRightAmount(doc, "Tax", `+${money(symbol, order.taxAmount)}`, y);
+
+    const totalTax = Number(order.taxAmount ?? 0);
+    const orderTaxType = (order as any).taxType || (totalTax === 0 ? "EXEMPT" : "IGST");
+
+    if (totalTax === 0 || orderTaxType === "EXEMPT") {
+      addRightAmount(doc, "Tax Exempt (0%)", money(symbol, 0), y);
+      y += 18;
+    } else if (orderTaxType === "VAT") {
+      addRightAmount(doc, "VAT @ 18%", `+${money(symbol, totalTax)}`, y);
+      y += 18;
+    } else if (orderTaxType === "CGST_SGST") {
+      const cgst = Math.round((totalTax / 2) * 100) / 100;
+      const sgst = Math.round((totalTax - cgst) * 100) / 100;
+      addRightAmount(doc, "CGST @ 9%", `+${money(symbol, cgst)}`, y);
+      y += 18;
+      addRightAmount(doc, "SGST @ 9%", `+${money(symbol, sgst)}`, y);
+      y += 18;
+    } else {
+      addRightAmount(doc, "IGST @ 18%", `+${money(symbol, totalTax)}`, y);
       y += 18;
     }
     if (Number(order.shippingCharge ?? 0) > 0) {

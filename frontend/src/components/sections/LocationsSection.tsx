@@ -58,17 +58,17 @@ export function LocationsSection({ data }: LocationsSectionProps) {
   );
 
   return (
-    <section className="border-t border-line py-16 lg:py-20">
+    <section className="border-t border-line pt-4 pb-3 lg:pt-5 lg:pb-4">
       <Container>
         <Reveal>
-          <div className="mb-9 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-7">
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-4">
             <h2 className="text-[clamp(28px,3.4vw,40px)] font-light text-ink">{t("ui.home.ourLocations")}</h2>
             <span className="text-sm text-steel">
               {data.subtitle === "Find us around the globe" ? t("ui.home.findUsAroundGlobe") : data.subtitle}
             </span>
           </div>
 
-          <div className="relative mt-2.5 w-full">
+          <div className="relative mt-2.5 w-full max-w-[760px] mx-auto">
             <svg viewBox="0 0 1010 666" className="block w-full" preserveAspectRatio="xMidYMid meet">
               <path d={WORLD_MAP_PATH} fill="#F2F2F2" stroke="#F2F2F2" strokeWidth={0.8} strokeLinejoin="round" />
             </svg>
@@ -102,7 +102,7 @@ export function LocationsSection({ data }: LocationsSectionProps) {
             )}
           </div>
 
-          <div className="mt-9 flex flex-wrap gap-7.5 border-t border-line pt-6.5 text-[13.5px] text-steel">
+          <div className="mt-6 flex flex-wrap gap-7.5 border-t border-line pt-4 text-[13.5px] text-steel">
             <span className="flex items-center gap-1.5">
               <span className="inline-block h-2.5 w-2.5 rounded-full bg-brand" /> {categoryLabel.hq}
             </span>
@@ -114,14 +114,14 @@ export function LocationsSection({ data }: LocationsSectionProps) {
             </span>
           </div>
 
-          <div className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {(["hq", "export", "dealer"] as const).map((category) => (
-              <div key={category} className="rounded-md border border-line bg-white p-5">
-                <div className="mb-4 flex items-center gap-2">
+              <div key={category} className="rounded-md border border-line bg-white p-4">
+                <div className="mb-3 flex items-center gap-2">
                   <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: pinColor[category] }} />
                   <h3 className="text-[15px] font-medium text-ink">{categoryLabel[category]}</h3>
                 </div>
-                <div className="space-y-2.5">
+                <div className="space-y-1.5">
                   {groupedPins[category].map((pin) => (
                     <button
                       key={pin.id}
@@ -129,7 +129,7 @@ export function LocationsSection({ data }: LocationsSectionProps) {
                       onMouseEnter={() => setActiveId(pin.id)}
                       onFocus={() => setActiveId(pin.id)}
                       onClick={() => setActiveId(pin.id)}
-                      className={`w-full rounded-md border px-3 py-2.5 text-left text-[13.5px] transition-colors ${
+                      className={`w-full rounded-md border px-3 py-2 text-left text-[13.5px] transition-colors ${
                         active?.id === pin.id
                           ? "border-[#E31E24] bg-red-50 text-ink"
                           : "border-line bg-offwhite text-steel hover:border-steel-2 hover:bg-white"

@@ -1247,7 +1247,7 @@ export default function PricingPage() {
 
       <Modal open={showForm} onClose={resetForm} title={form.id ? "Edit pricing rule" : "New pricing rule"} panelClassName="max-w-5xl">
         {showForm ? (
-          <div className="space-y-4">
+          <div className="space-y-6 p-6">
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <AdminSelect
                 label="Rule Type"

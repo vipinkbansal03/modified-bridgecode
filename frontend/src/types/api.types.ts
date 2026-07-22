@@ -137,6 +137,7 @@ export interface ApiCountry {
   code: string;
   currency: ApiCurrency;
   isDefault: boolean;
+  status?: string;
 }
 
 export interface ApiLanguage {

@@ -51,6 +51,8 @@ import publicBlogRoutes from "./modules/blogs/publicBlogs.routes";
 import bannerRoutes from "./modules/banners/banners.routes";
 import publicBannerRoutes from "./modules/banners/publicBanners.routes";
 
+import reviewRoutes from "./modules/reviews/reviews.routes";
+
 const app = express();
 
 // ─── Security middleware ─────────────────────────────────
@@ -131,6 +133,7 @@ app.use(`${API}/roles`, roleRoutes);
 app.use(`${API}/cms`, cmsRoutes);
 app.use(`${API}/blogs`, blogRoutes);
 app.use(`${API}/banners`, bannerRoutes);
+app.use(`${API}/reviews`, reviewRoutes);
 app.use("/api/customer/auth", customerAuthRoutes);
 app.use("/api/customer/addresses", customerAddressRoutes);
 app.use("/api/customer/orders", customerOrderRoutes);

@@ -79,13 +79,22 @@ export function AdminSearchableSelect({
     const width = Math.max(rect.width, contentMinWidth);
     const left = Math.max(edge, Math.min(rect.left, viewportWidth - width - edge));
 
-    if (openUp) {
-      const bottom = viewportHeight - rect.top + gap;
-      setMenuStyle({ bottom, left, width, maxHeight });
-    } else {
-      const top = rect.bottom + gap;
-      setMenuStyle({ top, left, width, maxHeight });
-    }
+    setMenuStyle((prev) => {
+      const top = openUp ? undefined : rect.bottom + gap;
+      const bottom = openUp ? viewportHeight - rect.top + gap : undefined;
+
+      if (
+        prev &&
+        prev.top === top &&
+        prev.bottom === bottom &&
+        prev.left === left &&
+        prev.width === width &&
+        prev.maxHeight === maxHeight
+      ) {
+        return prev;
+      }
+      return openUp ? { bottom, left, width, maxHeight } : { top, left, width, maxHeight };
+    });
   }, [filteredOptions]);
 
   useEffect(() => {

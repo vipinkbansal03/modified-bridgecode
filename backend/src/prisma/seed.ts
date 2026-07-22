@@ -1,5 +1,6 @@
 import { AttributeRole, AttributeStatus, Prisma, PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { ensureAllWorldCountriesSeeded } from "../modules/countries/countries.service";
 
 const prisma = new PrismaClient();
 
@@ -174,6 +175,8 @@ async function main() {
   await prisma.country.upsert({ where: { code: "GB" }, update: { dutyPercentage: 5, shippingCharge: 12 }, create: { name: "United Kingdom", code: "GB", currencyId: gbp.id, dutyPercentage: 5, shippingCharge: 12 } });
   await prisma.country.upsert({ where: { code: "DE" }, update: { dutyPercentage: 5, shippingCharge: 14 }, create: { name: "Germany", code: "DE", currencyId: eur.id, dutyPercentage: 5, shippingCharge: 14 } });
   await prisma.country.upsert({ where: { code: "AU" }, update: { dutyPercentage: 10, shippingCharge: 20 }, create: { name: "Australia", code: "AU", currencyId: usd.id, dutyPercentage: 10, shippingCharge: 20 } });
+  
+  await ensureAllWorldCountriesSeeded();
 
   // ─── Default language ────────────────────────────────────
   await prisma.language.upsert({
@@ -209,6 +212,23 @@ async function main() {
     where: { name: "Platinum" },
     update: { status: "ACTIVE", sortOrder: 3 },
     create: { name: "Platinum", status: "ACTIVE", sortOrder: 3 },
+  });
+
+  // ─── Default Customer Roles ────────────────────────────────
+  await prisma.customerRole.upsert({
+    where: { key: "GUEST" },
+    update: { name: "Guest Customer", status: "ACTIVE", sortOrder: 1 },
+    create: { key: "GUEST", name: "Guest Customer", description: "Default role for guest visitors", status: "ACTIVE", sortOrder: 1 },
+  });
+  await prisma.customerRole.upsert({
+    where: { key: "DOCTOR_RETAILER" },
+    update: { name: "Doctor / Retailer", status: "ACTIVE", sortOrder: 2 },
+    create: { key: "DOCTOR_RETAILER", name: "Doctor / Retailer", description: "Registered doctors and retail clinics", status: "ACTIVE", sortOrder: 2 },
+  });
+  await prisma.customerRole.upsert({
+    where: { key: "DEALER" },
+    update: { name: "Dealer / B2B Wholesale", status: "ACTIVE", sortOrder: 3 },
+    create: { key: "DEALER", name: "Dealer / B2B Wholesale", description: "B2B wholesale dealers and distributors", status: "ACTIVE", sortOrder: 3 },
   });
 
   const molarTubeCategory = await prisma.category.upsert({

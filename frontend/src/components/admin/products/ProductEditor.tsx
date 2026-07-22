@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useFormik } from "formik";
 import * as Yup from "yup";
-import { Upload, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2 } from "lucide-react";
+import { Upload, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column, toastMessages } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
@@ -59,7 +59,7 @@ const basicSchema = Yup.object({
   seoTitle: Yup.string().max(60),
   seoDescription: Yup.string().max(160),
   seoKeywords: Yup.string(),
-  highlights: Yup.array().of(Yup.object({ title: Yup.string(), description: Yup.string() })),
+  highlights: Yup.array().of(Yup.object({ title: Yup.string(), description: Yup.string(), image: Yup.string() })),
   technicalSpecs: Yup.array().of(Yup.object({ label: Yup.string(), value: Yup.string() })),
   warranty: Yup.array().of(Yup.string()),
   primaryFeatures: Yup.array().of(Yup.object({ title: Yup.string(), description: Yup.string() })),
@@ -79,7 +79,7 @@ type ProductEditorFormValues = {
   seoTitle: string;
   seoDescription: string;
   seoKeywords: string;
-  highlights: Array<{ title: string; description: string }>;
+  highlights: Array<{ title: string; description: string; image?: string }>;
   technicalSpecs: Array<{ label: string; value: string }>;
   warranty: string[];
   primaryFeatures: Array<{ title: string; description: string }>;
@@ -280,7 +280,7 @@ type SingleSelectionMap = Record<string, string>;
 type ProductTranslationField = "title" | "shortDescription" | "description" | "seoTitle" | "seoDescription" | "seoKeywords" | "highlights" | "technicalSpecs" | "warranty" | "primaryFeatures";
 
 type ProductTranslationDraft = {
-  highlights: Array<{ title: string; description: string }>;
+  highlights: Array<{ title: string; description: string; image?: string }>;
   technicalSpecs: Array<{ label: string; value: string }>;
   warranty: string[];
   primaryFeatures: Array<{ title: string; description: string }>;
@@ -553,6 +553,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
   const [translationLanguageId, setTranslationLanguageId] = useState("");
   const [translationDrafts, setTranslationDrafts] = useState<Record<string, ProductTranslationDraft>>({});
   const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
+  const [variantSearchQuery, setVariantSearchQuery] = useState("");
   const [variantCountryModalVariant, setVariantCountryModalVariant] = useState<VariantRow | null>(null);
   const [variantCountryOverrides, setVariantCountryOverrides] = useState<Record<string, boolean>>({});
   const [inventoryOverrideDrafts, setInventoryOverrideDrafts] = useState<Record<string, { countryId: string; stock: string }>>({});
@@ -860,6 +861,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
   };
 
   const handleBulkDeletePrices = async () => {
+    if (!selectedPriceIds.length) return;
     if (!window.confirm(`Are you sure you want to delete the selected ${selectedPriceIds.length} base price(s)?`)) return;
     try {
       await Promise.all(
@@ -870,6 +872,21 @@ export function ProductEditor({ productId }: ProductEditorProps) {
       refetch();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to delete selected prices."), "error");
+    }
+  };
+
+  const handleDeleteAllBasePrices = async () => {
+    if (!productBasePrices.length) return;
+    if (!window.confirm(`Are you sure you want to delete ALL ${productBasePrices.length} country base price(s) for this product?`)) return;
+    try {
+      await Promise.all(
+        productBasePrices.map((p: any) => adminApi.delete(`/pricing/${p.id}`))
+      );
+      showToast(`All ${productBasePrices.length} base price(s) deleted successfully.`);
+      setSelectedPriceIds([]);
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to delete base prices."), "error");
     }
   };
 
@@ -1861,6 +1878,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
     setCountryPriceMRP("");
     setCountryPriceSellingPrice("");
     setVariantPriceOverrides({});
+    setVariantSearchQuery("");
   }, [generatingCountryPrices]);
 
   const applyMRPToAllVariants = useCallback(() => {
@@ -1896,6 +1914,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
     try {
       setGeneratingCountryPrices(true);
       const result = await adminApi.post("/pricing/generate-country-prices", {
+        productId,
         mrp,
         sellingPrice: countryPriceSellingPrice ? Number(countryPriceSellingPrice) : undefined,
         variantOverrides: Object.keys(variantOverrides).length ? variantOverrides : undefined,
@@ -2529,8 +2548,8 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                 </button>
               </div>
               <div className="space-y-4">
-                {(formik.values.highlights || []).map((item: { title: string; description: string }, index: number) => (
-                  <div key={index} className="grid gap-3 lg:grid-cols-[1fr_1.5fr_auto] items-stretch">
+                {(formik.values.highlights || []).map((item: { title: string; description: string; image?: string }, index: number) => (
+                  <div key={index} className="grid gap-3 lg:grid-cols-[1fr_2.5fr_auto] items-stretch">
                     <div>
                       <AdminInput
                         label="Title"
@@ -2546,7 +2565,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                       <AdminRichTextEditor
                         label="Description"
                         value={item.description}
-                        placeholder="Enter highlight description"
+                        placeholder="Enter highlight description (use Image button in toolbar to insert photos)"
                         onChange={(value) => {
                           const next = [...(formik.values.highlights || [])];
                           next[index] = { ...next[index], description: value };
@@ -2989,6 +3008,15 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                     >
                       {basePriceBulkEditMode ? "Exit Bulk Edit" : "Bulk Edit"}
                     </button>
+                    {productBasePrices.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleDeleteAllBasePrices}
+                        className="flex items-center gap-1.5 rounded-md border border-[#F2C9C9] bg-red-50 px-3.5 py-2 text-[13px] font-medium text-red-600 hover:bg-red-100"
+                      >
+                        <Trash2 size={14} /> Delete All Prices
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={openCountryPriceModal}
@@ -4005,7 +4033,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
               />
             </div>
 
-            <div className="mb-4 rounded-lg border border-[#E6E6E6] p-4">
+            {/* <div className="mb-4 rounded-lg border border-[#E6E6E6] p-4">
               <div className="mb-3 text-[13px] font-medium text-[#1A1A1A]">Add Attributes To Generation</div>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <div className="flex-1">
@@ -4024,7 +4052,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                   Add Attribute
                 </button>
               </div>
-            </div>
+            </div> */}
 
             <div className="space-y-4">
               {generateAttributeIds.map((attributeId) => {
@@ -4836,12 +4864,12 @@ export function ProductEditor({ productId }: ProductEditorProps) {
         title="Generate Country Prices"
         panelClassName="max-w-2xl"
       >
-        <div className="space-y-4">
-          <p className="text-[13px] leading-5 text-[#6B6B6B]">
+        <div className="space-y-5 p-6">
+          <p className="text-[13px] leading-relaxed text-[#6B6B6B]">
             Enter the base product price once, and country prices will be generated automatically using the configured exchange rates. Set a different MRP per variant below if needed.
           </p>
           <AdminInput
-            label="Base MRP"
+            label="Base MRP *"
             type="number"
             min="0"
             step="0.01"
@@ -4851,9 +4879,11 @@ export function ProductEditor({ productId }: ProductEditorProps) {
           />
 
           {variantRows.length > 0 ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[13px] font-semibold text-[#1A1A1A]">Per-variant override (MRP & optional Selling Price)</span>
+            <div className="space-y-3 pt-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[13px] font-semibold text-[#1A1A1A]">
+                  Per-variant override (MRP & optional Selling Price)
+                </span>
                 <button
                   type="button"
                   onClick={applyMRPToAllVariants}
@@ -4863,71 +4893,98 @@ export function ProductEditor({ productId }: ProductEditorProps) {
                   Apply MRP (and selling price) to all
                 </button>
               </div>
-              <div className="max-h-64 overflow-y-auto rounded-md border border-[#E6E6E6]">
+
+              {variantRows.length > 3 ? (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="relative flex-1">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
+                    <input
+                      type="text"
+                      value={variantSearchQuery}
+                      onChange={(event) => setVariantSearchQuery(event.target.value)}
+                      placeholder="Search variants by title or SKU..."
+                      className="h-8.5 w-full rounded-md border border-[#E6E6E6] bg-white pl-8 pr-3 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                    />
+                  </div>
+                  <span className="text-[12px] font-medium text-[#6B6B6B] shrink-0">
+                    {variantSearchQuery.trim()
+                      ? `Showing ${variantRows.filter((v) => v.title.toLowerCase().includes(variantSearchQuery.toLowerCase().trim()) || (v.sku && v.sku.toLowerCase().includes(variantSearchQuery.toLowerCase().trim()))).length} of ${variantRows.length} variants`
+                      : `${variantRows.length} variants`}
+                  </span>
+                </div>
+              ) : null}
+
+              <div className="max-h-56 overflow-y-auto rounded-lg border border-[#E6E6E6]">
                 <table className="w-full text-[13px]">
-                  <thead className="sticky top-0 bg-[#F7F7F7] text-[12px] text-[#6B6B6B]">
+                  <thead className="sticky top-0 bg-[#F7F7F7] text-[12px] text-[#6B6B6B] shadow-sm">
                     <tr>
-                      <th className="px-3 py-2 text-left font-medium">Variant</th>
-                      <th className="px-3 py-2 text-right font-medium">MRP Override</th>
-                      <th className="px-3 py-2 text-right font-medium">Selling Price Override (optional)</th>
+                      <th className="px-3.5 py-2.5 text-left font-medium">Variant</th>
+                      <th className="px-3.5 py-2.5 text-right font-medium">MRP Override</th>
+                      <th className="px-3.5 py-2.5 text-right font-medium">Selling Price Override (optional)</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {variantRows.map((variant) => (
-                      <tr key={variant.id} className="border-t border-[#F0F0F0]">
-                        <td className="px-3 py-2 text-[#1A1A1A]">{variant.title}{variant.sku ? ` (${variant.sku})` : ""}</td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={variantPriceOverrides[variant.id]?.mrp ?? ""}
-                            onChange={(event) =>
-                              setVariantPriceOverrides((current) => ({
-                                ...current,
-                                [variant.id]: {
-                                  ...current[variant.id],
-                                  mrp: event.target.value,
-                                },
-                              }))
-                            }
-                            placeholder={countryPriceMRP || "0"}
-                            className="h-9 w-32 rounded-md border border-[#E6E6E6] px-2.5 text-right text-[13px] outline-none focus:border-[#E31E24]"
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={variantPriceOverrides[variant.id]?.sellingPrice ?? ""}
-                            onChange={(event) =>
-                              setVariantPriceOverrides((current) => ({
-                                ...current,
-                                [variant.id]: {
-                                  ...current[variant.id],
-                                  sellingPrice: event.target.value,
-                                },
-                              }))
-                            }
-                            placeholder={countryPriceSellingPrice || "Same as MRP"}
-                            className="h-9 w-36 rounded-md border border-[#E6E6E6] px-2.5 text-right text-[13px] outline-none focus:border-[#E31E24]"
-                          />
-                        </td>
-                      </tr>
-                    ))}
+                  <tbody className="divide-y divide-[#F0F0F0]">
+                    {variantRows
+                      .filter((variant) => {
+                        if (!variantSearchQuery.trim()) return true;
+                        const q = variantSearchQuery.toLowerCase().trim();
+                        return variant.title.toLowerCase().includes(q) || (variant.sku && variant.sku.toLowerCase().includes(q));
+                      })
+                      .map((variant) => (
+                        <tr key={variant.id} className="hover:bg-[#FAFAFA]">
+                          <td className="px-3.5 py-2.5 text-[#1A1A1A] font-medium">{variant.title}{variant.sku ? ` (${variant.sku})` : ""}</td>
+                          <td className="px-3.5 py-2.5 text-right">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={variantPriceOverrides[variant.id]?.mrp ?? ""}
+                              onChange={(event) =>
+                                setVariantPriceOverrides((current) => ({
+                                  ...current,
+                                  [variant.id]: {
+                                    ...current[variant.id],
+                                    mrp: event.target.value,
+                                  },
+                                }))
+                              }
+                              placeholder={countryPriceMRP || "0"}
+                              className="h-9 w-32 rounded-md border border-[#E6E6E6] px-2.5 text-right text-[13px] outline-none focus:border-[#E31E24]"
+                            />
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={variantPriceOverrides[variant.id]?.sellingPrice ?? ""}
+                              onChange={(event) =>
+                                setVariantPriceOverrides((current) => ({
+                                  ...current,
+                                  [variant.id]: {
+                                    ...current[variant.id],
+                                    sellingPrice: event.target.value,
+                                  },
+                                }))
+                              }
+                              placeholder={countryPriceSellingPrice || "Same as MRP"}
+                              className="h-9 w-36 rounded-md border border-[#E6E6E6] px-2.5 text-right text-[13px] outline-none focus:border-[#E31E24]"
+                            />
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
             </div>
           ) : null}
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex items-center justify-end gap-3 border-t border-[#E6E6E6] pt-4">
             <button
               type="button"
               onClick={closeCountryPriceModal}
               disabled={generatingCountryPrices}
-              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5] disabled:opacity-50"
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-50"
             >
               Cancel
             </button>
@@ -4949,7 +5006,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
         title={`Edit Base Price - ${editingProductPrice?.country.name}`}
         panelClassName="max-w-md"
       >
-        <form onSubmit={handleSaveProductPrice} className="space-y-4">
+        <form onSubmit={handleSaveProductPrice} className="space-y-5 p-6">
           <AdminInput
             label="MRP"
             type="number"
@@ -4993,11 +5050,11 @@ export function ProductEditor({ productId }: ProductEditorProps) {
               { value: "INACTIVE", label: "Inactive" },
             ]}
           />
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex items-center justify-end gap-3 border-t border-[#E6E6E6] pt-4 mt-2">
             <button
               type="button"
               onClick={() => setEditingProductPrice(null)}
-              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
             >
               Cancel
             </button>
@@ -5017,7 +5074,7 @@ export function ProductEditor({ productId }: ProductEditorProps) {
         title={`Bulk Edit ${selectedPriceIds.length} Base Price(s)`}
         panelClassName="max-w-md"
       >
-        <form onSubmit={handleSaveBulkEditPrices} className="space-y-4">
+        <form onSubmit={handleSaveBulkEditPrices} className="space-y-5 p-6">
           <p className="text-[13px] leading-5 text-[#6B6B6B]">
             Select the fields you want to update in bulk for the selected countries.
           </p>
@@ -5136,11 +5193,11 @@ export function ProductEditor({ productId }: ProductEditorProps) {
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex items-center justify-end gap-3 border-t border-[#E6E6E6] pt-4 mt-2">
             <button
               type="button"
               onClick={() => setBulkEditPricesModalOpen(false)}
-              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
             >
               Cancel
             </button>
