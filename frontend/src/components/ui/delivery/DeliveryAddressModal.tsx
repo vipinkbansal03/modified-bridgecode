@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 import { Modal } from "@/components/ui/Modal";
 import { useCustomerAddresses } from "@/hooks/api/useCustomerAddresses";
@@ -27,6 +27,19 @@ export function DeliveryAddressModal({
 console.log("Loading:", isLoading);
 
   const { selectedAddress, setSelectedAddress } = useDeliveryAddress();
+
+  const displayAddresses = useMemo(() => {
+    if (
+      selectedAddress &&
+      (selectedAddress.id.startsWith("geo-") ||
+        selectedAddress.id.startsWith("pin-"))
+    ) {
+      if (!addresses.some((a) => a.id === selectedAddress.id)) {
+        return [selectedAddress, ...addresses];
+      }
+    }
+    return addresses;
+  }, [addresses, selectedAddress]);
 
   const [selectedAddressId, setSelectedAddressId] = useState<
     string | undefined
@@ -66,13 +79,29 @@ console.log("Loading:", isLoading);
           const state = address.state || "Detected State";
           const pincode = address.postcode || "";
 
+          // Parse display_name to extract only street address components
+          const displayName = data.display_name || "";
+          const parts = displayName.split(",").map((p: string) => p.trim());
+          const streetParts = parts.filter((part: string) => {
+            const low = part.toLowerCase();
+            return (
+              low !== city.toLowerCase() &&
+              low !== state.toLowerCase() &&
+              low !== (address.country || "India").toLowerCase() &&
+              low !== pincode.toLowerCase() &&
+              low !== "india" &&
+              low !== address.country_code?.toLowerCase()
+            );
+          });
+          const cleanStreet = streetParts.join(", ") || "Detected Location";
+
           const mockAddress: CustomerAddress = {
             id: `geo-${Date.now()}`,
             customerId: "",
             label: "Current Location",
             fullName: "",
             phone: "",
-            addressLine1: "Detected Location",
+            addressLine1: cleanStreet,
             addressLine2: null,
             city,
             state,
@@ -108,26 +137,26 @@ console.log("Loading:", isLoading);
     const pinNormalized = pincode.trim();
 
     // 1. Check local test pincodes map first for instant local testing response
-    const LOCAL_PINCODES: Record<string, { city: string; state: string }> = {
-      "302034": { city: "Jaipur", state: "Rajasthan" },
-      "302016": { city: "Jaipur", state: "Rajasthan" },
-      "302001": { city: "Jaipur", state: "Rajasthan" },
-      "110001": { city: "New Delhi", state: "Delhi" },
-      "400001": { city: "Mumbai", state: "Maharashtra" },
-      "560001": { city: "Bengaluru", state: "Karnataka" },
-      "600001": { city: "Chennai", state: "Tamil Nadu" },
-      "700001": { city: "Kolkata", state: "West Bengal" },
+    const LOCAL_PINCODES: Record<string, { city: string; state: string; area: string }> = {
+      "302034": { city: "Jaipur", state: "Rajasthan", area: "Plot no. 5, Riddhi Nagar, Mansarovar" },
+      "302016": { city: "Jaipur", state: "Rajasthan", area: "Sector 10, Mansarovar" },
+      "302001": { city: "Jaipur", state: "Rajasthan", area: "M.I. Road, C-Scheme" },
+      "110001": { city: "New Delhi", state: "Delhi", area: "Barakhamba Road, Connaught Place" },
+      "400001": { city: "Mumbai", state: "Maharashtra", area: "Mahatma Gandhi Road, Fort" },
+      "560001": { city: "Bengaluru", state: "Karnataka", area: "Palace Road, Vasanth Nagar" },
+      "600001": { city: "Chennai", state: "Tamil Nadu", area: "Rajaji Salai, George Town" },
+      "700001": { city: "Kolkata", state: "West Bengal", area: "Netaji Subhas Road, Fairley Place" },
     };
 
     if (LOCAL_PINCODES[pinNormalized]) {
-      const { city, state } = LOCAL_PINCODES[pinNormalized];
+      const { city, state, area } = LOCAL_PINCODES[pinNormalized];
       const mockAddress: CustomerAddress = {
         id: `pin-${pinNormalized}`,
         customerId: "",
         label: `PIN ${pinNormalized}`,
         fullName: "",
         phone: "",
-        addressLine1: "Pincode Search",
+        addressLine1: area,
         addressLine2: null,
         city,
         state,
@@ -148,11 +177,11 @@ console.log("Loading:", isLoading);
       // 2. Try Indian Post Office API
       const res = await fetch(`https://api.postalpincode.in/pincode/${pinNormalized}`);
       const data = await res.json();
-      
       if (data && data[0] && data[0].Status === "Success" && data[0].PostOffice?.[0]) {
         const po = data[0].PostOffice[0];
         const city = po.District || po.Block || "Detected City";
         const state = po.State || "Detected State";
+        const areaName = po.Name ? `${po.Name}, ${city}` : `${city} Region`;
         
         const mockAddress: CustomerAddress = {
           id: `pin-${pinNormalized}`,
@@ -160,7 +189,7 @@ console.log("Loading:", isLoading);
           label: `PIN ${pinNormalized}`,
           fullName: "",
           phone: "",
-          addressLine1: "Pincode Search",
+          addressLine1: areaName,
           addressLine2: null,
           city,
           state,
@@ -192,13 +221,27 @@ console.log("Loading:", isLoading);
         const city = parts[0] || "Detected City";
         const state = parts[1] || "Detected State";
 
+        // Parse display_name to extract clean street component
+        const displayName = data2[0].display_name || "";
+        const nameParts = displayName.split(",").map((s: string) => s.trim());
+        const streetParts = nameParts.filter((part: string) => {
+          const low = part.toLowerCase();
+          return (
+            low !== city.toLowerCase() &&
+            low !== state.toLowerCase() &&
+            low !== "india" &&
+            low !== pinNormalized.toLowerCase()
+          );
+        });
+        const cleanStreet = streetParts.join(", ") || "Pincode Search";
+
         const mockAddress: CustomerAddress = {
           id: `pin-${pinNormalized}`,
           customerId: "",
           label: `PIN ${pinNormalized}`,
           fullName: "",
           phone: "",
-          addressLine1: "Pincode Search",
+          addressLine1: cleanStreet,
           addressLine2: null,
           city,
           state,
@@ -249,7 +292,7 @@ console.log("Loading:", isLoading);
       title="Choose Delivery Location"
       panelClassName="max-w-xl"
     >
-      <div className="space-y-6">
+      <div className="space-y-6 p-6">
         <CurrentLocationCard onClick={handleCurrentLocation} loading={detecting} />
 
         <PincodeSearch onSearch={handlePincodeSearch} loading={searchingPin} />
@@ -258,9 +301,9 @@ console.log("Loading:", isLoading);
           <div className="rounded-lg border border-line p-6 text-center text-sm text-steel">
             Loading saved addresses...
           </div>
-        ) : addresses.length > 0 ? (
+        ) : displayAddresses.length > 0 ? (
           <SavedAddresses
-            addresses={addresses}
+            addresses={displayAddresses}
             selectedAddressId={selectedAddressId}
             onSelect={handleAddressSelect}
           />

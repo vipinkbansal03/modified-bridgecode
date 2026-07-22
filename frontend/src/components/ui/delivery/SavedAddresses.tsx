@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Home, Building2 } from "lucide-react";
+import { Check, Home, Building2, MapPin } from "lucide-react";
 import type { CustomerAddress } from "@/types/delivery.types";
 import { cn } from "@/utils/cn";
 
@@ -53,7 +53,9 @@ export function SavedAddresses({
                     ? "bg-brand/10 text-brand ring-brand/10"
                     : "bg-[#FAFAFA] text-[#6B6B6B] ring-[#FAFAFA] group-hover:bg-brand/5 group-hover:text-brand group-hover:ring-brand/5"
                 )}>
-                  {address.label.toLowerCase() === "home" ? (
+                  {address.id.startsWith("geo-") || address.id.startsWith("pin-") ? (
+                    <MapPin size={18} />
+                  ) : address.label.toLowerCase() === "home" ? (
                     <Home size={18} />
                   ) : (
                     <Building2 size={18} />
