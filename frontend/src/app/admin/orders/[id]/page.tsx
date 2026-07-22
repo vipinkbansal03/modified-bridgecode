@@ -94,7 +94,7 @@ export default function OrderDetailPage() {
     );
   }
 
-  const sym = order.currency.symbol;
+  const sym = order.currency?.symbol ?? "$";
 
   async function handleDownloadInvoice() {
     if (!order) return;
