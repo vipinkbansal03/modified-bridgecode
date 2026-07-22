@@ -487,9 +487,10 @@ function VariantGridMatrix({
 
 type ProductEditorProps = {
   productId: string;
+  isEmbed?: boolean;
 };
 
-export function ProductEditor({ productId }: ProductEditorProps) {
+export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -5214,6 +5215,20 @@ export function ProductEditor({ productId }: ProductEditorProps) {
       {ToastComponent}
     </>
   );
+
+  if (isEmbed) {
+    return (
+      <div className="is-embed-variant-editor">
+        <style dangerouslySetInnerHTML={{ __html: `
+          .is-embed-variant-editor > *:not(.fixed) {
+            display: none !important;
+          }
+        `}} />
+        {content}
+        {ToastComponent}
+      </div>
+    );
+  }
 
   return (
     <AdminLayout title={product.title} breadcrumb={[{ label: "Products", href: "/admin/products" }, { label: "Edit" }]}>

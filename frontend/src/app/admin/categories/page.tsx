@@ -491,6 +491,8 @@ export default function CategoriesPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <AdminInput label="Name *" placeholder="e.g. Metal Brackets" value={formik.values.name} onChange={(e) => handleNameChange(e.target.value)} onBlur={formik.handleBlur} name="name" error={formik.touched.name ? (formik.errors.name as string) : ""} />
                 <AdminInput label="Slug *" placeholder="metal-brackets" value={formik.values.slug} onChange={(e) => { setSlugEdited(true); formik.setFieldValue("slug", slugify(e.target.value)); }} onBlur={formik.handleBlur} name="slug" error={formik.touched.slug ? (formik.errors.slug as string) : ""} />
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
                 <AdminSelect label="Parent category" options={parentOptions} {...formik.getFieldProps("parentId")} />
                 <AdminSelect
                   label="Status"
@@ -659,63 +661,68 @@ export default function CategoriesPage() {
         title="Add Category"
         panelClassName="max-w-4xl max-h-[calc(100vh-2.5rem)] overflow-y-auto"
       >
-        <form onSubmit={formik.handleSubmit} className="space-y-5">
+        <form onSubmit={formik.handleSubmit} className="space-y-5 p-6">
           <p className="text-[13px] leading-5 text-[#6B6B6B]">
             Create the category now. Country availability and translation work can be refined after saving.
           </p>
 
           {formik.status && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">{formik.status}</div>}
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <AdminInput
-              label="Name *"
-              placeholder="e.g. Metal Brackets"
-              value={formik.values.name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              onBlur={formik.handleBlur}
-              name="name"
-              error={formik.touched.name ? (formik.errors.name as string) : ""}
-            />
-            <AdminInput
-              label="Slug *"
-              placeholder="metal-brackets"
-              value={formik.values.slug}
-              onChange={(e) => {
-                setSlugEdited(true);
-                formik.setFieldValue("slug", slugify(e.target.value));
-              }}
-              onBlur={formik.handleBlur}
-              name="slug"
-              error={formik.touched.slug ? (formik.errors.slug as string) : ""}
-            />
-            <AdminSelect label="Parent category" options={parentOptions} {...formik.getFieldProps("parentId")} />
-            <AdminSelect
-              label="Status"
-              options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]}
-              {...formik.getFieldProps("status")}
-            />
-          </div>
-
-          <AdminTextarea label="Description" rows={3} {...formik.getFieldProps("description")} />
-
-          <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
-            <h4 className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">SEO</h4>
+          <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
-              <AdminInput label="Meta Title" placeholder="Browser/search title" {...formik.getFieldProps("seoTitle")} />
-              <AdminTextarea label="Meta Description" rows={2} placeholder="Short search description" {...formik.getFieldProps("seoDescription")} />
+              <AdminInput
+                label="Name *"
+                placeholder="e.g. Metal Brackets"
+                value={formik.values.name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                onBlur={formik.handleBlur}
+                name="name"
+                error={formik.touched.name ? (formik.errors.name as string) : ""}
+              />
+              <AdminInput
+                label="Slug *"
+                placeholder="metal-brackets"
+                value={formik.values.slug}
+                onChange={(e) => {
+                  setSlugEdited(true);
+                  formik.setFieldValue("slug", slugify(e.target.value));
+                }}
+                onBlur={formik.handleBlur}
+                name="slug"
+                error={formik.touched.slug ? (formik.errors.slug as string) : ""}
+              />
             </div>
-          </div>
 
-          <div className="grid gap-4 md:grid-cols-[120px_1fr]">
-            <div className="flex h-[92px] w-[120px] items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
-              {formik.values.image ? <img src={formik.values.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={22} className="text-[#9A9A9A]" />}
+            <div className="grid gap-4 md:grid-cols-2">
+              <AdminSelect label="Parent category" options={parentOptions} {...formik.getFieldProps("parentId")} />
+              <AdminSelect
+                label="Status"
+                options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]}
+                {...formik.getFieldProps("status")}
+              />
             </div>
-            <div className="space-y-2">
-              <AdminInput label="Image URL" placeholder="/uploads/category.jpg" {...formik.getFieldProps("image")} />
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]">
-                <Upload size={14} /> {uploadingImage ? "Uploading..." : "Upload image"}
-                <input type="file" accept="image/*" className="hidden" disabled={uploadingImage} onChange={(e) => handleImageUpload(e.target.files?.[0])} />
-              </label>
+
+            <AdminTextarea label="Description" rows={3} {...formik.getFieldProps("description")} />
+
+            <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
+              <h4 className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">SEO</h4>
+              <div className="grid gap-4 md:grid-cols-2">
+                <AdminInput label="Meta Title" placeholder="Browser/search title" {...formik.getFieldProps("seoTitle")} />
+                <AdminTextarea label="Meta Description" rows={2} placeholder="Short search description" {...formik.getFieldProps("seoDescription")} />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-[120px_1fr]">
+              <div className="flex h-[92px] w-[120px] items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
+                {formik.values.image ? <img src={formik.values.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={22} className="text-[#9A9A9A]" />}
+              </div>
+              <div className="space-y-2">
+                <AdminInput label="Image URL" placeholder="/uploads/category.jpg" {...formik.getFieldProps("image")} />
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]">
+                  <Upload size={14} /> {uploadingImage ? "Uploading..." : "Upload image"}
+                  <input type="file" accept="image/*" className="hidden" disabled={uploadingImage} onChange={(e) => handleImageUpload(e.target.files?.[0])} />
+                </label>
+              </div>
             </div>
           </div>
 
@@ -806,7 +813,7 @@ export default function CategoriesPage() {
         title="Import Categories Excel"
         panelClassName="max-w-4xl max-h-[calc(100vh-2.5rem)] overflow-y-auto"
       >
-        <div className="space-y-4">
+        <div className="space-y-4 p-6">
           <p className="text-[13.5px] leading-5 text-[#6B6B6B]">
             Upload an `.xlsx` or `.csv` file. The first sheet is validated on the server before any category is created or updated.
           </p>

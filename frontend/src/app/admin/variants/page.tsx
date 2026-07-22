@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Archive, Copy, Edit2, Eye, Image as ImageIcon, RotateCcw, Trash2 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { Modal } from "@/components/ui/Modal";
+import { ProductEditor } from "@/components/admin/products/ProductEditor";
 import {
   useAdminVariants,
   useArchiveVariant,
@@ -49,6 +52,11 @@ function getBaseInventory(row: VariantRow) {
 }
 
 export default function VariantsPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const activeVariantId = searchParams.get("variant");
+  const activeProductId = searchParams.get("productId");
+
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -193,9 +201,16 @@ export default function VariantsPage() {
           <Link href={`/admin/products/${row.product.id}/edit`} className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]" title="View product">
             <Eye size={15} />
           </Link>
-          <Link href={`/admin/products/${row.product.id}/edit?variant=${row.id}`} className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]" title="Edit variant">
+          <button
+            type="button"
+            onClick={() => {
+              router.push(`/admin/variants?productId=${row.product.id}&variant=${row.id}`, { scroll: false });
+            }}
+            className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
+            title="Edit variant"
+          >
             <Edit2 size={15} />
-          </Link>
+          </button>
           <button
             type="button"
             onClick={() => handleDuplicate(row)}
@@ -299,6 +314,10 @@ export default function VariantsPage() {
         onConfirm={handleDelete}
         onCancel={() => setDeleting(null)}
       />
+
+      {activeProductId && activeVariantId && (
+        <ProductEditor productId={activeProductId} isEmbed={true} />
+      )}
 
       {ToastComponent}
     </AdminLayout>
