@@ -39,6 +39,7 @@ export function HeaderSearch({ fullWidth = false, onNavigate }: { fullWidth?: bo
 
   const close = () => {
     setFocused(false);
+    setQuery("");
     onNavigate?.();
   };
 
