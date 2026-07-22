@@ -63,6 +63,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     const country = countries.find((item) => item.code === normalizedCode);
     setSelectedCountryCodeState(normalizedCode);
     localStorage.setItem("country", normalizedCode);
+    document.cookie = `country=${normalizedCode}; path=/; max-age=31536000; SameSite=Lax`;
     if (country?.currency?.code) {
       setSelectedCurrencyState(country.currency.code);
       localStorage.setItem("currency", country.currency.code);

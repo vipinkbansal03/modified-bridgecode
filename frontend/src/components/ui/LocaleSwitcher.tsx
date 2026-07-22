@@ -104,6 +104,7 @@ export function LocaleSwitcher() {
                   onClick={() => {
                     setSelectedCountryCode(country.code);
                     setOpen(false);
+                    router.refresh();
                   }}
                   className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left transition-colors ${
                     selectedCountryCode === country.code
