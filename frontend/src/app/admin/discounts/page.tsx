@@ -211,7 +211,7 @@ export default function DiscountsPage() {
   const [countryFilter, setCountryFilter] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importReport, setImportReport] = useState<SpreadsheetReport | null>(
@@ -705,9 +705,11 @@ export default function DiscountsPage() {
   const discountForm = (
     <form
       onSubmit={submit}
-      className="rounded-lg border border-[#E6E6E6] bg-white p-5"
+      className={`flex flex-col min-h-0 overflow-hidden ${
+        form.id ? "rounded-xl border border-[#E6E6E6] bg-white p-5" : ""
+      }`}
     >
-      {form.id ? (
+      {form.id && (
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
             Edit discount
@@ -720,8 +722,8 @@ export default function DiscountsPage() {
             <X size={16} />
           </button>
         </div>
-      ) : null}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      )}
+      <div className={form.id ? "grid grid-cols-1 gap-4 md:grid-cols-3" : "p-6 overflow-y-auto space-y-5 flex-1 grid grid-cols-1 gap-4 md:grid-cols-3"}>
         <AdminInput
           label="Rule Name *"
           value={form.name}
@@ -853,7 +855,7 @@ export default function DiscountsPage() {
           onChange={(event) => setField("endDate", event.target.value)}
         />
       </div>
-      <div className="mt-5 flex gap-2">
+      <div className={form.id ? "mt-5 flex gap-2" : "border-t border-[#E5E7EB] bg-[#FAFAFA] px-6 py-4 flex items-center justify-end gap-2.5 shrink-0"}>
         <button
           type="submit"
           disabled={createDiscount.isPending || updateDiscount.isPending}
@@ -903,171 +905,186 @@ export default function DiscountsPage() {
       </div>
 
       <div className="mb-5 rounded-xl border border-[#E6E6E6] bg-white p-4">
-        <div className="space-y-4">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <label className="relative w-full xl:max-w-[520px] xl:flex-1">
-              <Search
-                size={15}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]"
-              />
-              <input
-                type="search"
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  resetPage();
-                }}
-                placeholder="Search rule, product, category, tier..."
-                className="h-10 w-full rounded-lg border border-[#E6E6E6] bg-white pl-9 pr-3 text-[13.5px] outline-none transition placeholder:text-[#9A9A9A] focus:border-[#E31E24] focus:ring-2 focus:ring-[#E31E24]/10"
-              />
-            </label>
-
-            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-              <button
-                type="button"
-                onClick={() => setShowFilters((current) => !current)}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
-              >
-                <Filter size={14} />
-                {showFilters ? "Hide filters" : "Show filters"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowColumns((current) => !current)}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
-              >
-                <SlidersHorizontal size={14} />
-                Columns
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleExport(false)}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
-              >
-                <Download size={14} />
-                Export
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  resetForm();
-                  setShowForm(true);
-                }}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-              >
-                <Plus size={14} />
-                Create Discount
-              </button>
-            </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="relative w-full max-w-[280px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                resetPage();
+              }}
+              placeholder="Search rule, product, category..."
+              className="h-10 w-full rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+            />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <AdminSelect
-              value={status}
-              onChange={(event) => {
-                setStatus(event.target.value);
-                resetPage();
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowFilters((current) => !current)}
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
+            >
+              <Filter size={14} />
+              {showFilters ? "Hide filters" : "Show filters"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowColumns((current) => !current)}
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
+            >
+              <SlidersHorizontal size={14} />
+              Columns
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleExport(false)}
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]"
+            >
+              <Download size={14} />
+              Export
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                resetForm();
+                setShowForm(true);
               }}
-              options={[
-                { value: "", label: "All statuses" },
-                { value: "ACTIVE", label: "Active" },
-                { value: "INACTIVE", label: "Inactive" },
-              ]}
-            />
-            <AdminSelect
-              value={typeFilter}
-              onChange={(event) => {
-                setTypeFilter(event.target.value);
-                resetPage();
-              }}
-              options={[
-                { value: "", label: "All types" },
-                { value: "TIER", label: "Tier-based" },
-                { value: "MOQ", label: "MOQ-based" },
-                { value: "PROMOTIONAL", label: "Open promotion" },
-              ]}
-            />
-            <AdminSelect
-              value={scopeFilter}
-              onChange={(event) => {
-                setScopeFilter(event.target.value);
-                resetPage();
-              }}
-              options={[
-                { value: "", label: "All scopes" },
-                { value: "PLATFORM", label: "Platform-wide" },
-                { value: "PRODUCT", label: "Product" },
-                { value: "COLLECTION", label: "Collection" },
-                { value: "CATEGORY", label: "Category" },
-              ]}
-            />
-            <AdminSelect
-              value={countryFilter}
-              onChange={(event) => {
-                setCountryFilter(event.target.value);
-                resetPage();
-              }}
-              options={options.countries}
-            />
-            <AdminSelect
-              value={String(limit)}
-              onChange={(event) => {
-                setLimit(Number(event.target.value));
-                resetPage();
-              }}
-              options={[
-                { value: "10", label: "10 per page" },
-                { value: "20", label: "20 per page" },
-                { value: "50", label: "50 per page" },
-              ]}
-            />
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
+            >
+              <Plus size={14} />
+              Create Discount
+            </button>
           </div>
         </div>
 
-        {showFilters ? (
-          <div className="mt-4 grid gap-3 border-t border-[#F0F0F0] pt-4 lg:grid-cols-[repeat(3,minmax(0,1fr))_auto_auto] lg:items-center">
-            <AdminSelect
-              value={String(sortBy)}
-              onChange={(event) => setSortBy(event.target.value)}
-              options={[
-                { value: "createdAt", label: "Created date" },
-                { value: "updatedAt", label: "Updated date" },
-                { value: "name", label: "Rule name" },
-                { value: "type", label: "Type" },
-                { value: "status", label: "Status" },
-              ]}
-            />
-            <AdminSelect
-              value={sortDir}
-              onChange={(event) =>
-                setSortDir(event.target.value as "asc" | "desc")
-              }
-              options={[
-                { value: "desc", label: "Descending" },
-                { value: "asc", label: "Ascending" },
-              ]}
-            />
-            <button
-              type="button"
-              onClick={() => void handleExport(true)}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
-            >
-              <Download size={14} />
-              Export selected
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedIds([])}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
-            >
-              Clear selection
-            </button>
-            <div className="text-right text-[12.5px] text-[#9A9A9A]">
-              {selectedIds.length} selected / {data?.pagination?.total ?? 0}{" "}
-              total
+        {showFilters && (
+          <div className="mt-4 border-t border-[#F0F0F0] pt-4">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-[13px] font-bold text-[#1A1A1A]">Filters & Sorting</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setStatus("");
+                  setTypeFilter("");
+                  setScopeFilter("");
+                  setCountryFilter("");
+                  setSortBy("createdAt");
+                  setSortDir("desc");
+                  resetPage();
+                }}
+                className="text-[12.5px] font-medium text-[#E31E24] hover:underline"
+              >
+                Reset
+              </button>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+              <AdminSelect
+                label="Status"
+                value={status}
+                onChange={(event) => {
+                  setStatus(event.target.value);
+                  resetPage();
+                }}
+                options={[
+                  { value: "", label: "All statuses" },
+                  { value: "ACTIVE", label: "Active" },
+                  { value: "INACTIVE", label: "Inactive" },
+                ]}
+              />
+              <AdminSelect
+                label="Discount Type"
+                value={typeFilter}
+                onChange={(event) => {
+                  setTypeFilter(event.target.value);
+                  resetPage();
+                }}
+                options={[
+                  { value: "", label: "All types" },
+                  { value: "TIER", label: "Tier-based" },
+                  { value: "MOQ", label: "MOQ-based" },
+                  { value: "PROMOTIONAL", label: "Open promotion" },
+                ]}
+              />
+              <AdminSelect
+                label="Scope"
+                value={scopeFilter}
+                onChange={(event) => {
+                  setScopeFilter(event.target.value);
+                  resetPage();
+                }}
+                options={[
+                  { value: "", label: "All scopes" },
+                  { value: "PLATFORM", label: "Platform-wide" },
+                  { value: "PRODUCT", label: "Product" },
+                  { value: "COLLECTION", label: "Collection" },
+                  { value: "CATEGORY", label: "Category" },
+                ]}
+              />
+              <AdminSelect
+                label="Country"
+                value={countryFilter}
+                onChange={(event) => {
+                  setCountryFilter(event.target.value);
+                  resetPage();
+                }}
+                options={options.countries}
+              />
+              <AdminSelect
+                label="Sort By"
+                value={String(sortBy)}
+                onChange={(event) => setSortBy(event.target.value)}
+                options={[
+                  { value: "createdAt", label: "Created date" },
+                  { value: "updatedAt", label: "Updated date" },
+                  { value: "name", label: "Rule name" },
+                  { value: "type", label: "Type" },
+                  { value: "status", label: "Status" },
+                ]}
+              />
+              <AdminSelect
+                label="Direction"
+                value={sortDir}
+                onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+                options={[
+                  { value: "desc", label: "Descending" },
+                  { value: "asc", label: "Ascending" },
+                ]}
+              />
+              <AdminSelect
+                label="Page Size"
+                value={String(limit)}
+                onChange={(event) => {
+                  setLimit(Number(event.target.value));
+                  resetPage();
+                }}
+                options={[
+                  { value: "10", label: "10 per page" },
+                  { value: "20", label: "20 per page" },
+                  { value: "50", label: "50 per page" },
+                ]}
+              />
             </div>
           </div>
-        ) : null}
+        )}
+
+        {selectedIds.length > 0 && (
+          <div className="mt-4 rounded-xl border border-dashed border-[#E31E24]/30 bg-[#FFF5F5]/30 p-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-[13px] font-semibold text-[#E31E24]">{selectedIds.length} rows selected</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => void handleExport(true)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
+                <Download size={13} /> Export selected
+              </button>
+              <button type="button" onClick={() => setSelectedIds([])} className="text-[13px] font-medium text-[#6B6B6B] hover:text-[#E31E24] hover:underline">
+                Clear selection
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {isEditInlineOpen ? <div className="mb-5">{discountForm}</div> : null}
@@ -1076,7 +1093,7 @@ export default function DiscountsPage() {
         open={isCreateModalOpen}
         onClose={resetForm}
         title="New discount"
-        panelClassName="max-w-5xl overflow-visible z-[9999]"
+        panelClassName="max-w-5xl flex flex-col max-h-[90vh] overflow-hidden z-[9999]"
       >
         {isCreateModalOpen ? discountForm : null}
       </Modal>

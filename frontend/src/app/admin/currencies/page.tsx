@@ -110,6 +110,7 @@ export default function CurrenciesPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<"ENABLE" | "DISABLE" | "DELETE" | "">("");
+  const [showFilters, setShowFilters] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState({ ...columnDefaults });
   const [showForm, setShowForm] = useState(false);
@@ -337,8 +338,8 @@ export default function CurrenciesPage() {
         </div>
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.8fr)_repeat(4,minmax(0,1fr))]">
-            <div className="relative">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="relative w-full max-w-[280px]">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
               <input
                 value={search}
@@ -346,127 +347,157 @@ export default function CurrenciesPage() {
                   setSearch(event.target.value);
                   setPage(1);
                 }}
-                placeholder="Search currencies"
+                placeholder="Search currencies..."
                 className="h-10 w-full rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
               />
             </div>
-            <AdminSelect
-              label=""
-              value={statusFilter}
-              onChange={(event) => {
-                setStatusFilter(event.target.value);
-                setPage(1);
-              }}
-              options={[
-                { value: "", label: "All status" },
-                { value: "ACTIVE", label: "Active" },
-                { value: "INACTIVE", label: "Inactive" },
-              ]}
-            />
-            <AdminSelect
-              label=""
-              value={sortBy}
-              onChange={(event) => setSortBy(event.target.value)}
-              options={[
-                { value: "code", label: "Code" },
-                { value: "name", label: "Name" },
-                { value: "exchangeRate", label: "Exchange rate" },
-                { value: "status", label: "Status" },
-                { value: "updatedAt", label: "Updated date" },
-              ]}
-            />
-            <AdminSelect
-              label=""
-              value={sortDir}
-              onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
-              options={[
-                { value: "asc", label: "Ascending" },
-                { value: "desc", label: "Descending" },
-              ]}
-            />
-            <AdminSelect
-              label=""
-              value={String(limit)}
-              onChange={(event) => {
-                setLimit(Number(event.target.value));
-                setPage(1);
-              }}
-              options={[
-                { value: "10", label: "10 / page" },
-                { value: "20", label: "20 / page" },
-                { value: "50", label: "50 / page" },
-              ]}
-            />
-          </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowColumns((current) => !current)}
-              className="inline-flex h-10 items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F7F7F7]"
-            >
-              <SlidersHorizontal size={14} />
-              Columns
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleExport(false)}
-              className="inline-flex h-10 items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]"
-            >
-              <Download size={14} />
-              Export
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleExport(true)}
-              className="inline-flex h-10 items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]"
-            >
-              <Download size={14} />
-              Export selected
-            </button>
-            <button
-              type="button"
-              onClick={handleSyncRates}
-              className="inline-flex h-10 items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]"
-            >
-              <RefreshCw size={14} />
-              Sync rates
-            </button>
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              <div className="w-[180px]">
-                <AdminSelect
-                  label=""
-                  value={bulkAction}
-                  onChange={(event) => setBulkAction(event.target.value as "ENABLE" | "DISABLE" | "DELETE" | "")}
-                  options={[
-                    { value: "", label: "Bulk action" },
-                    { value: "ENABLE", label: "Enable" },
-                    { value: "DISABLE", label: "Disable" },
-                    { value: "DELETE", label: "Delete" },
-                  ]}
-                />
-              </div>
-              <div className="text-[12.5px] text-[#6B6B6B]">
-                {selectedIds.length} selected
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => void handleBulkAction()}
-                className="inline-flex h-10 items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]"
+                onClick={() => setShowFilters((current) => !current)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
               >
-                <SquareCheckBig size={14} />
-                Bulk apply
+                <Filter size={14} />
+                {showFilters ? "Hide filters" : "Show filters"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowColumns((current) => !current)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
+              >
+                <SlidersHorizontal size={14} />
+                Columns
+              </button>
+              <button
+                type="button"
+                onClick={handleSyncRates}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]"
+              >
+                <RefreshCw size={14} />
+                Sync Rates
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleExport(false)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]"
+              >
+                <Download size={14} />
+                Export
               </button>
               <button
                 type="button"
                 onClick={openCreate}
-                className="inline-flex h-10 items-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
               >
                 <Plus size={14} />
                 Add Currency
               </button>
             </div>
           </div>
+
+          {showFilters && (
+            <div className="mt-4 border-t border-[#F0F0F0] pt-4">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-[13px] font-bold text-[#1A1A1A]">Filters & Sorting</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setStatusFilter("");
+                    setSortBy("code");
+                    setSortDir("asc");
+                    setPage(1);
+                  }}
+                  className="text-[12.5px] font-medium text-[#E31E24] hover:underline"
+                >
+                  Reset
+                </button>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <AdminSelect
+                  label="Status"
+                  value={statusFilter}
+                  onChange={(event) => {
+                    setStatusFilter(event.target.value);
+                    setPage(1);
+                  }}
+                  options={[
+                    { value: "", label: "All status" },
+                    { value: "ACTIVE", label: "Active" },
+                    { value: "INACTIVE", label: "Inactive" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Sort By"
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value)}
+                  options={[
+                    { value: "code", label: "Code" },
+                    { value: "name", label: "Name" },
+                    { value: "exchangeRate", label: "Exchange rate" },
+                    { value: "status", label: "Status" },
+                    { value: "updatedAt", label: "Updated date" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Direction"
+                  value={sortDir}
+                  onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+                  options={[
+                    { value: "asc", label: "Ascending" },
+                    { value: "desc", label: "Descending" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Page Size"
+                  value={String(limit)}
+                  onChange={(event) => {
+                    setLimit(Number(event.target.value));
+                    setPage(1);
+                  }}
+                  options={[
+                    { value: "10", label: "10 per page" },
+                    { value: "20", label: "20 per page" },
+                    { value: "50", label: "50 per page" },
+                  ]}
+                />
+              </div>
+            </div>
+          )}
+
+          {selectedIds.length > 0 && (
+            <div className="mt-4 rounded-xl border border-dashed border-[#E31E24]/30 bg-[#FFF5F5]/30 p-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="text-[13px] font-semibold text-[#E31E24]">{selectedIds.length} rows selected</span>
+                <div className="h-4 w-[1px] bg-[#E6E6E6]" />
+                <div className="flex items-center gap-2">
+                  <AdminSelect
+                    label=""
+                    value={bulkAction}
+                    onChange={(event) => setBulkAction(event.target.value as "ENABLE" | "DISABLE" | "DELETE" | "")}
+                    options={[
+                      { value: "", label: "Choose action" },
+                      { value: "ENABLE", label: "Enable" },
+                      { value: "DISABLE", label: "Disable" },
+                      { value: "DELETE", label: "Delete" },
+                    ]}
+                  />
+                  <button type="button" onClick={() => void handleBulkAction()} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
+                    Apply
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => void handleExport(true)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
+                  <Download size={13} /> Export selected
+                </button>
+                <button type="button" onClick={() => setSelectedIds([])} className="text-[13px] font-medium text-[#6B6B6B] hover:text-[#E31E24] hover:underline">
+                  Clear selection
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {showColumns ? (

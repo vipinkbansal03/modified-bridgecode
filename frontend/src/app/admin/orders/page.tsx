@@ -50,6 +50,7 @@ export default function OrdersPage() {
   const [dateTo, setDateTo] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
 
@@ -152,99 +153,132 @@ export default function OrdersPage() {
         </div>
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.8fr)_repeat(6,minmax(0,1fr))]">
-            <div className="relative">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="relative w-full max-w-[280px]">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search order, customer, email"
+                placeholder="Search order, customer..."
                 className="h-10 w-full rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
               />
             </div>
-            <AdminSelect
-              label=""
-              value={status}
-              onChange={(event) => setStatus(event.target.value)}
-              options={[
-                { value: "", label: "All status" },
-                { value: "PENDING", label: "Pending" },
-                { value: "CONFIRMED", label: "Confirmed" },
-                { value: "PROCESSING", label: "Processing" },
-                { value: "SHIPPED", label: "Shipped" },
-                { value: "DELIVERED", label: "Delivered" },
-                { value: "CANCELLED", label: "Cancelled" },
-              ]}
-            />
-            <AdminSelect
-              label=""
-              value={paymentStatus}
-              onChange={(event) => setPaymentStatus(event.target.value)}
-              options={[
-                { value: "", label: "All payments" },
-                { value: "PENDING", label: "Pending" },
-                { value: "PAID", label: "Paid" },
-                { value: "FAILED", label: "Failed" },
-                { value: "REFUNDED", label: "Refunded" },
-              ]}
-            />
-            <AdminSelect
-              label=""
-              value={countryId}
-              onChange={(event) => setCountryId(event.target.value)}
-              options={[
-                { value: "", label: "All countries" },
-                ...countries.map((country: { id: string; code: string; name: string }) => ({ value: country.id, label: `${country.code} - ${country.name}` })),
-              ]}
-            />
-            <AdminInput label="" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-            <AdminInput label="" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
-            <AdminSelect
-              label=""
-              value={String(limit)}
-              onChange={(event) => setLimit(Number(event.target.value))}
-              options={[
-                { value: "10", label: "10 / page" },
-                { value: "20", label: "20 / page" },
-                { value: "50", label: "50 / page" },
-              ]}
-            />
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowFilters((current) => !current)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
+              >
+                <Filter size={14} />
+                {showFilters ? "Hide filters" : "Show filters"}
+              </button>
+              <Link href="/admin/orders/create" className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
+                <Plus size={14} />
+                Create Order
+              </Link>
+            </div>
           </div>
 
-          <div className="mt-3 grid gap-3 xl:grid-cols-[repeat(3,minmax(0,1fr))_auto]">
-            <AdminSelect
-              label=""
-              value={sortBy}
-              onChange={(event) => setSortBy(event.target.value)}
-              options={[
-                { value: "createdAt", label: "Created date" },
-                { value: "updatedAt", label: "Updated date" },
-                { value: "orderNumber", label: "Order number" },
-                { value: "customerName", label: "Customer name" },
-                { value: "total", label: "Total" },
-                { value: "status", label: "Order status" },
-                { value: "paymentStatus", label: "Payment status" },
-                { value: "country", label: "Country" },
-              ]}
-            />
-            <AdminSelect
-              label=""
-              value={sortDir}
-              onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
-              options={[
-                { value: "desc", label: "Descending" },
-                { value: "asc", label: "Ascending" },
-              ]}
-            />
-            <button type="button" onClick={resetFilters} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]">
-              <Filter size={14} />
-              Reset filters
-            </button>
-            <Link href="/admin/orders/create" className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-              <Plus size={14} />
-              Create Order
-            </Link>
-          </div>
+          {showFilters && (
+            <div className="mt-4 border-t border-[#F0F0F0] pt-4">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-[13px] font-bold text-[#1A1A1A]">Filters & Sorting</span>
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="text-[12.5px] font-medium text-[#E31E24] hover:underline"
+                >
+                  Reset
+                </button>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <AdminSelect
+                  label="Status"
+                  value={status}
+                  onChange={(event) => {
+                    setStatus(event.target.value);
+                    setPage(1);
+                  }}
+                  options={[
+                    { value: "", label: "All status" },
+                    { value: "PENDING", label: "Pending" },
+                    { value: "CONFIRMED", label: "Confirmed" },
+                    { value: "PROCESSING", label: "Processing" },
+                    { value: "SHIPPED", label: "Shipped" },
+                    { value: "DELIVERED", label: "Delivered" },
+                    { value: "CANCELLED", label: "Cancelled" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Payment Status"
+                  value={paymentStatus}
+                  onChange={(event) => {
+                    setPaymentStatus(event.target.value);
+                    setPage(1);
+                  }}
+                  options={[
+                    { value: "", label: "All payments" },
+                    { value: "PENDING", label: "Pending" },
+                    { value: "PAID", label: "Paid" },
+                    { value: "FAILED", label: "Failed" },
+                    { value: "REFUNDED", label: "Refunded" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Country"
+                  value={countryId}
+                  onChange={(event) => {
+                    setCountryId(event.target.value);
+                    setPage(1);
+                  }}
+                  options={[
+                    { value: "", label: "All countries" },
+                    ...countries.map((country: { id: string; code: string; name: string }) => ({ value: country.id, label: `${country.code} - ${country.name}` })),
+                  ]}
+                />
+                <AdminSelect
+                  label="Page Size"
+                  value={String(limit)}
+                  onChange={(event) => {
+                    setLimit(Number(event.target.value));
+                    setPage(1);
+                  }}
+                  options={[
+                    { value: "10", label: "10 per page" },
+                    { value: "20", label: "20 per page" },
+                    { value: "50", label: "50 per page" },
+                  ]}
+                />
+                <AdminInput label="Date From" type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} />
+                <AdminInput label="Date To" type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(1); }} />
+                <AdminSelect
+                  label="Sort By"
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value)}
+                  options={[
+                    { value: "createdAt", label: "Created date" },
+                    { value: "updatedAt", label: "Updated date" },
+                    { value: "orderNumber", label: "Order number" },
+                    { value: "customerName", label: "Customer name" },
+                    { value: "total", label: "Total" },
+                    { value: "status", label: "Order status" },
+                    { value: "paymentStatus", label: "Payment status" },
+                    { value: "country", label: "Country" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Direction"
+                  value={sortDir}
+                  onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+                  options={[
+                    { value: "desc", label: "Descending" },
+                    { value: "asc", label: "Ascending" },
+                  ]}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white">

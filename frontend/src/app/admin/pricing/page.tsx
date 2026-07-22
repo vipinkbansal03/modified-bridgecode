@@ -264,6 +264,7 @@ export default function PricingPage() {
   const [columnVisibility, setColumnVisibility] = useState(defaultColumnVisibility);
   const [showColumnPanel, setShowColumnPanel] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<PricingFormState>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<PricingRuleRow | null>(null);
@@ -346,8 +347,9 @@ export default function PricingPage() {
   );
 
   useEffect(() => {
-    if (countries.length && !previewInput.countryId) {
-      setPreviewInput((current) => ({ ...current, countryId: countries[0].id }));
+    const firstActive = countries.find((c: any) => c.status === "ACTIVE");
+    if (firstActive && !previewInput.countryId) {
+      setPreviewInput((current) => ({ ...current, countryId: firstActive.id }));
     }
   }, [countries, previewInput.countryId]);
 
@@ -366,10 +368,12 @@ export default function PricingPage() {
 
   const countryOptions = [
     { value: "", label: "All countries" },
-    ...countries.map((country: { id: string; name: string; code: string }) => ({
-      value: country.id,
-      label: `${country.name} (${country.code})`,
-    })),
+    ...countries
+      .filter((c: any) => c.status === "ACTIVE")
+      .map((country: { id: string; name: string; code: string }) => ({
+        value: country.id,
+        label: `${country.name} (${country.code})`,
+      })),
   ];
 
   const tierOptions = [
@@ -768,6 +772,7 @@ export default function PricingPage() {
                     setMinQuantityFilter("");
                     setSortBy("updatedAt");
                     setSortDir("desc");
+                    setShowAdvancedFilters(false);
                     setPage(1);
                   }}
                   className="text-[13px] font-medium text-[#E31E24] hover:underline"
@@ -776,7 +781,7 @@ export default function PricingPage() {
                 </button>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-[repeat(2,minmax(0,1fr))_120px] items-end">
                 <AdminInput label="Search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Rule, product, country, tier" />
                 <AdminSelect
                   label="Rule Type"
@@ -790,55 +795,69 @@ export default function PricingPage() {
                     ...Object.entries(ruleTypeLabels).map(([value, label]) => ({ value, label })),
                   ]}
                 />
-                <AdminSelect label="Status" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as PricingStatusFilter); setPage(1); }} options={[{ value: "ALL", label: "All statuses" }, { value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
-                <AdminSelect label="Country" value={countryFilter} onChange={(event) => { setCountryFilter(event.target.value); setPage(1); }} options={countryOptions} />
-                <AdminSelect label="Tier" value={tierFilter} onChange={(event) => { setTierFilter(event.target.value); setPage(1); }} options={tierOptions} />
-                <AdminSelect label="Product" value={productFilter} onChange={(event) => { setProductFilter(event.target.value); setPage(1); }} options={productOptions} />
-                <AdminSelect label="Variant" value={variantFilter} onChange={(event) => { setVariantFilter(event.target.value); setPage(1); }} options={[{ value: "", label: "All variants" }, ...(filterProductData?.variants ?? []).map((variant: { id: string; title: string; sku?: string | null }) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]} />
-                <AdminInput label="MOQ" type="number" min="1" value={minQuantityFilter} onChange={(event) => { setMinQuantityFilter(event.target.value); setPage(1); }} placeholder="Filter MOQ" />
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedFilters((prev) => !prev)}
+                  className="flex h-[46px] w-full items-center justify-center gap-1 rounded-lg border border-[#E6E6E6] bg-white text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7] active:scale-[0.98] transition-all"
+                >
+                  {showAdvancedFilters ? "Fewer Filters" : "More Filters"}
+                </button>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3">
-                <AdminSelect
-                  label="Sort By"
-                  value={sortBy}
-                  onChange={(event) => setSortBy(event.target.value as PricingSortBy)}
-                  options={[
-                    { value: "updatedAt", label: "Updated date" },
-                    { value: "createdAt", label: "Created date" },
-                    { value: "ruleName", label: "Rule name" },
-                    { value: "ruleType", label: "Rule type" },
-                    { value: "product", label: "Product" },
-                    { value: "country", label: "Country" },
-                    { value: "tier", label: "Tier" },
-                    { value: "basePrice", label: "Base price" },
-                    { value: "status", label: "Status" },
-                  ]}
-                />
-                <AdminSelect
-                  label="Direction"
-                  value={sortDir}
-                  onChange={(event) => setSortDir(event.target.value as PricingSortDir)}
-                  options={[
-                    { value: "desc", label: "Descending" },
-                    { value: "asc", label: "Ascending" },
-                  ]}
-                />
-                <AdminSelect
-                  label="Page Size"
-                  value={String(limit)}
-                  onChange={(event) => {
-                    setLimit(Number(event.target.value));
-                    setPage(1);
-                  }}
-                  options={[
-                    { value: "10", label: "10" },
-                    { value: "20", label: "20" },
-                    { value: "50", label: "50" },
-                    { value: "100", label: "100" },
-                  ]}
-                />
-              </div>
+              {showAdvancedFilters && (
+                <div className="mt-4 pt-4 border-t border-[#FAFAFA] space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <AdminSelect label="Status" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as PricingStatusFilter); setPage(1); }} options={[{ value: "ALL", label: "All statuses" }, { value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
+                    <AdminSelect label="Country" value={countryFilter} onChange={(event) => { setCountryFilter(event.target.value); setPage(1); }} options={countryOptions} />
+                    <AdminSelect label="Tier" value={tierFilter} onChange={(event) => { setTierFilter(event.target.value); setPage(1); }} options={tierOptions} />
+                    <AdminSelect label="Product" value={productFilter} onChange={(event) => { setProductFilter(event.target.value); setPage(1); }} options={productOptions} />
+                    <AdminSelect label="Variant" value={variantFilter} onChange={(event) => { setVariantFilter(event.target.value); setPage(1); }} options={[{ value: "", label: "All variants" }, ...(filterProductData?.variants ?? []).map((variant: { id: string; title: string; sku?: string | null }) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]} />
+                    <AdminInput label="MOQ" type="number" min="1" value={minQuantityFilter} onChange={(event) => { setMinQuantityFilter(event.target.value); setPage(1); }} placeholder="Filter MOQ" />
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-4 pt-2">
+                    <AdminSelect
+                      label="Sort By"
+                      value={sortBy}
+                      onChange={(event) => setSortBy(event.target.value as PricingSortBy)}
+                      options={[
+                        { value: "updatedAt", label: "Updated date" },
+                        { value: "createdAt", label: "Created date" },
+                        { value: "ruleName", label: "Rule name" },
+                        { value: "ruleType", label: "Rule type" },
+                        { value: "product", label: "Product" },
+                        { value: "country", label: "Country" },
+                        { value: "tier", label: "Tier" },
+                        { value: "basePrice", label: "Base price" },
+                        { value: "status", label: "Status" },
+                      ]}
+                    />
+                    <AdminSelect
+                      label="Direction"
+                      value={sortDir}
+                      onChange={(event) => setSortDir(event.target.value as PricingSortDir)}
+                      options={[
+                        { value: "desc", label: "Descending" },
+                        { value: "asc", label: "Ascending" },
+                      ]}
+                    />
+                    <AdminSelect
+                      label="Page Size"
+                      value={String(limit)}
+                      onChange={(event) => {
+                        setLimit(Number(event.target.value));
+                        setPage(1);
+                      }}
+                      options={[
+                        { value: "10", label: "10" },
+                        { value: "20", label: "20" },
+                        { value: "50", label: "50" },
+                        { value: "100", label: "100" },
+                      ]}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           ) : null}
 

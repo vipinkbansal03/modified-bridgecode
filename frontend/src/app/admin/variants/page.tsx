@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Archive, Copy, Edit2, Eye, Image as ImageIcon, RotateCcw, Trash2 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
@@ -51,7 +51,7 @@ function getBaseInventory(row: VariantRow) {
   return row.inventories?.find((inventory) => !inventory.countryId) ?? null;
 }
 
-export default function VariantsPage() {
+function VariantsList() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeVariantId = searchParams.get("variant");
@@ -321,5 +321,19 @@ export default function VariantsPage() {
 
       {ToastComponent}
     </AdminLayout>
+  );
+}
+
+export default function VariantsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center bg-[#F2F2F2]">
+          <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
+        </div>
+      }
+    >
+      <VariantsList />
+    </Suspense>
   );
 }

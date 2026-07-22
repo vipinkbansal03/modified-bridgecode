@@ -111,7 +111,7 @@ export default function QuoteDetailPage() {
     );
   }
 
-  const sym = quote.currency.symbol;
+  const sym = quote.currency?.symbol ?? "$";
   const isConverted = quote.status === "CONVERTED" || Boolean(quote.convertedOrderId);
 
   return (

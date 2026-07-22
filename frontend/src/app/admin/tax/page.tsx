@@ -148,7 +148,7 @@ export default function AdminTaxPage() {
   const [sortBy, setSortBy] = useState("updatedAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<TaxFormState>(emptyForm);
@@ -451,12 +451,11 @@ export default function AdminTaxPage() {
           <StatCard title="Total Rules" value={dashboard?.totalRules ?? 0} subtitle="All configured tax rules" icon={<Filter size={18} />} isLoading={dashboardLoading} />
           <StatCard title="Active Rules" value={dashboard?.activeRules ?? 0} subtitle="Live tax records" icon={<SquareCheckBig size={18} />} color="bg-green-600" isLoading={dashboardLoading} />
           <StatCard title="Inactive Rules" value={dashboard?.inactiveRules ?? 0} subtitle="Disabled tax records" icon={<X size={18} />} color="bg-gray-600" isLoading={dashboardLoading} />
-          <StatCard title="Active Countries" value={dashboard?.activeCountries ?? 0} subtitle="Countries ready for tax mapping" icon={<RefreshCw size={18} />} color="bg-[#0F6CBD]" isLoading={dashboardLoading} />
         </div>
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))]">
-            <div className="relative">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="relative w-full max-w-[280px]">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
               <input
                 value={search}
@@ -468,114 +467,157 @@ export default function AdminTaxPage() {
                 className="h-10 w-full rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
               />
             </div>
-            <AdminSelect
-              label=""
-              value={statusFilter}
-              onChange={(event) => {
-                setPage(1);
-                setStatusFilter(event.target.value);
-              }}
-              options={[
-                { value: "", label: "All status" },
-                { value: "ACTIVE", label: "Active" },
-                { value: "INACTIVE", label: "Inactive" },
-              ]}
-            />
-            <AdminSelect
-              label=""
-              value={countryFilter}
-              onChange={(event) => {
-                setPage(1);
-                setCountryFilter(event.target.value);
-              }}
-              options={countryOptions}
-            />
-            <AdminSelect
-              label=""
-              value={typeFilter}
-              onChange={(event) => {
-                setPage(1);
-                setTypeFilter(event.target.value);
-              }}
-              options={[
-                { value: "", label: "All types" },
-                { value: "CGST", label: "CGST" },
-                { value: "SGST", label: "SGST" },
-                { value: "VAT", label: "VAT" },
-                { value: "SALES_TAX", label: "Sales Tax" },
-              ]}
-            />
-          </div>
 
-          <div className="mt-3 grid gap-3 xl:grid-cols-[repeat(2,minmax(0,1fr))_auto_auto_auto_auto]">
-            <AdminSelect
-              label=""
-              value={sortBy}
-              onChange={(event) => setSortBy(event.target.value)}
-              options={[
-                { value: "updatedAt", label: "Updated date" },
-                { value: "createdAt", label: "Created date" },
-                { value: "name", label: "Rule name" },
-                { value: "type", label: "Rule type" },
-                { value: "percentage", label: "Tax rate" },
-                { value: "sortOrder", label: "Priority" },
-                { value: "country", label: "Country" },
-              ]}
-            />
-            <AdminSelect
-              label=""
-              value={sortDir}
-              onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
-              options={[
-                { value: "desc", label: "Descending" },
-                { value: "asc", label: "Ascending" },
-              ]}
-            />
-            <button type="button" onClick={() => setShowFilters((current) => !current)} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]">
-              <Filter size={14} />
-              {showFilters ? "Hide filters" : "Show filters"}
-            </button>
-            <button type="button" onClick={() => setShowColumns((current) => !current)} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]">
-              <SlidersHorizontal size={14} />
-              Columns
-            </button>
-            <button type="button" onClick={() => void handleExport(false)} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]">
-              <Download size={14} />
-              Export
-            </button>
-            <button type="button" onClick={openCreate} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-              <Plus size={14} />
-              Add Tax Rule
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowFilters((current) => !current)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
+              >
+                <Filter size={14} />
+                {showFilters ? "Hide filters" : "Show filters"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowColumns((current) => !current)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
+              >
+                <SlidersHorizontal size={14} />
+                Columns
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleExport(false)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]"
+              >
+                <Download size={14} />
+                Export
+              </button>
+              <button
+                type="button"
+                onClick={openCreate}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+              >
+                <Plus size={14} />
+                Add Tax Rule
+              </button>
+            </div>
           </div>
 
           {showFilters && (
-            <div className="mt-4 grid gap-3 border-t border-[#F0F0F0] pt-4 lg:grid-cols-[auto_minmax(180px,220px)_auto_auto_auto_1fr] lg:items-center">
-              <div className="text-[12.5px] font-medium text-[#6B6B6B]">Bulk actions</div>
-              <AdminSelect
-                label=""
-                value={bulkAction}
-                onChange={(event) => setBulkAction(event.target.value as "ENABLE" | "DISABLE" | "DELETE" | "")}
-                options={[
-                  { value: "", label: "Choose action" },
-                  { value: "ENABLE", label: "Enable" },
-                  { value: "DISABLE", label: "Disable" },
-                  { value: "DELETE", label: "Delete" },
-                ]}
-              />
-              <button type="button" onClick={handleBulkAction} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]">
-                <SquareCheckBig size={14} />
-                Apply
-              </button>
-              <button type="button" onClick={() => void handleExport(true)} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]">
-                <Download size={14} />
-                Export selected
-              </button>
-              <button type="button" onClick={() => setSelectedIds([])} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F7F7F7]">
-                Clear selection
-              </button>
-              <div className="text-right text-[12.5px] text-[#9A9A9A]">
-                {selectedIds.length} selected / {pagination.total ?? 0} total
+            <div className="mt-4 border-t border-[#F0F0F0] pt-4">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-[13px] font-bold text-[#1A1A1A]">Filters & Sorting</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setStatusFilter("");
+                    setCountryFilter("");
+                    setTypeFilter("");
+                    setSortBy("updatedAt");
+                    setSortDir("desc");
+                    setPage(1);
+                  }}
+                  className="text-[12.5px] font-medium text-[#E31E24] hover:underline"
+                >
+                  Reset
+                </button>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                <AdminSelect
+                  label="Status"
+                  value={statusFilter}
+                  onChange={(event) => {
+                    setPage(1);
+                    setStatusFilter(event.target.value);
+                  }}
+                  options={[
+                    { value: "", label: "All status" },
+                    { value: "ACTIVE", label: "Active" },
+                    { value: "INACTIVE", label: "Inactive" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Country"
+                  value={countryFilter}
+                  onChange={(event) => {
+                    setPage(1);
+                    setCountryFilter(event.target.value);
+                  }}
+                  options={countryOptions}
+                />
+                <AdminSelect
+                  label="Tax Type"
+                  value={typeFilter}
+                  onChange={(event) => {
+                    setPage(1);
+                    setTypeFilter(event.target.value);
+                  }}
+                  options={[
+                    { value: "", label: "All types" },
+                    { value: "CGST", label: "CGST" },
+                    { value: "SGST", label: "SGST" },
+                    { value: "VAT", label: "VAT" },
+                    { value: "SALES_TAX", label: "Sales Tax" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Sort By"
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value)}
+                  options={[
+                    { value: "updatedAt", label: "Updated date" },
+                    { value: "createdAt", label: "Created date" },
+                    { value: "name", label: "Rule name" },
+                    { value: "type", label: "Rule type" },
+                    { value: "percentage", label: "Tax rate" },
+                    { value: "sortOrder", label: "Priority" },
+                    { value: "country", label: "Country" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Direction"
+                  value={sortDir}
+                  onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+                  options={[
+                    { value: "desc", label: "Descending" },
+                    { value: "asc", label: "Ascending" },
+                  ]}
+                />
+              </div>
+            </div>
+          )}
+
+          {selectedIds.length > 0 && (
+            <div className="mt-4 rounded-xl border border-dashed border-[#E31E24]/30 bg-[#FFF5F5]/30 p-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="text-[13px] font-semibold text-[#E31E24]">{selectedIds.length} rows selected</span>
+                <div className="h-4 w-[1px] bg-[#E6E6E6]" />
+                <div className="flex flex-wrap items-center gap-2">
+                  <AdminSelect
+                    label=""
+                    value={bulkAction}
+                    onChange={(event) => setBulkAction(event.target.value as "ENABLE" | "DISABLE" | "DELETE" | "")}
+                    options={[
+                      { value: "", label: "Choose action" },
+                      { value: "ENABLE", label: "Enable" },
+                      { value: "DISABLE", label: "Disable" },
+                      { value: "DELETE", label: "Delete" },
+                    ]}
+                  />
+                  <button type="button" onClick={handleBulkAction} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
+                    Apply
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => void handleExport(true)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
+                  <Download size={13} /> Export selected
+                </button>
+                <button type="button" onClick={() => setSelectedIds([])} className="text-[13px] font-medium text-[#6B6B6B] hover:text-[#E31E24] hover:underline">
+                  Clear selection
+                </button>
               </div>
             </div>
           )}
@@ -757,136 +799,138 @@ export default function AdminTaxPage() {
         </div>
       </div>
 
-      <Modal open={showForm} onClose={() => setShowForm(false)} title={form.id ? "Edit Tax Rule" : "Add Tax Rule"} panelClassName="max-w-3xl overflow-hidden">
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Rule Details Grid */}
-          <div className="grid gap-x-5 gap-y-4 md:grid-cols-2">
-            <AdminInput
-              label="Rule Name"
-              value={form.name}
-              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-              placeholder="GST / VAT / Sales Tax"
-            />
-            <AdminSelect
-              label="Rule Type"
-              value={form.type}
-              onChange={(event) => setForm((current) => ({ ...current, type: event.target.value as TaxRule["type"] }))}
-              options={[
-                { value: "CGST", label: "CGST" },
-                { value: "SGST", label: "SGST" },
-                { value: "VAT", label: "VAT" },
-                { value: "SALES_TAX", label: "Sales Tax" },
-              ]}
-            />
-            <AdminSelect
-              label="Tax Mode (Calculation)"
-              value={form.taxMode}
-              onChange={(event) => setForm((current) => ({ ...current, taxMode: event.target.value as TaxRule["taxMode"] }))}
-              options={[
-                { value: "EXCLUSIVE", label: "Exclusive (Added on top of subtotal)" },
-                { value: "INCLUSIVE", label: "Inclusive (Included in product price)" },
-                { value: "EXEMPT", label: "Exempt (0% Tax / Tax Free)" },
-              ]}
-            />
-            <AdminSelect
-              label="Country"
-              value={form.countryId}
-              onChange={(event) => setForm((current) => ({ ...current, countryId: event.target.value }))}
-              options={countryOptions.filter((option) => option.value !== "")}
-            />
-            <AdminInput
-              label="Tax Percentage (%)"
-              type="number"
-              min="0"
-              max="100"
-              step="0.01"
-              value={form.percentage}
-              onChange={(event) => setForm((current) => ({ ...current, percentage: event.target.value }))}
-              placeholder="e.g. 18.00"
-            />
-            <AdminSelect
-              label="Status"
-              value={form.status}
-              onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as TaxRule["status"] }))}
-              options={[
-                { value: "ACTIVE", label: "Active" },
-                { value: "INACTIVE", label: "Inactive" },
-              ]}
-            />
-            <AdminInput
-              label="Priority (Sort Order)"
-              type="number"
-              min="0"
-              step="1"
-              value={form.sortOrder}
-              onChange={(event) => setForm((current) => ({ ...current, sortOrder: event.target.value }))}
-              placeholder="0"
-            />
-          </div>
-
-          {/* Applicable Products Section */}
-          <div className="pt-2 space-y-2">
-            <label className="block text-xs font-bold uppercase tracking-wider text-[#374151]">
-              Applicable Products (Optional)
-            </label>
-            <div className="border border-[#E5E7EB] rounded-xl p-3.5 bg-[#F9FAFB] space-y-3">
-              <div className="relative">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-                <input
-                  type="text"
-                  placeholder="Search products..."
-                  value={productSearch}
-                  onChange={(e) => setProductSearch(e.target.value)}
-                  className="w-full pl-9 pr-3.5 py-2 text-xs border border-[#E5E7EB] rounded-lg bg-white outline-none focus:border-[#E31E24]"
-                />
-              </div>
-
-              <div className="max-h-44 overflow-y-auto pr-1">
-                {filteredProducts.length === 0 ? (
-                  <p className="text-xs text-[#9CA3AF] text-center py-3">No products found</p>
-                ) : (
-                  <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
-                    {filteredProducts.map((p: any) => {
-                      const isChecked = form.productIds?.includes(p.id);
-                      return (
-                        <label
-                          key={p.id}
-                          className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
-                            isChecked
-                              ? "border-[#E31E24]/40 bg-[#FFF5F5] font-semibold text-[#111827]"
-                              : "border-[#E5E7EB] bg-white hover:bg-[#F3F4F6] text-[#374151]"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => {
-                              setForm((current) => {
-                                const pIds = current.productIds ?? [];
-                                if (isChecked) {
-                                  return { ...current, productIds: pIds.filter((id) => id !== p.id) };
-                                } else {
-                                  return { ...current, productIds: [...pIds, p.id] };
-                                }
-                              });
-                            }}
-                            className="h-4 w-4 rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24]"
-                          />
-                          <span className="truncate">{p.title}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+      <Modal open={showForm} onClose={() => setShowForm(false)} title={form.id ? "Edit Tax Rule" : "Add Tax Rule"} panelClassName="max-w-3xl flex flex-col max-h-[90vh]">
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0 overflow-hidden">
+          <div className="p-6 overflow-y-auto space-y-5 flex-1">
+            {/* Rule Details Grid */}
+            <div className="grid gap-x-5 gap-y-4 md:grid-cols-2">
+              <AdminInput
+                label="Rule Name"
+                value={form.name}
+                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                placeholder="GST / VAT / Sales Tax"
+              />
+              <AdminSelect
+                label="Rule Type"
+                value={form.type}
+                onChange={(event) => setForm((current) => ({ ...current, type: event.target.value as TaxRule["type"] }))}
+                options={[
+                  { value: "CGST", label: "CGST" },
+                  { value: "SGST", label: "SGST" },
+                  { value: "VAT", label: "VAT" },
+                  { value: "SALES_TAX", label: "Sales Tax" },
+                ]}
+              />
+              <AdminSelect
+                label="Tax Mode (Calculation)"
+                value={form.taxMode}
+                onChange={(event) => setForm((current) => ({ ...current, taxMode: event.target.value as TaxRule["taxMode"] }))}
+                options={[
+                  { value: "EXCLUSIVE", label: "Exclusive (Added on top of subtotal)" },
+                  { value: "INCLUSIVE", label: "Inclusive (Included in product price)" },
+                  { value: "EXEMPT", label: "Exempt (0% Tax / Tax Free)" },
+                ]}
+              />
+              <AdminSelect
+                label="Country"
+                value={form.countryId}
+                onChange={(event) => setForm((current) => ({ ...current, countryId: event.target.value }))}
+                options={countryOptions.filter((option) => option.value !== "")}
+              />
+              <AdminInput
+                label="Tax Percentage (%)"
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={form.percentage}
+                onChange={(event) => setForm((current) => ({ ...current, percentage: event.target.value }))}
+                placeholder="e.g. 18.00"
+              />
+              <AdminSelect
+                label="Status"
+                value={form.status}
+                onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as TaxRule["status"] }))}
+                options={[
+                  { value: "ACTIVE", label: "Active" },
+                  { value: "INACTIVE", label: "Inactive" },
+                ]}
+              />
+              <AdminInput
+                label="Priority (Sort Order)"
+                type="number"
+                min="0"
+                step="1"
+                value={form.sortOrder}
+                onChange={(event) => setForm((current) => ({ ...current, sortOrder: event.target.value }))}
+                placeholder="0"
+              />
             </div>
-            <p className="text-[11.5px] text-[#6B7280] leading-normal">
-              If no products are selected, this tax rule will apply globally to all products in the selected country.
-            </p>
+
+            {/* Applicable Products Section */}
+            <div className="pt-2 space-y-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#374151]">
+                Applicable Products (Optional)
+              </label>
+              <div className="border border-[#E5E7EB] rounded-xl p-3.5 bg-[#F9FAFB] space-y-3">
+                <div className="relative">
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
+                  <input
+                    type="text"
+                    placeholder="Search products..."
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    className="w-full pl-9 pr-3.5 py-2 text-xs border border-[#E5E7EB] rounded-lg bg-white outline-none focus:border-[#E31E24]"
+                  />
+                </div>
+
+                <div className="max-h-44 overflow-y-auto pr-1">
+                  {filteredProducts.length === 0 ? (
+                    <p className="text-xs text-[#9CA3AF] text-center py-3">No products found</p>
+                  ) : (
+                    <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
+                      {filteredProducts.map((p: any) => {
+                        const isChecked = form.productIds?.includes(p.id);
+                        return (
+                          <label
+                            key={p.id}
+                            className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                              isChecked
+                                ? "border-[#E31E24]/40 bg-[#FFF5F5] font-semibold text-[#111827]"
+                                : "border-[#E5E7EB] bg-white hover:bg-[#F3F4F6] text-[#374151]"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                setForm((current) => {
+                                  const pIds = current.productIds ?? [];
+                                  if (isChecked) {
+                                    return { ...current, productIds: pIds.filter((id) => id !== p.id) };
+                                  } else {
+                                    return { ...current, productIds: [...pIds, p.id] };
+                                  }
+                                });
+                              }}
+                              className="h-4 w-4 rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24]"
+                            />
+                            <span className="truncate">{p.title}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <p className="text-[11.5px] text-[#6B7280] leading-normal">
+                If no products are selected, this tax rule will apply globally to all products in the selected country.
+              </p>
+            </div>
           </div>
 
           {/* Footer Section */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[#E5E7EB] pt-4 mt-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[#E5E7EB] px-6 py-4 bg-[#FAFAFA] shrink-0">
             <p className="text-[11.5px] text-[#6B7280] max-w-sm leading-normal">
               Higher priority rules are resolved first. Tax percentage stays resolver-backed and never recalculates on the client.
             </p>

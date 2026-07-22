@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent, useCallback } from "react";
-import { Edit2, Plus, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { Edit2, Filter, Plus, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
@@ -64,6 +64,7 @@ export default function CountriesPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
+  const [showFilters, setShowFilters] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Country | null>(null);
@@ -452,93 +453,135 @@ export default function CountriesPage() {
         </div>
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.8fr)_repeat(4,minmax(0,1fr))]">
-            <div className="relative">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="relative w-full max-w-[280px]">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search countries"
+                placeholder="Search countries..."
                 className="h-10 w-full rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
               />
             </div>
-            <AdminSelect
-              label=""
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              options={[
-                { value: "", label: "All status" },
-                { value: "ACTIVE", label: "Active" },
-                { value: "INACTIVE", label: "Inactive" },
-              ]}
-            />
-            <AdminSelect
-              label=""
-              value={sortBy}
-              onChange={(event) => setSortBy(event.target.value as "name" | "code" | "currency" | "status")}
-              options={[
-                { value: "name", label: "Name" },
-                { value: "code", label: "Code" },
-                { value: "currency", label: "Currency" },
-                { value: "status", label: "Status" },
-              ]}
-            />
-            <AdminSelect
-              label=""
-              value={sortDir}
-              onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
-              options={[
-                { value: "asc", label: "Ascending" },
-                { value: "desc", label: "Descending" },
-              ]}
-            />
-            <AdminSelect
-              label=""
-              value={String(limit)}
-              onChange={(event) => setLimit(Number(event.target.value))}
-              options={[
-                { value: "10", label: "10 / page" },
-                { value: "20", label: "20 / page" },
-                { value: "50", label: "50 / page" },
-              ]}
-            />
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowFilters((current) => !current)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
+              >
+                <Filter size={14} />
+                {showFilters ? "Hide filters" : "Show filters"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowColumns((current) => !current)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
+              >
+                <SlidersHorizontal size={14} />
+                Columns
+              </button>
+              <button
+                type="button"
+                onClick={openCreate}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+              >
+                <Plus size={14} />
+                Add Country
+              </button>
+            </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-            {selectedIds.size > 0 && (
-              <div className="flex items-center gap-2 flex-1 md:flex-none">
-                <span className="text-[13px] text-[#6B6B6B]">{selectedIds.size} selected</span>
-                <button type="button" onClick={() => handleBulkAction("ENABLE")} disabled={bulkMutation.isPending} className="inline-flex h-10 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-50">
-                  Enable
-                </button>
-                <button type="button" onClick={() => handleBulkAction("DISABLE")} disabled={bulkMutation.isPending} className="inline-flex h-10 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-50">
-                  Disable
-                </button>
-                <button type="button" onClick={() => handleBulkAction("DELETE")} disabled={bulkMutation.isPending} className="inline-flex h-10 items-center gap-1.5 rounded-md border border-[#F2C9C9] bg-white px-3 text-[13px] font-medium text-red-500 hover:bg-red-50 disabled:opacity-50">
-                  Delete
-                </button>
-                <button type="button" onClick={clearSelection} className="inline-flex h-10 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#555] hover:bg-[#F7F7F7]">
-                  Clear
+          {showFilters && (
+            <div className="mt-4 border-t border-[#F0F0F0] pt-4">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-[13px] font-bold text-[#1A1A1A]">Filters & Sorting</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setStatusFilter("");
+                    setSortBy("name");
+                    setSortDir("asc");
+                    setPage(1);
+                  }}
+                  className="text-[12.5px] font-medium text-[#E31E24] hover:underline"
+                >
+                  Reset
                 </button>
               </div>
-            )}
-            <button
-              type="button"
-              onClick={() => setShowColumns((current) => !current)}
-              className="inline-flex h-10 items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F7F7F7]"
-            >
-              <SlidersHorizontal size={14} />
-              View mode
-            </button>
-            <button
-              type="button"
-              onClick={openCreate}
-              className="inline-flex h-10 items-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-            >
-              <Plus size={14} />
-              Add Country
-            </button>
-          </div>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <AdminSelect
+                  label="Status"
+                  value={statusFilter}
+                  onChange={(event) => {
+                    setStatusFilter(event.target.value);
+                    setPage(1);
+                  }}
+                  options={[
+                    { value: "", label: "All status" },
+                    { value: "ACTIVE", label: "Active" },
+                    { value: "INACTIVE", label: "Inactive" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Sort By"
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value as "name" | "code" | "currency" | "status")}
+                  options={[
+                    { value: "name", label: "Name" },
+                    { value: "code", label: "Code" },
+                    { value: "currency", label: "Currency" },
+                    { value: "status", label: "Status" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Direction"
+                  value={sortDir}
+                  onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+                  options={[
+                    { value: "asc", label: "Ascending" },
+                    { value: "desc", label: "Descending" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Page Size"
+                  value={String(limit)}
+                  onChange={(event) => setLimit(Number(event.target.value))}
+                  options={[
+                    { value: "10", label: "10 per page" },
+                    { value: "20", label: "20 per page" },
+                    { value: "50", label: "50 per page" },
+                  ]}
+                />
+              </div>
+            </div>
+          )}
+
+          {selectedIds.size > 0 && (
+            <div className="mt-4 rounded-xl border border-dashed border-[#E31E24]/30 bg-[#FFF5F5]/30 p-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="text-[13px] font-semibold text-[#E31E24]">{selectedIds.size} rows selected</span>
+                <div className="h-4 w-[1px] bg-[#E6E6E6]" />
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => handleBulkAction("ENABLE")} disabled={bulkMutation.isPending} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
+                    Enable
+                  </button>
+                  <button type="button" onClick={() => handleBulkAction("DISABLE")} disabled={bulkMutation.isPending} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-50">
+                    Disable
+                  </button>
+                  <button type="button" onClick={() => handleBulkAction("DELETE")} disabled={bulkMutation.isPending} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[#F2C9C9] bg-white px-3 text-[13px] font-medium text-red-500 hover:bg-red-50 disabled:opacity-50">
+                    Delete
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={clearSelection} className="text-[13px] font-medium text-[#6B6B6B] hover:text-[#E31E24] hover:underline">
+                  Clear selection
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {showColumns ? (

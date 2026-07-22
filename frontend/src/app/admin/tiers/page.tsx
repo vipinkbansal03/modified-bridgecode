@@ -119,7 +119,7 @@ export default function AdminTiersPage() {
   const [countryFilter, setCountryFilter] = useState("");
   const [sortBy, setSortBy] = useState("sortOrder");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<"ENABLE" | "DISABLE" | "DELETE" | "">("");
@@ -401,8 +401,8 @@ export default function AdminTiersPage() {
         </div>
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.7fr)_repeat(3,minmax(0,1fr))]">
-            <div className="relative">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="relative w-full max-w-[280px]">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
               <input
                 value={search}
@@ -414,113 +414,155 @@ export default function AdminTiersPage() {
                 className="h-10 w-full rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
               />
             </div>
-            <AdminSelect
-              label=""
-              value={statusFilter}
-              onChange={(event) => {
-                setPage(1);
-                setStatusFilter(event.target.value);
-              }}
-              options={[
-                { value: "", label: "All status" },
-                { value: "ACTIVE", label: "Active" },
-                { value: "INACTIVE", label: "Inactive" },
-              ]}
-            />
-            <AdminSelect
-              label=""
-              value={countryFilter}
-              onChange={(event) => {
-                setPage(1);
-                setCountryFilter(event.target.value);
-              }}
-              options={countryOptions}
-            />
-            <AdminSelect
-              label=""
-              value={sortBy}
-              onChange={(event) => setSortBy(event.target.value)}
-              options={[
-                { value: "sortOrder", label: "Priority" },
-                { value: "updatedAt", label: "Updated date" },
-                { value: "createdAt", label: "Created date" },
-                { value: "name", label: "Tier name" },
-                { value: "status", label: "Status" },
-              ]}
-            />
-          </div>
 
-          <div className="mt-3 grid gap-3 xl:grid-cols-[repeat(2,minmax(0,1fr))_auto_auto_auto_auto]">
-            <AdminSelect
-              label=""
-              value={sortDir}
-              onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
-              options={[
-                { value: "asc", label: "Ascending" },
-                { value: "desc", label: "Descending" },
-              ]}
-            />
-            <AdminSelect
-              label=""
-              value={String(limit)}
-              onChange={(event) => {
-                setPage(1);
-                setLimit(Number(event.target.value));
-              }}
-              options={[
-                { value: "10", label: "10 per page" },
-                { value: "20", label: "20 per page" },
-                { value: "50", label: "50 per page" },
-              ]}
-            />
-            <button type="button" onClick={() => setShowFilters((current) => !current)} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]">
-              <Filter size={14} />
-              {showFilters ? "Hide bulk" : "Show bulk"}
-            </button>
-            <button type="button" onClick={() => setShowColumns((current) => !current)} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]">
-              <SlidersHorizontal size={14} />
-              Columns
-            </button>
-            <button type="button" onClick={() => void handleExport(false)} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]">
-              <Download size={14} />
-              Export
-            </button>
-            <button type="button" onClick={startCreate} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-              <Plus size={14} />
-              Add Tier
-            </button>
-          </div>
-
-          {showFilters ? (
-            <div className="mt-4 grid gap-3 border-t border-[#F0F0F0] pt-4 lg:grid-cols-[auto_minmax(180px,220px)_auto_auto_auto_1fr] lg:items-center">
-              <div className="text-[12.5px] font-medium text-[#6B6B6B]">Bulk actions</div>
-              <AdminSelect
-                label=""
-                value={bulkAction}
-                onChange={(event) => setBulkAction(event.target.value as "ENABLE" | "DISABLE" | "DELETE" | "")}
-                options={[
-                  { value: "", label: "Choose action" },
-                  { value: "ENABLE", label: "Enable" },
-                  { value: "DISABLE", label: "Disable" },
-                  { value: "DELETE", label: "Delete" },
-                ]}
-              />
-              <button type="button" onClick={handleBulkAction} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]">
-                <SquareCheckBig size={14} />
-                Apply
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowFilters((current) => !current)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
+              >
+                <Filter size={14} />
+                {showFilters ? "Hide filters" : "Show filters"}
               </button>
-              <button type="button" onClick={() => void handleExport(true)} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]">
+              <button
+                type="button"
+                onClick={() => setShowColumns((current) => !current)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
+              >
+                <SlidersHorizontal size={14} />
+                Columns
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleExport(false)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]"
+              >
                 <Download size={14} />
-                Export selected
+                Export
               </button>
-              <button type="button" onClick={() => setSelectedIds([])} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F7F7F7]">
-                Clear selection
+              <button
+                type="button"
+                onClick={startCreate}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+              >
+                <Plus size={14} />
+                Add Tier
               </button>
-              <div className="text-right text-[12.5px] text-[#9A9A9A]">
-                {selectedIds.length} selected / {pagination.total ?? 0} total
+            </div>
+          </div>
+
+          {showFilters && (
+            <div className="mt-4 border-t border-[#F0F0F0] pt-4">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-[13px] font-bold text-[#1A1A1A]">Filters & Sorting</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setStatusFilter("");
+                    setCountryFilter("");
+                    setSortBy("sortOrder");
+                    setSortDir("asc");
+                    setPage(1);
+                  }}
+                  className="text-[12.5px] font-medium text-[#E31E24] hover:underline"
+                >
+                  Reset
+                </button>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                <AdminSelect
+                  label="Status"
+                  value={statusFilter}
+                  onChange={(event) => {
+                    setPage(1);
+                    setStatusFilter(event.target.value);
+                  }}
+                  options={[
+                    { value: "", label: "All status" },
+                    { value: "ACTIVE", label: "Active" },
+                    { value: "INACTIVE", label: "Inactive" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Country"
+                  value={countryFilter}
+                  onChange={(event) => {
+                    setPage(1);
+                    setCountryFilter(event.target.value);
+                  }}
+                  options={countryOptions}
+                />
+                <AdminSelect
+                  label="Sort By"
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value)}
+                  options={[
+                    { value: "sortOrder", label: "Priority" },
+                    { value: "updatedAt", label: "Updated date" },
+                    { value: "createdAt", label: "Created date" },
+                    { value: "name", label: "Tier name" },
+                    { value: "status", label: "Status" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Direction"
+                  value={sortDir}
+                  onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+                  options={[
+                    { value: "asc", label: "Ascending" },
+                    { value: "desc", label: "Descending" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Page Size"
+                  value={String(limit)}
+                  onChange={(event) => {
+                    setPage(1);
+                    setLimit(Number(event.target.value));
+                  }}
+                  options={[
+                    { value: "10", label: "10 per page" },
+                    { value: "20", label: "20 per page" },
+                    { value: "50", label: "50 per page" },
+                  ]}
+                />
               </div>
             </div>
-          ) : null}
+          )}
+
+          {selectedIds.length > 0 && (
+            <div className="mt-4 rounded-xl border border-dashed border-[#E31E24]/30 bg-[#FFF5F5]/30 p-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="text-[13px] font-semibold text-[#E31E24]">{selectedIds.length} rows selected</span>
+                <div className="h-4 w-[1px] bg-[#E6E6E6]" />
+                <div className="flex items-center gap-2">
+                  <AdminSelect
+                    label=""
+                    value={bulkAction}
+                    onChange={(event) => setBulkAction(event.target.value as "ENABLE" | "DISABLE" | "DELETE" | "")}
+                    options={[
+                      { value: "", label: "Choose action" },
+                      { value: "ENABLE", label: "Enable" },
+                      { value: "DISABLE", label: "Disable" },
+                      { value: "DELETE", label: "Delete" },
+                    ]}
+                  />
+                  <button type="button" onClick={handleBulkAction} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
+                    Apply
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => void handleExport(true)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
+                  <Download size={13} /> Export selected
+                </button>
+                <button type="button" onClick={() => setSelectedIds([])} className="text-[13px] font-medium text-[#6B6B6B] hover:text-[#E31E24] hover:underline">
+                  Clear selection
+                </button>
+              </div>
+            </div>
+          )}
 
           {showColumns ? (
             <div className="mt-4 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
