@@ -39,12 +39,16 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
     reviews: ReviewItem[];
     averageRating: number;
     totalRatings: number;
-  }>({
-    reviews: [],
-    averageRating: 5.0,
-    totalRatings: 0,
-  });
+  }>(
+    {
+      reviews: [],
+      averageRating: 5.0,
+      totalRatings: 0,
+    }
+  );
   const [loadingReviews, setLoadingReviews] = useState(false);
+  const [isEditingInformationImage, setIsEditingInformationImage] = useState(false);
+  const [isEditingInformationDescription, setIsEditingInformationDescription] = useState(false);
 
   const highlightsList = useMemoHighlights(product, apiProduct);
   const specsMap = useMemoSpecs(product, apiProduct);

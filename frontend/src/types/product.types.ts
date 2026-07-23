@@ -37,6 +37,8 @@ export interface ProductDetail {
   technicalSpecs: ProductSpec[];
   warranty: string[];
   primaryFeatures: ProductHighlight[];
+  informationImage?: string;
+  informationDescription?: string;
   /** Configurator fields are optional — only present for products with a verified bulk-order flow. */
   prescriptionOptions?: string[];
   slotOptions?: string[];

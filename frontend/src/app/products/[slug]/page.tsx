@@ -109,6 +109,8 @@ function mergeProduct(api: ApiProductDetail, staticProduct: ProductDetail | unde
     productCode: api.productCode ?? staticProduct?.productCode ?? "",
     images: apiImages,
     information: api.shortDescription ?? staticProduct?.information ?? "",
+    informationImage: api.informationImage ?? staticProduct?.informationImage,
+    informationDescription: api.informationDescription ?? staticProduct?.informationDescription,
     tagline: staticProduct?.tagline,
     highlights: api.highlights ?? staticProduct?.highlights ?? [],
     technicalSpecs: api.technicalSpecs ?? staticProduct?.technicalSpecs ?? [],
@@ -188,6 +190,23 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
             <div>
               <h1 className="mb-2 text-[28px] font-normal tracking-tight text-ink sm:text-[32px]">{product.title}</h1>
+
+              {product.informationImage || product.informationDescription ? (
+                <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
+                  {product.informationImage ? (
+                    <img
+                      src={product.informationImage}
+                      alt={product.informationDescription || product.title}
+                      className="max-h-24 w-auto max-w-full shrink-0 object-contain sm:max-w-[260px]"
+                    />
+                  ) : null}
+                  {product.informationDescription ? (
+                    <p className="max-w-2xl text-[13.5px] leading-relaxed text-steel sm:pt-0.5">
+                      {product.informationDescription}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
 
               {/* Rating Header */}
               <div className="mb-4 flex items-center gap-3">
