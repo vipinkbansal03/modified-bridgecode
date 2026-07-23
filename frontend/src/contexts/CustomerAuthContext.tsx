@@ -57,6 +57,7 @@ interface CustomerAuthContextType {
   login: (email: string, password: string, redirectTo?: string) => Promise<void>;
   register: (payload: RegisterPayload, redirectTo?: string) => Promise<void>;
   logout: () => void;
+  setCustomer: (customer: CustomerSession) => void;
 }
 
 const CustomerAuthContext = createContext<CustomerAuthContextType | null>(null);
@@ -128,8 +129,13 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     router.push("/login");
   };
 
+  const setCustomer = (updatedCustomer: CustomerSession) => {
+    setCurrentCustomer(updatedCustomer);
+    localStorage.setItem("customer_profile", JSON.stringify(updatedCustomer));
+  };
+
   return (
-    <CustomerAuthContext.Provider value={{ currentCustomer, token, isLoading, login, register, logout }}>
+    <CustomerAuthContext.Provider value={{ currentCustomer, token, isLoading, login, register, logout, setCustomer }}>
       {children}
     </CustomerAuthContext.Provider>
   );

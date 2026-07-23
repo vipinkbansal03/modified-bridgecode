@@ -38,7 +38,22 @@ export const resetPasswordSchema = z.object({
   newPassword: z.string().min(8, "Password must be at least 8 characters"),
 });
 
+export const updateCustomerProfileSchema = z.object({
+  firstName: z.string().trim().min(1, "First name is required").optional(),
+  lastName: z.string().trim().min(1, "Last name is required").optional(),
+  phone: z.string().trim().min(1, "Mobile number is required").optional(),
+  companyName: z.string().trim().optional(),
+  website: z.string().trim().optional(),
+  preferredPrescription: z.enum(["MBT", "ROTH", "OTHER"]).nullable().optional(),
+  preferredPrescriptionOther: z.string().trim().optional(),
+  preferredSlot: z.enum(["022", "018"]).nullable().optional(),
+  currentPractice: z.enum(["STUDENT", "ORTHODONTIST", "OTHER"]).nullable().optional(),
+  currentPracticeOther: z.string().trim().optional(),
+  usingModernProducts: z.boolean().optional(),
+});
+
 export type CustomerRegisterInput = z.infer<typeof customerRegisterSchema>;
 export type CustomerLoginInput = z.infer<typeof customerLoginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type UpdateCustomerProfileInput = z.infer<typeof updateCustomerProfileSchema>;

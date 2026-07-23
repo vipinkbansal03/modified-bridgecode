@@ -1,10 +1,11 @@
 import { Response } from "express";
-import { asyncHandler, ApiResponse } from "../../utils/apiResponse";
+import { asyncHandler, ApiResponse, AppError } from "../../utils/apiResponse";
 import {
   customerLoginSchema,
   customerRegisterSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  updateCustomerProfileSchema,
 } from "./customerAuth.validation";
 import * as CustomerAuthService from "./customerAuth.service";
 import { CustomerAuthRequest } from "../../middleware/customerAuth.middleware";
@@ -31,4 +32,17 @@ export const resetPassword = asyncHandler(async (req: CustomerAuthRequest, res: 
   const input = resetPasswordSchema.parse(req.body);
   const result = await CustomerAuthService.resetPassword(input);
   return ApiResponse.success(res, result.message);
+});
+
+export const getMe = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
+  if (!req.customer) throw new AppError("Customer authentication required.", 401);
+  const result = await CustomerAuthService.getMe(req.customer.id);
+  return ApiResponse.success(res, "Customer profile.", result);
+});
+
+export const updateProfile = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
+  if (!req.customer) throw new AppError("Customer authentication required.", 401);
+  const input = updateCustomerProfileSchema.parse(req.body);
+  const result = await CustomerAuthService.updateProfile(req.customer.id, input);
+  return ApiResponse.success(res, "Profile updated successfully.", result);
 });

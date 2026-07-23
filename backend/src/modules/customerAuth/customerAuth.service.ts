@@ -14,6 +14,7 @@ import type {
   CustomerRegisterInput,
   ForgotPasswordInput,
   ResetPasswordInput,
+  UpdateCustomerProfileInput,
 } from "./customerAuth.validation";
 
 function getJwtExpiresIn() {
@@ -212,4 +213,42 @@ export async function resetPassword(input: ResetPasswordInput) {
   });
 
   return { message: "Password reset successfully." };
+}
+
+export async function getMe(customerId: string) {
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId, deletedAt: null },
+    include: {
+      customerRole: { select: { id: true, key: true, name: true } },
+    },
+  });
+  if (!customer) throw new AppError("Customer profile not found.", 404);
+  return toCustomerSession(customer);
+}
+
+export async function updateProfile(customerId: string, input: UpdateCustomerProfileInput) {
+  const existing = await prisma.customer.findUnique({ where: { id: customerId, deletedAt: null } });
+  if (!existing) throw new AppError("Customer profile not found.", 404);
+
+  const updatedCustomer = await prisma.customer.update({
+    where: { id: customerId },
+    data: {
+      ...(input.firstName !== undefined && { firstName: input.firstName }),
+      ...(input.lastName !== undefined && { lastName: input.lastName }),
+      ...(input.phone !== undefined && { phone: input.phone }),
+      ...(input.companyName !== undefined && { companyName: cleanOptional(input.companyName) }),
+      ...(input.website !== undefined && { website: cleanOptional(input.website) }),
+      ...(input.preferredPrescription !== undefined && { preferredPrescription: input.preferredPrescription }),
+      ...(input.preferredPrescriptionOther !== undefined && { preferredPrescriptionOther: cleanOptional(input.preferredPrescriptionOther) }),
+      ...(input.preferredSlot !== undefined && { preferredSlot: input.preferredSlot }),
+      ...(input.currentPractice !== undefined && { currentPractice: input.currentPractice }),
+      ...(input.currentPracticeOther !== undefined && { currentPracticeOther: cleanOptional(input.currentPracticeOther) }),
+      ...(input.usingModernProducts !== undefined && { usingModernProducts: input.usingModernProducts }),
+    },
+    include: {
+      customerRole: { select: { id: true, key: true, name: true } },
+    },
+  });
+
+  return toCustomerSession(updatedCustomer);
 }

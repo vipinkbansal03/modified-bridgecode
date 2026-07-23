@@ -1510,7 +1510,16 @@ export async function submitProductReview(
     select: { id: true },
   });
 
-  if (!product) throw new Error("Product not found");
+  if (!product) throw new AppError("Product not found", 404);
+
+  if (data.customerEmail) {
+    const existing = await (prisma as any).productReview.findFirst({
+      where: { productId: product.id, customerEmail: data.customerEmail },
+    });
+    if (existing) {
+      throw new AppError("You have already submitted a review for this product.", 400);
+    }
+  }
 
   const review = await (prisma as any).productReview.create({
     data: {
@@ -1521,7 +1530,7 @@ export async function submitProductReview(
       ratingPrice: Number(data.ratingPrice || 5),
       ratingOverall: Number(data.ratingOverall || 5),
       feedbackText: data.feedbackText || "",
-      status: "APPROVED",
+      status: "PENDING",
     },
   });
 

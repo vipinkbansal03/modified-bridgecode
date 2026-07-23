@@ -18,6 +18,7 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
   const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submittedSuccess, setSubmittedSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Form State
   const [qualityRating, setQualityRating] = useState(5);
@@ -44,6 +45,7 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
     e.preventDefault();
     if (!currentCustomer) return;
     setSubmitting(true);
+    setErrorMessage(null);
 
     try {
       const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
@@ -72,10 +74,11 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
           setFeedbackText("");
         }, 2000);
       } else {
-        alert("Failed to submit feedback. Please try again.");
+        const errJson = await res.json().catch(() => null);
+        setErrorMessage(errJson?.message || "Failed to submit feedback. Please try again.");
       }
     } catch {
-      alert("Submission error. Please check connection.");
+      setErrorMessage("Submission error. Please check connection.");
     } finally {
       setSubmitting(false);
     }
@@ -96,7 +99,11 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
 
         <button
           type="button"
-          onClick={() => setIsOpen(true)}
+          onClick={() => {
+            setErrorMessage(null);
+            setSubmittedSuccess(false);
+            setIsOpen(true);
+          }}
           className="flex items-center gap-1.5 rounded-xl bg-[#FF7A59] px-5 py-2.5 text-[13.5px] font-bold text-white shadow-2xs transition-all hover:bg-[#E86745] hover:shadow-xs active:scale-95"
         >
           Feedback &gt;&gt;
@@ -166,7 +173,15 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
                   <Check size={24} />
                 </div>
                 <h4 className="text-[16px] font-bold text-[#111827]">Thank You, {customerName}!</h4>
-                <p className="text-[13.5px] text-[#4B5563]">Your valuable feedback has been submitted and published below.</p>
+                <p className="text-[13.5px] text-[#4B5563]">Your valuable feedback has been submitted and is pending admin approval.</p>
+              </div>
+            ) : errorMessage ? (
+              <div className="my-8 text-center space-y-2">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#FEF3C7] text-[#D97706]">
+                  <MessageSquarePlus size={24} />
+                </div>
+                <h4 className="text-[16px] font-bold text-[#111827]">Notice</h4>
+                <p className="text-[13.5px] text-[#4B5563]">{errorMessage}</p>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
