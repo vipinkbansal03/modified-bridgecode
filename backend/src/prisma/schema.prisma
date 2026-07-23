@@ -85,6 +85,8 @@ model Product {
   slug              String               @unique
   shortDescription  String?
   description       String?
+  informationImage  String?
+  informationDescription String?
   sortOrder         Int                  @default(0)
   categoryId        String
   sku               String?              @unique

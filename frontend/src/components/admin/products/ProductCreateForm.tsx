@@ -17,6 +17,8 @@ const schema = Yup.object({
   brand: Yup.string(),
   shortDescription: Yup.string().max(300),
   description: Yup.string(),
+  informationImage: Yup.string(),
+  informationDescription: Yup.string().max(200),
   seoTitle: Yup.string().max(60),
   seoDescription: Yup.string().max(160),
   seoKeywords: Yup.string(),
@@ -62,6 +64,8 @@ export function ProductCreateForm({
       brand: "Modern Orthodontics",
       shortDescription: "",
       description: "",
+      informationImage: "",
+      informationDescription: "",
       seoTitle: "",
       seoDescription: "",
       seoKeywords: "",
@@ -179,6 +183,62 @@ export function ProductCreateForm({
                     <span className="text-[13.5px] text-[#1A1A1A]">Has Variants</span>
                   </label>
                 </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-[auto_1fr] sm:items-start">
+                <div>
+                  <label className="mb-1 block text-[13.5px] font-medium text-[#1A1A1A]">Information Image</label>
+                  <div className="mt-1.5 flex items-center gap-3">
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/gif,image/webp"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const result = event.target?.result as string;
+                            formik.setFieldValue("informationImage", result);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="hidden"
+                      id="create-information-image-upload"
+                    />
+                    <label
+                      htmlFor="create-information-image-upload"
+                      className="cursor-pointer rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5]"
+                    >
+                      Upload Image
+                    </label>
+                    {formik.values.informationImage && (
+                      <div className="relative h-12 w-12">
+                        <img
+                          src={formik.values.informationImage}
+                          alt="Information preview"
+                          className="h-full w-full rounded-md object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => formik.setFieldValue("informationImage", "")}
+                          className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white hover:bg-[#B5151B]"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <p className="mt-1 text-[12px] text-[#6B6B6B]">Upload a small icon/image for information section.</p>
+                </div>
+
+                <AdminTextarea
+                  label="Information Description (max 200)"
+                  rows={3}
+                  maxLength={200}
+                  placeholder="Brief description related to the information image..."
+                  {...formik.getFieldProps("informationDescription")}
+                />
               </div>
 
               <AdminTextarea
