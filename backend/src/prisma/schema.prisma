@@ -837,7 +837,7 @@ model ProductReview {
   ratingPrice   Int      @default(5)
   ratingOverall Int      @default(5)
   feedbackText  String?  @db.Text
-  status        String   @default("APPROVED")
+  status        String   @default("PENDING")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

@@ -21,7 +21,7 @@ export function DeliveryAddressModal({
   open,
   onClose,
 }: DeliveryAddressModalProps) {
-  const { data: addresses = [], isLoading } = useCustomerAddresses();
+  const { data: addresses = [], isLoading } = useCustomerAddresses(); 
 
   const { selectedAddress, setSelectedAddress } = useDeliveryAddress();
 

@@ -76,6 +76,42 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Global elegant scrollbar styling across all pages & scrollable elements */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(180, 180, 180, 0.45) transparent;
+}
+
+*:hover {
+  scrollbar-color: rgba(140, 140, 140, 0.65) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(180, 180, 180, 0.4);
+  border-radius: 999px;
+  border: 1.5px solid transparent;
+  background-clip: padding-box;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 120, 120, 0.7);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 h1,
 h2,
 h3,

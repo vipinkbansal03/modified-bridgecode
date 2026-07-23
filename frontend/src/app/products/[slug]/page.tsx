@@ -85,7 +85,12 @@ function formatMoney(symbol: string, amount: number | null | undefined) {
 
 function getPublicPrice(apiProduct?: ApiProductDetail | null) {
   if (!apiProduct) return null;
-  return apiProduct.prices?.[0] ?? apiProduct.variants?.[0]?.prices?.[0] ?? null;
+  return (
+    apiProduct.lowestPrice?.[0] ??
+    apiProduct.prices?.[0] ??
+    apiProduct.variants?.[0]?.prices?.[0] ??
+    null
+  );
 }
 
 function getPublicDiscount(price?: ApiProductPrice | null) {

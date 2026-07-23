@@ -1,18 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput } from "@/components/admin/AdminComponents";
 import { Eye, EyeOff, Lock } from "lucide-react";
 
-const schema = Yup.object({ email: Yup.string().email("Invalid email").required("Email is required"), password: Yup.string().min(6, "Min 6 characters").required("Password is required") });
+const schema = Yup.object({
+  email: Yup.string().email("Invalid email").required("Email is required"),
+  password: Yup.string().min(6, "Min 6 characters").required("Password is required"),
+});
 
-export default function AdminLoginPage() {
-  const { login } = useAdminAuth();
+function AdminLoginForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user, login, isLoading } = useAdminAuth();
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
+
+  const returnToParam = searchParams.get("returnTo");
+  const targetRedirect = returnToParam && returnToParam.startsWith("/admin") ? returnToParam : "/admin/dashboard";
+
+  useEffect(() => {
+    if (!isLoading && user) {
+      router.replace(targetRedirect);
+    }
+  }, [isLoading, user, targetRedirect, router]);
 
   const formik = useFormik({
     initialValues: { email: "", password: "" },
@@ -21,6 +36,7 @@ export default function AdminLoginPage() {
       setError("");
       try {
         await login(values.email, values.password);
+        router.push(targetRedirect);
       } catch (err: unknown) {
         const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || "Login failed. Check your credentials.";
         setError(msg);
@@ -30,12 +46,23 @@ export default function AdminLoginPage() {
     },
   });
 
+  if (isLoading || user) {
+    return (
+      <div className="min-h-screen bg-[#F2F2F2] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#E31E24] border-t-transparent" />
+          <p className="text-[13px] font-medium text-[#6B6B6B]">Redirecting to admin dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F2F2F2] flex items-center justify-center px-4">
       <div className="w-full max-w-[380px]">
         {/* Logo */}
         <div className="mb-8 text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#E31E24] text-white mb-3">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#E31E24] text-white mb-3 shadow-xs">
             <Lock size={22} />
           </div>
           <h1 className="text-[22px] font-semibold text-[#1A1A1A]">Admin Login</h1>
@@ -88,5 +115,19 @@ export default function AdminLoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function AdminLoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#F2F2F2] flex items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#E31E24] border-t-transparent" />
+        </div>
+      }
+    >
+      <AdminLoginForm />
+    </Suspense>
   );
 }
