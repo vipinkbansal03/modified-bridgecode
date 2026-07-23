@@ -943,18 +943,25 @@ function getProductText(product: ProductTextSource) {
   };
 }
 
-type PublicProductRecord = Prisma.ProductGetPayload<{
-  include: {
-    category: { select: { name: true; slug: true; description: true } };
-    media: true;
-  };
-}> & {
+type PublicProductRecord = {
+  id: string;
+  slug: string;
+  title: string;
+  productCode: string | null;
+  brand: string;
+  shortDescription: string | null;
+  informationImage?: string | null;
+  informationDescription?: string | null;
+  category: CategoryTextSource & { slug: string };
+  media: Array<{ type: string; url: string; altText?: string | null }>;
+  isFeatured: boolean;
+  hasVariants: boolean;
   prices?: Array<{
     mrp: Prisma.Decimal | number;
     sellingPrice: Prisma.Decimal | number;
     dealerPrice?: Prisma.Decimal | number | null;
     distributorPrice?: Prisma.Decimal | number | null;
-    country: { code: string; name: string };
+    country: { code: string; name: string; dutyPercentage?: Prisma.Decimal | number; shippingCharge?: Prisma.Decimal | number };
     currency: { code: string; symbol: string };
   }>;
   _count?: { variants: number };
@@ -972,6 +979,8 @@ function toPublicProduct(p: PublicProductRecord) {
     productCode: p.productCode,
     brand: p.brand,
     shortDescription: text.shortDescription,
+    informationImage: p.informationImage,
+    informationDescription: p.informationDescription,
     category: {
       name: categoryText.name,
       slug: p.category?.slug ?? "",
@@ -998,33 +1007,111 @@ function toPublicProduct(p: PublicProductRecord) {
   };
 }
 
-type PublicProductDetailRecord = Prisma.ProductGetPayload<{
-  include: {
-    category: true;
-    media: true;
-    packages: true;
-    attributes: {
-      include: {
-        attribute: { include: { values: true } };
-        allowedValues: { include: { attributeValue: true } };
-      };
+type PublicProductDetailRecord = {
+  id: string;
+  slug: string;
+  title: string;
+  productCode: string | null;
+  brand: string;
+  shortDescription: string | null;
+  informationImage?: string | null;
+  informationDescription?: string | null;
+  description?: string | null;
+  category: CategoryTextSource & { slug: string };
+  media: Array<{ type: string; url: string; altText?: string | null }>;
+  packages: Array<{ id: string; title: string; slug: string; image: string | null; description: string | null; sortOrder: number }>;
+  attributes: Array<{
+    id?: string;
+    required?: boolean;
+    gridAxis?: string | null;
+    sortOrder?: number;
+    attribute: {
+      id?: string;
+      name: string;
+      role?: string;
+      status?: string;
+      sortOrder: number;
+      values: Array<{
+        id: string;
+        attributeId?: string;
+        value: string;
+        slug: string;
+        sortOrder: number;
+        image?: string | null;
+        note?: string | null;
+        priceAdjustment?: Prisma.Decimal | number;
+        gridRole?: string | null;
+        countryId?: string | null;
+        moq?: number | null;
+        tierPrice?: Prisma.Decimal | number | null;
+        dealerPrice?: Prisma.Decimal | number | null;
+      }>;
     };
-    variants: {
-      include: {
-        package: true;
-        attributeValues: { include: { attribute: true; attributeValue: true } };
-        prices: { include: { country: true; currency: true } };
-        inventories: true;
+    allowedValues: Array<{
+      attributeValueId: string;
+      attributeValue: {
+        id: string;
+        attributeId?: string;
+        value: string;
+        slug: string;
+        sortOrder: number;
+        image?: string | null;
+        note?: string | null;
+        priceAdjustment?: Prisma.Decimal | number;
+        gridRole?: string | null;
+        countryId?: string | null;
+        moq?: number | null;
+        tierPrice?: Prisma.Decimal | number | null;
+        dealerPrice?: Prisma.Decimal | number | null;
       };
-    };
-    prices: { include: { country: true; currency: true } };
-  };
-}> & {
+    }>;
+  }>;
+  variants: Array<{
+    id: string;
+    title: string;
+    sku: string | null;
+    variantKey: string;
+    moq?: number | null;
+    package: { id: string; title: string; slug?: string } | null;
+    attributeValues: Array<{
+      attributeId: string;
+      attributeValueId: string;
+      attribute: { name: string };
+      attributeValue: { id: string; value: string };
+    }>;
+    prices: Array<{
+    country: { code: string; name: string; dutyPercentage?: Prisma.Decimal | number; shippingCharge?: Prisma.Decimal | number };
+      currency: { code: string; symbol: string };
+      mrp: Prisma.Decimal | number;
+      sellingPrice: Prisma.Decimal | number;
+      dealerPrice?: Prisma.Decimal | number | null;
+      distributorPrice?: Prisma.Decimal | number | null;
+    }>;
+    inventories: Array<{ countryId: string | null; stock: number; reservedStock: number; status: string }>;
+  }>;
+  prices: Array<{
+    country: { code: string; name: string };
+    currency: { code: string; symbol: string };
+    mrp: Prisma.Decimal | number;
+    sellingPrice: Prisma.Decimal | number;
+    dealerPrice?: Prisma.Decimal | number | null;
+    distributorPrice?: Prisma.Decimal | number | null;
+  }>;
+  isFeatured: boolean;
+  hasVariants: boolean;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  seoKeywords?: string | null;
+  highlights?: Prisma.JsonValue | null;
+  technicalSpecs?: Prisma.JsonValue | null;
+  warranty?: Prisma.JsonValue | null;
+  primaryFeatures?: Prisma.JsonValue | null;
+  _count?: { variants: number };
   translations?: ProductTranslationSnapshot[];
 };
 
 function buildPublicPriceBreakdown(pr: {
-  country: { code: string; dutyPercentage: Prisma.Decimal | number; shippingCharge: Prisma.Decimal | number };
+  country: { code: string; dutyPercentage?: Prisma.Decimal | number; shippingCharge?: Prisma.Decimal | number };
   mrp: Prisma.Decimal | number;
 }) {
   const dutyPercentage = Number(pr.country.dutyPercentage) || 0;
@@ -1247,6 +1334,8 @@ async function toPublicProductDetail(
     productCode: p.productCode,
     brand: p.brand,
     shortDescription: text.shortDescription,
+    informationImage: p.informationImage,
+    informationDescription: p.informationDescription,
     description: text.description,
     category: {
       name: categoryText.name,

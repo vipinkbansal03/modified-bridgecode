@@ -122,6 +122,8 @@ type ProductInput = {
   title: string;
   shortDescription?: string;
   description?: string;
+  informationImage?: string;
+  informationDescription?: string;
   categoryId: string;
   sku?: string;
   productCode?: string;
@@ -629,6 +631,8 @@ export async function createProduct(data: ProductInput) {
         slug,
         sku: data.sku?.trim() || null,
         status: normalizedStatus,
+        informationImage: data.informationImage || null,
+        informationDescription: data.informationDescription || null,
       },
     });
 
