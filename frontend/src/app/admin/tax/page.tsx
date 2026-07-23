@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download, Eye, Filter, Plus, RefreshCw, Search, SquareCheckBig, Trash2, Upload, X, SlidersHorizontal, Pencil } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   AdminInput,
   AdminSelect,
@@ -137,6 +138,11 @@ function formatDate(value: string) {
 }
 
 export default function AdminTaxPage() {
+  const { hasPermission } = useAdminAuth();
+  const canCreate = hasPermission("tax.create");
+  const canUpdate = hasPermission("tax.update");
+  const canDelete = hasPermission("tax.delete");
+
   const { showToast, ToastComponent } = useToast();
 
   const [page, setPage] = useState(1);
@@ -258,20 +264,26 @@ export default function AdminTaxPage() {
         width: "200px",
         render: (row) => (
           <div className="flex flex-wrap items-center gap-1.5">
-            <button type="button" onClick={() => openEdit(row)} className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]" title="Edit rule">
-              <Pencil size={15} />
-            </button>
-            <button
-              type="button"
-              onClick={() => handleStatusToggle(row)}
-              className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
-              title={row.status === "ACTIVE" ? "Disable rule" : "Enable rule"}
-            >
-              <RefreshCw size={15} />
-            </button>
-            <button type="button" onClick={() => setDeleteTarget(row)} className="rounded border border-[#F2D7D7] p-2 text-[#E31E24] hover:bg-[#FFF5F5]" title="Delete rule">
-              <Trash2 size={15} />
-            </button>
+            {canUpdate && (
+              <>
+                <button type="button" onClick={() => openEdit(row)} className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]" title="Edit rule">
+                  <Pencil size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleStatusToggle(row)}
+                  className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                  title={row.status === "ACTIVE" ? "Disable rule" : "Enable rule"}
+                >
+                  <RefreshCw size={15} />
+                </button>
+              </>
+            )}
+            {canDelete && (
+              <button type="button" onClick={() => setDeleteTarget(row)} className="rounded border border-[#F2D7D7] p-2 text-[#E31E24] hover:bg-[#FFF5F5]" title="Delete rule">
+                <Trash2 size={15} />
+              </button>
+            )}
           </div>
         ),
       },
@@ -442,6 +454,41 @@ export default function AdminTaxPage() {
     return true;
   });
 
+  const finalColumns = useMemo(() => {
+    const list = [...filteredColumns];
+    if (canUpdate) {
+      list.unshift({
+        key: "select" as any,
+        label: (
+          <input
+            type="checkbox"
+            checked={rules.length > 0 && rules.every((row) => selectedIds.includes(row.id))}
+            onChange={(event) => {
+              const checked = event.target.checked;
+              setSelectedIds(checked ? rules.map((row) => row.id) : []);
+            }}
+            className="h-4 w-4 accent-[#E31E24]"
+          />
+        ),
+        width: "50px",
+        render: (row) => (
+          <input
+            type="checkbox"
+            checked={selectedIds.includes(row.id)}
+            onChange={(event) => {
+              const checked = event.target.checked;
+              setSelectedIds((current) =>
+                checked ? Array.from(new Set([...current, row.id])) : current.filter((id) => id !== row.id)
+              );
+            }}
+            className="h-4 w-4 accent-[#E31E24]"
+          />
+        ),
+      });
+    }
+    return list;
+  }, [filteredColumns, canUpdate, rules, selectedIds]);
+
   const previewResult = preview as TaxPreview | undefined;
 
   return (
@@ -493,14 +540,16 @@ export default function AdminTaxPage() {
                 <Download size={14} />
                 Export
               </button>
-              <button
-                type="button"
-                onClick={openCreate}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-              >
-                <Plus size={14} />
-                Add Tax Rule
-              </button>
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+                >
+                  <Plus size={14} />
+                  Add Tax Rule
+                </button>
+              )}
             </div>
           </div>
 
@@ -589,7 +638,7 @@ export default function AdminTaxPage() {
             </div>
           )}
 
-          {selectedIds.length > 0 && (
+          {selectedIds.length > 0 && canUpdate && (
             <div className="mt-4 rounded-xl border border-dashed border-[#E31E24]/30 bg-[#FFF5F5]/30 p-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <span className="text-[13px] font-semibold text-[#E31E24]">{selectedIds.length} rows selected</span>
@@ -641,7 +690,7 @@ export default function AdminTaxPage() {
           <div className="space-y-5">
             <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
               <DataTable<TaxRule>
-                columns={filteredColumns}
+                columns={finalColumns}
                 data={rules}
                 rowKey="id"
                 isLoading={isLoading}
@@ -742,24 +791,32 @@ export default function AdminTaxPage() {
                   <Download size={14} /> Export
                 </button>
               </div>
-              <div className="mt-4 grid gap-3">
-                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-[#D6D6D6] bg-[#FAFAFA] px-4 py-3">
-                  <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(event) => setImportFile(event.target.files?.[0] ?? null)} />
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-medium text-[#1A1A1A]">{importFile ? importFile.name : "Choose file"}</div>
-                    <div className="mt-0.5 text-[12px] text-[#6B6B6B]">Preview before import.</div>
+              {canUpdate ? (
+                <div className="mt-4 grid gap-3">
+                  <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-[#D6D6D6] bg-[#FAFAFA] px-4 py-3">
+                    <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(event) => setImportFile(event.target.files?.[0] ?? null)} />
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-medium text-[#1A1A1A]">{importFile ? importFile.name : "Choose file"}</div>
+                      <div className="mt-0.5 text-[12px] text-[#6B6B6B]">Preview before import.</div>
+                    </div>
+                    <Upload size={16} className="shrink-0 text-[#E31E24]" />
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => void handleImportPreview()} disabled={previewTaxImport.isPending} className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-50">
+                      <Eye size={14} /> Preview
+                    </button>
+                    <button type="button" onClick={() => void handleImportCommit()} disabled={importTaxRules.isPending} className="inline-flex items-center gap-2 rounded-md bg-[#E31E24] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
+                      <Upload size={14} /> Import
+                    </button>
                   </div>
-                  <Upload size={16} className="shrink-0 text-[#E31E24]" />
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => void handleImportPreview()} disabled={previewTaxImport.isPending} className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-50">
-                    <Eye size={14} /> Preview
-                  </button>
-                  <button type="button" onClick={() => void handleImportCommit()} disabled={importTaxRules.isPending} className="inline-flex items-center gap-2 rounded-md bg-[#E31E24] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
-                    <Upload size={14} /> Import
-                  </button>
                 </div>
-              </div>
+              ) : (
+                <div className="mt-4 grid gap-3">
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center text-[13px] text-[#6B6B6B]">
+                    Importing is disabled (No edit permission)
+                  </div>
+                </div>
+              )}
               {importReport ? (
                 <div className="mt-4 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3 text-[12.5px] text-[#1A1A1A]">
                   <div className="font-semibold">Import preview ready</div>

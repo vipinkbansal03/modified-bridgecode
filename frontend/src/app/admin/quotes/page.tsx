@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Clock3, Eye, Filter, MessageSquareQuote, Plus, Search, ShoppingCart, X } from "lucide-react";
+import { Clock3, Eye, Filter, MessageSquareQuote, Pencil, Plus, Search, ShoppingCart, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { AdminInput, AdminSelect, DataTable, Pagination, StatCard, StatusBadge, type Column } from "@/components/admin/AdminComponents";
-import { useAdminQuotes } from "@/hooks/admin/useAdminHooks";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { useAdminQuotes, useDeleteAdminQuote } from "@/hooks/admin/useAdminHooks";
+import { getAdminErrorMessage } from "@/services/adminApi";
 import { AdminStatsGrid } from "@/components/admin/dashboard/AdminStatsGrid";
 
 type QuoteRow = {
@@ -40,6 +42,27 @@ function formatDate(value?: string) {
 }
 
 export default function QuotesPage() {
+  const { hasPermission } = useAdminAuth();
+  const canCreate = hasPermission("quotes.create");
+  const canUpdate = hasPermission("quotes.update");
+  const canDelete = hasPermission("quotes.delete");
+
+  const { showToast } = useToast();
+  const deleteQuote = useDeleteAdminQuote();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+    try {
+      await deleteQuote.mutateAsync(deletingId);
+      showToast("Quote deleted successfully.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to delete quote."), "error");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -111,12 +134,36 @@ export default function QuotesPage() {
     {
       key: "actions",
       label: "Actions",
-      width: "90px",
+      width: "120px",
       render: (row) => (
-        <Link href={`/admin/quotes/${row.id}`} className="inline-flex h-7 items-center gap-1 rounded border border-[#E6E6E6] px-2.5 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]">
-          <Eye size={13} />
-          View
-        </Link>
+        <div className="flex items-center gap-1.5">
+          <Link
+            href={`/admin/quotes/${row.id}`}
+            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+            title="View quote"
+          >
+            <Eye size={13} />
+          </Link>
+          {canUpdate && (
+            <Link
+              href={`/admin/quotes/${row.id}`}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+              title="Edit quote"
+            >
+              <Pencil size={13} />
+            </Link>
+          )}
+          {canDelete && (
+            <button
+              type="button"
+              onClick={() => setDeletingId(row.id)}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50 hover:border-red-200"
+              title="Delete quote"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
+        </div>
       ),
     },
   ];
@@ -152,10 +199,12 @@ export default function QuotesPage() {
                 <Filter size={14} />
                 {showFilters ? "Hide filters" : "Show filters"}
               </button>
-              <Link href="/admin/quotes/create" className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-                <Plus size={14} />
-                Create Quote
-              </Link>
+              {canCreate && (
+                <Link href="/admin/quotes/create" className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
+                  <Plus size={14} />
+                  Create Quote
+                </Link>
+              )}
             </div>
           </div>
 
@@ -242,6 +291,15 @@ export default function QuotesPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        open={!!deletingId}
+        onCancel={() => setDeletingId(null)}
+        onConfirm={handleDelete}
+        title="Delete Quote Request"
+        message="Are you sure you want to permanently delete this quote request? This action cannot be undone."
+        danger
+      />
     </AdminLayout>
   );
 }

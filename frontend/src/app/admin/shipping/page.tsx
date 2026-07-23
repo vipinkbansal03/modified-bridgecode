@@ -2,12 +2,16 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, useToast } from "@/components/admin/AdminComponents";
 import { adminApi } from "@/services/adminApi";
 
 interface Provider { id: string; name: string; displayName: string; apiKey?: string; trackingUrl?: string; isEnabled: boolean }
 
 export default function ShippingPage() {
+  const { hasPermission } = useAdminAuth();
+  const canUpdate = hasPermission("shipping.update");
+
   const { showToast, ToastComponent } = useToast();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [configs, setConfigs] = useState<Record<string, { apiKey: string; trackingUrl: string; isEnabled: boolean }>>({});
@@ -45,17 +49,19 @@ export default function ShippingPage() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-[14px] font-semibold text-[#1A1A1A]">{p.displayName}</h3>
               <label className="flex items-center gap-2 cursor-pointer">
-                <div className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${configs[p.name]?.isEnabled ? "bg-[#E31E24]" : "bg-[#D1D5DB]"}`} onClick={() => setConfigs((prev) => ({ ...prev, [p.name]: { ...prev[p.name], isEnabled: !prev[p.name]?.isEnabled } }))}>
+                <div className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${configs[p.name]?.isEnabled ? "bg-[#E31E24]" : "bg-[#D1D5DB]"} ${!canUpdate ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`} onClick={() => { if (!canUpdate) return; setConfigs((prev) => ({ ...prev, [p.name]: { ...prev[p.name], isEnabled: !prev[p.name]?.isEnabled } })); }}>
                   <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${configs[p.name]?.isEnabled ? "translate-x-4" : "translate-x-0.5"}`} />
                 </div>
                 <span className="text-[13px] text-[#6B6B6B]">{configs[p.name]?.isEnabled ? "Enabled" : "Disabled"}</span>
               </label>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <AdminInput label="API Key" type="password" placeholder="Enter API key…" value={configs[p.name]?.apiKey || ""} onChange={(e) => setConfigs((prev) => ({ ...prev, [p.name]: { ...prev[p.name], apiKey: e.target.value } }))} />
-              <AdminInput label="Tracking URL Pattern" placeholder="https://track.example.com/{tracking}" value={configs[p.name]?.trackingUrl || ""} onChange={(e) => setConfigs((prev) => ({ ...prev, [p.name]: { ...prev[p.name], trackingUrl: e.target.value } }))} />
+              <AdminInput label="API Key" type="password" placeholder="Enter API key…" value={configs[p.name]?.apiKey || ""} onChange={(e) => setConfigs((prev) => ({ ...prev, [p.name]: { ...prev[p.name], apiKey: e.target.value } }))} disabled={!canUpdate} />
+              <AdminInput label="Tracking URL Pattern" placeholder="https://track.example.com/{tracking}" value={configs[p.name]?.trackingUrl || ""} onChange={(e) => setConfigs((prev) => ({ ...prev, [p.name]: { ...prev[p.name], trackingUrl: e.target.value } }))} disabled={!canUpdate} />
             </div>
-            <button onClick={() => handleSave(p.name)} className="mt-4 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">Save {p.displayName}</button>
+            {canUpdate && (
+              <button onClick={() => handleSave(p.name)} className="mt-4 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">Save {p.displayName}</button>
+            )}
           </div>
         ))}
       </div>

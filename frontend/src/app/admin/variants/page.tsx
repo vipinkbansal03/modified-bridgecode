@@ -5,6 +5,7 @@ import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Archive, Copy, Edit2, Eye, Image as ImageIcon, RotateCcw, Trash2 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { ProductEditor } from "@/components/admin/products/ProductEditor";
@@ -52,6 +53,11 @@ function getBaseInventory(row: VariantRow) {
 }
 
 function VariantsList() {
+  const { hasPermission } = useAdminAuth();
+  const canCreate = hasPermission("variants.create");
+  const canUpdate = hasPermission("variants.update");
+  const canDelete = hasPermission("variants.delete");
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeVariantId = searchParams.get("variant");
@@ -201,42 +207,50 @@ function VariantsList() {
           <Link href={`/admin/products/${row.product.id}/edit`} className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]" title="View product">
             <Eye size={15} />
           </Link>
-          <button
-            type="button"
-            onClick={() => {
-              router.push(`/admin/variants?productId=${row.product.id}&variant=${row.id}`, { scroll: false });
-            }}
-            className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
-            title="Edit variant"
-          >
-            <Edit2 size={15} />
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDuplicate(row)}
-            className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
-            title="Duplicate variant"
-            disabled={duplicateVariant.isPending}
-          >
-            <Copy size={15} />
-          </button>
-          <button
-            type="button"
-            onClick={() => handleArchiveToggle(row)}
-            className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
-            title={row.status === "ACTIVE" ? "Archive variant" : "Restore variant"}
-            disabled={archiveVariant.isPending || restoreVariant.isPending}
-          >
-            {row.status === "ACTIVE" ? <Archive size={15} /> : <RotateCcw size={15} />}
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeleting(row)}
-            className="rounded border border-[#F2D7D7] p-2 text-[#E31E24] hover:bg-[#FFF5F5]"
-            title="Delete variant"
-          >
-            <Trash2 size={15} />
-          </button>
+          {canUpdate && (
+            <button
+              type="button"
+              onClick={() => {
+                router.push(`/admin/variants?productId=${row.product.id}&variant=${row.id}`, { scroll: false });
+              }}
+              className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
+              title="Edit variant"
+            >
+              <Edit2 size={15} />
+            </button>
+          )}
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => handleDuplicate(row)}
+              className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
+              title="Duplicate variant"
+              disabled={duplicateVariant.isPending}
+            >
+              <Copy size={15} />
+            </button>
+          )}
+          {canUpdate && (
+            <button
+              type="button"
+              onClick={() => handleArchiveToggle(row)}
+              className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
+              title={row.status === "ACTIVE" ? "Archive variant" : "Restore variant"}
+              disabled={archiveVariant.isPending || restoreVariant.isPending}
+            >
+              {row.status === "ACTIVE" ? <Archive size={15} /> : <RotateCcw size={15} />}
+            </button>
+          )}
+          {canDelete && (
+            <button
+              type="button"
+              onClick={() => setDeleting(row)}
+              className="rounded border border-[#F2D7D7] p-2 text-[#E31E24] hover:bg-[#FFF5F5]"
+              title="Delete variant"
+            >
+              <Trash2 size={15} />
+            </button>
+          )}
         </div>
       ),
     },

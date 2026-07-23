@@ -5,6 +5,7 @@ import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { adminApi } from "@/services/adminApi";
 import { Star, CheckCircle2, XCircle, Trash2, Search, Filter, MessageSquare, ExternalLink } from "lucide-react";
 import Link from "next/link";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 interface ReviewItem {
   id: string;
@@ -23,6 +24,10 @@ interface ReviewItem {
 }
 
 export default function AdminReviewsPage() {
+  const { hasPermission } = useAdminAuth();
+  const canUpdate = hasPermission("reviews.update");
+  const canDelete = hasPermission("reviews.delete");
+
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -168,7 +173,7 @@ export default function AdminReviewsPage() {
                     <th className="py-3 px-4">Feedback Comment</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                    {(canUpdate || canDelete) && <th className="py-3 px-4 text-right">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E5E7EB] text-[13px] text-[#374151]">
@@ -246,38 +251,42 @@ export default function AdminReviewsPage() {
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {rev.status !== "APPROVED" && (
-                            <button
-                              disabled={updatingId === rev.id}
-                              onClick={() => handleUpdateStatus(rev.id, "APPROVED")}
-                              className="px-2.5 py-1 bg-[#16A34A] text-white text-[11px] font-semibold rounded hover:bg-[#15803D] transition-colors"
-                              title="Approve Review"
-                            >
-                              Approve
-                            </button>
-                          )}
-                          {rev.status !== "REJECTED" && (
-                            <button
-                              disabled={updatingId === rev.id}
-                              onClick={() => handleUpdateStatus(rev.id, "REJECTED")}
-                              className="px-2.5 py-1 bg-[#EA580C] text-white text-[11px] font-semibold rounded hover:bg-[#C2410C] transition-colors"
-                              title="Reject Review"
-                            >
-                              Reject
-                            </button>
-                          )}
-                          <button
-                            disabled={updatingId === rev.id}
-                            onClick={() => handleDelete(rev.id)}
-                            className="p-1.5 text-[#EF4444] hover:bg-[#FEE2E2] rounded transition-colors"
-                            title="Delete Review"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </td>
+                      {(canUpdate || canDelete) && (
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {canUpdate && rev.status !== "APPROVED" && (
+                              <button
+                                disabled={updatingId === rev.id}
+                                onClick={() => handleUpdateStatus(rev.id, "APPROVED")}
+                                className="px-2.5 py-1 bg-[#16A34A] text-white text-[11px] font-semibold rounded hover:bg-[#15803D] transition-colors"
+                                title="Approve Review"
+                              >
+                                Approve
+                              </button>
+                            )}
+                            {canUpdate && rev.status !== "REJECTED" && (
+                              <button
+                                disabled={updatingId === rev.id}
+                                onClick={() => handleUpdateStatus(rev.id, "REJECTED")}
+                                className="px-2.5 py-1 bg-[#EA580C] text-white text-[11px] font-semibold rounded hover:bg-[#C2410C] transition-colors"
+                                title="Reject Review"
+                              >
+                                Reject
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                disabled={updatingId === rev.id}
+                                onClick={() => handleDelete(rev.id)}
+                                className="p-1.5 text-[#EF4444] hover:bg-[#FEE2E2] rounded transition-colors"
+                                title="Delete Review"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

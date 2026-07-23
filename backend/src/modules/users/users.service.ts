@@ -36,12 +36,19 @@ export const getUser = (id: string) =>
     select: userSelect,
   });
 
-export const updateUser = (id: string, data: object) =>
-  prisma.user.update({
+export async function updateUser(id: string, data: any) {
+  const payload = { ...data };
+  if (payload.password) {
+    payload.password = await bcrypt.hash(payload.password, 12);
+  } else {
+    delete payload.password;
+  }
+  return prisma.user.update({
     where: { id },
-    data: data as never,
+    data: payload,
     select: userSelect,
   });
+}
 
 export const deleteUser = (id: string) =>
   prisma.user.update({ where: { id }, data: { deletedAt: new Date() } });

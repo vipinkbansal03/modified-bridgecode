@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, useToast } from "@/components/admin/AdminComponents";
 import { useAdminCountries, useAdminProduct, useAdminProducts, useCreateQuote } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
@@ -14,10 +15,21 @@ const emptyLine: QuoteLine = { productId: "", variantId: "", quantity: "1", over
 
 export default function CreateQuotePage() {
   const router = useRouter();
+  const { hasPermission } = useAdminAuth();
+  const canCreate = hasPermission("quotes.create");
+
+  useEffect(() => {
+    if (!canCreate) {
+      router.push("/admin/quotes");
+    }
+  }, [canCreate, router]);
+
   const { showToast, ToastComponent } = useToast();
   const { data: productsData } = useAdminProducts({ limit: 200 });
   const { data: countries = [] } = useAdminCountries();
   const createQuote = useCreateQuote();
+
+  if (!canCreate) return null;
 
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");

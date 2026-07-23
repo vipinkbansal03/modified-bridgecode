@@ -19,7 +19,8 @@ import {
   useRestoreProduct,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
-import { Archive, Copy, Download, Eye, Filter, Layers, Pencil, Plus, RotateCcw, Search, SlidersHorizontal, Trash2, Upload } from "lucide-react";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { Archive, Copy, Download, Eye, ExternalLink, Filter, Layers, Pencil, Plus, RotateCcw, Search, SlidersHorizontal, Trash2, Upload } from "lucide-react";
 
 interface ProductRow {
   id: string;
@@ -72,6 +73,11 @@ const DEFAULT_COLUMNS: Record<ColumnKey, boolean> = {
 const PRODUCT_COLUMNS_STORAGE_KEY = "admin-products-columns-v2";
 
 export default function AdminProductsPage() {
+  const { hasPermission } = useAdminAuth();
+  const canUpdate = hasPermission("products.update");
+  const canDelete = hasPermission("products.delete");
+  const canCreate = hasPermission("products.create");
+
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -389,9 +395,11 @@ export default function AdminProductsPage() {
             </div>
           </details>
         </div>
-        <Link href="/admin/products/create" className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
-          <Plus size={15} /> New Product
-        </Link>
+        {canCreate && (
+          <Link href="/admin/products/create" className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
+            <Plus size={15} /> New Product
+          </Link>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => exportProducts(false)} className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">
             <Download size={15} /> Export Excel
@@ -556,35 +564,41 @@ export default function AdminProductsPage() {
                       {visibleColumns.actions ? (
                         <div className="flex gap-1.5 md:justify-end">
                           {product.slug ? (
-                            <Link href={`/products/${product.slug}`} target="_blank" className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="View product">
-                              <Eye size={13} />
+                            <Link href={`/products/${product.slug}`} target="_blank" className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Preview on website">
+                              <ExternalLink size={13} />
                             </Link>
                           ) : (
                             <span title="Product slug missing" className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded border border-[#E6E6E6] text-[#C4C4C4]">
-                              <Eye size={13} />
+                              <ExternalLink size={13} />
                             </span>
                           )}
-                          <button type="button" onClick={() => handleDuplicate(product.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Duplicate product">
-                            <Copy size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleArchiveToggle(product)}
+                          {canUpdate && (
+                            <button type="button" onClick={() => handleDuplicate(product.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Duplicate product">
+                              <Copy size={13} />
+                            </button>
+                          )}
+                          {canUpdate && (
+                            <button
+                              type="button"
+                              onClick={() => handleArchiveToggle(product)}
+                              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+                              title={product.status === "ARCHIVED" ? "Restore product" : "Archive product"}
+                            >
+                              {product.status === "ARCHIVED" ? <RotateCcw size={13} /> : <Archive size={13} />}
+                            </button>
+                          )}
+                          <Link
+                            href={`/admin/products/${product.id}/edit`}
                             className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-                            title={product.status === "ARCHIVED" ? "Restore product" : "Archive product"}
+                            title={canUpdate ? "Edit product" : "View product"}
                           >
-                            {product.status === "ARCHIVED" ? <RotateCcw size={13} /> : <Archive size={13} />}
-                          </button>
-                           <Link
-                             href={`/admin/products/${product.id}/edit`}
-                             className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-                             title="Edit product"
-                           >
-                             <Pencil size={13} />
-                           </Link>
-                          <button type="button" onClick={() => setDeleting(product.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50" title="Delete product">
-                            <Trash2 size={13} />
-                          </button>
+                            {canUpdate ? <Pencil size={13} /> : <Eye size={13} />}
+                          </Link>
+                          {canDelete && (
+                            <button type="button" onClick={() => setDeleting(product.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50" title="Delete product">
+                              <Trash2 size={13} />
+                            </button>
+                          )}
                         </div>
                       ) : null}
                     </div>

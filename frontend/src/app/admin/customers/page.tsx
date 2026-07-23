@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Eye, Filter, Search, Shield, Store, UserCog, Users, XCircle } from "lucide-react";
+import { CheckCircle2, Eye, Filter, Search, Shield, Store, UserCog, Users, XCircle, Edit2, Trash2 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
 import {
@@ -13,7 +13,7 @@ import {
   useApproveCustomer,
   useRejectCustomer,
 } from "@/hooks/admin/useAdminHooks";
-import { getAdminErrorMessage } from "@/services/adminApi";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
 type CustomerRow = {
   id: string;
@@ -169,28 +169,90 @@ export default function AdminCustomersPage() {
     },
     { key: "customerRole", label: "Role", render: (row) => row.customerRole?.name ?? row.customerType.replace("_", " ") },
     { key: "tier", label: "Tier", render: (row) => row.tier?.name ?? "-" },
-    { key: "status", label: "Account", render: (row) => <StatusBadge status={row.status} /> },
-    { key: "approvalStatus", label: "Approval", render: (row) => <StatusBadge status={row.approvalStatus} /> },
+    {
+      key: "status",
+      label: "Account",
+      render: (row) => (
+        <button
+          onClick={async () => {
+            const nextStatus = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+            try {
+              await adminApi.put(`/customers/${row.id}`, { status: nextStatus });
+              showToast(`Account status updated to ${nextStatus.toLowerCase()}.`);
+              customerQuery.refetch();
+            } catch (err) {
+              showToast(getAdminErrorMessage(err, "Failed to update account status."), "error");
+            }
+          }}
+          className="cursor-pointer hover:opacity-85 transition-opacity focus:outline-hidden"
+          title="Click to toggle account status"
+        >
+          <StatusBadge status={row.status} />
+        </button>
+      ),
+    },
+    {
+      key: "approvalStatus",
+      label: "Approval",
+      render: (row) => (
+        <button
+          onClick={async () => {
+            try {
+              if (row.approvalStatus === "ACTIVE") {
+                await adminApi.post(`/customers/${row.id}/reject`);
+                showToast("Customer status set to Suspended.");
+              } else {
+                await adminApi.post(`/customers/${row.id}/approve`);
+                showToast("Customer approved.");
+              }
+              customerQuery.refetch();
+            } catch (err) {
+              showToast(getAdminErrorMessage(err, "Failed to update approval status."), "error");
+            }
+          }}
+          className="cursor-pointer hover:opacity-85 transition-opacity focus:outline-hidden"
+          title="Click to toggle approval status"
+        >
+          <StatusBadge status={row.approvalStatus} />
+        </button>
+      ),
+    },
     { key: "createdAt", label: "Created", render: (row) => formatDate(row.createdAt) },
     {
       key: "actions",
       label: "Actions",
-      width: "170px",
+      width: "180px",
       render: (row) => (
         <div className="flex items-center gap-1.5">
           <Link
             href={`/admin/customers/${row.id}`}
-            className="inline-flex h-7 items-center gap-1 rounded border border-[#E6E6E6] px-2.5 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]"
+            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+            title="View details"
           >
             <Eye size={13} />
-            View
           </Link>
+          <Link
+            href={`/admin/customers/${row.id}`}
+            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+            title="Edit profile"
+          >
+            <Edit2 size={13} />
+          </Link>
+          <button
+            type="button"
+            onClick={() => setDeletingCustomer(row.id)}
+            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"
+            title="Delete account"
+          >
+            <Trash2 size={13} />
+          </button>
           {row.approvalStatus === "PENDING_APPROVAL" ? (
             <>
               <button
                 type="button"
                 onClick={() => setPendingAction({ customer: row, action: "APPROVE" })}
                 className="inline-flex h-7 items-center gap-1 rounded border border-[#CFE8D7] px-2.5 text-[12px] font-medium text-[#1F8F4A] hover:bg-[#F1FBF4]"
+                title="Approve"
               >
                 <CheckCircle2 size={13} />
                 Approve
@@ -199,6 +261,7 @@ export default function AdminCustomersPage() {
                 type="button"
                 onClick={() => setPendingAction({ customer: row, action: "REJECT" })}
                 className="inline-flex h-7 items-center gap-1 rounded border border-[#F2C9C9] px-2.5 text-[12px] font-medium text-[#E31E24] hover:bg-[#FFF5F5]"
+                title="Reject"
               >
                 <XCircle size={13} />
                 Reject
@@ -226,6 +289,21 @@ export default function AdminCustomersPage() {
     }
   };
 
+  const [deletingCustomer, setDeletingCustomer] = useState<string | null>(null);
+
+  const handleDeleteCustomer = async () => {
+    if (!deletingCustomer) return;
+    try {
+      await adminApi.delete(`/customers/${deletingCustomer}`);
+      showToast("Customer deleted successfully.");
+      customerQuery.refetch();
+    } catch (err) {
+      showToast(getAdminErrorMessage(err, "Failed to delete customer."), "error");
+    } finally {
+      setDeletingCustomer(null);
+    }
+  };
+
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const activeFilterCount = [
@@ -250,8 +328,23 @@ export default function AdminCustomersPage() {
   };
 
   return (
-    <AdminLayout title="Customers" breadcrumb={[{ label: "Customers" }]}>
+    <AdminLayout title="Users & Customers" breadcrumb={[{ label: "Customers" }]}>
       <div className="space-y-5">
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-[#E6E6E6]">
+          <Link
+            href="/admin/customers"
+            className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-[#E31E24] text-[#E31E24]"
+          >
+            Customers
+          </Link>
+          <Link
+            href="/admin/users"
+            className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-transparent text-[#6B7280] hover:text-[#111827]"
+          >
+            Staff (Users)
+          </Link>
+        </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard title="Total Customers" value={totals.total} subtitle="All customer records" icon={<Users size={18} />} />
           <StatCard title="Active Accounts" value={totals.active} subtitle="Currently enabled" icon={<Shield size={18} />} color="bg-green-600" />
@@ -406,6 +499,14 @@ export default function AdminCustomersPage() {
         onConfirm={handleApprovalConfirm}
         onCancel={() => setPendingAction(null)}
         isLoading={approveCustomer.isPending || rejectCustomer.isPending}
+      />
+
+      <ConfirmModal
+        open={!!deletingCustomer}
+        title="Delete customer?"
+        message="Are you sure you want to delete this customer account? This will mark the customer as deleted."
+        onConfirm={handleDeleteCustomer}
+        onCancel={() => setDeletingCustomer(null)}
       />
 
       {ToastComponent}

@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   AdminInput,
   AdminSelect,
@@ -246,6 +247,11 @@ function getCustomerRoleLabel(key: string | null) {
 }
 
 export default function PricingPage() {
+  const { hasPermission } = useAdminAuth();
+  const canCreate = hasPermission("pricing.create");
+  const canUpdate = hasPermission("pricing.update");
+  const canDelete = hasPermission("pricing.delete");
+
   const { showToast, ToastComponent } = useToast();
 
   const [search, setSearch] = useState("");
@@ -744,9 +750,11 @@ export default function PricingPage() {
           <button type="button" onClick={() => setShowColumnPanel((current) => !current)} className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
             <SlidersHorizontal size={14} /> Columns
           </button>
-          <button type="button" onClick={() => openCreateForm("BASE_PRICE")} className="inline-flex items-center gap-2 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-            <Plus size={14} /> New Pricing Rule
-          </button>
+          {canCreate && (
+            <button type="button" onClick={() => openCreateForm("BASE_PRICE")} className="inline-flex items-center gap-2 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
+              <Plus size={14} /> New Pricing Rule
+            </button>
+          )}
         </div>
       </div>
 
@@ -882,7 +890,7 @@ export default function PricingPage() {
               </div>
             </div>
 
-            {selectedIds.length > 0 ? (
+            {selectedIds.length > 0 && canUpdate ? (
               <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3">
                 <span className="text-[12.5px] font-medium text-[#1A1A1A]">Bulk actions</span>
                 {bulkActionFamily === "base" ? (
@@ -931,13 +939,15 @@ export default function PricingPage() {
                 <thead className="bg-[#F8F8F8]">
                   <tr className="border-b border-[#E6E6E6]">
                     <th className="px-3 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">
-                      <input
-                        type="checkbox"
-                        checked={ruleRows.length > 0 && ruleRows.every((row) => selectedIds.includes(row.id))}
-                        onChange={(event) => setSelectedIds(event.target.checked ? ruleRows.map((row) => row.id) : [])}
-                        className="h-4 w-4 accent-[#E31E24]"
-                        aria-label="Select all rows"
-                      />
+                      {canUpdate ? (
+                        <input
+                          type="checkbox"
+                          checked={ruleRows.length > 0 && ruleRows.every((row) => selectedIds.includes(row.id))}
+                          onChange={(event) => setSelectedIds(event.target.checked ? ruleRows.map((row) => row.id) : [])}
+                          className="h-4 w-4 accent-[#E31E24]"
+                          aria-label="Select all rows"
+                        />
+                      ) : null}
                     </th>
                     {visibleColumns.map((column) => (
                       <th key={column.key} className="px-3 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">
@@ -966,13 +976,15 @@ export default function PricingPage() {
                       return (
                         <tr key={row.id} className="hover:bg-[#FAFAFA]">
                           <td className="px-3 py-3 align-top">
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.includes(row.id)}
-                              onChange={(event) => toggleSelected(row.id, event.target.checked)}
-                              className="h-4 w-4 accent-[#E31E24]"
-                              aria-label={`Select ${row.ruleName}`}
-                            />
+                            {canUpdate ? (
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.includes(row.id)}
+                                onChange={(event) => toggleSelected(row.id, event.target.checked)}
+                                className="h-4 w-4 accent-[#E31E24]"
+                                aria-label={`Select ${row.ruleName}`}
+                              />
+                            ) : null}
                           </td>
                           {columnVisibility.ruleName ? (
                             <td className="px-3 py-3 align-top">
@@ -1016,15 +1028,21 @@ export default function PricingPage() {
                           ) : null}
                           <td className="px-3 py-3 align-top text-right">
                             <div className="inline-flex items-center gap-1.5">
-                              <button type="button" onClick={() => openEditForm(row)} className="rounded-md border border-[#E6E6E6] px-2 py-1.5 text-[12.5px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
-                                Edit
-                              </button>
-                              <button type="button" onClick={() => cloneRuleToForm(row)} className="rounded-md border border-[#E6E6E6] px-2 py-1.5 text-[12.5px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
-                                Clone
-                              </button>
-                              <button type="button" onClick={() => setDeleteTarget(row)} className="rounded-md border border-red-200 px-2 py-1.5 text-[12.5px] font-medium text-red-700 hover:bg-red-50">
-                                Delete
-                              </button>
+                              {canUpdate && (
+                                <button type="button" onClick={() => openEditForm(row)} className="rounded-md border border-[#E6E6E6] px-2 py-1.5 text-[12.5px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
+                                  Edit
+                                </button>
+                              )}
+                              {canCreate && (
+                                <button type="button" onClick={() => cloneRuleToForm(row)} className="rounded-md border border-[#E6E6E6] px-2 py-1.5 text-[12.5px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
+                                  Clone
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button type="button" onClick={() => setDeleteTarget(row)} className="rounded-md border border-red-200 px-2 py-1.5 text-[12.5px] font-medium text-red-700 hover:bg-red-50">
+                                  Delete
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1214,27 +1232,38 @@ export default function PricingPage() {
                 <Download size={14} /> Export
               </button>
             </div>
-            <div className="mt-4 grid gap-3">
-              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-[#D6D6D6] bg-[#FAFAFA] px-4 py-3">
-                <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(event) => setImportFile(event.target.files?.[0] ?? null)} />
-                <div className="min-w-0">
-                  <div className="text-[13px] font-medium text-[#1A1A1A]">{importFile ? importFile.name : "Choose file"}</div>
-                  <div className="mt-0.5 text-[12px] text-[#6B6B6B]">Preview before import.</div>
+            {canUpdate ? (
+              <div className="mt-4 grid gap-3">
+                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-[#D6D6D6] bg-[#FAFAFA] px-4 py-3">
+                  <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(event) => setImportFile(event.target.files?.[0] ?? null)} />
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-medium text-[#1A1A1A]">{importFile ? importFile.name : "Choose file"}</div>
+                    <div className="mt-0.5 text-[12px] text-[#6B6B6B]">Preview before import.</div>
+                  </div>
+                  <Upload size={16} className="shrink-0 text-[#E31E24]" />
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={handleImportPreview} disabled={previewImport.isPending} className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-50">
+                    <Eye size={14} /> Preview
+                  </button>
+                  <button type="button" onClick={handleImportCommit} disabled={importPricing.isPending} className="inline-flex items-center gap-2 rounded-md bg-[#E31E24] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
+                    <Upload size={14} /> Import
+                  </button>
+                  <button type="button" onClick={() => handleExport(false)} className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
+                    <Download size={14} /> Export all
+                  </button>
                 </div>
-                <Upload size={16} className="shrink-0 text-[#E31E24]" />
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={handleImportPreview} disabled={previewImport.isPending} className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-50">
-                  <Eye size={14} /> Preview
-                </button>
-                <button type="button" onClick={handleImportCommit} disabled={importPricing.isPending} className="inline-flex items-center gap-2 rounded-md bg-[#E31E24] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
-                  <Upload size={14} /> Import
-                </button>
-                <button type="button" onClick={() => handleExport(false)} className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
+              </div>
+            ) : (
+              <div className="mt-4 grid gap-3">
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center text-[13px] text-[#6B6B6B]">
+                  Importing is disabled (No edit permission)
+                </div>
+                <button type="button" onClick={() => handleExport(false)} className="w-full inline-flex items-center justify-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
                   <Download size={14} /> Export all
                 </button>
               </div>
-            </div>
+            )}
             {importReport ? (
               <div className="mt-4 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3 text-[12.5px] text-[#1A1A1A]">
                 <div className="font-semibold">Import preview ready</div>

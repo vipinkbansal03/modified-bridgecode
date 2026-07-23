@@ -1950,6 +1950,14 @@ export const useAdminQuotes = (params?: {
     queryFn: () => adminApi.get("/quotes", { params }).then((r) => r.data),
   });
 
+export const useDeleteAdminQuote = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.delete(`/quotes/${id}`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-quotes"] }),
+  });
+};
+
 export const useAdminContactSubmissions = (params?: {
   page?: number;
   limit?: number;
@@ -2065,6 +2073,17 @@ export const useAdminOrder = (id: string) =>
     queryFn: () => adminApi.get(`/orders/${id}`).then((r) => r.data.data),
     enabled: !!id,
   });
+
+export const useDeleteAdminOrder = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.delete(`/orders/${id}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-orders"] });
+      qc.invalidateQueries({ queryKey: ["admin-order-analytics"] });
+    },
+  });
+};
 
 export const useUpdateOrderStatus = () => {
   const qc = useQueryClient();

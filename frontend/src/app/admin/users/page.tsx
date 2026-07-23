@@ -1,28 +1,68 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { Modal } from "@/components/ui/Modal";
 import { DataTable, Column, StatusBadge, AdminInput, AdminSelect, ConfirmModal, useToast } from "@/components/admin/AdminComponents";
 import { useAdminUsers, useAdminRoles } from "@/hooks/admin/useAdminHooks";
 import { adminApi } from "@/services/adminApi";
-import { Plus, X, Trash2 } from "lucide-react";
-interface User { id: string; name: string; email: string; role: { name: string }; status: string; lastLoginAt: string }
+import { Plus, X, Trash2, Edit2 } from "lucide-react";
+interface User { id: string; name: string; email: string; roleId: string; role: { name: string }; status: string; lastLoginAt: string }
 export default function UsersPage() {
   const [showForm, setShowForm] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const { showToast, ToastComponent } = useToast();
   const { data: users = [], isLoading, refetch } = useAdminUsers();
   const { data: roles = [] } = useAdminRoles();
   const roleOptions = [{ value: "", label: "Select role…" }, ...roles.map((r: { id: string; name: string }) => ({ value: r.id, label: r.name }))];
   const formik = useFormik({
-    initialValues: { name: "", email: "", password: "", roleId: "" },
-    validationSchema: Yup.object({ name: Yup.string().required(), email: Yup.string().email().required(), password: Yup.string().min(8).required(), roleId: Yup.string().required() }),
+    enableReinitialize: true,
+    initialValues: {
+      name: editingUser?.name || "",
+      email: editingUser?.email || "",
+      password: "",
+      roleId: editingUser?.roleId || "",
+      status: editingUser?.status || "ACTIVE",
+    },
+    validationSchema: Yup.object({
+      name: Yup.string().required("Name is required"),
+      email: Yup.string().email("Invalid email").required("Email is required"),
+      password: editingUser
+        ? Yup.string().min(8, "Password must be at least 8 characters")
+        : Yup.string().min(8, "Password must be at least 8 characters").required("Password is required"),
+      roleId: Yup.string().required("Role is required"),
+      status: Yup.string().required("Status is required"),
+    }),
     onSubmit: async (values, { setSubmitting, resetForm }) => {
-      try { await adminApi.post("/users", values); showToast("User created."); refetch(); setShowForm(false); resetForm(); }
-      catch { showToast("Failed.", "error"); } finally { setSubmitting(false); }
+      try {
+        if (editingUser) {
+          const payload: any = { ...values };
+          if (!payload.password) delete payload.password;
+          await adminApi.put(`/users/${editingUser.id}`, payload);
+          showToast("User updated.");
+        } else {
+          await adminApi.post("/users", values);
+          showToast("User created.");
+        }
+        refetch();
+        setShowForm(false);
+        setEditingUser(null);
+        resetForm();
+      } catch (err) {
+        showToast("Failed to save user.", "error");
+      } finally {
+        setSubmitting(false);
+      }
     },
   });
+  const handleCloseForm = () => {
+    setShowForm(false);
+    setEditingUser(null);
+    formik.resetForm();
+  };
   const handleDelete = async () => {
     if (!deleting) return;
     try { await adminApi.delete(`/users/${deleting}`); showToast("User removed."); refetch(); }
@@ -31,25 +71,143 @@ export default function UsersPage() {
   const columns: Column<User>[] = [
     { key: "name", label: "Name", render: (r) => <div><div className="font-medium">{r.name}</div><div className="text-[11.5px] text-[#9A9A9A]">{r.email}</div></div> },
     { key: "role", label: "Role", render: (r) => r.role?.name },
-    { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} /> },
+    {
+      key: "status",
+      label: "Status",
+      render: (r) => (
+        <button
+          onClick={async () => {
+            const nextStatus = r.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+            try {
+              await adminApi.put(`/users/${r.id}`, { status: nextStatus });
+              showToast(`Status updated to ${nextStatus.toLowerCase()}.`);
+              refetch();
+            } catch {
+              showToast("Failed to update status.", "error");
+            }
+          }}
+          className="cursor-pointer hover:opacity-85 transition-opacity focus:outline-hidden"
+          title="Click to toggle status"
+        >
+          <StatusBadge status={r.status} />
+        </button>
+      ),
+    },
     { key: "lastLoginAt", label: "Last Login", render: (r) => r.lastLoginAt ? new Date(r.lastLoginAt).toLocaleDateString() : "Never" },
-    { key: "actions", label: "", width: "50px", render: (r) => <button onClick={() => setDeleting(r.id)} className="flex items-center justify-center h-7 w-7 rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"><Trash2 size={13} /></button> },
+    {
+      key: "actions",
+      label: "Actions",
+      width: "100px",
+      render: (r) => (
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => {
+              setEditingUser(r);
+              setShowForm(true);
+            }}
+            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+            title="Edit user"
+          >
+            <Edit2 size={13} />
+          </button>
+          <button
+            onClick={() => setDeleting(r.id)}
+            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"
+            title="Delete user"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      ),
+    },
   ];
   return (
-    <AdminLayout title="Users" breadcrumb={[{ label: "Users" }]}>
-      <div className="flex justify-end mb-5"><button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">{showForm ? <X size={14} /> : <Plus size={14} />} {showForm ? "Cancel" : "New User"}</button></div>
-      {showForm && (
-        <form onSubmit={formik.handleSubmit} className="mb-5 rounded-xl border border-[#E6E6E6] bg-white p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <AdminInput label="Full Name *" {...formik.getFieldProps("name")} error={formik.touched.name ? (formik.errors.name as string) : ""} />
-          <AdminInput label="Email *" type="email" {...formik.getFieldProps("email")} error={formik.touched.email ? (formik.errors.email as string) : ""} />
-          <AdminInput label="Password *" type="password" placeholder="Min 8 characters" {...formik.getFieldProps("password")} error={formik.touched.password ? (formik.errors.password as string) : ""} />
-          <AdminSelect label="Role *" options={roleOptions} {...formik.getFieldProps("roleId")} error={formik.touched.roleId ? (formik.errors.roleId as string) : ""} />
-          <div className="sm:col-span-2"><button type="submit" disabled={formik.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">Create User</button></div>
-        </form>
-      )}
+    <AdminLayout title="Users & Customers" breadcrumb={[{ label: "Users" }]}>
+      <div className="space-y-5">
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-[#E6E6E6] mb-5">
+          <Link
+            href="/admin/customers"
+            className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-transparent text-[#6B7280] hover:text-[#111827]"
+          >
+            Customers
+          </Link>
+          <Link
+            href="/admin/users"
+            className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-[#E31E24] text-[#E31E24]"
+          >
+            Staff (Users)
+          </Link>
+        </div>
+        <div className="flex justify-end mb-5">
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
+          >
+            <Plus size={14} /> New User
+          </button>
+        </div>
+
+        <Modal open={showForm} onClose={handleCloseForm}>
+          <form onSubmit={formik.handleSubmit} className="flex flex-col max-h-[90vh] w-full max-w-2xl bg-white rounded-xl shadow-xl overflow-hidden">
+            <div className="border-b border-[#E6E6E6] px-5 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-[#1A1A1A]">
+                  {editingUser ? "Edit Staff User" : "Create New Staff User"}
+                </h3>
+                <p className="mt-0.5 text-xs text-[#6B6B6B]">
+                  {editingUser ? "Modify user credentials, role, and system status." : "Add a new member to the admin team and assign them a system role."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseForm}
+                className="text-[#9A9A9A] hover:text-[#1A1A1A]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <AdminInput label="Full Name *" {...formik.getFieldProps("name")} error={formik.touched.name ? (formik.errors.name as string) : ""} />
+                <AdminInput label="Email *" type="email" {...formik.getFieldProps("email")} error={formik.touched.email ? (formik.errors.email as string) : ""} />
+                <AdminInput label={editingUser ? "Password" : "Password *"} type="password" placeholder={editingUser ? "Leave blank to keep current" : "Min 8 characters"} {...formik.getFieldProps("password")} error={formik.touched.password ? (formik.errors.password as string) : ""} />
+                <AdminSelect label="Role *" options={roleOptions} {...formik.getFieldProps("roleId")} error={formik.touched.roleId ? (formik.errors.roleId as string) : ""} />
+                <AdminSelect
+                  label="Status *"
+                  options={[
+                    { value: "ACTIVE", label: "Active" },
+                    { value: "INACTIVE", label: "Inactive" },
+                  ]}
+                  {...formik.getFieldProps("status")}
+                  error={formik.touched.status ? (formik.errors.status as string) : ""}
+                />
+              </div>
+            </div>
+
+            <div className="border-t border-[#E6E6E6] bg-slate-50 px-5 py-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={handleCloseForm}
+                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+                disabled={formik.isSubmitting}
+              >
+                {editingUser ? "Update User" : "Create User"}
+              </button>
+            </div>
+          </form>
+        </Modal>
       <DataTable<User> columns={columns} data={users} rowKey="id" isLoading={isLoading} emptyMessage="No users." />
       <ConfirmModal open={!!deleting} title="Remove user?" message="This will deactivate the user account." onConfirm={handleDelete} onCancel={() => setDeleting(null)} />
       {ToastComponent}
+      </div>
     </AdminLayout>
   );
 }

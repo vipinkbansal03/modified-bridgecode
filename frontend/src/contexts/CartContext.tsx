@@ -127,7 +127,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           {},
         );
 
-        const updatedItems = [...items];
+        let updatedItems = [...items];
 
         for (const [productSlug, productItems] of Object.entries(
           groupedItems,
@@ -174,6 +174,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
           } catch (error: any) {
             const message = error?.message || "";
 
+            if (message.includes("Product not found")) {
+              console.warn(`Removing non-existent product ${productSlug} from cart.`);
+              updatedItems = updatedItems.filter((item) => item.productSlug !== productSlug);
+              continue;
+            }
+
             if (message.includes("No active price is configured")) {
               updatedItems.forEach((item, index) => {
                 if (item.productSlug === productSlug) {
@@ -188,7 +194,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
               continue;
             }
 
-            console.error(`Failed to refresh prices for ${productSlug}`, error);
+            console.warn(`Failed to refresh prices for ${productSlug}`, error);
           }
         }
 

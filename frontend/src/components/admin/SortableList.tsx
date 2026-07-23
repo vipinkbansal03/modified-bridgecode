@@ -71,19 +71,17 @@ export function SortableList<T extends { id: string }>({
             itemClassName,
           )}
         >
-          <button
-            type="button"
-            aria-label={handleAriaLabel}
-            className={cn(
-              "flex shrink-0 items-center px-1.5 text-[#9A9A9A]",
-              disabled ? "cursor-not-allowed opacity-40" : "cursor-grab active:cursor-grabbing hover:text-[#1A1A1A]",
-            )}
-            disabled={disabled}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <GripVertical size={16} />
-          </button>
-          <div className={contentClassName}>{renderItem(item, index)}</div>
+          {!disabled && (
+            <button
+              type="button"
+              aria-label={handleAriaLabel}
+              className="flex shrink-0 items-center px-1.5 text-[#9A9A9A] cursor-grab active:cursor-grabbing hover:text-[#1A1A1A]"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <GripVertical size={16} />
+            </button>
+          )}
+          <div className={cn(contentClassName, disabled && "pl-3")}>{renderItem(item, index)}</div>
         </div>
       ))}
     </div>

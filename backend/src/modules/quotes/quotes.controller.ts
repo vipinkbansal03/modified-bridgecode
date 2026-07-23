@@ -6,3 +6,7 @@ export const updateStatus = asyncHandler(async (req: AuthRequest, res: Response)
 export const updateReview = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Quote updated.", await S.updateQuoteReview(String(req.params.id), req.body)));
 export const addNote = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.created(res, "Note added.", await S.addNote(String(req.params.id), req.user!.id, req.body.note)));
 export const convertToOrder = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.created(res, "Converted to order.", await S.convertToOrder(String(req.params.id))));
+export const deleteOne = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await S.deleteQuote(String(req.params.id));
+  return ApiResponse.success(res, "Quote deleted.");
+});

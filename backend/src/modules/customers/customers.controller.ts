@@ -54,3 +54,17 @@ export const listAddresses = asyncHandler(async (req: AuthRequest, res: Response
   const addresses = await CustomersService.listCustomerAddresses(req.params.id);
   return ApiResponse.success(res, "Customer addresses fetched.", addresses);
 });
+
+export const remove = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await CustomersService.deleteCustomer(String(req.params.id));
+  return ApiResponse.success(res, "Customer deleted.");
+});
+
+export const updateAddress = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const updated = await CustomersService.updateCustomerAddress(
+    String(req.params.id),
+    String(req.params.addressId),
+    req.body,
+  );
+  return ApiResponse.success(res, "Customer address updated.", updated);
+});

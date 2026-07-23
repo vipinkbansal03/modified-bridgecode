@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Clock3, Eye, Filter, Plus, Search, ShoppingCart, Truck, Wallet } from "lucide-react";
+import { Clock3, Eye, Filter, Pencil, Plus, Search, ShoppingCart, Trash2, Truck, Wallet } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { AdminInput, AdminSelect, DataTable, Pagination, StatCard, StatusBadge, type Column } from "@/components/admin/AdminComponents";
-import { useAdminCountries, useAdminOrders, useOrderAnalytics } from "@/hooks/admin/useAdminHooks";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { useAdminCountries, useAdminOrders, useDeleteAdminOrder, useOrderAnalytics } from "@/hooks/admin/useAdminHooks";
+import { getAdminErrorMessage } from "@/services/adminApi";
 
 type OrderRow = {
   id: string;
@@ -41,6 +43,26 @@ function formatDate(value?: string) {
 }
 
 export default function OrdersPage() {
+  const { hasPermission } = useAdminAuth();
+  const canCreate = hasPermission("orders.create");
+  const canUpdate = hasPermission("orders.update");
+  const canDelete = hasPermission("orders.delete");
+  const { showToast } = useToast();
+  const deleteOrder = useDeleteAdminOrder();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+    try {
+      await deleteOrder.mutateAsync(deletingId);
+      showToast("Order deleted successfully.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to delete order."), "error");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -132,12 +154,36 @@ export default function OrdersPage() {
     {
       key: "actions",
       label: "Actions",
-      width: "90px",
+      width: "120px",
       render: (row) => (
-        <Link href={`/admin/orders/${row.id}`} className="inline-flex h-7 items-center gap-1 rounded border border-[#E6E6E6] px-2.5 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]">
-          <Eye size={13} />
-          View
-        </Link>
+        <div className="flex items-center gap-1.5">
+          <Link
+            href={`/admin/orders/${row.id}`}
+            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+            title="View order"
+          >
+            <Eye size={13} />
+          </Link>
+          {canUpdate && (
+            <Link
+              href={`/admin/orders/${row.id}`}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+              title="Edit order"
+            >
+              <Pencil size={13} />
+            </Link>
+          )}
+          {canDelete && (
+            <button
+              type="button"
+              onClick={() => setDeletingId(row.id)}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50 hover:border-red-200"
+              title="Delete order"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
+        </div>
       ),
     },
   ];
@@ -173,10 +219,12 @@ export default function OrdersPage() {
                 <Filter size={14} />
                 {showFilters ? "Hide filters" : "Show filters"}
               </button>
-              <Link href="/admin/orders/create" className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-                <Plus size={14} />
-                Create Order
-              </Link>
+              {canCreate && (
+                <Link href="/admin/orders/create" className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
+                  <Plus size={14} />
+                  Create Order
+                </Link>
+              )}
             </div>
           </div>
 
@@ -288,6 +336,15 @@ export default function OrdersPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        open={!!deletingId}
+        onCancel={() => setDeletingId(null)}
+        onConfirm={handleDelete}
+        title="Delete Order"
+        message="Are you sure you want to permanently delete this order? This action cannot be undone."
+        danger
+      />
     </AdminLayout>
   );
 }
