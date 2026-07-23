@@ -24,6 +24,7 @@ import {
   type CustomerOrderSummary,
   type ShippingEstimate,
 } from "@/services/customerApi";
+import { RazorpayPaymentButton } from "@/components/checkout/RazorpayPaymentButton";
 
 const DEMO_PAYMENT_LABEL = "Pay on Delivery";
 const SHIPPING_UNAVAILABLE_MESSAGE = "Shipping is not available to your country yet. Please contact support.";
@@ -45,6 +46,8 @@ export default function CheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<CustomerOrderSummary | null>(null);
+  const [pendingOrder, setPendingOrder] = useState<CustomerOrderSummary | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<"RAZORPAY" | "COD">("RAZORPAY");
   const [estimate, setEstimate] = useState<CustomerOrderEstimate | null>(null);
   const [shippingEstimate, setShippingEstimate] = useState<ShippingEstimate | null>(null);
   const [shippingError, setShippingError] = useState<string | null>(null);
@@ -227,11 +230,15 @@ export default function CheckoutPage() {
     }
 
     setIsSubmitting(true);
-      setError(null);
+    setError(null);
     try {
       const created = await createCustomerOrder(orderPayload);
-      setOrder(created);
-      clearCart();
+      if (selectedPaymentMethod === "RAZORPAY") {
+        setPendingOrder(created);
+      } else {
+        setOrder(created);
+        clearCart();
+      }
     } catch (err) {
       setError(getCustomerErrorMessage(err, "Could not place order."));
     } finally {
@@ -270,45 +277,59 @@ export default function CheckoutPage() {
     const taxAmount = Number(order.taxAmount ?? 0);
     const couponDiscount = Number(order.couponDiscount ?? order.discount ?? 0);
     const shippingLabel = order.shippingProvider || "Shipping";
+    const isPaid = order.paymentStatus === "PAID";
+
     return (
       <Container>
         <section className="py-16">
-          <div className="mx-auto max-w-2xl rounded-md border border-line bg-white p-8 text-center shadow-[0_16px_50px_rgba(31,24,18,0.08)]">
-            <CheckCircle2 size={36} className="mx-auto mb-4 text-[#2A6A40]" />
-            <h1 className="text-[30px] font-normal tracking-tight text-ink">Order received</h1>
+          <div className="mx-auto max-w-2xl rounded-xl border border-line bg-white p-8 text-center shadow-[0_16px_50px_rgba(31,24,18,0.08)]">
+            <CheckCircle2 size={42} className={`mx-auto mb-4 ${isPaid ? "text-[#2A6A40]" : "text-brand"}`} />
+            <h1 className="text-[30px] font-semibold tracking-tight text-ink">
+              {isPaid ? "Payment Successful & Order Confirmed!" : "Order Received"}
+            </h1>
             <p className="mt-3 text-[14.5px] leading-relaxed text-steel">
-              Your order is confirmed for demo checkout. You will pay on delivery; no online payment has been charged.
+              {isPaid
+                ? "Your payment has been securely processed via Razorpay and your order is now in processing."
+                : "Your order has been recorded. Payment will be collected on delivery."}
             </p>
-            <div className="mt-6 rounded-md bg-grey p-4 text-left">
+            <div className="mt-6 rounded-xl bg-grey p-5 text-left space-y-2">
               <div className="flex items-center justify-between text-[14px]">
                 <span className="text-steel">Order number</span>
-                <strong className="text-ink">{order.orderNumber}</strong>
+                <strong className="text-ink font-mono">{order.orderNumber}</strong>
               </div>
-              <div className="mt-2 flex items-center justify-between text-[14px]">
+              {order.paymentId && (
+                <div className="flex items-center justify-between text-[14px]">
+                  <span className="text-steel">Razorpay Payment ID</span>
+                  <strong className="text-ink font-mono text-xs">{order.paymentId}</strong>
+                </div>
+              )}
+              <div className="flex items-center justify-between text-[14px]">
                 <span className="text-steel">Shipping</span>
                 <strong className="text-ink">{shippingLabel} ({formatMoney(symbol, shippingCharge)})</strong>
               </div>
-              <div className="mt-2 flex items-center justify-between text-[14px]">
+              <div className="flex items-center justify-between text-[14px]">
                 <span className="text-steel">Tax</span>
                 <strong className="text-ink">{formatMoney(symbol, taxAmount)}</strong>
               </div>
               {order.couponCode && couponDiscount > 0 && (
-                <div className="mt-2 flex items-center justify-between text-[14px]">
+                <div className="flex items-center justify-between text-[14px]">
                   <span className="text-steel">Coupon ({order.couponCode})</span>
                   <strong className="text-[#2A6A40]">-{formatMoney(symbol, couponDiscount)}</strong>
                 </div>
               )}
-              <div className="mt-2 flex items-center justify-between text-[14px]">
+              <div className="flex items-center justify-between text-[14px]">
                 <span className="text-steel">Payment method</span>
-                <strong className="text-ink">{DEMO_PAYMENT_LABEL}</strong>
+                <strong className="text-ink">{order.paymentMethod === "RAZORPAY" ? "Razorpay Online Payment" : DEMO_PAYMENT_LABEL}</strong>
               </div>
-              <div className="mt-2 flex items-center justify-between text-[14px]">
+              <div className="flex items-center justify-between text-[14px]">
                 <span className="text-steel">Payment status</span>
-                <strong className="text-ink">{order.paymentStatus}</strong>
+                <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-bold ${isPaid ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}>
+                  {order.paymentStatus}
+                </span>
               </div>
-              <div className="mt-2 flex items-center justify-between border-t border-line pt-3 text-[15px]">
-                <span className="font-semibold text-ink">Total due on delivery</span>
-                <strong className="text-ink">{formatMoney(symbol, Number(order.total))}</strong>
+              <div className="flex items-center justify-between border-t border-line pt-3 text-[15px]">
+                <span className="font-semibold text-ink">{isPaid ? "Total Paid" : "Total Due on Delivery"}</span>
+                <strong className="text-[17px] font-extrabold text-ink">{formatMoney(symbol, Number(order.total))}</strong>
               </div>
             </div>
             <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
@@ -544,23 +565,71 @@ export default function CheckoutPage() {
                       : "Unavailable"}
                   </strong>
                 </div>
-                <div className="flex items-center justify-between text-[14px]">
-                  <span className="text-steel">Payment</span>
-                  <strong className="text-ink">{DEMO_PAYMENT_LABEL}</strong>
+                <div className="mt-4 space-y-2 border-t border-line pt-3">
+                  <span className="block text-xs uppercase tracking-wide text-steel-2 font-semibold">Payment Option</span>
+                  <label className={`flex items-center justify-between rounded-lg border p-3 cursor-pointer transition-colors ${selectedPaymentMethod === "RAZORPAY" ? "border-brand bg-brand/5" : "border-line bg-white"}`}>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        checked={selectedPaymentMethod === "RAZORPAY"}
+                        onChange={() => setSelectedPaymentMethod("RAZORPAY")}
+                        className="text-brand focus:ring-brand"
+                      />
+                      <span className="text-[13.5px] font-semibold text-ink">Razorpay (UPI / Cards / NetBanking)</span>
+                    </div>
+                    <span className="rounded bg-[#E31E24] px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">Online</span>
+                  </label>
+
+                  <label className={`flex items-center justify-between rounded-lg border p-3 cursor-pointer transition-colors ${selectedPaymentMethod === "COD" ? "border-brand bg-brand/5" : "border-line bg-white"}`}>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        checked={selectedPaymentMethod === "COD"}
+                        onChange={() => setSelectedPaymentMethod("COD")}
+                        className="text-brand focus:ring-brand"
+                      />
+                      <span className="text-[13.5px] font-semibold text-ink">Pay on Delivery</span>
+                    </div>
+                  </label>
                 </div>
+
                 <div className="flex items-center justify-between border-t border-line pt-3 text-[16px]">
-                  <span className="font-semibold text-ink">Total due on delivery</span>
-                  <strong className="text-ink">{formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, estimate?.total ?? totals.subtotal)}</strong>
+                  <span className="font-semibold text-ink">Total Payable</span>
+                  <strong className="text-[18px] font-extrabold text-brand">{formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, estimate?.total ?? totals.subtotal)}</strong>
                 </div>
               </div>
 
               {(error || approvalBlockMessage || shippingError) && <p className="mt-4 rounded-md border border-brand/20 bg-brand/5 px-3 py-2 text-[13px] text-brand">{error || approvalBlockMessage || shippingError}</p>}
-              <Button type="submit" variant="primary" size="lg" fullWidth className="mt-5" disabled={isSubmitting || !canPlaceOrder}>
-                {isSubmitting ? "Placing order..." : "Place order"}
-              </Button>
-              <p className="mt-3 text-center text-[12px] leading-relaxed text-steel">
-                Demo checkout uses pay on delivery. Stripe/Razorpay capture is intentionally not connected yet.
-              </p>
+              
+              {pendingOrder ? (
+                <div className="mt-5 space-y-3">
+                  <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-xs text-green-800 text-center">
+                    Order #{pendingOrder.orderNumber} created! Click below to complete your payment.
+                  </div>
+                  <RazorpayPaymentButton
+                    orderId={pendingOrder.id}
+                    customerName={form.fullName}
+                    customerEmail={currentCustomer?.email ?? ""}
+                    customerPhone={form.phone}
+                    onSuccess={(updated) => {
+                      setOrder(updated);
+                      setPendingOrder(null);
+                      clearCart();
+                    }}
+                    onError={(errMsg) => setError(errMsg)}
+                  />
+                </div>
+              ) : (
+                <Button type="submit" variant="primary" size="lg" fullWidth className="mt-5" disabled={isSubmitting || !canPlaceOrder}>
+                  {isSubmitting
+                    ? "Processing..."
+                    : selectedPaymentMethod === "RAZORPAY"
+                    ? "Proceed to Pay with Razorpay"
+                    : "Place Order (Pay on Delivery)"}
+                </Button>
+              )}
             </aside>
           </form>
         ) : (

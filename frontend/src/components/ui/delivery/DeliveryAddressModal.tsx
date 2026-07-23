@@ -23,9 +23,6 @@ export function DeliveryAddressModal({
 }: DeliveryAddressModalProps) {
   const { data: addresses = [], isLoading } = useCustomerAddresses();
 
-  console.log("Addresses:", addresses);
-console.log("Loading:", isLoading);
-
   const { selectedAddress, setSelectedAddress } = useDeliveryAddress();
 
   const displayAddresses = useMemo(() => {
