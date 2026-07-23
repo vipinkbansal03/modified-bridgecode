@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { useCountries } from "@/hooks/api/useCurrencies";
 
 interface CurrencyContextValue {
@@ -18,6 +19,7 @@ const CurrencyContext = createContext<CurrencyContextValue>({
 });
 
 export function CurrencyProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const { data: countries = [] } = useCountries();
   const [selectedCurrency, setSelectedCurrencyState] = useState("INR");
   const [selectedCountryCode, setSelectedCountryCodeState] = useState("IN");
@@ -34,6 +36,10 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   }, [selectedCountryCode]);
 
   useEffect(() => {
+    document.cookie = `currency=${selectedCurrency}; path=/; max-age=31536000; SameSite=Lax`;
+  }, [selectedCurrency]);
+
+  useEffect(() => {
     if (!countries.length) return;
 
     const storedCountry = localStorage.getItem("country");
@@ -45,17 +51,21 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     if (!validStoredCountry || selectedCountryCode !== nextCountry.code) {
       setSelectedCountryCodeState(nextCountry.code);
       localStorage.setItem("country", nextCountry.code);
+      document.cookie = `country=${nextCountry.code}; path=/; max-age=31536000; SameSite=Lax`;
     }
 
     if (nextCountry.currency.code && selectedCurrency !== nextCountry.currency.code) {
       setSelectedCurrencyState(nextCountry.currency.code);
       localStorage.setItem("currency", nextCountry.currency.code);
+      document.cookie = `currency=${nextCountry.currency.code}; path=/; max-age=31536000; SameSite=Lax`;
     }
   }, [countries, selectedCountryCode, selectedCurrency]);
 
   function setSelectedCurrency(code: string) {
     setSelectedCurrencyState(code);
     localStorage.setItem("currency", code);
+    document.cookie = `currency=${code}; path=/; max-age=31536000; SameSite=Lax`;
+    router.refresh();
   }
 
   function setSelectedCountryCode(code: string) {
@@ -67,7 +77,9 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     if (country?.currency?.code) {
       setSelectedCurrencyState(country.currency.code);
       localStorage.setItem("currency", country.currency.code);
+      document.cookie = `currency=${country.currency.code}; path=/; max-age=31536000; SameSite=Lax`;
     }
+    router.refresh();
   }
 
   return (

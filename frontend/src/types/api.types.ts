@@ -92,6 +92,8 @@ export interface ApiProductSummary {
   productCode: string | null;
   brand: string;
   shortDescription: string | null;
+  informationImage?: string | null;
+  informationDescription?: string | null;
   category: { name: string; slug: string };
   images: string[];
   thumbnail: string | null;
@@ -106,6 +108,8 @@ export interface ApiProductDetail extends Omit<ApiProductSummary, "images"> {
   seoTitle: string | null;
   seoDescription: string | null;
   seoKeywords: string | null;
+  informationImage?: string | null;
+  informationDescription?: string | null;
   highlights?: any;
   technicalSpecs?: any;
   warranty?: any;
@@ -115,6 +119,7 @@ export interface ApiProductDetail extends Omit<ApiProductSummary, "images"> {
   packages: ApiProductPackage[];
   attributes: ApiAttribute[];
   variants: ApiVariant[];
+  lowestPrice?: ApiProductPrice[];
 }
 
 export interface ApiSearchResult {

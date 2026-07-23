@@ -173,6 +173,18 @@ export async function publicListProducts(
           include: { country: true, currency: true },
           take: 5,
         },
+        variants: {
+          where: {
+            status: "ACTIVE",
+            countries: { some: { countryId: country.id, enabled: true } },
+          },
+          include: {
+            prices: {
+              where: { status: "ACTIVE", countryId: country.id },
+              include: { country: true, currency: true },
+            },
+          },
+        },
         _count: {
           select: {
             variants: {
@@ -736,6 +748,22 @@ export async function publicSearch(
             }),
           },
         },
+        prices: {
+          where: { status: "ACTIVE", countryId: country.id },
+          include: { country: true, currency: true },
+        },
+        variants: {
+          where: {
+            status: "ACTIVE",
+            countries: { some: { countryId: country.id, enabled: true } },
+          },
+          include: {
+            prices: {
+              where: { status: "ACTIVE", countryId: country.id },
+              include: { country: true, currency: true },
+            },
+          },
+        },
       },
     }),
     prisma.category.findMany({
@@ -943,27 +971,87 @@ function getProductText(product: ProductTextSource) {
   };
 }
 
-type PublicProductRecord = Prisma.ProductGetPayload<{
-  include: {
-    category: { select: { name: true; slug: true; description: true } };
-    media: true;
-  };
-}> & {
-  prices?: Array<{
-    mrp: Prisma.Decimal | number;
-    sellingPrice: Prisma.Decimal | number;
-    dealerPrice?: Prisma.Decimal | number | null;
-    distributorPrice?: Prisma.Decimal | number | null;
-    country: { code: string; name: string };
-    currency: { code: string; symbol: string };
-  }>;
+type PriceRecord = {
+  mrp: Prisma.Decimal | number;
+  sellingPrice: Prisma.Decimal | number;
+  dealerPrice?: Prisma.Decimal | number | null;
+  distributorPrice?: Prisma.Decimal | number | null;
+  country: { code: string; name: string; dutyPercentage?: Prisma.Decimal | number; shippingCharge?: Prisma.Decimal | number };
+  currency: { code: string; symbol: string };
+};
+
+type PublicProductRecord = {
+  id: string;
+  slug: string;
+  title: string;
+  productCode: string | null;
+  brand: string;
+  shortDescription: string | null;
+  informationImage?: string | null;
+  informationDescription?: string | null;
+  category: CategoryTextSource & { slug: string };
+  media: Array<{ type: string; url: string; altText?: string | null }>;
+  isFeatured: boolean;
+  hasVariants: boolean;
+  prices?: PriceRecord[];
+  variants?: Array<{ prices?: PriceRecord[] }>;
   _count?: { variants: number };
   translations?: Array<Record<string, unknown>>;
 };
 
+function toPriceDto(pr: PriceRecord) {
+  return {
+    countryCode: pr.country.code,
+    countryName: pr.country.name,
+    currencyCode: pr.currency.code,
+    currencySymbol: pr.currency.symbol,
+    mrp: Number(pr.mrp),
+    sellingPrice: Number(pr.sellingPrice),
+    dealerPrice: pr.dealerPrice != null ? Number(pr.dealerPrice) : null,
+    doctorRetailerPrice:
+      pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+    distributorPrice:
+      pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+  };
+}
+
+function computeLowestVariantPrices(
+  productPrices: PriceRecord[],
+  allVariantPrices: PriceRecord[][],
+) {
+  const merged = [
+    ...productPrices,
+    ...allVariantPrices.flat(),
+  ];
+  if (!merged.length) return [];
+
+  const byCurrency = new Map<string, PriceRecord[]>();
+  for (const pr of merged) {
+    const key = pr.currency.code;
+    const arr = byCurrency.get(key);
+    if (arr) arr.push(pr);
+    else byCurrency.set(key, [pr]);
+  }
+
+  return Array.from(byCurrency.values()).map((entries) => {
+    const cheapest = entries.reduce((min, cur) =>
+      Number(cur.sellingPrice) < Number(min.sellingPrice) ? cur : min,
+    );
+    return toPriceDto(cheapest);
+  });
+}
+
 function toPublicProduct(p: PublicProductRecord) {
   const text = getProductText(p);
   const categoryText = getCategoryText(p.category);
+
+  const allVariantPrices = (p.variants ?? []).map(
+    (v) => (v.prices ?? []) as PriceRecord[],
+  );
+  const lowestPrices = computeLowestVariantPrices(
+    (p.prices ?? []) as PriceRecord[],
+    allVariantPrices,
+  );
 
   return {
     id: p.id,
@@ -972,6 +1060,8 @@ function toPublicProduct(p: PublicProductRecord) {
     productCode: p.productCode,
     brand: p.brand,
     shortDescription: text.shortDescription,
+    informationImage: p.informationImage,
+    informationDescription: p.informationDescription,
     category: {
       name: categoryText.name,
       slug: p.category?.slug ?? "",
@@ -981,50 +1071,117 @@ function toPublicProduct(p: PublicProductRecord) {
     isFeatured: p.isFeatured,
     hasVariants: p.hasVariants,
     variantCount: p._count?.variants ?? 0,
-    prices:
-      p.prices?.map((pr) => ({
-        countryCode: pr.country.code,
-        countryName: pr.country.name,
-        currencyCode: pr.currency.code,
-        currencySymbol: pr.currency.symbol,
-        mrp: Number(pr.mrp),
-        sellingPrice: Number(pr.sellingPrice),
-        dealerPrice: pr.dealerPrice != null ? Number(pr.dealerPrice) : null,
-        doctorRetailerPrice:
-          pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
-        distributorPrice:
-          pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
-      })) ?? [],
+    prices: lowestPrices.length > 0
+      ? lowestPrices
+      : (p.prices?.map((pr) => toPriceDto(pr)) ?? []),
   };
 }
 
-type PublicProductDetailRecord = Prisma.ProductGetPayload<{
-  include: {
-    category: true;
-    media: true;
-    packages: true;
-    attributes: {
-      include: {
-        attribute: { include: { values: true } };
-        allowedValues: { include: { attributeValue: true } };
-      };
+type PublicProductDetailRecord = {
+  id: string;
+  slug: string;
+  title: string;
+  productCode: string | null;
+  brand: string;
+  shortDescription: string | null;
+  informationImage?: string | null;
+  informationDescription?: string | null;
+  description?: string | null;
+  category: CategoryTextSource & { slug: string };
+  media: Array<{ type: string; url: string; altText?: string | null }>;
+  packages: Array<{ id: string; title: string; slug: string; image: string | null; description: string | null; sortOrder: number }>;
+  attributes: Array<{
+    id?: string;
+    required?: boolean;
+    gridAxis?: string | null;
+    sortOrder?: number;
+    attribute: {
+      id?: string;
+      name: string;
+      role?: string;
+      status?: string;
+      sortOrder: number;
+      values: Array<{
+        id: string;
+        attributeId?: string;
+        value: string;
+        slug: string;
+        sortOrder: number;
+        image?: string | null;
+        note?: string | null;
+        priceAdjustment?: Prisma.Decimal | number;
+        gridRole?: string | null;
+        countryId?: string | null;
+        moq?: number | null;
+        tierPrice?: Prisma.Decimal | number | null;
+        dealerPrice?: Prisma.Decimal | number | null;
+      }>;
     };
-    variants: {
-      include: {
-        package: true;
-        attributeValues: { include: { attribute: true; attributeValue: true } };
-        prices: { include: { country: true; currency: true } };
-        inventories: true;
+    allowedValues: Array<{
+      attributeValueId: string;
+      attributeValue: {
+        id: string;
+        attributeId?: string;
+        value: string;
+        slug: string;
+        sortOrder: number;
+        image?: string | null;
+        note?: string | null;
+        priceAdjustment?: Prisma.Decimal | number;
+        gridRole?: string | null;
+        countryId?: string | null;
+        moq?: number | null;
+        tierPrice?: Prisma.Decimal | number | null;
+        dealerPrice?: Prisma.Decimal | number | null;
       };
-    };
-    prices: { include: { country: true; currency: true } };
-  };
-}> & {
+    }>;
+  }>;
+  variants: Array<{
+    id: string;
+    title: string;
+    sku: string | null;
+    variantKey: string;
+    moq?: number | null;
+    package: { id: string; title: string; slug?: string } | null;
+    attributeValues: Array<{
+      attributeId: string;
+      attributeValueId: string;
+      attribute: { name: string };
+      attributeValue: { id: string; value: string };
+    }>;
+    prices: Array<{
+    country: { code: string; name: string; dutyPercentage?: Prisma.Decimal | number; shippingCharge?: Prisma.Decimal | number };
+      currency: { code: string; symbol: string };
+      mrp: Prisma.Decimal | number;
+      sellingPrice: Prisma.Decimal | number;
+      dealerPrice?: Prisma.Decimal | number | null;
+      distributorPrice?: Prisma.Decimal | number | null;
+    }>;
+    inventories: Array<{ countryId: string | null; stock: number; reservedStock: number; status: string }>;
+  }>;
+  prices: Array<{
+    country: { code: string; name: string };
+    currency: { code: string; symbol: string };
+    mrp: Prisma.Decimal | number;
+    sellingPrice: Prisma.Decimal | number;
+    dealerPrice?: Prisma.Decimal | number | null;
+    distributorPrice?: Prisma.Decimal | number | null;
+  }>;
+  isFeatured: boolean;
+  hasVariants: boolean;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  seoKeywords?: string | null;
+  highlights?: Prisma.JsonValue | null;
+  technicalSpecs?: Prisma.JsonValue | null;
+  warranty?: Prisma.JsonValue | null;
+  primaryFeatures?: Prisma.JsonValue | null;
+  _count?: { variants: number };
   translations?: ProductTranslationSnapshot[];
 };
 
 function buildPublicPriceBreakdown(pr: {
-  country: { code: string; dutyPercentage: Prisma.Decimal | number; shippingCharge: Prisma.Decimal | number };
+  country: { code: string; dutyPercentage?: Prisma.Decimal | number; shippingCharge?: Prisma.Decimal | number };
   mrp: Prisma.Decimal | number;
 }) {
   const dutyPercentage = Number(pr.country.dutyPercentage) || 0;
@@ -1247,6 +1404,8 @@ async function toPublicProductDetail(
     productCode: p.productCode,
     brand: p.brand,
     shortDescription: text.shortDescription,
+    informationImage: p.informationImage,
+    informationDescription: p.informationDescription,
     description: text.description,
     category: {
       name: categoryText.name,
@@ -1278,6 +1437,10 @@ async function toPublicProductDetail(
     attributes: configuratorAttributes,
     variants: publicVariants,
     prices: productPrices,
+    lowestPrice: computeLowestVariantPrices(
+      (p.prices ?? []) as PriceRecord[],
+      p.variants.map((v) => (v.prices ?? []) as PriceRecord[]),
+    ),
   };
 }
 
@@ -1347,7 +1510,16 @@ export async function submitProductReview(
     select: { id: true },
   });
 
-  if (!product) throw new Error("Product not found");
+  if (!product) throw new AppError("Product not found", 404);
+
+  if (data.customerEmail) {
+    const existing = await (prisma as any).productReview.findFirst({
+      where: { productId: product.id, customerEmail: data.customerEmail },
+    });
+    if (existing) {
+      throw new AppError("You have already submitted a review for this product.", 400);
+    }
+  }
 
   const review = await (prisma as any).productReview.create({
     data: {
@@ -1358,7 +1530,7 @@ export async function submitProductReview(
       ratingPrice: Number(data.ratingPrice || 5),
       ratingOverall: Number(data.ratingOverall || 5),
       feedbackText: data.feedbackText || "",
-      status: "APPROVED",
+      status: "PENDING",
     },
   });
 

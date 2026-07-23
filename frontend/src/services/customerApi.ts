@@ -290,3 +290,67 @@ export async function listCustomerAddresses() {
   const res = await customerApi.get("/addresses");
   return res.data.data as CustomerAddress[];
 }
+
+export async function updateCustomerProfile(data: {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  companyName?: string;
+  website?: string;
+  preferredPrescription?: string | null;
+  preferredPrescriptionOther?: string;
+  preferredSlot?: string | null;
+  currentPractice?: string | null;
+  currentPracticeOther?: string;
+  usingModernProducts?: boolean;
+}) {
+  const res = await customerApi.put("/auth/profile", data);
+  return res.data.data;
+}
+
+export async function createCustomerAddress(data: {
+  label?: string;
+  fullName: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country?: string;
+  countryId?: string;
+  isDefault?: boolean;
+}) {
+  const res = await customerApi.post("/addresses", data);
+  return res.data.data as CustomerAddress;
+}
+
+export async function updateCustomerAddress(
+  addressId: string,
+  data: Partial<{
+    label: string;
+    fullName: string;
+    phone: string;
+    addressLine1: string;
+    addressLine2: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+    countryId: string;
+    isDefault: boolean;
+  }>,
+) {
+  const res = await customerApi.put(`/addresses/${addressId}`, data);
+  return res.data.data as CustomerAddress;
+}
+
+export async function deleteCustomerAddress(addressId: string) {
+  const res = await customerApi.delete(`/addresses/${addressId}`);
+  return res.data;
+}
+
+export async function setDefaultCustomerAddress(addressId: string) {
+  const res = await customerApi.put(`/addresses/${addressId}/default`);
+  return res.data.data as CustomerAddress;
+}
