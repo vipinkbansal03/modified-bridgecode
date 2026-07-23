@@ -119,6 +119,7 @@ export interface ApiProductDetail extends Omit<ApiProductSummary, "images"> {
   packages: ApiProductPackage[];
   attributes: ApiAttribute[];
   variants: ApiVariant[];
+  lowestPrice?: ApiProductPrice[];
 }
 
 export interface ApiSearchResult {

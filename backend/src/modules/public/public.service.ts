@@ -173,6 +173,18 @@ export async function publicListProducts(
           include: { country: true, currency: true },
           take: 5,
         },
+        variants: {
+          where: {
+            status: "ACTIVE",
+            countries: { some: { countryId: country.id, enabled: true } },
+          },
+          include: {
+            prices: {
+              where: { status: "ACTIVE", countryId: country.id },
+              include: { country: true, currency: true },
+            },
+          },
+        },
         _count: {
           select: {
             variants: {
@@ -736,6 +748,22 @@ export async function publicSearch(
             }),
           },
         },
+        prices: {
+          where: { status: "ACTIVE", countryId: country.id },
+          include: { country: true, currency: true },
+        },
+        variants: {
+          where: {
+            status: "ACTIVE",
+            countries: { some: { countryId: country.id, enabled: true } },
+          },
+          include: {
+            prices: {
+              where: { status: "ACTIVE", countryId: country.id },
+              include: { country: true, currency: true },
+            },
+          },
+        },
       },
     }),
     prisma.category.findMany({
@@ -943,6 +971,15 @@ function getProductText(product: ProductTextSource) {
   };
 }
 
+type PriceRecord = {
+  mrp: Prisma.Decimal | number;
+  sellingPrice: Prisma.Decimal | number;
+  dealerPrice?: Prisma.Decimal | number | null;
+  distributorPrice?: Prisma.Decimal | number | null;
+  country: { code: string; name: string; dutyPercentage?: Prisma.Decimal | number; shippingCharge?: Prisma.Decimal | number };
+  currency: { code: string; symbol: string };
+};
+
 type PublicProductRecord = {
   id: string;
   slug: string;
@@ -956,21 +993,65 @@ type PublicProductRecord = {
   media: Array<{ type: string; url: string; altText?: string | null }>;
   isFeatured: boolean;
   hasVariants: boolean;
-  prices?: Array<{
-    mrp: Prisma.Decimal | number;
-    sellingPrice: Prisma.Decimal | number;
-    dealerPrice?: Prisma.Decimal | number | null;
-    distributorPrice?: Prisma.Decimal | number | null;
-    country: { code: string; name: string; dutyPercentage?: Prisma.Decimal | number; shippingCharge?: Prisma.Decimal | number };
-    currency: { code: string; symbol: string };
-  }>;
+  prices?: PriceRecord[];
+  variants?: Array<{ prices?: PriceRecord[] }>;
   _count?: { variants: number };
   translations?: Array<Record<string, unknown>>;
 };
 
+function toPriceDto(pr: PriceRecord) {
+  return {
+    countryCode: pr.country.code,
+    countryName: pr.country.name,
+    currencyCode: pr.currency.code,
+    currencySymbol: pr.currency.symbol,
+    mrp: Number(pr.mrp),
+    sellingPrice: Number(pr.sellingPrice),
+    dealerPrice: pr.dealerPrice != null ? Number(pr.dealerPrice) : null,
+    doctorRetailerPrice:
+      pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+    distributorPrice:
+      pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+  };
+}
+
+function computeLowestVariantPrices(
+  productPrices: PriceRecord[],
+  allVariantPrices: PriceRecord[][],
+) {
+  const merged = [
+    ...productPrices,
+    ...allVariantPrices.flat(),
+  ];
+  if (!merged.length) return [];
+
+  const byCurrency = new Map<string, PriceRecord[]>();
+  for (const pr of merged) {
+    const key = pr.currency.code;
+    const arr = byCurrency.get(key);
+    if (arr) arr.push(pr);
+    else byCurrency.set(key, [pr]);
+  }
+
+  return Array.from(byCurrency.values()).map((entries) => {
+    const cheapest = entries.reduce((min, cur) =>
+      Number(cur.sellingPrice) < Number(min.sellingPrice) ? cur : min,
+    );
+    return toPriceDto(cheapest);
+  });
+}
+
 function toPublicProduct(p: PublicProductRecord) {
   const text = getProductText(p);
   const categoryText = getCategoryText(p.category);
+
+  const allVariantPrices = (p.variants ?? []).map(
+    (v) => (v.prices ?? []) as PriceRecord[],
+  );
+  const lowestPrices = computeLowestVariantPrices(
+    (p.prices ?? []) as PriceRecord[],
+    allVariantPrices,
+  );
 
   return {
     id: p.id,
@@ -990,20 +1071,9 @@ function toPublicProduct(p: PublicProductRecord) {
     isFeatured: p.isFeatured,
     hasVariants: p.hasVariants,
     variantCount: p._count?.variants ?? 0,
-    prices:
-      p.prices?.map((pr) => ({
-        countryCode: pr.country.code,
-        countryName: pr.country.name,
-        currencyCode: pr.currency.code,
-        currencySymbol: pr.currency.symbol,
-        mrp: Number(pr.mrp),
-        sellingPrice: Number(pr.sellingPrice),
-        dealerPrice: pr.dealerPrice != null ? Number(pr.dealerPrice) : null,
-        doctorRetailerPrice:
-          pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
-        distributorPrice:
-          pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
-      })) ?? [],
+    prices: lowestPrices.length > 0
+      ? lowestPrices
+      : (p.prices?.map((pr) => toPriceDto(pr)) ?? []),
   };
 }
 
@@ -1367,6 +1437,10 @@ async function toPublicProductDetail(
     attributes: configuratorAttributes,
     variants: publicVariants,
     prices: productPrices,
+    lowestPrice: computeLowestVariantPrices(
+      (p.prices ?? []) as PriceRecord[],
+      p.variants.map((v) => (v.prices ?? []) as PriceRecord[]),
+    ),
   };
 }
 

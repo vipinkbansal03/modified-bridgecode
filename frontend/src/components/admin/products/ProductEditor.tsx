@@ -559,6 +559,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [translationDrafts, setTranslationDrafts] = useState<Record<string, ProductTranslationDraft>>({});
   const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
   const [variantSearchQuery, setVariantSearchQuery] = useState("");
+  const [variantTabSearchQuery, setVariantTabSearchQuery] = useState("");
+  const [variantTabStatusFilter, setVariantTabStatusFilter] = useState("");
+  const [variantTabStockFilter, setVariantTabStockFilter] = useState("");
   const [variantCountryModalVariant, setVariantCountryModalVariant] = useState<VariantRow | null>(null);
   const [variantCountryOverrides, setVariantCountryOverrides] = useState<Record<string, boolean>>({});
   const [inventoryOverrideDrafts, setInventoryOverrideDrafts] = useState<Record<string, { countryId: string; stock: string }>>({});
@@ -1016,6 +1019,24 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   }, [attributeCatalog, editingVariant, variantGenerationCatalog]);
   const packageRows = useMemo(() => (product?.packages ?? []) as PackageRow[], [product?.packages]);
   const variantRows = useMemo(() => (product?.variants ?? []) as VariantRow[], [product?.variants]);
+  const filteredVariantRows = useMemo(() => {
+    return variantRows.filter((variant) => {
+      if (variantTabStatusFilter && variant.status !== variantTabStatusFilter) return false;
+      if (variantTabStockFilter) {
+        const stock = getBaseInventory(variant.inventories)?.stock ?? 0;
+        if (variantTabStockFilter === "IN_STOCK" && stock <= 0) return false;
+        if (variantTabStockFilter === "OUT_OF_STOCK" && stock > 0) return false;
+      }
+      if (variantTabSearchQuery.trim()) {
+        const q = variantTabSearchQuery.toLowerCase().trim();
+        const matchesTitle = variant.title.toLowerCase().includes(q);
+        const matchesSku = variant.sku && variant.sku.toLowerCase().includes(q);
+        const matchesAttr = variant.attributeValues?.some((attr) => attr.attributeValue?.value?.toLowerCase().includes(q));
+        if (!matchesTitle && !matchesSku && !matchesAttr) return false;
+      }
+      return true;
+    });
+  }, [variantRows, variantTabStatusFilter, variantTabStockFilter, variantTabSearchQuery]);
   const bulkCountryOptions = useMemo(() => {
     const countries = new Map<string, BulkCountryOption>();
     (productCountries as CountryAvailability[]).forEach((country) => {
@@ -1226,7 +1247,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       }
     }
 
-    const variantPackageKeys = new Set(variantRows.map((variant) => variant.packageId ?? "default"));
+    const variantPackageKeys = new Set(filteredVariantRows.map((variant) => variant.packageId ?? "default"));
     if (variantPackageKeys.size > 1) {
       reasons.push("more than one package is present, so each row/column cell would match multiple package variants");
     }
@@ -1234,7 +1255,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     const rows = rowValues.map((rowValue) => ({
       value: rowValue,
       cells: columnValues.map((columnValue) => {
-        const matches = variantRows.filter((variant) => {
+        const matches = filteredVariantRows.filter((variant) => {
           const selectedValueIds = new Set((variant.attributeValues ?? []).map((attributeValue) => attributeValue.attributeValueId));
           return selectedValueIds.has(rowValue.id) && selectedValueIds.has(columnValue.id);
         });
@@ -1254,7 +1275,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
 
     return { mode: "grid" as const, reasons: [], rowAxis, columnAxis, rows };
-  }, [mappedAttributeRows, variantRows]);
+  }, [mappedAttributeRows, filteredVariantRows]);
   const variantDisplayMode = variantGridState.mode;
 
   const pricingCols = useMemo(() => {
@@ -2385,7 +2406,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           </tr>
         </thead>
         <tbody>
-          {variantRows.map((variant) => {
+          {filteredVariantRows.map((variant) => {
             const draft = getBulkVariantDraft(variant);
             return (
               <tr key={variant.id} className="border-b border-[#F0F0F0] last:border-b-0">
@@ -2875,6 +2896,38 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
         {activeTab === 4 && (
           <div className="p-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
+                  <input
+                    placeholder="Search variants..."
+                    value={variantTabSearchQuery}
+                    onChange={(e) => setVariantTabSearchQuery(e.target.value)}
+                    className="w-[220px] rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                  />
+                </div>
+                <select
+                  value={variantTabStatusFilter}
+                  onChange={(e) => setVariantTabStatusFilter(e.target.value)}
+                  className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
+                  <option value="DRAFT">Draft</option>
+                </select>
+                <select
+                  value={variantTabStockFilter}
+                  onChange={(e) => setVariantTabStockFilter(e.target.value)}
+                  className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none"
+                >
+                  <option value="">All Stock</option>
+                  <option value="IN_STOCK">In Stock</option>
+                  <option value="OUT_OF_STOCK">Out of Stock</option>
+                </select>
+              </div>
+            </div>
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Product Variants</h3>
@@ -2883,11 +2936,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => setSelectedVariantIds(selectedVariantIds.length === variantRows.length ? [] : variantRows.map((variant) => variant.id))}
-                  disabled={!variantRows.length}
+                  onClick={() => setSelectedVariantIds(selectedVariantIds.length === filteredVariantRows.length ? [] : filteredVariantRows.map((variant) => variant.id))}
+                  disabled={!filteredVariantRows.length}
                   className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] disabled:opacity-40"
                 >
-                  {selectedVariantIds.length === variantRows.length && variantRows.length ? "Clear Selection" : "Select All"}
+                  {selectedVariantIds.length === filteredVariantRows.length && filteredVariantRows.length ? "Clear Selection" : "Select All"}
                 </button>
                 <button
                   type="button"
@@ -3008,7 +3061,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             ) : bulkEditMode ? (
               renderBulkFlatVariantTable()
             ) : (
-              <DataTable columns={variantCols} data={variantRows} rowKey="id" emptyMessage="No variants created yet." />
+              <DataTable columns={variantCols} data={filteredVariantRows} rowKey="id" emptyMessage="No variants match filters." />
             )}
           </div>
         )}
