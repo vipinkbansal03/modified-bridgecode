@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { Edit2, Filter, Plus, Search, Shield, Trash2, Users, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { Modal } from "@/components/ui/Modal";
 import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
 import {
   useAdminCustomerRoles,
@@ -225,8 +227,23 @@ export default function AdminCustomerRolesPage() {
   ];
 
   return (
-    <AdminLayout title="Customer Roles" breadcrumb={[{ label: "Customer Roles" }]}>
+    <AdminLayout title="Roles & Permissions" breadcrumb={[{ label: "Customer Roles" }]}>
       <div className="space-y-5">
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-[#E6E6E6] mb-5">
+          <Link
+            href="/admin/roles"
+            className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-transparent text-[#6B7280] hover:text-[#111827]"
+          >
+            System Roles
+          </Link>
+          <Link
+            href="/admin/customer-roles"
+            className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-[#E31E24] text-[#E31E24]"
+          >
+            Customer Roles
+          </Link>
+        </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard title="Total Roles" value={totals.total} subtitle="Role catalog entries" icon={<Users size={18} />} />
           <StatCard title="Active Roles" value={totals.active} subtitle="Assignable now" icon={<Shield size={18} />} color="bg-green-600" />
@@ -319,52 +336,94 @@ export default function AdminCustomerRolesPage() {
           )}
         </div>
 
-        {showForm ? (
-          <form onSubmit={handleSubmit} className="rounded-xl border border-[#E6E6E6] bg-white p-5">
-            <div className="mb-4 flex items-center justify-between gap-3">
+        <Modal open={showForm} onClose={resetForm}>
+          <form onSubmit={handleSubmit} className="flex flex-col max-h-[90vh] w-full max-w-2xl bg-white rounded-xl shadow-xl overflow-hidden">
+            <div className="border-b border-[#E6E6E6] px-5 py-4 flex items-center justify-between">
               <div>
-                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">{form.id ? "Edit customer role" : "Create customer role"}</h3>
-                <p className="mt-1 text-[12.5px] text-[#6B6B6B]">System roles stay protected. New roles should use short keys and clear names.</p>
+                <h3 className="text-base font-semibold text-[#1A1A1A]">
+                  {form.id ? "Edit Customer Role" : "Create Customer Role"}
+                </h3>
+                <p className="mt-0.5 text-xs text-[#6B6B6B]">
+                  System roles stay protected. New roles should use short keys.
+                </p>
               </div>
-              <button type="button" onClick={resetForm} className="text-[#9A9A9A] hover:text-[#1A1A1A]" aria-label="Close role form">
-                <X size={16} />
+              <button
+                type="button"
+                onClick={resetForm}
+                className="text-[#9A9A9A] hover:text-[#1A1A1A]"
+              >
+                <X size={18} />
               </button>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <AdminInput label="Name *" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <AdminInput
+                  label="Name *"
+                  value={form.name}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, name: event.target.value }))
+                  }
+                />
+                <AdminInput
+                  label="Key"
+                  value={form.key}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, key: event.target.value }))
+                  }
+                  disabled={rows.find((role) => role.id === form.id)?.isSystem}
+                />
+                <AdminSelect
+                  label="Status"
+                  value={form.status}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      status: event.target.value as RoleFormState["status"],
+                    }))
+                  }
+                  options={[
+                    { value: "ACTIVE", label: "Active" },
+                    { value: "INACTIVE", label: "Inactive" },
+                  ]}
+                />
+                <AdminInput
+                  label="Sort Order"
+                  type="number"
+                  value={form.sortOrder}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, sortOrder: event.target.value }))
+                  }
+                />
+              </div>
+
               <AdminInput
-                label="Key"
-                value={form.key}
-                onChange={(event) => setForm((current) => ({ ...current, key: event.target.value }))}
-                disabled={rows.find((role) => role.id === form.id)?.isSystem}
+                label="Description"
+                value={form.description}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, description: event.target.value }))
+                }
               />
-              <AdminSelect
-                label="Status"
-                value={form.status}
-                onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as RoleFormState["status"] }))}
-                options={[
-                  { value: "ACTIVE", label: "Active" },
-                  { value: "INACTIVE", label: "Inactive" },
-                ]}
-              />
-              <AdminInput label="Sort Order" type="number" value={form.sortOrder} onChange={(event) => setForm((current) => ({ ...current, sortOrder: event.target.value }))} />
             </div>
 
-            <div className="mt-4">
-              <AdminInput label="Description" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
-            </div>
-
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <button type="button" onClick={resetForm} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
+            <div className="border-t border-[#E6E6E6] bg-slate-50 px-5 py-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={resetForm}
+                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
+              >
                 Cancel
               </button>
-              <button type="submit" className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]" disabled={createRole.isPending || updateRole.isPending}>
-                {form.id ? "Update role" : "Create role"}
+              <button
+                type="submit"
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+                disabled={createRole.isPending || updateRole.isPending}
+              >
+                {form.id ? "Update Role" : "Create Role"}
               </button>
             </div>
           </form>
-        ) : null}
+        </Modal>
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white">
           <DataTable<CustomerRoleRow> columns={columns} data={rows} rowKey="id" isLoading={isLoading} emptyMessage="No customer roles found." />

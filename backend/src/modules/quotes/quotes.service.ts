@@ -315,3 +315,9 @@ export async function convertToOrder(quoteId: string) {
   });
   return order;
 }
+
+export const deleteQuote = async (id: string) => {
+  await prisma.quoteItem.deleteMany({ where: { quoteId: id } });
+  await prisma.quoteNote.deleteMany({ where: { quoteId: id } });
+  return prisma.quote.delete({ where: { id } });
+};

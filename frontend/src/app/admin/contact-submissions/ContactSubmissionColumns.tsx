@@ -55,10 +55,10 @@ export const contactSubmissionColumns: Column<ContactSubmissionRow>[] = [
     render: (row) => (
       <Link
         href={`/admin/contact-submissions/${row.id}`}
-        className="inline-flex items-center gap-1 rounded border px-3 py-1 text-sm hover:bg-gray-50"
+        className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+        title="View inquiry"
       >
-        <Eye size={14} />
-        View
+        <Eye size={13} />
       </Link>
     ),
   },

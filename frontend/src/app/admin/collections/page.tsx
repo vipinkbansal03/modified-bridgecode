@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Archive, Copy, Edit2, Globe, Image as ImageIcon, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import {
@@ -68,6 +69,11 @@ type CollectionSortBy = "sortOrder" | "name" | "slug" | "status" | "updatedAt" |
 const EMPTY_COUNTRIES: CountryToggle[] = [];
 
 export default function CollectionsPage() {
+  const { hasPermission } = useAdminAuth();
+  const canCreate = hasPermission("collections.create");
+  const canUpdate = hasPermission("collections.update");
+  const canDelete = hasPermission("collections.delete");
+
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -304,51 +310,61 @@ export default function CollectionsPage() {
         width: "220px",
         render: (row) => (
           <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setSelectedCollectionId(row.id)}
-              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-              title="Manage countries"
-            >
-              <Globe size={13} />
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDuplicate(row.id)}
-              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-              title="Duplicate collection"
-            >
-              <Copy size={13} />
-            </button>
-            <button
-              type="button"
-              onClick={() => handleArchiveToggle(row)}
-              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-              title={row.status === "ACTIVE" ? "Archive collection" : "Restore collection"}
-            >
-              {row.status === "ACTIVE" ? <Archive size={13} /> : <RotateCcw size={13} />}
-            </button>
-            <button
-              type="button"
-              onClick={() => edit(row)}
-              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-              title="Edit collection"
-            >
-              <Edit2 size={13} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setDeleting(row.id)}
-              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"
-              title="Delete collection"
-            >
-              <Trash2 size={13} />
-            </button>
+            {canUpdate && (
+              <button
+                type="button"
+                onClick={() => setSelectedCollectionId(row.id)}
+                className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+                title="Manage countries"
+              >
+                <Globe size={13} />
+              </button>
+            )}
+            {canCreate && (
+              <button
+                type="button"
+                onClick={() => handleDuplicate(row.id)}
+                className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+                title="Duplicate collection"
+              >
+                <Copy size={13} />
+              </button>
+            )}
+            {canUpdate && (
+              <button
+                type="button"
+                onClick={() => handleArchiveToggle(row)}
+                className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+                title={row.status === "ACTIVE" ? "Archive collection" : "Restore collection"}
+              >
+                {row.status === "ACTIVE" ? <Archive size={13} /> : <RotateCcw size={13} />}
+              </button>
+            )}
+            {canUpdate && (
+              <button
+                type="button"
+                onClick={() => edit(row)}
+                className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+                title="Edit collection"
+              >
+                <Edit2 size={13} />
+              </button>
+            )}
+            {canDelete && (
+              <button
+                type="button"
+                onClick={() => setDeleting(row.id)}
+                className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"
+                title="Delete collection"
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
           </div>
         ),
       },
     ],
-    [archiveCollection, duplicateCollection, edit],
+    [archiveCollection, duplicateCollection, edit, canCreate, canUpdate, canDelete],
   );
 
   const isCreateModalOpen = showForm && !form.id;
@@ -429,9 +445,11 @@ export default function CollectionsPage() {
             <option value="desc">Descending</option>
           </select>
         </div>
-        <button onClick={openCreateModal} className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
-          <Plus size={14} /> Create Collection
-        </button>
+        {canCreate && (
+          <button onClick={openCreateModal} className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
+            <Plus size={14} /> Create Collection
+          </button>
+        )}
       </div>
 
       <Modal

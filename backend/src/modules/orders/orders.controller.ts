@@ -20,3 +20,7 @@ export const invoice = asyncHandler(async (req: AuthRequest, res: Response) => {
   res.setHeader("Content-Disposition", `attachment; filename="invoice-${id}.pdf"`);
   res.send(buffer);
 });
+export const deleteOne = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await S.deleteOrder(String(req.params.id));
+  return ApiResponse.success(res, "Order deleted.");
+});

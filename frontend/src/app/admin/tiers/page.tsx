@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, ConfirmModal, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import {
@@ -111,6 +112,11 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 export default function AdminTiersPage() {
+  const { hasPermission } = useAdminAuth();
+  const canCreate = hasPermission("tiers.create");
+  const canUpdate = hasPermission("tiers.update");
+  const canDelete = hasPermission("tiers.delete");
+
   const { showToast, ToastComponent } = useToast();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -440,14 +446,16 @@ export default function AdminTiersPage() {
                 <Download size={14} />
                 Export
               </button>
-              <button
-                type="button"
-                onClick={startCreate}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-              >
-                <Plus size={14} />
-                Add Tier
-              </button>
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={startCreate}
+                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+                >
+                  <Plus size={14} />
+                  Add Tier
+                </button>
+              )}
             </div>
           </div>
 
@@ -531,7 +539,7 @@ export default function AdminTiersPage() {
             </div>
           )}
 
-          {selectedIds.length > 0 && (
+          {selectedIds.length > 0 && canUpdate && (
             <div className="mt-4 rounded-xl border border-dashed border-[#E31E24]/30 bg-[#FFF5F5]/30 p-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <span className="text-[13px] font-semibold text-[#E31E24]">{selectedIds.length} rows selected</span>
@@ -622,13 +630,15 @@ export default function AdminTiersPage() {
                   <thead className="bg-[#F8F8F8] border-b border-[#E6E6E6]">
                     <tr>
                       <th className="w-10 px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">
-                        <input
-                          type="checkbox"
-                          checked={allPageSelected}
-                          onChange={handleSelectAllPage}
-                          aria-label="Select all rows on this page"
-                          className="h-4 w-4 accent-[#E31E24]"
-                        />
+                        {canUpdate ? (
+                          <input
+                            type="checkbox"
+                            checked={allPageSelected}
+                            onChange={handleSelectAllPage}
+                            aria-label="Select all rows on this page"
+                            className="h-4 w-4 accent-[#E31E24]"
+                          />
+                        ) : null}
                       </th>
                       {filteredColumns.includes("name") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Tier Name</th> : null}
                       {filteredColumns.includes("customers") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Customers</th> : null}
@@ -662,17 +672,19 @@ export default function AdminTiersPage() {
                         return (
                           <tr key={tier.id} className={isSelected ? "bg-[#FFF8F8]" : "hover:bg-[#FAFAFA]"}>
                             <td className="px-4 py-4 align-top">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={(event) => {
-                                  const checked = event.target.checked;
-                                  setSelectedIds((current) =>
-                                    checked ? Array.from(new Set([...current, tier.id])) : current.filter((id) => id !== tier.id),
-                                  );
-                                }}
-                                className="h-4 w-4 accent-[#E31E24]"
-                              />
+                              {canUpdate ? (
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(event) => {
+                                    const checked = event.target.checked;
+                                    setSelectedIds((current) =>
+                                      checked ? Array.from(new Set([...current, tier.id])) : current.filter((id) => id !== tier.id),
+                                    );
+                                  }}
+                                  className="h-4 w-4 accent-[#E31E24]"
+                                />
+                              ) : null}
                             </td>
                             {filteredColumns.includes("name") ? (
                               <td className="px-4 py-4 align-top">
@@ -709,38 +721,48 @@ export default function AdminTiersPage() {
                                 >
                                   <Eye size={15} />
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() => startEdit(tier)}
-                                  className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                                  title="Edit tier"
-                                >
-                                  <Edit2 size={15} />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => startClone(tier)}
-                                  className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                                  title="Clone tier"
-                                >
-                                  <Copy size={15} />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleToggleStatus(tier)}
-                                  className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                                  title={tier.status === "ACTIVE" ? "Disable tier" : "Enable tier"}
-                                >
-                                  <RefreshCw size={15} />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setDeleteTarget(tier)}
-                                  className="rounded border border-[#F2D7D7] p-2 text-[#E31E24] hover:bg-[#FFF5F5]"
-                                  title="Delete tier"
-                                >
-                                  <Trash2 size={15} />
-                                </button>
+                                {canUpdate && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => startEdit(tier)}
+                                      className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                                      title="Edit tier"
+                                    >
+                                      <Edit2 size={15} />
+                                    </button>
+                                  </>
+                                )}
+                                {canCreate && (
+                                  <button
+                                    type="button"
+                                    onClick={() => startClone(tier)}
+                                    className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                                    title="Clone tier"
+                                  >
+                                    <Copy size={15} />
+                                  </button>
+                                )}
+                                {canUpdate && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleToggleStatus(tier)}
+                                    className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                                    title={tier.status === "ACTIVE" ? "Disable tier" : "Enable tier"}
+                                  >
+                                    <RefreshCw size={15} />
+                                  </button>
+                                )}
+                                {canDelete && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeleteTarget(tier)}
+                                    className="rounded border border-[#F2D7D7] p-2 text-[#E31E24] hover:bg-[#FFF5F5]"
+                                    title="Delete tier"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -858,43 +880,51 @@ export default function AdminTiersPage() {
                 </button>
               </div>
 
-              <div className="mt-4 grid gap-3">
-                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-[#D6D6D6] bg-[#FAFAFA] px-4 py-3">
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls,.csv"
-                    className="hidden"
-                    onChange={(event) => {
-                      setImportFile(event.target.files?.[0] ?? null);
-                      setImportReport(null);
-                      setImportMessage("");
-                    }}
-                  />
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-medium text-[#1A1A1A]">{importFile ? importFile.name : "Choose file"}</div>
-                    <div className="mt-0.5 text-[12px] text-[#6B6B6B]">Preview before import.</div>
+              {canUpdate ? (
+                <div className="mt-4 grid gap-3">
+                  <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-[#D6D6D6] bg-[#FAFAFA] px-4 py-3">
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={(event) => {
+                        setImportFile(event.target.files?.[0] ?? null);
+                        setImportReport(null);
+                        setImportMessage("");
+                      }}
+                    />
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-medium text-[#1A1A1A]">{importFile ? importFile.name : "Choose file"}</div>
+                      <div className="mt-0.5 text-[12px] text-[#6B6B6B]">Preview before import.</div>
+                    </div>
+                    <Upload size={16} className="shrink-0 text-[#E31E24]" />
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleImportPreview()}
+                      disabled={previewTierImport.isPending}
+                      className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-50"
+                    >
+                      <Eye size={14} /> Preview
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleImport()}
+                      disabled={importing || importTiers.isPending || !!importReport?.invalidRows}
+                      className="inline-flex items-center gap-2 rounded-md bg-[#E31E24] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
+                    >
+                      <Upload size={14} /> {importing ? "Importing..." : "Import"}
+                    </button>
                   </div>
-                  <Upload size={16} className="shrink-0 text-[#E31E24]" />
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleImportPreview()}
-                    disabled={previewTierImport.isPending}
-                    className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-50"
-                  >
-                    <Eye size={14} /> Preview
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleImport()}
-                    disabled={importing || importTiers.isPending || !!importReport?.invalidRows}
-                    className="inline-flex items-center gap-2 rounded-md bg-[#E31E24] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
-                  >
-                    <Upload size={14} /> {importing ? "Importing..." : "Import"}
-                  </button>
                 </div>
-              </div>
+              ) : (
+                <div className="mt-4 grid gap-3">
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center text-[13px] text-[#6B6B6B]">
+                    Importing is disabled (No edit permission)
+                  </div>
+                </div>
+              )}
 
               {importMessage ? (
                 <div className="mt-4 rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2 text-[13px] text-[#1A1A1A]">

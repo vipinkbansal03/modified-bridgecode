@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock3, Download, Filter, History, Layers, Search, SlidersHorizontal, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import {
   useAdminInventory,
@@ -121,7 +122,11 @@ function tinyNumber(value: number) {
 }
 
 export default function InventoryPage() {
+  const { hasPermission } = useAdminAuth();
+  const canUpdate = hasPermission("inventory.update");
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activeTab, setActiveTab] = useState<"levels" | "alerts" | "activity">("levels");
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -432,13 +437,15 @@ export default function InventoryPage() {
               <Download size={15} /> Export Selected
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={openImportDialog}
-            className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
-          >
-            <Upload size={15} /> Import Excel
-          </button>
+          {canUpdate && (
+            <button
+              type="button"
+              onClick={openImportDialog}
+              className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
+            >
+              <Upload size={15} /> Import Excel
+            </button>
+          )}
           <input
             ref={fileInputRef}
             type="file"
@@ -460,55 +467,101 @@ export default function InventoryPage() {
         <StatCard title="Out of Stock" value={tinyNumber(dashboard.data?.totals?.outOfStockCount ?? 0)} icon={<X size={18} />} color="bg-red-500" />
       </div>
 
-      <section className="mb-6 rounded-lg border border-[#E6E6E6] bg-white p-5">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <History size={17} className="text-[#E31E24]" />
-            <h2 className="text-[15px] font-semibold text-[#1A1A1A]">Low Stock Alerts</h2>
-          </div>
-          <span className="text-[12.5px] text-[#9A9A9A]">
-            {alerts.isLoading ? "Loading..." : `${(alerts.data ?? []).length} alert${(alerts.data ?? []).length === 1 ? "" : "s"}`}
-          </span>
-        </div>
-        {alerts.isLoading ? (
-          <div className="py-4 text-[13px] text-[#9A9A9A]">Loading low stock alerts...</div>
-        ) : (alerts.data ?? []).length === 0 ? (
-          <div className="py-4 text-[13px] text-[#9A9A9A]">No low stock alerts right now.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-[13px]">
-              <thead className="bg-[#F8F8F8] text-[#9A9A9A]">
-                <tr>
-                  <th className="px-4 py-2 text-left">Product</th>
-                  <th className="px-4 py-2 text-left">Variant</th>
-                  <th className="px-4 py-2 text-left">Stock</th>
-                  <th className="px-4 py-2 text-left">Threshold</th>
-                  <th className="px-4 py-2 text-left">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#E6E6E6]">
-                {(alerts.data ?? []).map((item: InventoryRow) => (
-                  <tr key={item.id} className="hover:bg-[#FAFAFA]">
-                    <td className="px-4 py-2 font-medium text-[#1A1A1A]">{item.product?.title ?? "Unknown product"}</td>
-                    <td className="px-4 py-2 text-[#555]">{item.variant?.title ?? "Main stock"}</td>
-                    <td className="px-4 py-2 text-[#555]">{item.stock}</td>
-                    <td className="px-4 py-2 text-[#555]">{item.lowStockThreshold}</td>
-                    <td className="px-4 py-2"><StatusBadge status={item.status} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-[12.5px] text-[#9A9A9A]">
-        <span>{data?.pagination ? `${data.pagination.total} inventory rows` : "Loading inventory..."}</span>
-        <label className="inline-flex items-center gap-2 text-[#555]">
-          <input type="checkbox" checked={allVisibleSelected} onChange={toggleVisible} />
-          Select visible
-        </label>
+      {/* Tabs */}
+      <div className="mb-6 flex border-b border-[#E6E6E6]">
+        <button
+          type="button"
+          onClick={() => setActiveTab("levels")}
+          className={`border-b-2 px-6 py-2.5 text-[14px] font-semibold transition-colors ${
+            activeTab === "levels"
+              ? "border-[#E31E24] text-[#E31E24]"
+              : "border-transparent text-[#6B6B6B] hover:text-[#1A1A1A]"
+          }`}
+        >
+          Stock Levels
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("alerts")}
+          className={`border-b-2 px-6 py-2.5 text-[14px] font-semibold transition-colors flex items-center gap-1.5 ${
+            activeTab === "alerts"
+              ? "border-[#E31E24] text-[#E31E24]"
+              : "border-transparent text-[#6B6B6B] hover:text-[#1A1A1A]"
+          }`}
+        >
+          Low Stock Alerts
+          {alerts.data && alerts.data.length > 0 && (
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#E31E24] px-1 text-[10.5px] font-bold text-white">
+              {alerts.data.length}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("activity")}
+          className={`border-b-2 px-6 py-2.5 text-[14px] font-semibold transition-colors ${
+            activeTab === "activity"
+              ? "border-[#E31E24] text-[#E31E24]"
+              : "border-transparent text-[#6B6B6B] hover:text-[#1A1A1A]"
+          }`}
+        >
+          Recent Stock Activity
+        </button>
       </div>
+
+      {activeTab === "alerts" && (
+        <section className="mb-6 rounded-lg border border-[#E6E6E6] bg-white p-5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <History size={17} className="text-[#E31E24]" />
+              <h2 className="text-[15px] font-semibold text-[#1A1A1A]">Low Stock Alerts</h2>
+            </div>
+            <span className="text-[12.5px] text-[#9A9A9A]">
+              {alerts.isLoading ? "Loading..." : `${(alerts.data ?? []).length} alert${(alerts.data ?? []).length === 1 ? "" : "s"}`}
+            </span>
+          </div>
+          {alerts.isLoading ? (
+            <div className="py-4 text-[13px] text-[#9A9A9A]">Loading low stock alerts...</div>
+          ) : (alerts.data ?? []).length === 0 ? (
+            <div className="py-4 text-[13px] text-[#9A9A9A]">No low stock alerts right now.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-[13px]">
+                <thead className="bg-[#F8F8F8] text-[#9A9A9A]">
+                  <tr>
+                    <th className="px-4 py-2 text-left">Product</th>
+                    <th className="px-4 py-2 text-left">Variant</th>
+                    <th className="px-4 py-2 text-left">Stock</th>
+                    <th className="px-4 py-2 text-left">Threshold</th>
+                    <th className="px-4 py-2 text-left">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E6E6E6]">
+                  {(alerts.data ?? []).map((item: InventoryRow) => (
+                    <tr key={item.id} className="hover:bg-[#FAFAFA]">
+                      <td className="px-4 py-2 font-medium text-[#1A1A1A]">{item.product?.title ?? "Unknown product"}</td>
+                      <td className="px-4 py-2 text-[#555]">{item.variant?.title ?? "Main stock"}</td>
+                      <td className="px-4 py-2 text-[#555]">{item.stock}</td>
+                      <td className="px-4 py-2 text-[#555]">{item.lowStockThreshold}</td>
+                      <td className="px-4 py-2"><StatusBadge status={item.status} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {activeTab === "levels" && (
+        <>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-[12.5px] text-[#9A9A9A]">
+            <span>{data?.pagination ? `${data.pagination.total} inventory rows` : "Loading inventory..."}</span>
+            <label className="inline-flex items-center gap-2 text-[#555]">
+              <input type="checkbox" checked={allVisibleSelected} onChange={toggleVisible} />
+              Select visible
+            </label>
+          </div>
 
       {selectedCount > 0 ? (
         <div className="mb-4 rounded-lg border border-[#E6E6E6] bg-white p-3">
@@ -582,12 +635,14 @@ export default function InventoryPage() {
                   return (
                     <div key={row.id} className="grid w-full items-center gap-0 px-2 py-4" style={{ gridTemplateColumns }}>
                       <div className="flex items-center justify-center px-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(row.id)}
-                          onChange={() => toggleSelected(row.id)}
-                          aria-label={`Select ${row.product.title}`}
-                        />
+                        {canUpdate && (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(row.id)}
+                            onChange={() => toggleSelected(row.id)}
+                            aria-label={`Select ${row.product.title}`}
+                          />
+                        )}
                       </div>
                       <div className="min-w-0 px-2">
                         <div className="truncate text-[13.5px] font-medium text-[#1A1A1A]">{row.product.title}</div>
@@ -603,17 +658,21 @@ export default function InventoryPage() {
                       {visibleColumns.reserved && <div className="px-2 text-[13px] text-[#555]">{tinyNumber(row.reservedStock)}</div>}
                       {visibleColumns.threshold && (
                         <div className="px-2">
-                          <input
-                            type="number"
-                            min="0"
-                            defaultValue={row.lowStockThreshold}
-                            className="w-full max-w-[96px] rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13px] outline-none focus:border-[#E31E24]"
-                            onBlur={(event) => {
-                              const nextValue = Number(event.target.value);
-                              if (!Number.isInteger(nextValue) || nextValue < 0 || nextValue === row.lowStockThreshold) return;
-                              void handleInlineUpdate(row, { lowStockThreshold: nextValue });
-                            }}
-                          />
+                          {canUpdate ? (
+                            <input
+                              type="number"
+                              min="0"
+                              defaultValue={row.lowStockThreshold}
+                              className="w-full max-w-[96px] rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13px] outline-none focus:border-[#E31E24]"
+                              onBlur={(event) => {
+                                const nextValue = Number(event.target.value);
+                                if (!Number.isInteger(nextValue) || nextValue < 0 || nextValue === row.lowStockThreshold) return;
+                                void handleInlineUpdate(row, { lowStockThreshold: nextValue });
+                              }}
+                            />
+                          ) : (
+                            <span className="text-[13px] text-[#555]">{row.lowStockThreshold}</span>
+                          )}
                         </div>
                       )}
                       {visibleColumns.status && <div className="px-2"><StatusBadge status={row.status} /></div>}
@@ -639,18 +698,22 @@ export default function InventoryPage() {
       </div>
 
       <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+        </>
+      )}
 
-      <section className="mt-6 rounded-lg border border-[#E6E6E6] bg-white p-5">
-        <div className="mb-3 flex items-center gap-2">
-          <Clock3 size={17} className="text-[#E31E24]" />
-          <h2 className="text-[15px] font-semibold text-[#1A1A1A]">Recent Stock Activity</h2>
-        </div>
-        {recentLoading ? (
-          <div className="py-4 text-[13px] text-[#9A9A9A]">Loading recent activity...</div>
-        ) : (
-          <AdjustmentRows adjustments={recentRows} emptyMessage="No stock adjustments recorded yet." />
-        )}
-      </section>
+      {activeTab === "activity" && (
+        <section className="mt-6 rounded-lg border border-[#E6E6E6] bg-white p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <Clock3 size={17} className="text-[#E31E24]" />
+            <h2 className="text-[15px] font-semibold text-[#1A1A1A]">Recent Stock Activity</h2>
+          </div>
+          {recentLoading ? (
+            <div className="py-4 text-[13px] text-[#9A9A9A]">Loading recent activity...</div>
+          ) : (
+            <AdjustmentRows adjustments={recentRows} emptyMessage="No stock adjustments recorded yet." />
+          )}
+        </section>
+      )}
 
       {historyRow && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

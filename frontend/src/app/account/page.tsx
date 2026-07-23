@@ -30,6 +30,7 @@ import {
 import { cn } from "@/utils/cn";
 import { formatPhoneNumberIntl } from "react-phone-number-input";
 import QuoteHistory from "./QuoteHistory";
+import { useCart } from "@/contexts/CartContext";
 import EditProfileModal from "./EditProfileModal";
 import AddressModal from "./AddressModal";
 
@@ -94,6 +95,42 @@ export default function AccountPage() {
   const [editingAddress, setEditingAddress] = useState<CustomerAddress | null>(null);
   const [isFetching, setIsFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { clearCart, addItems } = useCart();
+  const [reorderingId, setReorderingId] = useState<string | null>(null);
+
+  const handleReorder = async (order: CustomerOrderSummary) => {
+    setReorderingId(order.id);
+    try {
+      const cartItems = order.items
+        .filter((item) => item.product?.id && item.variant?.id)
+        .map((item) => ({
+          variantId: item.variant!.id,
+          productId: item.product!.id,
+          productSlug: item.product!.slug,
+          productTitle: item.product!.title,
+          variantTitle: item.variant!.title,
+          sku: item.sku,
+          quantity: item.quantity,
+          unitPrice: Number(item.unitPrice),
+          currencyCode: order.currency?.code ?? "INR",
+          currencySymbol: order.currency?.symbol ?? "Rs ",
+          selectedAttributes: {},
+        }));
+
+      if (cartItems.length === 0) {
+        alert("The items in this order are no longer available for purchase.");
+        return;
+      }
+
+      clearCart();
+      addItems(cartItems);
+      router.push("/checkout");
+    } catch (err) {
+      console.error("Reorder failed", err);
+    } finally {
+      setReorderingId(null);
+    }
+  };
 
   useEffect(() => {
     if (!isLoading && !currentCustomer) {
@@ -510,8 +547,8 @@ export default function AccountPage() {
                                 </strong>
                               </div>
                             </div>
-                            {canDownloadInvoice(order) ? (
-                              <div className="mt-4 flex justify-end">
+                            <div className="mt-4 flex justify-end gap-2">
+                              {canDownloadInvoice(order) ? (
                                 <button
                                   type="button"
                                   onClick={() => handleInvoiceDownload(order)}
@@ -523,8 +560,16 @@ export default function AccountPage() {
                                     ? "Downloading..."
                                     : "Download invoice"}
                                 </button>
-                              </div>
-                            ) : null}
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => void handleReorder(order)}
+                                disabled={reorderingId === order.id}
+                                className="inline-flex h-9 items-center gap-2 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
+                              >
+                                {reorderingId === order.id ? "Processing..." : "Reorder"}
+                              </button>
+                            </div>
                           </div>
                         )}
                       </article>

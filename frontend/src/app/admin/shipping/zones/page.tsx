@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
@@ -56,6 +57,11 @@ function money(value: string | number | null | undefined) {
 }
 
 export default function ShippingZonesPage() {
+  const { hasPermission } = useAdminAuth();
+  const canCreate = hasPermission("shipping.create");
+  const canUpdate = hasPermission("shipping.update");
+  const canDelete = hasPermission("shipping.delete");
+
   const { showToast, ToastComponent } = useToast();
   const [zones, setZones] = useState<ShippingZone[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -177,12 +183,16 @@ export default function ShippingZonesPage() {
       label: "Actions",
       render: (zone) => (
         <div className="flex items-center gap-2">
-          <button onClick={() => openEdit(zone)} className="rounded-md border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:text-[#111]" title="Edit zone">
-            <Edit2 size={14} />
-          </button>
-          <button onClick={() => setDeleteZone(zone)} className="rounded-md border border-red-100 p-2 text-red-600 hover:bg-red-50" title="Delete zone">
-            <Trash2 size={14} />
-          </button>
+          {canUpdate && (
+            <button onClick={() => openEdit(zone)} className="rounded-md border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:text-[#111]" title="Edit zone">
+              <Edit2 size={14} />
+            </button>
+          )}
+          {canDelete && (
+            <button onClick={() => setDeleteZone(zone)} className="rounded-md border border-red-100 p-2 text-red-600 hover:bg-red-50" title="Delete zone">
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       ),
     },
@@ -198,9 +208,11 @@ export default function ShippingZonesPage() {
             </Link>
             <span className="border-b-2 border-[#E31E24] px-4 py-2 text-[13px] font-semibold text-[#111]">Zones</span>
           </div>
-          <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-md bg-[#E31E24] px-4 py-2.5 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
-            <Plus size={15} /> Add Zone
-          </button>
+          {canCreate && (
+            <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-md bg-[#E31E24] px-4 py-2.5 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
+              <Plus size={15} /> Add Zone
+            </button>
+          )}
         </div>
 
         <DataTable columns={columns} data={zones} isLoading={isLoading} rowKey="id" emptyMessage="No shipping zones configured." />

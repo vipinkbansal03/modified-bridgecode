@@ -22,6 +22,7 @@ import {
 import { useProductFacets } from "@/hooks/api/useProducts";
 import { useLanguageContext } from "@/contexts/LanguageContext";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { getAdminErrorMessage } from "@/services/adminApi";
 import { ATTRIBUTE_DISPLAY_TYPE_LABELS, type AttributeRole } from "@/lib/attributeUtils";
 import type { ApiAttribute, ApiAttributeValue } from "@/types/api.types";
@@ -45,6 +46,9 @@ export interface AttributeFilterConfig {
 type EditorMode = "edit" | null;
 
 export default function ProductFiltersPage() {
+  const { hasPermission } = useAdminAuth();
+  const canManageFilters = hasPermission("attributes.update");
+
   const { selectedLanguage } = useLanguageContext();
   const { selectedCountryCode } = useCurrencyContext();
   const { data: attributes, isLoading: attrsLoading, refetch: refetchAttrs } = useAdminAttributes();
@@ -237,14 +241,16 @@ export default function ProductFiltersPage() {
               <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Attribute Filters ({localFilters.length})</h3>
               <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">These are the filters currently shown on the storefront <span className="font-medium text-[#6B6B6B]">/products</span> page. Toggle to show or hide each one.</p>
             </div>
-            <button
-              type="button"
-              onClick={handleBulkSave}
-              disabled={isSaving || updateFilters.isPending}
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
-            >
-              {isSaving || updateFilters.isPending ? "Saving..." : "Save All Changes"}
-            </button>
+            {canManageFilters && (
+              <button
+                type="button"
+                onClick={handleBulkSave}
+                disabled={isSaving || updateFilters.isPending}
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
+              >
+                {isSaving || updateFilters.isPending ? "Saving..." : "Save All Changes"}
+              </button>
+            )}
           </div>
 
           {localFilters.length === 0 ? (
@@ -295,6 +301,7 @@ export default function ProductFiltersPage() {
                           type="checkbox"
                           className="h-4 w-4 accent-brand"
                           checked={config.enabled}
+                          disabled={!canManageFilters}
                           onChange={(e) => {
                             setLocalFilters((prev: any[]) =>
                               prev.map((c: any) =>
@@ -309,6 +316,7 @@ export default function ProductFiltersPage() {
                       </label>
                       <select
                         value={config.displayType}
+                        disabled={!canManageFilters}
                         onChange={(e) => {
                           setLocalFilters((prev: any[]) =>
                             prev.map((c: any) =>
@@ -324,22 +332,26 @@ export default function ProductFiltersPage() {
                         <option value="X_GRID">Grid X Axis</option>
                         <option value="Y_GRID">Grid Y Axis</option>
                       </select>
-                      <button
-                        type="button"
-                        onClick={() => openEditModal(config.attributeId)}
-                        className="rounded p-1.5 text-[#6B6B6B] hover:bg-[#F0F0F0]"
-                        title="Configure allowed values"
-                      >
-                        <SlidersHorizontal size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeletingId(config.attributeId)}
-                        className="rounded p-1.5 text-red-500 hover:bg-red-50"
-                        title="Hide filter"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      {canManageFilters && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(config.attributeId)}
+                            className="rounded p-1.5 text-[#6B6B6B] hover:bg-[#F0F0F0]"
+                            title="Configure allowed values"
+                          >
+                            <SlidersHorizontal size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeletingId(config.attributeId)}
+                            className="rounded p-1.5 text-red-500 hover:bg-red-50"
+                            title="Hide filter"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 );

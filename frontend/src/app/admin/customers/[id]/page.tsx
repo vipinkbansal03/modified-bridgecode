@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import { ArrowLeft, CheckCircle2, MapPin, PackageSearch, Save, XCircle } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, CheckCircle2, MapPin, PackageSearch, Save, XCircle, Edit2, X } from "lucide-react";
 import { AdminInput, AdminSelect, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { Modal } from "@/components/ui/Modal";
 import {
+  useAdminCountries,
   useAdminCustomer,
   useAdminCustomerRoles,
   useAdminCustomerAddresses,
@@ -18,7 +20,7 @@ import {
   useUpdateCustomerRole,
   useUpdateCustomerTier,
 } from "@/hooks/admin/useAdminHooks";
-import { getAdminErrorMessage } from "@/services/adminApi";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
 type Customer = {
   id: string;
@@ -66,6 +68,8 @@ function formatMoney(value: string | number, currency?: CustomerOrder["currency"
 }
 
 export default function AdminCustomerDetailPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const params = useParams<{ id: string }>();
   const customerId = params.id;
   const { showToast } = useToast();
@@ -73,12 +77,59 @@ export default function AdminCustomerDetailPage() {
   const { data: customerRoles = [] } = useAdminCustomerRoles();
   const { data: tiers = [] } = useAdminTiers();
   const { data: orders = [], isLoading: ordersLoading } = useAdminCustomerOrders(customerId) as { data?: CustomerOrder[]; isLoading: boolean };
-  const { data: addresses = [], isLoading: addressesLoading } = useAdminCustomerAddresses(customerId) as { data?: CustomerAddress[]; isLoading: boolean };
+  const { data: addresses = [], isLoading: addressesLoading, refetch: refetchAddresses } = useAdminCustomerAddresses(customerId) as { data?: CustomerAddress[]; isLoading: boolean; refetch: () => void };
+  const { data: countries = [] } = useAdminCountries() as { data?: any[] };
+  const activeCountries = useMemo(() => countries.filter((c: any) => c.status === "ACTIVE"), [countries]);
+
   const updateTier = useUpdateCustomerTier();
   const updateCustomerRole = useUpdateCustomerRole();
   const updateCustomer = useUpdateAdminCustomer();
   const approveCustomer = useApproveCustomer();
   const rejectCustomer = useRejectCustomer();
+
+  const mode = searchParams.get("mode") ?? "view";
+  const isReadOnly = mode === "view";
+
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [selectedAddress, setSelectedAddress] = useState<any>(null);
+  const [addressForm, setAddressForm] = useState({
+    fullName: "",
+    phone: "",
+    addressLine1: "",
+    addressLine2: "",
+    city: "",
+    state: "",
+    postalCode: "",
+    countryId: "",
+  });
+
+  useEffect(() => {
+    if (!selectedAddress) return;
+    setAddressForm({
+      fullName: selectedAddress.fullName ?? "",
+      phone: selectedAddress.phone ?? "",
+      addressLine1: selectedAddress.addressLine1 ?? "",
+      addressLine2: selectedAddress.addressLine2 ?? "",
+      city: selectedAddress.city ?? "",
+      state: selectedAddress.state ?? "",
+      postalCode: selectedAddress.postalCode ?? "",
+      countryId: selectedAddress.countryId ?? "",
+    });
+  }, [selectedAddress]);
+
+  const handleSaveAddress = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAddress) return;
+    try {
+      await adminApi.put(`/customers/${customerId}/addresses/${selectedAddress.id}`, addressForm);
+      showToast("Customer address updated successfully.", "success");
+      setShowAddressModal(false);
+      setSelectedAddress(null);
+      refetchAddresses();
+    } catch (err) {
+      showToast(getAdminErrorMessage(err, "Failed to update address."), "error");
+    }
+  };
 
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", status: "ACTIVE", customerType: "RETAIL", approvalStatus: "ACTIVE" });
 
@@ -108,6 +159,7 @@ export default function AdminCustomerDetailPage() {
         approvalStatus: form.approvalStatus,
       });
       showToast("Customer profile updated.", "success");
+      router.push(`/admin/customers/${customerId}?mode=view`);
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Could not update customer profile."), "error");
     }
@@ -167,21 +219,27 @@ export default function AdminCustomerDetailPage() {
                   </h2>
                   <p className="mt-1 text-[13px] text-[#6B6B6B]">{customer.email}</p>
                 </div>
-                <div className="flex flex-col items-end gap-2">
-                  <StatusBadge status={customer.status} />
-                  <StatusBadge status={customer.approvalStatus} />
-                </div>
+                {isReadOnly && (
+                  <Link
+                    href={`/admin/customers/${customerId}?mode=edit`}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 text-[12.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors"
+                  >
+                    <Edit2 size={13} />
+                    Edit Profile
+                  </Link>
+                )}
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <AdminInput label="First Name" value={form.firstName} onChange={(event) => setForm((prev) => ({ ...prev, firstName: event.target.value }))} />
-                <AdminInput label="Last Name" value={form.lastName} onChange={(event) => setForm((prev) => ({ ...prev, lastName: event.target.value }))} />
-                <AdminInput label="Email" type="email" value={form.email} onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} />
-                <AdminInput label="Phone" value={form.phone} onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))} />
+                <AdminInput label="First Name" value={form.firstName} onChange={(event) => setForm((prev) => ({ ...prev, firstName: event.target.value }))} disabled={isReadOnly} />
+                <AdminInput label="Last Name" value={form.lastName} onChange={(event) => setForm((prev) => ({ ...prev, lastName: event.target.value }))} disabled={isReadOnly} />
+                <AdminInput label="Email" type="email" value={form.email} onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} disabled={isReadOnly} />
+                <AdminInput label="Phone" value={form.phone} onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))} disabled={isReadOnly} />
                 <AdminSelect
                   label="Status"
                   value={form.status}
                   onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}
+                  disabled={isReadOnly}
                   options={[
                     { value: "ACTIVE", label: "Active" },
                     { value: "INACTIVE", label: "Inactive" },
@@ -191,6 +249,7 @@ export default function AdminCustomerDetailPage() {
                   label="Customer Type"
                   value={form.customerType}
                   onChange={(event) => setForm((prev) => ({ ...prev, customerType: event.target.value }))}
+                  disabled={isReadOnly}
                   options={[
                     { value: "RETAIL", label: "Retail" },
                     { value: "DEALER", label: "Dealer" },
@@ -202,6 +261,7 @@ export default function AdminCustomerDetailPage() {
                   label="Approval Status"
                   value={form.approvalStatus}
                   onChange={(event) => setForm((prev) => ({ ...prev, approvalStatus: event.target.value }))}
+                  disabled={isReadOnly}
                   options={[
                     { value: "ACTIVE", label: "Active" },
                     { value: "PENDING_APPROVAL", label: "Pending Approval" },
@@ -210,17 +270,25 @@ export default function AdminCustomerDetailPage() {
                 />
               </div>
 
-              <div className="mt-5 flex justify-end">
-                <button
-                  type="button"
-                  onClick={handleProfileSave}
-                  disabled={updateCustomer.isPending}
-                  className="inline-flex h-10 items-center gap-2 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#C91920] disabled:opacity-60"
-                >
-                  <Save size={15} />
-                  Save Profile
-                </button>
-              </div>
+              {!isReadOnly && (
+                <div className="mt-5 flex justify-end gap-2">
+                  <Link
+                    href={`/admin/customers/${customerId}?mode=view`}
+                    className="inline-flex h-10 items-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-4 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]"
+                  >
+                    Cancel
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={handleProfileSave}
+                    disabled={updateCustomer.isPending}
+                    className="inline-flex h-10 items-center gap-2 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#C91920] disabled:opacity-60"
+                  >
+                    <Save size={15} />
+                    Save Profile
+                  </button>
+                </div>
+              )}
             </section>
 
             <section className="rounded-lg border border-[#E6E6E6] bg-white p-5">
@@ -232,7 +300,7 @@ export default function AdminCustomerDetailPage() {
                     <button
                       type="button"
                       onClick={() => handleApprovalAction("approve")}
-                      disabled={approveCustomer.isPending || rejectCustomer.isPending}
+                      disabled={isReadOnly || approveCustomer.isPending || rejectCustomer.isPending}
                       className="inline-flex h-9 items-center gap-2 rounded-md bg-[#1F8F4A] px-3 text-[12.5px] font-semibold text-white disabled:opacity-60"
                     >
                       <CheckCircle2 size={14} />
@@ -241,7 +309,7 @@ export default function AdminCustomerDetailPage() {
                     <button
                       type="button"
                       onClick={() => handleApprovalAction("reject")}
-                      disabled={approveCustomer.isPending || rejectCustomer.isPending}
+                      disabled={isReadOnly || approveCustomer.isPending || rejectCustomer.isPending}
                       className="inline-flex h-9 items-center gap-2 rounded-md border border-[#E31E24] bg-white px-3 text-[12.5px] font-semibold text-[#E31E24] disabled:opacity-60"
                     >
                       <XCircle size={14} />
@@ -258,7 +326,7 @@ export default function AdminCustomerDetailPage() {
                 label="Customer Role"
                 value={customer.customerRoleId ?? ""}
                 onChange={(event) => handleCustomerRoleChange(event.target.value)}
-                disabled={updateCustomerRole.isPending}
+                disabled={isReadOnly || updateCustomerRole.isPending}
                 options={customerRoles.map((role: { id: string; name: string; status: string }) => ({
                   value: role.id,
                   label: role.status === "ACTIVE" ? role.name : `${role.name} (Inactive)`,
@@ -268,7 +336,7 @@ export default function AdminCustomerDetailPage() {
                 label="Tier"
                 value={customer.tierId ?? ""}
                 onChange={(event) => handleTierChange(event.target.value)}
-                disabled={updateTier.isPending}
+                disabled={isReadOnly || updateTier.isPending}
                 options={[
                   { value: "", label: "None" },
                   ...tiers.map((tier: { id: string; name: string }) => ({ value: tier.id, label: tier.name })),
@@ -331,7 +399,22 @@ export default function AdminCustomerDetailPage() {
                   <div key={address.id} className="rounded-md border border-[#E6E6E6] bg-[#FAFAFA] p-4 text-[13px] text-[#6B6B6B]">
                     <div className="mb-2 flex items-center justify-between gap-3">
                       <div className="font-semibold text-[#1A1A1A]">{address.label || address.fullName}</div>
-                      {address.isDefault && <span className="rounded-full bg-[#E31E24]/10 px-2 py-0.5 text-[11px] font-semibold text-[#E31E24]">Default</span>}
+                      <div className="flex items-center gap-1.5">
+                        {address.isDefault && <span className="rounded-full bg-[#E31E24]/10 px-2 py-0.5 text-[11px] font-semibold text-[#E31E24]">Default</span>}
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedAddress(address);
+                              setShowAddressModal(true);
+                            }}
+                            className="text-[#6B6B6B] hover:text-[#E31E24] p-0.5 rounded transition-colors"
+                            title="Edit address"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div>{address.fullName}</div>
                     <div>{address.phone}</div>
@@ -350,6 +433,102 @@ export default function AdminCustomerDetailPage() {
           </section>
         </div>
       )}
+
+      <Modal open={showAddressModal} onClose={() => { setShowAddressModal(false); setSelectedAddress(null); }}>
+        <form onSubmit={handleSaveAddress} className="flex flex-col max-h-[90vh] w-full max-w-2xl bg-white rounded-xl shadow-xl overflow-hidden">
+          <div className="border-b border-[#E6E6E6] px-5 py-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-semibold text-[#1A1A1A]">
+                Edit Customer Address
+              </h3>
+              <p className="mt-0.5 text-xs text-[#6B6B6B]">
+                Modify the customer's billing or shipping address details.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setShowAddressModal(false); setSelectedAddress(null); }}
+              className="text-[#9A9A9A] hover:text-[#1A1A1A]"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <AdminInput
+                label="Full Name *"
+                value={addressForm.fullName}
+                onChange={(e) => setAddressForm(prev => ({ ...prev, fullName: e.target.value }))}
+                required
+              />
+              <AdminInput
+                label="Phone Number"
+                value={addressForm.phone}
+                onChange={(e) => setAddressForm(prev => ({ ...prev, phone: e.target.value }))}
+              />
+              <div className="md:col-span-2">
+                <AdminInput
+                  label="Address Line 1 *"
+                  value={addressForm.addressLine1}
+                  onChange={(e) => setAddressForm(prev => ({ ...prev, addressLine1: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="md:col-span-2">
+                <AdminInput
+                  label="Address Line 2"
+                  value={addressForm.addressLine2}
+                  onChange={(e) => setAddressForm(prev => ({ ...prev, addressLine2: e.target.value }))}
+                />
+              </div>
+              <AdminInput
+                label="City *"
+                value={addressForm.city}
+                onChange={(e) => setAddressForm(prev => ({ ...prev, city: e.target.value }))}
+                required
+              />
+              <AdminInput
+                label="State / Province"
+                value={addressForm.state}
+                onChange={(e) => setAddressForm(prev => ({ ...prev, state: e.target.value }))}
+              />
+              <AdminInput
+                label="Postal / ZIP Code *"
+                value={addressForm.postalCode}
+                onChange={(e) => setAddressForm(prev => ({ ...prev, postalCode: e.target.value }))}
+                required
+              />
+              <AdminSelect
+                label="Country *"
+                value={addressForm.countryId}
+                onChange={(e) => setAddressForm(prev => ({ ...prev, countryId: e.target.value }))}
+                required
+                options={[
+                  { value: "", label: "Select Country" },
+                  ...activeCountries.map((c: any) => ({ value: c.id, label: c.name })),
+                ]}
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-[#E6E6E6] bg-slate-50 px-5 py-4 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => { setShowAddressModal(false); setSelectedAddress(null); }}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+            >
+              Save Changes
+            </button>
+          </div>
+        </form>
+      </Modal>
     </AdminLayout>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { ConfirmModal, useToast } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
@@ -22,7 +23,6 @@ import {
   Edit3,
   Trash2,
   Search,
-  Sparkles,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
@@ -64,12 +64,15 @@ export default function RolesPage() {
     return { totalRoles, fullAccessRoles, customRoles, totalUsers };
   }, [roles]);
 
+  const [enabledModules, setEnabledModules] = useState<Record<string, boolean>>({});
+
   const openCreateModal = () => {
     setEditingRole(null);
     setRoleName("");
     setSelectedPerms([]);
     setIsFullAccess(false);
     setSearchQuery("");
+    setEnabledModules({});
     setShowModal(true);
   };
 
@@ -78,7 +81,15 @@ export default function RolesPage() {
     setRoleName(role.name);
     const fullAcc = role.permissions.includes("*");
     setIsFullAccess(fullAcc);
-    setSelectedPerms(fullAcc ? ["*"] : [...role.permissions]);
+    const perms = (fullAcc ? ["*"] : [...role.permissions]).filter((p) => p === "*" || ALL_PERMISSIONS.includes(p));
+    setSelectedPerms(perms);
+    
+    const initialEnabled: Record<string, boolean> = {};
+    PERMISSION_GROUPS.forEach((g) => {
+      initialEnabled[g.title] = g.permissions.some((p) => perms.includes(p));
+    });
+    setEnabledModules(initialEnabled);
+
     setSearchQuery("");
     setShowModal(true);
   };
@@ -89,16 +100,25 @@ export default function RolesPage() {
     setRoleName("");
     setSelectedPerms([]);
     setIsFullAccess(false);
+    setEnabledModules({});
   };
 
   const applyPreset = (preset: RolePreset) => {
+    const perms = [...preset.permissions];
     if (preset.permissions.includes("*")) {
       setIsFullAccess(true);
       setSelectedPerms(["*"]);
     } else {
       setIsFullAccess(false);
-      setSelectedPerms([...preset.permissions]);
+      setSelectedPerms(perms);
     }
+
+    const initialEnabled: Record<string, boolean> = {};
+    PERMISSION_GROUPS.forEach((g) => {
+      initialEnabled[g.title] = g.permissions.some((p) => perms.includes(p));
+    });
+    setEnabledModules(initialEnabled);
+
     if (!roleName) {
       setRoleName(preset.name);
     }
@@ -179,6 +199,21 @@ export default function RolesPage() {
   return (
     <AdminLayout title="Roles & Permissions" breadcrumb={[{ label: "Roles" }]}>
       <div className="space-y-6 p-4 md:p-6">
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-[#E6E6E6] mb-5">
+          <Link
+            href="/admin/roles"
+            className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-[#E31E24] text-[#E31E24]"
+          >
+            System Roles
+          </Link>
+          <Link
+            href="/admin/customer-roles"
+            className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-transparent text-[#6B7280] hover:text-[#111827]"
+          >
+            Customer Roles
+          </Link>
+        </div>
         {/* Header Banner */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-xl border border-[#E5E7EB] shadow-2xs">
           <div>
@@ -247,7 +282,7 @@ export default function RolesPage() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {roles.map((role) => {
                 const isSuper = role.permissions.includes("*");
-                const permCount = isSuper ? ALL_PERMISSIONS.length : role.permissions.length;
+                const permCount = isSuper ? ALL_PERMISSIONS.length : role.permissions.filter((p) => ALL_PERMISSIONS.includes(p)).length;
                 const userCount = role._count?.users || 0;
 
                 return (
@@ -349,28 +384,7 @@ export default function RolesPage() {
             </div>
           </div>
 
-          {/* Quick Presets Section */}
-          {!isFullAccess && (
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#374151]">
-                <Sparkles size={13} className="text-[#F59E0B]" />
-                1-Click Quick Role Presets:
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {ROLE_PRESETS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => applyPreset(preset)}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[#E5E7EB] bg-white text-[11.5px] font-medium text-[#374151] hover:bg-[#F3F4F6] hover:border-[#D1D5DB] transition-all shadow-2xs"
-                  >
-                    <span>{preset.icon}</span>
-                    <span>{preset.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+
 
           {/* Search Bar */}
           {!isFullAccess && (
@@ -412,62 +426,87 @@ export default function RolesPage() {
                 return (
                   <div key={group.title} className="rounded-xl border border-[#E5E7EB] bg-white overflow-hidden shadow-2xs">
                     {/* Group Header */}
+                    {/* Group Header */}
                     <div className="bg-[#F9FAFB] px-3.5 py-2.5 border-b border-[#E5E7EB] flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={enabledModules[group.title] ?? false}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setEnabledModules((prev) => ({ ...prev, [group.title]: checked }));
+                            if (!checked) {
+                              setSelectedPerms((current) => current.filter((p) => !groupKeys.includes(p)));
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24] cursor-pointer"
+                        />
                         <button
                           type="button"
                           onClick={() => toggleGroupAccordion(group.title)}
-                          className="text-[#6B7280] hover:text-[#111827]"
+                          className="text-[#6B7280] hover:text-[#111827] flex items-center"
                         >
                           {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                         </button>
                         <h4 className="text-xs font-bold text-[#111827]">{group.title} Module</h4>
-                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-[#E5E7EB] text-[#374151]">
-                          {groupKeys.filter((k) => selectedPerms.includes(k)).length} / {groupKeys.length} Selected
-                        </span>
+                        {enabledModules[group.title] && (
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-[#E5E7EB] text-[#374151]">
+                            {groupKeys.filter((k) => selectedPerms.includes(k)).length} / {groupKeys.length} Selected
+                          </span>
+                        )}
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => toggleGroupAll(group.title, groupKeys)}
-                        className="text-[11.5px] font-bold text-[#E31E24] hover:underline"
-                      >
-                        {allSelected ? "Deselect All" : "Select All Module"}
-                      </button>
+                      {enabledModules[group.title] && (
+                        <button
+                          type="button"
+                          onClick={() => toggleGroupAll(group.title, groupKeys)}
+                          className="text-[11.5px] font-bold text-[#E31E24] hover:underline"
+                        >
+                          {allSelected ? "Deselect All" : "Select All Module"}
+                        </button>
+                      )}
                     </div>
 
                     {/* Group Permission Switches Grid */}
                     {isExpanded && (
-                      <div className="p-3 grid gap-2.5 sm:grid-cols-2">
-                        {groupMeta.map((meta) => {
-                          const checked = selectedPerms.includes(meta.key);
-                          return (
-                            <label
-                              key={meta.key}
-                              className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer ${
-                                checked
-                                  ? "border-[#E5E7EB] bg-[#FFF5F5] ring-1 ring-[#E31E24]/30 shadow-2xs"
-                                  : "border-[#E5E7EB] bg-white hover:border-[#D1D5DB]"
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => togglePermission(meta.key)}
-                                className="mt-0.5 h-4 w-4 rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24]"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between gap-1">
-                                  <span className="text-xs font-bold text-[#111827]">{meta.label}</span>
-                                  <span className="font-mono text-[9.5px] text-[#6B7280] bg-[#F3F4F6] px-1.5 py-0.5 rounded">
-                                    {meta.key}
-                                  </span>
-                                </div>
-                                <p className="text-[11px] text-[#6B7280] mt-0.5 leading-normal">{meta.description}</p>
-                              </div>
-                            </label>
-                          );
-                        })}
+                      <div className="p-3">
+                        {enabledModules[group.title] ? (
+                          <div className="grid gap-2.5 sm:grid-cols-2">
+                            {groupMeta.map((meta) => {
+                              const checked = selectedPerms.includes(meta.key);
+                              return (
+                                <label
+                                  key={meta.key}
+                                  className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer ${
+                                    checked
+                                      ? "border-[#E5E7EB] bg-[#FFF5F5] ring-1 ring-[#E31E24]/30 shadow-2xs"
+                                      : "border-[#E5E7EB] bg-white hover:border-[#D1D5DB]"
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => togglePermission(meta.key)}
+                                    className="mt-0.5 h-4 w-4 rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24]"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="text-xs font-bold text-[#111827]">{meta.label}</span>
+                                      <span className="font-mono text-[9.5px] text-[#6B7280] bg-[#F3F4F6] px-1.5 py-0.5 rounded">
+                                        {meta.key}
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-[#6B6B6B] mt-0.5 leading-normal">{meta.description}</p>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="py-3 text-center text-xs text-[#9CA3AF] italic">
+                            Module disabled. Check the box in the header to configure granular permissions.
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

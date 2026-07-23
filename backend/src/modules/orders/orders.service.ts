@@ -281,3 +281,8 @@ export async function deliverOrder(id: string) {
     data: { status: "DELIVERED" },
   });
 }
+
+export const deleteOrder = async (id: string) => {
+  await prisma.orderItem.deleteMany({ where: { orderId: id } });
+  return prisma.order.delete({ where: { id } });
+};

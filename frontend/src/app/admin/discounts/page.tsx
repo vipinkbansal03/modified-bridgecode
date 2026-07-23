@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   AdminInput,
   AdminSelect,
@@ -201,6 +202,11 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 export default function DiscountsPage() {
+  const { hasPermission } = useAdminAuth();
+  const canCreate = hasPermission("discounts.create");
+  const canUpdate = hasPermission("discounts.update");
+  const canDelete = hasPermission("discounts.delete");
+
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState("");
@@ -555,15 +561,16 @@ export default function DiscountsPage() {
       key: "select",
       label: "",
       width: "48px",
-      render: (row) => (
-        <input
-          type="checkbox"
-          checked={selectedIds.includes(row.id)}
-          onChange={() => toggleRowSelection(row.id)}
-          aria-label={`Select ${row.name}`}
-          className="h-4 w-4 cursor-pointer rounded border-[#D9D9D9] accent-[#E31E24]"
-        />
-      ),
+      render: (row) =>
+        canUpdate ? (
+          <input
+            type="checkbox"
+            checked={selectedIds.includes(row.id)}
+            onChange={() => toggleRowSelection(row.id)}
+            aria-label={`Select ${row.name}`}
+            className="h-4 w-4 cursor-pointer rounded border-[#D9D9D9] accent-[#E31E24]"
+          />
+        ) : null,
     },
     {
       key: "name",
@@ -642,11 +649,13 @@ export default function DiscountsPage() {
           <button
             type="button"
             onClick={() => toggleStatus(row)}
-            disabled={updateDiscount.isPending}
+            disabled={updateDiscount.isPending || !canUpdate}
             title={
-              isActive
-                ? "Click to pause this discount rule"
-                : "Click to activate this discount rule"
+              !canUpdate
+                ? "You do not have permission to edit discounts"
+                : isActive
+                  ? "Click to pause this discount rule"
+                  : "Click to activate this discount rule"
             }
             className="inline-flex items-center gap-2 rounded-full border border-[#E6E6E6] bg-white px-2.5 py-1.5 text-[12px] font-medium transition hover:border-[#D0D0D0] disabled:cursor-not-allowed disabled:opacity-60"
           >
@@ -670,21 +679,27 @@ export default function DiscountsPage() {
       width: "86px",
       render: (row) => (
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              setForm(toForm(row));
-              setShowForm(true);
-            }}
-            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-          >
-            <Edit2 size={13} />
-          </button>
-          <button
-            onClick={() => setDeleting(row.id)}
-            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"
-          >
-            <Trash2 size={13} />
-          </button>
+          {canUpdate && (
+            <button
+              onClick={() => {
+                setForm(toForm(row));
+                setShowForm(true);
+              }}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+              title="Edit discount"
+            >
+              <Edit2 size={13} />
+            </button>
+          )}
+          {canDelete && (
+            <button
+              onClick={() => setDeleting(row.id)}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"
+              title="Delete discount"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
         </div>
       ),
     },
@@ -947,17 +962,19 @@ export default function DiscountsPage() {
               <Download size={14} />
               Export
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                resetForm();
-                setShowForm(true);
-              }}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-            >
-              <Plus size={14} />
-              Create Discount
-            </button>
+            {canCreate && (
+              <button
+                type="button"
+                onClick={() => {
+                  resetForm();
+                  setShowForm(true);
+                }}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
+              >
+                <Plus size={14} />
+                Create Discount
+              </button>
+            )}
           </div>
         </div>
 
@@ -1100,47 +1117,49 @@ export default function DiscountsPage() {
         {isCreateModalOpen ? discountForm : null}
       </Modal>
 
-      <div className="mb-3 flex flex-col gap-2 rounded-lg border border-[#E6E6E6] bg-white px-4 py-3 md:flex-row md:items-center md:justify-between">
-        <label className="inline-flex cursor-pointer items-center gap-2 text-[13px] font-medium text-[#1A1A1A]">
-          <input
-            type="checkbox"
-            checked={selectedOnPage}
-            onChange={togglePageSelection}
-            disabled={!discounts.length}
-            className="h-4 w-4 cursor-pointer rounded border-[#D9D9D9] accent-[#E31E24] disabled:cursor-not-allowed"
-          />
-          Select visible discounts
-        </label>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[12.5px] text-[#6B6B6B]">
-            {selectedIds.length} selected
-          </span>
-          <button
-            type="button"
-            onClick={() => runBulkAction("ENABLE")}
-            disabled={!selectedIds.length || bulkDiscounts.isPending}
-            className="rounded-md border border-[#DCEFE5] bg-[#F4FBF7] px-3 py-1.5 text-[12.5px] font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Bulk enable
-          </button>
-          <button
-            type="button"
-            onClick={() => runBulkAction("DISABLE")}
-            disabled={!selectedIds.length || bulkDiscounts.isPending}
-            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] font-medium text-[#6B6B6B] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Bulk disable
-          </button>
-          <button
-            type="button"
-            onClick={() => setBulkDeleting(true)}
-            disabled={!selectedIds.length || bulkDiscounts.isPending}
-            className="rounded-md border border-red-100 bg-red-50 px-3 py-1.5 text-[12.5px] font-medium text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Bulk delete
-          </button>
+      {canUpdate && (
+        <div className="mb-3 flex flex-col gap-2 rounded-lg border border-[#E6E6E6] bg-white px-4 py-3 md:flex-row md:items-center md:justify-between">
+          <label className="inline-flex cursor-pointer items-center gap-2 text-[13px] font-medium text-[#1A1A1A]">
+            <input
+              type="checkbox"
+              checked={selectedOnPage}
+              onChange={togglePageSelection}
+              disabled={!discounts.length}
+              className="h-4 w-4 cursor-pointer rounded border-[#D9D9D9] accent-[#E31E24] disabled:cursor-not-allowed"
+            />
+            Select visible discounts
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[12.5px] text-[#6B6B6B]">
+              {selectedIds.length} selected
+            </span>
+            <button
+              type="button"
+              onClick={() => runBulkAction("ENABLE")}
+              disabled={!selectedIds.length || bulkDiscounts.isPending}
+              className="rounded-md border border-[#DCEFE5] bg-[#F4FBF7] px-3 py-1.5 text-[12.5px] font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Bulk enable
+            </button>
+            <button
+              type="button"
+              onClick={() => runBulkAction("DISABLE")}
+              disabled={!selectedIds.length || bulkDiscounts.isPending}
+              className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] font-medium text-[#6B6B6B] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Bulk disable
+            </button>
+            <button
+              type="button"
+              onClick={() => setBulkDeleting(true)}
+              disabled={!selectedIds.length || bulkDiscounts.isPending}
+              className="rounded-md border border-red-100 bg-red-50 px-3 py-1.5 text-[12.5px] font-medium text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Bulk delete
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {showColumns ? (
         <div className="mb-5 rounded-xl border border-[#E6E6E6] bg-white p-4">
@@ -1207,53 +1226,61 @@ export default function DiscountsPage() {
             </div>
 
             {/* DROPZONE */}
-            <label className="mt-4 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-5 text-center transition hover:bg-gray-100">
-              <input
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                className="hidden"
-                onChange={(event) => {
-                  setImportFile(event.target.files?.[0] ?? null);
-                  setImportReport(null);
-                  setImportMessage("");
-                }}
-              />
+            {canUpdate ? (
+              <label className="mt-4 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-5 text-center transition hover:bg-gray-100">
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={(event) => {
+                    setImportFile(event.target.files?.[0] ?? null);
+                    setImportReport(null);
+                    setImportMessage("");
+                  }}
+                />
 
-              <Upload size={20} className="mb-2 text-red-500" />
+                <Upload size={20} className="mb-2 text-red-500" />
 
-              <p className="text-sm font-medium text-gray-800 truncate max-w-[220px]">
-                {importFile ? importFile.name : "Click to upload file"}
-              </p>
+                <p className="text-sm font-medium text-gray-800 truncate max-w-[220px]">
+                  {importFile ? importFile.name : "Click to upload file"}
+                </p>
 
-              <p className="text-xs text-gray-500 mt-1">
-                XLSX, XLS, CSV supported
-              </p>
-            </label>
+                <p className="text-xs text-gray-500 mt-1">
+                  XLSX, XLS, CSV supported
+                </p>
+              </label>
+            ) : (
+              <div className="mt-4 flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-gray-50 p-5 text-center text-[13px] text-[#6B6B6B]">
+                Importing is disabled (No edit permission)
+              </div>
+            )}
 
             {/* ACTION BUTTONS */}
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={() => void handleImportPreview()}
-                disabled={previewDiscountImport.isPending}
-                className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
-              >
-                Preview
-              </button>
+            {canUpdate && (
+              <div className="mt-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleImportPreview()}
+                  disabled={previewDiscountImport.isPending}
+                  className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Preview
+                </button>
 
-              <button
-                type="button"
-                onClick={() => void handleImport()}
-                disabled={
-                  importing ||
-                  importDiscounts.isPending ||
-                  !!importReport?.invalidRows
-                }
+                <button
+                  type="button"
+                  onClick={() => void handleImport()}
+                  disabled={
+                    importing ||
+                    importDiscounts.isPending ||
+                    !!importReport?.invalidRows
+                  }
                 className="flex-1 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
               >
                 {importing ? "Importing..." : "Import"}
               </button>
             </div>
+            )}
 
             {/* MESSAGE */}
             {importMessage && (

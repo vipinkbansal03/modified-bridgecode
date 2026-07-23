@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   AdminInput,
   AdminSelect,
@@ -35,6 +36,11 @@ import type { ApiAttribute } from "@/types/api.types";
 type EditorMode = "create" | "edit" | null;
 
 export default function AttributesPage() {
+  const { hasPermission } = useAdminAuth();
+  const canCreate = hasPermission("attributes.create");
+  const canUpdate = hasPermission("attributes.update");
+  const canDelete = hasPermission("attributes.delete");
+
   const router = useRouter();
   const { data: attributes = [], isLoading, refetch } = useAdminAttributes();
   const createAttribute = useCreateAttribute();
@@ -140,6 +146,11 @@ export default function AttributesPage() {
   };
 
   const handleReorder = async (next: ApiAttribute[]) => {
+    if (!canUpdate) {
+      showToast("You do not have permission to edit attributes.", "error");
+      refetch();
+      return;
+    }
     try {
       await reorderAttributes.mutateAsync(toSortOrderPayload(next));
     } catch (error) {
@@ -170,13 +181,15 @@ export default function AttributesPage() {
         <p className="text-[13.5px] text-[#6B6B6B]">
           Manage global attribute definitions. Drag rows to reorder.
         </p>
-        <button
-          type="button"
-          onClick={openCreateModal}
-          className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2.5 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-        >
-          <Plus size={14} /> New attribute
-        </button>
+        {canCreate && (
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2.5 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
+          >
+            <Plus size={14} /> New attribute
+          </button>
+        )}
       </div>
 
       {isLoading ? (
@@ -192,6 +205,7 @@ export default function AttributesPage() {
           contentClassName="flex-1 min-w-0 py-2 pr-3"
           items={sorted}
           onReorder={handleReorder}
+          disabled={!canUpdate}
           renderItem={(attr) => (
             <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-3">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
@@ -204,12 +218,16 @@ export default function AttributesPage() {
                 <span className="text-[11px] text-[#C4C4C4]">#{attr.sortOrder}</span>
               </div>
               <div className="flex shrink-0 gap-1">
-                <button type="button" onClick={() => openEditModal(attr.id)} className="rounded p-1.5 text-[#6B6B6B] hover:bg-[#F0F0F0]">
-                  <Pencil size={14} />
-                </button>
-                <button type="button" onClick={() => setDeletingId(attr.id)} className="rounded p-1.5 text-red-500 hover:bg-red-50">
-                  <Trash2 size={14} />
-                </button>
+                {canUpdate && (
+                  <button type="button" onClick={() => openEditModal(attr.id)} className="rounded p-1.5 text-[#6B6B6B] hover:bg-[#F0F0F0]">
+                    <Pencil size={14} />
+                  </button>
+                )}
+                {canDelete && (
+                  <button type="button" onClick={() => setDeletingId(attr.id)} className="rounded p-1.5 text-red-500 hover:bg-red-50">
+                    <Trash2 size={14} />
+                  </button>
+                )}
               </div>
             </div>
           )}

@@ -57,7 +57,25 @@ export const requirePermission = (...permissions: string[]) => {
   return (req: AuthRequest, _res: Response, next: NextFunction) => {
     if (!req.user) return next(new AppError("Not authenticated.", 401));
 
-    const hasPermission = permissions.some(
+    const method = req.method.toUpperCase();
+    const expandedPermissions = [...permissions];
+
+    permissions.forEach((p) => {
+      if (p.endsWith(".manage")) {
+        const prefix = p.substring(0, p.length - 7); // remove ".manage"
+        if (method === "POST") {
+          expandedPermissions.push(`${prefix}.create`);
+        } else if (method === "PUT" || method === "PATCH") {
+          expandedPermissions.push(`${prefix}.update`);
+        } else if (method === "DELETE") {
+          expandedPermissions.push(`${prefix}.delete`);
+        } else if (method === "GET") {
+          expandedPermissions.push(`${prefix}.view`);
+        }
+      }
+    });
+
+    const hasPermission = expandedPermissions.some(
       (p) => req.user!.permissions.includes(p) || req.user!.permissions.includes("*")
     );
 

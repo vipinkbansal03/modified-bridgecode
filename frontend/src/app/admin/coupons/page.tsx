@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Edit2, Filter, Plus, Search, Shield, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
@@ -96,6 +97,11 @@ function toForm(coupon: CouponRow): FormState {
 }
 
 export default function CouponsPage() {
+  const { hasPermission } = useAdminAuth();
+  const canCreate = hasPermission("coupons.create");
+  const canUpdate = hasPermission("coupons.update");
+  const canDelete = hasPermission("coupons.delete");
+
   const { showToast, ToastComponent } = useToast();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -289,25 +295,29 @@ export default function CouponsPage() {
       width: "96px",
       render: (row) => (
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => {
-              setForm(toForm(row));
-              setIsFormOpen(true);
-            }}
-            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-            aria-label={`Edit ${row.code}`}
-          >
-            <Edit2 size={13} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeleting(row)}
-            className="flex h-7 w-7 items-center justify-center rounded border border-[#F2C9C9] text-red-500 hover:bg-red-50"
-            aria-label={`Delete ${row.code}`}
-          >
-            <Trash2 size={13} />
-          </button>
+          {canUpdate && (
+            <button
+              type="button"
+              onClick={() => {
+                setForm(toForm(row));
+                setIsFormOpen(true);
+              }}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+              aria-label={`Edit ${row.code}`}
+            >
+              <Edit2 size={13} />
+            </button>
+          )}
+          {canDelete && (
+            <button
+              type="button"
+              onClick={() => setDeleting(row)}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#F2C9C9] text-red-500 hover:bg-red-50"
+              aria-label={`Delete ${row.code}`}
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
         </div>
       ),
     },
@@ -345,14 +355,16 @@ export default function CouponsPage() {
                 <Filter size={14} />
                 {showFilters ? "Hide filters" : "Show filters"}
               </button>
-              <button
-                type="button"
-                onClick={openCreate}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-              >
-                <Plus size={14} />
-                Create Coupon
-              </button>
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+                >
+                  <Plus size={14} />
+                  Create Coupon
+                </button>
+              )}
             </div>
           </div>
 

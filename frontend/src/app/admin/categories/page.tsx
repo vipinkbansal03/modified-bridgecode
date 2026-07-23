@@ -5,6 +5,7 @@ import { useFormik } from "formik";
 import * as Yup from "yup";
 import { Archive, Copy, Download, Image as ImageIcon, Pencil, Plus, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, AdminTextarea, ConfirmModal, StatusBadge, toastMessages, useToast } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import {
@@ -122,6 +123,11 @@ function collectDescendantIds(categories: Category[], id: string) {
 }
 
 export default function CategoriesPage() {
+  const { hasPermission } = useAdminAuth();
+  const canCreate = hasPermission("categories.create");
+  const canUpdate = hasPermission("categories.update");
+  const canDelete = hasPermission("categories.delete");
+
   const [editing, setEditing] = useState<Category | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -373,6 +379,11 @@ export default function CategoriesPage() {
   };
 
   const handleReorder = async (next: CategoryRow[]) => {
+    if (!canUpdate) {
+      showToast("You do not have permission to edit categories.", "error");
+      refetch();
+      return;
+    }
     try {
       await reorderCategories.mutateAsync(toSortOrderPayload(next));
     } catch (error) {
@@ -441,18 +452,22 @@ export default function CategoriesPage() {
           <button type="button" onClick={exportCategories} className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">
             <Download size={14} /> Export Excel
           </button>
-          <button type="button" onClick={openImportDialog} className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">
-            <Upload size={14} /> Import Excel
-          </button>
+          {canCreate && (
+            <button type="button" onClick={openImportDialog} className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">
+              <Upload size={14} /> Import Excel
+            </button>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={openCreateModal}
-          className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-        >
-          <Plus size={14} />
-          Add category
-        </button>
+        {canCreate && (
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
+          >
+            <Plus size={14} />
+            Add category
+          </button>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -757,6 +772,7 @@ export default function CategoriesPage() {
             className="w-full min-w-0"
             items={rows}
             onReorder={handleReorder}
+            disabled={!canUpdate}
             handleAriaLabel="Drag category to reorder"
             rowWidthClassName="w-full min-w-0"
             contentClassName="flex-1 min-w-0 w-full py-2 pr-3"
@@ -775,23 +791,31 @@ export default function CategoriesPage() {
                 <span className="text-[13px] text-[#1A1A1A]">{category._count.products}</span>
                 <StatusBadge status={category.status} />
                 <div className="flex gap-1.5 md:justify-end">
-                  <button type="button" onClick={() => handleDuplicate(category.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Duplicate category">
-                    <Copy size={13} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleArchiveToggle(category)}
-                    className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-                    title={category.status === "ACTIVE" ? "Archive category" : "Restore category"}
-                  >
-                    {category.status === "ACTIVE" ? <Archive size={13} /> : <RotateCcw size={13} />}
-                  </button>
-                  <button type="button" onClick={() => openEditor(category)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Edit category">
-                    <Pencil size={13} />
-                  </button>
-                  <button type="button" onClick={() => setDeleting(category.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50" title="Delete category">
-                    <Trash2 size={13} />
-                  </button>
+                  {canCreate && (
+                    <button type="button" onClick={() => handleDuplicate(category.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Duplicate category">
+                      <Copy size={13} />
+                    </button>
+                  )}
+                  {canUpdate && (
+                    <button
+                      type="button"
+                      onClick={() => handleArchiveToggle(category)}
+                      className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+                      title={category.status === "ACTIVE" ? "Archive category" : "Restore category"}
+                    >
+                      {category.status === "ACTIVE" ? <Archive size={13} /> : <RotateCcw size={13} />}
+                    </button>
+                  )}
+                  {canUpdate && (
+                    <button type="button" onClick={() => openEditor(category)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Edit category">
+                      <Pencil size={13} />
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button type="button" onClick={() => setDeleting(category.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50" title="Delete category">
+                      <Trash2 size={13} />
+                    </button>
+                  )}
                 </div>
               </div>
             )}

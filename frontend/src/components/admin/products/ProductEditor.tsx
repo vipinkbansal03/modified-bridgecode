@@ -35,6 +35,7 @@ import {
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { cn } from "@/utils/cn";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   filterTranslationLanguages,
   TranslationBlurField,
@@ -43,7 +44,25 @@ import {
   NoTranslationLanguagesMessage,
 } from "@/components/admin/TranslationEditorUi";
 
-const TABS = ["Basic Info", "Product Info", "Media", "Packages", "Variants", "Pricing", "Inventory", "Translations", "Product Attributes", "Country Availability", "SEO"];
+interface TabConfig {
+  id: number;
+  label: string;
+  permission?: string;
+}
+
+const ALL_TABS: TabConfig[] = [
+  { id: 0, label: "Basic Info" },
+  { id: 1, label: "Product Info" },
+  { id: 2, label: "Media" },
+  { id: 3, label: "Packages" },
+  { id: 4, label: "Variants", permission: "variants.view" },
+  { id: 5, label: "Pricing", permission: "pricing.view" },
+  { id: 6, label: "Inventory", permission: "inventory.view" },
+  { id: 7, label: "Translations", permission: "translations.view" },
+  { id: 8, label: "Product Attributes", permission: "attributes.view" },
+  { id: 9, label: "Country Availability", permission: "countries.view" },
+  { id: 10, label: "SEO" },
+];
 
 const basicSchema = Yup.object({
   title: Yup.string().required("Required"),
@@ -140,11 +159,13 @@ function ProductBaseInventoryEditor({
   inventory,
   onSaved,
   notify,
+  disabled = false,
 }: {
   productId: string;
   inventory?: NonNullable<VariantRow["inventories"]>[number] | null;
   onSaved: () => Promise<unknown>;
   notify: (message: string, type?: "success" | "error") => void;
+  disabled?: boolean;
 }) {
   const [stock, setStock] = useState(inventory?.stock ?? 0);
   const [reservedStock, setReservedStock] = useState(inventory?.reservedStock ?? 0);
@@ -175,15 +196,17 @@ function ProductBaseInventoryEditor({
         <p className="mt-1 text-[12px] text-[#6B6B6B]">This inventory is inherited by newly generated variants when no country-specific override applies.</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
-        <AdminInput label="Stock" type="number" min={0} step={1} value={stock} onChange={(event) => setStock(Math.max(0, Math.trunc(Number(event.target.value))))} />
-        <AdminInput label="Reserved stock" type="number" min={0} step={1} value={reservedStock} onChange={(event) => setReservedStock(Math.max(0, Math.trunc(Number(event.target.value))))} />
-        <AdminInput label="Low-stock threshold" type="number" min={0} step={1} value={lowStockThreshold} onChange={(event) => setLowStockThreshold(Math.max(0, Math.trunc(Number(event.target.value))))} />
+        <AdminInput label="Stock" type="number" min={0} step={1} value={stock} onChange={(event) => setStock(Math.max(0, Math.trunc(Number(event.target.value))))} disabled={disabled} />
+        <AdminInput label="Reserved stock" type="number" min={0} step={1} value={reservedStock} onChange={(event) => setReservedStock(Math.max(0, Math.trunc(Number(event.target.value))))} disabled={disabled} />
+        <AdminInput label="Low-stock threshold" type="number" min={0} step={1} value={lowStockThreshold} onChange={(event) => setLowStockThreshold(Math.max(0, Math.trunc(Number(event.target.value))))} disabled={disabled} />
       </div>
       <div className="mt-4 flex items-center justify-between gap-3">
         <span className="text-[12px] text-[#6B6B6B]">Available after reservations: {Math.max(0, stock - reservedStock)}</span>
-        <button type="button" onClick={save} disabled={saving} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
-          {saving ? "Saving…" : inventory?.id ? "Update Base Inventory" : "Create Base Inventory"}
-        </button>
+        {!disabled && (
+          <button type="button" onClick={save} disabled={saving} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
+            {saving ? "Saving…" : inventory?.id ? "Update Base Inventory" : "Create Base Inventory"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -495,6 +518,15 @@ type ProductEditorProps = {
 };
 
 export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
+  const { hasPermission } = useAdminAuth();
+  const canUpdate = hasPermission("products.update");
+  const isReadOnly = !canUpdate;
+  const canManageAttributes = hasPermission("attributes.update");
+
+  const visibleTabs = useMemo(() => {
+    return ALL_TABS.filter((t) => !t.permission || hasPermission(t.permission));
+  }, [hasPermission]);
+
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -2490,22 +2522,22 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     <>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-1 rounded-lg border border-[#E6E6E6] bg-white p-1">
-          {TABS.map((tab, i) => (
+          {visibleTabs.map((tab) => (
             <button
-              key={tab}
+              key={tab.id}
               type="button"
-              onClick={() => setActiveTab(i)}
+              onClick={() => setActiveTab(tab.id)}
               className={cn(
                 "rounded-md px-3.5 py-1.5 text-[12.5px] font-medium transition-colors",
-                activeTab === i ? "bg-[#E31E24] text-white" : "text-[#6B6B6B] hover:bg-[#F2F2F2]"
+                activeTab === tab.id ? "bg-[#E31E24] text-white" : "text-[#6B6B6B] hover:bg-[#F2F2F2]"
               )}
             >
-              {tab}
+              {tab.label}
             </button>
           ))}
         </div>
         <div className="flex items-center gap-2">
-          {activeTab === 0 || activeTab === 1 || activeTab === 10 ? (
+          {!isReadOnly && (activeTab === 0 || activeTab === 1 || activeTab === 10) ? (
             <button
               type="button"
               onClick={() => formik.handleSubmit()}
@@ -2527,7 +2559,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         </div>
       </div>
 
-      <div className="rounded-xl border border-[#E6E6E6] bg-white">
+      <fieldset disabled={isReadOnly} className="disabled:opacity-100 flex-1 min-w-0">
+        <div className="rounded-xl border border-[#E6E6E6] bg-white">
         {activeTab === 0 && (
           <div className="p-6 space-y-5">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -3248,6 +3281,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     inventory={baseInventory}
                     onSaved={refetch}
                     notify={showToast}
+                    disabled={isReadOnly}
                   />
                 );
               })()}
@@ -3285,7 +3319,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                   type="number"
                                   min="0"
                                   defaultValue={inventory?.stock || 0}
-                                  className="w-20 rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13.5px] outline-none focus:border-[#E31E24]"
+                                  disabled={isReadOnly}
+                                  className="w-20 rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13.5px] outline-none focus:border-[#E31E24] disabled:bg-[#FAFAFA]"
                                   onBlur={async (e) => {
                                     if (!inventory?.id) return;
                                     await adminApi.put(`/inventory/${inventory.id}`, { stock: parseInt(e.target.value) });
@@ -3299,7 +3334,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                   type="number"
                                   min="0"
                                   defaultValue={inventory?.lowStockThreshold || 10}
-                                  className="w-20 rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13.5px] outline-none focus:border-[#E31E24]"
+                                  disabled={isReadOnly}
+                                  className="w-20 rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13.5px] outline-none focus:border-[#E31E24] disabled:bg-[#FAFAFA]"
                                   onBlur={async (e) => {
                                     if (!inventory?.id) return;
                                     await adminApi.put(`/inventory/${inventory.id}`, { lowStockThreshold: parseInt(e.target.value) });
@@ -3311,7 +3347,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                           </div>
                         ))}
 
-                        {canCreateOverride ? (
+                        {!isReadOnly && canCreateOverride ? (
                           <div className="rounded-md border border-dashed border-[#E6E6E6] bg-[#FAFAFA] p-3">
                             <div className="mb-2 text-[12px] font-medium text-[#1A1A1A]">Add country override</div>
                             <div className="flex flex-wrap items-end gap-2">
@@ -3746,7 +3782,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               </div>
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div className={cn("grid gap-4", canManageAttributes ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-1")}>
               <div className="space-y-3">
                 {productAttributesLoading ? (
                   <div className="h-28 animate-pulse rounded-lg bg-[#F2F2F2]" />
@@ -3781,6 +3817,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                           <div className="min-w-[180px]">
                             <AdminSelect
                               value={getDisplayTypeValue(mapping.gridAxis)}
+                              disabled={!canManageAttributes}
                               onChange={(e) => {
                                 const next = e.target.value as GridAxis | "";
                                 handleSetMappedGridAxis(mapping.attributeId, next === "ROW" ? "ROW" : next === "COLUMN" ? "COLUMN" : null);
@@ -3798,7 +3835,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                               checked={mapping.required}
                               onChange={(e) => handleToggleMappedRequired(mapping.attributeId, e.target.checked)}
                               className="h-4 w-4 accent-[#E31E24]"
-                              disabled={assignProductAttributes.isPending}
+                              disabled={!canManageAttributes || assignProductAttributes.isPending}
                             />
                             Required
                           </label>
@@ -3808,18 +3845,20 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                               checked={mapping.visibleOnStorefront !== false}
                               onChange={(e) => handleToggleMappedVisibility(mapping.attributeId, e.target.checked)}
                               className="h-4 w-4 accent-[#E31E24]"
-                              disabled={updateProductFilterVisibility.isPending}
+                              disabled={!canManageAttributes || updateProductFilterVisibility.isPending}
                             />
                             Visible on Storefront Filter
                           </label>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveProductAttribute(mapping.attributeId)}
-                            disabled={removeProductAttribute.isPending}
-                            className="rounded-md border border-[#F2C9C9] px-2.5 py-1.5 text-[12px] text-red-600 hover:bg-red-50 disabled:opacity-50"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                          {canManageAttributes && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveProductAttribute(mapping.attributeId)}
+                              disabled={removeProductAttribute.isPending}
+                              className="rounded-md border border-[#F2C9C9] px-2.5 py-1.5 text-[12px] text-red-600 hover:bg-red-50 disabled:opacity-50"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -3827,112 +3866,114 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 )}
               </div>
 
-              <div className="rounded-lg border border-[#E6E6E6] p-4">
-                <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">Add Attribute</h4>
-                <div className="mt-4 space-y-4">
-                  <AdminSelect
-                    label="Attribute"
-                    value={selectedMappingAttributeId}
-                    onChange={(e) => {
-                      setSelectedMappingAttributeId(e.target.value);
-                      setNewMappingGridAxis(null);
-                      setNewMappingValueIds([]);
-                    }}
-                    options={[
-                      { value: "", label: "Select attribute..." },
-                      ...availableMappingAttributes.map((attribute) => ({ value: attribute.id, label: attribute.name })),
-                    ]}
-                  />
-                  <label className="flex items-center gap-2 text-[13px] text-[#555]">
-                    <input
-                      type="checkbox"
-                      checked={newMappingRequired}
-                      onChange={(e) => setNewMappingRequired(e.target.checked)}
-                      className="h-4 w-4 accent-[#E31E24]"
+              {canManageAttributes && (
+                <div className="rounded-lg border border-[#E6E6E6] p-4">
+                  <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">Add Attribute</h4>
+                  <div className="mt-4 space-y-4">
+                    <AdminSelect
+                      label="Attribute"
+                      value={selectedMappingAttributeId}
+                      onChange={(e) => {
+                        setSelectedMappingAttributeId(e.target.value);
+                        setNewMappingGridAxis(null);
+                        setNewMappingValueIds([]);
+                      }}
+                      options={[
+                        { value: "", label: "Select attribute..." },
+                        ...availableMappingAttributes.map((attribute) => ({ value: attribute.id, label: attribute.name })),
+                      ]}
                     />
-                    Required for this product
-                  </label>
-                  <AdminSelect
-                    value={getDisplayTypeValue(newMappingGridAxis)}
-                    onChange={(e) => {
-                      const next = e.target.value as GridAxis | "";
-                      setNewMappingGridAxis(next === "ROW" ? "ROW" : next === "COLUMN" ? "COLUMN" : null);
-                    }}
-                    options={[
-                      { value: "", label: "Dropdown filter" },
-                      { value: "COLUMN", label: "Matrix columns" },
-                      { value: "ROW", label: "Matrix rows" },
-                    ]}
-                  />
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={cn("rounded-full border px-2.5 py-1 text-[11.5px] font-medium", roleBadgeClass(getDisplayTypeRole(newMappingGridAxis)))}>
-                      {getDisplayTypeLabel(newMappingGridAxis)}
-                    </span>
-                    <span className="text-[12px] text-[#9A9A9A]">Current display type</span>
-                  </div>
-                  <p className="text-[12px] leading-5 text-[#9A9A9A]">
-                    Product-level display types control the storefront exactly: Dropdown for filtering, Matrix columns for the X axis, and Matrix rows for the Y axis. Multiple row or column attributes are combined automatically. Product Packages are displayed separately as tabs.
-                  </p>
+                    <label className="flex items-center gap-2 text-[13px] text-[#555]">
+                      <input
+                        type="checkbox"
+                        checked={newMappingRequired}
+                        onChange={(e) => setNewMappingRequired(e.target.checked)}
+                        className="h-4 w-4 accent-[#E31E24]"
+                      />
+                      Required for this product
+                    </label>
+                    <AdminSelect
+                      value={getDisplayTypeValue(newMappingGridAxis)}
+                      onChange={(e) => {
+                        const next = e.target.value as GridAxis | "";
+                        setNewMappingGridAxis(next === "ROW" ? "ROW" : next === "COLUMN" ? "COLUMN" : null);
+                      }}
+                      options={[
+                        { value: "", label: "Dropdown filter" },
+                        { value: "COLUMN", label: "Matrix columns" },
+                        { value: "ROW", label: "Matrix rows" },
+                      ]}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={cn("rounded-full border px-2.5 py-1 text-[11.5px] font-medium", roleBadgeClass(getDisplayTypeRole(newMappingGridAxis)))}>
+                        {getDisplayTypeLabel(newMappingGridAxis)}
+                      </span>
+                      <span className="text-[12px] text-[#9A9A9A]">Current display type</span>
+                    </div>
+                    <p className="text-[12px] leading-5 text-[#9A9A9A]">
+                      Product-level display types control the storefront exactly: Dropdown for filtering, Matrix columns for the X axis, and Matrix rows for the Y axis. Multiple row or column attributes are combined automatically. Product Packages are displayed separately as tabs.
+                    </p>
 
-                  {selectedMappingAttributeId && selectedAttributeDetail ? (
-                    <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", roleBadgeClass(getDisplayTypeRole(newMappingGridAxis)))}>
-                            {getDisplayTypeLabel(newMappingGridAxis)}
+                    {selectedMappingAttributeId && selectedAttributeDetail ? (
+                      <div className="space-y-3">
+                          <div className="flex items-center gap-2">
+                            <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", roleBadgeClass(getDisplayTypeRole(newMappingGridAxis)))}>
+                              {getDisplayTypeLabel(newMappingGridAxis)}
+                            </span>
+                            <span className="text-[12px] text-[#9A9A9A]">{newMappingValueIds.length} selected</span>
+                          </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={selectAllNewMappingValues}
+                            className="rounded-full border border-[#E6E6E6] bg-white px-3 py-1 text-[11.5px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                          >
+                            Select all
+                          </button>
+                          <button
+                            type="button"
+                            onClick={clearAllNewMappingValues}
+                            className="rounded-full border border-[#E6E6E6] bg-white px-3 py-1 text-[11.5px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                          >
+                            Clear all
+                          </button>
+                          <span className="text-[12px] text-[#9A9A9A]">
+                            {newMappingValueIds.length} of {selectedAttributeValues.length} selected
                           </span>
-                          <span className="text-[12px] text-[#9A9A9A]">{newMappingValueIds.length} selected</span>
                         </div>
 
-                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="space-y-1.5">
+                          {selectedAttributeValues.map((value) => (
+                            <label key={value.id} className="flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[12.5px]">
+                              <input
+                                type="checkbox"
+                                checked={newMappingValueIds.includes(value.id)}
+                                onChange={() => toggleNewMappingValue(value.id)}
+                                className="h-4 w-4 accent-[#E31E24]"
+                              />
+                              {value.value}
+                            </label>
+                          ))}
+                        </div>
+
                         <button
                           type="button"
-                          onClick={selectAllNewMappingValues}
-                          className="rounded-full border border-[#E6E6E6] bg-white px-3 py-1 text-[11.5px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                          onClick={handleAddProductAttribute}
+                          disabled={assignProductAttributes.isPending}
+                          className="w-full rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
                         >
-                          Select all
+                          {assignProductAttributes.isPending ? "Saving..." : "Map Attribute"}
                         </button>
-                        <button
-                          type="button"
-                          onClick={clearAllNewMappingValues}
-                          className="rounded-full border border-[#E6E6E6] bg-white px-3 py-1 text-[11.5px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                        >
-                          Clear all
-                        </button>
-                        <span className="text-[12px] text-[#9A9A9A]">
-                          {newMappingValueIds.length} of {selectedAttributeValues.length} selected
-                        </span>
                       </div>
-
-                      <div className="space-y-1.5">
-                        {selectedAttributeValues.map((value) => (
-                          <label key={value.id} className="flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[12.5px]">
-                            <input
-                              type="checkbox"
-                              checked={newMappingValueIds.includes(value.id)}
-                              onChange={() => toggleNewMappingValue(value.id)}
-                              className="h-4 w-4 accent-[#E31E24]"
-                            />
-                            {value.value}
-                          </label>
-                        ))}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={handleAddProductAttribute}
-                        disabled={assignProductAttributes.isPending}
-                        className="w-full rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
-                      >
-                        {assignProductAttributes.isPending ? "Saving..." : "Map Attribute"}
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="rounded-md border border-dashed border-[#E6E6E6] px-3 py-6 text-center text-[12.5px] text-[#9A9A9A]">
-                      Select an attribute to choose allowed values.
-                    </p>
-                  )}
+                    ) : (
+                      <p className="rounded-md border border-dashed border-[#E6E6E6] px-3 py-6 text-center text-[12.5px] text-[#9A9A9A]">
+                        Select an attribute to choose allowed values.
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         )}
@@ -4003,6 +4044,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           </div>
         )}
       </div>
+      </fieldset>
 
       {packageModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">

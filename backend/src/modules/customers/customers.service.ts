@@ -197,3 +197,29 @@ export async function listCustomerAddresses(id: string) {
     orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
   });
 }
+
+export const deleteCustomer = (id: string) =>
+  prisma.customer.update({ where: { id }, data: { deletedAt: new Date() } });
+
+export async function updateCustomerAddress(customerId: string, addressId: string, data: any) {
+  const addr = await prisma.customerAddress.findFirst({
+    where: { id: addressId, customerId },
+  });
+  if (!addr) throw new AppError("Address not found.", 404);
+
+  return prisma.customerAddress.update({
+    where: { id: addressId },
+    data: {
+      fullName: data.fullName?.trim(),
+      phone: data.phone?.trim() || null,
+      addressLine1: data.addressLine1?.trim(),
+      addressLine2: data.addressLine2?.trim() || null,
+      city: data.city?.trim(),
+      state: data.state?.trim() || null,
+      postalCode: data.postalCode?.trim(),
+      countryId: data.countryId,
+    },
+    include: { country: true },
+  });
+}
+
