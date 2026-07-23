@@ -266,7 +266,7 @@ function LoginForm() {
             </div>
 
             <div>
-              <label className="flex items-center gap-2 text-[12px] text-[#8A8A8A]">
+              <label className="flex items-center gap-2 text-[12px] text-[#8A8A8A] select-none cursor-pointer">
                 <input
                   id="acceptTerms"
                   name="acceptTerms"
@@ -280,7 +280,7 @@ function LoginForm() {
               </label>
 
               {formik.touched.acceptTerms && formik.errors.acceptTerms && (
-                <p className="mt-1 text-[12px] text-[#E31E24]">
+                <p className="mt-1 text-[12px] text-[#E31E24] select-none">
                   {formik.errors.acceptTerms}
                 </p>
               )}

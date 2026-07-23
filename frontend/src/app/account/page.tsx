@@ -8,23 +8,40 @@ import {
   Download,
   Home,
   PackageCheck,
+  Pencil,
+  Plus,
   UserRound,
 } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { Button } from "@/components/ui/Button";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import {
+  deleteCustomerAddress,
   downloadCustomerInvoice,
   getCustomerErrorMessage,
   listCustomerAddresses,
   listCustomerOrders,
   listCustomerQuotes,
+  setDefaultCustomerAddress,
   type CustomerAddress,
   type CustomerOrderSummary,
   type CustomerQuoteSummary,
 } from "@/services/customerApi";
 import { cn } from "@/utils/cn";
+import { formatPhoneNumberIntl } from "react-phone-number-input";
 import QuoteHistory from "./QuoteHistory";
+import EditProfileModal from "./EditProfileModal";
+import AddressModal from "./AddressModal";
+
+function formatPhone(phone?: string | null) {
+  if (!phone) return "Not added";
+  try {
+    const formatted = formatPhoneNumberIntl(phone);
+    return formatted || phone;
+  } catch {
+    return phone;
+  }
+}
 
 function money(
   order: CustomerOrderSummary,
@@ -63,7 +80,7 @@ function canDownloadInvoice(order: CustomerOrderSummary) {
 
 export default function AccountPage() {
   const router = useRouter();
-  const { currentCustomer, isLoading, logout } = useCustomerAuth();
+  const { currentCustomer, isLoading, logout, setCustomer } = useCustomerAuth();
   const [orders, setOrders] = useState<CustomerOrderSummary[]>([]);
   const [quotes, setQuotes] = useState<CustomerQuoteSummary[]>([]);
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
@@ -72,6 +89,9 @@ export default function AccountPage() {
   const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<
     string | null
   >(null);
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
+  const [editingAddress, setEditingAddress] = useState<CustomerAddress | null>(null);
   const [isFetching, setIsFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -188,9 +208,19 @@ export default function AccountPage() {
         <div className="grid gap-8 lg:grid-cols-[320px_minmax(0,1fr)]">
           <aside className="space-y-6">
             <div className="rounded-md border border-line bg-white p-5 shadow-[0_16px_50px_rgba(31,24,18,0.06)]">
-              <h2 className="mb-4 text-[18px] font-semibold text-ink">
-                Profile
-              </h2>
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-[18px] font-semibold text-ink">
+                  Profile
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setIsEditProfileOpen(true)}
+                  className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-brand hover:underline"
+                >
+                  <Pencil size={13} />
+                  Edit Profile
+                </button>
+              </div>
               <div className="space-y-3 text-[14px]">
                 <div>
                   <p className="text-[12px] font-semibold uppercase tracking-wide text-steel-2">
@@ -211,9 +241,19 @@ export default function AccountPage() {
                     Phone
                   </p>
                   <p className="mt-1 text-ink">
-                    {currentCustomer.phone || "Not added"}
+                    {formatPhone(currentCustomer.phone)}
                   </p>
                 </div>
+                {currentCustomer.companyName && (
+                  <div>
+                    <p className="text-[12px] font-semibold uppercase tracking-wide text-steel-2">
+                      Company
+                    </p>
+                    <p className="mt-1 text-ink">
+                      {currentCustomer.companyName}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <p className="text-[12px] font-semibold uppercase tracking-wide text-steel-2">
                     Status
@@ -223,18 +263,27 @@ export default function AccountPage() {
                   </p>
                 </div>
               </div>
-              <p className="mt-5 rounded-md bg-grey px-3 py-2 text-[12.5px] leading-relaxed text-steel">
-                Profile editing is not available yet because no customer profile
-                update endpoint exists.
-              </p>
             </div>
 
             <div className="rounded-md border border-line bg-white p-5">
-              <div className="mb-4 flex items-center gap-2">
-                <Home size={17} className="text-brand" />
-                <h2 className="text-[18px] font-semibold text-ink">
-                  Saved Addresses
-                </h2>
+              <div className="mb-4 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Home size={17} className="text-brand" />
+                  <h2 className="text-[18px] font-semibold text-ink">
+                    Saved Addresses
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingAddress(null);
+                    setIsAddressModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-brand hover:underline"
+                >
+                  <Plus size={14} />
+                  Add Address
+                </button>
               </div>
               {isFetching ? (
                 <p className="text-[14px] text-steel">Loading addresses...</p>
@@ -243,20 +292,40 @@ export default function AccountPage() {
                   {addresses.map((address) => (
                     <div
                       key={address.id}
-                      className="rounded-md border border-line bg-offwhite p-4 text-[13.5px] text-steel"
+                      className="rounded-md border border-line bg-offwhite p-4 text-[13.5px] text-steel break-all overflow-hidden"
                     >
                       <div className="mb-2 flex items-center justify-between gap-2">
                         <p className="font-semibold text-ink">
                           {address.label ?? address.fullName}
                         </p>
-                        {address.isDefault && (
-                          <span className="rounded-pill bg-white px-2 py-1 text-[10px] font-semibold uppercase text-brand">
+                        {address.isDefault ? (
+                          <span className="rounded-pill bg-white px-2 py-1 text-[10px] font-semibold uppercase text-brand border border-line">
                             Default
                           </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const updated = await setDefaultCustomerAddress(address.id);
+                                setAddresses((prev) =>
+                                  prev.map((a) => ({
+                                    ...a,
+                                    isDefault: a.id === updated.id,
+                                  }))
+                                );
+                              } catch (err) {
+                                setError(getCustomerErrorMessage(err, "Failed to set default address."));
+                              }
+                            }}
+                            className="text-[11px] font-semibold text-steel-2 hover:text-brand hover:underline"
+                          >
+                            Set as default
+                          </button>
                         )}
                       </div>
                       <p>{address.fullName}</p>
-                      <p>{address.phone}</p>
+                      <p>{formatPhone(address.phone)}</p>
                       <p>{address.addressLine1}</p>
                       {address.addressLine2 && <p>{address.addressLine2}</p>}
                       <p>
@@ -265,6 +334,34 @@ export default function AccountPage() {
                       <p>
                         {address.country.name} ({address.country.code})
                       </p>
+
+                      <div className="mt-3 flex items-center justify-end gap-3 border-t border-line/60 pt-2 text-[12px]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingAddress(address);
+                            setIsAddressModalOpen(true);
+                          }}
+                          className="font-semibold text-ink hover:text-brand"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!confirm("Are you sure you want to delete this address?")) return;
+                            try {
+                              await deleteCustomerAddress(address.id);
+                              setAddresses((prev) => prev.filter((a) => a.id !== address.id));
+                            } catch (err) {
+                              setError(getCustomerErrorMessage(err, "Failed to delete address."));
+                            }
+                          }}
+                          className="font-semibold text-[#E31E24] hover:underline"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -273,10 +370,6 @@ export default function AccountPage() {
                   No saved addresses yet.
                 </p>
               )}
-              <p className="mt-4 rounded-md bg-grey px-3 py-2 text-[12.5px] leading-relaxed text-steel">
-                Address create/edit/delete is deferred; the backend currently
-                exposes read-only address listing.
-              </p>
             </div>
           </aside>
           <div className="space-y-8">
@@ -459,6 +552,32 @@ export default function AccountPage() {
           </div>
         </div>
       </section>
+
+      <EditProfileModal
+        isOpen={isEditProfileOpen}
+        onClose={() => setIsEditProfileOpen(false)}
+        onSuccess={(updated) => setCustomer(updated)}
+      />
+
+      <AddressModal
+        isOpen={isAddressModalOpen}
+        editingAddress={editingAddress}
+        onClose={() => {
+          setIsAddressModalOpen(false);
+          setEditingAddress(null);
+        }}
+        onSuccess={(address) => {
+          setAddresses((prev) => {
+            const idx = prev.findIndex((a) => a.id === address.id);
+            if (idx >= 0) {
+              const clone = [...prev];
+              clone[idx] = address;
+              return clone;
+            }
+            return address.isDefault ? [address, ...prev.map((a) => ({ ...a, isDefault: false }))] : [...prev, address];
+          });
+        }}
+      />
     </Container>
   );
 }

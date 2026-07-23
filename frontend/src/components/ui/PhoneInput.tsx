@@ -29,7 +29,7 @@ export default function PhoneInputField({
   disabled,
   countryKey
 }: PhoneInputFieldProps) {
-  const showError = Boolean(touched && error);
+  const showError = Boolean((touched || Boolean(value && value.length > 0)) && error);
 
   return (
     <div>

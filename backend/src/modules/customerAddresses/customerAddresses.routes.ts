@@ -6,5 +6,9 @@ const router = Router();
 router.use(protectCustomer);
 
 router.get("/", C.list);
+router.post("/", C.create);
+router.put("/:id", C.update);
+router.delete("/:id", C.remove);
+router.put("/:id/default", C.setDefault);
 
 export default router;
