@@ -124,6 +124,7 @@ export interface CustomerOrderSummary {
   status: string;
   paymentStatus: string;
   paymentMethod?: string | null;
+  paymentId?: string | null;
   subtotal: string | number;
   taxAmount?: string | number;
   discount?: string | number;
@@ -290,6 +291,34 @@ export async function listCustomerAddresses() {
   const res = await customerApi.get("/addresses");
   return res.data.data as CustomerAddress[];
 }
+
+export interface RazorpayOrderResponse {
+  razorpayOrderId: string;
+  amount: number;
+  currency: string;
+  keyId: string;
+  orderNumber: string;
+}
+
+export async function createRazorpayOrder(orderId: string) {
+  const res = await customerApi.post(`/orders/${orderId}/razorpay-order`);
+  return res.data.data as RazorpayOrderResponse;
+}
+
+export async function verifyRazorpayPayment(
+  orderId: string,
+  payload: {
+    razorpay_payment_id: string;
+    razorpay_order_id: string;
+    razorpay_signature: string;
+  },
+) {
+  const res = await customerApi.post(
+    `/orders/${orderId}/verify-razorpay`,
+    payload,
+  );
+  return res.data.data as CustomerOrderSummary;
+} // <-- ADD THIS
 
 export async function updateCustomerProfile(data: {
   firstName?: string;

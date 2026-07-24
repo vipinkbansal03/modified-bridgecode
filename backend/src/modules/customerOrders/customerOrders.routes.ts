@@ -9,5 +9,7 @@ router.get("/", C.list);
 router.get("/:id/invoice", C.invoice);
 router.post("/estimate", C.estimate);
 router.post("/", C.create);
+router.post("/:id/razorpay-order", C.createRazorpayOrder);
+router.post("/:id/verify-razorpay", C.verifyRazorpayPayment);
 
 export default router;

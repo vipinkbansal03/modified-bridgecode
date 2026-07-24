@@ -37,3 +37,25 @@ export const invoice = asyncHandler(async (req: CustomerAuthRequest, res: Respon
   res.setHeader("Content-Disposition", `attachment; filename="invoice-${orderId}.pdf"`);
   res.send(pdf);
 });
+
+export const createRazorpayOrder = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
+  if (!req.customer) throw new AppError("Customer authentication required.", 401);
+  const orderId = String(req.params.id);
+  const data = await CustomerOrdersService.createRazorpayOrder(req.customer.id, orderId);
+  return ApiResponse.success(res, "Razorpay order created.", data);
+});
+
+export const verifyRazorpayPayment = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
+  if (!req.customer) throw new AppError("Customer authentication required.", 401);
+  const orderId = String(req.params.id);
+  const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body;
+  if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+    throw new AppError("Missing Razorpay payment parameters.", 400);
+  }
+  const order = await CustomerOrdersService.verifyRazorpayPayment(req.customer.id, orderId, {
+    razorpay_payment_id,
+    razorpay_order_id,
+    razorpay_signature,
+  });
+  return ApiResponse.success(res, "Payment verified successfully.", order);
+});
