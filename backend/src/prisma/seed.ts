@@ -1362,6 +1362,11 @@ async function main() {
     { key: "general.default_language", value: "en", group: "general", label: "Default Language", type: "string" },
     { key: "general.default_currency", value: "INR", group: "general", label: "Default Currency", type: "string" },
     { key: "general.timezone", value: "Asia/Kolkata", group: "general", label: "Timezone", type: "string" },
+    // Tax & Compliance
+    { key: "tax.seller_name", value: "Modern Orthodontics Pvt Ltd", group: "tax", label: "Seller Legal Name", type: "string" },
+    { key: "tax.seller_gstin", value: "03AAAAA1111A1Z1", group: "tax", label: "Seller GSTIN (India)", type: "string" },
+    { key: "tax.seller_iec", value: "0300000000", group: "tax", label: "Seller Import Export Code (IEC)", type: "string" },
+    { key: "tax.ship_from_state", value: "Punjab", group: "tax", label: "Fulfillment Origin State", type: "string" },
     // SEO
     { key: "seo.default_title", value: "Modern Orthodontics — Precision Orthodontic Products", group: "seo", label: "Default Meta Title", type: "string" },
     { key: "seo.default_description", value: "Modern Orthodontics manufactures premium orthodontic brackets, wires, and accessories. ISO 13485 certified.", group: "seo", label: "Default Meta Description", type: "string" },

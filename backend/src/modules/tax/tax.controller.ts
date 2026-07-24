@@ -98,3 +98,22 @@ export const importSpreadsheet = asyncHandler(async (req: AuthRequest, res: Resp
     removeTempFile(file.path);
   }
 });
+
+export const validateIdentifier = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { taxId, taxIdType, countryCode } = req.body;
+  if (!taxId) {
+    return ApiResponse.error(res, "Tax ID is required.", [], 400);
+  }
+  const result = await TaxService.validateTaxIdentifier(
+    String(taxId),
+    String(taxIdType || ""),
+    String(countryCode || "")
+  );
+  return ApiResponse.success(res, "Tax identifier validation completed.", result);
+});
+
+export const validateAddress = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await TaxService.validateAddressDetails(req.body);
+  return ApiResponse.success(res, "Address validation completed.", result);
+});
+

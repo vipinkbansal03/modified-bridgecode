@@ -126,7 +126,7 @@ async function calculateCustomerOrder(
         customerId: customer.id,
         quantity: item.quantity,
         buyerState: input.shippingAddress?.state ?? null,
-        sellerState: "Rajasthan",
+        sellerState: null,
       });
 
       const unitPrice = resolvedPrice.finalPrice;
@@ -303,6 +303,37 @@ export async function createCustomerOrder(
     orderItems[0]?.resolvedPrice.taxBreakdownStructure?.taxType ||
     (taxAmount === 0 ? "EXEMPT" : "IGST");
 
+  let totalIgst = 0;
+  let totalCgst = 0;
+  let totalSgst = 0;
+  let totalVat = 0;
+  let totalSalesTax = 0;
+  let isZeroRated = false;
+
+  for (const item of orderItems) {
+    const bd = item.resolvedPrice.taxBreakdownStructure;
+    if (bd) {
+      if (bd.taxType === "IGST") {
+        totalIgst += (bd.igst || 0) * item.quantity;
+      } else if (bd.taxType === "CGST_SGST") {
+        totalCgst += (bd.cgst || 0) * item.quantity;
+        totalSgst += (bd.sgst || 0) * item.quantity;
+      } else if (bd.taxType === "VAT") {
+        totalVat += (bd.vat || 0) * item.quantity;
+      }
+    }
+  }
+
+  const destinationCountryCode = orderCountry.code?.toUpperCase() || "IN";
+  if (destinationCountryCode !== "IN" && taxAmount === 0) {
+    isZeroRated = true;
+  }
+
+  const hasVat = orderItems.some((item) => item.resolvedPrice.taxBreakdownStructure?.taxType === "VAT");
+  const isExempt = taxAmount === 0 || orderItems.every((item) => item.resolvedPrice.taxBreakdownStructure?.taxType === "EXEMPT");
+  const taxLabel = isExempt ? "Tax Exempt" : hasVat ? "VAT" : "GST";
+  const primaryTaxMode = orderItems[0]?.resolvedPrice.taxMode || "EXCLUSIVE";
+
   return prisma.$transaction(async (tx) => {
     const order = await tx.order.create({
       data: {
@@ -319,6 +350,16 @@ export async function createCustomerOrder(
         shippingCharge,
         taxAmount,
         taxType: resolvedTaxType,
+        taxIdSnapshot: customer.taxIdStatus === "VALID" ? customer.taxId : null,
+        taxIdTypeSnapshot: customer.taxIdStatus === "VALID" ? customer.taxIdType : null,
+        taxMode: primaryTaxMode,
+        taxLabel: taxLabel,
+        igstAmount: totalIgst,
+        cgstAmount: totalCgst,
+        sgstAmount: totalSgst,
+        vatAmount: totalVat,
+        salesTaxAmount: totalSalesTax,
+        isZeroRated: isZeroRated,
         total,
         couponId: couponValidation?.coupon.id ?? null,
         couponCode: couponValidation?.coupon.code ?? null,
@@ -338,6 +379,8 @@ export async function createCustomerOrder(
             quantity: item.quantity,
             unitPrice: item.unitPriceBeforeTax,
             total: item.subtotal,
+            hsnCode: item.variant.product.hsnCode,
+            taxAmount: item.taxTotal,
           })),
         },
       },

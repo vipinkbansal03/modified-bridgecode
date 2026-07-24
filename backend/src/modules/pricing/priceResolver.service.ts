@@ -480,6 +480,32 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
   // Extension point: code-based coupons can append another PROMOTIONAL_DISCOUNT layer after automatic discounts.
   const priceBeforeTax = roundMoney(currentPrice);
   let totalTaxAmount = 0;
+
+  // 1. Fetch dynamic settings and tax rules
+  const [shipFromStateSetting, destinationCountry] = await Promise.all([
+    prisma.setting.findFirst({ where: { key: "tax.ship_from_state" } }),
+    prisma.country.findUnique({ where: { id: input.countryId }, select: { code: true } }),
+  ]);
+  const defaultSellerState = shipFromStateSetting?.value || "Punjab";
+  const destinationCountryCode = destinationCountry?.code?.toUpperCase() || "IN";
+
+  // 2. Fetch customer tax verification status
+  let customerTaxExempt = false;
+  let customerTaxId = null;
+  let customerTaxIdType = null;
+  if (input.customerId) {
+    const customer = await prisma.customer.findUnique({
+      where: { id: input.customerId },
+      select: { taxId: true, taxIdType: true, taxIdStatus: true }
+    });
+    if (customer && customer.taxIdStatus === "VALID") {
+      customerTaxExempt = true;
+      customerTaxId = customer.taxId;
+      customerTaxIdType = customer.taxIdType;
+    }
+  }
+
+  // 3. Fetch tax rules from database
   const countryTaxRules = (await (prisma as unknown as { taxRule: { findMany: (args: unknown) => Promise<any[]> } }).taxRule.findMany({
     where: { countryId: input.countryId, status: "ACTIVE" },
     include: { products: { select: { id: true } } },
@@ -496,100 +522,151 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
       : countryTaxRules.filter((rule) => rule.products.length === 0)
   ) as ActiveTaxRule[];
 
-  let primaryTaxMode = "INCLUSIVE";
+  let primaryTaxMode = "EXCLUSIVE";
   let taxBreakdownStructure: TaxBreakdownStructure | undefined;
+  let ruleIdApplied = null;
+  let taxPercent = 0;
+  let isZeroRatedExport = false;
+  let isVatReverseCharge = false;
 
-  if (activeTaxRules.length > 0) {
-    const selectedRule = activeTaxRules[0] as any;
-    primaryTaxMode = selectedRule.taxMode || "EXCLUSIVE";
-    const taxPercent = money(selectedRule.percentage);
-
-    if (primaryTaxMode === "EXEMPT") {
-      totalTaxAmount = 0;
+  // Evaluate final tax rate and mode
+  if (destinationCountryCode !== "IN") {
+    // International Exports
+    if (customerTaxExempt && (destinationCountryCode === "US" || ["AT","BE","BG","CY","CZ","DE","DK","EE","ES","FI","FR","GR","HR","HU","IE","IT","LT","LU","LV","MT","NL","PL","PT","RO","SE","SI","SK","GB"].includes(destinationCountryCode))) {
+      // B2B Reverse Charge or US Resale Exemption
+      taxPercent = 0;
+      primaryTaxMode = "EXEMPT";
+      if (destinationCountryCode === "US") {
+        taxBreakdownStructure = {
+          taxType: "EXEMPT",
+          totalTax: 0,
+          rate: 0,
+          ruleIdsApplied: [],
+        };
+      } else {
+        isVatReverseCharge = true;
+        taxBreakdownStructure = {
+          taxType: "VAT",
+          vat: 0,
+          totalTax: 0,
+          rate: 0,
+          ruleIdsApplied: [],
+        };
+      }
+    } else if (activeTaxRules.length > 0) {
+      const selectedRule = activeTaxRules[0] as any;
+      primaryTaxMode = selectedRule.taxMode || "EXCLUSIVE";
+      taxPercent = money(selectedRule.percentage);
+      ruleIdApplied = selectedRule.id;
+    } else {
+      // Default to Zero-Rated Export
+      taxPercent = 0;
+      primaryTaxMode = "EXEMPT";
+      isZeroRatedExport = true;
       taxBreakdownStructure = {
         taxType: "EXEMPT",
         totalTax: 0,
         rate: 0,
-        ruleIdsApplied: [selectedRule.id],
+        ruleIdsApplied: [],
+      };
+    }
+  } else {
+    // India Domestic
+    if (activeTaxRules.length > 0) {
+      const selectedRule = activeTaxRules[0] as any;
+      primaryTaxMode = selectedRule.taxMode || "EXCLUSIVE";
+      taxPercent = money(selectedRule.percentage);
+      ruleIdApplied = selectedRule.id;
+    } else {
+      // Fallback legacy percentage
+      taxPercent = money(basePrice.taxPercentage);
+      primaryTaxMode = "EXCLUSIVE";
+    }
+  }
+
+  // Calculate actual amount based on taxMode
+  if (primaryTaxMode === "EXEMPT") {
+    totalTaxAmount = 0;
+  } else if (primaryTaxMode === "INCLUSIVE") {
+    totalTaxAmount = roundMoney(priceBeforeTax - priceBeforeTax / (1 + taxPercent / 100));
+  } else {
+    totalTaxAmount = roundMoney(priceBeforeTax * (taxPercent / 100));
+  }
+
+  // Setup breakdown structure
+  const sellerStateNorm = (input.sellerState || defaultSellerState).trim().toLowerCase();
+  const buyerStateNorm = (input.buyerState || "").trim().toLowerCase();
+  const isSameState = !!buyerStateNorm && (
+    buyerStateNorm === sellerStateNorm ||
+    (buyerStateNorm === "pb" && sellerStateNorm === "punjab") ||
+    (buyerStateNorm === "punjab" && sellerStateNorm === "pb") ||
+    (buyerStateNorm === "rj" && sellerStateNorm === "rajasthan") ||
+    (buyerStateNorm === "rajasthan" && sellerStateNorm === "rj")
+  );
+
+  if (destinationCountryCode !== "IN") {
+    if (isVatReverseCharge) {
+      taxBreakdownStructure = {
+        taxType: "VAT",
+        vat: 0,
+        totalTax: 0,
+        rate: 0,
+        ruleIdsApplied: ruleIdApplied ? [ruleIdApplied] : [],
       };
     } else {
-      if (primaryTaxMode === "INCLUSIVE") {
-        totalTaxAmount = roundMoney(priceBeforeTax - priceBeforeTax / (1 + taxPercent / 100));
-      } else {
-        totalTaxAmount = roundMoney(priceBeforeTax * (taxPercent / 100));
-      }
-
-      const sellerStateNorm = (input.sellerState || "Rajasthan").trim().toLowerCase();
-      const buyerStateNorm = (input.buyerState || "").trim().toLowerCase();
-      const isSameState = !!buyerStateNorm && (buyerStateNorm === sellerStateNorm || buyerStateNorm === "rj" || buyerStateNorm === "rajasthan");
-
-      if (selectedRule.type === "VAT") {
-        taxBreakdownStructure = {
-          taxType: "VAT",
-          vat: totalTaxAmount,
-          totalTax: totalTaxAmount,
-          rate: taxPercent,
-          ruleIdsApplied: [selectedRule.id],
-        };
-      } else if (isSameState) {
-        const cgst = Math.round((totalTaxAmount / 2) * 100) / 100;
-        const sgst = Math.round((totalTaxAmount - cgst) * 100) / 100;
-        taxBreakdownStructure = {
-          taxType: "CGST_SGST",
-          cgst,
-          sgst,
-          totalTax: totalTaxAmount,
-          rate: taxPercent,
-          ruleIdsApplied: [selectedRule.id],
-        };
-      } else {
-        taxBreakdownStructure = {
-          taxType: "IGST",
-          igst: totalTaxAmount,
-          totalTax: totalTaxAmount,
-          rate: taxPercent,
-          ruleIdsApplied: [selectedRule.id],
-        };
-      }
+      const isVAT = activeTaxRules.length > 0 && activeTaxRules[0].type === "VAT";
+      taxBreakdownStructure = isVAT
+        ? {
+            taxType: "VAT",
+            vat: totalTaxAmount,
+            totalTax: totalTaxAmount,
+            rate: taxPercent,
+            ruleIdsApplied: ruleIdApplied ? [ruleIdApplied] : [],
+          }
+        : {
+            taxType: "EXEMPT",
+            totalTax: totalTaxAmount,
+            rate: taxPercent,
+            ruleIdsApplied: ruleIdApplied ? [ruleIdApplied] : [],
+          };
     }
-
-    layers.push({
-      type: "TAX",
-      label: primaryTaxMode === "INCLUSIVE" ? "Inclusive Tax" : "Tax",
-      amountBefore: priceBeforeTax,
-      amountAfter: primaryTaxMode === "INCLUSIVE" ? priceBeforeTax : roundMoney(priceBeforeTax + totalTaxAmount),
-      taxPercent,
-      taxAmount: totalTaxAmount,
-      ruleId: selectedRule.id,
-      isSpecific: productSpecificRules.length > 0,
-    } as any);
-    currentPrice = primaryTaxMode === "INCLUSIVE" ? priceBeforeTax : roundMoney(priceBeforeTax + totalTaxAmount);
-  } else if (money(basePrice.taxPercentage) > 0) {
-    const taxPercent = money(basePrice.taxPercentage);
-    totalTaxAmount = roundMoney(priceBeforeTax * (taxPercent / 100));
-    currentPrice = roundMoney(priceBeforeTax + totalTaxAmount);
-
-    const sellerStateNorm = (input.sellerState || "Rajasthan").trim().toLowerCase();
-    const buyerStateNorm = (input.buyerState || "").trim().toLowerCase();
-    const isSameState = !!buyerStateNorm && (buyerStateNorm === sellerStateNorm || buyerStateNorm === "rj" || buyerStateNorm === "rajasthan");
-
-    const fallbackCgst = Math.round((totalTaxAmount / 2) * 100) / 100;
-    const fallbackSgst = Math.round((totalTaxAmount - fallbackCgst) * 100) / 100;
-
-    taxBreakdownStructure = isSameState
-      ? { taxType: "CGST_SGST", cgst: fallbackCgst, sgst: fallbackSgst, totalTax: totalTaxAmount, rate: taxPercent, ruleIdsApplied: [] }
-      : { taxType: "IGST", igst: totalTaxAmount, totalTax: totalTaxAmount, rate: taxPercent, ruleIdsApplied: [] };
-
-    layers.push({
-      type: "TAX",
-      label: "Tax",
-      amountBefore: priceBeforeTax,
-      amountAfter: currentPrice,
-      taxPercent,
-      taxAmount: totalTaxAmount,
-      taxRuleType: "LEGACY_PRODUCT_PRICE_TAX",
-    });
+  } else {
+    // India splits GST into CGST/SGST or IGST
+    if (isSameState) {
+      const cgst = Math.round((totalTaxAmount / 2) * 100) / 100;
+      const sgst = Math.round((totalTaxAmount - cgst) * 100) / 100;
+      taxBreakdownStructure = {
+        taxType: "CGST_SGST",
+        cgst,
+        sgst,
+        totalTax: totalTaxAmount,
+        rate: taxPercent,
+        ruleIdsApplied: ruleIdApplied ? [ruleIdApplied] : [],
+      };
+    } else {
+      taxBreakdownStructure = {
+        taxType: "IGST",
+        igst: totalTaxAmount,
+        totalTax: totalTaxAmount,
+        rate: taxPercent,
+        ruleIdsApplied: ruleIdApplied ? [ruleIdApplied] : [],
+      };
+    }
   }
+
+  // Push layers
+  layers.push({
+    type: "TAX",
+    label: primaryTaxMode === "INCLUSIVE" ? "Inclusive Tax" : "Tax",
+    amountBefore: priceBeforeTax,
+    amountAfter: primaryTaxMode === "INCLUSIVE" ? priceBeforeTax : roundMoney(priceBeforeTax + totalTaxAmount),
+    taxPercent,
+    taxAmount: totalTaxAmount,
+    ruleId: ruleIdApplied || undefined,
+    isSpecific: productSpecificRules.length > 0,
+  } as any);
+
+  currentPrice = primaryTaxMode === "INCLUSIVE" ? priceBeforeTax : roundMoney(priceBeforeTax + totalTaxAmount);
 
   const countryRecord = (basePrice as { country?: { id: string; code: string; dutyPercentage: Prisma.Decimal | number; shippingCharge: Prisma.Decimal | number } }).country;
   const landedCost =

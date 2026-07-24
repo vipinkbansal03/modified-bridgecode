@@ -8,6 +8,9 @@ const router = Router();
 
 router.use(protect);
 
+router.post("/identifiers/validate", TaxController.validateIdentifier);
+router.post("/addresses/validate", TaxController.validateAddress);
+
 router.get("/", requirePermission("tax.view", "tax.manage"), TaxController.list);
 router.get("/dashboard", requirePermission("tax.view", "tax.manage"), TaxController.dashboard);
 router.get("/preview", requirePermission("tax.view", "tax.manage"), TaxController.preview);

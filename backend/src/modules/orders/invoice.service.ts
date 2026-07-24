@@ -56,11 +56,15 @@ export async function generateInvoice(orderId: string): Promise<Buffer> {
   });
   if (!order) throw new AppError("Order not found.", 404);
 
-  const [siteNameSetting, siteUrlSetting] = await Promise.all([
+  const [siteNameSetting, siteUrlSetting, sellerName, sellerGstin, sellerIec, shipFromState] = await Promise.all([
     getSettingValue("general.site_name").catch(() => ""),
     getSettingValue("general.site_url").catch(() => ""),
+    getSettingValue("tax.seller_name").catch(() => "Modern Orthodontics Pvt Ltd"),
+    getSettingValue("tax.seller_gstin").catch(() => ""),
+    getSettingValue("tax.seller_iec").catch(() => ""),
+    getSettingValue("tax.ship_from_state").catch(() => "Punjab"),
   ]);
-  const storeName = process.env.STORE_NAME || siteNameSetting || "Store";
+  const storeName = process.env.STORE_NAME || sellerName || siteNameSetting || "Store";
   const storeAddress = process.env.STORE_ADDRESS || "";
   const storeEmail = process.env.STORE_EMAIL || process.env.EMAIL_FROM || "";
   const storeUrl = process.env.STORE_URL || siteUrlSetting || "";
@@ -82,6 +86,16 @@ export async function generateInvoice(orderId: string): Promise<Buffer> {
       doc.text(line, 50, storeY, { width: 250 });
       storeY += 13;
     }
+    if (sellerGstin) {
+      doc.text(`GSTIN: ${sellerGstin}`, 50, storeY, { width: 250 });
+      storeY += 13;
+    }
+    if (sellerIec && (order as any).isZeroRated) {
+      doc.text(`IEC: ${sellerIec}`, 50, storeY, { width: 250 });
+      storeY += 13;
+    }
+    doc.text(`Ship-From State: ${shipFromState}`, 50, storeY, { width: 250 });
+    storeY += 13;
 
     doc.font("Helvetica-Bold").fontSize(24).text("INVOICE", 360, 50, { width: 180, align: "right" });
     doc.font("Helvetica").fontSize(10);
@@ -107,7 +121,8 @@ export async function generateInvoice(orderId: string): Promise<Buffer> {
       order.customerName,
       order.customerEmail,
       ...((addressLines.length ? addressLines : fallbackAddress) as string[]),
-    ];
+      (order as any).taxIdSnapshot ? `${(order as any).taxIdTypeSnapshot || 'Tax ID'}: ${(order as any).taxIdSnapshot}` : null,
+    ].filter(Boolean);
     let y = 185;
     for (const line of billLines) {
       doc.text(textValue(line), 50, y, { width: 260 });
@@ -130,7 +145,7 @@ export async function generateInvoice(orderId: string): Promise<Buffer> {
       y = maybeNewPage(doc, y);
       const rowTop = y;
       
-      const hsnCode = (item.product as any)?.hsnCode || null;
+      const hsnCode = (item as any).hsnCode || (item.product as any)?.hsnCode || null;
       if (!hsnCode) {
         console.warn(`[Invoice Data Gap] Product "${item.product?.title ?? item.title}" (ID: ${item.productId}) has no assigned HSN code.`);
       }
@@ -177,24 +192,34 @@ export async function generateInvoice(orderId: string): Promise<Buffer> {
       y += 18;
     }
 
-    const totalTax = Number(order.taxAmount ?? 0);
-    const orderTaxType = (order as any).taxType || (totalTax === 0 ? "EXEMPT" : "IGST");
+    const cgst = Number((order as any).cgstAmount ?? 0);
+    const sgst = Number((order as any).sgstAmount ?? 0);
+    const igst = Number((order as any).igstAmount ?? 0);
+    const vat = Number((order as any).vatAmount ?? 0);
 
-    if (totalTax === 0 || orderTaxType === "EXEMPT") {
-      addRightAmount(doc, "Tax Exempt (0%)", money(symbol, 0), y);
+    if ((order as any).isZeroRated) {
+      addRightAmount(doc, "Zero-Rated Export (LUT)", money(symbol, 0), y);
       y += 18;
-    } else if (orderTaxType === "VAT") {
-      addRightAmount(doc, "VAT @ 18%", `+${money(symbol, totalTax)}`, y);
+    } else if (cgst > 0 || sgst > 0) {
+      addRightAmount(doc, "CGST", `+${money(symbol, cgst)}`, y);
       y += 18;
-    } else if (orderTaxType === "CGST_SGST") {
-      const cgst = Math.round((totalTax / 2) * 100) / 100;
-      const sgst = Math.round((totalTax - cgst) * 100) / 100;
-      addRightAmount(doc, "CGST @ 9%", `+${money(symbol, cgst)}`, y);
+      addRightAmount(doc, "SGST", `+${money(symbol, sgst)}`, y);
       y += 18;
-      addRightAmount(doc, "SGST @ 9%", `+${money(symbol, sgst)}`, y);
+    } else if (igst > 0) {
+      addRightAmount(doc, "IGST", `+${money(symbol, igst)}`, y);
+      y += 18;
+    } else if (vat > 0) {
+      addRightAmount(doc, "VAT", `+${money(symbol, vat)}`, y);
       y += 18;
     } else {
-      addRightAmount(doc, "IGST @ 18%", `+${money(symbol, totalTax)}`, y);
+      addRightAmount(doc, "Tax Exempt (0%)", money(symbol, 0), y);
+      y += 18;
+    }
+
+    if ((order as any).isZeroRated) {
+      y = maybeNewPage(doc, y + 10);
+      doc.font("Helvetica-Oblique").fontSize(8).fillColor("#333333");
+      doc.text("Declaration: Supply meant for export under bond or letter of undertaking (LUT) without payment of integrated tax.", 50, y, { width: 495 });
       y += 18;
     }
     if (Number(order.shippingCharge ?? 0) > 0) {
