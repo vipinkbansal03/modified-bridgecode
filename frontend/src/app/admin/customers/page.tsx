@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, Eye, Filter, Search, Shield, Store, UserCog, Users, XCircle, Edit2, Trash2 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
 import {
   useAdminCountries,
@@ -64,6 +66,19 @@ function formatDate(value?: string) {
 }
 
 export default function AdminCustomersPage() {
+  const { hasPermission, isLoading: authLoading } = useAdminAuth();
+  const router = useRouter();
+
+  useLayoutEffect(() => {
+    if (!authLoading && !hasPermission("customers.view")) {
+      router.replace("/admin/dashboard");
+    }
+  }, [authLoading, hasPermission, router]);
+
+  const canCreate = hasPermission("customers.create");
+  const canUpdate = hasPermission("customers.update");
+  const canDelete = hasPermission("customers.delete");
+
   const { showToast, ToastComponent } = useToast();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -173,48 +188,56 @@ export default function AdminCustomersPage() {
       key: "status",
       label: "Account",
       render: (row) => (
-        <button
-          onClick={async () => {
-            const nextStatus = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-            try {
-              await adminApi.put(`/customers/${row.id}`, { status: nextStatus });
-              showToast(`Account status updated to ${nextStatus.toLowerCase()}.`);
-              customerQuery.refetch();
-            } catch (err) {
-              showToast(getAdminErrorMessage(err, "Failed to update account status."), "error");
-            }
-          }}
-          className="cursor-pointer hover:opacity-85 transition-opacity focus:outline-hidden"
-          title="Click to toggle account status"
-        >
+        canUpdate ? (
+          <button
+            onClick={async () => {
+              const nextStatus = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+              try {
+                await adminApi.put(`/customers/${row.id}`, { status: nextStatus });
+                showToast(`Account status updated to ${nextStatus.toLowerCase()}.`);
+                customerQuery.refetch();
+              } catch (err) {
+                showToast(getAdminErrorMessage(err, "Failed to update account status."), "error");
+              }
+            }}
+            className="cursor-pointer hover:opacity-85 transition-opacity focus:outline-hidden"
+            title="Click to toggle account status"
+          >
+            <StatusBadge status={row.status} />
+          </button>
+        ) : (
           <StatusBadge status={row.status} />
-        </button>
+        )
       ),
     },
     {
       key: "approvalStatus",
       label: "Approval",
       render: (row) => (
-        <button
-          onClick={async () => {
-            try {
-              if (row.approvalStatus === "ACTIVE") {
-                await adminApi.post(`/customers/${row.id}/reject`);
-                showToast("Customer status set to Suspended.");
-              } else {
-                await adminApi.post(`/customers/${row.id}/approve`);
-                showToast("Customer approved.");
+        canUpdate ? (
+          <button
+            onClick={async () => {
+              try {
+                if (row.approvalStatus === "ACTIVE") {
+                  await adminApi.post(`/customers/${row.id}/reject`);
+                  showToast("Customer status set to Suspended.");
+                } else {
+                  await adminApi.post(`/customers/${row.id}/approve`);
+                  showToast("Customer approved.");
+                }
+                customerQuery.refetch();
+              } catch (err) {
+                showToast(getAdminErrorMessage(err, "Failed to update approval status."), "error");
               }
-              customerQuery.refetch();
-            } catch (err) {
-              showToast(getAdminErrorMessage(err, "Failed to update approval status."), "error");
-            }
-          }}
-          className="cursor-pointer hover:opacity-85 transition-opacity focus:outline-hidden"
-          title="Click to toggle approval status"
-        >
+            }}
+            className="cursor-pointer hover:opacity-85 transition-opacity focus:outline-hidden"
+            title="Click to toggle approval status"
+          >
+            <StatusBadge status={row.approvalStatus} />
+          </button>
+        ) : (
           <StatusBadge status={row.approvalStatus} />
-        </button>
+        )
       ),
     },
     { key: "createdAt", label: "Created", render: (row) => formatDate(row.createdAt) },
@@ -231,22 +254,26 @@ export default function AdminCustomersPage() {
           >
             <Eye size={13} />
           </Link>
-          <Link
-            href={`/admin/customers/${row.id}`}
-            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-            title="Edit profile"
-          >
-            <Edit2 size={13} />
-          </Link>
-          <button
-            type="button"
-            onClick={() => setDeletingCustomer(row.id)}
-            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"
-            title="Delete account"
-          >
-            <Trash2 size={13} />
-          </button>
-          {row.approvalStatus === "PENDING_APPROVAL" ? (
+          {canUpdate && (
+            <Link
+              href={`/admin/customers/${row.id}`}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+              title="Edit profile"
+            >
+              <Edit2 size={13} />
+            </Link>
+          )}
+          {canDelete && (
+            <button
+              type="button"
+              onClick={() => setDeletingCustomer(row.id)}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"
+              title="Delete account"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
+          {canUpdate && row.approvalStatus === "PENDING_APPROVAL" ? (
             <>
               <button
                 type="button"
@@ -327,6 +354,10 @@ export default function AdminCustomersPage() {
     setSortDir("desc");
   };
 
+  if (authLoading || !hasPermission("customers.view")) {
+    return null;
+  }
+
   return (
     <AdminLayout title="Users & Customers" breadcrumb={[{ label: "Customers" }]}>
       <div className="space-y-5">
@@ -338,12 +369,14 @@ export default function AdminCustomersPage() {
           >
             Customers
           </Link>
-          <Link
-            href="/admin/users"
-            className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-transparent text-[#6B7280] hover:text-[#111827]"
-          >
-            Staff (Users)
-          </Link>
+          {hasPermission("users.view") && (
+            <Link
+              href="/admin/users"
+              className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-transparent text-[#6B7280] hover:text-[#111827]"
+            >
+              Staff (Users)
+            </Link>
+          )}
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard title="Total Customers" value={totals.total} subtitle="All customer records" icon={<Users size={18} />} />

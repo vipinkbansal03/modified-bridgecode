@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, Plus, Trash2, GripVertical, Edit2, Save, X, Languages, Upload } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminTextarea, AdminSelect, useToast, ConfirmModal, toastMessages } from "@/components/admin/AdminComponents";
 import {
   useAdminCmsPage, useAdminCmsPages, useUpdateCmsPage, useCreateCmsSection, useUpdateCmsSection, useDeleteCmsSection,
@@ -404,9 +405,17 @@ function CmsTranslationEditor({
 }
 
 export default function CmsPageEditorPage() {
+  const { hasPermission, isLoading: authLoading } = useAdminAuth();
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const router = useRouter();
+
+  useLayoutEffect(() => {
+    if (!authLoading && !hasPermission("cms.update")) {
+      router.replace("/admin/cms/pages");
+    }
+  }, [authLoading, hasPermission, router]);
+
   const { data: page, isLoading } = useAdminCmsPage(id);
   const { data: languages = [] } = useAdminLanguages();
   const { data: pageListData } = useAdminCmsPages({ page: 1 });
@@ -486,8 +495,8 @@ export default function CmsPageEditorPage() {
     }
   }
 
-  if (isLoading) return <AdminLayout title="Loading…" breadcrumb={[{ label: "Content" }, { label: "Pages", href: "/admin/cms/pages" }]}><div className="text-sm text-gray-500">Loading page…</div></AdminLayout>;
-  if (!p) return <AdminLayout title="Not found" breadcrumb={[{ label: "Content" }, { label: "Pages", href: "/admin/cms/pages" }]}><div className="text-sm text-red-500">Page not found.</div></AdminLayout>;
+  if (isLoading || authLoading) return <AdminLayout title="Loading…" breadcrumb={[{ label: "Content" }, { label: "Pages", href: "/admin/cms/pages" }]}><div className="text-sm text-gray-500">Loading page…</div></AdminLayout>;
+  if (!p || !hasPermission("cms.update")) return <AdminLayout title="Not found" breadcrumb={[{ label: "Content" }, { label: "Pages", href: "/admin/cms/pages" }]}><div className="text-sm text-red-500">Page not found.</div></AdminLayout>;
 
   return (
     <AdminLayout title={p.title} breadcrumb={[{ label: "Content" }, { label: "Pages", href: "/admin/cms/pages" }, { label: p.title }]}>

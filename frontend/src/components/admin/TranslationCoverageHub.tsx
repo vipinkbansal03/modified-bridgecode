@@ -243,10 +243,12 @@ function GapSaveFields({
   gap,
   languageId,
   onSaved,
+  canUpdate = false,
 }: {
   gap: CoverageGap;
   languageId: string;
   onSaved: () => void;
+  canUpdate?: boolean;
 }) {
   const { showToast } = useToast();
 
@@ -419,6 +421,7 @@ function GapSaveFields({
               defaultValue=""
               englishReference={missing.englishValue}
               onSave={onStaticSave}
+              disabled={!canUpdate}
             />
           );
         }
@@ -445,6 +448,7 @@ function GapSaveFields({
               defaultValue=""
               englishReference={missing.englishValue}
               onSave={onSave}
+              disabled={!canUpdate}
             />
           );
         }
@@ -456,6 +460,7 @@ function GapSaveFields({
             defaultValue=""
             englishReference={missing.englishValue}
             onSave={onSave}
+            disabled={!canUpdate}
           />
         );
       })}
@@ -465,8 +470,14 @@ function GapSaveFields({
 
 export function TranslationCoverageHub({
   languages,
+  canUpdate = false,
+  canDelete = false,
+  canCreate = false,
 }: {
   languages: AdminLanguage[];
+  canUpdate?: boolean;
+  canDelete?: boolean;
+  canCreate?: boolean;
 }) {
   const translationLanguages = filterTranslationLanguages(languages);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -822,15 +833,17 @@ export function TranslationCoverageHub({
                 {isExporting ? "Exporting..." : "Export CSV"}
               </button>
 
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isImporting || !activeLanguageId}
-                className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#E31E24] bg-[#E31E24] px-3.5 text-[12.5px] font-medium text-white shadow-sm transition hover:bg-[#C9151B] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Upload size={14} />
-                {isImporting ? "Importing..." : "Import CSV"}
-              </button>
+              {canUpdate && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isImporting || !activeLanguageId}
+                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#E31E24] bg-[#E31E24] px-3.5 text-[12.5px] font-medium text-white shadow-sm transition hover:bg-[#C9151B] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Upload size={14} />
+                  {isImporting ? "Importing..." : "Import CSV"}
+                </button>
+              )}
 
               <input
                 ref={fileInputRef}
@@ -981,6 +994,7 @@ export function TranslationCoverageHub({
                         gap={gap}
                         languageId={activeLanguageId}
                         onSaved={() => refetch()}
+                        canUpdate={canUpdate}
                       />
                     </div>
                   )}

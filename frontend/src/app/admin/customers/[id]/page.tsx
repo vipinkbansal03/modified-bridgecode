@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useLayoutEffect, useState, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, CheckCircle2, MapPin, PackageSearch, Save, XCircle, Edit2, X } from "lucide-react";
 import { AdminInput, AdminSelect, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { Modal } from "@/components/ui/Modal";
 import {
   useAdminCountries,
@@ -68,7 +69,17 @@ function formatMoney(value: string | number, currency?: CustomerOrder["currency"
 }
 
 export default function AdminCustomerDetailPage() {
+  const { hasPermission, isLoading: authLoading } = useAdminAuth();
   const router = useRouter();
+
+  useLayoutEffect(() => {
+    if (!authLoading && !hasPermission("customers.view")) {
+      router.replace("/admin/dashboard");
+    }
+  }, [authLoading, hasPermission, router]);
+
+  const canUpdate = hasPermission("customers.update");
+
   const searchParams = useSearchParams();
   const params = useParams<{ id: string }>();
   const customerId = params.id;
@@ -88,7 +99,7 @@ export default function AdminCustomerDetailPage() {
   const rejectCustomer = useRejectCustomer();
 
   const mode = searchParams.get("mode") ?? "view";
-  const isReadOnly = mode === "view";
+  const isReadOnly = mode === "view" || !canUpdate;
 
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState<any>(null);
@@ -195,6 +206,10 @@ export default function AdminCustomerDetailPage() {
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Could not update customer approval."), "error");
     }
+  }
+
+  if (authLoading || !hasPermission("customers.view")) {
+    return null;
   }
 
   return (

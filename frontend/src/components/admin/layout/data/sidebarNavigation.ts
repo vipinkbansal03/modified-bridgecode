@@ -127,7 +127,7 @@ export const sidebarSections: SidebarSection[] = [
       { label: "Media Library", href: "/admin/media", icon: Image, permission: "media.view" },
       { label: "Translations", href: "/admin/translations", icon: Languages, permission: "translations.view" },
       { label: "AI Tools", href: "/admin/ai-tools", icon: Sparkles, permission: "ai.view" },
-      { label: "Payments", href: "/admin/payments", icon: CreditCard, permission: "settings.view" },
+      { label: "Payments", href: "/admin/payments", icon: CreditCard, permission: "payments.view" },
       { label: "Settings", href: "/admin/settings", icon: Settings, permission: "settings.view" },
     ],
   },

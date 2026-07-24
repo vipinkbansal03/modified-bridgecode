@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, useToast } from "@/components/admin/AdminComponents";
 import { useCreateCmsPage } from "@/hooks/admin/useAdminHooks";
 
@@ -11,11 +12,22 @@ function slugify(s: string) {
 }
 
 export default function CmsPageCreatePage() {
+  const { hasPermission, isLoading: authLoading } = useAdminAuth();
   const router = useRouter();
   const { showToast } = useToast();
   const createPage = useCreateCmsPage();
 
+  useLayoutEffect(() => {
+    if (!authLoading && !hasPermission("cms.create")) {
+      router.replace("/admin/cms/pages");
+    }
+  }, [authLoading, hasPermission, router]);
+
   const [form, setForm] = useState({ title: "", slug: "", pageKey: "", status: "ACTIVE", seoTitle: "", seoDescription: "" });
+
+  if (authLoading || !hasPermission("cms.create")) {
+    return null;
+  }
 
   function set(k: string, v: string) {
     setForm((f) => {

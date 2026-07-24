@@ -83,11 +83,13 @@ export function TranslationBlurInput({
   defaultValue,
   englishReference,
   onSave,
+  disabled = false,
 }: {
   label: string;
   defaultValue: string;
   englishReference?: string | null;
   onSave: (value: string) => Promise<void>;
+  disabled?: boolean;
 }) {
   const { showToast } = useToast();
 
@@ -97,6 +99,7 @@ export function TranslationBlurInput({
         label={label}
         defaultValue={defaultValue}
         placeholder={englishReference ?? ""}
+        disabled={disabled}
         onBlur={async (e) => {
           const value = e.currentTarget.value.trim();
           const saved = defaultValue.trim();
@@ -122,12 +125,14 @@ export function TranslationBlurField({
   defaultValue,
   englishReference,
   onSave,
+  disabled = false,
 }: {
   label: string;
   rows?: number;
   defaultValue: string;
   englishReference?: string | null;
   onSave: (value: string) => Promise<void>;
+  disabled?: boolean;
 }) {
   const { showToast } = useToast();
 
@@ -138,6 +143,7 @@ export function TranslationBlurField({
         rows={rows}
         defaultValue={defaultValue}
         placeholder={englishReference ?? ""}
+        disabled={disabled}
         onBlur={async (e) => {
           const value = e.currentTarget.value.trim();
           const saved = defaultValue.trim();

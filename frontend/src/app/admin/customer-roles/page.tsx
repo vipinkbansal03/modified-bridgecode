@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Edit2, Filter, Plus, Search, Shield, Trash2, Users, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { Modal } from "@/components/ui/Modal";
 import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
 import {
@@ -48,6 +50,19 @@ function formatKeyLabel(key: string) {
 }
 
 export default function AdminCustomerRolesPage() {
+  const { hasPermission, isLoading: authLoading } = useAdminAuth();
+  const router = useRouter();
+
+  useLayoutEffect(() => {
+    if (!authLoading && !hasPermission("roles.view")) {
+      router.replace("/admin/dashboard");
+    }
+  }, [authLoading, hasPermission, router]);
+
+  const canCreate = hasPermission("roles.create");
+  const canUpdate = hasPermission("roles.update");
+  const canDelete = hasPermission("roles.delete");
+
   const { showToast, ToastComponent } = useToast();
   const { data: roles = [], isLoading } = useAdminCustomerRoles();
   const createRole = useCreateCustomerRole();
@@ -203,28 +218,40 @@ export default function AdminCustomerRolesPage() {
     { key: "customers", label: "Customers", render: (row) => row._count?.customers ?? 0 },
     { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
     { key: "sortOrder", label: "Sort", render: (row) => row.sortOrder },
-    {
-      key: "actions",
-      label: "Actions",
-      width: "120px",
-      render: (row) => (
-        <div className="flex items-center gap-1.5">
-          <button type="button" onClick={() => startEdit(row)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Edit role">
-            <Edit2 size={13} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeleting(row)}
-            disabled={row.isSystem}
-            className="flex h-7 w-7 items-center justify-center rounded border border-[#F2C9C9] text-red-500 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
-            title={row.isSystem ? "System roles cannot be deleted" : "Delete role"}
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
-      ),
-    },
+    ...(canUpdate || canDelete
+      ? [
+          {
+            key: "actions",
+            label: "Actions",
+            width: "120px",
+            render: (row: CustomerRoleRow) => (
+              <div className="flex items-center gap-1.5">
+                {canUpdate && (
+                  <button type="button" onClick={() => startEdit(row)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Edit role">
+                    <Edit2 size={13} />
+                  </button>
+                )}
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => setDeleting(row)}
+                    disabled={row.isSystem}
+                    className="flex h-7 w-7 items-center justify-center rounded border border-[#F2C9C9] text-red-500 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    title={row.isSystem ? "System roles cannot be deleted" : "Delete role"}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            ),
+          },
+        ]
+      : []),
   ];
+
+  if (authLoading || !hasPermission("roles.view")) {
+    return null;
+  }
 
   return (
     <AdminLayout title="Roles & Permissions" breadcrumb={[{ label: "Customer Roles" }]}>
@@ -272,14 +299,16 @@ export default function AdminCustomerRolesPage() {
                 <Filter size={14} />
                 {showFilters ? "Hide filters" : "Show filters"}
               </button>
-              <button
-                type="button"
-                onClick={startCreate}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-              >
-                <Plus size={14} />
-                New Customer Role
-              </button>
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={startCreate}
+                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+                >
+                  <Plus size={14} />
+                  New Customer Role
+                </button>
+              )}
             </div>
           </div>
 
