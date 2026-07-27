@@ -384,6 +384,13 @@ model Customer {
   taxIdType                  String?           // "GSTIN", "VAT", "EIN", "OTHER"
   taxIdStatus                String            @default("UNVERIFIED") // "UNVERIFIED" | "PENDING" | "VALID" | "INVALID"
   taxIdVerifiedAt            DateTime?
+  vatNumber                  String?
+  vatValidationStatus        String?           // "VALID" | "INVALID" | "UNVERIFIED"
+  vatValidatedAt             DateTime?
+  vatCompanyName             String?
+  vatCompanyAddress          String?
+  vatCountryCode             String?
+  vatValidationSource        String?           // "VIES"
   taxExemptCertificateUrl    String?
   createdAt                  DateTime          @default(now())
   updatedAt                  DateTime          @updatedAt

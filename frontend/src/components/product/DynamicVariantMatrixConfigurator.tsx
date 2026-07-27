@@ -64,7 +64,12 @@ function getPriceForCurrency(
 }
 
 function formatMoney(symbol: string, amount: number) {
-  return `${symbol}${Math.round(amount || 0).toLocaleString("en-IN")}`;
+  const val = amount || 0;
+  const hasDecimals = val % 1 !== 0;
+  return `${symbol}${val.toLocaleString("en-IN", {
+    minimumFractionDigits: hasDecimals ? 2 : 0,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function buildSelectionKey(selectionByAttributeId: Record<string, string>) {
@@ -454,11 +459,16 @@ export function DynamicVariantMatrixConfigurator({
   };
 
   useEffect(() => {
-    const previewItems = Object.entries(quantityMap)
-      .filter(([, quantity]) => quantity > 0)
-      .map(([variantId, quantity]) => ({ variantId, quantity }));
+    const previewItems = currentCustomer
+      ? apiProduct.variants.map((v) => ({ variantId: v.id, quantity: quantityMap[v.id] || 1 }))
+      : Object.entries(quantityMap)
+          .filter(([, quantity]) => quantity > 0)
+          .map(([variantId, quantity]) => ({ variantId, quantity }));
 
-    if (!previewItems.length) return;
+    if (!previewItems.length) {
+      setPreviewPriceMap({});
+      return;
+    }
 
     let active = true;
     const timer = window.setTimeout(async () => {
@@ -498,7 +508,7 @@ export function DynamicVariantMatrixConfigurator({
       active = false;
       window.clearTimeout(timer);
     };
-  }, [apiProduct.slug, quantityMap, selectedCountryCode]);
+  }, [apiProduct.slug, apiProduct.variants, quantityMap, selectedCountryCode, currentCustomer]);
 
   if (!matrixEnabled) return null;
 

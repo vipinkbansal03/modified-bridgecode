@@ -1,4 +1,6 @@
 import { Response } from "express";
+import jwt from "jsonwebtoken";
+import { prisma } from "../../config/database";
 import { asyncHandler, ApiResponse } from "../../utils/apiResponse";
 import { removeTempFile } from "../../utils/spreadsheet";
 import { AuthRequest } from "../../middleware/auth.middleware";
@@ -101,15 +103,108 @@ export const importSpreadsheet = asyncHandler(async (req: AuthRequest, res: Resp
 
 export const validateIdentifier = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { taxId, taxIdType, countryCode } = req.body;
-  if (!taxId) {
-    return ApiResponse.error(res, "Tax ID is required.", [], 400);
+
+  let customerId: string | null = null;
+  let token: string | undefined;
+  if (req.headers.authorization?.startsWith("Bearer ")) {
+    token = req.headers.authorization.split(" ")[1];
+  } else if (req.cookies?.customerToken) {
+    token = req.cookies.customerToken;
   }
+
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id: string; scope?: string };
+      if (decoded.scope === "customer") {
+        customerId = decoded.id;
+      }
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  if (!taxId) {
+    if (customerId) {
+      await prisma.customer.update({
+        where: { id: customerId },
+        data: {
+          taxId: null,
+          taxIdType: null,
+          taxIdStatus: "UNVERIFIED",
+          vatNumber: null,
+          vatValidationStatus: "UNVERIFIED",
+          vatValidatedAt: null,
+          vatCompanyName: null,
+          vatCompanyAddress: null,
+          vatCountryCode: null,
+          vatValidationSource: null,
+        },
+      });
+    }
+    return ApiResponse.success(res, "Tax identifier cleared.", {
+      success: true,
+      valid: false,
+      message: "Tax ID cleared.",
+      isValid: false,
+    });
+  }
+
   const result = await TaxService.validateTaxIdentifier(
     String(taxId),
     String(taxIdType || ""),
     String(countryCode || "")
   );
-  return ApiResponse.success(res, "Tax identifier validation completed.", result);
+
+  const normalizedResult = {
+    success: true,
+    valid: Boolean(result.isValid),
+    countryCode: result.countryCode ?? String(countryCode || "").toUpperCase(),
+    identifier: result.identifier ?? result.taxId ?? String(taxId),
+    identifierType: result.identifierType ?? String(taxIdType || "").toUpperCase(),
+    validationStatus: result.validationStatus ?? (result.isValid ? "VALID" : "INVALID"),
+    validationSource: result.validationSource ?? result.validatedBy ?? null,
+    companyName: result.companyName ?? result.legalName ?? null,
+    address: result.companyAddress ?? result.address ?? null,
+    message: result.message ?? (result.isValid ? "Tax identifier verified successfully" : "Invalid tax identifier"),
+    isValid: Boolean(result.isValid),
+    ...result,
+  };
+
+  const isVatIdentifier = normalizedResult.identifierType === "VAT";
+  const vatFields = isVatIdentifier
+    ? {
+        vatNumber: normalizedResult.identifier ?? null,
+        vatValidationStatus: normalizedResult.isValid ? "VALID" : "INVALID",
+        vatValidatedAt: normalizedResult.isValid ? new Date() : null,
+        vatCompanyName: normalizedResult.companyName ?? null,
+        vatCompanyAddress: normalizedResult.address ?? null,
+        vatCountryCode: normalizedResult.countryCode ?? null,
+        vatValidationSource: normalizedResult.validationSource ?? null,
+      }
+    : {
+        vatNumber: null,
+        vatValidationStatus: null,
+        vatValidatedAt: null,
+        vatCompanyName: null,
+        vatCompanyAddress: null,
+        vatCountryCode: null,
+        vatValidationSource: null,
+      };
+
+  if (customerId) {
+    await prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        taxId: normalizedResult.isValid ? normalizedResult.identifier ?? String(taxId) : String(taxId),
+        taxIdType: normalizedResult.isValid ? normalizedResult.identifierType : String(taxIdType || ""),
+        taxIdStatus: normalizedResult.isValid ? "VALID" : "INVALID",
+        taxIdVerifiedAt: normalizedResult.isValid ? new Date() : null,
+        ...vatFields,
+      },
+    });
+  }
+
+  return ApiResponse.success(res, "Tax identifier validation completed.", normalizedResult);
 });
 
 export const validateAddress = asyncHandler(async (req: AuthRequest, res: Response) => {

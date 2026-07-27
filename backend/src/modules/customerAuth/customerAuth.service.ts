@@ -48,6 +48,8 @@ function toCustomerSession(customer: {
   customerRole: { id: string; key: string; name: string } | null;
   tierId: string | null;
   defaultCountryId: string | null;
+  taxId?: string | null;
+  taxIdStatus?: string | null;
 }) {
   return {
     id: customer.id,
@@ -70,6 +72,8 @@ function toCustomerSession(customer: {
     customerRole: customer.customerRole,
     tierId: customer.tierId,
     defaultCountryId: customer.defaultCountryId,
+    taxId: customer.taxId,
+    taxIdStatus: customer.taxIdStatus,
   };
 }
 

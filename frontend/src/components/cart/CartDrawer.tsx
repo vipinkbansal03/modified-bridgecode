@@ -6,7 +6,12 @@ import { useCart } from "@/contexts/CartContext";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 
 function formatMoney(symbol: string, amount: number) {
-  return `${symbol}${Math.round(amount || 0).toLocaleString("en-IN")}`;
+  const val = amount || 0;
+  const hasDecimals = val % 1 !== 0;
+  return `${symbol}${val.toLocaleString("en-IN", {
+    minimumFractionDigits: hasDecimals ? 2 : 0,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 export function CartDrawer() {

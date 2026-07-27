@@ -221,21 +221,67 @@ export async function estimateCustomerOrder(
   const hasVat = calculation.orderItems.some(
     (item) => item.resolvedPrice.taxBreakdownStructure?.taxType === "VAT",
   );
+  const hasVatReverseCharge = calculation.orderItems.some(
+    (item) =>
+      item.resolvedPrice.taxBreakdownStructure?.taxType === "VAT" &&
+      item.resolvedPrice.taxBreakdownStructure?.rate === 0,
+  );
   const isExempt =
-    calculation.taxAmount === 0 ||
     calculation.orderItems.every(
       (item) => item.resolvedPrice.taxBreakdownStructure?.taxType === "EXEMPT",
     );
-  const taxLabel = isExempt ? "Tax Exempt" : hasVat ? "VAT" : "GST";
+  const taxLabel = hasVatReverseCharge
+    ? "VAT Reverse Charge"
+    : isExempt
+    ? "Tax Exempt"
+    : hasVat
+    ? "VAT"
+    : "GST";
 
-  const customerTaxBreakdown = [
-    {
-      taxLabel,
-      totalTax: calculation.taxAmount,
-      taxAmount: calculation.taxAmount,
-      label: taxLabel,
-    },
-  ];
+  let totalIgst = 0;
+  let totalCgst = 0;
+  let totalSgst = 0;
+  let totalVat = 0;
+
+  for (const item of calculation.orderItems) {
+    const bd = item.resolvedPrice.taxBreakdownStructure;
+    if (bd) {
+      if (bd.taxType === "IGST") {
+        totalIgst += (bd.igst || 0) * item.quantity;
+      } else if (bd.taxType === "CGST_SGST") {
+        totalCgst += (bd.cgst || 0) * item.quantity;
+        totalSgst += (bd.sgst || 0) * item.quantity;
+      } else if (bd.taxType === "VAT") {
+        totalVat += (bd.vat || 0) * item.quantity;
+      }
+    }
+  }
+
+  const resolvedTaxType =
+    calculation.orderItems[0]?.resolvedPrice.taxBreakdownStructure?.taxType ||
+    (calculation.taxAmount === 0 ? "EXEMPT" : "IGST");
+  const taxPercent = calculation.orderItems[0]?.resolvedPrice.taxBreakdownStructure?.rate || 0;
+
+  const customerTaxBreakdown: Array<{ label: string; taxAmount: number; rate: number }> = [];
+  if (resolvedTaxType === "CGST_SGST") {
+    customerTaxBreakdown.push(
+      { label: "CGST", taxAmount: roundMoney(totalCgst), rate: taxPercent / 2 },
+      { label: "SGST", taxAmount: roundMoney(totalSgst), rate: taxPercent / 2 }
+    );
+  } else if (resolvedTaxType === "IGST" && calculation.taxAmount > 0) {
+    customerTaxBreakdown.push({
+      label: "IGST",
+      taxAmount: roundMoney(totalIgst),
+      rate: taxPercent,
+    });
+  } else if (resolvedTaxType === "VAT") {
+    const label = hasVatReverseCharge ? "VAT Reverse Charge" : "VAT";
+    customerTaxBreakdown.push({
+      label,
+      taxAmount: roundMoney(totalVat),
+      rate: taxPercent,
+    });
+  }
 
   const primaryTaxMode =
     calculation.orderItems[0]?.resolvedPrice.taxMode || "EXCLUSIVE";
@@ -330,8 +376,13 @@ export async function createCustomerOrder(
   }
 
   const hasVat = orderItems.some((item) => item.resolvedPrice.taxBreakdownStructure?.taxType === "VAT");
-  const isExempt = taxAmount === 0 || orderItems.every((item) => item.resolvedPrice.taxBreakdownStructure?.taxType === "EXEMPT");
-  const taxLabel = isExempt ? "Tax Exempt" : hasVat ? "VAT" : "GST";
+  const hasVatReverseCharge = orderItems.some(
+    (item) =>
+      item.resolvedPrice.taxBreakdownStructure?.taxType === "VAT" &&
+      item.resolvedPrice.taxBreakdownStructure?.rate === 0,
+  );
+  const isExempt = orderItems.every((item) => item.resolvedPrice.taxBreakdownStructure?.taxType === "EXEMPT");
+  const taxLabel = hasVatReverseCharge ? "VAT Reverse Charge" : isExempt ? "Tax Exempt" : hasVat ? "VAT" : "GST";
   const primaryTaxMode = orderItems[0]?.resolvedPrice.taxMode || "EXCLUSIVE";
 
   return prisma.$transaction(async (tx) => {

@@ -80,7 +80,12 @@ async function fetchSlugsFromApi(): Promise<string[]> {
 
 function formatMoney(symbol: string, amount: number | null | undefined) {
   if (amount === null || amount === undefined) return "";
-  return `${symbol}${Math.round(amount).toLocaleString("en-IN")}`;
+  const val = amount || 0;
+  const hasDecimals = val % 1 !== 0;
+  return `${symbol}${val.toLocaleString("en-IN", {
+    minimumFractionDigits: hasDecimals ? 2 : 0,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function getPublicPrice(apiProduct?: ApiProductDetail | null) {

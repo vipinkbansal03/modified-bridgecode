@@ -612,7 +612,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [countryPriceModalOpen, setCountryPriceModalOpen] = useState(false);
   const [countryPriceMRP, setCountryPriceMRP] = useState("");
   const [countryPriceSellingPrice, setCountryPriceSellingPrice] = useState("");
-  const [variantPriceOverrides, setVariantPriceOverrides] = useState<Record<string, { mrp?: string; sellingPrice?: string }>>({});
+  const [countryPriceDealerPrice, setCountryPriceDealerPrice] = useState("");
+  const [countryPriceDistributorPrice, setCountryPriceDistributorPrice] = useState("");
+  const [variantPriceOverrides, setVariantPriceOverrides] = useState<Record<string, { mrp?: string; sellingPrice?: string; dealerPrice?: string; distributorPrice?: string }>>({});
   const [generatingCountryPrices, setGeneratingCountryPrices] = useState(false);
   const [editingProductPrice, setEditingProductPrice] = useState<any | null>(null);
   const [editPriceForm, setEditPriceForm] = useState({
@@ -1937,19 +1939,26 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     setCountryPriceModalOpen(false);
     setCountryPriceMRP("");
     setCountryPriceSellingPrice("");
+    setCountryPriceDealerPrice("");
+    setCountryPriceDistributorPrice("");
     setVariantPriceOverrides({});
     setVariantSearchQuery("");
   }, [generatingCountryPrices]);
 
   const applyMRPToAllVariants = useCallback(() => {
     setVariantPriceOverrides((current) => {
-      const next: Record<string, { mrp?: string; sellingPrice?: string }> = {};
+      const next: Record<string, { mrp?: string; sellingPrice?: string; dealerPrice?: string; distributorPrice?: string }> = {};
       variantRows.forEach((variant) => {
-        next[variant.id] = { mrp: countryPriceMRP, sellingPrice: countryPriceSellingPrice };
+        next[variant.id] = {
+          mrp: countryPriceMRP,
+          sellingPrice: countryPriceSellingPrice,
+          dealerPrice: countryPriceDealerPrice,
+          distributorPrice: countryPriceDistributorPrice,
+        };
       });
       return next;
     });
-  }, [countryPriceMRP, countryPriceSellingPrice, variantRows]);
+  }, [countryPriceMRP, countryPriceSellingPrice, countryPriceDealerPrice, countryPriceDistributorPrice, variantRows]);
 
   const handleGenerateCountryPrices = useCallback(async () => {
     const mrp = Number(countryPriceMRP);
@@ -1958,15 +1967,20 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       return;
     }
 
-    const variantOverrides: Record<string, { mrp: number; sellingPrice?: number }> = {};
+    const variantOverrides: Record<string, { mrp: number; sellingPrice?: number; dealerPrice?: number; distributorPrice?: number }> = {};
     variantRows.forEach((variant) => {
       const override = variantPriceOverrides[variant.id];
       const variantMRP = override?.mrp != null && override.mrp.trim() !== "" ? Number(override.mrp) : mrp;
       const variantSellingPrice = override?.sellingPrice != null && override.sellingPrice.trim() !== "" ? Number(override.sellingPrice) : undefined;
+      const variantDealer = override?.dealerPrice != null && override.dealerPrice.trim() !== "" ? Number(override.dealerPrice) : undefined;
+      const variantDistributor = override?.distributorPrice != null && override.distributorPrice.trim() !== "" ? Number(override.distributorPrice) : undefined;
+
       if (Number.isFinite(variantMRP) && variantMRP > 0) {
         variantOverrides[variant.id] = {
           mrp: variantMRP,
           ...(variantSellingPrice != null && { sellingPrice: variantSellingPrice }),
+          ...(variantDealer != null && { dealerPrice: variantDealer }),
+          ...(variantDistributor != null && { distributorPrice: variantDistributor }),
         };
       }
     });
@@ -1977,6 +1991,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         productId,
         mrp,
         sellingPrice: countryPriceSellingPrice ? Number(countryPriceSellingPrice) : undefined,
+        dealerPrice: countryPriceDealerPrice ? Number(countryPriceDealerPrice) : undefined,
+        distributorPrice: countryPriceDistributorPrice ? Number(countryPriceDistributorPrice) : undefined,
         variantOverrides: Object.keys(variantOverrides).length ? variantOverrides : undefined,
       });
       showToast(result.data?.message || "Country prices generated.");
@@ -1987,7 +2003,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     } finally {
       setGeneratingCountryPrices(false);
     }
-  }, [closeCountryPriceModal, countryPriceMRP, countryPriceSellingPrice, productId, refetch, showToast, variantPriceOverrides, variantRows]);
+  }, [closeCountryPriceModal, countryPriceMRP, countryPriceSellingPrice, countryPriceDealerPrice, countryPriceDistributorPrice, productId, refetch, showToast, variantPriceOverrides, variantRows]);
 
   useEffect(() => {
     if (!variantIdFromQuery || editingVariant) return;
@@ -5015,27 +5031,56 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         open={countryPriceModalOpen}
         onClose={closeCountryPriceModal}
         title="Generate Country Prices"
-        panelClassName="max-w-2xl"
+        panelClassName="max-w-3xl"
       >
         <div className="space-y-5 p-6">
           <p className="text-[13px] leading-relaxed text-[#6B6B6B]">
-            Enter the base product price once, and country prices will be generated automatically using the configured exchange rates. Set a different MRP per variant below if needed.
+            Enter the base product prices once, and country prices will be generated automatically using the configured exchange rates. Set variant overrides below if needed.
           </p>
-          <AdminInput
-            label="Base MRP *"
-            type="number"
-            min="0"
-            step="0.01"
-            value={countryPriceMRP}
-            onChange={(event) => setCountryPriceMRP(event.target.value)}
-            placeholder="Enter base MRP"
-          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <AdminInput
+              label="Base MRP *"
+              type="number"
+              min="0"
+              step="0.01"
+              value={countryPriceMRP}
+              onChange={(event) => setCountryPriceMRP(event.target.value)}
+              placeholder="Enter base MRP"
+            />
+            <AdminInput
+              label="Base Selling Price (optional)"
+              type="number"
+              min="0"
+              step="0.01"
+              value={countryPriceSellingPrice}
+              onChange={(event) => setCountryPriceSellingPrice(event.target.value)}
+              placeholder="Same as MRP"
+            />
+            <AdminInput
+              label="Base Dealer Price (optional)"
+              type="number"
+              min="0"
+              step="0.01"
+              value={countryPriceDealerPrice}
+              onChange={(event) => setCountryPriceDealerPrice(event.target.value)}
+              placeholder="Not set"
+            />
+            <AdminInput
+              label="Base Doctor / Retailer Price (optional)"
+              type="number"
+              min="0"
+              step="0.01"
+              value={countryPriceDistributorPrice}
+              onChange={(event) => setCountryPriceDistributorPrice(event.target.value)}
+              placeholder="Not set"
+            />
+          </div>
 
           {variantRows.length > 0 ? (
             <div className="space-y-3 pt-1">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-[13px] font-semibold text-[#1A1A1A]">
-                  Per-variant override (MRP & optional Selling Price)
+                  Per-variant overrides
                 </span>
                 <button
                   type="button"
@@ -5043,7 +5088,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   disabled={!countryPriceMRP}
                   className="text-[12.5px] font-medium text-[#E31E24] hover:underline disabled:opacity-40"
                 >
-                  Apply MRP (and selling price) to all
+                  Apply base prices to all variants
                 </button>
               </div>
 
@@ -5072,8 +5117,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   <thead className="sticky top-0 bg-[#F7F7F7] text-[12px] text-[#6B6B6B] shadow-sm">
                     <tr>
                       <th className="px-3.5 py-2.5 text-left font-medium">Variant</th>
-                      <th className="px-3.5 py-2.5 text-right font-medium">MRP Override</th>
-                      <th className="px-3.5 py-2.5 text-right font-medium">Selling Price Override (optional)</th>
+                      <th className="px-3.5 py-2.5 text-right font-medium">MRP</th>
+                      <th className="px-3.5 py-2.5 text-right font-medium">Selling Price</th>
+                      <th className="px-3.5 py-2.5 text-right font-medium">Dealer Price</th>
+                      <th className="px-3.5 py-2.5 text-right font-medium">Doctor Price</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#F0F0F0]">
@@ -5102,7 +5149,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                 }))
                               }
                               placeholder={countryPriceMRP || "0"}
-                              className="h-9 w-32 rounded-md border border-[#E6E6E6] px-2.5 text-right text-[13px] outline-none focus:border-[#E31E24]"
+                              className="h-9 w-20 rounded-md border border-[#E6E6E6] px-2.5 text-right text-[13px] outline-none focus:border-[#E31E24]"
                             />
                           </td>
                           <td className="px-3.5 py-2.5 text-right">
@@ -5121,7 +5168,45 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                 }))
                               }
                               placeholder={countryPriceSellingPrice || "Same as MRP"}
-                              className="h-9 w-36 rounded-md border border-[#E6E6E6] px-2.5 text-right text-[13px] outline-none focus:border-[#E31E24]"
+                              className="h-9 w-24 rounded-md border border-[#E6E6E6] px-2.5 text-right text-[13px] outline-none focus:border-[#E31E24]"
+                            />
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={variantPriceOverrides[variant.id]?.dealerPrice ?? ""}
+                              onChange={(event) =>
+                                setVariantPriceOverrides((current) => ({
+                                  ...current,
+                                  [variant.id]: {
+                                    ...current[variant.id],
+                                    dealerPrice: event.target.value,
+                                  },
+                                }))
+                              }
+                              placeholder={countryPriceDealerPrice || "Not set"}
+                              className="h-9 w-20 rounded-md border border-[#E6E6E6] px-2.5 text-right text-[13px] outline-none focus:border-[#E31E24]"
+                            />
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={variantPriceOverrides[variant.id]?.distributorPrice ?? ""}
+                              onChange={(event) =>
+                                setVariantPriceOverrides((current) => ({
+                                  ...current,
+                                  [variant.id]: {
+                                    ...current[variant.id],
+                                    distributorPrice: event.target.value,
+                                  },
+                                }))
+                              }
+                              placeholder={countryPriceDistributorPrice || "Not set"}
+                              className="h-9 w-20 rounded-md border border-[#E6E6E6] px-2.5 text-right text-[13px] outline-none focus:border-[#E31E24]"
                             />
                           </td>
                         </tr>

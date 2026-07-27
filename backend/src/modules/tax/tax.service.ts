@@ -1,6 +1,8 @@
 import { prisma } from "../../config/database";
 import { AppError, getPagination } from "../../utils/apiResponse";
+import { logger } from "../../config/logger";
 import { readSpreadsheetRows, writeSpreadsheetBuffer } from "../../utils/spreadsheet";
+import { validateIdentifier, clearTaxValidationCache as clearIdentifierValidationCache } from "./taxValidation.service";
 
 const TAX_RULE_TYPES = ["CGST", "SGST", "VAT", "SALES_TAX"] as const;
 const TAX_MODES = ["EXCLUSIVE", "INCLUSIVE", "EXEMPT"] as const;
@@ -120,6 +122,8 @@ function normalizeStatus(value: string | undefined) {
   if (!STATUS_VALUES.includes(status as never)) throw new AppError("Invalid tax rule status.", 400);
   return status;
 }
+
+export { clearIdentifierValidationCache as clearVatValidationCache };
 
 function normalizeSortBy(value?: string) {
   if (!value) return "updatedAt";
@@ -589,74 +593,19 @@ export async function importTaxSpreadsheet(filePath: string) {
  * Validates a business tax identifier (GSTIN for India, VAT ID for Europe, EIN for US)
  */
 export async function validateTaxIdentifier(taxId: string, taxIdType: string, countryCode: string) {
-  const cleanId = taxId.trim().replace(/[-\s]/g, "").toUpperCase();
-  const cCode = countryCode.trim().toUpperCase();
-
-  // Validate format using standard regexes
-  if (taxIdType === "GSTIN" || cCode === "IN") {
-    const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-    if (!gstinRegex.test(cleanId)) {
-      return { isValid: false, message: "Invalid India GSTIN format. Expected e.g., 03AAAAA1111A1Z1" };
-    }
-    return {
-      isValid: true,
-      taxId: cleanId,
-      type: "GSTIN",
-      legalName: "Verified India Ortho Center Pvt Ltd",
-      tradeName: "Modern Dental Ludhiana",
-      address: "123 Mall Road, Ludhiana, Punjab, 141001",
-      verifiedAt: new Date()
-    };
-  }
-
-  if (taxIdType === "VAT" || ["AT","BE","BG","CY","CZ","DE","DK","EE","ES","FI","FR","GR","HR","HU","IE","IT","LT","LU","LV","MT","NL","PL","PT","RO","SE","SI","SK","GB"].includes(cCode)) {
-    // Simple validation of EU VAT (usually 2-letter country prefix + 8 to 12 alphanumeric characters)
-    const vatRegex = /^[A-Z]{2}[A-Z0-9]{8,12}$/;
-    const vatIdToCheck = cleanId.startsWith(cCode) ? cleanId : `${cCode}${cleanId}`;
-    if (!vatRegex.test(vatIdToCheck)) {
-      return { isValid: false, message: "Invalid EU VAT ID format. Expected e.g., DE123456789" };
-    }
-    return {
-      isValid: true,
-      taxId: vatIdToCheck,
-      type: "VAT",
-      legalName: "Verified European Dental Supplies GmbH",
-      tradeName: "EU Ortho Logistics",
-      address: "Mauerstrasse 44, Berlin, 10117, Germany",
-      verifiedAt: new Date()
-    };
-  }
-
-  if (taxIdType === "EIN" || cCode === "US") {
-    // US EIN format: 9 digits
-    const einRegex = /^[0-9]{9}$/;
-    if (!einRegex.test(cleanId)) {
-      return { isValid: false, message: "Invalid US Federal EIN format. Expected 9-digit number" };
-    }
-    return {
-      isValid: true,
-      taxId: cleanId,
-      type: "EIN",
-      legalName: "Verified US Orthodontic Clinic Corp",
-      tradeName: "US Dental Pros",
-      address: "789 Broadway St, New York, NY, 10003",
-      verifiedAt: new Date()
-    };
-  }
-
-  // Fallback check
-  if (cleanId.length < 5) {
-    return { isValid: false, message: "Tax identifier is too short." };
-  }
-
+  const result = await validateIdentifier(taxId, taxIdType, countryCode);
   return {
-    isValid: true,
-    taxId: cleanId,
-    type: "OTHER",
-    legalName: "Verified Global B2B Partner",
-    tradeName: "International Dental Clinic",
-    address: "Main Street, Global City",
-    verifiedAt: new Date()
+    isValid: result.isValid,
+    taxId: result.taxId ?? result.identifier,
+    type: result.identifierType,
+    legalName: result.companyName ?? null,
+    tradeName: result.companyName ?? null,
+    address: result.companyAddress ?? null,
+    verifiedAt: result.validatedAt,
+    validatedBy: result.validationSource,
+    countryCode: result.countryCode,
+    validationSource: result.validationSource,
+    message: result.message,
   };
 }
 

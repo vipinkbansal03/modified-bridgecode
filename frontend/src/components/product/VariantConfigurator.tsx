@@ -114,7 +114,12 @@ function buildPackageAttribute(
 }
 
 function formatMoney(symbol: string, amount: number) {
-  return `${symbol}${Math.round(amount || 0).toLocaleString("en-IN")}`;
+  const val = amount || 0;
+  const hasDecimals = val % 1 !== 0;
+  return `${symbol}${val.toLocaleString("en-IN", {
+    minimumFractionDigits: hasDecimals ? 2 : 0,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function buildInitialSelections(
@@ -349,7 +354,16 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   }, []);
 
   useEffect(() => {
-    if (!currentVariant || quantity < 1) return;
+    const previewItems = currentCustomer
+      ? apiProduct.variants.map((v) => ({ variantId: v.id, quantity: v.id === currentVariant?.id ? quantity : 1 }))
+      : currentVariant && quantity >= 1
+        ? [{ variantId: currentVariant.id, quantity }]
+        : [];
+
+    if (!previewItems.length) {
+      setPreviewPriceMap({});
+      return;
+    }
 
     let active = true;
     const timer = window.setTimeout(async () => {
@@ -357,7 +371,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
         const customerToken = window.localStorage.getItem("customer_token");
         const response = await apiClient.post(
           `/products/${apiProduct.slug}/price-preview`,
-          { items: [{ variantId: currentVariant.id, quantity }] },
+          { items: previewItems },
           {
             params: selectedCountryCode
               ? { countryCode: selectedCountryCode }
@@ -389,7 +403,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [apiProduct.slug, currentVariant?.id, quantity, selectedCountryCode]);
+  }, [apiProduct.slug, apiProduct.variants, currentVariant?.id, quantity, selectedCountryCode, currentCustomer]);
 
   if (isMatrixLayout) {
     return <DynamicVariantMatrixConfigurator apiProduct={apiProduct} />;
