@@ -105,6 +105,8 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
 
 const STATUS_STYLES: Record<string, string> = {
   ACTIVE: "bg-green-50 text-green-700 border-green-200",
+  SCHEDULED: "bg-blue-50 text-blue-700 border-blue-200",
+  EXPIRED: "bg-amber-50 text-amber-700 border-amber-200",
   DRAFT: "bg-yellow-50 text-yellow-700 border-yellow-200",
   INACTIVE: "bg-gray-50 text-gray-600 border-gray-200",
   ARCHIVED: "bg-gray-100 text-gray-500 border-gray-200",

@@ -28,6 +28,7 @@ type CouponRow = {
   countryId: string | null;
   country?: Related | null;
   status: "ACTIVE" | "INACTIVE";
+  effectiveStatus?: "ACTIVE" | "SCHEDULED" | "EXPIRED" | "INACTIVE";
   createdAt?: string;
 };
 
@@ -77,6 +78,17 @@ function validity(coupon: CouponRow) {
 
 function valueLabel(coupon: CouponRow) {
   return coupon.discountType === "PERCENTAGE" ? `${amount(coupon.discountValue)}%` : amount(coupon.discountValue);
+}
+
+function getEffectiveCouponStatus(coupon: CouponRow): "ACTIVE" | "SCHEDULED" | "EXPIRED" | "INACTIVE" {
+  if (coupon.effectiveStatus) return coupon.effectiveStatus;
+  if (coupon.status !== "ACTIVE") return "INACTIVE";
+  const now = new Date();
+  const start = new Date(coupon.startDate);
+  const end = new Date(coupon.endDate);
+  if (now < start) return "SCHEDULED";
+  if (now > end) return "EXPIRED";
+  return "ACTIVE";
 }
 
 function toForm(coupon: CouponRow): FormState {
@@ -144,9 +156,9 @@ export default function CouponsPage() {
   const stats = useMemo(
     () => ({
       total: Number(pagination.total ?? 0),
-      active: coupons.filter((coupon) => coupon.status === "ACTIVE").length,
-      percentage: coupons.filter((coupon) => coupon.discountType === "PERCENTAGE").length,
-      fixed: coupons.filter((coupon) => coupon.discountType === "FIXED").length,
+      active: coupons.filter((coupon) => getEffectiveCouponStatus(coupon) === "ACTIVE").length,
+      scheduled: coupons.filter((coupon) => getEffectiveCouponStatus(coupon) === "SCHEDULED").length,
+      expired: coupons.filter((coupon) => getEffectiveCouponStatus(coupon) === "EXPIRED").length,
     }),
     [pagination.total, coupons],
   );
@@ -288,7 +300,7 @@ export default function CouponsPage() {
     },
     { key: "usage", label: "Usage", render: (row) => `${row.usedCount}/${row.usageLimit || "Unlimited"}` },
     { key: "dates", label: "Validity", render: (row) => validity(row) },
-    { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
+    { key: "status", label: "Status", render: (row) => <StatusBadge status={getEffectiveCouponStatus(row)} /> },
     {
       key: "actions",
       label: "Actions",
@@ -328,9 +340,9 @@ export default function CouponsPage() {
       <div className="space-y-5">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard title="Total Coupons" value={stats.total} subtitle="All coupon records" icon={<Shield size={18} />} />
-          <StatCard title="Active Coupons" value={stats.active} subtitle="Available now" icon={<Shield size={18} />} color="bg-green-600" />
-          <StatCard title="Percentage Coupons" value={stats.percentage} subtitle="Rate-based deals" icon={<Shield size={18} />} color="bg-[#0F6CBD]" />
-          <StatCard title="Fixed Coupons" value={stats.fixed} subtitle="Flat-value deals" icon={<Shield size={18} />} color="bg-[#7A4F01]" />
+          <StatCard title="Active Coupons" value={stats.active} subtitle="Available & valid now" icon={<Shield size={18} />} color="bg-green-600" />
+          <StatCard title="Scheduled Coupons" value={stats.scheduled} subtitle="Upcoming promotions" icon={<Shield size={18} />} color="bg-[#0F6CBD]" />
+          <StatCard title="Expired Coupons" value={stats.expired} subtitle="Ended promotions" icon={<Shield size={18} />} color="bg-[#7A4F01]" />
         </div>
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
@@ -397,6 +409,8 @@ export default function CouponsPage() {
                   options={[
                     { value: "", label: "All statuses" },
                     { value: "ACTIVE", label: "Active" },
+                    { value: "SCHEDULED", label: "Scheduled" },
+                    { value: "EXPIRED", label: "Expired" },
                     { value: "INACTIVE", label: "Inactive" },
                   ]}
                 />

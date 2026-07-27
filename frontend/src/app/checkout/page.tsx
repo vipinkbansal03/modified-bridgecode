@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Lock, ShoppingCart } from "lucide-react";
+import { CheckCircle2, HelpCircle, Lock, ShoppingCart } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Modal } from "@/components/ui/Modal";
 import { useCart } from "@/contexts/CartContext";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
@@ -18,6 +19,10 @@ import {
   getCustomerErrorMessage,
   listCustomerAddresses,
   validateCoupon,
+  fetchPublicPaymentMethods,
+  initiateCustomerPayment,
+  verifyCustomerPayment,
+  type AvailablePaymentMethod,
   type CouponValidationResult,
   type CustomerAddress,
   type CustomerOrderEstimate,
@@ -27,14 +32,24 @@ import {
 import { RazorpayPaymentButton } from "@/components/checkout/RazorpayPaymentButton";
 
 const DEMO_PAYMENT_LABEL = "Pay on Delivery";
-const SHIPPING_UNAVAILABLE_MESSAGE = "Shipping is not available to your country yet. Please contact support.";
+const SHIPPING_UNAVAILABLE_MESSAGE =
+  "Shipping is not available to your country yet. Please contact support.";
 const APPROVAL_MESSAGES: Record<string, string> = {
-  PENDING_APPROVAL: "Your account is pending approval. You will be notified once approved.",
+  PENDING_APPROVAL:
+    "Your account is pending approval. You will be notified once approved.",
   SUSPENDED: "Your account has been suspended. Please contact support.",
 };
 
 function formatMoney(symbol: string, amount: number) {
-  return `${symbol}${Math.round(amount || 0).toLocaleString("en-IN")}`;
+  if (amount === null || amount === undefined || !Number.isFinite(amount))
+    return "";
+  const val = Number(amount);
+  const hasDecimals = Math.abs(val % 1) > 0.001;
+  const formatted = val.toLocaleString("en-US", {
+    minimumFractionDigits: hasDecimals ? 2 : 0,
+    maximumFractionDigits: 2,
+  });
+  return `${symbol}${formatted}`;
 }
 
 export default function CheckoutPage() {
@@ -46,15 +61,46 @@ export default function CheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<CustomerOrderSummary | null>(null);
-  const [pendingOrder, setPendingOrder] = useState<CustomerOrderSummary | null>(null);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<"RAZORPAY" | "COD">("RAZORPAY");
+  const [pendingOrder, setPendingOrder] = useState<CustomerOrderSummary | null>(
+    null,
+  );
+  const [availablePaymentMethods, setAvailablePaymentMethods] = useState<
+    AvailablePaymentMethod[]
+  >([]);
+  const [selectedPaymentCode, setSelectedPaymentCode] = useState<string>("COD");
   const [estimate, setEstimate] = useState<CustomerOrderEstimate | null>(null);
-  const [shippingEstimate, setShippingEstimate] = useState<ShippingEstimate | null>(null);
+  const [shippingEstimate, setShippingEstimate] =
+    useState<ShippingEstimate | null>(null);
   const [shippingError, setShippingError] = useState<string | null>(null);
-  const [couponInput, setCouponInput] = useState("");
-  const [appliedCoupon, setAppliedCoupon] = useState<CouponValidationResult | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<CouponValidationResult | null>(() => {
+    if (typeof window !== "undefined") {
+      const stored = window.localStorage.getItem("applied_coupon");
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch {
+          return null;
+        }
+      }
+    }
+    return null;
+  });
+  const [couponInput, setCouponInput] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = window.localStorage.getItem("applied_coupon");
+      if (stored) {
+        try {
+          return JSON.parse(stored).code;
+        } catch {
+          return "";
+        }
+      }
+    }
+    return "";
+  });
   const [couponError, setCouponError] = useState<string | null>(null);
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+  const [showBreakdownModal, setShowBreakdownModal] = useState(false);
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [form, setForm] = useState({
     fullName: "",
@@ -64,9 +110,30 @@ export default function CheckoutPage() {
     city: "",
     state: "",
     postalCode: "",
-    countryCode: "IN",
+    countryCode: selectedCountryCode ? selectedCountryCode.toUpperCase() : "IN",
     notes: "",
   });
+
+  useEffect(() => {
+    let active = true;
+    fetchPublicPaymentMethods(form.countryCode)
+      .then((methods) => {
+        if (!active) return;
+        setAvailablePaymentMethods(methods);
+        const defaultMethod = methods.find((m) => m.isDefault) || methods[0];
+        if (defaultMethod) {
+          setSelectedPaymentCode(defaultMethod.code);
+        } else {
+          setSelectedPaymentCode("COD");
+        }
+      })
+      .catch(() => {
+        if (active) setAvailablePaymentMethods([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [form.countryCode]);
 
   useEffect(() => {
     if (!isLoading && !currentCustomer) {
@@ -78,23 +145,35 @@ export default function CheckoutPage() {
     if (currentCustomer) {
       setForm((current) => ({
         ...current,
-        fullName: current.fullName || `${currentCustomer.firstName} ${currentCustomer.lastName}`.trim(),
+        fullName:
+          current.fullName ||
+          `${currentCustomer.firstName} ${currentCustomer.lastName}`.trim(),
         phone: current.phone || currentCustomer.phone || "",
       }));
       listCustomerAddresses()
         .then((saved) => {
           setAddresses(saved);
-          
-          // Prioritize sessionAddress from the header, fall back to default database address
-          const preselected = sessionAddress || (saved.find((address) => address.isDefault) ?? saved[0]);
-          if (preselected) applySavedAddress(preselected);
+
+          const activeCountryCode = selectedCountryCode
+            ? selectedCountryCode.toUpperCase()
+            : "IN";
+          const matchingCountryAddress = saved.find(
+            (addr) => addr.country?.code?.toUpperCase() === activeCountryCode,
+          );
+          const preselected =
+            sessionAddress ||
+            matchingCountryAddress ||
+            (saved.find((address) => address.isDefault) ?? saved[0]);
+          if (preselected) {
+            applySavedAddress(preselected, true);
+          }
         })
         .catch(() => {
           setAddresses([]);
-          if (sessionAddress) applySavedAddress(sessionAddress);
+          if (sessionAddress) applySavedAddress(sessionAddress, true);
         });
     } else if (sessionAddress) {
-      applySavedAddress(sessionAddress);
+      applySavedAddress(sessionAddress, true);
     }
   }, [currentCustomer, sessionAddress]);
 
@@ -107,40 +186,89 @@ export default function CheckoutPage() {
   const canSubmit = useMemo(() => {
     return Boolean(
       items.length &&
-        form.fullName.trim() &&
-        form.phone.trim() &&
-        form.addressLine1.trim() &&
-        form.city.trim() &&
-        form.state.trim() &&
-        form.postalCode.trim()
+      form.fullName.trim() &&
+      form.phone.trim() &&
+      form.addressLine1.trim() &&
+      form.city.trim() &&
+      form.state.trim() &&
+      form.postalCode.trim(),
     );
   }, [form, items.length]);
 
   const hasSpecificTaxes = useMemo(() => {
     if (!estimate?.items) return false;
     return (estimate.items as any[]).some((item) =>
-      (item.appliedTaxes as any[])?.some((tax) => tax.isSpecific)
+      (item.appliedTaxes as any[])?.some((tax) => tax.isSpecific),
     );
   }, [estimate]);
 
-  const approvalBlockMessage = currentCustomer?.approvalStatus ? APPROVAL_MESSAGES[currentCustomer.approvalStatus] : null;
-  const canPlaceOrder = canSubmit && Boolean(shippingEstimate?.available) && !approvalBlockMessage;
+  const aggregatedDiscounts = useMemo(() => {
+    if (!estimate?.automaticDiscounts) return [];
+    const map = new Map<
+      string,
+      {
+        amount: number;
+        label: string;
+        originalUnitPrice: number;
+        discountedUnitPrice: number;
+        quantity: number;
+      }
+    >();
 
-  const orderPayload = useMemo(() => ({
-    items: items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
-    shippingAddress: {
-      fullName: form.fullName.trim(),
-      phone: form.phone.trim(),
-      addressLine1: form.addressLine1.trim(),
-      addressLine2: form.addressLine2.trim() || undefined,
-      city: form.city.trim(),
-      state: form.state.trim(),
-      postalCode: form.postalCode.trim(),
-      countryCode: form.countryCode.trim().toUpperCase() || undefined,
-    },
-    couponCode: appliedCoupon?.code,
-    notes: form.notes.trim() || undefined,
-  }), [appliedCoupon?.code, form, items]);
+    for (const discount of estimate.automaticDiscounts as any[]) {
+      if (!discount.label) continue;
+      const key = discount.label;
+      const existing = map.get(key) || {
+        amount: 0,
+        label: discount.label,
+        originalUnitPrice: discount.amountBefore ?? 0,
+        discountedUnitPrice: discount.amountAfter ?? 0,
+        quantity: 0,
+      };
+
+      existing.amount += discount.discountAmount;
+      existing.quantity += discount.quantity ?? 0;
+      if (discount.amountBefore)
+        existing.originalUnitPrice = discount.amountBefore;
+      if (discount.amountAfter)
+        existing.discountedUnitPrice = discount.amountAfter;
+
+      map.set(key, existing);
+    }
+    return Array.from(map.values());
+  }, [
+    estimate?.automaticDiscounts,
+    estimate?.currency?.symbol,
+    totals.currencySymbol,
+  ]);
+
+  const approvalBlockMessage = currentCustomer?.approvalStatus
+    ? APPROVAL_MESSAGES[currentCustomer.approvalStatus]
+    : null;
+  const canPlaceOrder =
+    canSubmit && Boolean(shippingEstimate?.available) && !approvalBlockMessage;
+
+  const orderPayload = useMemo(
+    () => ({
+      items: items.map((item) => ({
+        variantId: item.variantId,
+        quantity: item.quantity,
+      })),
+      shippingAddress: {
+        fullName: form.fullName.trim(),
+        phone: form.phone.trim(),
+        addressLine1: form.addressLine1.trim(),
+        addressLine2: form.addressLine2.trim() || undefined,
+        city: form.city.trim(),
+        state: form.state.trim(),
+        postalCode: form.postalCode.trim(),
+        countryCode: form.countryCode.trim().toUpperCase() || undefined,
+      },
+      couponCode: appliedCoupon?.code,
+      notes: form.notes.trim() || undefined,
+    }),
+    [appliedCoupon?.code, form, items],
+  );
 
   useEffect(() => {
     if (!currentCustomer || !canSubmit) {
@@ -152,16 +280,25 @@ export default function CheckoutPage() {
 
     let cancelled = false;
     setShippingError(null);
-    calculateShipping({ countryCode: form.countryCode.trim().toUpperCase(), orderValue: totals.subtotal })
+    calculateShipping({
+      countryCode: form.countryCode.trim().toUpperCase(),
+      orderValue: totals.subtotal,
+    })
       .then((nextShipping) => {
         if (cancelled) return;
         setShippingEstimate(nextShipping);
-        setShippingError(nextShipping.available ? null : nextShipping.message ?? SHIPPING_UNAVAILABLE_MESSAGE);
+        setShippingError(
+          nextShipping.available
+            ? null
+            : (nextShipping.message ?? SHIPPING_UNAVAILABLE_MESSAGE),
+        );
       })
       .catch((err) => {
         if (!cancelled) {
           setShippingEstimate(null);
-          setShippingError(getCustomerErrorMessage(err, SHIPPING_UNAVAILABLE_MESSAGE));
+          setShippingError(
+            getCustomerErrorMessage(err, SHIPPING_UNAVAILABLE_MESSAGE),
+          );
         }
       });
     estimateCustomerOrder(orderPayload)
@@ -172,16 +309,30 @@ export default function CheckoutPage() {
         if (!cancelled) {
           setEstimate(null);
           if (appliedCoupon) {
-            setCouponError(getCustomerErrorMessage(err, "Coupon could not be applied to this order."));
+            setCouponError(
+              getCustomerErrorMessage(
+                err,
+                "Coupon could not be applied to this order.",
+              ),
+            );
           } else {
-            setShippingError(getCustomerErrorMessage(err, SHIPPING_UNAVAILABLE_MESSAGE));
+            setShippingError(
+              getCustomerErrorMessage(err, SHIPPING_UNAVAILABLE_MESSAGE),
+            );
           }
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [appliedCoupon, canSubmit, currentCustomer, form.countryCode, orderPayload, totals.subtotal]);
+  }, [
+    appliedCoupon,
+    canSubmit,
+    currentCustomer,
+    form.countryCode,
+    orderPayload,
+    totals.subtotal,
+  ]);
 
   async function handleApplyCoupon() {
     const code = couponInput.trim();
@@ -200,9 +351,14 @@ export default function CheckoutPage() {
       });
       setAppliedCoupon(result);
       setCouponInput(result.code);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("applied_coupon", JSON.stringify(result));
+      }
     } catch (err) {
       setAppliedCoupon(null);
-      setCouponError(getCustomerErrorMessage(err, "Coupon could not be applied."));
+      setCouponError(
+        getCustomerErrorMessage(err, "Coupon could not be applied."),
+      );
     } finally {
       setIsApplyingCoupon(false);
     }
@@ -212,6 +368,9 @@ export default function CheckoutPage() {
     setAppliedCoupon(null);
     setCouponError(null);
     setCouponInput("");
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("applied_coupon");
+    }
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -233,7 +392,15 @@ export default function CheckoutPage() {
     setError(null);
     try {
       const created = await createCustomerOrder(orderPayload);
-      if (selectedPaymentMethod === "RAZORPAY") {
+      const selectedMethod = availablePaymentMethods.find(
+        (m) => m.code === selectedPaymentCode,
+      );
+
+      if (
+        selectedMethod?.type === "SDK_MODAL" ||
+        selectedPaymentCode === "RAZORPAY"
+      ) {
+        await initiateCustomerPayment(created.id, selectedPaymentCode);
         setPendingOrder(created);
       } else {
         setOrder(created);
@@ -246,7 +413,19 @@ export default function CheckoutPage() {
     }
   }
 
-  function applySavedAddress(address: CustomerAddress) {
+  function applySavedAddress(
+    address: CustomerAddress,
+    preserveCurrentCountry = false,
+  ) {
+    const activeCountry = selectedCountryCode
+      ? selectedCountryCode.toUpperCase()
+      : "IN";
+    const targetCountryCode = preserveCurrentCountry
+      ? activeCountry
+      : address.country?.code
+        ? address.country.code.toUpperCase()
+        : activeCountry;
+
     setForm((current) => ({
       ...current,
       fullName: address.fullName,
@@ -256,9 +435,10 @@ export default function CheckoutPage() {
       city: address.city,
       state: address.state,
       postalCode: address.postalCode,
-      countryCode: address.country.code,
+      countryCode: targetCountryCode,
     }));
-    if (address.country.code) {
+
+    if (!preserveCurrentCountry && address.country?.code) {
       setSelectedCountryCode(address.country.code.toUpperCase());
     }
   }
@@ -266,7 +446,9 @@ export default function CheckoutPage() {
   if (isLoading || (!currentCustomer && !order)) {
     return (
       <Container>
-        <div className="py-20 text-center text-steel">Preparing checkout...</div>
+        <div className="py-20 text-center text-steel">
+          Preparing checkout...
+        </div>
       </Container>
     );
   }
@@ -283,9 +465,14 @@ export default function CheckoutPage() {
       <Container>
         <section className="py-16">
           <div className="mx-auto max-w-2xl rounded-xl border border-line bg-white p-8 text-center shadow-[0_16px_50px_rgba(31,24,18,0.08)]">
-            <CheckCircle2 size={42} className={`mx-auto mb-4 ${isPaid ? "text-[#2A6A40]" : "text-brand"}`} />
+            <CheckCircle2
+              size={42}
+              className={`mx-auto mb-4 ${isPaid ? "text-[#2A6A40]" : "text-brand"}`}
+            />
             <h1 className="text-[30px] font-semibold tracking-tight text-ink">
-              {isPaid ? "Payment Successful & Order Confirmed!" : "Order Received"}
+              {isPaid
+                ? "Payment Successful & Order Confirmed!"
+                : "Order Received"}
             </h1>
             <p className="mt-3 text-[14.5px] leading-relaxed text-steel">
               {isPaid
@@ -295,46 +482,72 @@ export default function CheckoutPage() {
             <div className="mt-6 rounded-xl bg-grey p-5 text-left space-y-2">
               <div className="flex items-center justify-between text-[14px]">
                 <span className="text-steel">Order number</span>
-                <strong className="text-ink font-mono">{order.orderNumber}</strong>
+                <strong className="text-ink font-mono">
+                  {order.orderNumber}
+                </strong>
               </div>
               {order.paymentId && (
                 <div className="flex items-center justify-between text-[14px]">
                   <span className="text-steel">Razorpay Payment ID</span>
-                  <strong className="text-ink font-mono text-xs">{order.paymentId}</strong>
+                  <strong className="text-ink font-mono text-xs">
+                    {order.paymentId}
+                  </strong>
                 </div>
               )}
               <div className="flex items-center justify-between text-[14px]">
                 <span className="text-steel">Shipping</span>
-                <strong className="text-ink">{shippingLabel} ({formatMoney(symbol, shippingCharge)})</strong>
+                <strong className="text-ink">
+                  {shippingLabel} ({formatMoney(symbol, shippingCharge)})
+                </strong>
               </div>
               <div className="flex items-center justify-between text-[14px]">
                 <span className="text-steel">Tax</span>
-                <strong className="text-ink">{formatMoney(symbol, taxAmount)}</strong>
+                <strong className="text-ink">
+                  {formatMoney(symbol, taxAmount)}
+                </strong>
               </div>
               {order.couponCode && couponDiscount > 0 && (
                 <div className="flex items-center justify-between text-[14px]">
-                  <span className="text-steel">Coupon ({order.couponCode})</span>
-                  <strong className="text-[#2A6A40]">-{formatMoney(symbol, couponDiscount)}</strong>
+                  <span className="text-steel">
+                    Coupon ({order.couponCode})
+                  </span>
+                  <strong className="text-[#2A6A40]">
+                    -{formatMoney(symbol, couponDiscount)}
+                  </strong>
                 </div>
               )}
               <div className="flex items-center justify-between text-[14px]">
                 <span className="text-steel">Payment method</span>
-                <strong className="text-ink">{order.paymentMethod === "RAZORPAY" ? "Razorpay Online Payment" : DEMO_PAYMENT_LABEL}</strong>
+                <strong className="text-ink">
+                  {order.paymentMethod === "RAZORPAY"
+                    ? "Razorpay Online Payment"
+                    : DEMO_PAYMENT_LABEL}
+                </strong>
               </div>
               <div className="flex items-center justify-between text-[14px]">
                 <span className="text-steel">Payment status</span>
-                <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-bold ${isPaid ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}>
+                <span
+                  className={`inline-block rounded-md px-2 py-0.5 text-xs font-bold ${isPaid ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}
+                >
                   {order.paymentStatus}
                 </span>
               </div>
               <div className="flex items-center justify-between border-t border-line pt-3 text-[15px]">
-                <span className="font-semibold text-ink">{isPaid ? "Total Paid" : "Total Due on Delivery"}</span>
-                <strong className="text-[17px] font-extrabold text-ink">{formatMoney(symbol, Number(order.total))}</strong>
+                <span className="font-semibold text-ink">
+                  {isPaid ? "Total Paid" : "Total Due on Delivery"}
+                </span>
+                <strong className="text-[17px] font-extrabold text-ink">
+                  {formatMoney(symbol, Number(order.total))}
+                </strong>
               </div>
             </div>
             <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
-              <Button href="/products" variant="outline">Continue shopping</Button>
-              <Button href="/account" variant="primary">View my account</Button>
+              <Button href="/products" variant="outline">
+                Continue shopping
+              </Button>
+              <Button href="/account" variant="primary">
+                View my account
+              </Button>
             </div>
           </div>
         </section>
@@ -351,54 +564,142 @@ export default function CheckoutPage() {
               <Lock size={14} />
               Secure checkout
             </p>
-            <h1 className="text-[34px] font-normal tracking-tight text-ink">Checkout</h1>
+            <h1 className="text-[34px] font-normal tracking-tight text-ink">
+              Checkout
+            </h1>
           </div>
-          <Link href="/products" className="text-[14px] font-medium text-ink hover:text-brand">
+          <Link
+            href="/products"
+            className="text-[14px] font-medium text-ink hover:text-brand"
+          >
             Continue shopping
           </Link>
         </div>
 
         {items.length ? (
-          <form onSubmit={handleSubmit} className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_390px]" noValidate>
+          <form
+            onSubmit={handleSubmit}
+            className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_390px]"
+            noValidate
+          >
             <div className="space-y-6">
               <div className="rounded-md border border-line bg-white p-5">
-                <h2 className="mb-5 text-[18px] font-semibold text-ink">Shipping address</h2>
+                <h2 className="mb-5 text-[18px] font-semibold text-ink">
+                  Shipping address
+                </h2>
                 {addresses.length > 0 && (
                   <div className="mb-5">
-                    <label htmlFor="savedAddress" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-steel-2">
+                    <label
+                      htmlFor="savedAddress"
+                      className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-steel-2"
+                    >
                       Saved address
                     </label>
                     <select
                       id="savedAddress"
                       onChange={(event) => {
-                        const address = addresses.find((entry) => entry.id === event.target.value);
-                        if (address) applySavedAddress(address);
+                        const address = addresses.find(
+                          (entry) => entry.id === event.target.value,
+                        );
+                        if (address) applySavedAddress(address, false);
                       }}
                       className="w-full rounded-md border border-line bg-white px-4 py-3 text-[14.5px] text-ink outline-none transition-colors focus:border-steel-2"
                     >
                       {addresses.map((address) => (
                         <option key={address.id} value={address.id}>
-                          {address.label ?? (address.isDefault ? "Default address" : address.fullName)} - {address.city}, {address.country.code}
+                          {address.label ??
+                            (address.isDefault
+                              ? "Default address"
+                              : address.fullName)}{" "}
+                          - {address.city}, {address.country.code}
                         </option>
                       ))}
                     </select>
                   </div>
                 )}
                 <div className="grid gap-5 sm:grid-cols-2">
-                  <Input label="Full name" value={form.fullName} onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))} />
-                  <Input label="Phone" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} />
-                  <Input className="sm:col-span-2" label="Address line 1" value={form.addressLine1} onChange={(event) => setForm((current) => ({ ...current, addressLine1: event.target.value }))} />
-                  <Input className="sm:col-span-2" label="Address line 2 (optional)" value={form.addressLine2} onChange={(event) => setForm((current) => ({ ...current, addressLine2: event.target.value }))} />
-                  <Input label="City" value={form.city} onChange={(event) => setForm((current) => ({ ...current, city: event.target.value }))} />
-                  <Input label="State" value={form.state} onChange={(event) => setForm((current) => ({ ...current, state: event.target.value }))} />
-                  <Input label="Postal code" value={form.postalCode} onChange={(event) => setForm((current) => ({ ...current, postalCode: event.target.value }))} />
+                  <Input
+                    label="Full name"
+                    value={form.fullName}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        fullName: event.target.value,
+                      }))
+                    }
+                  />
+                  <Input
+                    label="Phone"
+                    value={form.phone}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        phone: event.target.value,
+                      }))
+                    }
+                  />
+                  <Input
+                    className="sm:col-span-2"
+                    label="Address line 1"
+                    value={form.addressLine1}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        addressLine1: event.target.value,
+                      }))
+                    }
+                  />
+                  <Input
+                    className="sm:col-span-2"
+                    label="Address line 2 (optional)"
+                    value={form.addressLine2}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        addressLine2: event.target.value,
+                      }))
+                    }
+                  />
+                  <Input
+                    label="City"
+                    value={form.city}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        city: event.target.value,
+                      }))
+                    }
+                  />
+                  <Input
+                    label="State"
+                    value={form.state}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        state: event.target.value,
+                      }))
+                    }
+                  />
+                  <Input
+                    label="Postal code"
+                    value={form.postalCode}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        postalCode: event.target.value,
+                      }))
+                    }
+                  />
                   <Input
                     label="Country code"
                     maxLength={2}
                     value={form.countryCode}
                     onChange={(event) => {
                       const nextCode = event.target.value.toUpperCase();
-                      setForm((current) => ({ ...current, countryCode: nextCode }));
+                      setForm((current) => ({
+                        ...current,
+                        countryCode: nextCode,
+                      }));
                       if (nextCode.length === 2) {
                         setSelectedCountryCode(nextCode);
                       }
@@ -408,26 +709,36 @@ export default function CheckoutPage() {
               </div>
 
               <div className="rounded-md border border-line bg-white p-5">
-                <h2 className="mb-4 text-[18px] font-semibold text-ink">Shipping method</h2>
+                <h2 className="mb-4 text-[18px] font-semibold text-ink">
+                  Shipping method
+                </h2>
                 <div className="rounded-md border border-line bg-grey px-4 py-3">
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <p className="text-[14px] font-semibold text-ink">
-                        {shippingEstimate?.available ? shippingEstimate.provider ?? "Shipping" : "Shipping unavailable"}
+                        {shippingEstimate?.available
+                          ? (shippingEstimate.provider ?? "Shipping")
+                          : "Shipping unavailable"}
                       </p>
                       <p className="mt-1 text-[12.5px] text-steel">
                         {shippingEstimate?.available
                           ? shippingEstimate.estimatedDays
                             ? `Estimated delivery: ${shippingEstimate.estimatedDays}`
                             : "Calculated from the selected shipping country."
-                          : shippingError ?? "Complete the address to check shipping availability."}
+                          : (shippingError ??
+                            "Complete the address to check shipping availability.")}
                       </p>
                     </div>
                     <strong className="text-[14px] text-ink">
                       {shippingEstimate?.available
                         ? shippingEstimate.isFree
                           ? "Free"
-                          : formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, estimate?.shippingCharge ?? shippingEstimate.charge)
+                          : formatMoney(
+                              estimate?.currency?.symbol ??
+                                totals.currencySymbol,
+                              estimate?.shippingCharge ??
+                                shippingEstimate.charge,
+                            )
                         : "-"}
                     </strong>
                   </div>
@@ -435,21 +746,34 @@ export default function CheckoutPage() {
               </div>
 
               <div className="rounded-md border border-line bg-white p-5">
-                <h2 className="mb-4 text-[18px] font-semibold text-ink">Order notes</h2>
+                <h2 className="mb-4 text-[18px] font-semibold text-ink">
+                  Order notes
+                </h2>
                 <textarea
                   value={form.notes}
-                  onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      notes: event.target.value,
+                    }))
+                  }
                   className="min-h-[110px] w-full rounded-md border border-line bg-white px-4 py-3 text-[14.5px] text-ink outline-none transition-colors placeholder:text-steel-2 focus:border-steel-2"
                   placeholder="Delivery instructions or internal purchase reference"
                 />
               </div>
 
               <div className="rounded-md border border-line bg-white p-5">
-                <h2 className="mb-4 text-[18px] font-semibold text-ink">Payment method</h2>
+                <h2 className="mb-4 text-[18px] font-semibold text-ink">
+                  Payment method
+                </h2>
                 <div className="rounded-md border border-line bg-grey px-4 py-3">
-                  <p className="text-[14px] font-semibold text-ink">{DEMO_PAYMENT_LABEL}</p>
+                  <p className="text-[14px] font-semibold text-ink">
+                    {DEMO_PAYMENT_LABEL}
+                  </p>
                   <p className="mt-1 text-[12.5px] leading-relaxed text-steel">
-                    No online payment is captured in this demo flow. The order is saved with pending payment and the amount is due on delivery.
+                    No online payment is captured in this demo flow. The order
+                    is saved with pending payment and the amount is due on
+                    delivery.
                   </p>
                 </div>
               </div>
@@ -458,22 +782,40 @@ export default function CheckoutPage() {
             <aside className="h-fit rounded-md border border-line bg-white p-5 shadow-[0_16px_50px_rgba(31,24,18,0.08)]">
               <div className="mb-5 flex items-center gap-2">
                 <ShoppingCart size={17} className="text-brand" />
-                <h2 className="text-[18px] font-semibold text-ink">Order summary</h2>
+                <h2 className="text-[18px] font-semibold text-ink">
+                  Order summary
+                </h2>
               </div>
 
               <div className="space-y-4">
                 {items.map((item) => {
-                  const estimatedItem = estimate?.items?.find((ei) => ei.variantId === item.variantId);
-                  const displayUnitPrice = estimatedItem ? estimatedItem.unitPrice : item.unitPrice;
-                  const displayCurrencySymbol = estimate?.currency?.symbol ?? item.currencySymbol;
+                  const estimatedItem = estimate?.items?.find(
+                    (ei) => ei.variantId === item.variantId,
+                  );
+                  const displayUnitPrice = estimatedItem
+                    ? estimatedItem.unitPrice
+                    : item.unitPrice;
+                  const displayCurrencySymbol =
+                    estimate?.currency?.symbol ?? item.currencySymbol;
                   return (
-                    <div key={item.variantId} className="border-b border-line pb-4 last:border-0">
+                    <div
+                      key={item.variantId}
+                      className="border-b border-line pb-4 last:border-0"
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-[14px] font-semibold text-ink">{item.productTitle}</p>
-                          <p className="mt-1 text-[12.5px] text-steel">{item.variantTitle}</p>
+                          <p className="text-[14px] font-semibold text-ink">
+                            {item.productTitle}
+                          </p>
+                          <p className="mt-1 text-[12.5px] text-steel">
+                            {item.variantTitle}
+                          </p>
                         </div>
-                        <button type="button" onClick={() => removeItem(item.variantId)} className="text-[12px] font-medium text-brand">
+                        <button
+                          type="button"
+                          onClick={() => removeItem(item.variantId)}
+                          className="text-[12px] font-medium text-brand"
+                        >
                           Remove
                         </button>
                       </div>
@@ -482,10 +824,31 @@ export default function CheckoutPage() {
                           type="number"
                           min={1}
                           value={item.quantity}
-                          onChange={(event) => updateQuantity(item.variantId, Math.max(1, Number(event.target.value) || 1))}
+                          onChange={(event) =>
+                            updateQuantity(
+                              item.variantId,
+                              Math.max(1, Number(event.target.value) || 1),
+                            )
+                          }
                           className="w-20 rounded-md border border-line px-3 py-2 text-center text-[13px] outline-none"
                         />
-                        <p className="text-[14px] font-semibold text-ink">{formatMoney(displayCurrencySymbol, displayUnitPrice * item.quantity)}</p>
+                        <div className="text-right">
+                          {estimatedItem?.basePrice &&
+                            estimatedItem.basePrice > displayUnitPrice && (
+                              <p className="text-[11.5px] text-steel line-through">
+                                {formatMoney(
+                                  displayCurrencySymbol,
+                                  estimatedItem.basePrice * item.quantity,
+                                )}
+                              </p>
+                            )}
+                          <p className="text-[14px] font-semibold text-ink">
+                            {formatMoney(
+                              displayCurrencySymbol,
+                              displayUnitPrice * item.quantity,
+                            )}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   );
@@ -493,23 +856,123 @@ export default function CheckoutPage() {
               </div>
 
               <div className="mt-5 space-y-3 border-t border-line pt-4">
+                {estimate && Number(estimate.automaticDiscount ?? 0) > 0 && (
+                  <>
+                    <div className="flex items-center justify-between text-[13.5px]">
+                      <span className="text-steel">Original Base Subtotal</span>
+                      <span className="text-steel line-through">
+                        {formatMoney(
+                          estimate.currency?.symbol ?? totals.currencySymbol,
+                          estimate.originalBaseSubtotal ??
+                            Number(estimate.subtotal ?? 0) +
+                              Number(estimate.automaticDiscount ?? 0),
+                        )}
+                      </span>
+                    </div>
+                    {aggregatedDiscounts.length > 0 ? (
+                      <details className="group">
+                        <summary className="flex items-center justify-between text-[13.5px] cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-[#2A6A40]">
+                              Applied Discounts
+                            </span>
+                            <svg
+                              className="w-3.5 h-3.5 text-[#2A6A40] transition-transform group-open:rotate-180"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2.5}
+                                d="M19 9l-7 7-7-7"
+                              />
+                            </svg>
+                          </div>
+                          <strong className="text-[#2A6A40]">
+                            -
+                            {formatMoney(
+                              estimate.currency?.symbol ??
+                                totals.currencySymbol,
+                              Number(estimate.automaticDiscount ?? 0),
+                            )}
+                          </strong>
+                        </summary>
+                        <div className="flex flex-col gap-1.5 pl-2 mt-2 border-l-2 border-[#2A6A40]/20">
+                          {aggregatedDiscounts.map((discount, i) => (
+                            <div
+                              key={i}
+                              className="flex items-center justify-between text-[12.5px]"
+                            >
+                              <span className="text-[#2A6A40]/90 font-medium">
+                                {discount.label}
+                              </span>
+                              <span className="text-[#2A6A40]/90 font-semibold">
+                                -
+                                {formatMoney(
+                                  estimate.currency?.symbol ??
+                                    totals.currencySymbol,
+                                  discount.amount,
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    ) : (
+                      <div className="flex items-center justify-between text-[13.5px]">
+                        <span className="font-semibold text-[#2A6A40]">
+                          Applied Discounts
+                        </span>
+                        <strong className="text-[#2A6A40]">
+                          -
+                          {formatMoney(
+                            estimate.currency?.symbol ?? totals.currencySymbol,
+                            Number(estimate.automaticDiscount ?? 0),
+                          )}
+                        </strong>
+                      </div>
+                    )}
+                  </>
+                )}
                 <div className="flex items-center justify-between text-[14px]">
                   <span className="text-steel">Subtotal</span>
-                  <strong className="text-ink">{formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, estimate?.subtotal ?? totals.subtotal)}</strong>
+                  <strong className="text-ink">
+                    {formatMoney(
+                      estimate?.currency?.symbol ?? totals.currencySymbol,
+                      estimate?.subtotal ?? totals.subtotal,
+                    )}
+                  </strong>
                 </div>
                 <div className="rounded-md border border-line bg-grey/60 p-3">
-                  <label htmlFor="couponCode" className="mb-2 block text-[12px] font-semibold uppercase tracking-wide text-steel-2">
+                  <label
+                    htmlFor="couponCode"
+                    className="mb-2 block text-[12px] font-semibold uppercase tracking-wide text-steel-2"
+                  >
                     Coupon code
                   </label>
                   {appliedCoupon ? (
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-[13.5px] font-semibold text-[#2A6A40]">{appliedCoupon.code} applied</p>
+                        <p className="text-[13.5px] font-semibold text-[#2A6A40]">
+                          {appliedCoupon.code} applied
+                        </p>
                         <p className="mt-0.5 text-[12px] text-steel">
-                          Discount: {formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, estimate?.couponDiscount ?? appliedCoupon.discountAmount)}
+                          Discount:{" "}
+                          {formatMoney(
+                            estimate?.currency?.symbol ?? totals.currencySymbol,
+                            estimate?.couponDiscount ??
+                              appliedCoupon.discountAmount,
+                          )}
                         </p>
                       </div>
-                      <button type="button" onClick={handleRemoveCoupon} className="text-[18px] leading-none text-steel hover:text-brand" aria-label="Remove coupon">
+                      <button
+                        type="button"
+                        onClick={handleRemoveCoupon}
+                        className="text-[18px] leading-none text-steel hover:text-brand"
+                        aria-label="Remove coupon"
+                      >
                         ×
                       </button>
                     </div>
@@ -535,14 +998,35 @@ export default function CheckoutPage() {
                       </button>
                     </div>
                   )}
-                  {couponError && <p className="mt-2 text-[12.5px] text-brand">{couponError}</p>}
+                  {couponError && (
+                    <p className="mt-2 text-[12.5px] text-brand">
+                      {couponError}
+                    </p>
+                  )}
                 </div>
-                {(estimate?.couponCode || appliedCoupon) && Number(estimate?.couponDiscount ?? appliedCoupon?.discountAmount ?? 0) > 0 && (
-                  <div className="flex items-center justify-between text-[14px]">
-                    <span className="text-steel">Coupon ({estimate?.couponCode ?? appliedCoupon?.code})</span>
-                    <strong className="text-[#2A6A40]">-{formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, Number(estimate?.couponDiscount ?? appliedCoupon?.discountAmount ?? 0))}</strong>
-                  </div>
-                )}
+                {(estimate?.couponCode || appliedCoupon) &&
+                  Number(
+                    estimate?.couponDiscount ??
+                      appliedCoupon?.discountAmount ??
+                      0,
+                  ) > 0 && (
+                    <div className="flex items-center justify-between text-[14px]">
+                      <span className="text-steel">
+                        Coupon ({estimate?.couponCode ?? appliedCoupon?.code})
+                      </span>
+                      <strong className="text-[#2A6A40]">
+                        -
+                        {formatMoney(
+                          estimate?.currency?.symbol ?? totals.currencySymbol,
+                          Number(
+                            estimate?.couponDiscount ??
+                              appliedCoupon?.discountAmount ??
+                              0,
+                          ),
+                        )}
+                      </strong>
+                    </div>
+                  )}
                 <div className="flex items-center justify-between text-[14px]">
                   <span className="text-steel">
                     {(estimate as any)?.isTaxInclusive
@@ -551,7 +1035,10 @@ export default function CheckoutPage() {
                   </span>
                   <strong className="text-ink">
                     {(estimate?.taxAmount ?? 0) > 0
-                      ? formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, estimate!.taxAmount)
+                      ? formatMoney(
+                          estimate?.currency?.symbol ?? totals.currencySymbol,
+                          estimate!.taxAmount,
+                        )
                       : "Tax Exempt"}
                   </strong>
                 </div>
@@ -561,52 +1048,96 @@ export default function CheckoutPage() {
                     {shippingEstimate?.available
                       ? shippingEstimate.isFree
                         ? "Free"
-                        : formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, estimate?.shippingCharge ?? shippingEstimate.charge)
+                        : formatMoney(
+                            estimate?.currency?.symbol ?? totals.currencySymbol,
+                            estimate?.shippingCharge ?? shippingEstimate.charge,
+                          )
                       : "Unavailable"}
                   </strong>
                 </div>
                 <div className="mt-4 space-y-2 border-t border-line pt-3">
-                  <span className="block text-xs uppercase tracking-wide text-steel-2 font-semibold">Payment Option</span>
-                  <label className={`flex items-center justify-between rounded-lg border p-3 cursor-pointer transition-colors ${selectedPaymentMethod === "RAZORPAY" ? "border-brand bg-brand/5" : "border-line bg-white"}`}>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="paymentMethod"
-                        checked={selectedPaymentMethod === "RAZORPAY"}
-                        onChange={() => setSelectedPaymentMethod("RAZORPAY")}
-                        className="text-brand focus:ring-brand"
-                      />
-                      <span className="text-[13.5px] font-semibold text-ink">Razorpay (UPI / Cards / NetBanking)</span>
+                  <span className="block text-xs uppercase tracking-wide text-steel-2 font-semibold">
+                    Payment Options ({availablePaymentMethods.length})
+                  </span>
+                  {availablePaymentMethods.length > 0 ? (
+                    availablePaymentMethods.map((method) => {
+                      const isSelected = selectedPaymentCode === method.code;
+                      return (
+                        <label
+                          key={method.id}
+                          className={`flex items-center justify-between rounded-lg border p-3 cursor-pointer transition-colors ${
+                            isSelected
+                              ? "border-brand bg-brand/5"
+                              : "border-line bg-white"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="paymentMethod"
+                              checked={isSelected}
+                              onChange={() =>
+                                setSelectedPaymentCode(method.code)
+                              }
+                              className="text-brand focus:ring-brand"
+                            />
+                            <div>
+                              <span className="text-[13.5px] font-semibold text-ink">
+                                {method.name}
+                              </span>
+                              {method.description && (
+                                <p className="text-[11.5px] text-steel">
+                                  {method.description}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <span className="rounded bg-[#EFEFEF] px-1.5 py-0.5 text-[10px] font-bold text-ink uppercase">
+                            {method.type === "OFFLINE" ? "COD" : "Online"}
+                          </span>
+                        </label>
+                      );
+                    })
+                  ) : (
+                    <div className="rounded-lg border border-line bg-grey p-3 text-xs text-steel">
+                      Pay on Delivery is enabled for your country.
                     </div>
-                    <span className="rounded bg-[#E31E24] px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">Online</span>
-                  </label>
-
-                  <label className={`flex items-center justify-between rounded-lg border p-3 cursor-pointer transition-colors ${selectedPaymentMethod === "COD" ? "border-brand bg-brand/5" : "border-line bg-white"}`}>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="paymentMethod"
-                        checked={selectedPaymentMethod === "COD"}
-                        onChange={() => setSelectedPaymentMethod("COD")}
-                        className="text-brand focus:ring-brand"
-                      />
-                      <span className="text-[13.5px] font-semibold text-ink">Pay on Delivery</span>
-                    </div>
-                  </label>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between border-t border-line pt-3 text-[16px]">
                   <span className="font-semibold text-ink">Total Payable</span>
-                  <strong className="text-[18px] font-extrabold text-brand">{formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, estimate?.total ?? totals.subtotal)}</strong>
+                  <strong className="text-[18px] font-extrabold text-brand">
+                    {formatMoney(
+                      estimate?.currency?.symbol ?? totals.currencySymbol,
+                      estimate?.total ?? totals.subtotal,
+                    )}
+                  </strong>
                 </div>
               </div>
 
-              {(error || approvalBlockMessage || shippingError) && <p className="mt-4 rounded-md border border-brand/20 bg-brand/5 px-3 py-2 text-[13px] text-brand">{error || approvalBlockMessage || shippingError}</p>}
-              
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowBreakdownModal(true)}
+                  className="inline-flex items-center gap-1 text-[12px] font-medium text-[#2A6A40] hover:underline"
+                >
+                  <HelpCircle size={13} />
+                  Price Breakdown
+                </button>
+              </div>
+
+              {(error || approvalBlockMessage || shippingError) && (
+                <p className="mt-4 rounded-md border border-brand/20 bg-brand/5 px-3 py-2 text-[13px] text-brand">
+                  {error || approvalBlockMessage || shippingError}
+                </p>
+              )}
+
               {pendingOrder ? (
                 <div className="mt-5 space-y-3">
                   <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-xs text-green-800 text-center">
-                    Order #{pendingOrder.orderNumber} created! Click below to complete your payment.
+                    Order #{pendingOrder.orderNumber} created! Click below to
+                    complete your payment.
                   </div>
                   <RazorpayPaymentButton
                     orderId={pendingOrder.id}
@@ -622,12 +1153,19 @@ export default function CheckoutPage() {
                   />
                 </div>
               ) : (
-                <Button type="submit" variant="primary" size="lg" fullWidth className="mt-5" disabled={isSubmitting || !canPlaceOrder}>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="lg"
+                  fullWidth
+                  className="mt-5"
+                  disabled={isSubmitting || !canPlaceOrder}
+                >
                   {isSubmitting
                     ? "Processing..."
-                    : selectedPaymentMethod === "RAZORPAY"
-                    ? "Proceed to Pay with Razorpay"
-                    : "Place Order (Pay on Delivery)"}
+                    : selectedPaymentCode === "RAZORPAY"
+                      ? "Proceed to Pay with Razorpay"
+                      : "Place Order"}
                 </Button>
               )}
             </aside>
@@ -635,12 +1173,209 @@ export default function CheckoutPage() {
         ) : (
           <div className="rounded-md border border-line bg-white p-10 text-center">
             <ShoppingCart size={30} className="mx-auto mb-3 text-steel-2" />
-            <h2 className="text-[20px] font-semibold text-ink">Your cart is empty</h2>
-            <p className="mt-2 text-[14px] text-steel">Add a product variant before checkout.</p>
-            <Button href="/products" variant="primary" className="mt-6">Browse products</Button>
+            <h2 className="text-[20px] font-semibold text-ink">
+              Your cart is empty
+            </h2>
+            <p className="mt-2 text-[14px] text-steel">
+              Add a product variant before checkout.
+            </p>
+            <Button href="/products" variant="primary" className="mt-6">
+              Browse products
+            </Button>
           </div>
         )}
       </section>
+
+      <Modal
+        open={showBreakdownModal}
+        onClose={() => setShowBreakdownModal(false)}
+        title="Price Breakdown"
+        panelClassName="max-w-lg max-h-[85vh] flex flex-col overflow-hidden z-[9999]"
+      >
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-y-auto p-6 text-[13.5px] text-[#1A1A1A] space-y-4">
+          <div className="flex justify-between items-center text-steel pb-2 border-b border-[#E6E6E6]">
+            <span>Original Base Subtotal</span>
+            <span className="font-semibold text-ink font-mono">
+              {formatMoney(
+                estimate?.currency?.symbol ?? totals.currencySymbol,
+                estimate?.originalBaseSubtotal ??
+                  Number(estimate?.subtotal ?? 0) +
+                    Number(estimate?.automaticDiscount ?? 0),
+              )}
+            </span>
+          </div>
+
+          {aggregatedDiscounts.length > 0 && (
+            <div className="space-y-4 py-1 border-b border-[#E6E6E6]">
+              <div className="flex justify-between items-center font-semibold text-[#2A6A40]">
+                <span>Applied Discounts</span>
+                <span>
+                  -
+                  {formatMoney(
+                    estimate?.currency?.symbol ?? totals.currencySymbol,
+                    Number(estimate?.automaticDiscount ?? 0) +
+                      Number(
+                        appliedCoupon
+                          ? (estimate?.couponDiscount ??
+                              appliedCoupon.discountAmount)
+                          : 0,
+                      ),
+                  )}
+                </span>
+              </div>
+
+              {aggregatedDiscounts.map((discount, i) => {
+                const savingsPerUnit = Math.max(
+                  0,
+                  discount.originalUnitPrice - discount.discountedUnitPrice,
+                );
+                return (
+                  <div
+                    key={i}
+                    className="pl-3 border-l-2 border-[#2A6A40]/30 space-y-1.5"
+                  >
+                    <div className="font-semibold text-[#2A6A40] text-[13px]">
+                      {discount.label}
+                    </div>
+
+                    <div className="flex justify-between text-[12.5px] text-steel">
+                      <span>Original Unit Price</span>
+                      <span className="font-mono">
+                        {formatMoney(
+                          estimate?.currency?.symbol ?? totals.currencySymbol,
+                          discount.originalUnitPrice,
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between text-[12.5px] text-steel">
+                      <span>New Unit Price</span>
+                      <span className="font-mono">
+                        {formatMoney(
+                          estimate?.currency?.symbol ?? totals.currencySymbol,
+                          discount.discountedUnitPrice,
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between text-[12.5px] text-steel">
+                      <span>Quantity</span>
+                      <span className="font-mono">{discount.quantity}</span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-[12.5px] font-semibold text-[#2A6A40] pt-1">
+                      <span>You Saved</span>
+                      <span>
+                        {formatMoney(
+                          estimate?.currency?.symbol ?? totals.currencySymbol,
+                          savingsPerUnit,
+                        )}{" "}
+                        × {discount.quantity} = -
+                        {formatMoney(
+                          estimate?.currency?.symbol ?? totals.currencySymbol,
+                          discount.amount,
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {appliedCoupon && (
+                <div className="pl-3 border-l-2 border-[#2A6A40]/30 space-y-1">
+                  <div className="font-semibold text-[#2A6A40] text-[13px]">
+                    {appliedCoupon.code} (Promo Coupon)
+                  </div>
+                  {appliedCoupon.description && (
+                    <div className="text-[12.5px] text-steel">
+                      {appliedCoupon.description}
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center text-[12.5px] font-semibold text-[#2A6A40] pt-1">
+                    <span>You Saved</span>
+                    <span>
+                      -
+                      {formatMoney(
+                        estimate?.currency?.symbol ?? totals.currencySymbol,
+                        estimate?.couponDiscount ??
+                          appliedCoupon.discountAmount,
+                      )}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-between items-center text-ink font-semibold py-1 border-b border-[#E6E6E6]">
+            <span>Subtotal</span>
+            <span className="font-mono">
+              {formatMoney(
+                estimate?.currency?.symbol ?? totals.currencySymbol,
+                estimate?.subtotal ?? totals.subtotal,
+              )}
+            </span>
+          </div>
+
+          <div className="flex justify-between items-center text-steel">
+            <span>Tax (Included)</span>
+            <span className="font-mono">
+              {formatMoney(
+                estimate?.currency?.symbol ?? totals.currencySymbol,
+                estimate?.taxAmount ?? 0,
+              )}
+            </span>
+          </div>
+
+          <div className="pb-1">
+            <div className="flex justify-between text-steel">
+              <span>Shipping</span>
+
+              <span className="font-mono">
+                {estimate?.shippingIsFree
+                  ? "FREE"
+                  : formatMoney(
+                      estimate?.currency?.symbol ?? totals.currencySymbol,
+                      estimate?.shippingCharge ?? 0,
+                    )}
+              </span>
+            </div>
+
+            <div className="mt-1 text-[12px] text-steel-2">
+              {estimate?.shippingProvider || "Standard Shipping"}
+            </div>
+          </div>
+        </div>
+
+        {/* Fixed Footer */}
+        <div className="border-t bg-white px-6 py-4 shrink-0">
+          <div className="flex justify-between items-center text-[16px] font-bold text-brand pb-3">
+            <span>Total Payable</span>
+            <span className="text-[18px]">
+              {formatMoney(
+                estimate?.currency?.symbol ?? totals.currencySymbol,
+                estimate?.total ?? totals.subtotal,
+              )}
+            </span>
+          </div>
+
+          <p className="rounded-md bg-[#F8F9FA] px-3 py-2 text-[11px] leading-relaxed text-steel border border-[#E5E7EB]">
+            Prices are calculated sequentially based on applicable pricing
+            rules, promotions, and coupons.
+          </p>
+
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setShowBreakdownModal(false)}
+              className="rounded-md bg-brand px-5 py-2 text-[13px] font-semibold text-white hover:bg-brand/90 transition-colors shadow-sm"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </Modal>
     </Container>
   );
 }

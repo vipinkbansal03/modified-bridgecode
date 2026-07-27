@@ -122,10 +122,10 @@ type PromotionalDiscount = {
   id: string;
   name: string;
   type: DiscountRuleKind;
-  productId: string | null;
-  collectionId: string | null;
-  categoryId: string | null;
-  countryId: string | null;
+  products: { id: string }[];
+  collections: { id: string }[];
+  categories: { id: string }[];
+  countries: { id: string }[];
   discountPercent: Prisma.Decimal | null;
   fixedAmount: Prisma.Decimal | null;
   createdAt: Date;
@@ -156,14 +156,14 @@ function applyPromotionalDiscount(currentPrice: number, rule: PromotionalDiscoun
 }
 
 function discountScopeRank(discount: PromotionalDiscount) {
-  if (discount.productId) return 4;
-  if (discount.collectionId) return 3;
-  if (discount.categoryId) return 2;
+  if (discount.products && discount.products.length > 0) return 4;
+  if (discount.collections && discount.collections.length > 0) return 3;
+  if (discount.categories && discount.categories.length > 0) return 2;
   return 1;
 }
 
 function discountCountryRank(discount: PromotionalDiscount) {
-  return discount.countryId ? 2 : 1;
+  return discount.countries && discount.countries.length > 0 ? 2 : 1;
 }
 
 function selectBestPromotionalDiscount(discounts: PromotionalDiscount[], currentPrice: number) {
@@ -208,13 +208,17 @@ async function findPromotionalDiscounts(
 
   const now = new Date();
   const scopeFilters: Prisma.DiscountWhereInput[] = [
-    { productId: input.productId },
-    { productId: null, collectionId: null, categoryId: null },
+    { products: { some: { productId: input.productId } } },
+    { products: { none: {} }, collections: { none: {} }, categories: { none: {} } },
   ];
-  if (productCollectionIds.length) scopeFilters.push({ collectionId: { in: productCollectionIds } });
-  if (productCategoryId) scopeFilters.push({ categoryId: productCategoryId });
+  if (productCollectionIds.length) {
+    scopeFilters.push({ collections: { some: { collectionId: { in: productCollectionIds } } } });
+  }
+  if (productCategoryId) {
+    scopeFilters.push({ categories: { some: { categoryId: productCategoryId } } });
+  }
 
-  return prisma.discount.findMany({
+  const discounts = await prisma.discount.findMany({
     where: {
       type,
       status: "ACTIVE",
@@ -222,13 +226,26 @@ async function findPromotionalDiscounts(
       ...(type === "MOQ" ? { minQuantity: { lte: input.quantity } } : {}),
       OR: scopeFilters,
       AND: [
-        { OR: [{ countryId: input.countryId }, { countryId: null }] },
+        { OR: [{ countries: { some: { countryId: input.countryId } } }, { countries: { none: {} } }] },
         { OR: [{ startDate: null }, { startDate: { lte: now } }] },
         { OR: [{ endDate: null }, { endDate: { gte: now } }] },
       ],
     },
-    orderBy: { createdAt: "desc" },
+    include: {
+      products: { select: { productId: true } },
+      collections: { select: { collectionId: true } },
+      categories: { select: { categoryId: true } },
+      countries: { select: { countryId: true } },
+    },
   });
+
+  return discounts.map((d) => ({
+    ...d,
+    products: d.products.map((p) => ({ id: p.productId })),
+    collections: d.collections.map((c) => ({ id: c.collectionId })),
+    categories: d.categories.map((c) => ({ id: c.categoryId })),
+    countries: d.countries.map((c) => ({ id: c.countryId })),
+  }));
 }
 
 async function findBasePrice(input: ResolvePriceInput) {

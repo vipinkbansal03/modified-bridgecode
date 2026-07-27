@@ -153,6 +153,27 @@ export function LocaleSwitcher() {
               ))}
             </div>
           </div>
+
+          {/* Currency (Display-only) */}
+          <div className="border-t border-line bg-[#F8F9FA] p-4">
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-steel">
+              Currency
+            </h4>
+
+            <div className="flex items-center gap-3 rounded-lg border border-line bg-white p-3 shadow-sm select-none">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand/10 text-sm font-extrabold text-brand font-mono">
+                {activeCountry?.currency?.symbol ?? "$"}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[13.5px] font-semibold text-ink">
+                  {activeCountry?.currency?.name ?? "US Dollar"} ({activeCountry?.currency?.symbol ?? "$"})
+                </span>
+                <span className="text-[11px] text-steel">
+                  Based on your selected country.
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -64,7 +64,14 @@ function getPriceForCurrency(
 }
 
 function formatMoney(symbol: string, amount: number) {
-  return `${symbol}${Math.round(amount || 0).toLocaleString("en-IN")}`;
+  if (amount === null || amount === undefined || !Number.isFinite(amount)) return "";
+  const val = Number(amount);
+  const hasDecimals = Math.abs(val % 1) > 0.001;
+  const formatted = val.toLocaleString("en-US", {
+    minimumFractionDigits: hasDecimals ? 2 : 0,
+    maximumFractionDigits: 2,
+  });
+  return `${symbol}${formatted}`;
 }
 
 function buildSelectionKey(selectionByAttributeId: Record<string, string>) {
@@ -145,7 +152,6 @@ function buildCartItems(
   variants: NormalizedVariant[],
   quantityMap: Record<string, number>,
   priceMap: Record<string, ApiProductPrice | null>,
-  previewPriceMap?: Record<string, number>,
 ) {
   const items: Array<{ cart: CartItem; quote: QuoteCartItem }> = [];
 
@@ -157,13 +163,13 @@ function buildCartItems(
 
     const base = {
       productId: apiProduct.id,
-        productSlug: apiProduct.slug,
+      productSlug: apiProduct.slug,
       productTitle: apiProduct.title,
       variantId,
       variantTitle: variant.title,
       sku: variant.sku,
       quantity,
-      unitPrice: previewPriceMap?.[variantId] ?? price.sellingPrice,
+      unitPrice: price.sellingPrice,
       currencyCode: price.currencyCode,
       currencySymbol: price.currencySymbol,
       selectedAttributes: variant.attributeCombination,
@@ -267,9 +273,6 @@ export function DynamicVariantMatrixConfigurator({
     () => packageOptions[0]?.id ?? "",
   );
   const [quantityMap, setQuantityMap] = useState<Record<string, number>>({});
-  const [previewPriceMap, setPreviewPriceMap] = useState<
-    Record<string, number>
-  >({});
   const [feedback, setFeedback] = useState<{
     kind: "success" | "error";
     message: string;
@@ -330,16 +333,13 @@ export function DynamicVariantMatrixConfigurator({
                 variant,
                 quantity,
                 price,
-                resolvedUnitPrice:
-                  previewPriceMap[variant.id] ?? price.sellingPrice,
-                total:
-                  (previewPriceMap[variant.id] ?? price.sellingPrice) *
-                  quantity,
+                resolvedUnitPrice: price.sellingPrice,
+                total: price.sellingPrice * quantity,
               }
             : null;
         })
         .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
-    [normalizedVariants, previewPriceMap, quantityMap, variantPriceMap],
+    [normalizedVariants, quantityMap, variantPriceMap],
   );
 
   const totals = useMemo(() => {
@@ -390,7 +390,6 @@ export function DynamicVariantMatrixConfigurator({
       normalizedVariants,
       quantityMap,
       variantPriceMap,
-      previewPriceMap,
     );
     if (!items.length) {
       setFeedback({
@@ -415,7 +414,6 @@ export function DynamicVariantMatrixConfigurator({
       normalizedVariants,
       quantityMap,
       variantPriceMap,
-      previewPriceMap,
     );
     if (!items.length) {
       setFeedback({
@@ -453,52 +451,7 @@ export function DynamicVariantMatrixConfigurator({
     });
   };
 
-  useEffect(() => {
-    const previewItems = Object.entries(quantityMap)
-      .filter(([, quantity]) => quantity > 0)
-      .map(([variantId, quantity]) => ({ variantId, quantity }));
 
-    if (!previewItems.length) return;
-
-    let active = true;
-    const timer = window.setTimeout(async () => {
-      try {
-        const customerToken = window.localStorage.getItem("customer_token");
-        const response = await apiClient.post(
-          `/products/${apiProduct.slug}/price-preview`,
-          { items: previewItems },
-          {
-            params: selectedCountryCode
-              ? { countryCode: selectedCountryCode }
-              : undefined,
-            headers: customerToken
-              ? { Authorization: `Bearer ${customerToken}` }
-              : undefined,
-          },
-        );
-
-        if (!active) return;
-
-        const previews = (response.data.data ?? []) as Array<{
-          variantId: string;
-          unitPrice: number;
-        }>;
-        setPreviewPriceMap(
-          previews.reduce<Record<string, number>>((acc, preview) => {
-            acc[preview.variantId] = preview.unitPrice;
-            return acc;
-          }, {}),
-        );
-      } catch {
-        if (active) setPreviewPriceMap({});
-      }
-    }, 180);
-
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-    };
-  }, [apiProduct.slug, quantityMap, selectedCountryCode]);
 
   if (!matrixEnabled) return null;
 
@@ -645,8 +598,7 @@ export function DynamicVariantMatrixConfigurator({
                           const minPositive = Math.max(1, variant?.moq ?? 1);
                           const displayUnitPrice =
                             variant && price
-                              ? (previewPriceMap[variant.id] ??
-                                price.sellingPrice)
+                              ? price.sellingPrice
                               : null;
 
                           return (

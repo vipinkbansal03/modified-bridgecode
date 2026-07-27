@@ -1,8 +1,9 @@
 import { prisma } from "../../config/database";
+import { Prisma } from "@prisma/client";
 import { AppError, getPagination } from "../../utils/apiResponse";
 import { assertActiveCountry, assertSellableInCountry } from "../countries/countryAvailability.service";
 import { resolvePrice } from "../pricing/priceResolver.service";
-import { sendQuoteConvertedEmail } from "../../utils/email";
+import { sendQuoteConvertedEmail, sendQuoteSentEmail } from "../../utils/email";
 
 export async function listQuotes(query: { page?: string; limit?: string; status?: string; search?: string; sortBy?: string; sortDir?: string }) {
   const { page, limit, skip } = getPagination(query);
@@ -38,7 +39,7 @@ export async function listQuotes(query: { page?: string; limit?: string; status?
     }
   })();
   const [data, total] = await Promise.all([
-    prisma.quote.findMany({ where: where as never, skip, take: limit, orderBy: orderBy as never, include: { country: true, currency: true, items: true, _count: { select: { items: true } } } }),
+    prisma.quote.findMany({ where: where as never, skip, take: limit, orderBy: orderBy as never, include: { country: true, currency: true, items: true, internalNotes: { select: { id: true, note: true }, take: 1 }, _count: { select: { items: true } } } }),
     prisma.quote.count({ where }),
   ]);
   return { data, total, page, limit };
@@ -63,8 +64,13 @@ export async function createAdminQuote(input: {
   companyName?: string | null;
   countryId?: string | null;
   notes?: string | null;
+  expiresAt?: string | Date | null;
+  shippingAddress?: Record<string, unknown> | null;
+  billingAddress?: Record<string, unknown> | null;
   discount?: number | string | null;
   shippingCharge?: number | string | null;
+  sendEmail?: boolean;
+  status?: string;
   items: { productId: string; variantId?: string | null; quantity: number | string; overridePrice?: number | string | null }[];
 }) {
   if (!Array.isArray(input.items) || input.items.length === 0) {
@@ -74,6 +80,11 @@ export async function createAdminQuote(input: {
   const customer = input.customerId
     ? await prisma.customer.findUnique({
         where: { id: input.customerId, deletedAt: null },
+        include: { defaultCountry: true },
+      })
+    : input.customerEmail
+    ? await prisma.customer.findFirst({
+        where: { email: { equals: input.customerEmail.trim(), mode: "insensitive" }, deletedAt: null },
         include: { defaultCountry: true },
       })
     : null;
@@ -178,8 +189,12 @@ export async function createAdminQuote(input: {
       discount,
       shippingCharge,
       total: Math.max(0, subtotal + shippingCharge - discount),
-      status: "PENDING",
+      status: input.sendEmail || input.status === "SENT" ? "SENT" : "PENDING",
+      source: "ADMIN",
       notes: input.notes ?? null,
+      expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+      shippingAddress: input.shippingAddress ? (input.shippingAddress as object) : Prisma.DbNull,
+      billingAddress: input.billingAddress ? (input.billingAddress as object) : Prisma.DbNull,
       items: {
         create: quoteItems.map((item) => ({
           productId: item.product.id,
@@ -194,20 +209,40 @@ export async function createAdminQuote(input: {
     },
   });
 
+  if (quote.status === "SENT" || input.sendEmail) {
+    void sendQuoteSentEmail({
+      customerEmail: quote.customerEmail,
+      customerName: quote.customerName,
+      quoteNumber: quote.quoteNumber,
+      total: Number(quote.total),
+    });
+  }
+
   return getQuote(quote.id);
 }
 
 export async function updateStatus(id: string, status: string) {
   const quote = await prisma.quote.findUnique({
     where: { id },
-    select: { status: true, convertedOrderId: true },
+    select: { status: true, convertedOrderId: true, customerEmail: true, customerName: true, quoteNumber: true, total: true },
   });
   if (!quote) throw new AppError("Quote not found.", 404);
   if (quote.status === "CONVERTED" || quote.convertedOrderId) {
     throw new AppError("Converted quotes cannot be moved to another status.", 400);
   }
 
-  return prisma.quote.update({ where: { id }, data: { status: status as never } });
+  const updated = await prisma.quote.update({ where: { id }, data: { status: status as never } });
+
+  if (status === "SENT") {
+    void sendQuoteSentEmail({
+      customerEmail: quote.customerEmail,
+      customerName: quote.customerName,
+      quoteNumber: quote.quoteNumber,
+      total: Number(quote.total),
+    });
+  }
+
+  return updated;
 }
 
 export const addNote = (quoteId: string, userId: string, note: string) =>
@@ -220,6 +255,9 @@ export async function updateQuoteReview(
     discount?: number | string | null;
     shippingCharge?: number | string | null;
     notes?: string | null;
+    expiresAt?: string | Date | null;
+    shippingAddress?: Record<string, unknown> | null;
+    billingAddress?: Record<string, unknown> | null;
   }
 ) {
   const quote = await getQuote(id);
@@ -260,6 +298,9 @@ export async function updateQuoteReview(
         shippingCharge,
         total,
         notes: data.notes ?? quote.notes,
+        expiresAt: data.expiresAt !== undefined ? (data.expiresAt ? new Date(data.expiresAt) : null) : quote.expiresAt,
+        shippingAddress: data.shippingAddress !== undefined ? (data.shippingAddress ? (data.shippingAddress as object) : Prisma.DbNull) : quote.shippingAddress ?? Prisma.DbNull,
+        billingAddress: data.billingAddress !== undefined ? (data.billingAddress ? (data.billingAddress as object) : Prisma.DbNull) : quote.billingAddress ?? Prisma.DbNull,
         status: quote.status === "PENDING" ? "REVIEWING" : quote.status,
       },
     }),
@@ -293,7 +334,7 @@ export async function convertToOrder(quoteId: string) {
       customerEmail: quote.customerEmail,
       customerPhone: quote.customerPhone || "",
       companyName: quote.companyName,
-      shippingAddress: {},
+      shippingAddress: (quote.shippingAddress as never) ?? {},
       countryId: quote.countryId,
       currencyId: quote.currencyId,
       subtotal: quote.subtotal,

@@ -65,12 +65,16 @@ type Discount = {
   fixedAmount: string | number | null;
   countryId: string | null;
   country?: Related | null;
+  countries?: Related[];
   productId: string | null;
   product?: Related | null;
+  products?: Related[];
   collectionId: string | null;
   collection?: Related | null;
+  collections?: Related[];
   categoryId: string | null;
   category?: Related | null;
+  categories?: Related[];
   startDate: string | null;
   endDate: string | null;
 };
@@ -87,9 +91,9 @@ type FormState = {
   fixedAmount: string;
   countryIds: string[];
   scope: "PLATFORM" | "PRODUCT" | "COLLECTION" | "CATEGORY";
-  productId: string;
-  collectionId: string;
-  categoryId: string;
+  productIds: string[];
+  collectionIds: string[];
+  categoryIds: string[];
   startDate: string;
   endDate: string;
 };
@@ -124,9 +128,9 @@ const blankForm: FormState = {
   fixedAmount: "",
   countryIds: [],
   scope: "PLATFORM",
-  productId: "",
-  collectionId: "",
-  categoryId: "",
+  productIds: [],
+  collectionIds: [],
+  categoryIds: [],
   startDate: "",
   endDate: "",
 };
@@ -152,13 +156,20 @@ function discountValue(discount: Discount) {
 }
 
 function scopeLabel(discount: Discount) {
-  if (discount.product) return `Product: ${discount.product.title}`;
-  if (discount.collection) return `Collection: ${discount.collection.name}`;
-  if (discount.category) return `Category: ${discount.category.name}`;
+  const pCount = (discount as any).products?.length ?? 0;
+  const colCount = (discount as any).collections?.length ?? 0;
+  const catCount = (discount as any).categories?.length ?? 0;
+  if (pCount > 0) return `${pCount} Product(s): ${(discount as any).products.map((p: any) => p.title).join(", ")}`;
+  if (colCount > 0) return `${colCount} Collection(s): ${(discount as any).collections.map((c: any) => c.name).join(", ")}`;
+  if (catCount > 0) return `${catCount} Category(ies): ${(discount as any).categories.map((c: any) => c.name).join(", ")}`;
   return "Platform-wide";
 }
 
 function toForm(discount: Discount): FormState {
+  const products = (discount as any).products ?? [];
+  const collections = (discount as any).collections ?? [];
+  const categories = (discount as any).categories ?? [];
+  const countries = (discount as any).countries ?? [];
   return {
     id: discount.id,
     name: discount.name,
@@ -171,17 +182,17 @@ function toForm(discount: Discount): FormState {
       discount.discountPercent != null ? String(discount.discountPercent) : "",
     fixedAmount:
       discount.fixedAmount != null ? String(discount.fixedAmount) : "",
-    countryIds: discount.countryId ? [discount.countryId] : [],
-    scope: discount.productId
+    countryIds: countries.map((c: any) => c.id),
+    scope: products.length > 0
       ? "PRODUCT"
-      : discount.collectionId
+      : collections.length > 0
         ? "COLLECTION"
-        : discount.categoryId
+        : categories.length > 0
           ? "CATEGORY"
           : "PLATFORM",
-    productId: discount.productId ?? "",
-    collectionId: discount.collectionId ?? "",
-    categoryId: discount.categoryId ?? "",
+    productIds: products.map((p: any) => p.id),
+    collectionIds: collections.map((c: any) => c.id),
+    categoryIds: categories.map((c: any) => c.id),
     startDate: dateInput(discount.startDate),
     endDate: dateInput(discount.endDate),
   };
@@ -354,21 +365,21 @@ export default function DiscountsPage() {
       if (key === "valueType" && value === "PERCENT") next.fixedAmount = "";
       if (key === "valueType" && value === "FIXED") next.discountPercent = "";
       if (key === "scope" && value === "PLATFORM") {
-        next.productId = "";
-        next.collectionId = "";
-        next.categoryId = "";
+        next.productIds = [];
+        next.collectionIds = [];
+        next.categoryIds = [];
       }
       if (key === "scope" && value === "PRODUCT") {
-        next.collectionId = "";
-        next.categoryId = "";
+        next.collectionIds = [];
+        next.categoryIds = [];
       }
       if (key === "scope" && value === "COLLECTION") {
-        next.productId = "";
-        next.categoryId = "";
+        next.productIds = [];
+        next.categoryIds = [];
       }
       if (key === "scope" && value === "CATEGORY") {
-        next.productId = "";
-        next.collectionId = "";
+        next.productIds = [];
+        next.collectionIds = [];
       }
       return next;
     });
@@ -385,11 +396,10 @@ export default function DiscountsPage() {
       discountPercent:
         form.valueType === "PERCENT" ? form.discountPercent : null,
       fixedAmount: form.valueType === "FIXED" ? form.fixedAmount : null,
-      countryId: form.countryIds.length > 0 ? form.countryIds[0] : null,
-      productId: form.scope === "PRODUCT" ? form.productId || null : null,
-      collectionId:
-        form.scope === "COLLECTION" ? form.collectionId || null : null,
-      categoryId: form.scope === "CATEGORY" ? form.categoryId || null : null,
+      countryIds: form.countryIds,
+      productIds: form.scope === "PRODUCT" ? form.productIds : [],
+      collectionIds: form.scope === "COLLECTION" ? form.collectionIds : [],
+      categoryIds: form.scope === "CATEGORY" ? form.categoryIds : [],
       startDate: form.startDate || null,
       endDate: form.endDate || null,
     };
@@ -627,10 +637,13 @@ export default function DiscountsPage() {
     {
       key: "country",
       label: "Country",
-      render: (row) =>
-        row.country
-          ? `${row.country.name} (${row.country.code})`
-          : "All countries",
+      render: (row) => {
+        const countries = row.countries ?? (row.country ? [row.country] : []);
+        if (countries.length === 0) return "All countries";
+        if (countries.length === 1) return `${countries[0].name ?? countries[0].code} (${countries[0].code})`;
+        if (countries.length <= 2) return countries.map((c) => c.code ?? c.name).join(", ");
+        return `${countries.length} Countries (${countries.slice(0, 2).map((c) => c.code ?? c.name).join(", ")}, ...)`;
+      },
     },
     {
       key: "dates",
@@ -716,37 +729,25 @@ export default function DiscountsPage() {
     return true;
   });
 
-  const isCreateModalOpen = showForm && !form.id;
-  const isEditInlineOpen = showForm && !!form.id;
-
   const discountForm = (
-    <form
-      onSubmit={submit}
-      className={`flex flex-col min-h-0 overflow-hidden ${
-        form.id ? "rounded-xl border border-[#E6E6E6] bg-white p-5" : ""
-      }`}
-    >
-      {form.id && (
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
-            Edit discount
-          </h3>
-          <button
-            type="button"
-            onClick={resetForm}
-            className="text-[#9A9A9A] hover:text-[#1A1A1A]"
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
-      <div className={form.id ? "" : "p-6 overflow-y-auto flex-1"}>
+    <form onSubmit={submit} className="flex flex-col min-h-0 overflow-hidden">
+      <div className="p-6 overflow-y-auto flex-1">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <AdminInput
             label="Rule Name *"
             value={form.name}
             onChange={(event) => setField("name", event.target.value)}
             placeholder="Gold launch promo"
+          />
+          <AdminSelect
+            label="Discount Type *"
+            value={form.type}
+            onChange={(event) => setField("type", event.target.value as FormState["type"])}
+            options={[
+              { value: "TIER", label: "Tier Discount" },
+              { value: "MOQ", label: "MOQ Discount" },
+              { value: "PROMOTIONAL", label: "Promotional" },
+            ]}
           />
           <AdminMultiSearchableSelect
             label="Countries"
@@ -834,27 +835,54 @@ export default function DiscountsPage() {
             ]}
           />
           {form.scope === "PRODUCT" && (
-            <AdminSelect
-              label="Product *"
-              value={form.productId}
-              onChange={(event) => setField("productId", event.target.value)}
+            <AdminMultiSearchableSelect
+              label="Products *"
+              values={form.productIds}
+              onValuesChange={(values) =>
+                setForm((prev) => ({
+                  ...prev,
+                  productIds: values,
+                }))
+              }
               options={options.products}
+              placeholder="Select products"
+              allowSelectAll
+              selectAllLabel="All products"
+              selectionSummaryFormatter={(selected) => `${selected.length} Products Selected`}
             />
           )}
           {form.scope === "COLLECTION" && (
-            <AdminSelect
-              label="Collection *"
-              value={form.collectionId}
-              onChange={(event) => setField("collectionId", event.target.value)}
+            <AdminMultiSearchableSelect
+              label="Collections *"
+              values={form.collectionIds}
+              onValuesChange={(values) =>
+                setForm((prev) => ({
+                  ...prev,
+                  collectionIds: values,
+                }))
+              }
               options={options.collections}
+              placeholder="Select collections"
+              allowSelectAll
+              selectAllLabel="All collections"
+              selectionSummaryFormatter={(selected) => `${selected.length} Collections Selected`}
             />
           )}
           {form.scope === "CATEGORY" && (
-            <AdminSelect
-              label="Category *"
-              value={form.categoryId}
-              onChange={(event) => setField("categoryId", event.target.value)}
+            <AdminMultiSearchableSelect
+              label="Categories *"
+              values={form.categoryIds}
+              onValuesChange={(values) =>
+                setForm((prev) => ({
+                  ...prev,
+                  categoryIds: values,
+                }))
+              }
               options={options.categories}
+              placeholder="Select categories"
+              allowSelectAll
+              selectAllLabel="All categories"
+              selectionSummaryFormatter={(selected) => `${selected.length} Categories Selected`}
             />
           )}
 
@@ -872,7 +900,14 @@ export default function DiscountsPage() {
           />
         </div>
       </div>
-      <div className={form.id ? "mt-5 flex gap-2" : "border-t border-[#E5E7EB] bg-[#FAFAFA] px-6 py-4 flex items-center justify-end gap-2.5 shrink-0"}>
+      <div className="border-t border-[#E5E7EB] bg-[#FAFAFA] px-6 py-4 flex items-center justify-end gap-2.5 shrink-0">
+        <button
+          type="button"
+          onClick={resetForm}
+          className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2]"
+        >
+          Cancel
+        </button>
         <button
           type="submit"
           disabled={createDiscount.isPending || updateDiscount.isPending}
@@ -880,15 +915,6 @@ export default function DiscountsPage() {
         >
           {form.id ? "Update Discount" : "Create Discount"}
         </button>
-        {form.id && (
-          <button
-            type="button"
-            onClick={resetForm}
-            className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2]"
-          >
-            Clear Edit
-          </button>
-        )}
       </div>
     </form>
   );
@@ -1106,15 +1132,13 @@ export default function DiscountsPage() {
         )}
       </div>
 
-      {isEditInlineOpen ? <div className="mb-5">{discountForm}</div> : null}
-
       <Modal
-        open={isCreateModalOpen}
+        open={showForm}
         onClose={resetForm}
-        title="New discount"
+        title={form.id ? "Edit discount" : "New discount"}
         panelClassName="max-w-5xl flex flex-col max-h-[90vh] overflow-hidden z-[9999]"
       >
-        {isCreateModalOpen ? discountForm : null}
+        {showForm ? discountForm : null}
       </Modal>
 
       {canUpdate && (

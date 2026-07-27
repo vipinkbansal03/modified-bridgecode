@@ -136,16 +136,47 @@ async function normalizeCouponInput(input: CouponInput, currentId?: string) {
   };
 }
 
+export type EffectiveCouponStatus = "ACTIVE" | "SCHEDULED" | "EXPIRED" | "INACTIVE";
+
+export function getEffectiveStatus(
+  status: Status | string,
+  startDate: Date | string,
+  endDate: Date | string,
+  now: Date = new Date()
+): EffectiveCouponStatus {
+  if (status !== "ACTIVE") {
+    return "INACTIVE";
+  }
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (now < start) {
+    return "SCHEDULED";
+  }
+  if (now > end) {
+    return "EXPIRED";
+  }
+  return "ACTIVE";
+}
+
 export async function listCoupons(query: CouponListQuery) {
   const { page, limit, skip } = getPagination(query);
   const search = query.search?.trim();
   const status = query.status?.trim().toUpperCase();
-  if (status && !["ACTIVE", "INACTIVE"].includes(status)) {
+  if (status && !["ACTIVE", "SCHEDULED", "EXPIRED", "INACTIVE"].includes(status)) {
     throw new AppError("Invalid coupon status.", 400);
   }
 
+  const now = new Date();
   const where: Prisma.CouponWhereInput = {
-    ...(status ? { status: status as Status } : {}),
+    ...(status === "INACTIVE"
+      ? { status: "INACTIVE" }
+      : status === "ACTIVE"
+      ? { status: "ACTIVE", startDate: { lte: now }, endDate: { gte: now } }
+      : status === "SCHEDULED"
+      ? { status: "ACTIVE", startDate: { gt: now } }
+      : status === "EXPIRED"
+      ? { status: "ACTIVE", endDate: { lt: now } }
+      : {}),
     ...(search
       ? {
           OR: [
@@ -188,15 +219,24 @@ export async function listCoupons(query: CouponListQuery) {
     prisma.coupon.count({ where }),
   ]);
 
-  return { data, total, page, limit };
+  const couponsWithEffectiveStatus = data.map((coupon) => ({
+    ...coupon,
+    effectiveStatus: getEffectiveStatus(coupon.status, coupon.startDate, coupon.endDate, now),
+  }));
+
+  return { data: couponsWithEffectiveStatus, total, page, limit };
 }
 
 export async function createCoupon(input: CouponInput) {
   const data = await normalizeCouponInput(input);
-  return prisma.coupon.create({
+  const coupon = await prisma.coupon.create({
     data: data as Prisma.CouponUncheckedCreateInput,
     include: { country: true, currency: true },
   });
+  return {
+    ...coupon,
+    effectiveStatus: getEffectiveStatus(coupon.status, coupon.startDate, coupon.endDate),
+  };
 }
 
 export async function updateCoupon(id: string, input: CouponInput) {
@@ -204,11 +244,15 @@ export async function updateCoupon(id: string, input: CouponInput) {
   if (!current) throw new AppError("Coupon not found.", 404);
 
   const data = await normalizeCouponInput({ ...current, ...input }, id);
-  return prisma.coupon.update({
+  const coupon = await prisma.coupon.update({
     where: { id },
     data: data as Prisma.CouponUncheckedUpdateInput,
     include: { country: true, currency: true },
   });
+  return {
+    ...coupon,
+    effectiveStatus: getEffectiveStatus(coupon.status, coupon.startDate, coupon.endDate),
+  };
 }
 
 export const deleteCoupon = (id: string) => prisma.coupon.delete({ where: { id } });
@@ -218,19 +262,28 @@ export async function validateCoupon(code: string, orderTotal: number, countryCo
   if (!normalizedCode) throw new AppError("Coupon code is required.", 400);
   if (!Number.isFinite(orderTotal) || orderTotal <= 0) throw new AppError("Order value must be greater than 0.", 400);
 
-  const coupon = await prisma.coupon.findUnique({ where: { code: normalizedCode }, include: { country: true } });
+  const coupon = await prisma.coupon.findUnique({ where: { code: normalizedCode }, include: { country: true, currency: true } });
   if (!coupon) throw new AppError("Coupon not found.", 404);
-  if (coupon.status !== "ACTIVE") throw new AppError("Coupon is inactive.", 400);
 
-  const now = new Date();
-  if (coupon.startDate > now) throw new AppError("Coupon has not started yet.", 400);
-  if (coupon.endDate < now) throw new AppError("Coupon has expired.", 400);
-  if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) throw new AppError("Coupon usage limit reached.", 400);
-  if (coupon.minOrderValue && orderTotal < Number(coupon.minOrderValue)) throw new AppError(`Minimum order value is ${coupon.minOrderValue}.`, 400);
+  const effectiveStatus = getEffectiveStatus(coupon.status, coupon.startDate, coupon.endDate);
+  if (effectiveStatus === "INACTIVE") throw new AppError("Coupon is inactive.", 400);
+  if (effectiveStatus === "SCHEDULED") throw new AppError("Coupon has not started yet.", 400);
+  if (effectiveStatus === "EXPIRED") throw new AppError("Coupon has expired.", 400);
 
   if (coupon.countryId) {
-    if (!countryCode) throw new AppError("Coupon is available only for a specific country.", 400);
-    if (coupon.country?.code !== countryCode.toUpperCase()) throw new AppError("Coupon is not available in your country.", 400);
+    if (!countryCode || coupon.country?.code !== countryCode.toUpperCase()) {
+      throw new AppError("Coupon is not available in your region.", 400);
+    }
+  }
+
+  if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
+    throw new AppError("Coupon usage limit reached.", 400);
+  }
+
+  if (coupon.minOrderValue && orderTotal < Number(coupon.minOrderValue)) {
+    const symbol = coupon.currency?.symbol || (coupon.country?.code === "IN" ? "₹" : coupon.country?.code === "US" ? "$" : "");
+    const formattedMin = symbol ? `${symbol}${Number(coupon.minOrderValue).toLocaleString()}` : `${coupon.minOrderValue}`;
+    throw new AppError(`Minimum order value for this coupon is ${formattedMin}.`, 400);
   }
 
   let discount = coupon.discountType === "PERCENTAGE" ? (orderTotal * Number(coupon.discountValue)) / 100 : Number(coupon.discountValue);
@@ -239,7 +292,10 @@ export async function validateCoupon(code: string, orderTotal: number, countryCo
 
   const discountAmount = parseFloat(discount.toFixed(2));
   return {
-    coupon,
+    coupon: {
+      ...coupon,
+      effectiveStatus,
+    },
     discount: discountAmount,
     public: {
       valid: true,
@@ -251,3 +307,5 @@ export async function validateCoupon(code: string, orderTotal: number, countryCo
     },
   };
 }
+
+

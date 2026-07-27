@@ -196,9 +196,17 @@ export async function estimateCustomerOrder(
   input: CreateCustomerOrderInput,
 ) {
   const calculation = await calculateCustomerOrder(customerId, input);
+
+  const originalBaseSubtotal = roundMoney(
+    calculation.orderItems.reduce(
+      (sum, item) => sum + item.resolvedPrice.basePrice * item.quantity,
+      0,
+    ),
+  );
+
   const automaticDiscounts = calculation.orderItems.flatMap((item) =>
     item.resolvedPrice.appliedDiscounts
-      .filter((entry) => entry.type === "PROMOTIONAL_DISCOUNT")
+      .filter((entry) => entry.type !== "BASE_PRICE" && entry.type !== "TAX")
       .map((entry) => ({
         variantId: item.variant.id,
         sku: item.variant.sku,
@@ -214,8 +222,9 @@ export async function estimateCustomerOrder(
         quantity: item.quantity,
       })),
   );
+
   const automaticDiscount = roundMoney(
-    automaticDiscounts.reduce((sum, entry) => sum + entry.discountAmount, 0),
+    Math.max(0, originalBaseSubtotal - calculation.subtotal),
   );
 
   const hasVat = calculation.orderItems.some(
@@ -242,6 +251,7 @@ export async function estimateCustomerOrder(
   const isTaxInclusive = primaryTaxMode === "INCLUSIVE";
 
   return {
+    originalBaseSubtotal,
     subtotal: calculation.subtotal,
     taxAmount: calculation.taxAmount,
     taxMode: primaryTaxMode,
@@ -261,10 +271,11 @@ export async function estimateCustomerOrder(
       sku: item.variant.sku,
       title: item.variant.title,
       quantity: item.quantity,
-      unitPrice: item.unitPriceBeforeTax,
-      lineSubtotal: item.subtotal,
+      basePrice: item.resolvedPrice.basePrice,
+      unitPrice: item.unitPrice,
+      lineSubtotal: item.total,
       appliedDiscounts: item.resolvedPrice.appliedDiscounts.filter(
-        (entry) => entry.type === "PROMOTIONAL_DISCOUNT",
+        (entry) => entry.type !== "BASE_PRICE" && entry.type !== "TAX",
       ),
       appliedTaxes: item.resolvedPrice.appliedDiscounts
         .filter((entry) => entry.type === "TAX")

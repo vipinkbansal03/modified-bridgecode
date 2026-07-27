@@ -30,6 +30,10 @@ export const qk = {
   customerAddresses: {
     all: ["customer-addresses"] as const,
   },
+  wishlist: {
+    all: ["wishlist"] as const,
+    count: ["wishlist", "count"] as const,
+  },
   languages: {
     all: ["languages"] as const,
   },

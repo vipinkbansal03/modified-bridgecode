@@ -2039,6 +2039,7 @@ export const useAdminOrders = (params?: {
   limit?: number;
   status?: string;
   paymentStatus?: string;
+  paymentMethod?: string;
   search?: string;
   countryId?: string;
   dateFrom?: string;
@@ -2346,3 +2347,14 @@ export const useAdminCmsMenus = () =>
     queryKey: ["admin-cms-menus"],
     queryFn: () => adminApi.get("/cms/menus").then((r) => r.data.data),
   });
+
+export const useAddQuoteNote = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) =>
+      adminApi.post(`/quotes/${id}/notes`, { note }).then((r) => r.data),
+    onSuccess: (_d, { id }) => {
+      qc.invalidateQueries({ queryKey: ["admin-quote", id] });
+    },
+  });
+};

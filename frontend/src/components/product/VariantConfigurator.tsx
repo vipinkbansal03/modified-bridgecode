@@ -114,7 +114,14 @@ function buildPackageAttribute(
 }
 
 function formatMoney(symbol: string, amount: number) {
-  return `${symbol}${Math.round(amount || 0).toLocaleString("en-IN")}`;
+  if (amount === null || amount === undefined || !Number.isFinite(amount)) return "";
+  const val = Number(amount);
+  const hasDecimals = Math.abs(val % 1) > 0.001;
+  const formatted = val.toLocaleString("en-US", {
+    minimumFractionDigits: hasDecimals ? 2 : 0,
+    maximumFractionDigits: 2,
+  });
+  return `${symbol}${formatted}`;
 }
 
 function buildInitialSelections(
@@ -276,9 +283,6 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   const [drafts, setDrafts] = useState<DraftConfiguration[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [added, setAdded] = useState(false);
-  const [previewPriceMap, setPreviewPriceMap] = useState<
-    Record<string, number>
-  >({});
   const [summaryHighlighted, setSummaryHighlighted] = useState(false);
   const [quoteSummaryHighlighted, setQuoteSummaryHighlighted] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -321,7 +325,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
           : "₹");
   const currencyCode = currentPrice?.currencyCode ?? selectedCurrency;
   const currentResolvedUnitPrice = currentVariant
-    ? (previewPriceMap[currentVariant.id] ?? currentPrice?.sellingPrice ?? 0)
+    ? (currentPrice?.sellingPrice ?? 0)
     : 0;
 
   const subtotal = drafts.reduce(
@@ -347,49 +351,6 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     document.addEventListener("mousedown", handleOutsideClick);
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
-
-  useEffect(() => {
-    if (!currentVariant || quantity < 1) return;
-
-    let active = true;
-    const timer = window.setTimeout(async () => {
-      try {
-        const customerToken = window.localStorage.getItem("customer_token");
-        const response = await apiClient.post(
-          `/products/${apiProduct.slug}/price-preview`,
-          { items: [{ variantId: currentVariant.id, quantity }] },
-          {
-            params: selectedCountryCode
-              ? { countryCode: selectedCountryCode }
-              : undefined,
-            headers: customerToken
-              ? { Authorization: `Bearer ${customerToken}` }
-              : undefined,
-          },
-        );
-
-        if (!active) return;
-
-        const previews = (response.data.data ?? []) as Array<{
-          variantId: string;
-          unitPrice: number;
-        }>;
-        setPreviewPriceMap(
-          previews.reduce<Record<string, number>>((acc, preview) => {
-            acc[preview.variantId] = preview.unitPrice;
-            return acc;
-          }, {}),
-        );
-      } catch {
-        if (active) setPreviewPriceMap({});
-      }
-    }, 180);
-
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-    };
-  }, [apiProduct.slug, currentVariant?.id, quantity, selectedCountryCode]);
 
   if (isMatrixLayout) {
     return <DynamicVariantMatrixConfigurator apiProduct={apiProduct} />;

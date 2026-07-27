@@ -189,6 +189,7 @@ export interface CustomerQuoteSummary {
 export interface CustomerQuote extends CustomerQuoteSummary {}
 
 export interface CustomerOrderEstimate {
+  originalBaseSubtotal?: number;
   subtotal: number;
   taxAmount: number;
   shippingCharge: number;
@@ -197,6 +198,13 @@ export interface CustomerOrderEstimate {
   shippingEstimatedDays?: string | null;
   shippingIsFree?: boolean;
   discount: number;
+  automaticDiscount?: number;
+  automaticDiscounts?: {
+    label: string;
+    discountRuleType?: string;
+    discountAmount: number;
+    variantId?: string;
+  }[];
   couponCode?: string | null;
   couponDiscount?: number;
   total: number;
@@ -211,6 +219,7 @@ export interface CustomerOrderEstimate {
     sku: string | null;
     title: string;
     quantity: number;
+    basePrice?: number;
     unitPrice: number;
     lineSubtotal: number;
   }[];
@@ -280,6 +289,16 @@ export async function getCustomerQuote(id: string) {
   return res.data.data as CustomerQuote;
 }
 
+export async function acceptCustomerQuote(id: string) {
+  const res = await customerApi.put(`/quotes/${id}/accept`);
+  return res.data.data as CustomerQuoteSummary;
+}
+
+export async function declineCustomerQuote(id: string) {
+  const res = await customerApi.put(`/quotes/${id}/decline`);
+  return res.data.data as CustomerQuoteSummary;
+}
+
 export async function downloadCustomerInvoice(orderId: string) {
   const res = await customerApi.get(`/orders/${orderId}/invoice`, {
     responseType: "blob",
@@ -300,6 +319,54 @@ export interface RazorpayOrderResponse {
   orderNumber: string;
 }
 
+export interface AvailablePaymentMethod {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+  iconUrl?: string;
+  type: "OFFLINE" | "SDK_MODAL" | "HOSTED_REDIRECT" | "DIRECT_FORM";
+  clientScriptUrl?: string;
+  sortOrder: number;
+  isDefault: boolean;
+  minOrderAmount?: number | null;
+  maxOrderAmount?: number | null;
+  publicKey?: string | null;
+}
+
+export async function fetchPublicPaymentMethods(countryCode?: string) {
+  const url = API_ORIGIN ? `${API_ORIGIN}/api/public/payment-methods` : "/api/public/payment-methods";
+  const res = await axios.get(url, {
+    params: { countryCode },
+  });
+  return res.data.data as AvailablePaymentMethod[];
+}
+
+export async function initiateCustomerPayment(orderId: string, paymentMethodCode: string) {
+  const res = await customerApi.post(`/orders/${orderId}/payment/initiate`, {
+    paymentMethodCode,
+  });
+  return res.data.data as {
+    paymentId: string;
+    type: "OFFLINE" | "SDK_MODAL" | "HOSTED_REDIRECT" | "DIRECT_FORM";
+    redirectUrl?: string;
+    clientScriptUrl?: string;
+    sdkPayload?: Record<string, unknown>;
+  };
+}
+
+export async function verifyCustomerPayment(
+  orderId: string,
+  paymentMethodCode: string,
+  payload: Record<string, unknown>,
+) {
+  const res = await customerApi.post(`/orders/${orderId}/payment/verify`, {
+    paymentMethodCode,
+    payload,
+  });
+  return res.data.data as CustomerOrderSummary;
+}
+
 export async function createRazorpayOrder(orderId: string) {
   const res = await customerApi.post(`/orders/${orderId}/razorpay-order`);
   return res.data.data as RazorpayOrderResponse;
@@ -318,7 +385,7 @@ export async function verifyRazorpayPayment(
     payload,
   );
   return res.data.data as CustomerOrderSummary;
-} // <-- ADD THIS
+}
 
 export async function updateCustomerProfile(data: {
   firstName?: string;
@@ -382,4 +449,51 @@ export async function deleteCustomerAddress(addressId: string) {
 export async function setDefaultCustomerAddress(addressId: string) {
   const res = await customerApi.put(`/addresses/${addressId}/default`);
   return res.data.data as CustomerAddress;
+}
+
+// ─── Wishlist API ──────────────────────────────────────────
+export interface WishlistItem {
+  id: string;
+  productId: string;
+  createdAt: string;
+  product: {
+    id: string;
+    title: string;
+    slug: string;
+    shortDescription?: string | null;
+    category?: string;
+    categorySlug?: string;
+    image?: string | null;
+    price?: string;
+    rawPrice?: {
+      sellingPrice: number;
+      mrp?: number | null;
+      currencySymbol?: string;
+    } | null;
+  };
+}
+
+export async function getCustomerWishlist(): Promise<WishlistItem[]> {
+  const res = await customerApi.get("/wishlist");
+  return res.data.data;
+}
+
+export async function addToWishlist(productId: string) {
+  const res = await customerApi.post("/wishlist", { productId });
+  return res.data.data;
+}
+
+export async function removeFromWishlist(productId: string) {
+  const res = await customerApi.delete(`/wishlist/${productId}`);
+  return res.data.data;
+}
+
+export async function toggleWishlist(productId: string): Promise<{ inWishlist: boolean }> {
+  const res = await customerApi.post("/wishlist/toggle", { productId });
+  return res.data.data;
+}
+
+export async function getWishlistCount(): Promise<{ count: number }> {
+  const res = await customerApi.get("/wishlist/count");
+  return res.data.data;
 }

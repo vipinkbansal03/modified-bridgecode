@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { DeliveryAddressButton } from "@/components/ui/delivery/DeliveryAddressButton";
 import Link from "next/link";
-import { ChevronDown, ShoppingCart, Menu, X, MapPin } from "lucide-react";
+import { ChevronDown, ShoppingCart, Heart, Menu, X, MapPin } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { MegaMenu } from "@/components/layout/MegaMenu";
 import { MobileMenu } from "@/components/layout/MobileMenu";
 import { HeaderSearch } from "@/components/ui/HeaderSearch";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { useCart } from "@/contexts/CartContext";
+import { useWishlistCount } from "@/hooks/api";
 import { useCmsMenu } from "@/hooks/api/useCmsContent";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import navigation from "@/data/navigation.json";
@@ -41,6 +42,7 @@ export function Header() {
   const accountRef = useRef<HTMLDivElement>(null);
   const { totals, openCart } = useCart();
   const { currentCustomer, logout } = useCustomerAuth();
+  const { data: wishlistCount = 0 } = useWishlistCount();
   const { t } = useStaticTranslations();
   const label = (value: string) =>
     navLabelKeys[value] ? t(navLabelKeys[value]) : value;
@@ -180,6 +182,13 @@ export function Header() {
                         >
                           My Account
                         </Link>
+                        <Link
+                          href="/wishlist"
+                          onClick={() => setAccountOpen(false)}
+                          className="mt-1 block rounded-md px-3 py-2 text-[13.5px] text-ink hover:bg-grey hover:text-brand"
+                        >
+                          My Wishlist {wishlistCount > 0 ? `(${wishlistCount})` : ""}
+                        </Link>
                         <button
                           type="button"
                           onClick={() => {
@@ -209,6 +218,20 @@ export function Header() {
                   </Link>
                 )}
               </div>
+
+              <Link
+                href="/wishlist"
+                aria-label="Wishlist"
+                title="Wishlist"
+                className="relative flex h-10 w-10 items-center justify-center rounded-md text-ink hover:bg-grey hover:text-brand transition-colors"
+              >
+                <Heart size={22} className="stroke-[1.75]" />
+                {wishlistCount > 0 && (
+                  <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#E31E24] text-[9px] font-bold text-white shadow-sm">
+                    {wishlistCount}
+                  </span>
+                )}
+              </Link>
 
               <button
                 aria-label="Open cart"
@@ -289,14 +312,45 @@ export function Header() {
               <Logo />
             </Link>
 
-            <button
-              type="button"
-              aria-label={mobileOpen ? "Close menu" : t("ui.nav.menu")}
-              onClick={() => setMobileOpen((v) => !v)}
-              className="flex h-10 w-10 items-center justify-center rounded-md transition-colors hover:bg-grey"
-            >
-              {mobileOpen ? <X size={22} /> : <Menu size={22} />}
-            </button>
+            <div className="flex items-center gap-1.5">
+              <Link
+                href="/wishlist"
+                aria-label="Wishlist"
+                title="Wishlist"
+                className="relative flex h-10 w-10 items-center justify-center rounded-md text-ink transition-colors hover:bg-grey"
+                onClick={() => setMobileOpen(false)}
+              >
+                <Heart size={22} className="stroke-[1.75]" />
+                {wishlistCount > 0 && (
+                  <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#E31E24] text-[9px] font-bold text-white">
+                    {wishlistCount}
+                  </span>
+                )}
+              </Link>
+
+              <button
+                type="button"
+                aria-label="Cart"
+                onClick={openCart}
+                className="relative flex h-10 w-10 items-center justify-center rounded-md text-ink transition-colors hover:bg-grey"
+              >
+                <ShoppingCart size={22} className="stroke-[1.75]" />
+                {totals.itemCount > 0 && (
+                  <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#F08804] text-[9px] font-bold text-white">
+                    {totals.itemCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                aria-label={mobileOpen ? "Close menu" : t("ui.nav.menu")}
+                onClick={() => setMobileOpen((v) => !v)}
+                className="flex h-10 w-10 items-center justify-center rounded-md transition-colors hover:bg-grey"
+              >
+                {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -316,6 +370,7 @@ export function Header() {
         ctaHref={ctaHref}
         isLoggedIn={Boolean(currentCustomer)}
         cartCount={totals.itemCount}
+        wishlistCount={wishlistCount}
         onLinkClick={() => setMobileOpen(false)}
         onCartClick={openCart}
       />

@@ -16,6 +16,7 @@ import customerAuthRoutes from "./modules/customerAuth/customerAuth.routes";
 import customerAddressRoutes from "./modules/customerAddresses/customerAddresses.routes";
 import customerOrderRoutes from "./modules/customerOrders/customerOrders.routes";
 import customerQuoteRoutes from "./modules/customerQuotes/customerQuotes.routes";
+import customerWishlistRoutes from "./modules/wishlist/wishlist.routes";
 import customerRoutes from "./modules/customers/customers.routes";
 import customerRoleRoutes from "./modules/customerRoles/customerRoles.routes";
 import tierRoutes from "./modules/tiers/tiers.routes";
@@ -52,6 +53,7 @@ import bannerRoutes from "./modules/banners/banners.routes";
 import publicBannerRoutes from "./modules/banners/publicBanners.routes";
 
 import reviewRoutes from "./modules/reviews/reviews.routes";
+import paymentMethodsRoutes from "./modules/payment/paymentMethods.routes";
 
 const app = express();
 
@@ -97,6 +99,7 @@ app.get("/health", (_req, res) => {
 
 // ─── Public API Routes (no auth) ─────────────────────────
 app.use("/api", publicRoutes);
+app.use("/api", paymentMethodsRoutes);
 app.use("/api/settings", settingsRoutes); // public tracking/robots/sitemap sub-routes
 
 // ─── API Routes ──────────────────────────────────────────
@@ -138,6 +141,8 @@ app.use("/api/customer/auth", customerAuthRoutes);
 app.use("/api/customer/addresses", customerAddressRoutes);
 app.use("/api/customer/orders", customerOrderRoutes);
 app.use("/api/customer/quotes", customerQuoteRoutes);
+app.use("/api/customer/wishlist", customerWishlistRoutes);
+app.use("/api/wishlist", customerWishlistRoutes);
 app.use("/api/shipping", publicShippingRoutes);
 app.use("/api/coupons", publicCouponRoutes);
 app.use("/api/blogs", publicBlogRoutes);

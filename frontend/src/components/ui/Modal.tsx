@@ -23,6 +23,17 @@ export function Modal({ open, onClose, title, children, panelClassName }: ModalP
     return () => setMounted(false);
   }, []);
 
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [open]);
+
   if (!mounted) return null;
 
   return createPortal(

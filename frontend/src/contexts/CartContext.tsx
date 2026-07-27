@@ -20,6 +20,7 @@ export interface CartItem {
   sku: string | null;
   quantity: number;
   unitPrice: number;
+  basePrice?: number;
   currencyCode: string;
   currencySymbol: string;
   countryCode?: string;
@@ -31,7 +32,9 @@ export interface CartItem {
 
 interface CartTotals {
   itemCount: number;
+  originalSubtotal: number;
   subtotal: number;
+  roleDiscount: number;
   currencyCode: string;
   currencySymbol: string;
 }
@@ -55,14 +58,23 @@ const STORAGE_KEY = "purchase_cart_v1";
 
 function computeTotals(items: CartItem[]): CartTotals {
   const first = items[0];
+  const originalSubtotal = items.reduce(
+    (sum, item) => sum + item.quantity * (item.basePrice ?? item.unitPrice),
+    0,
+  );
+  const subtotal = items.reduce(
+    (sum, item) => sum + item.quantity * item.unitPrice,
+    0,
+  );
+  const roleDiscount = Math.max(0, originalSubtotal - subtotal);
+
   return {
     itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
-    subtotal: items.reduce(
-      (sum, item) => sum + item.quantity * item.unitPrice,
-      0,
-    ),
+    originalSubtotal,
+    subtotal,
+    roleDiscount,
     currencyCode: first?.currencyCode ?? "INR",
-    currencySymbol: first?.currencySymbol ?? "Rs ",
+    currencySymbol: first?.currencySymbol ?? "₹",
   };
 }
 
@@ -164,6 +176,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
                 updatedItems[index] = {
                   ...updatedItems[index],
                   unitPrice: preview.unitPrice,
+                  basePrice: preview.basePrice ?? preview.unitPrice,
                   currencyCode: preview.currency.code,
                   currencySymbol: preview.currency.symbol,
                   priceUnavailable: false,
@@ -257,7 +270,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const clearCart = () => setItems([]);
+  const clearCart = () => {
+    setItems([]);
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("applied_coupon");
+    }
+  };
   const openCart = () => setIsOpen(true);
   const closeCart = () => setIsOpen(false);
 

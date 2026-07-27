@@ -7,7 +7,10 @@ import { ImageOff } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 
+import { WishlistButton } from "@/components/product/WishlistButton";
+
 export interface ProductCardProps {
+  id?: string;
   image?: string | null;
   title: string;
   slug: string;
@@ -16,40 +19,50 @@ export interface ProductCardProps {
   price?: string;
   badge?: string;
   ctaLabel?: string;
+  actionSlot?: React.ReactNode;
 }
 
-export function ProductCard({ image, title, slug, category, shortDescription, price, badge }: ProductCardProps) {
+export function ProductCard({ id, image, title, slug, category, shortDescription, price, badge, ctaLabel, actionSlot }: ProductCardProps) {
   const imageSrc = image?.trim() || null;
 
   return (
     <motion.div whileHover={{ y: -4 }} transition={{ duration: 0.2, ease: "easeOut" }}>
-      <Link href={`/products/${slug}`} className="block">
-        <Card className="h-full">
-          <div className="relative h-[190px] w-full bg-offwhite sm:h-[230px]">
-            {imageSrc ? (
-              <Image src={imageSrc} alt={title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />
-            ) : (
-              <div className="flex h-full items-center justify-center px-4 text-center text-sm text-steel-2">
-                <div>
-                  <ImageOff size={24} className="mx-auto mb-2 text-steel-2" />
-                  <span>No image uploaded</span>
+      <div className="relative h-full">
+        <Link href={`/products/${slug}`} className="block h-full">
+          <Card className="h-full">
+            <div className="relative h-[190px] w-full bg-offwhite sm:h-[230px]">
+              {imageSrc ? (
+                <Image src={imageSrc} alt={title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />
+              ) : (
+                <div className="flex h-full items-center justify-center px-4 text-center text-sm text-steel-2">
+                  <div>
+                    <ImageOff size={24} className="mx-auto mb-2 text-steel-2" />
+                    <span>No image uploaded</span>
+                  </div>
                 </div>
-              </div>
-            )}
-            {badge && (
-              <span className="absolute top-3 left-3">
-                <Badge tone="brand">{badge}</Badge>
-              </span>
-            )}
+              )}
+              {badge && (
+                <span className="absolute top-3 left-3">
+                  <Badge tone="brand">{badge}</Badge>
+                </span>
+              )}
+            </div>
+            <div className="p-4 sm:p-5">
+              {category && <span className="text-xs uppercase tracking-wide text-steel-2">{category}</span>}
+              <h5 className="mt-1.5 text-[15px] font-medium text-ink">{title}</h5>
+              {shortDescription && <p className="mt-1.5 text-sm text-steel">{shortDescription}</p>}
+              {price && <p className="mt-2 text-sm font-semibold text-ink">{price}</p>}
+            </div>
+          </Card>
+        </Link>
+        {actionSlot ? (
+          <div className="absolute top-3 right-3 z-10">{actionSlot}</div>
+        ) : id ? (
+          <div className="absolute top-3 right-3 z-10">
+            <WishlistButton productId={id} />
           </div>
-          <div className="p-4 sm:p-5">
-            {category && <span className="text-xs uppercase tracking-wide text-steel-2">{category}</span>}
-            <h5 className="mt-1.5 text-[15px] font-medium text-ink">{title}</h5>
-            {shortDescription && <p className="mt-1.5 text-sm text-steel">{shortDescription}</p>}
-            {price && <p className="mt-2 text-sm font-semibold text-ink">{price}</p>}
-          </div>
-        </Card>
-      </Link>
+        ) : null}
+      </div>
     </motion.div>
   );
 }

@@ -48,6 +48,7 @@ interface OrderDetail {
   total: number;
   status: string;
   paymentStatus: string;
+  paymentMethod: string | null;
   paymentProvider: string | null;
   paymentId: string | null;
   shippingProvider: string | null;
@@ -251,7 +252,8 @@ export default function OrderDetailPage() {
             <h3 className="text-[14px] font-semibold text-[#111]">Order Details</h3>
             <InfoRow label="Order #" value={<span className="font-mono font-semibold">{order.orderNumber}</span>} />
             <InfoRow label="Created" value={new Date(order.createdAt).toLocaleDateString()} />
-            <InfoRow label="Payment" value={<StatusBadge status={order.paymentStatus} />} />
+            <InfoRow label="Payment Status" value={<StatusBadge status={order.paymentStatus} />} />
+            <InfoRow label="Payment Mode" value={formatPaymentMethod(order.paymentMethod)} />
             {order.paymentProvider && <InfoRow label="Provider" value={order.paymentProvider} />}
             {order.paymentId && <InfoRow label="Payment ID" value={<span className="font-mono text-[12px]">{order.paymentId}</span>} />}
           </div>
@@ -286,4 +288,11 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
       <span className="text-right font-medium text-[#111]">{value}</span>
     </div>
   );
+}
+
+function formatPaymentMethod(value?: string | null) {
+  if (!value) return "-";
+  if (value === "PAY_ON_DELIVERY") return "Pay on Delivery (COD)";
+  if (value === "RAZORPAY") return "Razorpay";
+  return value;
 }

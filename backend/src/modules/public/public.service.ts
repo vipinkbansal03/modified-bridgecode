@@ -295,7 +295,7 @@ export async function publicGetProduct(
         },
       },
       prices: {
-        where: { status: "ACTIVE", countryId: country.id },
+        where: { status: "ACTIVE", countryId: country.id, variantId: null },
         include: { country: true, currency: true },
       },
     },
@@ -1019,14 +1019,13 @@ function computeLowestVariantPrices(
   productPrices: PriceRecord[],
   allVariantPrices: PriceRecord[][],
 ) {
-  const merged = [
-    ...productPrices,
-    ...allVariantPrices.flat(),
-  ];
-  if (!merged.length) return [];
+  const variantPricesFlat = allVariantPrices.flat();
+  const candidates =
+    variantPricesFlat.length > 0 ? variantPricesFlat : productPrices;
+  if (!candidates.length) return [];
 
   const byCurrency = new Map<string, PriceRecord[]>();
-  for (const pr of merged) {
+  for (const pr of candidates) {
     const key = pr.currency.code;
     const arr = byCurrency.get(key);
     if (arr) arr.push(pr);
@@ -1438,8 +1437,8 @@ async function toPublicProductDetail(
     variants: publicVariants,
     prices: productPrices,
     lowestPrice: computeLowestVariantPrices(
-      (p.prices ?? []) as PriceRecord[],
-      p.variants.map((v) => (v.prices ?? []) as PriceRecord[]),
+      (p.prices ?? []) as unknown as PriceRecord[],
+      p.variants.map((v) => (v.prices ?? []) as unknown as PriceRecord[]),
     ),
   };
 }

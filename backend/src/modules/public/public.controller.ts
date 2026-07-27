@@ -99,11 +99,20 @@ function getRequestedCountry(req: Request) {
 }
 
 function getOptionalCustomerId(req: Request) {
+  let token: string | undefined;
   const authHeader = typeof req.headers.authorization === "string" ? req.headers.authorization : "";
-  if (!authHeader.startsWith("Bearer ")) return undefined;
+  if (authHeader.startsWith("Bearer ")) {
+    token = authHeader.slice(7);
+  } else if ((req as any).cookies?.customerToken) {
+    token = (req as any).cookies.customerToken;
+  } else if ((req as any).cookies?.token) {
+    token = (req as any).cookies.token;
+  }
+
+  if (!token) return undefined;
 
   try {
-    const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET!) as { id?: string; scope?: string };
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id?: string; scope?: string };
     if (decoded.scope !== "customer" || !decoded.id) return undefined;
     return decoded.id;
   } catch {

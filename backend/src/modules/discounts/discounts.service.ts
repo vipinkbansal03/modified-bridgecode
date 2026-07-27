@@ -14,10 +14,10 @@ type DiscountInput = {
   minQuantity?: number | string | null;
   discountPercent?: number | string | null;
   fixedAmount?: number | string | null;
-  countryId?: string | null;
-  productId?: string | null;
-  categoryId?: string | null;
-  collectionId?: string | null;
+  countryIds?: string[];
+  productIds?: string[];
+  categoryIds?: string[];
+  collectionIds?: string[];
   startDate?: string | Date | null;
   endDate?: string | Date | null;
 };
@@ -78,11 +78,29 @@ function buildDiscountOrderBy(query: DiscountListQuery) {
 function discountInclude() {
   return {
     tier: true,
-    country: true,
-    product: { select: { id: true, title: true, slug: true } },
-    collection: true,
-    category: true,
+    countries: { include: { country: true } },
+    products: { include: { product: { select: { id: true, title: true, slug: true } } } },
+    collections: { include: { collection: true } },
+    categories: { include: { category: true } },
   };
+}
+
+export function formatDiscount<T extends Record<string, any>>(discount: T): T {
+  if (!discount) return discount;
+  const formatted: any = { ...discount };
+  if (Array.isArray(formatted.countries)) {
+    formatted.countries = formatted.countries.map((item: any) => item.country ?? item).filter(Boolean);
+  }
+  if (Array.isArray(formatted.products)) {
+    formatted.products = formatted.products.map((item: any) => item.product ?? item).filter(Boolean);
+  }
+  if (Array.isArray(formatted.collections)) {
+    formatted.collections = formatted.collections.map((item: any) => item.collection ?? item).filter(Boolean);
+  }
+  if (Array.isArray(formatted.categories)) {
+    formatted.categories = formatted.categories.map((item: any) => item.category ?? item).filter(Boolean);
+  }
+  return formatted;
 }
 
 async function buildDiscountWhere(query: DiscountListQuery) {
@@ -108,21 +126,21 @@ async function buildDiscountWhere(query: DiscountListQuery) {
   const where: Prisma.DiscountWhereInput = {
     ...(type ? { type: type as never } : {}),
     ...(status ? { status: status as Status } : {}),
-    ...(countryId ? { countryId } : {}),
-    ...(scope === "PLATFORM" ? { productId: null, collectionId: null, categoryId: null } : {}),
-    ...(scope === "PRODUCT" ? { productId: { not: null } } : {}),
-    ...(scope === "COLLECTION" ? { collectionId: { not: null } } : {}),
-    ...(scope === "CATEGORY" ? { categoryId: { not: null } } : {}),
+    ...(countryId ? { countries: { some: { countryId } } } : {}),
+    ...(scope === "PLATFORM" ? { products: { none: {} }, collections: { none: {} }, categories: { none: {} } } : {}),
+    ...(scope === "PRODUCT" ? { products: { some: {} } } : {}),
+    ...(scope === "COLLECTION" ? { collections: { some: {} } } : {}),
+    ...(scope === "CATEGORY" ? { categories: { some: {} } } : {}),
     ...(search
       ? {
           OR: [
             { name: { contains: search, mode: "insensitive" } },
-            { product: { title: { contains: search, mode: "insensitive" } } },
-            { collection: { name: { contains: search, mode: "insensitive" } } },
-            { category: { name: { contains: search, mode: "insensitive" } } },
+            { products: { some: { product: { title: { contains: search, mode: "insensitive" } } } } },
+            { collections: { some: { collection: { name: { contains: search, mode: "insensitive" } } } } },
+            { categories: { some: { category: { name: { contains: search, mode: "insensitive" } } } } },
             { tier: { name: { contains: search, mode: "insensitive" } } },
-            { country: { name: { contains: search, mode: "insensitive" } } },
-            { country: { code: { contains: search, mode: "insensitive" } } },
+            { countries: { some: { country: { name: { contains: search, mode: "insensitive" } } } } },
+            { countries: { some: { country: { code: { contains: search, mode: "insensitive" } } } } },
           ],
         }
       : {}),
@@ -154,10 +172,6 @@ async function normalizeDiscountInput(input: DiscountInput, partial = false) {
   if (input.status && !DISCOUNT_STATUSES.includes(input.status)) throw new AppError("Discount status must be ACTIVE or INACTIVE.", 400);
 
   const tierId = blankToNull(input.tierId) as string | null;
-  const countryId = blankToNull(input.countryId) as string | null;
-  const productId = blankToNull(input.productId) as string | null;
-  const categoryId = blankToNull(input.categoryId) as string | null;
-  const collectionId = blankToNull(input.collectionId) as string | null;
   const minQuantity = intOrNull(input.minQuantity, "Minimum quantity");
   const discountPercent = decimalOrNull(input.discountPercent, "Discount percent");
   const fixedAmount = decimalOrNull(input.fixedAmount, "Fixed amount");
@@ -173,9 +187,15 @@ async function normalizeDiscountInput(input: DiscountInput, partial = false) {
   if (discountPercent !== null && discountPercent.gt(100)) {
     throw new AppError("Discount percent cannot exceed 100.", 400);
   }
-  const scopedTargets = [productId, collectionId, categoryId].filter(Boolean).length;
+
+  const countryIds = Array.isArray(input.countryIds) ? input.countryIds : [];
+  const productIds = Array.isArray(input.productIds) ? input.productIds : [];
+  const categoryIds = Array.isArray(input.categoryIds) ? input.categoryIds : [];
+  const collectionIds = Array.isArray(input.collectionIds) ? input.collectionIds : [];
+
+  const scopedTargets = [productIds.length > 0, collectionIds.length > 0, categoryIds.length > 0].filter(Boolean).length;
   if (scopedTargets > 1) {
-    throw new AppError("Discount can target a product, collection, or category, not more than one.", 400);
+    throw new AppError("Discount can target products, collections, or categories, not more than one.", 400);
   }
   if (startDate && endDate && endDate < startDate) {
     throw new AppError("End date must be after start date.", 400);
@@ -197,11 +217,11 @@ async function normalizeDiscountInput(input: DiscountInput, partial = false) {
   }
 
   await Promise.all([
-    tierId ? assertTierUsable(tierId, { countryId }) : Promise.resolve(null),
-    assertExists("country", countryId),
-    assertExists("product", productId),
-    assertExists("collection", collectionId),
-    assertExists("category", categoryId),
+    tierId ? Promise.all(countryIds.map(cid => assertTierUsable(tierId, { countryId: cid }))) : Promise.resolve(null),
+    ...countryIds.map(id => assertExists("country", id)),
+    ...productIds.map(id => assertExists("product", id)),
+    ...collectionIds.map(id => assertExists("collection", id)),
+    ...categoryIds.map(id => assertExists("category", id)),
   ]);
 
   return {
@@ -212,12 +232,14 @@ async function normalizeDiscountInput(input: DiscountInput, partial = false) {
     minQuantity,
     discountPercent,
     fixedAmount,
-    countryId,
-    productId,
-    collectionId,
-    categoryId,
     startDate,
     endDate,
+    _relations: {
+      countries: countryIds,
+      products: productIds,
+      categories: categoryIds,
+      collections: collectionIds,
+    }
   };
 }
 
@@ -269,7 +291,7 @@ export async function listDiscounts(query: DiscountListQuery) {
     }),
     prisma.discount.count({ where }),
   ]);
-  return { data, total, page, limit };
+  return { data: data.map(formatDiscount), total, page, limit };
 }
 
 export async function getDiscountDashboard() {
@@ -295,28 +317,66 @@ export async function getDiscountDashboard() {
     tierDiscounts: tier,
     moqDiscounts: moq,
     promotionalDiscounts: promotional,
-    recentlyUpdated,
+    recentlyUpdated: recentlyUpdated.map(formatDiscount),
   };
 }
 
 export async function createDiscount(input: DiscountInput) {
-  const data = await normalizeDiscountInput(input);
-  return prisma.discount.create({
-    data: data as Prisma.DiscountUncheckedCreateInput,
-    include: { tier: true, country: true, product: { select: { id: true, title: true, slug: true } }, collection: true, category: true },
+  const parsed = await normalizeDiscountInput(input);
+  const { _relations, ...rest } = parsed as any;
+  const created = await prisma.discount.create({
+    data: {
+      ...rest,
+      countries: _relations.countries.length > 0 ? { create: _relations.countries.map((countryId: string) => ({ countryId })) } : undefined,
+      products: _relations.products.length > 0 ? { create: _relations.products.map((productId: string) => ({ productId })) } : undefined,
+      collections: _relations.collections.length > 0 ? { create: _relations.collections.map((collectionId: string) => ({ collectionId })) } : undefined,
+      categories: _relations.categories.length > 0 ? { create: _relations.categories.map((categoryId: string) => ({ categoryId })) } : undefined,
+    } as any,
+    include: discountInclude(),
   });
+  return formatDiscount(created);
 }
 
 export async function updateDiscount(id: string, input: DiscountInput) {
-  const current = await prisma.discount.findUnique({ where: { id } });
-  if (!current) throw new AppError("Discount not found.", 404);
-  const merged = { ...current, ...input } as DiscountInput;
-  const data = await normalizeDiscountInput(merged, true);
-  return prisma.discount.update({
+  const current = await prisma.discount.findUnique({
     where: { id },
-    data: data as Prisma.DiscountUncheckedUpdateInput,
-    include: { tier: true, country: true, product: { select: { id: true, title: true, slug: true } }, collection: true, category: true },
+    include: discountInclude(),
   });
+  if (!current) throw new AppError("Discount not found.", 404);
+  const formattedCurrent = formatDiscount(current);
+  const merged = {
+    ...current,
+    ...input,
+    countryIds: input.countryIds !== undefined ? input.countryIds : formattedCurrent.countries.map((c: any) => c.id),
+    productIds: input.productIds !== undefined ? input.productIds : formattedCurrent.products.map((p: any) => p.id),
+    collectionIds: input.collectionIds !== undefined ? input.collectionIds : formattedCurrent.collections.map((c: any) => c.id),
+    categoryIds: input.categoryIds !== undefined ? input.categoryIds : formattedCurrent.categories.map((c: any) => c.id),
+  } as DiscountInput;
+  const parsed = await normalizeDiscountInput(merged, true);
+  const { _relations, ...rest } = parsed as any;
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await Promise.all([
+      tx.discountCountry.deleteMany({ where: { discountId: id } }),
+      tx.discountProduct.deleteMany({ where: { discountId: id } }),
+      tx.discountCollection.deleteMany({ where: { discountId: id } }),
+      tx.discountCategory.deleteMany({ where: { discountId: id } }),
+    ]);
+
+    return tx.discount.update({
+      where: { id },
+      data: {
+        ...rest,
+        countries: _relations.countries.length > 0 ? { create: _relations.countries.map((countryId: string) => ({ countryId })) } : undefined,
+        products: _relations.products.length > 0 ? { create: _relations.products.map((productId: string) => ({ productId })) } : undefined,
+        collections: _relations.collections.length > 0 ? { create: _relations.collections.map((collectionId: string) => ({ collectionId })) } : undefined,
+        categories: _relations.categories.length > 0 ? { create: _relations.categories.map((categoryId: string) => ({ categoryId })) } : undefined,
+      } as any,
+      include: discountInclude(),
+    });
+  });
+
+  return formatDiscount(updated);
 }
 
 export async function deleteDiscount(id: string) {
@@ -392,10 +452,10 @@ function rowToPayload(row: DiscountSpreadsheetRow) {
     minQuantity: row.minQuantity || null,
     discountPercent: row.discountPercent || null,
     fixedAmount: row.fixedAmount || null,
-    countryId: row.countryId || null,
-    productId: row.productId || null,
-    collectionId: row.collectionId || null,
-    categoryId: row.categoryId || null,
+    countryIds: row.countryId ? row.countryId.split(",").map(s => s.trim()).filter(Boolean) : [],
+    productIds: row.productId ? row.productId.split(",").map(s => s.trim()).filter(Boolean) : [],
+    collectionIds: row.collectionId ? row.collectionId.split(",").map(s => s.trim()).filter(Boolean) : [],
+    categoryIds: row.categoryId ? row.categoryId.split(",").map(s => s.trim()).filter(Boolean) : [],
     startDate: row.startDate || null,
     endDate: row.endDate || null,
   };
@@ -424,10 +484,10 @@ async function validateDiscountRows(rows: Record<string, string>[]) {
     }
     if (!["ACTIVE", "INACTIVE"].includes(row.status)) issues.push({ row: rowNumber, field: "status", message: "Status must be ACTIVE or INACTIVE." });
     if (row.tierId) relatedIds.tierIds.add(row.tierId);
-    if (row.countryId) relatedIds.countryIds.add(row.countryId);
-    if (row.productId) relatedIds.productIds.add(row.productId);
-    if (row.collectionId) relatedIds.collectionIds.add(row.collectionId);
-    if (row.categoryId) relatedIds.categoryIds.add(row.categoryId);
+    if (row.countryId) row.countryId.split(",").map(id => id.trim()).filter(Boolean).forEach(id => relatedIds.countryIds.add(id));
+    if (row.productId) row.productId.split(",").map(id => id.trim()).filter(Boolean).forEach(id => relatedIds.productIds.add(id));
+    if (row.collectionId) row.collectionId.split(",").map(id => id.trim()).filter(Boolean).forEach(id => relatedIds.collectionIds.add(id));
+    if (row.categoryId) row.categoryId.split(",").map(id => id.trim()).filter(Boolean).forEach(id => relatedIds.categoryIds.add(id));
 
     const duplicateKey = [row.name.toLowerCase(), row.type, row.tierId, row.countryId, row.productId, row.collectionId, row.categoryId, row.minQuantity, row.discountPercent, row.fixedAmount].join("|");
     const seenRow = seen.get(duplicateKey);
@@ -464,24 +524,32 @@ async function validateDiscountRows(rows: Record<string, string>[]) {
       else if (tier.status !== "ACTIVE") issues.push({ row: rowNumber, field: "tierId", message: "Tier is inactive." });
     }
     if (row.countryId) {
-      const country = countryById.get(row.countryId);
-      if (!country) issues.push({ row: rowNumber, field: "countryId", message: "Country not found." });
-      else if (country.status !== "ACTIVE") issues.push({ row: rowNumber, field: "countryId", message: "Country is inactive." });
+      for (const id of row.countryId.split(",").map(s => s.trim()).filter(Boolean)) {
+        const country = countryById.get(id);
+        if (!country) issues.push({ row: rowNumber, field: "countryId", message: `Country ${id} not found.` });
+        else if (country.status !== "ACTIVE") issues.push({ row: rowNumber, field: "countryId", message: `Country ${id} is inactive.` });
+      }
     }
     if (row.productId) {
-      const product = productById.get(row.productId);
-      if (!product) issues.push({ row: rowNumber, field: "productId", message: "Product not found." });
-      else if (product.status !== "ACTIVE") issues.push({ row: rowNumber, field: "productId", message: "Product is inactive." });
+      for (const id of row.productId.split(",").map(s => s.trim()).filter(Boolean)) {
+        const product = productById.get(id);
+        if (!product) issues.push({ row: rowNumber, field: "productId", message: `Product ${id} not found.` });
+        else if (product.status !== "ACTIVE") issues.push({ row: rowNumber, field: "productId", message: `Product ${id} is inactive.` });
+      }
     }
     if (row.categoryId) {
-      const category = categoryById.get(row.categoryId);
-      if (!category) issues.push({ row: rowNumber, field: "categoryId", message: "Category not found." });
-      else if (category.status !== "ACTIVE") issues.push({ row: rowNumber, field: "categoryId", message: "Category is inactive." });
+      for (const id of row.categoryId.split(",").map(s => s.trim()).filter(Boolean)) {
+        const category = categoryById.get(id);
+        if (!category) issues.push({ row: rowNumber, field: "categoryId", message: `Category ${id} not found.` });
+        else if (category.status !== "ACTIVE") issues.push({ row: rowNumber, field: "categoryId", message: `Category ${id} is inactive.` });
+      }
     }
     if (row.collectionId) {
-      const collection = collectionById.get(row.collectionId);
-      if (!collection) issues.push({ row: rowNumber, field: "collectionId", message: "Collection not found." });
-      else if (collection.status !== "ACTIVE") issues.push({ row: rowNumber, field: "collectionId", message: "Collection is inactive." });
+      for (const id of row.collectionId.split(",").map(s => s.trim()).filter(Boolean)) {
+        const collection = collectionById.get(id);
+        if (!collection) issues.push({ row: rowNumber, field: "collectionId", message: `Collection ${id} not found.` });
+        else if (collection.status !== "ACTIVE") issues.push({ row: rowNumber, field: "collectionId", message: `Collection ${id} is inactive.` });
+      }
     }
   }
 
@@ -507,10 +575,10 @@ export async function exportDiscountsSpreadsheet(query: DiscountListQuery & { id
       minQuantity: discount.minQuantity ?? "",
       discountPercent: discount.discountPercent ?? "",
       fixedAmount: discount.fixedAmount ?? "",
-      countryId: discount.countryId ?? "",
-      productId: discount.productId ?? "",
-      collectionId: discount.collectionId ?? "",
-      categoryId: discount.categoryId ?? "",
+      countryId: (discount as any).countries?.map((c: any) => c.id).join(",") ?? "",
+      productId: (discount as any).products?.map((p: any) => p.id).join(",") ?? "",
+      collectionId: (discount as any).collections?.map((c: any) => c.id).join(",") ?? "",
+      categoryId: (discount as any).categories?.map((c: any) => c.id).join(",") ?? "",
       startDate: discount.startDate ? discount.startDate.toISOString() : "",
       endDate: discount.endDate ? discount.endDate.toISOString() : "",
     })),
@@ -550,19 +618,44 @@ export async function importDiscountSpreadsheet(filePath: string) {
               name: row.name,
               type: payload.type,
               tierId: payload.tierId,
-              countryId: payload.countryId,
-              productId: payload.productId,
-              collectionId: payload.collectionId,
-              categoryId: payload.categoryId,
+              countries: payload.countryIds.length > 0 ? { some: { id: { in: payload.countryIds } } } : undefined,
+              products: payload.productIds.length > 0 ? { some: { id: { in: payload.productIds } } } : undefined,
+              collections: payload.collectionIds.length > 0 ? { some: { id: { in: payload.collectionIds } } } : undefined,
+              categories: payload.categoryIds.length > 0 ? { some: { id: { in: payload.categoryIds } } } : undefined,
               minQuantity: payload.minQuantity ? Number(payload.minQuantity) : null,
             },
           });
 
+      const parsedPayload = await normalizeDiscountInput(payload, existing !== null);
+      const { _relations, ...rest } = parsedPayload as any;
+
       if (existing) {
-        await tx.discount.update({ where: { id: existing.id }, data: await normalizeDiscountInput(payload, true) as Prisma.DiscountUncheckedUpdateInput });
+        await tx.discountCountry.deleteMany({ where: { discountId: existing.id } });
+        await tx.discountProduct.deleteMany({ where: { discountId: existing.id } });
+        await tx.discountCollection.deleteMany({ where: { discountId: existing.id } });
+        await tx.discountCategory.deleteMany({ where: { discountId: existing.id } });
+
+        await tx.discount.update({
+          where: { id: existing.id },
+          data: {
+            ...rest,
+            countries: _relations.countries.length > 0 ? { create: _relations.countries.map((countryId: string) => ({ countryId })) } : undefined,
+            products: _relations.products.length > 0 ? { create: _relations.products.map((productId: string) => ({ productId })) } : undefined,
+            collections: _relations.collections.length > 0 ? { create: _relations.collections.map((collectionId: string) => ({ collectionId })) } : undefined,
+            categories: _relations.categories.length > 0 ? { create: _relations.categories.map((categoryId: string) => ({ categoryId })) } : undefined,
+          } as any,
+        });
         summary.updated += 1;
       } else {
-        await tx.discount.create({ data: await normalizeDiscountInput(payload) as Prisma.DiscountUncheckedCreateInput });
+        await tx.discount.create({
+          data: {
+            ...rest,
+            countries: _relations.countries.length > 0 ? { create: _relations.countries.map((countryId: string) => ({ countryId })) } : undefined,
+            products: _relations.products.length > 0 ? { create: _relations.products.map((productId: string) => ({ productId })) } : undefined,
+            collections: _relations.collections.length > 0 ? { create: _relations.collections.map((collectionId: string) => ({ collectionId })) } : undefined,
+            categories: _relations.categories.length > 0 ? { create: _relations.categories.map((categoryId: string) => ({ categoryId })) } : undefined,
+          } as any,
+        });
         summary.created += 1;
       }
     }

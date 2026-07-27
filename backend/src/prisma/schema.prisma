@@ -57,7 +57,7 @@ model Category {
   seoDescription String?
   products       Product[]
   countries      CategoryCountry[]
-  discounts      Discount[]
+  discounts      DiscountCategory[]
 
   @@map("categories")
 }
@@ -74,7 +74,7 @@ model Collection {
   updatedAt   DateTime            @updatedAt
   products    CollectionProduct[]
   countries   CollectionCountry[]
-  discounts   Discount[]
+  discounts   DiscountCollection[]
 
   @@map("collections")
 }
@@ -117,7 +117,7 @@ model Product {
   variants          ProductVariant[]
   collections       CollectionProduct[]
   countries         ProductCountry[]
-  discounts         Discount[]
+  discounts         DiscountProduct[]
   moqPricing        MoqPricing[]
   tierPricing       TierPricing[]
   category          Category             @relation(fields: [categoryId], references: [id])
@@ -126,6 +126,7 @@ model Product {
   QuoteItem         QuoteItem[]
   taxRules          TaxRule[]            @relation("ProductTaxRules")
   reviews           ProductReview[]
+  wishlistItems     Wishlist[]
 
   @@map("products")
 }
@@ -295,7 +296,7 @@ model Country {
   defaultCustomers    Customer[]          @relation("CustomerDefaultCountry")
   customerAddresses   CustomerAddress[]   @relation("CustomerAddressCountry")
   productCountries    ProductCountry[]
-  discounts           Discount[]
+  discounts           DiscountCountry[]
   moqPricing          MoqPricing[]
   tierCountries       TierCountry[]
   attributeValues     AttributeValue[]    @relation("CountryAttributeValues")
@@ -308,6 +309,7 @@ model Country {
   tierPricing         TierPricing[]
   Quote               Quote[]
   variantCountries    VariantCountry[]
+  paymentMethods      PaymentMethodCountry[]
 
   @@map("countries")
 }
@@ -388,6 +390,7 @@ model Customer {
   addresses                  CustomerAddress[]
   orders                     Order[]
   quotes                     Quote[]
+  wishlistItems              Wishlist[]
 
   @@map("customers")
 }
@@ -520,6 +523,7 @@ model Quote {
   total    Decimal @db.Decimal(12, 2)
 
   status QuoteStatus @default(PENDING)
+  source String      @default("CUSTOMER")
 
   notes     String?
   expiresAt DateTime?
@@ -530,6 +534,9 @@ model Quote {
   updatedAt DateTime @updatedAt
 
   shippingCharge Decimal @default(0) @db.Decimal(12, 2)
+
+  shippingAddress Json?
+  billingAddress  Json?
 
   items         QuoteItem[]
   internalNotes QuoteNote[]
@@ -588,6 +595,7 @@ model Order {
   total            Decimal          @db.Decimal(12, 2)
   couponId         String?
   customerId       String?
+  paymentMethodId  String?
   paymentMethod    String?
   taxAmount        Decimal          @default(0) @db.Decimal(12, 2)
   taxType          String?
@@ -611,6 +619,7 @@ model Order {
   currency         Currency         @relation(fields: [currencyId], references: [id])
   quote            Quote?
   shippingZone     ShippingZone?    @relation(fields: [shippingZoneId], references: [id])
+  paymentMethodRef PaymentMethod?   @relation(fields: [paymentMethodId], references: [id])
 
   @@map("orders")
 }
@@ -1169,22 +1178,70 @@ model Discount {
   tierId          String?
   minQuantity     Int?
   discountPercent Decimal?         @db.Decimal(5, 2)
-  fixedAmount     Decimal?         @db.Decimal(12, 2)
-  countryId       String?
-  productId       String?
-  categoryId      String?
-  collectionId    String?
+  fixedAmount     Decimal?             @db.Decimal(12, 2)
+  countries       DiscountCountry[]
+  products        DiscountProduct[]
+  categories      DiscountCategory[]
+  collections     DiscountCollection[]
   startDate       DateTime?
   endDate         DateTime?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  tier            Tier?            @relation(fields: [tierId], references: [id])
-  country         Country?         @relation(fields: [countryId], references: [id])
-  product         Product?         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  category        Category?        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  collection      Collection?      @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  tier            Tier?                @relation(fields: [tierId], references: [id])
 
   @@map("discounts")
+}
+
+model DiscountCountry {
+  id         String   @id @default(cuid())
+  discountId String
+  countryId  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  discount   Discount @relation(fields: [discountId], references: [id], onDelete: Cascade)
+  country    Country  @relation(fields: [countryId], references: [id])
+
+  @@unique([discountId, countryId])
+  @@map("discount_countries")
+}
+
+model DiscountProduct {
+  id         String   @id @default(cuid())
+  discountId String
+  productId  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  discount   Discount @relation(fields: [discountId], references: [id], onDelete: Cascade)
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([discountId, productId])
+  @@map("discount_products")
+}
+
+model DiscountCategory {
+  id         String   @id @default(cuid())
+  discountId String
+  categoryId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  discount   Discount @relation(fields: [discountId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([discountId, categoryId])
+  @@map("discount_categories")
+}
+
+model DiscountCollection {
+  id           String     @id @default(cuid())
+  discountId   String
+  collectionId String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  discount     Discount   @relation(fields: [discountId], references: [id], onDelete: Cascade)
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@unique([discountId, collectionId])
+  @@map("discount_collections")
 }
 
 model TaxRule {
@@ -1356,3 +1413,76 @@ enum StorageProvider {
   LOCAL
   CLOUDINARY
 }
+
+enum PaymentMethodType {
+  OFFLINE
+  SDK_MODAL
+  HOSTED_REDIRECT
+  DIRECT_FORM
+}
+
+model PaymentMethod {
+  id              String                 @id @default(cuid())
+  code            String                 @unique
+  name            String
+  description     String?
+  iconUrl         String?
+  type            PaymentMethodType
+  sortOrder       Int                    @default(0)
+  isEnabled       Boolean                @default(true)
+  clientScriptUrl String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  countries       PaymentMethodCountry[]
+  configs         PaymentMethodConfig[]
+  orders          Order[]
+
+  @@map("payment_methods")
+}
+
+model PaymentMethodCountry {
+  id              String        @id @default(cuid())
+  paymentMethodId String
+  countryId       String
+  isEnabled       Boolean       @default(true)
+  isDefault       Boolean       @default(false)
+  minOrderAmount  Decimal?      @db.Decimal(12, 2)
+  maxOrderAmount  Decimal?      @db.Decimal(12, 2)
+  sortOrder       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Cascade)
+  country         Country       @relation(fields: [countryId], references: [id], onDelete: Cascade)
+
+  @@unique([paymentMethodId, countryId])
+  @@map("payment_method_countries")
+}
+
+model PaymentMethodConfig {
+  id              String        @id @default(cuid())
+  paymentMethodId String
+  environment     String        @default("PRODUCTION")
+  configKey       String
+  configValue     String
+  isPublic        Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Cascade)
+
+  @@unique([paymentMethodId, environment, configKey])
+  @@map("payment_method_configs")
+}
+
+model Wishlist {
+  id         String   @id @default(uuid())
+  customerId String
+  productId  String
+  createdAt  DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, productId])
+  @@map("wishlists")
+}
+

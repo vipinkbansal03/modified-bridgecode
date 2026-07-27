@@ -17,6 +17,7 @@ type OrderRow = {
   total: number | string;
   status: string;
   paymentStatus: string;
+  paymentMethod?: string | null;
   country?: { id: string; name: string; code: string } | null;
   currency?: { code: string; symbol?: string | null } | null;
   shippingProvider?: string | null;
@@ -40,6 +41,13 @@ function formatMoney(value: number | string, currency?: OrderRow["currency"]) {
 function formatDate(value?: string) {
   if (!value) return "-";
   return new Date(value).toLocaleDateString();
+}
+
+function formatPaymentMethod(value?: string | null) {
+  if (!value) return "-";
+  if (value === "PAY_ON_DELIVERY") return "Pay on Delivery (COD)";
+  if (value === "RAZORPAY") return "Razorpay";
+  return value;
 }
 
 export default function OrdersPage() {
@@ -67,6 +75,7 @@ export default function OrdersPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
   const [countryId, setCountryId] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -81,6 +90,7 @@ export default function OrdersPage() {
     limit,
     status: status || undefined,
     paymentStatus: paymentStatus || undefined,
+    paymentMethod: paymentMethod || undefined,
     search: debouncedSearch.trim() || undefined,
     countryId: countryId || undefined,
     dateFrom: dateFrom || undefined,
@@ -103,7 +113,7 @@ export default function OrdersPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, status, paymentStatus, countryId, dateFrom, dateTo, sortBy, sortDir, limit]);
+  }, [debouncedSearch, status, paymentStatus, paymentMethod, countryId, dateFrom, dateTo, sortBy, sortDir, limit]);
 
   const totalRevenue = useMemo(() => Number(analytics.data?.totals?.allTimeRevenue ?? 0), [analytics.data]);
 
@@ -112,6 +122,7 @@ export default function OrdersPage() {
     setDebouncedSearch("");
     setStatus("");
     setPaymentStatus("");
+    setPaymentMethod("");
     setCountryId("");
     setDateFrom("");
     setDateTo("");
@@ -144,7 +155,8 @@ export default function OrdersPage() {
     { key: "country", label: "Country", render: (row) => row.country?.code ?? "-" },
     { key: "items", label: "Items", render: (row) => row._count?.items ?? 0 },
     { key: "status", label: "Order Status", render: (row) => <StatusBadge status={row.status} /> },
-    { key: "paymentStatus", label: "Payment", render: (row) => <StatusBadge status={row.paymentStatus} /> },
+    { key: "paymentStatus", label: "Payment Status", render: (row) => <StatusBadge status={row.paymentStatus} /> },
+    { key: "paymentMethod", label: "Payment Mode", render: (row) => formatPaymentMethod(row.paymentMethod) },
     { key: "total", label: "Total", render: (row) => formatMoney(row.total, row.currency) },
     {
       key: "shippingProvider",
@@ -271,6 +283,19 @@ export default function OrdersPage() {
                     { value: "PAID", label: "Paid" },
                     { value: "FAILED", label: "Failed" },
                     { value: "REFUNDED", label: "Refunded" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Payment Mode"
+                  value={paymentMethod}
+                  onChange={(event) => {
+                    setPaymentMethod(event.target.value);
+                    setPage(1);
+                  }}
+                  options={[
+                    { value: "", label: "All payment modes" },
+                    { value: "PAY_ON_DELIVERY", label: "Pay on Delivery (COD)" },
+                    { value: "RAZORPAY", label: "Razorpay" },
                   ]}
                 />
                 <AdminSelect

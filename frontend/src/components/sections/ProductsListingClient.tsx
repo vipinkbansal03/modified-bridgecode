@@ -150,6 +150,7 @@ export function ProductsListingClient() {
               {products.map((p) => (
                 <ProductCard
                   key={p.slug}
+                  id={p.id}
                   image={p.thumbnail?.trim() || p.images.find((image) => image?.trim()) || null}
                   title={p.title}
                   slug={p.slug}

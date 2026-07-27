@@ -83,7 +83,7 @@ export function AdminMultiSearchableSelect({
   const isAllSelected =
     allowSelectAll &&
     (selectedValues.length === 0 ||
-      options.every((option) => selectedValues.includes(option.value)));
+      (options.length > 0 && options.every((option) => selectedValues.includes(option.value))));
 
   const filteredOptions = useMemo(() => {
     if (!showSearch || !searchQuery.trim()) return options;
@@ -210,9 +210,7 @@ export function AdminMultiSearchableSelect({
       return;
     }
 
-    let updatedValues = isAllSelected
-      ? options.map((option) => option.value)
-      : [...selectedValues];
+    let updatedValues = [...selectedValues];
 
     if (updatedValues.includes(nextValue)) {
       updatedValues = updatedValues.filter((value) => value !== nextValue);
@@ -220,9 +218,9 @@ export function AdminMultiSearchableSelect({
       updatedValues.push(nextValue);
     }
 
-    const everySelected = options.every((option) =>
-      updatedValues.includes(option.value),
-    );
+    const everySelected =
+      options.length > 0 &&
+      options.every((option) => updatedValues.includes(option.value));
 
     onValuesChange(everySelected ? [] : updatedValues);
   };
@@ -325,7 +323,7 @@ export function AdminMultiSearchableSelect({
                   const isSelected =
                     option.value === selectAllValue
                       ? isAllSelected
-                      : isAllSelected || selectedValues.includes(option.value);
+                      : selectedValues.includes(option.value);
 
                   return (
                     <button
@@ -338,21 +336,21 @@ export function AdminMultiSearchableSelect({
                       className={cn(
                         "flex w-full items-center px-3.5 py-2 text-left text-[13.5px] transition hover:bg-[#F7F7F7]",
                         isSelected
-                          ? "bg-red-50 text-[#E31E24]"
+                          ? "bg-[#F8F9FA] font-medium text-[#1A1A1A]"
                           : "text-[#1A1A1A]",
                       )}
                     >
                       <div className="flex items-center gap-2">
                         <div
                           className={cn(
-                            "flex h-4 w-4 items-center justify-center rounded border",
+                            "flex h-4 w-4 items-center justify-center rounded border transition-colors",
                             isSelected
                               ? "border-[#E31E24] bg-[#E31E24] text-white"
                               : "border-[#CFCFCF] bg-white",
                           )}
                         >
                           {isSelected && (
-                            <span className="text-[10px] leading-none">✓</span>
+                            <span className="text-[10px] font-bold leading-none">✓</span>
                           )}
                         </div>
 

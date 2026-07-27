@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Clock3, Eye, Filter, MessageSquareQuote, Pencil, Plus, Search, ShoppingCart, Trash2, X } from "lucide-react";
+import { Clock3, Eye, Filter, MessageSquareQuote, Pencil, Plus, Search, ShoppingCart, Trash2, UserCheck, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
@@ -20,8 +20,10 @@ type QuoteRow = {
   currency?: { code: string; symbol: string } | null;
   total: number | string;
   status: string;
+  source?: string;
   createdAt: string;
   updatedAt?: string;
+  internalNotes?: { id: string; note: string }[];
   _count?: { items?: number };
 };
 
@@ -127,6 +129,22 @@ export default function QuotesPage() {
       ),
     },
     { key: "country", label: "Country", render: (row) => row.country ? `${row.country.code} - ${row.country.name}` : "-" },
+    {
+      key: "source",
+      label: "Source",
+      render: (row) => {
+        const isAdminCreated = row.source === "ADMIN" || Boolean(row.internalNotes && row.internalNotes.length > 0);
+        return isAdminCreated ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2.5 py-1 text-[11px] font-semibold text-purple-700">
+            <UserCheck size={11} /> Admin Created
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
+            <ShoppingCart size={11} /> Customer RFQ
+          </span>
+        );
+      },
+    },
     { key: "items", label: "Items", render: (row) => row._count?.items ?? 0 },
     { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
     { key: "total", label: "Total", render: (row) => formatMoney(row.total, row.currency) },

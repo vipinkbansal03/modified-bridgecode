@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { ShoppingCart, User } from "lucide-react";
+import { ShoppingCart, User, Heart } from "lucide-react";
 import { HeaderSearch } from "@/components/ui/HeaderSearch";
 import { LocaleSwitcher } from "@/components/ui/LocaleSwitcher";
 import type { NavLink } from "@/types/common.types";
@@ -14,6 +14,7 @@ interface MobileMenuProps {
   ctaHref: string;
   isLoggedIn: boolean;
   cartCount: number;
+  wishlistCount?: number;
   onLinkClick: () => void;
   onCartClick: () => void;
 }
@@ -25,6 +26,7 @@ export function MobileMenu({
   ctaHref,
   isLoggedIn,
   cartCount,
+  wishlistCount = 0,
   onLinkClick,
   onCartClick,
 }: MobileMenuProps) {
@@ -66,14 +68,29 @@ export function MobileMenu({
             >
               {ctaLabel}
             </Link>
-            <div className="mt-6 grid grid-cols-2 gap-2 border-t border-line pt-3">
+            <div className="mt-6 grid grid-cols-3 gap-2 border-t border-line pt-3">
               <Link
                 href={isLoggedIn ? "/account" : "/login"}
                 onClick={onLinkClick}
                 className="flex h-12 items-center justify-center rounded-md border border-line text-ink"
                 aria-label="Account"
+                title="Account"
               >
-                <User size={17} />
+                <User size={18} />
+              </Link>
+              <Link
+                href="/wishlist"
+                onClick={onLinkClick}
+                className="relative flex h-12 items-center justify-center rounded-md border border-line text-ink"
+                aria-label="Wishlist"
+                title="Wishlist"
+              >
+                <Heart size={18} />
+                {wishlistCount > 0 && (
+                  <span className="absolute right-3 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-[#E31E24] text-[9px] font-bold text-white">
+                    {wishlistCount}
+                  </span>
+                )}
               </Link>
               <button
                 type="button"
@@ -83,10 +100,11 @@ export function MobileMenu({
                 }}
                 className="relative flex h-12 items-center justify-center rounded-md border border-line text-ink"
                 aria-label="Cart"
+                title="Cart"
               >
-                <ShoppingCart size={17} />
+                <ShoppingCart size={18} />
                 {cartCount > 0 && (
-                  <span className="absolute right-3 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-[#E31E24] text-[9px] font-bold text-white">
+                  <span className="absolute right-3 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-[#F08804] text-[9px] font-bold text-white">
                     {cartCount}
                   </span>
                 )}

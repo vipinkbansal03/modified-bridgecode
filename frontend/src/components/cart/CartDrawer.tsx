@@ -6,7 +6,14 @@ import { useCart } from "@/contexts/CartContext";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 
 function formatMoney(symbol: string, amount: number) {
-  return `${symbol}${Math.round(amount || 0).toLocaleString("en-IN")}`;
+  if (amount === null || amount === undefined || !Number.isFinite(amount)) return "";
+  const val = Number(amount);
+  const hasDecimals = Math.abs(val % 1) > 0.001;
+  const formatted = val.toLocaleString("en-US", {
+    minimumFractionDigits: hasDecimals ? 2 : 0,
+    maximumFractionDigits: 2,
+  });
+  return `${symbol}${formatted}`;
 }
 
 export function CartDrawer() {
@@ -159,12 +166,22 @@ export function CartDrawer() {
                           </p>
                         </>
                       ) : (
-                        <p className="text-[15px] font-semibold text-ink">
-                          {formatMoney(
-                            item.currencySymbol,
-                            item.unitPrice * item.quantity,
+                        <div>
+                          {item.basePrice && item.basePrice > item.unitPrice && (
+                            <p className="text-[11.5px] text-steel line-through">
+                              {formatMoney(
+                                item.currencySymbol,
+                                item.basePrice * item.quantity,
+                              )}
+                            </p>
                           )}
-                        </p>
+                          <p className="text-[15px] font-semibold text-ink">
+                            {formatMoney(
+                              item.currencySymbol,
+                              item.unitPrice * item.quantity,
+                            )}
+                          </p>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -185,6 +202,22 @@ export function CartDrawer() {
         </div>
 
         <div className="border-t border-line p-5">
+          {totals.roleDiscount > 0 && !hasUnavailableItems && (
+            <>
+              <div className="mb-2 flex items-center justify-between text-[13px]">
+                <span className="text-steel">Base Subtotal</span>
+                <span className="text-steel line-through">
+                  {formatMoney(totals.currencySymbol, totals.originalSubtotal)}
+                </span>
+              </div>
+              <div className="mb-2 flex items-center justify-between text-[13px]">
+                <span className="font-semibold text-[#2A6A40]">Customer Discount</span>
+                <span className="font-semibold text-[#2A6A40]">
+                  -{formatMoney(totals.currencySymbol, totals.roleDiscount)}
+                </span>
+              </div>
+            </>
+          )}
           <div className="mb-4 flex items-center justify-between text-[15px]">
             <span className="text-steel">{t("ui.cart.subtotal")}</span>
             <strong

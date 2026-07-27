@@ -14,6 +14,7 @@ import { VariantConfigurator } from "@/components/product/VariantConfigurator";
 import { BundleSection } from "@/components/sections/BundleSection";
 import { RecentlySeenSection } from "@/components/sections/RecentlySeenSection";
 import { ContactCTASection } from "@/components/sections/ContactCTASection";
+import { WishlistButton } from "@/components/product/WishlistButton";
 import { buildMetadata } from "@/lib/seo";
 import productsData from "@/data/products.json";
 import homeContent from "@/data/home.json";
@@ -79,8 +80,14 @@ async function fetchSlugsFromApi(): Promise<string[]> {
 }
 
 function formatMoney(symbol: string, amount: number | null | undefined) {
-  if (amount === null || amount === undefined) return "";
-  return `${symbol}${Math.round(amount).toLocaleString("en-IN")}`;
+  if (amount === null || amount === undefined || !Number.isFinite(amount)) return "";
+  const val = Number(amount);
+  const hasDecimals = Math.abs(val % 1) > 0.001;
+  const formatted = val.toLocaleString("en-US", {
+    minimumFractionDigits: hasDecimals ? 2 : 0,
+    maximumFractionDigits: 2,
+  });
+  return `${symbol}${formatted}`;
 }
 
 function getPublicPrice(apiProduct?: ApiProductDetail | null) {
@@ -184,9 +191,12 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
           <div className="mb-6 flex items-center justify-between border-b border-line pb-3">
             <h6 className="text-[14.5px] font-medium text-ink">{product.title}</h6>
-            <button aria-label="Share" className="text-steel hover:text-brand transition-colors">
-              <Share2 size={16} />
-            </button>
+            <div className="flex items-center gap-3">
+              {apiProduct?.id && <WishlistButton productId={apiProduct.id} />}
+              <button aria-label="Share" className="text-steel hover:text-brand transition-colors p-1">
+                <Share2 size={16} />
+              </button>
+            </div>
           </div>
 
           {/* Top Fold: Gallery Left, Header & Description Right */}

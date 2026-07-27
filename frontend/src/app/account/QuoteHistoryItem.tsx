@@ -1,7 +1,10 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
-import type { CustomerQuoteSummary } from "@/services/customerApi";
+import { useState } from "react";
+import { ChevronDown, CheckCircle, XCircle } from "lucide-react";
+import { acceptCustomerQuote, declineCustomerQuote, type CustomerQuoteSummary } from "@/services/customerApi";
+import { useToast } from "@/components/ui/ToastProvider";
+import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/utils/cn";
 
 interface QuoteHistoryItemProps {
@@ -32,16 +35,18 @@ function getStatusBadgeClass(status: string) {
   switch (status) {
     case "PENDING":
       return "border-yellow-300 bg-yellow-50 text-yellow-700";
-
+    case "REVIEWING":
+    case "SENT":
+      return "border-blue-300 bg-blue-50 text-blue-700";
+    case "ACCEPTED":
+      return "border-emerald-300 bg-emerald-50 text-emerald-700";
     case "CONVERTED":
       return "border-green-300 bg-green-50 text-green-700";
-
+    case "DECLINED":
     case "CANCELLED":
       return "border-red-300 bg-red-50 text-red-700";
-
     case "EXPIRED":
       return "border-gray-300 bg-gray-100 text-gray-700";
-
     default:
       return "border-line bg-grey text-steel";
   }
@@ -52,6 +57,40 @@ export default function QuoteHistoryItem({
   expanded,
   onToggle,
 }: QuoteHistoryItemProps) {
+  const { showToast } = useToast();
+  const qc = useQueryClient();
+  const [loading, setLoading] = useState(false);
+
+  const canAction = quote.status === "SENT" || quote.status === "REVIEWING" || quote.status === "PENDING";
+
+  async function handleAccept(e: React.MouseEvent) {
+    e.stopPropagation();
+    setLoading(true);
+    try {
+      await acceptCustomerQuote(quote.id);
+      showToast("Quote accepted successfully!");
+      qc.invalidateQueries({ queryKey: ["customer-quotes"] });
+    } catch {
+      showToast("Failed to accept quote.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDecline(e: React.MouseEvent) {
+    e.stopPropagation();
+    setLoading(true);
+    try {
+      await declineCustomerQuote(quote.id);
+      showToast("Quote declined.");
+      qc.invalidateQueries({ queryKey: ["customer-quotes"] });
+    } catch {
+      showToast("Failed to decline quote.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <article className="py-4 first:pt-0 last:pb-0">
       <button
@@ -130,6 +169,7 @@ export default function QuoteHistoryItem({
               </div>
             ))}
           </div>
+
           <div className="mt-4 space-y-2 border-t border-line pt-4 text-[13.5px]">
             <div className="flex justify-between">
               <span className="text-steel">Subtotal</span>
@@ -154,34 +194,73 @@ export default function QuoteHistoryItem({
 
             <div className="flex justify-between border-t border-line pt-2 text-[15px]">
               <span className="font-semibold text-ink">Total</span>
-
               <strong className="text-ink">{money(quote, quote.total)}</strong>
             </div>
           </div>
+
           {quote.notes && (
             <div className="mt-4 border-t border-line pt-4">
               <h4 className="text-sm font-semibold text-ink">Notes</h4>
-
               <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-steel">
                 {quote.notes}
               </p>
             </div>
           )}
+
+          {canAction && (
+            <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={handleAccept}
+                className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 transition-all"
+              >
+                <CheckCircle size={14} /> Accept Quote
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={handleDecline}
+                className="inline-flex items-center gap-1.5 rounded-full border border-red-300 bg-white px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 transition-all"
+              >
+                <XCircle size={14} /> Decline Quote
+              </button>
+            </div>
+          )}
+
+          {quote.status === "ACCEPTED" && (
+            <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
+              <p className="text-sm font-semibold text-emerald-700">
+                ✓ Quote Accepted
+              </p>
+              <p className="mt-0.5 text-xs text-emerald-600">
+                You have accepted this quote. Our team will generate your final order shortly.
+              </p>
+            </div>
+          )}
+
+          {quote.status === "DECLINED" && (
+            <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2">
+              <p className="text-sm font-semibold text-red-700">
+                ✕ Quote Declined
+              </p>
+            </div>
+          )}
+
           {quote.status === "CONVERTED" && (
             <div className="mt-4 rounded-md border border-green-200 bg-green-50 px-3 py-2">
               <p className="text-sm font-semibold text-green-700">
                 ✓ Converted to Order
               </p>
-
               <p className="mt-1 text-sm text-green-700">
                 This quote has already been converted into an order.
               </p>
             </div>
           )}
+
           {quote.expiresAt && (
             <div className="mt-4 border-t border-line pt-4">
               <h4 className="text-sm font-semibold text-ink">Valid Until</h4>
-
               <p className="mt-2 text-sm text-steel">
                 {formatDate(quote.expiresAt)}
               </p>

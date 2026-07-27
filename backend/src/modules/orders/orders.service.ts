@@ -56,6 +56,7 @@ export async function listOrders(query: {
   limit?: string;
   status?: string;
   paymentStatus?: string;
+  paymentMethod?: string;
   search?: string;
   countryId?: string;
   dateFrom?: string;
@@ -67,6 +68,7 @@ export async function listOrders(query: {
   const where: Prisma.OrderWhereInput = {};
   if (query.status) where.status = query.status as never;
   if (query.paymentStatus) where.paymentStatus = query.paymentStatus as never;
+  if (query.paymentMethod) where.paymentMethod = query.paymentMethod;
   if (query.countryId) where.countryId = query.countryId;
   if (query.search?.trim()) {
     const search = query.search.trim();

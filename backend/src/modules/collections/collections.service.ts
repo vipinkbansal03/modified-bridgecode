@@ -7,7 +7,7 @@ type CollectionInput = {
   name?: string;
   slug?: string;
   description?: string | null;
-  image?: string | null;
+  image?: string | null;  
   status?: Status;
   sortOrder?: number | string | null;
   productIds?: string[];
@@ -263,20 +263,20 @@ export async function updateCollectionCountries(collectionId: string, items: { c
 export async function listCollectionDiscounts(collectionId: string) {
   await getCollection(collectionId);
   return prisma.discount.findMany({
-    where: { collectionId },
+    where: { collections: { some: { id: collectionId } } },
     orderBy: { createdAt: "desc" },
-    include: { tier: true, country: true, collection: true },
+    include: { tier: true, countries: true, collections: true },
   });
 }
 
 export async function createCollectionDiscount(collectionId: string, input: Record<string, unknown>) {
   await getCollection(collectionId);
-  return DiscountsService.createDiscount({ ...input, collectionId, productId: null, categoryId: null } as never);
+  return DiscountsService.createDiscount({ ...input, collectionIds: [collectionId], productIds: [], categoryIds: [] } as never);
 }
 
 export async function deleteCollectionDiscount(collectionId: string, discountId: string) {
   await getCollection(collectionId);
-  const discount = await prisma.discount.findFirst({ where: { id: discountId, collectionId } });
+  const discount = await prisma.discount.findFirst({ where: { id: discountId, collections: { some: { id: collectionId } } } });
   if (!discount) throw new AppError("Collection discount not found.", 404);
   await prisma.discount.delete({ where: { id: discountId } });
 }

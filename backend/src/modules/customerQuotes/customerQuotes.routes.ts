@@ -8,5 +8,7 @@ router.use(protectCustomer);
 
 router.get("/", C.list);
 router.get("/:id", C.getOne);
+router.put("/:id/accept", C.accept);
+router.put("/:id/decline", C.decline);
 
 export default router;
