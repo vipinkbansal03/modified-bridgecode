@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useLayoutEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { ConfirmModal, useToast } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { useAdminRoles } from "@/hooks/admin/useAdminHooks";
@@ -35,6 +37,19 @@ interface Role {
 }
 
 export default function RolesPage() {
+  const { hasPermission, isLoading: authLoading } = useAdminAuth();
+  const router = useRouter();
+
+  useLayoutEffect(() => {
+    if (!authLoading && !hasPermission("roles.view")) {
+      router.replace("/admin/dashboard");
+    }
+  }, [authLoading, hasPermission, router]);
+
+  const canCreate = hasPermission("roles.create");
+  const canUpdate = hasPermission("roles.update");
+  const canDelete = hasPermission("roles.delete");
+
   const { showToast, ToastComponent } = useToast();
   const { data: rolesData = [], isLoading, refetch } = useAdminRoles();
   const roles = (rolesData || []) as Role[];
@@ -196,6 +211,10 @@ export default function RolesPage() {
     setExpandedGroups((prev) => ({ ...prev, [groupTitle]: !prev[groupTitle] }));
   };
 
+  if (authLoading || !hasPermission("roles.view")) {
+    return null;
+  }
+
   return (
     <AdminLayout title="Roles & Permissions" breadcrumb={[{ label: "Roles" }]}>
       <div className="space-y-6 p-4 md:p-6">
@@ -222,12 +241,14 @@ export default function RolesPage() {
               Configure system roles and define precise permissions for admins, managers, and staff members.
             </p>
           </div>
-          <button
-            onClick={openCreateModal}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs shrink-0"
-          >
-            <Plus size={16} /> Create New Role
-          </button>
+          {canCreate && (
+            <button
+              onClick={openCreateModal}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs shrink-0"
+            >
+              <Plus size={16} /> Create New Role
+            </button>
+          )}
         </div>
 
         {/* Stat Cards */}
@@ -315,24 +336,30 @@ export default function RolesPage() {
                     </div>
 
                     {/* Bottom Action Footer */}
-                    <div className="mt-5 pt-3 border-t border-[#F3F4F6] flex items-center justify-between">
-                      <button
-                        onClick={() => openEditModal(role)}
-                        className="inline-flex items-center gap-1.5 text-xs font-bold text-[#2563EB] hover:text-[#1D4ED8] hover:underline"
-                      >
-                        <Edit3 size={13} /> Edit Permissions
-                      </button>
+                    {(canUpdate || (canDelete && !isSuper)) && (
+                      <div className="mt-5 pt-3 border-t border-[#F3F4F6] flex items-center justify-between">
+                        {canUpdate ? (
+                          <button
+                            onClick={() => openEditModal(role)}
+                            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#2563EB] hover:text-[#1D4ED8] hover:underline"
+                          >
+                            <Edit3 size={13} /> Edit Permissions
+                          </button>
+                        ) : (
+                          <span />
+                        )}
 
-                      {!isSuper && (
-                        <button
-                          onClick={() => setDeletingId(role.id)}
-                          className="p-1.5 text-[#EF4444] hover:bg-[#FEE2E2] rounded-md transition-colors"
-                          title="Delete Role"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      )}
-                    </div>
+                        {canDelete && !isSuper && (
+                          <button
+                            onClick={() => setDeletingId(role.id)}
+                            className="p-1.5 text-[#EF4444] hover:bg-[#FEE2E2] rounded-md transition-colors"
+                            title="Delete Role"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}

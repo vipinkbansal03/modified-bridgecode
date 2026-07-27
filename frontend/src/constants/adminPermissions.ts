@@ -119,6 +119,10 @@ export const PERMISSION_METADATA: Record<string, PermissionMeta> = {
   "roles.create": { key: "roles.create", label: "Create System Roles", description: "Allows creating custom system roles", group: "Administration" },
   "roles.update": { key: "roles.update", label: "Edit System Roles", description: "Allows configuring custom roles and permissions", group: "Administration" },
   "roles.delete": { key: "roles.delete", label: "Delete System Roles", description: "Allows removing system roles", group: "Administration" },
+  "payments.view": { key: "payments.view", label: "View Payment Settings", description: "Allows viewing payment gateway credentials and configurations", group: "Administration" },
+  "payments.create": { key: "payments.create", label: "Create Payment Settings", description: "Allows configuring new payment gateways", group: "Administration" },
+  "payments.update": { key: "payments.update", label: "Edit Payment Settings", description: "Allows updating payment API credentials, modes, and keys", group: "Administration" },
+  "payments.delete": { key: "payments.delete", label: "Delete Payment Settings", description: "Allows deleting payment gateway configurations", group: "Administration" },
   "settings.view": { key: "settings.view", label: "View Store Settings", description: "Allows inspecting store configuration and details", group: "Administration" },
   "settings.create": { key: "settings.create", label: "Create Store Settings", description: "Allows configuring store branding rules", group: "Administration" },
   "settings.update": { key: "settings.update", label: "Edit Store Settings", description: "Allows updating store info, branding, and tax settings", group: "Administration" },
@@ -245,6 +249,10 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       "roles.create",
       "roles.update",
       "roles.delete",
+      "payments.view",
+      "payments.create",
+      "payments.update",
+      "payments.delete",
       "settings.view",
       "settings.create",
       "settings.update",
@@ -325,7 +333,8 @@ export const ROLE_PRESETS: RolePreset[] = [
       "products.view", "categories.view", "collections.view", "attributes.view",
       "inventory.view", "orders.view", "quotes.view", "contactSubmissions.view",
       "shipping.view", "coupons.view", "discounts.view", "pricing.view",
-      "cms.view", "media.view", "translations.view", "customers.view", "logs.view"
+      "cms.view", "media.view", "translations.view", "customers.view", "logs.view",
+      "payments.view", "settings.view"
     ],
   },
 ];

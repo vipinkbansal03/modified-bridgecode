@@ -1,8 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, StatusBadge, useToast, toastMessages } from "@/components/admin/AdminComponents";
 import { TranslationCoverageHub } from "@/components/admin/TranslationCoverageHub";
 import { cn } from "@/utils/cn";
@@ -66,6 +68,19 @@ function getPaginationItems(currentPage: number, totalPages: number) {
 }
 
 export default function TranslationsPage() {
+  const { hasPermission, isLoading: authLoading } = useAdminAuth();
+  const router = useRouter();
+
+  useLayoutEffect(() => {
+    if (!authLoading && !hasPermission("translations.view")) {
+      router.replace("/admin/dashboard");
+    }
+  }, [authLoading, hasPermission, router]);
+
+  const canCreate = hasPermission("translations.create");
+  const canUpdate = hasPermission("translations.update");
+  const canDelete = hasPermission("translations.delete");
+
   const [activeTab, setActiveTab] = useState<"hub" | "manage">("hub");
   const [showLangForm, setShowLangForm] = useState(false);
   const [langName, setLangName] = useState("");
@@ -235,6 +250,10 @@ export default function TranslationsPage() {
     setSelectedReviewIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   };
 
+  if (authLoading || !hasPermission("translations.view")) {
+    return null;
+  }
+
   return (
     <AdminLayout title="Translations" breadcrumb={[{ label: "Translations" }]}>
       <div className="mb-5 flex w-full rounded-lg border border-[#E6E6E6] bg-white p-1 sm:inline-flex sm:w-auto">
@@ -261,7 +280,7 @@ export default function TranslationsPage() {
       </div>
 
       {activeTab === "hub" ? (
-        <TranslationCoverageHub languages={languages} />
+        <TranslationCoverageHub languages={languages} canUpdate={canUpdate} canDelete={canDelete} canCreate={canCreate} />
       ) : (
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-5">

@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   Globe, Search, BarChart2, Megaphone, Share2, ShieldCheck, Code2, Cookie, MessageCircle, Mail,
   CheckCircle2, AlertCircle, Eye, EyeOff, Save, RefreshCw, Lock, Upload, Plus, Trash2, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminTextarea, AdminSelect, useToast } from "@/components/admin/AdminComponents";
 import { adminApi } from "@/services/adminApi";
 import { cn } from "@/utils/cn";
@@ -237,6 +239,17 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
+  const { hasPermission, isLoading: authLoading } = useAdminAuth();
+  const router = useRouter();
+
+  useLayoutEffect(() => {
+    if (!authLoading && !hasPermission("settings.view")) {
+      router.replace("/admin/dashboard");
+    }
+  }, [authLoading, hasPermission, router]);
+
+  const canUpdate = hasPermission("settings.update");
+
   const [activeTab, setActiveTab] = useState("general");
   const [settings, setSettings] = useState<SettingMap>({});
   const [loginSlides, setLoginSlides] = useState<LoginSlide[]>(DEFAULT_LOGIN_SLIDES);
@@ -249,6 +262,7 @@ export default function SettingsPage() {
   const { showToast, ToastComponent } = useToast();
 
   const loadSettings = useCallback(async () => {
+    if (authLoading || !hasPermission("settings.view")) return;
     setLoading(true);
     try {
       const r = await adminApi.get("/settings");
@@ -433,15 +447,21 @@ export default function SettingsPage() {
           <div className="sticky -top-6 z-20 mb-5 flex items-center justify-between rounded-b-xl border border-t-0 border-[#E6E6E6] bg-white/95 px-4 py-3 shadow-[0_14px_35px_rgba(227,30,36,0.10)] backdrop-blur before:absolute before:left-0 before:top-0 before:h-[3px] before:w-full before:bg-[#E31E24] relative">
             <div>
               <h2 className="text-[15px] font-semibold text-[#1A1A1A]">{TABS.find((t) => t.id === activeTab)?.label}</h2>
-              <p className="mt-0.5 text-[11.5px] text-[#8B8B8B]">Changes are not applied until you save.</p>
+              {canUpdate ? (
+                <p className="mt-0.5 text-[11.5px] text-[#8B8B8B]">Changes are not applied until you save.</p>
+              ) : (
+                <p className="mt-0.5 text-[11.5px] text-amber-600 font-medium">Read-only mode. You do not have permissions to edit store settings.</p>
+              )}
             </div>
-            <button onClick={handleSave} disabled={saving}
-              className="flex items-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white shadow-[0_8px_20px_rgba(227,30,36,0.28)] transition-colors hover:bg-[#B5151B] disabled:opacity-50">
-              <Save size={13} />{saving ? "Saving…" : "Save Settings"}
-            </button>
+            {canUpdate && (
+              <button onClick={handleSave} disabled={saving}
+                className="flex items-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white shadow-[0_8px_20px_rgba(227,30,36,0.28)] transition-colors hover:bg-[#B5151B] disabled:opacity-50">
+                <Save size={13} />{saving ? "Saving…" : "Save Settings"}
+              </button>
+            )}
           </div>
 
-          <div className="rounded-xl border border-[#E6E6E6] bg-white p-6">
+          <fieldset disabled={!canUpdate} className="rounded-xl border border-[#E6E6E6] bg-white p-6 disabled:opacity-90">
 
             {/* ── General ── */}
             {activeTab === "general" && (
@@ -882,7 +902,7 @@ export default function SettingsPage() {
               </div>
             )}
 
-          </div>
+          </fieldset>
         </div>
       </div>
     </AdminLayout>

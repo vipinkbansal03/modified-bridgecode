@@ -1,9 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useState, useLayoutEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { Modal } from "@/components/ui/Modal";
 import { DataTable, Column, StatusBadge, AdminInput, AdminSelect, ConfirmModal, useToast } from "@/components/admin/AdminComponents";
 import { useAdminUsers, useAdminRoles } from "@/hooks/admin/useAdminHooks";
@@ -11,6 +13,19 @@ import { adminApi } from "@/services/adminApi";
 import { Plus, X, Trash2, Edit2 } from "lucide-react";
 interface User { id: string; name: string; email: string; roleId: string; role: { name: string }; status: string; lastLoginAt: string }
 export default function UsersPage() {
+  const { hasPermission, isLoading: authLoading } = useAdminAuth();
+  const router = useRouter();
+
+  useLayoutEffect(() => {
+    if (!authLoading && !hasPermission("users.view")) {
+      router.replace("/admin/dashboard");
+    }
+  }, [authLoading, hasPermission, router]);
+
+  const canCreate = hasPermission("users.create");
+  const canUpdate = hasPermission("users.update");
+  const canDelete = hasPermission("users.delete");
+
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -75,63 +90,81 @@ export default function UsersPage() {
       key: "status",
       label: "Status",
       render: (r) => (
-        <button
-          onClick={async () => {
-            const nextStatus = r.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-            try {
-              await adminApi.put(`/users/${r.id}`, { status: nextStatus });
-              showToast(`Status updated to ${nextStatus.toLowerCase()}.`);
-              refetch();
-            } catch {
-              showToast("Failed to update status.", "error");
-            }
-          }}
-          className="cursor-pointer hover:opacity-85 transition-opacity focus:outline-hidden"
-          title="Click to toggle status"
-        >
+        canUpdate ? (
+          <button
+            onClick={async () => {
+              const nextStatus = r.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+              try {
+                await adminApi.put(`/users/${r.id}`, { status: nextStatus });
+                showToast(`Status updated to ${nextStatus.toLowerCase()}.`);
+                refetch();
+              } catch {
+                showToast("Failed to update status.", "error");
+              }
+            }}
+            className="cursor-pointer hover:opacity-85 transition-opacity focus:outline-hidden"
+            title="Click to toggle status"
+          >
+            <StatusBadge status={r.status} />
+          </button>
+        ) : (
           <StatusBadge status={r.status} />
-        </button>
+        )
       ),
     },
     { key: "lastLoginAt", label: "Last Login", render: (r) => r.lastLoginAt ? new Date(r.lastLoginAt).toLocaleDateString() : "Never" },
-    {
-      key: "actions",
-      label: "Actions",
-      width: "100px",
-      render: (r) => (
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => {
-              setEditingUser(r);
-              setShowForm(true);
-            }}
-            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-            title="Edit user"
-          >
-            <Edit2 size={13} />
-          </button>
-          <button
-            onClick={() => setDeleting(r.id)}
-            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"
-            title="Delete user"
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
-      ),
-    },
+    ...(canUpdate || canDelete
+      ? [
+          {
+            key: "actions",
+            label: "Actions",
+            width: "100px",
+            render: (r: User) => (
+              <div className="flex items-center gap-1.5">
+                {canUpdate && (
+                  <button
+                    onClick={() => {
+                      setEditingUser(r);
+                      setShowForm(true);
+                    }}
+                    className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+                    title="Edit user"
+                  >
+                    <Edit2 size={13} />
+                  </button>
+                )}
+                {canDelete && (
+                  <button
+                    onClick={() => setDeleting(r.id)}
+                    className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"
+                    title="Delete user"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            ),
+          },
+        ]
+      : []),
   ];
+  if (authLoading || !hasPermission("users.view")) {
+    return null;
+  }
+
   return (
     <AdminLayout title="Users & Customers" breadcrumb={[{ label: "Users" }]}>
       <div className="space-y-5">
         {/* Navigation Tabs */}
         <div className="flex border-b border-[#E6E6E6] mb-5">
-          <Link
-            href="/admin/customers"
-            className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-transparent text-[#6B7280] hover:text-[#111827]"
-          >
-            Customers
-          </Link>
+          {hasPermission("customers.view") && (
+            <Link
+              href="/admin/customers"
+              className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-transparent text-[#6B7280] hover:text-[#111827]"
+            >
+              Customers
+            </Link>
+          )}
           <Link
             href="/admin/users"
             className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-[#E31E24] text-[#E31E24]"
@@ -139,14 +172,16 @@ export default function UsersPage() {
             Staff (Users)
           </Link>
         </div>
-        <div className="flex justify-end mb-5">
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-          >
-            <Plus size={14} /> New User
-          </button>
-        </div>
+        {canCreate && (
+          <div className="flex justify-end mb-5">
+            <button
+              onClick={() => setShowForm(true)}
+              className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
+            >
+              <Plus size={14} /> New User
+            </button>
+          </div>
+        )}
 
         <Modal open={showForm} onClose={handleCloseForm}>
           <form onSubmit={formik.handleSubmit} className="flex flex-col max-h-[90vh] w-full max-w-2xl bg-white rounded-xl shadow-xl overflow-hidden">

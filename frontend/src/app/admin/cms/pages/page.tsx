@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Edit2, Eye, Plus, RotateCcw, Save, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, AdminTextarea, ConfirmModal, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import {
   useAdminCmsPage,
@@ -404,6 +405,10 @@ function SectionContentEditor({
   onDeleteSection: () => void;
   onSaved: () => void;
 }) {
+  const { hasPermission } = useAdminAuth();
+  const canUpdate = hasPermission("cms.update");
+  const canDelete = hasPermission("cms.delete");
+
   const { showToast } = useToast();
   const updateSection = useUpdateCmsSection(pageId);
   const updateBlock = useUpdateCmsBlock(pageId);
@@ -655,14 +660,16 @@ function SectionContentEditor({
           <h3 className="text-[16px] font-semibold uppercase tracking-wide text-[#1A1A1A]">{section.title || section.sectionKey}</h3>
           <p className="mt-1 text-[12px] text-[#9A9A9A]">{section.sectionKey}</p>
         </div>
-        <button
-          type="button"
-          onClick={onDeleteSection}
-          className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[12px] font-medium text-red-500 hover:bg-red-50"
-        >
-          <Trash2 size={13} />
-          Delete Section
-        </button>
+        {canDelete && (
+          <button
+            type="button"
+            onClick={onDeleteSection}
+            className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[12px] font-medium text-red-500 hover:bg-red-50"
+          >
+            <Trash2 size={13} />
+            Delete Section
+          </button>
+        )}
       </div>
 
       <div className="space-y-6">
@@ -670,6 +677,7 @@ function SectionContentEditor({
           label={isHero ? "TITLE TOP" : "SECTION TITLE"}
           value={form.title}
           onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
+          disabled={!canUpdate}
         />
 
         {isHero && (
@@ -677,6 +685,7 @@ function SectionContentEditor({
             label="TITLE BOTTOM"
             value={form.heroTitleBottom}
             onChange={(e) => setForm((prev) => ({ ...prev, heroTitleBottom: e.target.value }))}
+            disabled={!canUpdate}
           />
         )}
 
@@ -684,12 +693,14 @@ function SectionContentEditor({
           label="SUBTITLE"
           value={form.subtitle}
           onChange={(e) => setForm((prev) => ({ ...prev, subtitle: e.target.value }))}
+          disabled={!canUpdate}
         />
         <AdminTextarea
           label="DESCRIPTION"
           rows={5}
           value={form.description}
           onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+          disabled={!canUpdate}
         />
 
         {isHero && (
@@ -698,21 +709,25 @@ function SectionContentEditor({
               label="BUTTON TEXT"
               value={form.heroButtonText}
               onChange={(e) => setForm((prev) => ({ ...prev, heroButtonText: e.target.value }))}
+              disabled={!canUpdate}
             />
             <AdminInput
               label="BUTTON LINK"
               value={form.heroButtonLink}
               onChange={(e) => setForm((prev) => ({ ...prev, heroButtonLink: e.target.value }))}
+              disabled={!canUpdate}
             />
             <AdminInput
               label="SECONDARY BUTTON TEXT"
               value={form.heroSecondaryButtonText}
               onChange={(e) => setForm((prev) => ({ ...prev, heroSecondaryButtonText: e.target.value }))}
+              disabled={!canUpdate}
             />
             <AdminInput
               label="SECONDARY BUTTON LINK"
               value={form.heroSecondaryButtonLink}
               onChange={(e) => setForm((prev) => ({ ...prev, heroSecondaryButtonLink: e.target.value }))}
+              disabled={!canUpdate}
             />
 
             <div className="space-y-3">
@@ -729,15 +744,17 @@ function SectionContentEditor({
                     <p className="text-[12px] text-[#9A9A9A]">Open Media Library to reuse existing assets or upload a new file</p>
                   </div>
                 )}
-                <div className="mt-4 flex justify-center">
-                  <label className={cn("inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-2 text-[12px] font-medium text-white", uploadingImage ? "bg-gray-400" : "bg-[#E31E24] hover:bg-[#B5151B]")}>
-                    <Upload size={13} />
-                    {uploadingImage ? "Uploading..." : form.heroImage ? "Change Image" : "Upload Image"}
-                    <input type="file" accept="image/*" className="hidden" onChange={handleHeroImageUpload} disabled={uploadingImage} />
-                  </label>
-                </div>
+                {canUpdate && (
+                  <div className="mt-4 flex justify-center">
+                    <label className={cn("inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-2 text-[12px] font-medium text-white", uploadingImage ? "bg-gray-400" : "bg-[#E31E24] hover:bg-[#B5151B]")}>
+                      <Upload size={13} />
+                      {uploadingImage ? "Uploading..." : form.heroImage ? "Change Image" : "Upload Image"}
+                      <input type="file" accept="image/*" className="hidden" onChange={handleHeroImageUpload} disabled={uploadingImage} />
+                    </label>
+                  </div>
+                )}
               </div>
-              <AdminInput label="" placeholder="Or paste an image URL..." value={form.heroImage} onChange={(e) => setForm((prev) => ({ ...prev, heroImage: e.target.value }))} />
+              <AdminInput label="" placeholder="Or paste an image URL..." value={form.heroImage} onChange={(e) => setForm((prev) => ({ ...prev, heroImage: e.target.value }))} disabled={!canUpdate} />
             </div>
           </>
         )}
@@ -747,13 +764,15 @@ function SectionContentEditor({
             <h4 className="text-[14px] font-semibold uppercase tracking-wide text-[#1A1A1A]">
               {isHero ? "HERO IMAGES" : "SECTION ITEMS"}
             </h4>
-            <button
-              type="button"
-              onClick={addBlockItem}
-              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F8F8F8]"
-            >
-              ADD ITEM
-            </button>
+            {canUpdate && (
+              <button
+                type="button"
+                onClick={addBlockItem}
+                className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F8F8F8]"
+              >
+                ADD ITEM
+              </button>
+            )}
           </div>
 
           {blockForms.length === 0 ? (
@@ -769,46 +788,50 @@ function SectionContentEditor({
                       <p className="text-[12px] text-[#9A9A9A]">Item {index + 1}</p>
                       <p className="mt-1 text-[13px] font-semibold uppercase tracking-wide text-[#1A1A1A]">{block.blockType}</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => removeBlockItem(index)}
-                      className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F8F8F8]"
-                    >
-                      REMOVE
-                    </button>
+                    {canUpdate && (
+                      <button
+                        type="button"
+                        onClick={() => removeBlockItem(index)}
+                        className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F8F8F8]"
+                      >
+                        REMOVE
+                      </button>
+                    )}
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <AdminInput label="TITLE" value={block.title} onChange={(e) => updateBlockForm(index, "title", e.target.value)} />
-                    <AdminInput label="SUBTITLE" value={block.subtitle} onChange={(e) => updateBlockForm(index, "subtitle", e.target.value)} />
+                    <AdminInput label="TITLE" value={block.title} onChange={(e) => updateBlockForm(index, "title", e.target.value)} disabled={!canUpdate} />
+                    <AdminInput label="SUBTITLE" value={block.subtitle} onChange={(e) => updateBlockForm(index, "subtitle", e.target.value)} disabled={!canUpdate} />
                     <div className="md:col-span-2">
-                      <AdminTextarea label="DESCRIPTION" rows={4} value={block.description} onChange={(e) => updateBlockForm(index, "description", e.target.value)} />
+                      <AdminTextarea label="DESCRIPTION" rows={4} value={block.description} onChange={(e) => updateBlockForm(index, "description", e.target.value)} disabled={!canUpdate} />
                     </div>
-                    <AdminInput label="BUTTON TEXT" value={block.linkLabel} onChange={(e) => updateBlockForm(index, "linkLabel", e.target.value)} />
-                    <AdminInput label="BUTTON LINK" value={block.linkUrl} onChange={(e) => updateBlockForm(index, "linkUrl", e.target.value)} />
-                    <AdminInput label="ICON" value={block.icon} onChange={(e) => updateBlockForm(index, "icon", e.target.value)} />
+                    <AdminInput label="BUTTON TEXT" value={block.linkLabel} onChange={(e) => updateBlockForm(index, "linkLabel", e.target.value)} disabled={!canUpdate} />
+                    <AdminInput label="BUTTON LINK" value={block.linkUrl} onChange={(e) => updateBlockForm(index, "linkUrl", e.target.value)} disabled={!canUpdate} />
+                    <AdminInput label="ICON" value={block.icon} onChange={(e) => updateBlockForm(index, "icon", e.target.value)} disabled={!canUpdate} />
                     <div className="md:col-span-2 space-y-3">
                       {block.image ? (
                         <img src={block.image} alt={block.title || `Item ${index + 1}`} className="h-44 w-full max-w-[340px] rounded-lg object-cover border border-[#E6E6E6]" />
                       ) : null}
-                      <div className="flex flex-wrap items-center gap-2">
-                        <label className={cn("inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-2 text-[12px] font-medium text-white", uploadingBlockIndex === index ? "bg-gray-400" : "bg-[#E31E24] hover:bg-[#B5151B]")}>
-                          <Upload size={13} />
-                          {uploadingBlockIndex === index ? "Uploading..." : block.image ? "Change Image" : "Upload Image"}
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleBlockImageUpload(index, e)} disabled={uploadingBlockIndex === index} />
-                        </label>
-                        {block.image && (
-                          <button
-                            type="button"
-                            onClick={() => updateBlockForm(index, "image", "")}
-                            className="inline-flex items-center gap-1 rounded-md border border-[#E6E6E6] px-3 py-2 text-[12px] font-medium text-[#6B6B6B] hover:bg-[#F8F8F8]"
-                          >
-                            <X size={13} />
-                            Remove Image
-                          </button>
-                        )}
-                      </div>
-                      <AdminInput label="IMAGE URL" value={block.image} onChange={(e) => updateBlockForm(index, "image", e.target.value)} />
+                      {canUpdate && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className={cn("inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-2 text-[12px] font-medium text-white", uploadingBlockIndex === index ? "bg-gray-400" : "bg-[#E31E24] hover:bg-[#B5151B]")}>
+                            <Upload size={13} />
+                            {uploadingBlockIndex === index ? "Uploading..." : block.image ? "Change Image" : "Upload Image"}
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleBlockImageUpload(index, e)} disabled={uploadingBlockIndex === index} />
+                          </label>
+                          {block.image && (
+                            <button
+                              type="button"
+                              onClick={() => updateBlockForm(index, "image", "")}
+                              className="inline-flex items-center gap-1 rounded-md border border-[#E6E6E6] px-3 py-2 text-[12px] font-medium text-[#6B6B6B] hover:bg-[#F8F8F8]"
+                            >
+                              <X size={13} />
+                              Remove Image
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      <AdminInput label="IMAGE URL" value={block.image} onChange={(e) => updateBlockForm(index, "image", e.target.value)} disabled={!canUpdate} />
                     </div>
                   </div>
                 </div>
@@ -817,23 +840,30 @@ function SectionContentEditor({
           )}
         </div>
 
-        <div className="flex justify-end pt-2">
-          <button
-            type="button"
-            onClick={saveSection}
-            disabled={saving || updateSection.isPending || updateBlock.isPending || createBlock.isPending}
-            className="inline-flex items-center gap-1.5 rounded-md bg-[#E31E24] px-5 py-2.5 text-[13px] font-medium text-white hover:bg-[#B5151B] disabled:opacity-50"
-          >
-            <Save size={13} />
-            {saving ? "Saving..." : "Save Section"}
-          </button>
-        </div>
+        {canUpdate && (
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              onClick={saveSection}
+              disabled={saving || updateSection.isPending || updateBlock.isPending || createBlock.isPending}
+              className="inline-flex items-center gap-1.5 rounded-md bg-[#E31E24] px-5 py-2.5 text-[13px] font-medium text-white hover:bg-[#B5151B] disabled:opacity-50"
+            >
+              <Save size={13} />
+              {saving ? "Saving..." : "Save Section"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 function CmsPagesPageContent() {
+  const { hasPermission } = useAdminAuth();
+  const canCreate = hasPermission("cms.create");
+  const canUpdate = hasPermission("cms.update");
+  const canDelete = hasPermission("cms.delete");
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const { showToast } = useToast();
@@ -1052,9 +1082,11 @@ function CmsPagesPageContent() {
     <AdminLayout title="CMS Pages" breadcrumb={[{ label: "Content" }, { label: "Pages" }]}>
       <div className="mb-5 flex items-center justify-between">
         <p className="text-sm text-gray-500">{pages.length} page{pages.length !== 1 ? "s" : ""}</p>
-        <Link href="/admin/cms/pages/create" className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90">
-          <Plus size={16} /> New Page
-        </Link>
+        {canCreate && (
+          <Link href="/admin/cms/pages/create" className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90">
+            <Plus size={16} /> New Page
+          </Link>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-xl border border-[#E6E6E6] bg-white">
@@ -1144,18 +1176,22 @@ function CmsPagesPageContent() {
                     <Eye size={13} />
                     View Page
                   </a>
-                  <Link href={`/admin/cms/pages/${selectedPage.id}`} className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[12px] font-medium text-[#6B6B6B] hover:bg-white">
-                    <Edit2 size={13} />
-                    Open Old Editor
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => setDeletePageId(selectedPage.id)}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[12px] font-medium text-red-500 hover:bg-red-50"
-                  >
-                    <Trash2 size={13} />
-                    Delete Page
-                  </button>
+                  {canUpdate && (
+                    <Link href={`/admin/cms/pages/${selectedPage.id}`} className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[12px] font-medium text-[#6B6B6B] hover:bg-white">
+                      <Edit2 size={13} />
+                      Open Old Editor
+                    </Link>
+                  )}
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={() => setDeletePageId(selectedPage.id)}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[12px] font-medium text-red-500 hover:bg-red-50"
+                    >
+                      <Trash2 size={13} />
+                      Delete Page
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1211,7 +1247,7 @@ function CmsPagesPageContent() {
                     <h3 className="text-[14px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Core SEO</h3>
                     <div className="mt-4 space-y-5 border-t border-[#E6E6E6] pt-4">
                       <div>
-                        <AdminInput label="META TITLE" maxLength={120} value={seoForm.seoTitle} onChange={(e) => setSeoForm((prev) => ({ ...prev, seoTitle: e.target.value }))} />
+                        <AdminInput label="META TITLE" maxLength={120} value={seoForm.seoTitle} onChange={(e) => setSeoForm((prev) => ({ ...prev, seoTitle: e.target.value }))} disabled={!canUpdate} />
                         <div className="mt-2 flex justify-between text-[12px] text-[#9A9A9A]">
                           <span>Ideal: 50-60 characters. Shown as the blue link in Google results.</span>
                           <span>{seoForm.seoTitle.length} / 120</span>
@@ -1219,7 +1255,7 @@ function CmsPagesPageContent() {
                       </div>
 
                       <div>
-                        <AdminTextarea label="META DESCRIPTION" rows={5} maxLength={320} value={seoForm.seoDescription} onChange={(e) => setSeoForm((prev) => ({ ...prev, seoDescription: e.target.value }))} />
+                        <AdminTextarea label="META DESCRIPTION" rows={5} maxLength={320} value={seoForm.seoDescription} onChange={(e) => setSeoForm((prev) => ({ ...prev, seoDescription: e.target.value }))} disabled={!canUpdate} />
                         <div className="mt-2 flex justify-between text-[12px] text-[#9A9A9A]">
                           <span>Ideal: 140-160 characters.</span>
                           <span className={seoForm.seoDescription.length > 160 ? "text-[#C53030]" : ""}>{seoForm.seoDescription.length} / 320</span>
@@ -1228,7 +1264,7 @@ function CmsPagesPageContent() {
 
                       <div className="grid gap-4 md:grid-cols-2">
                         <div>
-                          <AdminInput label="META KEYWORDS" maxLength={500} placeholder="keyword1, keyword2, keyword3" value={seoForm.seoKeywords} onChange={(e) => setSeoForm((prev) => ({ ...prev, seoKeywords: e.target.value }))} />
+                          <AdminInput label="META KEYWORDS" maxLength={500} placeholder="keyword1, keyword2, keyword3" value={seoForm.seoKeywords} onChange={(e) => setSeoForm((prev) => ({ ...prev, seoKeywords: e.target.value }))} disabled={!canUpdate} />
                           <div className="mt-2 text-right text-[12px] text-[#9A9A9A]">{seoForm.seoKeywords.length} / 500</div>
                         </div>
                         <AdminSelect
@@ -1241,11 +1277,12 @@ function CmsPagesPageContent() {
                             { value: "index,nofollow", label: "Index, No Follow" },
                             { value: "noindex,nofollow", label: "No Index, No Follow" },
                           ]}
+                          disabled={!canUpdate}
                         />
                       </div>
 
                       <div>
-                        <AdminInput label="CANONICAL URL" value={seoForm.canonicalUrl} onChange={(e) => setSeoForm((prev) => ({ ...prev, canonicalUrl: e.target.value }))} />
+                        <AdminInput label="CANONICAL URL" value={seoForm.canonicalUrl} onChange={(e) => setSeoForm((prev) => ({ ...prev, canonicalUrl: e.target.value }))} disabled={!canUpdate} />
                         <p className="mt-2 text-[12px] text-[#9A9A9A]">Leave blank to use the page&apos;s default URL.</p>
                       </div>
 
@@ -1254,18 +1291,20 @@ function CmsPagesPageContent() {
                         {seoForm.favicon ? (
                           <img src={seoForm.favicon} alt="Favicon" className="h-28 w-28 rounded-lg border border-[#E6E6E6] object-contain bg-white" />
                         ) : null}
-                        <div className="rounded-xl border border-dashed border-[#E6E6E6] bg-[#FCFCFC] p-5 text-center">
-                          <p className="text-[13px] text-[#1A1A1A]">{seoForm.favicon ? "Change image" : "Upload or select image"}</p>
-                          <p className="mt-1 text-[12px] text-[#9A9A9A]">Open Media Library to reuse existing assets or upload a new file</p>
-                          <div className="mt-4 flex justify-center">
-                            <label className={cn("inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-2 text-[12px] font-medium text-white", uploadingSeoAsset === "favicon" ? "bg-gray-400" : "bg-[#E31E24] hover:bg-[#B5151B]")}>
-                              <Upload size={13} />
-                              {uploadingSeoAsset === "favicon" ? "Uploading..." : seoForm.favicon ? "Change Image" : "Upload Image"}
-                              <input type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadSeoImage("favicon", file); e.target.value = ""; }} disabled={uploadingSeoAsset === "favicon"} />
-                            </label>
+                        {canUpdate && (
+                          <div className="rounded-xl border border-dashed border-[#E6E6E6] bg-[#FCFCFC] p-5 text-center">
+                            <p className="text-[13px] text-[#1A1A1A]">{seoForm.favicon ? "Change image" : "Upload or select image"}</p>
+                            <p className="mt-1 text-[12px] text-[#9A9A9A]">Open Media Library to reuse existing assets or upload a new file</p>
+                            <div className="mt-4 flex justify-center">
+                              <label className={cn("inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-2 text-[12px] font-medium text-white", uploadingSeoAsset === "favicon" ? "bg-gray-400" : "bg-[#E31E24] hover:bg-[#B5151B]")}>
+                                <Upload size={13} />
+                                {uploadingSeoAsset === "favicon" ? "Uploading..." : seoForm.favicon ? "Change Image" : "Upload Image"}
+                                <input type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadSeoImage("favicon", file); e.target.value = ""; }} disabled={uploadingSeoAsset === "favicon"} />
+                              </label>
+                            </div>
                           </div>
-                        </div>
-                        <AdminInput label="" value={seoForm.favicon} onChange={(e) => setSeoForm((prev) => ({ ...prev, favicon: e.target.value }))} />
+                        )}
+                        <AdminInput label="" value={seoForm.favicon} onChange={(e) => setSeoForm((prev) => ({ ...prev, favicon: e.target.value }))} disabled={!canUpdate} />
                         <p className="text-[12px] text-[#9A9A9A]">Site tab icon. Recommended square image at least 64x64.</p>
                       </div>
                     </div>
@@ -1286,11 +1325,11 @@ function CmsPagesPageContent() {
                     <div className="mt-4 grid gap-5 border-t border-[#E6E6E6] pt-4 md:grid-cols-[1fr_1fr]">
                       <div className="space-y-5">
                         <div>
-                          <AdminInput label="OG TITLE" maxLength={120} placeholder="Inherits Meta Title if blank" value={seoForm.ogTitle} onChange={(e) => setSeoForm((prev) => ({ ...prev, ogTitle: e.target.value }))} />
+                          <AdminInput label="OG TITLE" maxLength={120} placeholder="Inherits Meta Title if blank" value={seoForm.ogTitle} onChange={(e) => setSeoForm((prev) => ({ ...prev, ogTitle: e.target.value }))} disabled={!canUpdate} />
                           <div className="mt-2 text-right text-[12px] text-[#9A9A9A]">{seoForm.ogTitle.length} / 120</div>
                         </div>
                         <div>
-                          <AdminTextarea label="OG DESCRIPTION" rows={5} maxLength={320} placeholder="Inherits Meta Description if blank" value={seoForm.ogDescription} onChange={(e) => setSeoForm((prev) => ({ ...prev, ogDescription: e.target.value }))} />
+                          <AdminTextarea label="OG DESCRIPTION" rows={5} maxLength={320} placeholder="Inherits Meta Description if blank" value={seoForm.ogDescription} onChange={(e) => setSeoForm((prev) => ({ ...prev, ogDescription: e.target.value }))} disabled={!canUpdate} />
                           <div className="mt-2 text-right text-[12px] text-[#9A9A9A]">{seoForm.ogDescription.length} / 320</div>
                         </div>
                       </div>
@@ -1299,18 +1338,20 @@ function CmsPagesPageContent() {
                         {seoForm.ogImage ? (
                           <img src={seoForm.ogImage} alt="OG" className="h-56 w-full max-w-[280px] rounded-lg border border-[#E6E6E6] object-contain bg-white" />
                         ) : null}
-                        <div className="rounded-xl border border-dashed border-[#E6E6E6] bg-[#FCFCFC] p-5 text-center">
-                          <p className="text-[13px] text-[#1A1A1A]">{seoForm.ogImage ? "Change image" : "Upload or select image"}</p>
-                          <p className="mt-1 text-[12px] text-[#9A9A9A]">Open Media Library to reuse existing assets or upload a new file</p>
-                          <div className="mt-4 flex justify-center">
-                            <label className={cn("inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-2 text-[12px] font-medium text-white", uploadingSeoAsset === "ogImage" ? "bg-gray-400" : "bg-[#E31E24] hover:bg-[#B5151B]")}>
-                              <Upload size={13} />
-                              {uploadingSeoAsset === "ogImage" ? "Uploading..." : seoForm.ogImage ? "Change Image" : "Upload Image"}
-                              <input type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadSeoImage("ogImage", file); e.target.value = ""; }} disabled={uploadingSeoAsset === "ogImage"} />
-                            </label>
+                        {canUpdate && (
+                          <div className="rounded-xl border border-dashed border-[#E6E6E6] bg-[#FCFCFC] p-5 text-center">
+                            <p className="text-[13px] text-[#1A1A1A]">{seoForm.ogImage ? "Change image" : "Upload or select image"}</p>
+                            <p className="mt-1 text-[12px] text-[#9A9A9A]">Open Media Library to reuse existing assets or upload a new file</p>
+                            <div className="mt-4 flex justify-center">
+                              <label className={cn("inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-2 text-[12px] font-medium text-white", uploadingSeoAsset === "ogImage" ? "bg-gray-400" : "bg-[#E31E24] hover:bg-[#B5151B]")}>
+                                <Upload size={13} />
+                                {uploadingSeoAsset === "ogImage" ? "Uploading..." : seoForm.ogImage ? "Change Image" : "Upload Image"}
+                                <input type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadSeoImage("ogImage", file); e.target.value = ""; }} disabled={uploadingSeoAsset === "ogImage"} />
+                              </label>
+                            </div>
                           </div>
-                        </div>
-                        <AdminInput label="" value={seoForm.ogImage} onChange={(e) => setSeoForm((prev) => ({ ...prev, ogImage: e.target.value }))} />
+                        )}
+                        <AdminInput label="" value={seoForm.ogImage} onChange={(e) => setSeoForm((prev) => ({ ...prev, ogImage: e.target.value }))} disabled={!canUpdate} />
                       </div>
                     </div>
                   </div>
@@ -1320,11 +1361,11 @@ function CmsPagesPageContent() {
                     <div className="mt-4 grid gap-5 border-t border-[#E6E6E6] pt-4 md:grid-cols-[1fr_1fr]">
                       <div className="space-y-5">
                         <div>
-                          <AdminInput label="TWITTER TITLE" maxLength={120} placeholder="Inherits OG Title if blank" value={seoForm.twitterTitle} onChange={(e) => setSeoForm((prev) => ({ ...prev, twitterTitle: e.target.value }))} />
+                          <AdminInput label="TWITTER TITLE" maxLength={120} placeholder="Inherits OG Title if blank" value={seoForm.twitterTitle} onChange={(e) => setSeoForm((prev) => ({ ...prev, twitterTitle: e.target.value }))} disabled={!canUpdate} />
                           <div className="mt-2 text-right text-[12px] text-[#9A9A9A]">{seoForm.twitterTitle.length} / 120</div>
                         </div>
                         <div>
-                          <AdminTextarea label="TWITTER DESCRIPTION" rows={5} maxLength={320} placeholder="Inherits OG Description if blank" value={seoForm.twitterDescription} onChange={(e) => setSeoForm((prev) => ({ ...prev, twitterDescription: e.target.value }))} />
+                          <AdminTextarea label="TWITTER DESCRIPTION" rows={5} maxLength={320} placeholder="Inherits OG Description if blank" value={seoForm.twitterDescription} onChange={(e) => setSeoForm((prev) => ({ ...prev, twitterDescription: e.target.value }))} disabled={!canUpdate} />
                           <div className="mt-2 text-right text-[12px] text-[#9A9A9A]">{seoForm.twitterDescription.length} / 320</div>
                         </div>
                       </div>
@@ -1333,18 +1374,20 @@ function CmsPagesPageContent() {
                         {seoForm.twitterImage ? (
                           <img src={seoForm.twitterImage} alt="Twitter" className="h-56 w-full max-w-[280px] rounded-lg border border-[#E6E6E6] object-contain bg-white" />
                         ) : null}
-                        <div className="rounded-xl border border-dashed border-[#E6E6E6] bg-[#FCFCFC] p-5 text-center">
-                          <p className="text-[13px] text-[#1A1A1A]">{seoForm.twitterImage ? "Change image" : "Upload or select image"}</p>
-                          <p className="mt-1 text-[12px] text-[#9A9A9A]">Open Media Library to reuse existing assets or upload a new file</p>
-                          <div className="mt-4 flex justify-center">
-                            <label className={cn("inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-2 text-[12px] font-medium text-white", uploadingSeoAsset === "twitterImage" ? "bg-gray-400" : "bg-[#E31E24] hover:bg-[#B5151B]")}>
-                              <Upload size={13} />
-                              {uploadingSeoAsset === "twitterImage" ? "Uploading..." : seoForm.twitterImage ? "Change Image" : "Upload Image"}
-                              <input type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadSeoImage("twitterImage", file); e.target.value = ""; }} disabled={uploadingSeoAsset === "twitterImage"} />
-                            </label>
+                        {canUpdate && (
+                          <div className="rounded-xl border border-dashed border-[#E6E6E6] bg-[#FCFCFC] p-5 text-center">
+                            <p className="text-[13px] text-[#1A1A1A]">{seoForm.twitterImage ? "Change image" : "Upload or select image"}</p>
+                            <p className="mt-1 text-[12px] text-[#9A9A9A]">Open Media Library to reuse existing assets or upload a new file</p>
+                            <div className="mt-4 flex justify-center">
+                              <label className={cn("inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-2 text-[12px] font-medium text-white", uploadingSeoAsset === "twitterImage" ? "bg-gray-400" : "bg-[#E31E24] hover:bg-[#B5151B]")}>
+                                <Upload size={13} />
+                                {uploadingSeoAsset === "twitterImage" ? "Uploading..." : seoForm.twitterImage ? "Change Image" : "Upload Image"}
+                                <input type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadSeoImage("twitterImage", file); e.target.value = ""; }} disabled={uploadingSeoAsset === "twitterImage"} />
+                              </label>
+                            </div>
                           </div>
-                        </div>
-                        <AdminInput label="" placeholder="Or paste an image URL..." value={seoForm.twitterImage} onChange={(e) => setSeoForm((prev) => ({ ...prev, twitterImage: e.target.value }))} />
+                        )}
+                        <AdminInput label="" placeholder="Or paste an image URL..." value={seoForm.twitterImage} onChange={(e) => setSeoForm((prev) => ({ ...prev, twitterImage: e.target.value }))} disabled={!canUpdate} />
                       </div>
                     </div>
                   </div>
@@ -1358,27 +1401,33 @@ function CmsPagesPageContent() {
                           <div key={`faq-${index}`} className="rounded-lg border border-[#E6E6E6] p-4">
                             <div className="mb-3 flex justify-between">
                               <p className="text-[13px] font-semibold text-[#1A1A1A]">FAQ {index + 1}</p>
-                              <button type="button" onClick={() => removeFaq(index)} className="rounded-md border border-[#E6E6E6] px-3 py-1.5 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F8F8F8]">REMOVE</button>
+                              {canUpdate && (
+                                <button type="button" onClick={() => removeFaq(index)} className="rounded-md border border-[#E6E6E6] px-3 py-1.5 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F8F8F8]">REMOVE</button>
+                              )}
                             </div>
                             <div className="space-y-4">
-                              <AdminInput label="QUESTION" value={faq.question} onChange={(e) => updateFaq(index, "question", e.target.value)} />
-                              <AdminTextarea label="ANSWER" rows={4} value={faq.answer} onChange={(e) => updateFaq(index, "answer", e.target.value)} />
+                              <AdminInput label="QUESTION" value={faq.question} onChange={(e) => updateFaq(index, "question", e.target.value)} disabled={!canUpdate} />
+                              <AdminTextarea label="ANSWER" rows={4} value={faq.answer} onChange={(e) => updateFaq(index, "answer", e.target.value)} disabled={!canUpdate} />
                             </div>
                           </div>
                         ))}
                       </div>
-                      <button type="button" onClick={addFaq} className="mt-4 rounded-md border border-[#E6E6E6] px-4 py-2 text-[12px] font-semibold text-[#1A1A1A] hover:bg-[#F8F8F8]">
-                        + ADD FAQ
-                      </button>
+                      {canUpdate && (
+                        <button type="button" onClick={addFaq} className="mt-4 rounded-md border border-[#E6E6E6] px-4 py-2 text-[12px] font-semibold text-[#1A1A1A] hover:bg-[#F8F8F8]">
+                          + ADD FAQ
+                        </button>
+                      )}
                     </div>
                   </div>
 
-                  <div className="flex justify-end border-t border-[#E6E6E6] pt-6">
-                    <button type="submit" disabled={updatePage.isPending} className="inline-flex items-center gap-1.5 rounded-md bg-[#12314F] px-6 py-3 text-[13px] font-medium text-white hover:bg-[#0E2740] disabled:opacity-50">
-                      <Save size={13} />
-                      {updatePage.isPending ? "Saving..." : "Save SEO"}
-                    </button>
-                  </div>
+                  {canUpdate && (
+                    <div className="flex justify-end border-t border-[#E6E6E6] pt-6">
+                      <button type="submit" disabled={updatePage.isPending} className="inline-flex items-center gap-1.5 rounded-md bg-[#12314F] px-6 py-3 text-[13px] font-medium text-white hover:bg-[#0E2740] disabled:opacity-50">
+                        <Save size={13} />
+                        {updatePage.isPending ? "Saving..." : "Save SEO"}
+                      </button>
+                    </div>
+                  )}
                 </form>
               )}
 

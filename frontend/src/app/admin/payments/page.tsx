@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useLayoutEffect } from "react";
+import { useRouter } from "next/navigation";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useToast } from "@/components/admin/AdminComponents";
 import { adminApi } from "@/services/adminApi";
-import { Search, Globe, ShieldCheck } from "lucide-react";
+import { Search, ShieldCheck } from "lucide-react";
 
 interface PaymentMethod {
   id: string;
@@ -34,6 +36,17 @@ interface PaymentMatrixResponse {
 }
 
 export default function PaymentsPage() {
+  const { hasPermission, isLoading: authLoading } = useAdminAuth();
+  const router = useRouter();
+
+  useLayoutEffect(() => {
+    if (!authLoading && !hasPermission("payments.view")) {
+      router.replace("/admin/dashboard");
+    }
+  }, [authLoading, hasPermission, router]);
+
+  const canUpdate = hasPermission("payments.update");
+
   const { showToast, ToastComponent } = useToast();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<PaymentMatrixResponse | null>(null);
@@ -53,14 +66,20 @@ export default function PaymentsPage() {
   };
 
   useEffect(() => {
+    if (authLoading || !hasPermission("payments.view")) return;
     fetchMatrix();
-  }, []);
+  }, [authLoading, hasPermission]);
 
   const handleToggleCountryMethod = async (
     paymentMethodId: string,
     countryId: string,
     currentEnabled: boolean,
   ) => {
+    if (!canUpdate) {
+      showToast("You do not have permission to update payment settings.", "error");
+      return;
+    }
+
     const cellKey = `${paymentMethodId}:${countryId}`;
     setUpdatingCell(cellKey);
     try {
@@ -96,6 +115,10 @@ export default function PaymentsPage() {
       setUpdatingCell(null);
     }
   };
+
+  if (authLoading || !hasPermission("payments.view")) {
+    return null;
+  }
 
   const filteredMatrix = (data?.matrix ?? []).filter((row) =>
     row.countryName.toLowerCase().includes(search.toLowerCase()) ||
@@ -223,7 +246,7 @@ export default function PaymentsPage() {
                             <label className="inline-flex cursor-pointer items-center justify-center">
                               <input
                                 type="checkbox"
-                                disabled={isUpdating}
+                                disabled={isUpdating || !canUpdate}
                                 checked={method.isEnabled}
                                 onChange={() =>
                                   handleToggleCountryMethod(

@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent, useCallback } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, type FormEvent, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Edit2, Filter, Plus, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
@@ -56,6 +58,19 @@ function matchesSearch(country: Country, search: string) {
 }
 
 export default function CountriesPage() {
+  const { hasPermission, isLoading: authLoading } = useAdminAuth();
+  const router = useRouter();
+
+  useLayoutEffect(() => {
+    if (!authLoading && !hasPermission("countries.view")) {
+      router.replace("/admin/dashboard");
+    }
+  }, [authLoading, hasPermission, router]);
+
+  const canCreate = hasPermission("countries.create");
+  const canUpdate = hasPermission("countries.update");
+  const canDelete = hasPermission("countries.delete");
+
   const { showToast, ToastComponent } = useToast();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -365,28 +380,32 @@ export default function CountriesPage() {
   }
 
   const columns = [
-    {
-      key: "select",
-      label: (
-        <input
-          type="checkbox"
-          checked={selectAll}
-          onChange={toggleSelectAll}
-          className="h-4 w-4 rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
-          aria-label="Select all"
-        />
-      ),
-      width: "40px",
-      render: (row: Country) => (
-        <input
-          type="checkbox"
-          checked={selectedIds.has(row.id)}
-          onChange={() => toggleSelect(row.id)}
-          className="h-4 w-4 rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
-          aria-label={`Select ${row.name}`}
-        />
-      ),
-    },
+    ...(canUpdate
+      ? [
+          {
+            key: "select",
+            label: (
+              <input
+                type="checkbox"
+                checked={selectAll}
+                onChange={toggleSelectAll}
+                className="h-4 w-4 rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
+                aria-label="Select all"
+              />
+            ),
+            width: "40px",
+            render: (row: Country) => (
+              <input
+                type="checkbox"
+                checked={selectedIds.has(row.id)}
+                onChange={() => toggleSelect(row.id)}
+                className="h-4 w-4 rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
+                aria-label={`Select ${row.name}`}
+              />
+            ),
+          },
+        ]
+      : []),
     {
       key: "name",
       label: "Country",
@@ -404,43 +423,59 @@ export default function CountriesPage() {
       key: "status",
       label: "Status",
       render: (row: Country) => (
-        <button
-          type="button"
-          onClick={() => handleToggleStatus(row)}
-          title={`Click to toggle status (currently ${row.status.toLowerCase()})`}
-          className="cursor-pointer transition-transform hover:scale-105"
-        >
+        canUpdate ? (
+          <button
+            type="button"
+            onClick={() => handleToggleStatus(row)}
+            title={`Click to toggle status (currently ${row.status.toLowerCase()})`}
+            className="cursor-pointer transition-transform hover:scale-105"
+          >
+            <StatusBadge status={row.status} />
+          </button>
+        ) : (
           <StatusBadge status={row.status} />
-        </button>
+        )
       ),
     },
-    {
-      key: "actions",
-      label: "Actions",
-      width: "110px",
-      render: (row: Country) => (
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => openEdit(row)}
-            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-            title="Edit country details"
-          >
-            <Edit2 size={13} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeleting(row)}
-            disabled={deleting?.id === row.id}
-            className="flex h-7 w-7 items-center justify-center rounded border border-[#F2C9C9] text-red-500 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
-            title={row.isDefault ? "Default country cannot be deleted" : "Deactivate country"}
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
-      ),
-    },
+    ...(canUpdate || canDelete
+      ? [
+          {
+            key: "actions",
+            label: "Actions",
+            width: "110px",
+            render: (row: Country) => (
+              <div className="flex items-center gap-1.5">
+                {canUpdate && (
+                  <button
+                    type="button"
+                    onClick={() => openEdit(row)}
+                    className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+                    title="Edit country details"
+                  >
+                    <Edit2 size={13} />
+                  </button>
+                )}
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => setDeleting(row)}
+                    disabled={deleting?.id === row.id}
+                    className="flex h-7 w-7 items-center justify-center rounded border border-[#F2C9C9] text-red-500 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    title={row.isDefault ? "Default country cannot be deleted" : "Deactivate country"}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            ),
+          },
+        ]
+      : []),
   ];
+
+  if (authLoading || !hasPermission("countries.view")) {
+    return null;
+  }
 
   return (
     <AdminLayout title="Countries" breadcrumb={[{ label: "Countries" }]}>
@@ -481,14 +516,16 @@ export default function CountriesPage() {
                 <SlidersHorizontal size={14} />
                 Columns
               </button>
-              <button
-                type="button"
-                onClick={openCreate}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-              >
-                <Plus size={14} />
-                Add Country
-              </button>
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+                >
+                  <Plus size={14} />
+                  Add Country
+                </button>
+              )}
             </div>
           </div>
 
