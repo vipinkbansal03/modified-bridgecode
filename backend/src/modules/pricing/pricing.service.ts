@@ -1274,7 +1274,7 @@ export async function generateCountryPrices(
         : landedMRP;
       const vSelling = override && override.sellingPrice != null 
         ? computeLandedPrice(override.sellingPrice, country, baseCurrencyRate).mrp 
-        : (override ? vMRP : landedSelling);
+        : landedSelling;
       const vDealer = override && override.dealerPrice != null 
         ? computeLandedPrice(override.dealerPrice, country, baseCurrencyRate).mrp 
         : landedDealer;

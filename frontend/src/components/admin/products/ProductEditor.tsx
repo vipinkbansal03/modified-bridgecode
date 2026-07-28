@@ -9,6 +9,7 @@ import { Upload, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Se
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column, toastMessages } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
+import { BulkVariantImportWizard } from "@/components/admin/products/BulkVariantImportWizard";
 import {
   useAdminProduct,
   useUpdateProduct,
@@ -532,7 +533,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const searchParams = useSearchParams();
   const variantIdFromQuery = searchParams.get("variant");
   const [activeTab, setActiveTab] = useState(0);
-  const [pricingSubTab, setPricingSubTab] = useState<"base" | "tier" | "moq">("base");
+  const [pricingSubTab, setPricingSubTab] = useState<"base" | "variant_prices" | "tier" | "moq">("base");
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [deletingMedia, setDeletingMedia] = useState<string | null>(null);
   const [deletingPackage, setDeletingPackage] = useState<PackageRow | null>(null);
@@ -565,6 +566,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   });
   const [generatingVariants, setGeneratingVariants] = useState(false);
   const [generateVariantOpen, setGenerateVariantOpen] = useState(false);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [generateVariantBasePrice, setGenerateVariantBasePrice] = useState("");
   const [generateAttributeIds, setGenerateAttributeIds] = useState<string[]>([]);
   const [manualVariantAttributeIds, setManualVariantAttributeIds] = useState<string[]>([]);
@@ -594,6 +596,56 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [variantTabSearchQuery, setVariantTabSearchQuery] = useState("");
   const [variantTabStatusFilter, setVariantTabStatusFilter] = useState("");
   const [variantTabStockFilter, setVariantTabStockFilter] = useState("");
+  const [filterSku, setFilterSku] = useState("");
+  const [filterVariantName, setFilterVariantName] = useState("");
+  const [filterAttributes, setFilterAttributes] = useState("");
+  const [filterStock, setFilterStock] = useState("");
+  const [filterPrice, setFilterPrice] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [pageSize, setPageSize] = useState(100);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [bulkActionType, setBulkActionType] = useState("Bulk Action");
+  const [bulkActionValue, setBulkActionValue] = useState("");
+  const [filterPriceCountry, setFilterPriceCountry] = useState("");
+  const [filterPriceMRP, setFilterPriceMRP] = useState("");
+  const [filterPriceSelling, setFilterPriceSelling] = useState("");
+  const [filterPriceDealer, setFilterPriceDealer] = useState("");
+  const [filterPriceDoctor, setFilterPriceDoctor] = useState("");
+  const [filterPriceStatus, setFilterPriceStatus] = useState("");
+  const [pricePageSize, setPricePageSize] = useState(100);
+  const [priceCurrentPage, setPriceCurrentPage] = useState(1);
+  const [priceSortField, setPriceSortField] = useState<string | null>(null);
+  const [priceSortDirection, setPriceSortDirection] = useState<"asc" | "desc">("asc");
+  const [priceBulkActionType, setPriceBulkActionType] = useState("Bulk Action");
+  const [priceBulkActionValue, setPriceBulkActionValue] = useState("");
+  const [filterVPVariant, setFilterVPVariant] = useState("");
+  const [filterVPCountry, setFilterVPCountry] = useState("");
+  const [filterVPMRP, setFilterVPMRP] = useState("");
+  const [filterVPSelling, setFilterVPSelling] = useState("");
+  const [filterVPDealer, setFilterVPDealer] = useState("");
+  const [filterVPDoctor, setFilterVPDoctor] = useState("");
+  const [filterVPStatus, setFilterVPStatus] = useState("");
+  const [vpPageSize, setVpPageSize] = useState(100);
+  const [vpCurrentPage, setVpCurrentPage] = useState(1);
+  const [vpSortField, setVpSortField] = useState<string | null>(null);
+  const [vpSortDirection, setVpSortDirection] = useState<"asc" | "desc">("asc");
+  const [vpBulkActionType, setVpBulkActionType] = useState("Bulk Action");
+  const [vpBulkActionValue, setVpBulkActionValue] = useState("");
+  const [selectedVPIds, setSelectedVPIds] = useState<string[]>([]);
+  const [filterInvVariant, setFilterInvVariant] = useState("");
+  const [filterInvType, setFilterInvType] = useState("");
+  const [filterInvStock, setFilterInvStock] = useState("");
+  const [filterInvLowStock, setFilterInvLowStock] = useState("");
+  const [invPageSize, setInvPageSize] = useState(100);
+  const [invCurrentPage, setInvCurrentPage] = useState(1);
+  const [invSortField, setInvSortField] = useState<string | null>(null);
+  const [invSortDirection, setInvSortDirection] = useState<"asc" | "desc">("asc");
+  const [invBulkActionType, setInvBulkActionType] = useState("Bulk Action");
+  const [invBulkActionValue, setInvBulkActionValue] = useState("");
+  const [invBulkCountryId, setInvBulkCountryId] = useState("");
+  const [selectedInvIds, setSelectedInvIds] = useState<string[]>([]);
   const [variantCountryModalVariant, setVariantCountryModalVariant] = useState<VariantRow | null>(null);
   const [variantCountryOverrides, setVariantCountryOverrides] = useState<Record<string, boolean>>({});
   const [inventoryOverrideDrafts, setInventoryOverrideDrafts] = useState<Record<string, { countryId: string; stock: string }>>({});
@@ -647,6 +699,152 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const productBasePrices = useMemo(() => {
     return (product?.prices || []).filter((p: any) => !p.variantId);
   }, [product?.prices]);
+
+  const filteredBasePrices = useMemo(() => {
+    let rows = (product?.prices || []).filter((p: any) => !p.variantId);
+
+    // Client-side column filters
+    if (filterPriceCountry.trim()) {
+      const q = filterPriceCountry.toLowerCase().trim();
+      rows = rows.filter((p: any) => {
+        const countryName = p.country?.name?.toLowerCase() ?? "";
+        const countryCode = p.country?.code?.toLowerCase() ?? "";
+        return countryName.includes(q) || countryCode.includes(q);
+      });
+    }
+
+    if (filterPriceMRP.trim()) {
+      const q = filterPriceMRP.trim();
+      rows = rows.filter((p: any) => {
+        const val = Number(p.mrp ?? 0);
+        if (q.startsWith(">")) {
+          const num = parseFloat(q.slice(1));
+          return !isNaN(num) && val > num;
+        } else if (q.startsWith("<")) {
+          const num = parseFloat(q.slice(1));
+          return !isNaN(num) && val < num;
+        } else {
+          const num = parseFloat(q);
+          return !isNaN(num) && val === num;
+        }
+      });
+    }
+
+    if (filterPriceSelling.trim()) {
+      const q = filterPriceSelling.trim();
+      rows = rows.filter((p: any) => {
+        const val = Number(p.sellingPrice ?? 0);
+        if (q.startsWith(">")) {
+          const num = parseFloat(q.slice(1));
+          return !isNaN(num) && val > num;
+        } else if (q.startsWith("<")) {
+          const num = parseFloat(q.slice(1));
+          return !isNaN(num) && val < num;
+        } else {
+          const num = parseFloat(q);
+          return !isNaN(num) && val === num;
+        }
+      });
+    }
+
+    if (filterPriceDealer.trim()) {
+      const q = filterPriceDealer.trim();
+      rows = rows.filter((p: any) => {
+        const val = p.dealerPrice != null ? Number(p.dealerPrice) : null;
+        if (val === null) return false;
+        if (q.startsWith(">")) {
+          const num = parseFloat(q.slice(1));
+          return !isNaN(num) && val > num;
+        } else if (q.startsWith("<")) {
+          const num = parseFloat(q.slice(1));
+          return !isNaN(num) && val < num;
+        } else {
+          const num = parseFloat(q);
+          return !isNaN(num) && val === num;
+        }
+      });
+    }
+
+    if (filterPriceDoctor.trim()) {
+      const q = filterPriceDoctor.trim();
+      rows = rows.filter((p: any) => {
+        const val = p.distributorPrice != null ? Number(p.distributorPrice) : null;
+        if (val === null) return false;
+        if (q.startsWith(">")) {
+          const num = parseFloat(q.slice(1));
+          return !isNaN(num) && val > num;
+        } else if (q.startsWith("<")) {
+          const num = parseFloat(q.slice(1));
+          return !isNaN(num) && val < num;
+        } else {
+          const num = parseFloat(q);
+          return !isNaN(num) && val === num;
+        }
+      });
+    }
+
+    if (filterPriceStatus && filterPriceStatus !== "") {
+      rows = rows.filter((p: any) => p.status === filterPriceStatus);
+    }
+
+    // Client-side sorting
+    if (priceSortField) {
+      rows = [...rows].sort((a: any, b: any) => {
+        let valA: any = "";
+        let valB: any = "";
+        if (priceSortField === "country") {
+          valA = a.country?.name ?? "";
+          valB = b.country?.name ?? "";
+        } else if (priceSortField === "mrp") {
+          valA = Number(a.mrp ?? 0);
+          valB = Number(b.mrp ?? 0);
+        } else if (priceSortField === "sellingPrice") {
+          valA = Number(a.sellingPrice ?? 0);
+          valB = Number(b.sellingPrice ?? 0);
+        } else if (priceSortField === "dealerPrice") {
+          valA = a.dealerPrice != null ? Number(a.dealerPrice) : -1;
+          valB = b.dealerPrice != null ? Number(b.dealerPrice) : -1;
+        } else if (priceSortField === "distributorPrice") {
+          valA = a.distributorPrice != null ? Number(a.distributorPrice) : -1;
+          valB = b.distributorPrice != null ? Number(b.distributorPrice) : -1;
+        } else if (priceSortField === "status") {
+          valA = a.status ?? "";
+          valB = b.status ?? "";
+        }
+        if (valA < valB) return priceSortDirection === "asc" ? -1 : 1;
+        if (valA > valB) return priceSortDirection === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return rows;
+  }, [
+    product?.prices,
+    filterPriceCountry,
+    filterPriceMRP,
+    filterPriceSelling,
+    filterPriceDealer,
+    filterPriceDoctor,
+    filterPriceStatus,
+    priceSortField,
+    priceSortDirection,
+  ]);
+
+  const totalPriceItems = filteredBasePrices.length;
+  const totalPricePages = Math.ceil(totalPriceItems / pricePageSize) || 1;
+
+  useEffect(() => {
+    if (priceCurrentPage > totalPricePages) {
+      setPriceCurrentPage(1);
+    }
+  }, [totalPricePages, priceCurrentPage]);
+
+  const paginatedBasePrices = useMemo(() => {
+    const start = (priceCurrentPage - 1) * pricePageSize;
+    const end = start + pricePageSize;
+    return filteredBasePrices.slice(start, end);
+  }, [filteredBasePrices, priceCurrentPage, pricePageSize]);
+
 
   const handleToggleBasePriceBulkEdit = () => {
     if (basePriceBulkEditMode) {
@@ -917,6 +1115,235 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   };
 
+  const handlePriceBulkApplyAction = async () => {
+    if (!selectedPriceIds.length) {
+      showToast("Please select at least one price row.", "error");
+      return;
+    }
+    if (priceBulkActionType === "Bulk Action") {
+      showToast("Please select a bulk action.", "error");
+      return;
+    }
+    setBulkSaving(true);
+    try {
+      if (priceBulkActionType === "Delete selected") {
+        if (!window.confirm(`Delete ${selectedPriceIds.length} selected price(s)?`)) {
+          setBulkSaving(false);
+          return;
+        }
+        await Promise.all(selectedPriceIds.map((id) => adminApi.delete(`/pricing/${id}`)));
+        showToast(`Successfully deleted ${selectedPriceIds.length} price(s).`, "success");
+      } else {
+        const payload: any = {};
+        if (priceBulkActionType === "Mark active") {
+          payload.status = "ACTIVE";
+        } else if (priceBulkActionType === "Mark inactive") {
+          payload.status = "INACTIVE";
+        } else if (priceBulkActionType === "Update MRP") {
+          if (!priceBulkActionValue.trim() || isNaN(parseFloat(priceBulkActionValue))) {
+            showToast("Please enter a valid MRP.", "error");
+            setBulkSaving(false);
+            return;
+          }
+          payload.mrp = parseFloat(priceBulkActionValue);
+        } else if (priceBulkActionType === "Update Selling Price") {
+          if (!priceBulkActionValue.trim() || isNaN(parseFloat(priceBulkActionValue))) {
+            showToast("Please enter a valid Selling Price.", "error");
+            setBulkSaving(false);
+            return;
+          }
+          payload.sellingPrice = parseFloat(priceBulkActionValue);
+        } else if (priceBulkActionType === "Update Dealer") {
+          if (!priceBulkActionValue.trim() || isNaN(parseFloat(priceBulkActionValue))) {
+            showToast("Please enter a valid Dealer Price.", "error");
+            setBulkSaving(false);
+            return;
+          }
+          payload.dealerPrice = parseFloat(priceBulkActionValue);
+        } else if (priceBulkActionType === "Update Doctor / Retailer") {
+          if (!priceBulkActionValue.trim() || isNaN(parseFloat(priceBulkActionValue))) {
+            showToast("Please enter a valid Doctor/Retailer Price.", "error");
+            setBulkSaving(false);
+            return;
+          }
+          payload.distributorPrice = parseFloat(priceBulkActionValue);
+        }
+        await Promise.all(
+          selectedPriceIds.map((id) => adminApi.put(`/pricing/${id}`, payload))
+        );
+        showToast(`Successfully updated ${selectedPriceIds.length} price(s).`, "success");
+      }
+      setSelectedPriceIds([]);
+      setPriceBulkActionValue("");
+      setPriceBulkActionType("Bulk Action");
+      await refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Bulk update failed."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  const handleVPBulkApplyAction = async () => {
+    if (!selectedVPIds.length) {
+      showToast("Please select at least one variant price row.", "error");
+      return;
+    }
+    if (vpBulkActionType === "Bulk Action") {
+      showToast("Please select a bulk action.", "error");
+      return;
+    }
+    setBulkSaving(true);
+    try {
+      if (vpBulkActionType === "Delete selected") {
+        if (!window.confirm(`Delete ${selectedVPIds.length} selected variant price override(s)?`)) {
+          setBulkSaving(false);
+          return;
+        }
+        await Promise.all(selectedVPIds.map((id) => adminApi.delete(`/pricing/${id}`)));
+        showToast(`Successfully deleted ${selectedVPIds.length} variant price(s).`, "success");
+      } else {
+        const payload: any = {};
+        if (vpBulkActionType === "Mark active") {
+          payload.status = "ACTIVE";
+        } else if (vpBulkActionType === "Mark inactive") {
+          payload.status = "INACTIVE";
+        } else if (vpBulkActionType === "Update MRP") {
+          if (!vpBulkActionValue.trim() || isNaN(parseFloat(vpBulkActionValue))) {
+            showToast("Please enter a valid MRP.", "error");
+            setBulkSaving(false);
+            return;
+          }
+          payload.mrp = parseFloat(vpBulkActionValue);
+        } else if (vpBulkActionType === "Update Selling Price") {
+          if (!vpBulkActionValue.trim() || isNaN(parseFloat(vpBulkActionValue))) {
+            showToast("Please enter a valid Selling Price.", "error");
+            setBulkSaving(false);
+            return;
+          }
+          payload.sellingPrice = parseFloat(vpBulkActionValue);
+        } else if (vpBulkActionType === "Update Dealer") {
+          if (!vpBulkActionValue.trim() || isNaN(parseFloat(vpBulkActionValue))) {
+            showToast("Please enter a valid Dealer Price.", "error");
+            setBulkSaving(false);
+            return;
+          }
+          payload.dealerPrice = parseFloat(vpBulkActionValue);
+        } else if (vpBulkActionType === "Update Doctor / Retailer") {
+          if (!vpBulkActionValue.trim() || isNaN(parseFloat(vpBulkActionValue))) {
+            showToast("Please enter a valid Doctor/Retailer Price.", "error");
+            setBulkSaving(false);
+            return;
+          }
+          payload.distributorPrice = parseFloat(vpBulkActionValue);
+        }
+        await Promise.all(
+          selectedVPIds.map((id) => adminApi.put(`/pricing/${id}`, payload))
+        );
+        showToast(`Successfully updated ${selectedVPIds.length} variant price(s).`, "success");
+      }
+      setSelectedVPIds([]);
+      setVpBulkActionValue("");
+      setVpBulkActionType("Bulk Action");
+      await refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Bulk update failed."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  const handleInvBulkApplyAction = async () => {
+    if (!selectedInvIds.length) {
+      showToast("Please select at least one inventory row.", "error");
+      return;
+    }
+    if (invBulkActionType === "Bulk Action") {
+      showToast("Please select a bulk action.", "error");
+      return;
+    }
+    setBulkSaving(true);
+    try {
+      if (invBulkActionType === "Delete selected overrides") {
+        const overridesToDelete = paginatedVariantInventories.filter(
+          (inv: any) => selectedInvIds.includes(inv.id) && inv.isOverride
+        );
+        if (!overridesToDelete.length) {
+          showToast("No country override inventory rows were selected to delete.", "error");
+          setBulkSaving(false);
+          return;
+        }
+        if (!window.confirm(`Delete ${overridesToDelete.length} selected country inventory override(s)?`)) {
+          setBulkSaving(false);
+          return;
+        }
+        await Promise.all(
+          overridesToDelete.map((inv) => adminApi.delete(`/inventory/${inv.id}`))
+        );
+        showToast(`Successfully deleted ${overridesToDelete.length} country override(s).`, "success");
+      } else if (invBulkActionType === "Add country override") {
+        if (!invBulkCountryId) {
+          showToast("Please select a country.", "error");
+          setBulkSaving(false);
+          return;
+        }
+        const stockVal = parseInt(invBulkActionValue || "0");
+        if (isNaN(stockVal) || stockVal < 0) {
+          showToast("Please enter a valid stock override.", "error");
+          setBulkSaving(false);
+          return;
+        }
+        const uniqueVariantIds = Array.from(
+          new Set(
+            paginatedVariantInventories
+              .filter((inv: any) => selectedInvIds.includes(inv.id))
+              .map((inv: any) => inv.variantId)
+          )
+        );
+        await Promise.all(
+          uniqueVariantIds.map((vId) =>
+            adminApi.post("/inventory/upsert", {
+              variantId: vId,
+              countryId: invBulkCountryId,
+              stock: stockVal,
+            })
+          )
+        );
+        showToast(`Successfully added country override to ${uniqueVariantIds.length} variant(s).`, "success");
+      } else {
+        const payload: any = {};
+        if (invBulkActionType === "Update stock") {
+          if (!invBulkActionValue.trim() || isNaN(parseInt(invBulkActionValue))) {
+            showToast("Please enter a valid stock number.", "error");
+            setBulkSaving(false);
+            return;
+          }
+          payload.stock = parseInt(invBulkActionValue);
+        } else if (invBulkActionType === "Update low stock threshold") {
+          if (!invBulkActionValue.trim() || isNaN(parseInt(invBulkActionValue))) {
+            showToast("Please enter a valid low stock threshold.", "error");
+            setBulkSaving(false);
+            return;
+          }
+          payload.lowStockThreshold = parseInt(invBulkActionValue);
+        }
+        await Promise.all(
+          selectedInvIds.map((id) => adminApi.put(`/inventory/${id}`, payload))
+        );
+        showToast(`Successfully updated ${selectedInvIds.length} inventory record(s).`, "success");
+      }
+      setSelectedInvIds([]);
+      setInvBulkActionValue("");
+      setInvBulkCountryId("");
+      setInvBulkActionType("Bulk Action");
+      await refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Bulk update failed."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   const handleDeleteAllBasePrices = async () => {
     if (!productBasePrices.length) return;
     if (!window.confirm(`Are you sure you want to delete ALL ${productBasePrices.length} country base price(s) for this product?`)) return;
@@ -1053,8 +1480,319 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   }, [attributeCatalog, editingVariant, variantGenerationCatalog]);
   const packageRows = useMemo(() => (product?.packages ?? []) as PackageRow[], [product?.packages]);
   const variantRows = useMemo(() => (product?.variants ?? []) as VariantRow[], [product?.variants]);
+
+  const productVariantPrices = useMemo(() => {
+    const rawPrices = (product?.prices || []).filter((p: any) => p.variantId != null);
+    return rawPrices.map((price: any) => {
+      const variant = variantRows.find((v) => v.id === price.variantId);
+      return {
+        ...price,
+        variantTitle: variant?.title ?? "Unknown Variant",
+        variantSku: variant?.sku ?? "",
+      };
+    });
+  }, [product?.prices, variantRows]);
+
+  const filteredVariantPrices = useMemo(() => {
+    let rows = productVariantPrices;
+
+    if (filterVPVariant.trim()) {
+      const q = filterVPVariant.toLowerCase().trim();
+      rows = rows.filter(
+        (p: any) =>
+          p.variantTitle.toLowerCase().includes(q) ||
+          p.variantSku.toLowerCase().includes(q)
+      );
+    }
+
+    if (filterVPCountry.trim()) {
+      const q = filterVPCountry.toLowerCase().trim();
+      rows = rows.filter((p: any) => {
+        const countryName = p.country?.name?.toLowerCase() ?? "";
+        const countryCode = p.country?.code?.toLowerCase() ?? "";
+        return countryName.includes(q) || countryCode.includes(q);
+      });
+    }
+
+    if (filterVPMRP.trim()) {
+      const q = filterVPMRP.trim();
+      rows = rows.filter((p: any) => {
+        const val = Number(p.mrp ?? 0);
+        if (q.startsWith(">")) {
+          const num = parseFloat(q.slice(1));
+          return !isNaN(num) && val > num;
+        } else if (q.startsWith("<")) {
+          const num = parseFloat(q.slice(1));
+          return !isNaN(num) && val < num;
+        } else {
+          const num = parseFloat(q);
+          return !isNaN(num) && val === num;
+        }
+      });
+    }
+
+    if (filterVPSelling.trim()) {
+      const q = filterVPSelling.trim();
+      rows = rows.filter((p: any) => {
+        const val = Number(p.sellingPrice ?? 0);
+        if (q.startsWith(">")) {
+          const num = parseFloat(q.slice(1));
+          return !isNaN(num) && val > num;
+        } else if (q.startsWith("<")) {
+          const num = parseFloat(q.slice(1));
+          return !isNaN(num) && val < num;
+        } else {
+          const num = parseFloat(q);
+          return !isNaN(num) && val === num;
+        }
+      });
+    }
+
+    if (filterVPDealer.trim()) {
+      const q = filterVPDealer.trim();
+      rows = rows.filter((p: any) => {
+        const val = p.dealerPrice != null ? Number(p.dealerPrice) : null;
+        if (val === null) return false;
+        if (q.startsWith(">")) {
+          const num = parseFloat(q.slice(1));
+          return !isNaN(num) && val > num;
+        } else if (q.startsWith("<")) {
+          const num = parseFloat(q.slice(1));
+          return !isNaN(num) && val < num;
+        } else {
+          const num = parseFloat(q);
+          return !isNaN(num) && val === num;
+        }
+      });
+    }
+
+    if (filterVPDoctor.trim()) {
+      const q = filterVPDoctor.trim();
+      rows = rows.filter((p: any) => {
+        const val = p.distributorPrice != null ? Number(p.distributorPrice) : null;
+        if (val === null) return false;
+        if (q.startsWith(">")) {
+          const num = parseFloat(q.slice(1));
+          return !isNaN(num) && val > num;
+        } else if (q.startsWith("<")) {
+          const num = parseFloat(q.slice(1));
+          return !isNaN(num) && val < num;
+        } else {
+          const num = parseFloat(q);
+          return !isNaN(num) && val === num;
+        }
+      });
+    }
+
+    if (filterVPStatus && filterVPStatus !== "") {
+      rows = rows.filter((p: any) => p.status === filterVPStatus);
+    }
+
+    // Client-side sorting
+    if (vpSortField) {
+      rows = [...rows].sort((a: any, b: any) => {
+        let valA: any = "";
+        let valB: any = "";
+        if (vpSortField === "variant") {
+          valA = a.variantTitle ?? "";
+          valB = b.variantTitle ?? "";
+        } else if (vpSortField === "country") {
+          valA = a.country?.name ?? "";
+          valB = b.country?.name ?? "";
+        } else if (vpSortField === "mrp") {
+          valA = Number(a.mrp ?? 0);
+          valB = Number(b.mrp ?? 0);
+        } else if (vpSortField === "sellingPrice") {
+          valA = Number(a.sellingPrice ?? 0);
+          valB = Number(b.sellingPrice ?? 0);
+        } else if (vpSortField === "dealerPrice") {
+          valA = a.dealerPrice != null ? Number(a.dealerPrice) : -1;
+          valB = b.dealerPrice != null ? Number(b.dealerPrice) : -1;
+        } else if (vpSortField === "distributorPrice") {
+          valA = a.distributorPrice != null ? Number(a.distributorPrice) : -1;
+          valB = b.distributorPrice != null ? Number(b.distributorPrice) : -1;
+        } else if (vpSortField === "status") {
+          valA = a.status ?? "";
+          valB = b.status ?? "";
+        }
+        if (valA < valB) return vpSortDirection === "asc" ? -1 : 1;
+        if (valA > valB) return vpSortDirection === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return rows;
+  }, [
+    productVariantPrices,
+    filterVPVariant,
+    filterVPCountry,
+    filterVPMRP,
+    filterVPSelling,
+    filterVPDealer,
+    filterVPDoctor,
+    filterVPStatus,
+    vpSortField,
+    vpSortDirection,
+  ]);
+
+  const totalVPItems = filteredVariantPrices.length;
+  const totalVPPages = Math.ceil(totalVPItems / vpPageSize) || 1;
+
+  useEffect(() => {
+    if (vpCurrentPage > totalVPPages) {
+      setVpCurrentPage(1);
+    }
+  }, [totalVPPages, vpCurrentPage]);
+
+  const paginatedVariantPrices = useMemo(() => {
+    const start = (vpCurrentPage - 1) * vpPageSize;
+    const end = start + vpPageSize;
+    return filteredVariantPrices.slice(start, end);
+  }, [filteredVariantPrices, vpCurrentPage, vpPageSize]);
+
+  const allVariantInventories = useMemo(() => {
+    const list: any[] = [];
+    variantRows.forEach((variant) => {
+      const base = getBaseInventory(variant.inventories);
+      if (base) {
+        list.push({
+          ...base,
+          id: base.id,
+          variantId: variant.id,
+          variantTitle: variant.title,
+          variantSku: variant.sku ?? "",
+          type: "Base",
+          countryName: "Base Inventory",
+          countryCode: "",
+          isOverride: false,
+        });
+      }
+      
+      const countryOverridesList = (variant.inventories ?? []).filter((inv) => inv.countryId);
+      countryOverridesList.forEach((inv) => {
+        list.push({
+          ...inv,
+          id: inv.id,
+          variantId: variant.id,
+          variantTitle: variant.title,
+          variantSku: variant.sku ?? "",
+          type: "Country Override",
+          countryName: inv.country?.name ?? "Unknown Country",
+          countryCode: inv.country?.code ?? "",
+          isOverride: true,
+        });
+      });
+    });
+    return list;
+  }, [variantRows]);
+
+  const filteredVariantInventories = useMemo(() => {
+    let rows = allVariantInventories;
+
+    if (filterInvVariant.trim()) {
+      const q = filterInvVariant.toLowerCase().trim();
+      rows = rows.filter(
+        (inv: any) =>
+          inv.variantTitle.toLowerCase().includes(q) ||
+          inv.variantSku.toLowerCase().includes(q)
+      );
+    }
+
+    if (filterInvType.trim()) {
+      const q = filterInvType.toLowerCase().trim();
+      rows = rows.filter(
+        (inv: any) =>
+          inv.countryName.toLowerCase().includes(q) ||
+          inv.countryCode.toLowerCase().includes(q) ||
+          inv.type.toLowerCase().includes(q)
+      );
+    }
+
+    if (filterInvStock.trim()) {
+      const q = filterInvStock.trim();
+      rows = rows.filter((inv: any) => {
+        const val = inv.stock ?? 0;
+        if (q.startsWith(">")) {
+          const num = parseInt(q.slice(1));
+          return !isNaN(num) && val > num;
+        } else if (q.startsWith("<")) {
+          const num = parseInt(q.slice(1));
+          return !isNaN(num) && val < num;
+        } else {
+          const num = parseInt(q);
+          return !isNaN(num) && val === num;
+        }
+      });
+    }
+
+    if (filterInvLowStock.trim()) {
+      const q = filterInvLowStock.trim();
+      rows = rows.filter((inv: any) => {
+        const val = inv.lowStockThreshold ?? 10;
+        if (q.startsWith(">")) {
+          const num = parseInt(q.slice(1));
+          return !isNaN(num) && val > num;
+        } else if (q.startsWith("<")) {
+          const num = parseInt(q.slice(1));
+          return !isNaN(num) && val < num;
+        } else {
+          const num = parseInt(q);
+          return !isNaN(num) && val === num;
+        }
+      });
+    }
+
+    // Client-side sorting
+    if (invSortField) {
+      rows = [...rows].sort((a: any, b: any) => {
+        let valA: any = "";
+        let valB: any = "";
+        if (invSortField === "variant") {
+          valA = a.variantTitle ?? "";
+          valB = b.variantTitle ?? "";
+        } else if (invSortField === "type") {
+          valA = a.countryName ?? "";
+          valB = b.countryName ?? "";
+        } else if (invSortField === "stock") {
+          valA = a.stock ?? 0;
+          valB = b.stock ?? 0;
+        } else if (invSortField === "lowStockThreshold") {
+          valA = a.lowStockThreshold ?? 0;
+          valB = b.lowStockThreshold ?? 0;
+        }
+        if (valA < valB) return invSortDirection === "asc" ? -1 : 1;
+        if (valA > valB) return invSortDirection === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return rows;
+  }, [
+    allVariantInventories,
+    filterInvVariant,
+    filterInvType,
+    filterInvStock,
+    filterInvLowStock,
+    invSortField,
+    invSortDirection,
+  ]);
+
+  const totalInvItems = filteredVariantInventories.length;
+  const totalInvPages = Math.ceil(totalInvItems / invPageSize) || 1;
+
+  useEffect(() => {
+    if (invCurrentPage > totalInvPages) {
+      setInvCurrentPage(1);
+    }
+  }, [totalInvPages, invCurrentPage]);
+
+  const paginatedVariantInventories = useMemo(() => {
+    const start = (invCurrentPage - 1) * invPageSize;
+    const end = start + invPageSize;
+    return filteredVariantInventories.slice(start, end);
+  }, [filteredVariantInventories, invCurrentPage, invPageSize]);
   const filteredVariantRows = useMemo(() => {
-    return variantRows.filter((variant) => {
+    let rows = variantRows.filter((variant) => {
       if (variantTabStatusFilter && variant.status !== variantTabStatusFilter) return false;
       if (variantTabStockFilter) {
         const stock = getBaseInventory(variant.inventories)?.stock ?? 0;
@@ -1068,9 +1806,116 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         const matchesAttr = variant.attributeValues?.some((attr) => attr.attributeValue?.value?.toLowerCase().includes(q));
         if (!matchesTitle && !matchesSku && !matchesAttr) return false;
       }
+
+      // Column client-side filters
+      if (filterSku.trim()) {
+        const q = filterSku.toLowerCase().trim();
+        if (!variant.sku || !variant.sku.toLowerCase().includes(q)) return false;
+      }
+      if (filterVariantName.trim()) {
+        const q = filterVariantName.toLowerCase().trim();
+        if (!variant.title.toLowerCase().includes(q)) return false;
+      }
+      if (filterAttributes.trim()) {
+        const q = filterAttributes.toLowerCase().trim();
+        const matchesAttr = variant.attributeValues?.some((attr) => {
+          const attrVal = attr.attributeValue?.value?.toLowerCase() ?? "";
+          const attrName = attr.attribute?.name?.toLowerCase() ?? "";
+          return attrVal.includes(q) || attrName.includes(q);
+        });
+        if (!matchesAttr) return false;
+      }
+      if (filterStock.trim()) {
+        const q = filterStock.trim();
+        const stock = getBaseInventory(variant.inventories)?.stock ?? 0;
+        if (q.startsWith(">")) {
+          const num = parseInt(q.slice(1), 10);
+          if (isNaN(num) || stock <= num) return false;
+        } else if (q.startsWith("<")) {
+          const num = parseInt(q.slice(1), 10);
+          if (isNaN(num) || stock >= num) return false;
+        } else {
+          const num = parseInt(q, 10);
+          if (isNaN(num) || stock !== num) return false;
+        }
+      }
+      if (filterPrice.trim()) {
+        const q = filterPrice.trim();
+        const basePrice = getVariantPriceForCountry(variant)?.sellingPrice ?? getVariantPriceForCountry(variant)?.mrp ?? 0;
+        if (q.startsWith(">")) {
+          const num = parseFloat(q.slice(1));
+          if (isNaN(num) || Number(basePrice) <= num) return false;
+        } else if (q.startsWith("<")) {
+          const num = parseFloat(q.slice(1));
+          if (isNaN(num) || Number(basePrice) >= num) return false;
+        } else {
+          const num = parseFloat(q);
+          if (isNaN(num) || Number(basePrice) !== num) return false;
+        }
+      }
+      if (filterStatus && variant.status !== filterStatus) return false;
+
       return true;
     });
-  }, [variantRows, variantTabStatusFilter, variantTabStockFilter, variantTabSearchQuery]);
+
+    if (sortField) {
+      rows = [...rows].sort((a, b) => {
+        let valA: any = "";
+        let valB: any = "";
+        if (sortField === "sku") {
+          valA = a.sku || "";
+          valB = b.sku || "";
+        } else if (sortField === "title") {
+          valA = a.title || "";
+          valB = b.title || "";
+        } else if (sortField === "stock") {
+          valA = getBaseInventory(a.inventories)?.stock ?? 0;
+          valB = getBaseInventory(b.inventories)?.stock ?? 0;
+        } else if (sortField === "price") {
+          valA = getVariantPriceForCountry(a)?.sellingPrice ?? getVariantPriceForCountry(a)?.mrp ?? 0;
+          valB = getVariantPriceForCountry(b)?.sellingPrice ?? getVariantPriceForCountry(b)?.mrp ?? 0;
+        } else if (sortField === "status") {
+          valA = a.status || "";
+          valB = b.status || "";
+        } else if (sortField === "attributes") {
+          valA = a.attributeValues?.map(av => av.attributeValue?.value).join(", ") || "";
+          valB = b.attributeValues?.map(av => av.attributeValue?.value).join(", ") || "";
+        }
+        if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+        if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+    return rows;
+  }, [
+    variantRows,
+    variantTabStatusFilter,
+    variantTabStockFilter,
+    variantTabSearchQuery,
+    filterSku,
+    filterVariantName,
+    filterAttributes,
+    filterStock,
+    filterPrice,
+    filterStatus,
+    sortField,
+    sortDirection,
+  ]);
+
+  const totalItems = filteredVariantRows.length;
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(1);
+    }
+  }, [totalPages, currentPage]);
+
+  const paginatedVariantRows = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
+    return filteredVariantRows.slice(start, end);
+  }, [filteredVariantRows, currentPage, pageSize]);
   const bulkCountryOptions = useMemo(() => {
     const countries = new Map<string, BulkCountryOption>();
     (productCountries as CountryAvailability[]).forEach((country) => {
@@ -1970,17 +2815,19 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     const variantOverrides: Record<string, { mrp: number; sellingPrice?: number; dealerPrice?: number; distributorPrice?: number }> = {};
     variantRows.forEach((variant) => {
       const override = variantPriceOverrides[variant.id];
-      const variantMRP = override?.mrp != null && override.mrp.trim() !== "" ? Number(override.mrp) : mrp;
-      const variantSellingPrice = override?.sellingPrice != null && override.sellingPrice.trim() !== "" ? Number(override.sellingPrice) : undefined;
-      const variantDealer = override?.dealerPrice != null && override.dealerPrice.trim() !== "" ? Number(override.dealerPrice) : undefined;
-      const variantDistributor = override?.distributorPrice != null && override.distributorPrice.trim() !== "" ? Number(override.distributorPrice) : undefined;
+      if (!override) return;
 
-      if (Number.isFinite(variantMRP) && variantMRP > 0) {
+      const hasMRP = override.mrp != null && override.mrp.trim() !== "";
+      const hasSelling = override.sellingPrice != null && override.sellingPrice.trim() !== "";
+      const hasDealer = override.dealerPrice != null && override.dealerPrice.trim() !== "";
+      const hasDistributor = override.distributorPrice != null && override.distributorPrice.trim() !== "";
+
+      if (hasMRP || hasSelling || hasDealer || hasDistributor) {
         variantOverrides[variant.id] = {
-          mrp: variantMRP,
-          ...(variantSellingPrice != null && { sellingPrice: variantSellingPrice }),
-          ...(variantDealer != null && { dealerPrice: variantDealer }),
-          ...(variantDistributor != null && { distributorPrice: variantDistributor }),
+          mrp: hasMRP ? Number(override.mrp) : mrp,
+          ...(hasSelling && { sellingPrice: Number(override.sellingPrice) }),
+          ...(hasDealer && { dealerPrice: Number(override.dealerPrice) }),
+          ...(hasDistributor && { distributorPrice: Number(override.distributorPrice) }),
         };
       }
     });
@@ -2117,7 +2964,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       });
 
       const pricingUpdates: any[] = [];
-      const countries = (variantCountries as CountryAvailability[]).filter((c) => c.enabled);
+      const countries = (variantCountries as CountryAvailability[]).filter(
+        (c) => c.enabled && (productCountries as CountryAvailability[]).find((pc) => pc.id === c.id)?.enabled
+      );
 
       countries.forEach((country) => {
         const draft = editVariantCountryPrices[country.id];
@@ -3057,6 +3906,15 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   <Plus size={14} />
                   Create Manual Variant
                 </button>
+                <button
+                  onClick={() => setBulkImportOpen(true)}
+                  disabled={!product.hasVariants}
+                  className="flex items-center gap-1.5 rounded-md bg-gradient-to-r from-[#E31E24] to-[#FF6B6B] px-4 py-2 text-[13px] font-semibold text-white hover:from-[#B5151B] hover:to-[#E31E24] disabled:opacity-40 shadow-sm transition-all"
+                  id="bulk-import-trigger"
+                >
+                  <Upload size={14} />
+                  Bulk Import
+                </button>
               </div>
             </div>
             {!product.hasVariants && (
@@ -3064,32 +3922,170 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 Enable &quot;Has Variants&quot; in Basic Info first.
               </div>
             )}
-            <div className="mb-5 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
-              <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">
-                {hasMappedProductAttributes ? "Mapped Attribute Catalog" : "Global Attribute Catalog"}
-              </h4>
-              <p className="mt-1 text-[12.5px] text-[#6B6B6B]">
-                {hasMappedProductAttributes
-                  ? "Showing attributes mapped to this product. Future generated variants are limited to these mapped values."
-                  : "This product has no mapped attributes yet. Generation can still use the full global catalog; map attributes first in Product Attributes when you want product-specific controls."}
-              </p>
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {variantGenerationCatalog.map((attribute) => {
-                  const values = getAttributeValues(attribute);
-                  return (
-                    <div key={attribute.id} className="rounded-lg border border-[#E6E6E6] bg-white p-3.5">
-                      <div className="text-[13px] font-medium text-[#1A1A1A]">{attribute.name}</div>
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {values.slice(0, 5).map((value) => (
-                          <span key={value.id} className="rounded-full bg-[#F2F2F2] px-2 py-0.5 text-[11px] text-[#6B6B6B]">{value.value}</span>
-                        ))}
-                        {values.length > 5 && <span className="text-[11px] text-[#9A9A9A]">+{values.length - 5}</span>}
-                      </div>
-                    </div>
-                  );
-                })}
+
+            {/* Custom Table Controls row directly above the table */}
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#E6E6E6] bg-white p-3.5 shadow-sm">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-[13px] font-semibold text-[#1A1A1A]">List</span>
+                <span className="rounded-full bg-[#FEF2F2] border border-red-100 px-2.5 py-0.5 text-[11.5px] font-semibold text-red-600">
+                  {selectedVariantIds.length} selected
+                </span>
+                <span className="text-[12.5px] text-[#6B6B6B]">
+                  Showing {totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalItems)} of {totalItems}
+                </span>
+                <div className="flex items-center gap-1">
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="rounded-md border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] text-[#1A1A1A] outline-none"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-1.5 ml-2">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="rounded-md border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] hover:bg-[#F5F5F5] disabled:opacity-40"
+                  >
+                    Prev
+                  </button>
+                  <span className="text-[12px] text-[#1A1A1A] font-semibold">{currentPage}/{totalPages}</span>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="rounded-md border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] hover:bg-[#F5F5F5] disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                <input
+                  type="text"
+                  placeholder={
+                    bulkActionType === "Standard price update"
+                      ? "Price"
+                      : bulkActionType === "Stock update filtered"
+                      ? "Stock quantity"
+                      : "Value"
+                  }
+                  value={bulkActionValue}
+                  onChange={(e) => setBulkActionValue(e.target.value)}
+                  disabled={
+                    bulkActionType === "Bulk Action" ||
+                    bulkActionType === "Mark active" ||
+                    bulkActionType === "Mark inactive" ||
+                    bulkActionType === "Delete selected"
+                  }
+                  className="w-[130px] rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] outline-none focus:border-[#E31E24] disabled:opacity-50"
+                />
+                <select
+                  value={bulkActionType}
+                  onChange={(e) => setBulkActionType(e.target.value)}
+                  className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                >
+                  <option value="Bulk Action">Bulk Action</option>
+                  <option value="Mark active">Mark active</option>
+                  <option value="Mark inactive">Mark inactive</option>
+                  <option value="Standard price update">Standard price update</option>
+                  <option value="Stock update filtered">Stock update filtered</option>
+                  <option value="Delete selected">Delete selected</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!selectedVariantIds.length) {
+                      showToast("Please select at least one variant.", "error");
+                      return;
+                    }
+                    if (bulkActionType === "Bulk Action") {
+                      showToast("Please select a bulk action.", "error");
+                      return;
+                    }
+                    setBulkSaving(true);
+                    try {
+                      let updates: any[] = [];
+                      if (bulkActionType === "Mark active") {
+                        updates = selectedVariantIds.map((id) => ({ variantId: id, action: "restore" }));
+                      } else if (bulkActionType === "Mark inactive") {
+                        updates = selectedVariantIds.map((id) => ({ variantId: id, action: "delete" }));
+                      } else if (bulkActionType === "Standard price update") {
+                        if (!bulkActionValue.trim() || isNaN(parseFloat(bulkActionValue))) {
+                          showToast("Please enter a valid price.", "error");
+                          setBulkSaving(false);
+                          return;
+                        }
+                        updates = selectedVariantIds.map((id) => ({
+                          variantId: id,
+                          price: { sellingPrice: parseFloat(bulkActionValue) },
+                          countryId: product?.defaultCountryId || undefined,
+                        }));
+                      } else if (bulkActionType === "Stock update filtered") {
+                        if (!bulkActionValue.trim() || isNaN(parseInt(bulkActionValue, 10))) {
+                          showToast("Please enter a valid stock quantity.", "error");
+                          setBulkSaving(false);
+                          return;
+                        }
+                        updates = selectedVariantIds.map((id) => ({
+                          variantId: id,
+                          stock: parseInt(bulkActionValue, 10),
+                        }));
+                      } else if (bulkActionType === "Delete selected") {
+                        if (!window.confirm(`Delete ${selectedVariantIds.length} selected variant(s)?`)) {
+                          setBulkSaving(false);
+                          return;
+                        }
+                        updates = selectedVariantIds.map((id) => ({ variantId: id, action: "delete" }));
+                      }
+
+                      const response = await adminApi.put(`/products/${productId}/variants/bulk`, { updates });
+                      const summary = response.data.data.summary;
+                      showToast(summary.failed ? `Updated ${summary.succeeded}; ${summary.failed} failed.` : `Successfully updated ${summary.succeeded} variant(s).`, summary.failed ? "error" : "success");
+                      setSelectedVariantIds([]);
+                      setBulkActionValue("");
+                      setBulkActionType("Bulk Action");
+                      await refetch();
+                    } catch (error) {
+                      showToast(getAdminErrorMessage(error, "Bulk update failed."), "error");
+                    } finally {
+                      setBulkSaving(false);
+                    }
+                  }}
+                  disabled={bulkSaving || selectedVariantIds.length === 0}
+                  className="rounded-md bg-[#1A1A1A] hover:bg-[#333] px-4 py-1.5 text-[12.5px] font-bold text-white shadow-sm disabled:opacity-40"
+                >
+                  Apply
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterSku("");
+                    setFilterVariantName("");
+                    setFilterAttributes("");
+                    setFilterStock("");
+                    setFilterPrice("");
+                    setFilterStatus("");
+                    setVariantTabSearchQuery("");
+                    setVariantTabStatusFilter("");
+                    setVariantTabStockFilter("");
+                  }}
+                  className="rounded-md border border-[#E6E6E6] bg-white px-4 py-1.5 text-[12.5px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                >
+                  Clear Filters
+                </button>
               </div>
             </div>
+
             {variantDisplayMode === "flat" && variantGridState.reasons.length > 0 && (
               <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] leading-relaxed text-amber-800">
                 <span className="font-semibold">Flat list active:</span> {variantGridState.reasons[0]}.
@@ -3110,7 +4106,256 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             ) : bulkEditMode ? (
               renderBulkFlatVariantTable()
             ) : (
-              <DataTable columns={variantCols} data={filteredVariantRows} rowKey="id" emptyMessage="No variants match filters." />
+              <div className="overflow-x-auto rounded-lg border border-[#E6E6E6] bg-white">
+                <table className="min-w-full border-collapse text-left text-[13px]">
+                  <thead className="bg-[#FAFAFA] text-[12px] font-semibold text-[#6B6B6B]">
+                    <tr>
+                      <th className="border-b border-[#E6E6E6] px-4 py-3 w-12 text-center">
+                        <input
+                          type="checkbox"
+                          checked={paginatedVariantRows.length > 0 && paginatedVariantRows.every((r) => selectedVariantIds.includes(r.id))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              const pageIds = paginatedVariantRows.map((r) => r.id);
+                              setSelectedVariantIds((prev) => Array.from(new Set([...prev, ...pageIds])));
+                            } else {
+                              const pageIds = new Set(paginatedVariantRows.map((r) => r.id));
+                              setSelectedVariantIds((prev) => prev.filter((id) => !pageIds.has(id)));
+                            }
+                          }}
+                          className="h-4 w-4 accent-[#E31E24]"
+                        />
+                      </th>
+                      <th
+                        onClick={() => {
+                          setSortField("sku");
+                          setSortDirection((d) => d === "asc" ? "desc" : "asc");
+                        }}
+                        className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                      >
+                        <div className="flex items-center gap-1 hover:text-[#1A1A1A]">
+                          SKU {sortField === "sku" ? (sortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => {
+                          setSortField("title");
+                          setSortDirection((d) => d === "asc" ? "desc" : "asc");
+                        }}
+                        className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                      >
+                        <div className="flex items-center gap-1 hover:text-[#1A1A1A]">
+                          Variant {sortField === "title" ? (sortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => {
+                          setSortField("attributes");
+                          setSortDirection((d) => d === "asc" ? "desc" : "asc");
+                        }}
+                        className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                      >
+                        <div className="flex items-center gap-1 hover:text-[#1A1A1A]">
+                          Attributes {sortField === "attributes" ? (sortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => {
+                          setSortField("stock");
+                          setSortDirection((d) => d === "asc" ? "desc" : "asc");
+                        }}
+                        className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                      >
+                        <div className="flex items-center gap-1 hover:text-[#1A1A1A]">
+                          Stock {sortField === "stock" ? (sortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => {
+                          setSortField("price");
+                          setSortDirection((d) => d === "asc" ? "desc" : "asc");
+                        }}
+                        className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                      >
+                        <div className="flex items-center gap-1 hover:text-[#1A1A1A]">
+                          Price {sortField === "price" ? (sortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => {
+                          setSortField("status");
+                          setSortDirection((d) => d === "asc" ? "desc" : "asc");
+                        }}
+                        className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                      >
+                        <div className="flex items-center gap-1 hover:text-[#1A1A1A]">
+                          Status {sortField === "status" ? (sortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                        </div>
+                      </th>
+                      <th className="border-b border-[#E6E6E6] px-4 py-3">ACTIONS</th>
+                    </tr>
+
+                    <tr className="bg-white">
+                      <th className="border-b border-[#E6E6E6] px-4 py-2"></th>
+                      <th className="border-b border-[#E6E6E6] px-4 py-2">
+                        <input
+                          placeholder="Filter SKU"
+                          value={filterSku}
+                          onChange={(e) => {
+                            setFilterSku(e.target.value);
+                            setCurrentPage(1);
+                          }}
+                          className="w-full rounded border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                        />
+                      </th>
+                      <th className="border-b border-[#E6E6E6] px-4 py-2">
+                        <input
+                          placeholder="Filter variant"
+                          value={filterVariantName}
+                          onChange={(e) => {
+                            setFilterVariantName(e.target.value);
+                            setCurrentPage(1);
+                          }}
+                          className="w-full rounded border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                        />
+                      </th>
+                      <th className="border-b border-[#E6E6E6] px-4 py-2">
+                        <input
+                          placeholder="Filter attributes"
+                          value={filterAttributes}
+                          onChange={(e) => {
+                            setFilterAttributes(e.target.value);
+                            setCurrentPage(1);
+                          }}
+                          className="w-full rounded border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                        />
+                      </th>
+                      <th className="border-b border-[#E6E6E6] px-4 py-2">
+                        <input
+                          placeholder="Filter stock"
+                          value={filterStock}
+                          onChange={(e) => {
+                            setFilterStock(e.target.value);
+                            setCurrentPage(1);
+                          }}
+                          className="w-full rounded border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                        />
+                      </th>
+                      <th className="border-b border-[#E6E6E6] px-4 py-2">
+                        <input
+                          placeholder="Filter price"
+                          value={filterPrice}
+                          onChange={(e) => {
+                            setFilterPrice(e.target.value);
+                            setCurrentPage(1);
+                          }}
+                          className="w-full rounded border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                        />
+                      </th>
+                      <th className="border-b border-[#E6E6E6] px-4 py-2">
+                        <select
+                          value={filterStatus}
+                          onChange={(e) => {
+                            setFilterStatus(e.target.value);
+                            setCurrentPage(1);
+                          }}
+                          className="w-full rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12.5px] font-normal outline-none focus:border-[#E31E24]"
+                        >
+                          <option value="">All status</option>
+                          <option value="ACTIVE">Active</option>
+                          <option value="INACTIVE">Inactive</option>
+                        </select>
+                      </th>
+                      <th className="border-b border-[#E6E6E6] px-4 py-2 text-right text-[11px] font-medium text-[#9A9A9A] select-none pr-8 whitespace-nowrap">
+                        Columns filters (client-side)
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedVariantRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-8 text-center text-[#9A9A9A]">
+                          No variants match filters.
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedVariantRows.map((variant) => {
+                        const baseStock = getBaseInventory(variant.inventories)?.stock ?? "—";
+                        const priceObj = getVariantPriceForCountry(variant);
+                        const formattedPrice = priceObj
+                          ? `${priceObj.currency?.symbol ?? "₹"}${priceObj.sellingPrice ?? priceObj.mrp ?? "0.00"}`
+                          : "—";
+
+                        return (
+                          <tr key={variant.id} className="border-b border-[#F0F0F0] last:border-b-0 hover:bg-[#FAF9F9]">
+                            <td className="px-4 py-3 text-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedVariantIds.includes(variant.id)}
+                                onChange={(e) => {
+                                  setSelectedVariantIds((prev) =>
+                                    e.target.checked
+                                      ? [...prev, variant.id]
+                                      : prev.filter((id) => id !== variant.id)
+                                  );
+                                }}
+                                className="h-4 w-4 accent-[#E31E24]"
+                              />
+                            </td>
+                            <td className="px-4 py-3 font-medium text-[#1A1A1A]">{variant.sku || "No SKU"}</td>
+                            <td className="px-4 py-3 text-[#555]">{variant.title}</td>
+                            <td className="px-4 py-3 text-[#6B6B6B] text-[12px]">
+                              {variant.attributeValues?.map((av) => (
+                                <span key={av.attributeValueId} className="mr-1 inline-block bg-[#F2F2F2] px-2 py-0.5 rounded text-[#555]">
+                                  {av.attribute?.name}: {av.attributeValue?.value}
+                                </span>
+                              )) || "—"}
+                            </td>
+                            <td className="px-4 py-3 font-medium text-[#1A1A1A]">{baseStock}</td>
+                            <td className="px-4 py-3 font-medium text-[#1A1A1A]">{formattedPrice}</td>
+                            <td className="px-4 py-3">
+                              <StatusBadge status={variant.status} />
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditVariantModal(variant)}
+                                  className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]"
+                                >
+                                  <Pencil size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openVariantCountriesModal(variant)}
+                                  className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]"
+                                  title="Country availability"
+                                >
+                                  <Globe2 size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCloneVariant(variant.id)}
+                                  className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]"
+                                >
+                                  <Copy size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingVariant(variant)}
+                                  className="rounded border border-[#F2C9C9] px-2 py-1 text-[12px] text-red-600 hover:bg-red-50"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}
@@ -3120,6 +4365,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             <div className="flex flex-wrap gap-1 rounded-lg border border-[#E6E6E6] bg-white p-1 max-w-max">
               {[
                 { key: "base", label: "Base Prices" },
+                { key: "variant_prices", label: "Variant Prices" },
                 { key: "tier", label: "Tier Pricing" },
                 { key: "moq", label: "MOQ Pricing" },
               ].map((subTab) => (
@@ -3190,30 +4436,688 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   renderBulkBasePriceTable()
                 ) : (
                   <>
-                    {selectedPriceIds.length > 0 && (
-                      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-red-200 bg-red-50/50 p-3.5 text-[13px] text-[#1A1A1A]">
-                        <span className="font-medium">{selectedPriceIds.length} row(s) selected</span>
-                        <div className="flex gap-2 ml-auto">
+                    {/* Custom Table Controls row directly above the table */}
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#E6E6E6] bg-white p-3.5 shadow-sm">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="text-[13px] font-semibold text-[#1A1A1A]">List</span>
+                        <span className="rounded-full bg-[#FEF2F2] border border-red-100 px-2.5 py-0.5 text-[11.5px] font-semibold text-red-600">
+                          {selectedPriceIds.length} selected
+                        </span>
+                        <span className="text-[12.5px] text-[#6B6B6B]">
+                          Showing {totalPriceItems === 0 ? 0 : (priceCurrentPage - 1) * pricePageSize + 1}-{Math.min(priceCurrentPage * pricePageSize, totalPriceItems)} of {totalPriceItems}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <select
+                            value={pricePageSize}
+                            onChange={(e) => {
+                              setPricePageSize(Number(e.target.value));
+                              setPriceCurrentPage(1);
+                            }}
+                            className="rounded-md border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] text-[#1A1A1A] outline-none"
+                          >
+                            <option value={10}>10</option>
+                            <option value={25}>25</option>
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-1.5 ml-2">
                           <button
                             type="button"
-                            onClick={handleStartBulkEditPrices}
-                            className="rounded border border-[#E6E6E6] bg-white px-3 py-1.5 font-medium text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#1A1A1A]"
+                            onClick={() => setPriceCurrentPage((p) => Math.max(1, p - 1))}
+                            disabled={priceCurrentPage === 1}
+                            className="rounded-md border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] hover:bg-[#F5F5F5] disabled:opacity-40"
                           >
-                            Bulk Edit Selected
+                            Prev
                           </button>
+                          <span className="text-[12px] text-[#1A1A1A] font-semibold">{priceCurrentPage}/{totalPricePages}</span>
                           <button
                             type="button"
-                            onClick={handleBulkDeletePrices}
-                            className="rounded bg-red-600 px-3 py-1.5 font-semibold text-white hover:bg-red-700"
+                            onClick={() => setPriceCurrentPage((p) => Math.min(totalPricePages, p + 1))}
+                            disabled={priceCurrentPage === totalPricePages}
+                            className="rounded-md border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] hover:bg-[#F5F5F5] disabled:opacity-40"
                           >
-                            Bulk Delete Selected
+                            Next
                           </button>
                         </div>
                       </div>
-                    )}
-                    <DataTable columns={pricingCols} data={productBasePrices} rowKey="id" emptyMessage="No pricing set. Use Generate to auto-fill all countries." />
+
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <input
+                          type="text"
+                          placeholder={
+                            priceBulkActionType === "Update MRP"
+                              ? "MRP"
+                              : priceBulkActionType === "Update Selling Price"
+                              ? "Selling Price"
+                              : priceBulkActionType === "Update Dealer"
+                              ? "Dealer Price"
+                              : priceBulkActionType === "Update Doctor / Retailer"
+                              ? "Doctor/Retailer Price"
+                              : "Value"
+                          }
+                          value={priceBulkActionValue}
+                          onChange={(e) => setPriceBulkActionValue(e.target.value)}
+                          disabled={
+                            priceBulkActionType === "Bulk Action" ||
+                            priceBulkActionType === "Mark active" ||
+                            priceBulkActionType === "Mark inactive" ||
+                            priceBulkActionType === "Delete selected"
+                          }
+                          className="w-[130px] rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] outline-none focus:border-[#E31E24] disabled:opacity-50"
+                        />
+                        <select
+                          value={priceBulkActionType}
+                          onChange={(e) => setPriceBulkActionType(e.target.value)}
+                          className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                        >
+                          <option value="Bulk Action">Bulk Action</option>
+                          <option value="Mark active">Mark active</option>
+                          <option value="Mark inactive">Mark inactive</option>
+                          <option value="Update MRP">Update MRP</option>
+                          <option value="Update Selling Price">Update Selling Price</option>
+                          <option value="Update Dealer">Update Dealer</option>
+                          <option value="Update Doctor / Retailer">Update Doctor / Retailer</option>
+                          <option value="Delete selected">Delete selected</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={handlePriceBulkApplyAction}
+                          disabled={bulkSaving || selectedPriceIds.length === 0}
+                          className="rounded-md bg-[#1A1A1A] hover:bg-[#333] px-4 py-1.5 text-[12.5px] font-bold text-white shadow-sm disabled:opacity-40"
+                        >
+                          Apply
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFilterPriceCountry("");
+                            setFilterPriceMRP("");
+                            setFilterPriceSelling("");
+                            setFilterPriceDealer("");
+                            setFilterPriceDoctor("");
+                            setFilterPriceStatus("");
+                          }}
+                          className="rounded-md border border-[#E6E6E6] bg-white px-4 py-1.5 text-[12.5px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                        >
+                          Clear Filters
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-lg border border-[#E6E6E6] bg-white">
+                      <table className="min-w-full border-collapse text-left text-[13px]">
+                        <thead className="bg-[#FAFAFA] text-[12px] font-semibold text-[#6B6B6B]">
+                          <tr>
+                            <th className="border-b border-[#E6E6E6] px-4 py-3 w-12 text-center">
+                              <input
+                                type="checkbox"
+                                checked={paginatedBasePrices.length > 0 && paginatedBasePrices.every((r: any) => selectedPriceIds.includes(r.id))}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    const pageIds = paginatedBasePrices.map((r: any) => r.id);
+                                    setSelectedPriceIds((prev) => Array.from(new Set([...prev, ...pageIds])));
+                                  } else {
+                                    const pageIds = new Set(paginatedBasePrices.map((r: any) => r.id));
+                                    setSelectedPriceIds((prev) => prev.filter((id) => !pageIds.has(id)));
+                                  }
+                                }}
+                                className="h-4 w-4 accent-[#E31E24]"
+                              />
+                            </th>
+                            <th
+                              onClick={() => {
+                                setPriceSortField("country");
+                                setPriceSortDirection((d) => d === "asc" ? "desc" : "asc");
+                              }}
+                              className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                            >
+                              <div className="flex items-center gap-1 hover:text-[#1A1A1A]">
+                                Country {priceSortField === "country" ? (priceSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                              </div>
+                            </th>
+                            <th
+                              onClick={() => {
+                                setPriceSortField("mrp");
+                                setPriceSortDirection((d) => d === "asc" ? "desc" : "asc");
+                              }}
+                              className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                            >
+                              <div className="flex items-center gap-1 hover:text-[#1A1A1A]">
+                                MRP {priceSortField === "mrp" ? (priceSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                              </div>
+                            </th>
+                            <th
+                              onClick={() => {
+                                setPriceSortField("sellingPrice");
+                                setPriceSortDirection((d) => d === "asc" ? "desc" : "asc");
+                              }}
+                              className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                            >
+                              <div className="flex items-center gap-1 hover:text-[#1A1A1A]">
+                                Selling Price {priceSortField === "sellingPrice" ? (priceSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                              </div>
+                            </th>
+                            <th
+                              onClick={() => {
+                                setPriceSortField("dealerPrice");
+                                setPriceSortDirection((d) => d === "asc" ? "desc" : "asc");
+                              }}
+                              className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                            >
+                              <div className="flex items-center gap-1 hover:text-[#1A1A1A]">
+                                Dealer {priceSortField === "dealerPrice" ? (priceSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                              </div>
+                            </th>
+                            <th
+                              onClick={() => {
+                                setPriceSortField("distributorPrice");
+                                setPriceSortDirection((d) => d === "asc" ? "desc" : "asc");
+                              }}
+                              className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                            >
+                              <div className="flex items-center gap-1 hover:text-[#1A1A1A]">
+                                Doctor / Retailer {priceSortField === "distributorPrice" ? (priceSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                              </div>
+                            </th>
+                            <th
+                              onClick={() => {
+                                setPriceSortField("status");
+                                setPriceSortDirection((d) => d === "asc" ? "desc" : "asc");
+                              }}
+                              className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                            >
+                              <div className="flex items-center gap-1 hover:text-[#1A1A1A]">
+                                Status {priceSortField === "status" ? (priceSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                              </div>
+                            </th>
+                            <th className="border-b border-[#E6E6E6] px-4 py-3">ACTIONS</th>
+                          </tr>
+
+                          <tr className="bg-white">
+                            <th className="border-b border-[#E6E6E6] px-4 py-2"></th>
+                            <th className="border-b border-[#E6E6E6] px-4 py-2">
+                              <input
+                                placeholder="Filter Country"
+                                value={filterPriceCountry}
+                                onChange={(e) => {
+                                  setFilterPriceCountry(e.target.value);
+                                  setPriceCurrentPage(1);
+                                }}
+                                className="w-full rounded border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                              />
+                            </th>
+                            <th className="border-b border-[#E6E6E6] px-4 py-2">
+                              <input
+                                placeholder="Filter MRP"
+                                value={filterPriceMRP}
+                                onChange={(e) => {
+                                  setFilterPriceMRP(e.target.value);
+                                  setPriceCurrentPage(1);
+                                }}
+                                className="w-full rounded border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                              />
+                            </th>
+                            <th className="border-b border-[#E6E6E6] px-4 py-2">
+                              <input
+                                placeholder="Filter Selling Price"
+                                value={filterPriceSelling}
+                                onChange={(e) => {
+                                  setFilterPriceSelling(e.target.value);
+                                  setPriceCurrentPage(1);
+                                }}
+                                className="w-full rounded border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                              />
+                            </th>
+                            <th className="border-b border-[#E6E6E6] px-4 py-2">
+                              <input
+                                placeholder="Filter Dealer"
+                                value={filterPriceDealer}
+                                onChange={(e) => {
+                                  setFilterPriceDealer(e.target.value);
+                                  setPriceCurrentPage(1);
+                                }}
+                                className="w-full rounded border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                              />
+                            </th>
+                            <th className="border-b border-[#E6E6E6] px-4 py-2">
+                              <input
+                                placeholder="Filter Doctor / Retailer"
+                                value={filterPriceDoctor}
+                                onChange={(e) => {
+                                  setFilterPriceDoctor(e.target.value);
+                                  setPriceCurrentPage(1);
+                                }}
+                                className="w-full rounded border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                              />
+                            </th>
+                            <th className="border-b border-[#E6E6E6] px-4 py-2">
+                              <select
+                                value={filterPriceStatus}
+                                onChange={(e) => {
+                                  setFilterPriceStatus(e.target.value);
+                                  setPriceCurrentPage(1);
+                                }}
+                                className="w-full rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12.5px] font-normal outline-none focus:border-[#E31E24]"
+                              >
+                                <option value="">All status</option>
+                                <option value="ACTIVE">Active</option>
+                                <option value="INACTIVE">Inactive</option>
+                              </select>
+                            </th>
+                            <th className="border-b border-[#E6E6E6] px-4 py-2 text-right text-[11px] font-medium text-[#9A9A9A] select-none pr-8 whitespace-nowrap">
+                              Columns filters (client-side)
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginatedBasePrices.length === 0 ? (
+                            <tr>
+                              <td colSpan={8} className="px-4 py-8 text-center text-[#9A9A9A]">
+                                No country-wise prices match filters.
+                              </td>
+                            </tr>
+                          ) : (
+                            paginatedBasePrices.map((price: any) => {
+                              const formattedMRP = `${price.currency?.symbol ?? "$"}${price.mrp}`;
+                              const formattedSelling = `${price.currency?.symbol ?? "$"}${price.sellingPrice}`;
+                              const formattedDealer = price.dealerPrice != null ? `${price.currency?.symbol ?? "$"}${price.dealerPrice}` : "—";
+                              const formattedDoctor = price.distributorPrice != null ? `${price.currency?.symbol ?? "$"}${price.distributorPrice}` : "—";
+
+                              return (
+                                <tr key={price.id} className="border-b border-[#F0F0F0] last:border-b-0 hover:bg-[#FAF9F9]">
+                                  <td className="px-4 py-3 text-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedPriceIds.includes(price.id)}
+                                      onChange={() => handleToggleSelectPrice(price.id)}
+                                      className="h-4 w-4 accent-[#E31E24]"
+                                    />
+                                  </td>
+                                  <td className="px-4 py-3 font-medium text-[#1A1A1A]">
+                                    {price.country?.name} ({price.country?.code})
+                                  </td>
+                                  <td className="px-4 py-3 text-[#1A1A1A] font-medium">{formattedMRP}</td>
+                                  <td className="px-4 py-3 text-[#1A1A1A] font-medium">{formattedSelling}</td>
+                                  <td className="px-4 py-3 text-[#1A1A1A]">{formattedDealer}</td>
+                                  <td className="px-4 py-3 text-[#1A1A1A]">{formattedDoctor}</td>
+                                  <td className="px-4 py-3">
+                                    <StatusBadge status={price.status} />
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStartEditPrice(price)}
+                                        className="rounded border border-[#E6E6E6] p-1 text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#1A1A1A]"
+                                      >
+                                        <Pencil size={13} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteProductPrice(price.id)}
+                                        className="rounded border border-[#F2C9C9] p-1 text-red-600 hover:bg-red-50"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </>
                 )}
+              </section>
+            )}
+
+            {pricingSubTab === "variant_prices" && (
+              <section>
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Variant-wise Pricing</h3>
+                    <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Manage country-specific overrides for product variants.</p>
+                  </div>
+                </div>
+
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E6E6E6] bg-white p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded bg-[#F2F2F2] px-2 py-0.5 text-[11px] font-semibold text-[#6B6B6B]">List</span>
+                    <span className="text-[12.5px] font-semibold text-[#1A1A1A]">{selectedVPIds.length} selected</span>
+                    <div className="h-4 w-px bg-[#E6E6E6]" />
+                    <span className="text-[12.5px] text-[#6B6B6B]">
+                      Showing {totalVPItems > 0 ? (vpCurrentPage - 1) * vpPageSize + 1 : 0}-
+                      {Math.min(vpCurrentPage * vpPageSize, totalVPItems)} of {totalVPItems}
+                    </span>
+                    <select
+                      value={vpPageSize}
+                      onChange={(e) => {
+                        setVpPageSize(Number(e.target.value));
+                        setVpCurrentPage(1);
+                      }}
+                      className="rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] outline-none"
+                    >
+                      {[10, 25, 50, 100].map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setVpCurrentPage((p) => Math.max(1, p - 1))}
+                        disabled={vpCurrentPage === 1}
+                        className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] font-medium hover:bg-[#F2F2F2] disabled:opacity-40"
+                      >
+                        Prev
+                      </button>
+                      <span className="text-[12.5px] text-[#1A1A1A] font-medium px-1">
+                        {vpCurrentPage}/{totalVPPages}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setVpCurrentPage((p) => Math.min(totalVPPages, p + 1))}
+                        disabled={vpCurrentPage === totalVPPages}
+                        className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] font-medium hover:bg-[#F2F2F2] disabled:opacity-40"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Value"
+                      value={vpBulkActionValue}
+                      onChange={(e) => setVpBulkActionValue(e.target.value)}
+                      disabled={bulkSaving || ["Bulk Action", "Mark active", "Mark inactive", "Delete selected"].includes(vpBulkActionType)}
+                      className="h-8.5 rounded-md border border-[#E6E6E6] px-3 text-[12.5px] outline-none disabled:bg-[#FAFAFA]"
+                    />
+                    <select
+                      value={vpBulkActionType}
+                      onChange={(e) => setVpBulkActionType(e.target.value)}
+                      className="h-8.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[12.5px] outline-none focus:border-[#E31E24]"
+                    >
+                      <option>Bulk Action</option>
+                      <option>Mark active</option>
+                      <option>Mark inactive</option>
+                      <option>Update MRP</option>
+                      <option>Update Selling Price</option>
+                      <option>Update Dealer</option>
+                      <option>Update Doctor / Retailer</option>
+                      <option>Delete selected</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleVPBulkApplyAction}
+                      disabled={bulkSaving || selectedVPIds.length === 0 || vpBulkActionType === "Bulk Action"}
+                      className="h-8.5 rounded-md bg-[#808080] px-4 text-[12.5px] font-semibold text-white hover:bg-[#6B6B6B] disabled:opacity-50"
+                    >
+                      {bulkSaving ? "Applying..." : "Apply"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFilterVPVariant("");
+                        setFilterVPCountry("");
+                        setFilterVPMRP("");
+                        setFilterVPSelling("");
+                        setFilterVPDealer("");
+                        setFilterVPDoctor("");
+                        setFilterVPStatus("");
+                        setSelectedVPIds([]);
+                      }}
+                      className="h-8.5 rounded-md border border-[#E6E6E6] bg-white px-4 text-[12.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
+                    >
+                      Clear Filters
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto rounded-lg border border-[#E6E6E6] bg-white">
+                  <table className="min-w-full border-collapse text-left text-[13px]">
+                    <thead className="bg-[#FAFAFA] text-[12px] font-semibold text-[#6B6B6B]">
+                      <tr>
+                        <th className="border-b border-[#E6E6E6] px-4 py-3 w-12 text-center">
+                          <input
+                            type="checkbox"
+                            checked={paginatedVariantPrices.length > 0 && paginatedVariantPrices.every((r: any) => selectedVPIds.includes(r.id))}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                const pageIds = paginatedVariantPrices.map((r: any) => r.id);
+                                setSelectedVPIds((prev) => Array.from(new Set([...prev, ...pageIds])));
+                              } else {
+                                const pageIds = new Set(paginatedVariantPrices.map((r: any) => r.id));
+                                setSelectedVPIds((prev) => prev.filter((id) => !pageIds.has(id)));
+                              }
+                            }}
+                            className="h-4 w-4 accent-[#E31E24]"
+                          />
+                        </th>
+                        <th
+                          onClick={() => {
+                            setVpSortField("variant");
+                            setVpSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+                          }}
+                          className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                        >
+                          Variant {vpSortField === "variant" ? (vpSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                        </th>
+                        <th
+                          onClick={() => {
+                            setVpSortField("country");
+                            setVpSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+                          }}
+                          className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                        >
+                          Country {vpSortField === "country" ? (vpSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                        </th>
+                        <th
+                          onClick={() => {
+                            setVpSortField("mrp");
+                            setVpSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+                          }}
+                          className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                        >
+                          MRP {vpSortField === "mrp" ? (vpSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                        </th>
+                        <th
+                          onClick={() => {
+                            setVpSortField("sellingPrice");
+                            setVpSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+                          }}
+                          className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                        >
+                          Selling Price {vpSortField === "sellingPrice" ? (vpSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                        </th>
+                        <th
+                          onClick={() => {
+                            setVpSortField("dealerPrice");
+                            setVpSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+                          }}
+                          className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                        >
+                          Dealer {vpSortField === "dealerPrice" ? (vpSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                        </th>
+                        <th
+                          onClick={() => {
+                            setVpSortField("distributorPrice");
+                            setVpSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+                          }}
+                          className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                        >
+                          Doctor / Retailer {vpSortField === "distributorPrice" ? (vpSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                        </th>
+                        <th
+                          onClick={() => {
+                            setVpSortField("status");
+                            setVpSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+                          }}
+                          className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                        >
+                          Status {vpSortField === "status" ? (vpSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                        </th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-3">ACTIONS</th>
+                      </tr>
+                      <tr className="bg-[#FCFCFC]">
+                        <th className="border-b border-[#E6E6E6] px-4 py-2"></th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2">
+                          <input
+                            type="text"
+                            placeholder="Filter Variant"
+                            value={filterVPVariant}
+                            onChange={(e) => setFilterVPVariant(e.target.value)}
+                            className="w-full rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                          />
+                        </th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2">
+                          <input
+                            type="text"
+                            placeholder="Filter Country"
+                            value={filterVPCountry}
+                            onChange={(e) => setFilterVPCountry(e.target.value)}
+                            className="w-full rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                          />
+                        </th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2">
+                          <input
+                            type="text"
+                            placeholder="Filter MRP"
+                            value={filterVPMRP}
+                            onChange={(e) => setFilterVPMRP(e.target.value)}
+                            className="w-full rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                          />
+                        </th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2">
+                          <input
+                            type="text"
+                            placeholder="Filter Selling Price"
+                            value={filterVPSelling}
+                            onChange={(e) => setFilterVPSelling(e.target.value)}
+                            className="w-full rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                          />
+                        </th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2">
+                          <input
+                            type="text"
+                            placeholder="Filter Dealer"
+                            value={filterVPDealer}
+                            onChange={(e) => setFilterVPDealer(e.target.value)}
+                            className="w-full rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                          />
+                        </th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2">
+                          <input
+                            type="text"
+                            placeholder="Filter Doctor / Retailer"
+                            value={filterVPDoctor}
+                            onChange={(e) => setFilterVPDoctor(e.target.value)}
+                            className="w-full rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                          />
+                        </th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2">
+                          <select
+                            value={filterVPStatus}
+                            onChange={(e) => setFilterVPStatus(e.target.value)}
+                            className="w-full rounded border border-[#E6E6E6] bg-white px-1.5 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                          >
+                            <option value="">All status</option>
+                            <option value="ACTIVE">ACTIVE</option>
+                            <option value="INACTIVE">INACTIVE</option>
+                          </select>
+                        </th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2 text-[11px] text-[#9A9A9A] font-normal">Columns filters (client-side)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E6E6E6]">
+                      {paginatedVariantPrices.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} className="px-4 py-8 text-center text-[#9A9A9A]">
+                            No variant price overrides found.
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedVariantPrices.map((price: any) => {
+                          const currencySymbol = price.currency?.symbol ?? price.country?.currency?.symbol ?? "$";
+                          return (
+                            <tr key={price.id} className="hover:bg-[#FAFAFA]">
+                              <td className="px-4 py-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedVPIds.includes(price.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedVPIds((prev) => [...prev, price.id]);
+                                    } else {
+                                      setSelectedVPIds((prev) => prev.filter((id) => id !== price.id));
+                                    }
+                                  }}
+                                  className="h-4 w-4 accent-[#E31E24]"
+                                />
+                              </td>
+                              <td className="px-4 py-3 font-medium text-[#1A1A1A]">
+                                {price.variantTitle} {price.variantSku ? `(${price.variantSku})` : ""}
+                              </td>
+                              <td className="px-4 py-3 text-[#6B6B6B]">
+                                {price.country?.name} ({price.country?.code})
+                              </td>
+                              <td className="px-4 py-3 font-medium text-[#1A1A1A]">
+                                {currencySymbol}
+                                {price.mrp}
+                              </td>
+                              <td className="px-4 py-3 font-semibold text-[#16A34A]">
+                                {currencySymbol}
+                                {price.sellingPrice}
+                              </td>
+                              <td className="px-4 py-3 text-[#1A1A1A]">
+                                {price.dealerPrice != null ? `${currencySymbol}${price.dealerPrice}` : "—"}
+                              </td>
+                              <td className="px-4 py-3 text-[#1A1A1A]">
+                                {price.distributorPrice != null ? `${currencySymbol}${price.distributorPrice}` : "—"}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span
+                                  className={cn(
+                                    "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                                    price.status === "ACTIVE" ? "bg-[#E6F4EA] text-[#137333]" : "bg-[#FCE8E6] text-[#C5221F]"
+                                  )}
+                                >
+                                  {price.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const variant = variantRows.find((v) => v.id === price.variantId);
+                                      if (variant) openEditVariantModal(variant);
+                                    }}
+                                    className="rounded border border-[#E6E6E6] p-1 text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#1A1A1A]"
+                                  >
+                                    <Pencil size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteProductPrice(price.id)}
+                                    className="rounded border border-[#F2C9C9] p-1 text-red-600 hover:bg-red-50"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </section>
             )}
 
@@ -3302,150 +5206,330 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 );
               })()}
             </div>
-            {variantRows.length > 0 && <div className="space-y-3">
-              {variantRows.map((variant) => ({
-                    id: variant.id,
-                    title: variant.title,
-                    inventories: variant.inventories ?? [],
-                  })).map(
-                (item: { id: string; title: string; inventories?: VariantRow["inventories"] }) => {
-                  const baseInventory = getBaseInventory(item.inventories);
-                  const countryInventories = (item.inventories ?? []).filter((inventory) => inventory.countryId);
-                  const existingCountryIds = new Set(countryInventories.map((inventory) => inventory.countryId).filter(Boolean));
-                  const availableOverrideCountries = (productCountries as CountryAvailability[]).filter(
-                    (country) => (countryOverrides[country.id] ?? country.enabled) && !existingCountryIds.has(country.id),
-                  );
-                  const draft = inventoryOverrideDrafts[item.id] ?? { countryId: availableOverrideCountries[0]?.id ?? "", stock: "0" };
-                  const canCreateOverride = item.id !== "main" && availableOverrideCountries.length > 0;
 
-                  return (
-                    <div key={item.id} className="rounded-lg border border-[#E6E6E6] p-4">
-                      <div className="mb-3 text-[13.5px] font-medium text-[#1A1A1A]">{item.title}</div>
-                      <div className="space-y-3">
-                        {[baseInventory, ...countryInventories].filter(Boolean).map((inventory) => (
-                          <div key={inventory?.id ?? `${item.id}-${inventory?.countryId ?? "base"}`} className="flex flex-wrap items-center gap-3 rounded-lg border border-[#F1F1F1] bg-[#FCFCFC] p-3">
-                            <div>
-                              <div className="text-[12px] font-medium text-[#1A1A1A]">{inventory?.country ? `${inventory.country.name} (${inventory.country.code})` : "Base Inventory"}</div>
-                              <div className="text-[11px] text-[#8A8A8A]">{inventory?.country ? "Overrides base stock for this country." : "Fallback stock used when no country override exists."}</div>
-                            </div>
-                            <div className="ml-auto flex items-center gap-2">
-                              <div className="text-center">
-                                <div className="mb-1 text-[11px] text-[#9A9A9A]">Stock</div>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  defaultValue={inventory?.stock || 0}
-                                  disabled={isReadOnly}
-                                  className="w-20 rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13.5px] outline-none focus:border-[#E31E24] disabled:bg-[#FAFAFA]"
-                                  onBlur={async (e) => {
-                                    if (!inventory?.id) return;
-                                    await adminApi.put(`/inventory/${inventory.id}`, { stock: parseInt(e.target.value) });
-                                    showToast("Stock updated.");
-                                  }}
-                                />
-                              </div>
-                              <div className="text-center">
-                                <div className="mb-1 text-[11px] text-[#9A9A9A]">Low Stock</div>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  defaultValue={inventory?.lowStockThreshold || 10}
-                                  disabled={isReadOnly}
-                                  className="w-20 rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13.5px] outline-none focus:border-[#E31E24] disabled:bg-[#FAFAFA]"
-                                  onBlur={async (e) => {
-                                    if (!inventory?.id) return;
-                                    await adminApi.put(`/inventory/${inventory.id}`, { lowStockThreshold: parseInt(e.target.value) });
-                                  }}
-                                />
-                              </div>
-                              {inventory && <StatusBadge status={inventory.status || "INACTIVE"} />}
-                            </div>
-                          </div>
-                        ))}
+            {variantRows.length > 0 && (
+              <section className="mt-8">
+                <div className="mb-4">
+                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Variant Inventories</h3>
+                  <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Manage stock level and low stock warnings for specific variants & countries.</p>
+                </div>
 
-                        {!isReadOnly && canCreateOverride ? (
-                          <div className="rounded-md border border-dashed border-[#E6E6E6] bg-[#FAFAFA] p-3">
-                            <div className="mb-2 text-[12px] font-medium text-[#1A1A1A]">Add country override</div>
-                            <div className="flex flex-wrap items-end gap-2">
-                              <div className="min-w-[180px] flex-1">
-                                <AdminSelect
-                                  label="Country"
-                                  value={draft.countryId}
-                                  onChange={(e) =>
-                                    setInventoryOverrideDrafts((current) => ({
-                                      ...current,
-                                      [item.id]: { ...draft, countryId: e.target.value },
-                                    }))
-                                  }
-                                  options={[
-                                    { value: "", label: "Select country" },
-                                    ...availableOverrideCountries.map((country) => ({
-                                      value: country.id,
-                                      label: `${country.name} (${country.code})`,
-                                    })),
-                                  ]}
-                                />
-                              </div>
-                              <div>
-                                <AdminInput
-                                  label="Stock"
-                                  type="number"
-                                  min={0}
-                                  value={draft.stock}
-                                  onChange={(e) =>
-                                    setInventoryOverrideDrafts((current) => ({
-                                      ...current,
-                                      [item.id]: { ...draft, stock: e.target.value },
-                                    }))
-                                  }
-                                />
-                              </div>
-                              <button
-                                type="button"
-                                className="rounded-md bg-[#E31E24] px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B]"
-                                onClick={async () => {
-                                  if (!draft.countryId) {
-                                    showToast("Select a country for the override.", "error");
-                                    return;
-                                  }
-                                  const stock = Math.max(0, parseInt(draft.stock || "0", 10) || 0);
-                                  try {
-                                    await adminApi.post("/inventory/upsert", {
-                                      variantId: item.id,
-                                      countryId: draft.countryId,
-                                      stock,
-                                    });
-                                    setInventoryOverrideDrafts((current) => {
-                                      const next = { ...current };
-                                      delete next[item.id];
-                                      return next;
-                                    });
-                                    showToast("Country inventory override created.");
-                                    refetch();
-                                  } catch (error) {
-                                    showToast(getAdminErrorMessage(error, "Failed to create country override."), "error");
-                                  }
-                                }}
-                              >
-                                Add Override
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          !countryInventories.length && (
-                            <p className="rounded-md border border-dashed border-[#E6E6E6] px-3 py-2 text-[12px] text-[#8A8A8A]">
-                              {item.id === "main"
-                                ? "Enable variants to manage country overrides."
-                                : "Enable countries in Country Availability first, then add overrides here."}
-                            </p>
-                          )
-                        )}
-                      </div>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E6E6E6] bg-white p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded bg-[#F2F2F2] px-2 py-0.5 text-[11px] font-semibold text-[#6B6B6B]">List</span>
+                    <span className="text-[12.5px] font-semibold text-[#1A1A1A]">{selectedInvIds.length} selected</span>
+                    <div className="h-4 w-px bg-[#E6E6E6]" />
+                    <span className="text-[12.5px] text-[#6B6B6B]">
+                      Showing {totalInvItems > 0 ? (invCurrentPage - 1) * invPageSize + 1 : 0}-
+                      {Math.min(invCurrentPage * invPageSize, totalInvItems)} of {totalInvItems}
+                    </span>
+                    <select
+                      value={invPageSize}
+                      onChange={(e) => {
+                        setInvPageSize(Number(e.target.value));
+                        setInvCurrentPage(1);
+                      }}
+                      className="rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] outline-none"
+                    >
+                      {[10, 25, 50, 100].map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setInvCurrentPage((p) => Math.max(1, p - 1))}
+                        disabled={invCurrentPage === 1}
+                        className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] font-medium hover:bg-[#F2F2F2] disabled:opacity-40"
+                      >
+                        Prev
+                      </button>
+                      <span className="text-[12.5px] text-[#1A1A1A] font-medium px-1">
+                        {invCurrentPage}/{totalInvPages}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setInvCurrentPage((p) => Math.min(totalInvPages, p + 1))}
+                        disabled={invCurrentPage === totalInvPages}
+                        className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] font-medium hover:bg-[#F2F2F2] disabled:opacity-40"
+                      >
+                        Next
+                      </button>
                     </div>
-                  );
-                },
-              )}
-            </div>}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {invBulkActionType === "Add country override" && (
+                      <select
+                        value={invBulkCountryId}
+                        onChange={(e) => setInvBulkCountryId(e.target.value)}
+                        className="h-8.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[12.5px] outline-none focus:border-[#E31E24]"
+                      >
+                        <option value="">Select country...</option>
+                        {productCountries.map((c: any) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} ({c.code})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <input
+                      type="text"
+                      placeholder="Value"
+                      value={invBulkActionValue}
+                      onChange={(e) => setInvBulkActionValue(e.target.value)}
+                      disabled={bulkSaving || ["Bulk Action", "Delete selected overrides"].includes(invBulkActionType)}
+                      className="h-8.5 rounded-md border border-[#E6E6E6] px-3 text-[12.5px] outline-none disabled:bg-[#FAFAFA]"
+                    />
+                    <select
+                      value={invBulkActionType}
+                      onChange={(e) => setInvBulkActionType(e.target.value)}
+                      className="h-8.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[12.5px] outline-none focus:border-[#E31E24]"
+                    >
+                      <option>Bulk Action</option>
+                      <option>Update stock</option>
+                      <option>Update low stock threshold</option>
+                      <option>Add country override</option>
+                      <option>Delete selected overrides</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleInvBulkApplyAction}
+                      disabled={bulkSaving || selectedInvIds.length === 0 || invBulkActionType === "Bulk Action"}
+                      className="h-8.5 rounded-md bg-[#808080] px-4 text-[12.5px] font-semibold text-white hover:bg-[#6B6B6B] disabled:opacity-50"
+                    >
+                      {bulkSaving ? "Applying..." : "Apply"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFilterInvVariant("");
+                        setFilterInvType("");
+                        setFilterInvStock("");
+                        setFilterInvLowStock("");
+                        setSelectedInvIds([]);
+                      }}
+                      className="h-8.5 rounded-md border border-[#E6E6E6] bg-white px-4 text-[12.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
+                    >
+                      Clear Filters
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto rounded-lg border border-[#E6E6E6] bg-white">
+                  <table className="min-w-full border-collapse text-left text-[13px]">
+                    <thead className="bg-[#FAFAFA] text-[12px] font-semibold text-[#6B6B6B]">
+                      <tr>
+                        <th className="border-b border-[#E6E6E6] px-4 py-3 w-12 text-center">
+                          <input
+                            type="checkbox"
+                            checked={paginatedVariantInventories.length > 0 && paginatedVariantInventories.every((r: any) => selectedInvIds.includes(r.id))}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                const pageIds = paginatedVariantInventories.map((r: any) => r.id);
+                                setSelectedInvIds((prev) => Array.from(new Set([...prev, ...pageIds])));
+                              } else {
+                                const pageIds = new Set(paginatedVariantInventories.map((r: any) => r.id));
+                                setSelectedInvIds((prev) => prev.filter((id) => !pageIds.has(id)));
+                              }
+                            }}
+                            className="h-4 w-4 accent-[#E31E24]"
+                          />
+                        </th>
+                        <th
+                          onClick={() => {
+                            setInvSortField("variant");
+                            setInvSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+                          }}
+                          className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                        >
+                          Variant {invSortField === "variant" ? (invSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                        </th>
+                        <th
+                          onClick={() => {
+                            setInvSortField("type");
+                            setInvSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+                          }}
+                          className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
+                        >
+                          Inventory Type / Country {invSortField === "type" ? (invSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                        </th>
+                        <th
+                          onClick={() => {
+                            setInvSortField("stock");
+                            setInvSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+                          }}
+                          className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none w-36 text-center"
+                        >
+                          Stock {invSortField === "stock" ? (invSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                        </th>
+                        <th
+                          onClick={() => {
+                            setInvSortField("lowStockThreshold");
+                            setInvSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+                          }}
+                          className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none w-36 text-center"
+                        >
+                          Low Stock Threshold {invSortField === "lowStockThreshold" ? (invSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                        </th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-3 w-28 text-center">Status</th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-3 w-24">ACTIONS</th>
+                      </tr>
+                      <tr className="bg-[#FCFCFC]">
+                        <th className="border-b border-[#E6E6E6] px-4 py-2"></th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2">
+                          <input
+                            type="text"
+                            placeholder="Filter Variant"
+                            value={filterInvVariant}
+                            onChange={(e) => setFilterInvVariant(e.target.value)}
+                            className="w-full rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                          />
+                        </th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2">
+                          <input
+                            type="text"
+                            placeholder="Filter Type"
+                            value={filterInvType}
+                            onChange={(e) => setFilterInvType(e.target.value)}
+                            className="w-full rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
+                          />
+                        </th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2">
+                          <input
+                            type="text"
+                            placeholder="Filter Stock"
+                            value={filterInvStock}
+                            onChange={(e) => setFilterInvStock(e.target.value)}
+                            className="w-full rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24] text-center"
+                          />
+                        </th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2">
+                          <input
+                            type="text"
+                            placeholder="Filter Low Stock"
+                            value={filterInvLowStock}
+                            onChange={(e) => setFilterInvLowStock(e.target.value)}
+                            className="w-full rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24] text-center"
+                          />
+                        </th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2"></th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2 text-[11px] text-[#9A9A9A] font-normal">Filters</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E6E6E6]">
+                      {paginatedVariantInventories.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-8 text-center text-[#9A9A9A]">
+                            No variant inventories matching filters found.
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedVariantInventories.map((inventory: any) => {
+                          const stockLevel = inventory.stock ?? 0;
+                          const threshold = inventory.lowStockThreshold ?? 10;
+                          const isLowStock = stockLevel <= threshold;
+
+                          return (
+                            <tr key={inventory.id} className="hover:bg-[#FAFAFA]">
+                              <td className="px-4 py-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedInvIds.includes(inventory.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedInvIds((prev) => [...prev, inventory.id]);
+                                    } else {
+                                      setSelectedInvIds((prev) => prev.filter((id) => id !== inventory.id));
+                                    }
+                                  }}
+                                  className="h-4 w-4 accent-[#E31E24]"
+                                />
+                              </td>
+                              <td className="px-4 py-3 font-medium text-[#1A1A1A]">
+                                {inventory.variantTitle} {inventory.variantSku ? `(${inventory.variantSku})` : ""}
+                              </td>
+                              <td className="px-4 py-3 text-[#6B6B6B]">
+                                {inventory.isOverride ? (
+                                  <span className="inline-flex items-center gap-1.5 font-semibold text-[#1A1A1A]">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-[#E31E24]" />
+                                    {inventory.countryName} ({inventory.countryCode}) Override
+                                  </span>
+                                ) : (
+                                  <span className="text-[#8A8A8A]">Base Inventory Default</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  defaultValue={stockLevel}
+                                  disabled={isReadOnly}
+                                  className="w-20 rounded border border-[#E6E6E6] px-2 py-1 text-center text-[13px] outline-none focus:border-[#E31E24]"
+                                  onBlur={async (e) => {
+                                    const nextStock = parseInt(e.target.value);
+                                    if (isNaN(nextStock) || nextStock < 0) return;
+                                    await adminApi.put(`/inventory/${inventory.id}`, { stock: nextStock });
+                                    showToast("Stock updated.");
+                                    refetch();
+                                  }}
+                                />
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  defaultValue={threshold}
+                                  disabled={isReadOnly}
+                                  className="w-20 rounded border border-[#E6E6E6] px-2 py-1 text-center text-[13px] outline-none focus:border-[#E31E24]"
+                                  onBlur={async (e) => {
+                                    const nextThreshold = parseInt(e.target.value);
+                                    if (isNaN(nextThreshold) || nextThreshold < 0) return;
+                                    await adminApi.put(`/inventory/${inventory.id}`, { lowStockThreshold: nextThreshold });
+                                    showToast("Low stock threshold updated.");
+                                    refetch();
+                                  }}
+                                />
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <span
+                                  className={cn(
+                                    "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                                    stockLevel > 0 
+                                      ? (isLowStock ? "bg-[#FFF4E5] text-[#B06000]" : "bg-[#E6F4EA] text-[#137333]") 
+                                      : "bg-[#FCE8E6] text-[#C5221F]"
+                                  )}
+                                >
+                                  {stockLevel > 0 ? (isLowStock ? "LOW STOCK" : "IN STOCK") : "OUT OF STOCK"}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                {inventory.isOverride && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (!window.confirm(`Delete override for ${inventory.countryName}?`)) return;
+                                      await adminApi.delete(`/inventory/${inventory.id}`);
+                                      showToast("Override deleted.");
+                                      refetch();
+                                    }}
+                                    className="rounded border border-[#F2C9C9] p-1 text-red-600 hover:bg-red-50"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
           </div>
         )}
 
@@ -4727,16 +6811,26 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             {editVariantSubTab === "prices" && (
               <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
                 {(() => {
-                  const countries = (variantCountries as CountryAvailability[]).filter((c) => c.enabled);
+                  const countries = (variantCountries as CountryAvailability[]).filter(
+                    (c) => c.enabled && (productCountries as CountryAvailability[]).find((pc) => pc.id === c.id)?.enabled
+                  );
                   if (countries.length === 0) {
                     return <p className="text-[13px] text-[#9A9A9A] py-4 text-center">No countries enabled for this product/variant. Enable them in Country Availability first.</p>;
                   }
                   return countries.map((country) => {
                     const draft = editVariantCountryPrices[country.id] ?? { mrp: "", sellingPrice: "", dealerPrice: "", doctorRetailerPrice: "", stock: "" };
                     const currencySymbol = country.currency?.symbol ?? "$";
+                    const basePrice = productBasePrices.find((p: any) => p.countryId === country.id);
+                    const defaultMRP = basePrice?.mrp != null ? String(basePrice.mrp) : "";
+                    const defaultSelling = basePrice?.sellingPrice != null ? String(basePrice.sellingPrice) : "";
+                    const defaultDealer = basePrice?.dealerPrice != null ? String(basePrice.dealerPrice) : "";
+                    const defaultDoctor = basePrice?.distributorPrice != null ? String(basePrice.distributorPrice) : "";
+                    const baseInv = getBaseInventory(editingVariant?.inventories);
+                    const defaultStock = baseInv?.stock != null ? String(baseInv.stock) : "0";
+
                     return (
                       <div key={country.id} className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
-                        <div className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">{country.name} ({country.code})</div>
+                        <div className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">{country.name || "Country"} ({country.code || ""})</div>
                         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                           <AdminInput
                             label={`MRP (${currencySymbol})`}
@@ -4744,6 +6838,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                             min="0"
                             step="0.01"
                             value={draft.mrp}
+                            placeholder={defaultMRP}
                             onChange={(e) => setEditVariantCountryPrices((current) => ({
                               ...current,
                               [country.id]: { ...(current[country.id] ?? { mrp: "", sellingPrice: "", dealerPrice: "", doctorRetailerPrice: "", stock: "" }), mrp: e.target.value }
@@ -4755,6 +6850,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                             min="0"
                             step="0.01"
                             value={draft.sellingPrice}
+                            placeholder={defaultSelling || defaultMRP}
                             onChange={(e) => setEditVariantCountryPrices((current) => ({
                               ...current,
                               [country.id]: { ...(current[country.id] ?? { mrp: "", sellingPrice: "", dealerPrice: "", doctorRetailerPrice: "", stock: "" }), sellingPrice: e.target.value }
@@ -4766,6 +6862,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                             min="0"
                             step="0.01"
                             value={draft.dealerPrice}
+                            placeholder={defaultDealer}
                             onChange={(e) => setEditVariantCountryPrices((current) => ({
                               ...current,
                               [country.id]: { ...(current[country.id] ?? { mrp: "", sellingPrice: "", dealerPrice: "", doctorRetailerPrice: "", stock: "" }), dealerPrice: e.target.value }
@@ -4777,6 +6874,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                             min="0"
                             step="0.01"
                             value={draft.doctorRetailerPrice}
+                            placeholder={defaultDoctor}
                             onChange={(e) => setEditVariantCountryPrices((current) => ({
                               ...current,
                               [country.id]: { ...(current[country.id] ?? { mrp: "", sellingPrice: "", dealerPrice: "", doctorRetailerPrice: "", stock: "" }), doctorRetailerPrice: e.target.value }
@@ -4787,6 +6885,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                             type="number"
                             min="0"
                             value={draft.stock}
+                            placeholder={defaultStock}
                             onChange={(e) => setEditVariantCountryPrices((current) => ({
                               ...current,
                               [country.id]: { ...(current[country.id] ?? { mrp: "", sellingPrice: "", dealerPrice: "", doctorRetailerPrice: "", stock: "" }), stock: e.target.value }
@@ -4815,7 +6914,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       label="Country"
                       value={modalTierRuleDraft.countryId}
                       onChange={(e) => setModalTierRuleDraft((d) => ({ ...d, countryId: e.target.value }))}
-                      options={[{ value: "", label: "Select country" }, ...countryRows.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))]}
+                      options={[{ value: "", label: "Select country" }, ...(productCountries as CountryAvailability[]).filter((c) => c.enabled).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))]}
                     />
                     <AdminSelect
                       label="Mode"
@@ -4906,7 +7005,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       label="Country"
                       value={modalMoqRuleDraft.countryId}
                       onChange={(e) => setModalMoqRuleDraft((d) => ({ ...d, countryId: e.target.value }))}
-                      options={[{ value: "", label: "Select country" }, ...countryRows.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))]}
+                      options={[{ value: "", label: "Select country" }, ...(productCountries as CountryAvailability[]).filter((c) => c.enabled).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))]}
                     />
                     <AdminInput
                       label="Min Qty"
@@ -5448,6 +7547,18 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           </div>
         </form>
       </Modal>
+
+      {/* Bulk Variant Import Wizard */}
+      <BulkVariantImportWizard
+        open={bulkImportOpen}
+        onClose={() => setBulkImportOpen(false)}
+        productId={productId}
+        attributeNames={productAttributeMappings.map((m: any) => m.attribute?.name).filter(Boolean)}
+        onSuccess={() => {
+          refetch();
+          showToast("Variants imported successfully!", "success");
+        }}
+      />
 
       {ToastComponent}
     </>
