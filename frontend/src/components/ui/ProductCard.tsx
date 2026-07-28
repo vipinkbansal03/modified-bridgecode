@@ -26,13 +26,15 @@ export function ProductCard({ id, image, title, slug, category, shortDescription
   const rawImage = image?.trim() || null;
   let imageSrc: string | null = null;
   if (rawImage) {
-    let trimmed = rawImage.replace(/^http:\/\/(?:localhost|127\.0\.0\.1):4000(\/uploads\/)/i, "$1");
-    if (trimmed.startsWith("/")) {
-      imageSrc = trimmed;
-    } else if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-      imageSrc = trimmed;
+    if (rawImage.startsWith("data:")) {
+      imageSrc = rawImage;
     } else {
-      imageSrc = `/${trimmed}`;
+      let trimmed = rawImage.replace(/^http:\/\/(?:localhost|127\.0\.0\.1):4000(\/uploads\/)/i, "$1");
+      if (trimmed.startsWith("/") || trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+        imageSrc = trimmed;
+      } else {
+        imageSrc = `/${trimmed}`;
+      }
     }
   }
 
@@ -43,7 +45,11 @@ export function ProductCard({ id, image, title, slug, category, shortDescription
           <Card className="h-full">
             <div className="relative h-[190px] w-full bg-offwhite sm:h-[230px]">
               {imageSrc ? (
-                <Image src={imageSrc} alt={title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />
+                imageSrc.startsWith("data:") ? (
+                  <img src={imageSrc} alt={title} className="h-full w-full object-cover" />
+                ) : (
+                  <Image src={imageSrc} alt={title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />
+                )
               ) : (
                 <div className="flex h-full items-center justify-center px-4 text-center text-sm text-steel-2">
                   <div>
