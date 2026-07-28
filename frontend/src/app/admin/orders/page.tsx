@@ -195,6 +195,13 @@ export default function OrdersPage() {
               <Trash2 size={13} />
             </button>
           )}
+          <Link
+            href={`/admin/orders/${row.id}`}
+            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+            title="Shipping"
+          >
+            <Truck size={13} />
+          </Link>
         </div>
       ),
     },

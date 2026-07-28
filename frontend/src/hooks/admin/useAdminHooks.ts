@@ -2129,6 +2129,151 @@ export const useDeliverOrder = () => {
   });
 };
 
+// ─── Shipping Providers ──────────────────────────────────
+
+export const useAdminShippingProviders = () =>
+  useQuery({
+    queryKey: ["admin-shipping-providers"],
+    queryFn: () => adminApi.get("/shipping/providers").then((r) => r.data.data),
+    staleTime: 2 * 60 * 1000,
+  });
+
+export const useAdminShippingProvider = (id: string) =>
+  useQuery({
+    queryKey: ["admin-shipping-provider", id],
+    queryFn: () => adminApi.get(`/shipping/providers/${id}`).then((r) => r.data.data),
+    enabled: !!id,
+  });
+
+export const useUpsertShippingProvider = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      adminApi.post("/shipping/providers", data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-shipping-providers"] }),
+  });
+};
+
+export const useToggleShippingProvider = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      adminApi.post(`/shipping/providers/${id}/toggle`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-shipping-providers"] }),
+  });
+};
+
+export const useTestShippingConnection = () =>
+  useMutation({
+    mutationFn: (id: string) =>
+      adminApi.post(`/shipping/providers/${id}/test-connection`).then((r) => r.data.data),
+  });
+
+// ─── Shipping Zones ──────────────────────────────────────
+
+export const useAdminShippingZones = (params?: { providerId?: string; countryId?: string; status?: string }) =>
+  useQuery({
+    queryKey: ["admin-shipping-zones", params],
+    queryFn: () => adminApi.get("/shipping/zones", { params }).then((r) => r.data.data),
+    staleTime: 2 * 60 * 1000,
+  });
+
+export const useCreateShippingZone = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      adminApi.post("/shipping/zones", data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-shipping-zones"] }),
+  });
+};
+
+export const useUpdateShippingZone = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) =>
+      adminApi.put(`/shipping/zones/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-shipping-zones"] }),
+  });
+};
+
+export const useDeleteShippingZone = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.delete(`/shipping/zones/${id}`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-shipping-zones"] }),
+  });
+};
+
+// ─── Shipments ──────────────────────────────────────────
+
+export const useAdminShipments = (params?: { orderId?: string; status?: string; providerId?: string; page?: number; limit?: number }) =>
+  useQuery({
+    queryKey: ["admin-shipments", params],
+    queryFn: () => adminApi.get("/shipping/shipments", { params }).then((r) => r.data),
+    staleTime: 30_000,
+  });
+
+export const useAdminShipment = (id: string) =>
+  useQuery({
+    queryKey: ["admin-shipment", id],
+    queryFn: () => adminApi.get(`/shipping/shipments/${id}`).then((r) => r.data.data),
+    enabled: !!id,
+  });
+
+export const useOrderShipments = (orderId: string) =>
+  useQuery({
+    queryKey: ["admin-order-shipments", orderId],
+    queryFn: () => adminApi.get(`/shipping/order/${orderId}`).then((r) => r.data.data),
+    enabled: !!orderId,
+  });
+
+export const useCreateShipment = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) => adminApi.post("/shipping/shipments", data).then((r) => r.data),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["admin-shipments"] });
+      if ((vars as { orderId?: string }).orderId) qc.invalidateQueries({ queryKey: ["admin-order-shipments", (vars as { orderId?: string }).orderId] });
+    },
+  });
+};
+
+export const useUpdateShipment = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) => adminApi.put(`/shipping/shipments/${id}`, data).then((r) => r.data),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["admin-shipments"] });
+      qc.invalidateQueries({ queryKey: ["admin-shipment", vars.id] });
+    },
+  });
+};
+
+export const useUpdateShipmentStatus = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; status: string; location?: string; description?: string }) =>
+      adminApi.post(`/shipping/shipments/${id}/status`, data).then((r) => r.data),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["admin-shipments"] });
+      qc.invalidateQueries({ queryKey: ["admin-shipment", vars.id] });
+    },
+  });
+};
+
+export const useTrackShipment = () =>
+  useMutation({
+    mutationFn: (id: string) => adminApi.post(`/shipping/shipments/${id}/track`).then((r) => r.data.data),
+  });
+
+export const useDeleteShipment = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.delete(`/shipping/shipments/${id}`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-shipments"] }),
+  });
+};
+
 // ─── Media ───────────────────────────────────────────────
 
 export const useAdminMedia = (params?: { page?: number }) =>

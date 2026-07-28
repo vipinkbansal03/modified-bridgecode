@@ -1,11 +1,253 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/database";
-import { AppError } from "../../utils/apiResponse";
-export const listProviders = () => prisma.shippingProvider.findMany({ include: { zones: { include: { country: true } } } });
-export const upsertProvider = (data: object) => prisma.shippingProvider.upsert({ where: { name: (data as {name:string}).name }, create: data as never, update: data as never });
-export const listZones = () => prisma.shippingZone.findMany({ include: { provider: true, country: true } });
-export const createZone = (data: object) => prisma.shippingZone.create({ data: data as never, include: { country: true, provider: true } });
-export const updateZone = (id: string, data: object) => prisma.shippingZone.update({ where: { id }, data: data as never, include: { country: true, provider: true } });
-export const deleteZone = (id: string) => prisma.shippingZone.delete({ where: { id } });
+import { AppError, getPagination } from "../../utils/apiResponse";
+import { logger } from "../../config/logger";
+import { getAdapter } from "./adapters";
+
+const PROVIDER_SELECT = {
+  id: true,
+  name: true,
+  displayName: true,
+  apiKey: true,
+  apiSecret: true,
+  baseUrl: true,
+  trackingUrl: true,
+  isEnabled: true,
+  config: true,
+  createdAt: true,
+  updatedAt: true,
+  _count: { select: { zones: true } },
+} satisfies Prisma.ShippingProviderSelect;
+
+type ProviderRow = Prisma.ShippingProviderGetPayload<{ select: typeof PROVIDER_SELECT }>;
+
+function maskCredential(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if (value.length <= 8) return "****";
+  return value.slice(0, 4) + "****" + value.slice(-4);
+}
+
+function sanitizeProvider(provider: ProviderRow) {
+  return {
+    ...provider,
+    apiKey: maskCredential(provider.apiKey),
+    apiSecret: maskCredential(provider.apiSecret),
+  };
+}
+
+// ─── Provider CRUD ──────────────────────────────────────
+
+export async function listProviders() {
+  const providers = await prisma.shippingProvider.findMany({
+    select: PROVIDER_SELECT,
+    orderBy: { createdAt: "asc" },
+  });
+  return providers.map(sanitizeProvider);
+}
+
+export async function getProvider(id: string) {
+  const provider = await prisma.shippingProvider.findUnique({
+    where: { id },
+    select: { ...PROVIDER_SELECT, zones: { include: { country: true }, orderBy: { charge: "asc" } } },
+  });
+  if (!provider) throw new AppError("Shipping provider not found.", 404);
+  return {
+    ...provider,
+    apiKey: maskCredential(provider.apiKey),
+    apiSecret: maskCredential(provider.apiSecret),
+  };
+}
+
+export async function upsertProvider(input: {
+  name: string;
+  displayName?: string;
+  apiKey?: string;
+  apiSecret?: string;
+  baseUrl?: string;
+  trackingUrl?: string;
+  isEnabled?: boolean;
+  config?: Record<string, unknown>;
+}) {
+  const name = input.name?.trim();
+  if (!name) throw new AppError("Provider name is required.", 400);
+
+  const displayName = input.displayName?.trim() || name;
+  const normalizedName = name.toUpperCase().replace(/\s+/g, "_");
+
+  const existing = await prisma.shippingProvider.findUnique({ where: { name: normalizedName } });
+
+  const data: Prisma.ShippingProviderUncheckedCreateInput | Prisma.ShippingProviderUncheckedUpdateInput = {
+    displayName,
+    apiKey: input.apiKey?.trim() || null,
+    apiSecret: input.apiSecret?.trim() || null,
+    baseUrl: input.baseUrl?.trim() || null,
+    trackingUrl: input.trackingUrl?.trim() || null,
+    isEnabled: input.isEnabled ?? existing?.isEnabled ?? false,
+    config: (input.config ?? existing?.config ?? {}) as Prisma.InputJsonValue,
+  };
+
+  if (existing) {
+    const updated = await prisma.shippingProvider.update({
+      where: { id: existing.id },
+      data,
+      select: PROVIDER_SELECT,
+    });
+    return sanitizeProvider(updated);
+  }
+
+  const created = await prisma.shippingProvider.create({
+    data: { name: normalizedName, ...data } as Prisma.ShippingProviderUncheckedCreateInput,
+    select: PROVIDER_SELECT,
+  });
+  return sanitizeProvider(created);
+}
+
+export async function toggleProvider(id: string) {
+  const provider = await prisma.shippingProvider.findUnique({ where: { id }, select: { id: true, isEnabled: true, displayName: true } });
+  if (!provider) throw new AppError("Shipping provider not found.", 404);
+
+  const updated = await prisma.shippingProvider.update({
+    where: { id },
+    data: { isEnabled: !provider.isEnabled },
+    select: PROVIDER_SELECT,
+  });
+  logger.info(`Shipping provider "${provider.displayName}" ${updated.isEnabled ? "enabled" : "disabled"}`);
+  return sanitizeProvider(updated);
+}
+
+// ─── Connection Test ────────────────────────────────────
+
+export async function testConnection(id: string) {
+  const provider = await prisma.shippingProvider.findUnique({ where: { id }, select: { id: true, name: true, apiKey: true, apiSecret: true, baseUrl: true, displayName: true } });
+  if (!provider) throw new AppError("Shipping provider not found.", 404);
+
+  if (!provider.apiKey) {
+    return { success: false, message: `${provider.displayName} API key is not configured.`, latencyMs: 0 };
+  }
+
+  const adapter = getAdapter(provider.name);
+  if (!adapter) {
+    return { success: false, message: `No adapter available for ${provider.displayName}.`, latencyMs: 0 };
+  }
+
+  return adapter.testConnection({ apiKey: provider.apiKey, apiSecret: provider.apiSecret, baseUrl: provider.baseUrl });
+}
+
+// ─── Zone CRUD ──────────────────────────────────────────
+
+export async function listZones(query?: { providerId?: string; countryId?: string; status?: string }) {
+  const where: Prisma.ShippingZoneWhereInput = {};
+  if (query?.providerId) where.providerId = query.providerId;
+  if (query?.countryId) where.countryId = query.countryId;
+  if (query?.status) where.status = query.status as "ACTIVE" | "INACTIVE";
+
+  return prisma.shippingZone.findMany({
+    where,
+    include: { provider: true, country: true },
+    orderBy: [{ country: { name: "asc" } }, { charge: "asc" }],
+  });
+}
+
+export async function createZone(input: {
+  providerId: string;
+  countryId: string;
+  charge: number | string;
+  freeAbove?: number | string | null;
+  estimatedDays?: string | null;
+  status?: string;
+}) {
+  if (!input.providerId) throw new AppError("Provider is required.", 400);
+  if (!input.countryId) throw new AppError("Country is required.", 400);
+
+  const charge = Number(input.charge);
+  if (!Number.isFinite(charge) || charge < 0) throw new AppError("Charge must be a non-negative number.", 400);
+
+  const provider = await prisma.shippingProvider.findUnique({ where: { id: input.providerId }, select: { id: true } });
+  if (!provider) throw new AppError("Shipping provider not found.", 404);
+
+  const country = await prisma.country.findUnique({ where: { id: input.countryId }, select: { id: true } });
+  if (!country) throw new AppError("Country not found.", 404);
+
+  const duplicate = await prisma.shippingZone.findFirst({ where: { providerId: input.providerId, countryId: input.countryId }, select: { id: true } });
+  if (duplicate) throw new AppError("A shipping zone already exists for this provider and country.", 409);
+
+  const freeAbove = input.freeAbove != null && input.freeAbove !== "" ? Number(input.freeAbove) : null;
+  if (freeAbove !== null && (!Number.isFinite(freeAbove) || freeAbove < 0)) throw new AppError("Free above must be a non-negative number.", 400);
+
+  return prisma.shippingZone.create({
+    data: {
+      providerId: input.providerId,
+      countryId: input.countryId,
+      charge,
+      freeAbove,
+      estimatedDays: input.estimatedDays?.trim() || null,
+      status: (input.status as "ACTIVE" | "INACTIVE") || "ACTIVE",
+    },
+    include: { provider: true, country: true },
+  });
+}
+
+export async function updateZone(id: string, input: {
+  providerId?: string;
+  countryId?: string;
+  charge?: number | string;
+  freeAbove?: number | string | null;
+  estimatedDays?: string | null;
+  status?: string;
+}) {
+  const existing = await prisma.shippingZone.findUnique({ where: { id }, select: { id: true, providerId: true, countryId: true } });
+  if (!existing) throw new AppError("Shipping zone not found.", 404);
+
+  if (input.charge !== undefined) {
+    const charge = Number(input.charge);
+    if (!Number.isFinite(charge) || charge < 0) throw new AppError("Charge must be a non-negative number.", 400);
+  }
+
+  if (input.freeAbove !== undefined && input.freeAbove !== null && input.freeAbove !== "") {
+    const freeAbove = Number(input.freeAbove);
+    if (!Number.isFinite(freeAbove) || freeAbove < 0) throw new AppError("Free above must be a non-negative number.", 400);
+  }
+
+  const data: Prisma.ShippingZoneUncheckedUpdateInput = {};
+  if (input.providerId) data.providerId = input.providerId;
+  if (input.countryId) data.countryId = input.countryId;
+  if (input.charge !== undefined) data.charge = Number(input.charge);
+  if (input.freeAbove !== undefined) data.freeAbove = input.freeAbove != null && input.freeAbove !== "" ? Number(input.freeAbove) : null;
+  if (input.estimatedDays !== undefined) data.estimatedDays = input.estimatedDays?.trim() || null;
+  if (input.status) data.status = input.status as "ACTIVE" | "INACTIVE";
+
+  if (data.providerId || data.countryId) {
+    const checkProvider = (data.providerId as string) ?? existing.providerId;
+    const checkCountry = (data.countryId as string) ?? existing.countryId;
+    const duplicate = await prisma.shippingZone.findFirst({
+      where: { providerId: checkProvider, countryId: checkCountry, NOT: { id } },
+      select: { id: true },
+    });
+    if (duplicate) throw new AppError("A shipping zone already exists for this provider and country.", 409);
+  }
+
+  return prisma.shippingZone.update({
+    where: { id },
+    data,
+    include: { provider: true, country: true },
+  });
+}
+
+export async function deleteZone(id: string) {
+  const existing = await prisma.shippingZone.findUnique({
+    where: { id },
+    select: { id: true, _count: { select: { orders: true } } },
+  });
+  if (!existing) throw new AppError("Shipping zone not found.", 404);
+
+  if (existing._count.orders > 0) {
+    throw new AppError(`Cannot delete: this zone is linked to ${existing._count.orders} order(s). Set status to Inactive instead.`, 400);
+  }
+
+  return prisma.shippingZone.delete({ where: { id } });
+}
+
+// ─── Shipping Calculation ───────────────────────────────
 
 /**
  * Calculate shipping charge for a given country and order subtotal.
@@ -76,4 +318,217 @@ export async function calculateRequiredShipping(countryCode: string, orderTotal:
     throw new AppError(shipping.message ?? "Shipping is not available to your country yet. Please contact support.", 400);
   }
   return shipping;
+}
+
+// ─── Shipments ──────────────────────────────────────────
+
+const SHIPMENT_SELECT = {
+  id: true,
+  orderId: true,
+  providerId: true,
+  status: true,
+  trackingNumber: true,
+  awbNumber: true,
+  labelUrl: true,
+  estimatedDelivery: true,
+  shippingCharge: true,
+  notes: true,
+  providerResponse: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.ShipmentSelect;
+
+export async function listShipments(query?: { orderId?: string; status?: string; providerId?: string; page?: string; limit?: string }) {
+  const where: Prisma.ShipmentWhereInput = {};
+  if (query?.orderId) where.orderId = query.orderId;
+  if (query?.status) where.status = query.status as never;
+  if (query?.providerId) where.providerId = query.providerId;
+
+  const { page, limit, skip } = getPagination({ page: query?.page, limit: query?.limit });
+  const [data, total] = await Promise.all([
+    prisma.shipment.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      select: { ...SHIPMENT_SELECT, order: { select: { id: true, orderNumber: true, customerName: true } }, provider: { select: { id: true, name: true, displayName: true } } },
+    }),
+    prisma.shipment.count({ where }),
+  ]);
+  return { data, total, page, limit };
+}
+
+export async function getShipment(id: string) {
+  const shipment = await prisma.shipment.findUnique({
+    where: { id },
+    select: {
+      ...SHIPMENT_SELECT,
+      order: { select: { id: true, orderNumber: true, customerName: true, customerEmail: true, shippingAddress: true, country: { select: { code: true, name: true } } } },
+      provider: { select: { id: true, name: true, displayName: true, trackingUrl: true } },
+      events: { orderBy: { timestamp: "desc" } },
+    },
+  });
+  if (!shipment) throw new AppError("Shipment not found.", 404);
+  return shipment;
+}
+
+export async function getShipmentsForOrder(orderId: string) {
+  return prisma.shipment.findMany({
+    where: { orderId },
+    orderBy: { createdAt: "desc" },
+    select: {
+      ...SHIPMENT_SELECT,
+      provider: { select: { id: true, name: true, displayName: true } },
+      events: { orderBy: { timestamp: "desc" }, take: 1 },
+    },
+  });
+}
+
+export async function createShipment(input: {
+  orderId: string;
+  providerId: string;
+  trackingNumber?: string;
+  awbNumber?: string;
+  shippingCharge?: number | string;
+  estimatedDelivery?: string;
+  notes?: string;
+}) {
+  if (!input.orderId) throw new AppError("Order ID is required.", 400);
+  if (!input.providerId) throw new AppError("Provider ID is required.", 400);
+
+  const order = await prisma.order.findUnique({ where: { id: input.orderId }, select: { id: true, orderNumber: true, customerName: true, customerEmail: true, shippingAddress: true, country: { select: { id: true, code: true } }, items: { select: { title: true, sku: true, quantity: true, total: true } } } });
+  if (!order) throw new AppError("Order not found.", 404);
+
+  const provider = await prisma.shippingProvider.findUnique({ where: { id: input.providerId }, select: { id: true, name: true, apiKey: true, apiSecret: true, baseUrl: true } });
+  if (!provider) throw new AppError("Shipping provider not found.", 404);
+
+  const shippingCharge = input.shippingCharge != null ? Number(input.shippingCharge) : null;
+
+  const shipment = await prisma.shipment.create({
+    data: {
+      orderId: input.orderId,
+      providerId: input.providerId,
+      status: "CREATED",
+      trackingNumber: input.trackingNumber?.trim() || null,
+      awbNumber: input.awbNumber?.trim() || null,
+      estimatedDelivery: input.estimatedDelivery?.trim() || null,
+      shippingCharge,
+      notes: input.notes?.trim() || null,
+    },
+    select: SHIPMENT_SELECT,
+  });
+
+  await prisma.shipmentEvent.create({
+    data: {
+      shipmentId: shipment.id,
+      status: "CREATED",
+      description: `Shipment created with ${provider.name}.`,
+    },
+  });
+
+  logger.info(`Shipment ${shipment.id} created for order ${order.orderNumber}`);
+  return shipment;
+}
+
+export async function updateShipment(id: string, input: {
+  trackingNumber?: string;
+  awbNumber?: string;
+  estimatedDelivery?: string;
+  shippingCharge?: number | string;
+  notes?: string;
+}) {
+  const existing = await prisma.shipment.findUnique({ where: { id }, select: { id: true } });
+  if (!existing) throw new AppError("Shipment not found.", 404);
+
+  const data: Prisma.ShipmentUncheckedUpdateInput = {};
+  if (input.trackingNumber !== undefined) data.trackingNumber = input.trackingNumber?.trim() || null;
+  if (input.awbNumber !== undefined) data.awbNumber = input.awbNumber?.trim() || null;
+  if (input.estimatedDelivery !== undefined) data.estimatedDelivery = input.estimatedDelivery?.trim() || null;
+  if (input.shippingCharge !== undefined) data.shippingCharge = input.shippingCharge != null ? Number(input.shippingCharge) : null;
+  if (input.notes !== undefined) data.notes = input.notes?.trim() || null;
+
+  return prisma.shipment.update({ where: { id }, data, select: SHIPMENT_SELECT });
+}
+
+export async function updateShipmentStatus(id: string, input: { status: string; location?: string; description?: string }) {
+  const shipment = await prisma.shipment.findUnique({ where: { id }, select: { id: true, orderId: true, status: true } });
+  if (!shipment) throw new AppError("Shipment not found.", 404);
+
+  const newStatus = input.status as never;
+  const updated = await prisma.shipment.update({ where: { id }, data: { status: newStatus }, select: SHIPMENT_SELECT });
+
+  await prisma.shipmentEvent.create({
+    data: {
+      shipmentId: id,
+      status: newStatus,
+      location: input.location?.trim() || null,
+      description: input.description?.trim() || null,
+    },
+  });
+
+  if (newStatus === "DELIVERED") {
+    await prisma.order.update({ where: { id: shipment.orderId }, data: { status: "DELIVERED" } });
+  }
+
+  logger.info(`Shipment ${id} status updated to ${newStatus}`);
+  return updated;
+}
+
+export async function addShipmentEvent(shipmentId: string, input: { status: string; location?: string; description?: string }) {
+  const shipment = await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { id: true } });
+  if (!shipment) throw new AppError("Shipment not found.", 404);
+
+  return prisma.shipmentEvent.create({
+    data: {
+      shipmentId,
+      status: input.status as never,
+      location: input.location?.trim() || null,
+      description: input.description?.trim() || null,
+    },
+  });
+}
+
+export async function trackShipmentFromProvider(id: string) {
+  const shipment = await prisma.shipment.findUnique({
+    where: { id },
+    select: { id: true, trackingNumber: true, provider: { select: { name: true, apiKey: true, apiSecret: true, baseUrl: true } } },
+  });
+  if (!shipment) throw new AppError("Shipment not found.", 404);
+  if (!shipment.trackingNumber) throw new AppError("This shipment has no tracking number.", 400);
+
+  const adapter = getAdapter(shipment.provider.name);
+  if (!adapter) throw new AppError(`No adapter available for ${shipment.provider.name}.`, 400);
+
+  const result = await adapter.trackShipment(
+    { apiKey: shipment.provider.apiKey ?? "", apiSecret: shipment.provider.apiSecret, baseUrl: shipment.provider.baseUrl },
+    shipment.trackingNumber,
+  );
+
+  if (result.updates?.length) {
+    const latest = result.updates[0];
+    await prisma.shipment.update({ where: { id }, data: { status: result.status as never } });
+    await prisma.shipmentEvent.createMany({
+      data: result.updates.map((u) => ({
+        shipmentId: id,
+        status: u.status as never,
+        location: u.location ?? null,
+        description: u.description ?? null,
+        timestamp: new Date(u.timestamp),
+        raw: u as unknown as Prisma.InputJsonValue,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  return result;
+}
+
+export async function deleteShipment(id: string) {
+  const shipment = await prisma.shipment.findUnique({ where: { id }, select: { id: true, status: true } });
+  if (!shipment) throw new AppError("Shipment not found.", 404);
+  if (shipment.status !== "CREATED" && shipment.status !== "CANCELLED") {
+    throw new AppError("Only shipments in CREATED or CANCELLED status can be deleted.", 400);
+  }
+  await prisma.shipmentEvent.deleteMany({ where: { shipmentId: id } });
+  return prisma.shipment.delete({ where: { id } });
 }
