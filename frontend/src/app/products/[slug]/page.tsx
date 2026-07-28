@@ -108,10 +108,23 @@ function getPublicDiscount(price?: ApiProductPrice | null) {
 }
 
 function mergeProduct(api: ApiProductDetail, staticProduct: ProductDetail | undefined): ProductDetail {
+  const normalizeUrl = (url?: string | null) => {
+    if (!url) return undefined;
+    let trimmed = url.trim();
+    if (!trimmed) return undefined;
+    // Replace full http://localhost:4000/uploads/ or http://127.0.0.1:4000/uploads/ with /uploads/
+    trimmed = trimmed.replace(/^http:\/\/(?:localhost|127\.0\.0\.1):4000(\/uploads\/)/i, "$1");
+    if (trimmed.startsWith("/")) return trimmed;
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
+    return `/${trimmed}`;
+  };
+
   const apiImages = api.images
     .map((img) => (typeof img === "string" ? img : img.url))
-    .map((url) => url.trim())
+    .map((url) => normalizeUrl(url) || "")
     .filter(Boolean);
+
+  const resolveUrl = (url?: string | null) => normalizeUrl(url);
 
   return {
     slug: api.slug,
@@ -119,10 +132,10 @@ function mergeProduct(api: ApiProductDetail, staticProduct: ProductDetail | unde
     category: api.category.name,
     categorySlug: api.category.slug,
     productCode: api.productCode ?? staticProduct?.productCode ?? "",
-    images: apiImages,
+    images: apiImages.length > 0 ? apiImages : (staticProduct?.images ?? []),
     information: api.shortDescription ?? staticProduct?.information ?? "",
-    informationImage: api.informationImage ?? staticProduct?.informationImage,
-    informationDescription: api.informationDescription ?? staticProduct?.informationDescription,
+    informationImage: resolveUrl(api.informationImage),
+    informationDescription: api.informationDescription ?? undefined,
     tagline: staticProduct?.tagline,
     highlights: api.highlights ?? staticProduct?.highlights ?? [],
     technicalSpecs: api.technicalSpecs ?? staticProduct?.technicalSpecs ?? [],
@@ -255,12 +268,21 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                       </span>
                     </div>
                   ) : (publicPrice as any)?.taxMode === "INCLUSIVE" ? (
-                    <p className="text-[12.5px] font-medium text-[#111827] pt-0.5">
-                      Inclusive of all taxes
-                    </p>
-                  ) : null}
+                    <p className="text-[12px] text-[#6B7280]">Inclusive of all taxes</p>
+                  ) : (
+                    <p className="text-[12px] text-[#6B7280]">Taxes calculated at checkout</p>
+                  )}
                 </div>
-              ) : null}
+              ) : (
+                <div className="mb-4 flex flex-col gap-1.5">
+                  <span className="inline-block w-fit rounded-pill border border-[#E5E7EB] bg-[#F3F4F6] px-3.5 py-1 text-sm font-semibold text-[#E31E24]">
+                    Price Upon Request
+                  </span>
+                  <p className="text-[13px] text-[#6B7280]">
+                    Pricing for this region is provided via custom quote.
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-3">
                 <div>

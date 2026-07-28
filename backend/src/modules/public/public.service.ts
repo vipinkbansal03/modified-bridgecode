@@ -46,7 +46,10 @@ function buildStorefrontProductWhere(
           variants: {
             some: {
               status: "ACTIVE",
-              countries: { some: { countryId, enabled: true } },
+              OR: [
+                { countries: { some: { countryId, enabled: true } } },
+                { countries: { none: {} } },
+              ],
             },
           },
         },
@@ -67,7 +70,12 @@ function buildStorefrontProductWhere(
   return {
     status: "ACTIVE",
     deletedAt: null,
-    category: { countries: { some: { countryId, enabled: true } } },
+    category: {
+      OR: [
+        { countries: { some: { countryId, enabled: true } } },
+        { countries: { none: {} } },
+      ],
+    },
     ...extraRest,
     AND: andConditions,
   };
@@ -100,7 +108,10 @@ export async function publicListProducts(
     {
       category: {
         ...(query.category ? { slug: query.category } : {}),
-        countries: { some: { countryId: country.id, enabled: true } },
+        OR: [
+          { countries: { some: { countryId: country.id, enabled: true } } },
+          { countries: { none: {} } },
+        ],
       },
       ...(query.search && {
         OR: buildProductTextSearchOr(query.search, languageCode),
@@ -176,7 +187,10 @@ export async function publicListProducts(
         variants: {
           where: {
             status: "ACTIVE",
-            countries: { some: { countryId: country.id, enabled: true } },
+            OR: [
+              { countries: { some: { countryId: country.id, enabled: true } } },
+              { countries: { none: {} } },
+            ],
           },
           include: {
             prices: {
@@ -190,7 +204,10 @@ export async function publicListProducts(
             variants: {
               where: {
                 status: "ACTIVE",
-                countries: { some: { countryId: country.id, enabled: true } },
+                OR: [
+                  { countries: { some: { countryId: country.id, enabled: true } } },
+                  { countries: { none: {} } },
+                ],
               },
             },
           },
@@ -210,7 +227,10 @@ export async function publicListProductFacets(countryCode?: string) {
       attributeValue: { status: "ACTIVE" },
       variant: {
         status: "ACTIVE",
-        countries: { some: { countryId: country.id, enabled: true } },
+        OR: [
+          { countries: { some: { countryId: country.id, enabled: true } } },
+          { countries: { none: {} } },
+        ],
         product: buildStorefrontProductWhere(country.id),
       },
     },
@@ -277,7 +297,10 @@ export async function publicGetProduct(
       variants: {
         where: {
           status: "ACTIVE",
-          countries: { some: { countryId: country.id, enabled: true } },
+          OR: [
+            { countries: { some: { countryId: country.id, enabled: true } } },
+            { countries: { none: {} } },
+          ],
         },
         include: {
           package: true,
@@ -335,7 +358,10 @@ export async function previewPublicProductPrices(
       id: { in: requestedVariantIds },
       productId: product.id,
       status: "ACTIVE",
-      countries: { some: { countryId: country.id, enabled: true } },
+      OR: [
+        { countries: { some: { countryId: country.id, enabled: true } } },
+        { countries: { none: {} } },
+      ],
     },
     select: { id: true, productId: true },
   });
@@ -396,7 +422,10 @@ export async function publicListCategories(
     where: {
       status: "ACTIVE",
       deletedAt: null,
-      countries: { some: { countryId: country.id, enabled: true } },
+      OR: [
+        { countries: { some: { countryId: country.id, enabled: true } } },
+        { countries: { none: {} } },
+      ],
     },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     include: {
@@ -424,7 +453,10 @@ export async function publicGetCategory(
       slug,
       status: "ACTIVE",
       deletedAt: null,
-      countries: { some: { countryId: country.id, enabled: true } },
+      OR: [
+        { countries: { some: { countryId: country.id, enabled: true } } },
+        { countries: { none: {} } },
+      ],
     },
     include: {
       ...(languageCode ? approvedCategoryTranslationInclude(languageCode) : {}),
@@ -538,16 +570,20 @@ export async function submitPublicQuote(input: QuoteSubmitInput) {
         throw new AppError("Quote item quantity must be at least 1.", 400);
       }
 
-      const resolved =
-        item.productId && item.variantId
-          ? await resolvePrice({
-              productId: item.productId,
-              variantId: item.variantId,
-              countryId: defaultCountry.id,
-              customerId: input.customerId ?? undefined,
-              quantity,
-            })
-          : null;
+      let resolved = null;
+      if (item.productId && item.variantId && defaultCountry.id !== "default") {
+        try {
+          resolved = await resolvePrice({
+            productId: item.productId,
+            variantId: item.variantId,
+            countryId: defaultCountry.id,
+            customerId: input.customerId ?? undefined,
+            quantity,
+          });
+        } catch {
+          resolved = null;
+        }
+      }
 
       const submittedUnitPrice = getSubmittedUnitPrice(item.unitPrice);
       const unitPrice = submittedUnitPrice ?? resolved?.finalPrice ?? 0;
@@ -1052,6 +1088,11 @@ function toPublicProduct(p: PublicProductRecord) {
     allVariantPrices,
   );
 
+  const hasCountryPrice = lowestPrices.length > 0 || (p.prices?.length ?? 0) > 0;
+  const pricingStatus: "AVAILABLE" | "PRICE_ON_REQUEST" | "UNAVAILABLE" = hasCountryPrice
+    ? "AVAILABLE"
+    : "PRICE_ON_REQUEST";
+
   return {
     id: p.id,
     slug: p.slug,
@@ -1286,6 +1327,10 @@ async function toPublicProductDetail(
       ),
       // Fall back to product-level country price when variant has none yet.
       prices: variantPrices.length ? variantPrices : productPrices,
+      hasCountryPrice: variantPrices.length > 0 || productPrices.length > 0,
+      pricingStatus: (variantPrices.length > 0 || productPrices.length > 0)
+        ? "AVAILABLE"
+        : "PRICE_ON_REQUEST",
       inventory:
         (v.inventories.find((inventory) => inventory.countryId === countryId) ??
         v.inventories.find((inventory) => inventory.countryId === null))
@@ -1436,6 +1481,10 @@ async function toPublicProductDetail(
     attributes: configuratorAttributes,
     variants: publicVariants,
     prices: productPrices,
+    hasCountryPrice: productPrices.length > 0 || publicVariants.some((v) => v.hasCountryPrice),
+    pricingStatus: (productPrices.length > 0 || publicVariants.some((v) => v.hasCountryPrice))
+      ? "AVAILABLE"
+      : "PRICE_ON_REQUEST",
     lowestPrice: computeLowestVariantPrices(
       (p.prices ?? []) as unknown as PriceRecord[],
       p.variants.map((v) => (v.prices ?? []) as unknown as PriceRecord[]),

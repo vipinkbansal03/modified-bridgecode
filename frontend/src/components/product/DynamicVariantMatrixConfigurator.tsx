@@ -54,11 +54,7 @@ function getPriceForCurrency(
 ): ApiProductPrice | null {
   return (
     variant.prices.find((price) => price.currencyCode === currencyCode) ??
-    variant.prices.find((price) => price.currencyCode === "INR") ??
-    variant.prices[0] ??
     productPrices.find((price) => price.currencyCode === currencyCode) ??
-    productPrices.find((price) => price.currencyCode === "INR") ??
-    productPrices[0] ??
     null
   );
 }

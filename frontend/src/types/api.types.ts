@@ -140,6 +140,7 @@ export interface ApiCountry {
   id: string;
   name: string;
   code: string;
+  flagEmoji?: string;
   currency: ApiCurrency;
   isDefault: boolean;
   status?: string;

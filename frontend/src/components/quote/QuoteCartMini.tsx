@@ -135,12 +135,12 @@ export function QuoteCartMini() {
             <div className="flex justify-between text-[12px] text-[#6B6B6B]">
               <span>{t("ui.quote.estimatedValue")}</span>
               <span className="font-semibold text-ink">
-                {hasUnavailableItems
-                  ? "Unavailable"
+                {hasUnavailableItems || totals.grandTotal <= 0
+                  ? "Upon Request"
                   : fmt(totals.currencySymbol, totals.grandTotal)}
               </span>
             </div>
-            {!hasUnavailableItems && totals.discountPercentage > 0 && (
+            {!hasUnavailableItems && totals.grandTotal > 0 && totals.discountPercentage > 0 && (
               <div className="rounded bg-emerald-50 px-2 py-1 text-[10.5px] font-medium text-emerald-700">
                 {t("ui.quote.volumeDiscountApplied", {
                   percent: totals.discountPercentage,
@@ -148,35 +148,20 @@ export function QuoteCartMini() {
               </div>
             )}
           </div>
-          <div className="border-t border-[#F0F0F0] p-3 space-y-2">
-            <button
-              onClick={() => {
-                if (!hasUnavailableItems) {
-                  setDrawerOpen(true);
-                }
-              }}
-              disabled={hasUnavailableItems}
-              className={`flex w-full items-center justify-center gap-1.5 rounded py-2 text-[12.5px] font-semibold text-white ${
-                hasUnavailableItems
-                  ? "cursor-not-allowed bg-gray-400"
-                  : "bg-[#E31E24] hover:bg-[#B5151B]"
-              }`}
-            >
-              <FileText size={13} />
-              {t("ui.quote.submitRfq")}
-            </button>
+
+          <div className="p-4 pt-0 space-y-2">
             <button
               onClick={() => setDrawerOpen(true)}
-              className="flex w-full items-center justify-center gap-1 rounded border border-[#E6E6E6] py-1.5 text-[12px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#E31E24] py-2.5 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
             >
-              {t("ui.quote.viewQuote")}
-              <ChevronRight size={12} />
+              <FileText size={15} />
+              {t("ui.quote.submitRfq")}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Mobile bottom bar */}
+      {/* Mobile sticky bar */}
       <div className="fixed bottom-0 left-0 right-0 z-50 lg:hidden border-t border-[#E6E6E6] bg-white px-4 py-3 shadow-lg">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
@@ -198,10 +183,10 @@ export function QuoteCartMini() {
                 })}
               </p>
               <p className="text-[11.5px] text-[#9A9A9A]">
-                {hasUnavailableItems
-                  ? "Unavailable"
+                {hasUnavailableItems || totals.grandTotal <= 0
+                  ? "Price Upon Request"
                   : fmt(totals.currencySymbol, totals.grandTotal)}
-                {!hasUnavailableItems && totals.discountPercentage > 0 && (
+                {!hasUnavailableItems && totals.grandTotal > 0 && totals.discountPercentage > 0 && (
                   <span className="ml-1 text-emerald-600">
                     (
                     {t("ui.quote.discountOff", {

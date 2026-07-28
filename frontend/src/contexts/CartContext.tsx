@@ -246,12 +246,22 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const addItem = (item: CartItem) => {
+    if (!item.unitPrice || item.unitPrice <= 0 || item.priceUnavailable) {
+      if (typeof window !== "undefined") {
+        alert("This item requires a custom quote for your selected country.");
+      }
+      return;
+    }
     setItems((current) => mergeCartItems(current, [item]));
   };
 
   const addItems = (incomingItems: CartItem[]) => {
-    if (!incomingItems.length) return;
-    setItems((current) => mergeCartItems(current, incomingItems));
+    const valid = incomingItems.filter((i) => i.unitPrice && i.unitPrice > 0 && !i.priceUnavailable);
+    if (valid.length < incomingItems.length && typeof window !== "undefined") {
+      alert("This item requires a custom quote for your selected country.");
+    }
+    if (!valid.length) return;
+    setItems((current) => mergeCartItems(current, valid));
   };
 
   const updateQuantity = (variantId: string, quantity: number) => {

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { X, Trash2, CheckCircle, FileText } from "lucide-react";
 import { useQuoteCart } from "@/contexts/QuoteCartContext";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
+import { useCurrencyContext } from "@/contexts/CurrencyContext";
 import { useQuoteSubmit } from "@/hooks/api";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import { useToast } from "@/components/ui/ToastProvider";
@@ -83,6 +84,8 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
     setCompany((prev) => prev || currentCustomer.companyName || "");
   }, [currentCustomer, open]);
 
+  const { selectedCountryCode } = useCurrencyContext();
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name || !email || !items.length) return;
@@ -94,6 +97,7 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
         customerEmail: email,
         customerPhone: phone || undefined,
         companyName: company || undefined,
+        countryCode: selectedCountryCode,
         items: items.map((i) => ({
           productId: i.productId,
           variantId: i.variantId,
@@ -229,8 +233,8 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                         </div>
                         <div className="shrink-0 text-right">
                           <p className="text-[13.5px] font-semibold text-ink">
-                            {item.priceUnavailable
-                              ? "—"
+                            {item.priceUnavailable || item.unitPrice <= 0
+                              ? "Price Upon Request"
                               : fmt(
                                   item.currencySymbol,
                                   item.unitPrice * item.quantity,
@@ -238,8 +242,8 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                           </p>
 
                           <p className="text-[11.5px] text-[#9A9A9A]">
-                            {item.priceUnavailable
-                              ? "Price unavailable"
+                            {item.priceUnavailable || item.unitPrice <= 0
+                              ? `${item.quantity} units`
                               : `${item.quantity} × ${fmt(item.currencySymbol, item.unitPrice)}`}
                           </p>
                           <button
@@ -278,12 +282,13 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                           })}
                         </span>
                         <span>
-                          {hasUnavailableItems
-                            ? "Unavailable"
+                          {hasUnavailableItems || totals.subtotal <= 0
+                            ? "Price Upon Request"
                             : fmt(totals.currencySymbol, totals.subtotal)}
                         </span>
                       </div>
                       {!hasUnavailableItems &&
+                        totals.subtotal > 0 &&
                         totals.discountPercentage > 0 && (
                           <div className="flex justify-between text-emerald-600">
                             <span>
@@ -300,11 +305,11 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                             </span>
                           </div>
                         )}
-                      <div className="flex justify-between border-t border-[#F0F0F0] pt-2 text-[14.5px] font-semibold text-ink">
+                      <div className="mt-2 border-t border-[#E6E6E6] pt-2 font-semibold text-ink flex justify-between text-[14px]">
                         <span>{t("ui.quote.estimatedTotal")}</span>
                         <span>
-                          {hasUnavailableItems
-                            ? "Unavailable"
+                          {hasUnavailableItems || totals.grandTotal <= 0
+                            ? "Price Upon Request"
                             : fmt(totals.currencySymbol, totals.grandTotal)}
                         </span>
                       </div>
