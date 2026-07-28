@@ -330,6 +330,45 @@ async function main() {
     });
   }
 
+  // ─── Shipping provider & zones ────────────────────────────
+  const shippingProvider = await prisma.shippingProvider.upsert({
+    where: { name: "STANDARD_EXPRESS" },
+    update: { isEnabled: true, displayName: "Standard Delivery" },
+    create: { name: "STANDARD_EXPRESS", displayName: "Standard Delivery", isEnabled: true },
+  });
+
+  const indiaCountry = allCountriesForPayment.find((c) => c.code.toUpperCase() === "IN");
+  if (indiaCountry) {
+    await prisma.shippingZone.upsert({
+      where: { providerId_countryId: { providerId: shippingProvider.id, countryId: indiaCountry.id } },
+      update: { status: "ACTIVE", charge: 0, freeAbove: 0, estimatedDays: "3-5 business days" },
+      create: {
+        providerId: shippingProvider.id,
+        countryId: indiaCountry.id,
+        charge: 0,
+        freeAbove: 0,
+        estimatedDays: "3-5 business days",
+        status: "ACTIVE",
+      },
+    });
+  }
+
+  const usCountry = allCountriesForPayment.find((c) => c.code.toUpperCase() === "US");
+  if (usCountry) {
+    await prisma.shippingZone.upsert({
+      where: { providerId_countryId: { providerId: shippingProvider.id, countryId: usCountry.id } },
+      update: { status: "ACTIVE", charge: 15, freeAbove: 200, estimatedDays: "5-7 business days" },
+      create: {
+        providerId: shippingProvider.id,
+        countryId: usCountry.id,
+        charge: 15,
+        freeAbove: 200,
+        estimatedDays: "5-7 business days",
+        status: "ACTIVE",
+      },
+    });
+  }
+
   // Default customer pricing tiers. Country/pricing mappings are intentionally empty until admins enable them.
   await prisma.tier.upsert({
     where: { name: "Silver" },
