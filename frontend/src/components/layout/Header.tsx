@@ -389,6 +389,8 @@ export function Header() {
       <MobileMenu
         open={mobileOpen}
         links={mobileLinks}
+        capabilitiesNav={capabilitiesNav}
+        productsMegaNav={productsMegaNav}
         ctaLabel={ctaLabel}
         ctaHref={ctaHref}
         isLoggedIn={Boolean(currentCustomer)}

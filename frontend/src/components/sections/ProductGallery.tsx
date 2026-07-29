@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, ImageOff } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -11,7 +11,13 @@ interface ProductGalleryProps {
 }
 
 export function ProductGallery({ images, title }: ProductGalleryProps) {
-  const safeImages = images.map((image) => image.trim()).filter(Boolean);
+  const safeImages = useMemo(() => {
+    if (!images || !Array.isArray(images) || images.length === 0) return [];
+    return images
+      .filter(Boolean)
+      .map((img) => img.replace(/^http:\/\/(?:localhost|127\.0\.0\.1):4000(\/uploads\/)/i, "$1"));
+  }, [images]);
+
   const [index, setIndex] = useState(0);
 
   const go = (delta: number) => {
@@ -33,7 +39,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
     <div className="flex flex-col gap-3.5 sm:flex-row sm:gap-4.5">
       {/* Thumbnail Strip (Vertical on Desktop, Horizontal on Mobile) */}
       <div className="custom-scrollbar-x order-2 flex gap-2.5 overflow-x-auto pb-2 sm:order-1 sm:flex-col sm:gap-3.5 sm:overflow-visible sm:pb-0">
-        {safeImages.map((img, i) => (
+        {safeImages.map((img: string, i: number) => (
           <button
             key={img}
             type="button"
@@ -43,7 +49,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
               index === i ? "border-[#E31E24] shadow-2xs scale-105" : "border-[#E5E7EB] opacity-75 hover:opacity-100"
             )}
           >
-            <Image src={img} alt={`${title} thumbnail ${i + 1}`} fill className="object-contain p-0.5" />
+            <Image src={img} alt={`${title} thumbnail ${i + 1}`} fill sizes="72px" className="object-contain p-0.5" />
           </button>
         ))}
       </div>
@@ -68,8 +74,8 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
             src={safeImages[index]}
             alt={title}
             fill
+            sizes="(max-width: 768px) 84vw, 500px"
             className="object-contain transition-all duration-300"
-            sizes="500px"
             priority
           />
         </div>

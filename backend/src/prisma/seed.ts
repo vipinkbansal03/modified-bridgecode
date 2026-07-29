@@ -1,4 +1,4 @@
-import { AttributeRole, AttributeStatus, Prisma, PrismaClient } from "@prisma/client";
+import { AttributeRole, AttributeStatus, PaymentMethodType, Prisma, PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { ensureAllWorldCountriesSeeded } from "../modules/countries/countries.service";
 
@@ -263,7 +263,7 @@ async function main() {
     create: { name: "English", code: "en", isDefault: true },
   });
 
-  // ─── Payment gateways ────────────────────────────────────
+  // ─── Payment gateways & methods ──────────────────────────
   await prisma.paymentGateway.upsert({
     where: { provider: "RAZORPAY" },
     update: {},
@@ -274,6 +274,112 @@ async function main() {
     update: {},
     create: { provider: "STRIPE", displayName: "Stripe", isEnabled: false, countries: [] },
   });
+
+  const cod = await prisma.paymentMethod.upsert({
+    where: { code: "COD" },
+    update: {
+      name: "Pay on Delivery",
+      description: "Pay with cash or card upon delivery",
+      type: PaymentMethodType.OFFLINE,
+      isEnabled: true,
+      sortOrder: 1,
+    },
+    create: {
+      code: "COD",
+      name: "Pay on Delivery",
+      description: "Pay with cash or card upon delivery",
+      type: PaymentMethodType.OFFLINE,
+      isEnabled: true,
+      sortOrder: 1,
+    },
+  });
+
+  const razorpay = await prisma.paymentMethod.upsert({
+    where: { code: "RAZORPAY" },
+    update: {
+      name: "Razorpay (UPI / Cards / NetBanking)",
+      description: "Fast & secure online payments for Indian accounts",
+      type: PaymentMethodType.SDK_MODAL,
+      clientScriptUrl: "https://checkout.razorpay.com/v1/checkout.js",
+      isEnabled: true,
+      sortOrder: 2,
+    },
+    create: {
+      code: "RAZORPAY",
+      name: "Razorpay (UPI / Cards / NetBanking)",
+      description: "Fast & secure online payments for Indian accounts",
+      type: PaymentMethodType.SDK_MODAL,
+      clientScriptUrl: "https://checkout.razorpay.com/v1/checkout.js",
+      isEnabled: true,
+      sortOrder: 2,
+    },
+  });
+
+  const allCountriesForPayment = await prisma.country.findMany();
+  for (const c of allCountriesForPayment) {
+    const isIndia = c.code.toUpperCase() === "IN";
+    await prisma.paymentMethodCountry.upsert({
+      where: { paymentMethodId_countryId: { paymentMethodId: cod.id, countryId: c.id } },
+      update: { isEnabled: true, isDefault: !isIndia },
+      create: { paymentMethodId: cod.id, countryId: c.id, isEnabled: true, isDefault: !isIndia },
+    });
+    await prisma.paymentMethodCountry.upsert({
+      where: { paymentMethodId_countryId: { paymentMethodId: razorpay.id, countryId: c.id } },
+      update: { isEnabled: isIndia, isDefault: isIndia },
+      create: { paymentMethodId: razorpay.id, countryId: c.id, isEnabled: isIndia, isDefault: isIndia },
+    });
+  }
+
+  // ─── Shipping providers & zones ─────────────────────────
+  const standardProvider = await prisma.shippingProvider.upsert({
+    where: { name: "STANDARD_EXPRESS" },
+    update: { isEnabled: true, displayName: "Standard Delivery" },
+    create: { name: "STANDARD_EXPRESS", displayName: "Standard Delivery", isEnabled: true },
+  });
+
+  await prisma.shippingProvider.upsert({
+    where: { name: "DHL" },
+    update: { displayName: "DHL Express", baseUrl: "https://express.api.dhl.com/mydhlapi", trackingUrl: "https://track.dhl.com/{tracking}" },
+    create: { name: "DHL", displayName: "DHL Express", baseUrl: "https://express.api.dhl.com/mydhlapi", trackingUrl: "https://track.dhl.com/{tracking}", isEnabled: false },
+  });
+
+  await prisma.shippingProvider.upsert({
+    where: { name: "DTDC" },
+    update: { displayName: "DTDC Courier", baseUrl: "https://api.dtdc.in", trackingUrl: "https://www.dtdc.in/tracking/{tracking}" },
+    create: { name: "DTDC", displayName: "DTDC Courier", baseUrl: "https://api.dtdc.in", trackingUrl: "https://www.dtdc.in/tracking/{tracking}", isEnabled: false },
+  });
+
+  const indiaCountry = allCountriesForPayment.find((c) => c.code.toUpperCase() === "IN");
+  if (indiaCountry) {
+    await prisma.shippingZone.upsert({
+      where: { providerId_countryId: { providerId: standardProvider.id, countryId: indiaCountry.id } },
+      update: { status: "ACTIVE", charge: 0, freeAbove: 0, estimatedDays: "3-5 business days" },
+      create: {
+        providerId: standardProvider.id,
+        countryId: indiaCountry.id,
+        charge: 0,
+        freeAbove: 0,
+        estimatedDays: "3-5 business days",
+        status: "ACTIVE",
+      },
+    });
+  }
+
+  const usCountry = allCountriesForPayment.find((c) => c.code.toUpperCase() === "US");
+  if (usCountry) {
+    await prisma.shippingZone.upsert({
+      where: { providerId_countryId: { providerId: standardProvider.id, countryId: usCountry.id } },
+      update: { status: "ACTIVE", charge: 15, freeAbove: 200, estimatedDays: "5-7 business days" },
+      create: {
+        providerId: standardProvider.id,
+        countryId: usCountry.id,
+        charge: 15,
+        freeAbove: 200,
+        estimatedDays: "5-7 business days",
+        status: "ACTIVE",
+      },
+    });
+  }
 
   // Default customer pricing tiers. Country/pricing mappings are intentionally empty until admins enable them.
   await prisma.tier.upsert({
@@ -1480,12 +1586,73 @@ async function main() {
     { key: "email.from_email", value: "noreply@modortho.com", group: "email", label: "From Email", type: "string" },
   ];
 
-  for (const s of defaultSettings) {
-    await prisma.setting.upsert({
-      where: { key: s.key },
-      update: {},
-      create: { key: s.key, value: s.value, group: s.group, label: s.label, type: s.type, isSecret: s.isSecret ?? false, isEnabled: s.isEnabled ?? true },
+  // ─── Header CMS Menus ─────────────────────────────────────
+  const existingCapsMenu = await prisma.cMSMenu.findUnique({ where: { location: "header-capabilities" } });
+  if (!existingCapsMenu) {
+    await prisma.cMSMenu.create({
+      data: {
+        name: "Header Capabilities",
+        location: "header-capabilities",
+        status: "ACTIVE",
+        items: {
+          create: [
+            { label: "Design & Engineering", url: "/capabilities/design-engineering", sortOrder: 0, status: "ACTIVE" },
+            { label: "Manufacturing Services", url: "/capabilities/manufacturing-services", sortOrder: 1, status: "ACTIVE" },
+            { label: "OEM Services", url: "/capabilities/oem-services", sortOrder: 2, status: "ACTIVE" },
+            { label: "Custom Packaging", url: "/capabilities/custom-packaging", sortOrder: 3, status: "ACTIVE" },
+          ],
+        },
+      },
     });
+  }
+
+  const existingProductsMegaMenu = await prisma.cMSMenu.findUnique({ where: { location: "header-products-mega" } });
+  if (!existingProductsMegaMenu) {
+    const categories = await prisma.category.findMany({ where: { deletedAt: null }, orderBy: { sortOrder: "asc" } });
+
+    const megaMenu = await prisma.cMSMenu.create({
+      data: {
+        name: "Header Products Mega Menu",
+        location: "header-products-mega",
+        status: "ACTIVE",
+      },
+    });
+
+    if (categories.length > 0) {
+      const parentCol = await prisma.cMSMenuItem.create({
+        data: {
+          menuId: megaMenu.id,
+          label: "Product Categories",
+          url: "/products",
+          sortOrder: 0,
+          status: "ACTIVE",
+        },
+      });
+
+      for (let i = 0; i < categories.length; i++) {
+        const cat = categories[i];
+        await prisma.cMSMenuItem.create({
+          data: {
+            menuId: megaMenu.id,
+            parentId: parentCol.id,
+            label: cat.name,
+            url: `/products?category=${cat.slug}`,
+            sortOrder: i,
+            status: "ACTIVE",
+          },
+        });
+      }
+    } else {
+      const bracketsCol = await prisma.cMSMenuItem.create({
+        data: { menuId: megaMenu.id, label: "Bracket Systems", url: "/products?category=bracket-systems", sortOrder: 0, status: "ACTIVE" },
+      });
+      await prisma.cMSMenuItem.create({
+        data: { menuId: megaMenu.id, parentId: bracketsCol.id, label: "Aesthetic Brackets", url: "/products?category=aesthetic-brackets", sortOrder: 0, status: "ACTIVE" },
+      });
+      await prisma.cMSMenuItem.create({
+        data: { menuId: megaMenu.id, parentId: bracketsCol.id, label: "Metal Brackets", url: "/products?category=metal-brackets", sortOrder: 1, status: "ACTIVE" },
+      });
+    }
   }
 
   console.log(`✅ Seed complete.`);

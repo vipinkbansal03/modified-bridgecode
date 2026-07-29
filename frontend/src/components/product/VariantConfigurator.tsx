@@ -57,11 +57,7 @@ function getPriceForCurrency(
 ): ApiProductPrice | null {
   return (
     variant.prices.find((price) => price.currencyCode === currencyCode) ??
-    variant.prices.find((price) => price.currencyCode === "INR") ??
-    variant.prices[0] ??
     productPrices.find((price) => price.currencyCode === currencyCode) ??
-    productPrices.find((price) => price.currencyCode === "INR") ??
-    productPrices[0] ??
     null
   );
 }
@@ -791,9 +787,15 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-steel-2">
                     Estimated Unit Price
                   </p>
-                  <p className="mt-1 text-[24px] font-semibold text-ink">
-                    {formatMoney(currencySymbol, currentResolvedUnitPrice)}
-                  </p>
+                  {currentPrice ? (
+                    <p className="mt-1 text-[24px] font-semibold text-ink">
+                      {formatMoney(currencySymbol, currentResolvedUnitPrice)}
+                    </p>
+                  ) : (
+                    <span className="mt-1 inline-block rounded-pill border border-[#E5E7EB] bg-[#F3F4F6] px-3 py-1 text-sm font-semibold text-[#E31E24]">
+                      Price Upon Request
+                    </span>
+                  )}
                   <p className="mt-1 text-[12px] text-steel">
                     {currentVariant?.sku
                       ? `SKU ${currentVariant.sku}`
@@ -802,22 +804,58 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                 </div>
               </div>
 
+              {!currentPrice && (
+                <div className="mt-3 rounded-lg border border-[#FDE8E8] bg-[#FEF2F2] p-3 text-[13px] text-[#B91C1C]">
+                  Pricing for this region is provided via custom quote. Click <strong>Request Quote</strong> to submit your configuration.
+                </div>
+              )}
+
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3">
-                <button
-                  type="button"
-                  onClick={handleAddConfiguration}
-                  className="inline-flex items-center justify-center rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90"
-                >
-                  Add Configuration
-                </button>
-                <button
-                  type="button"
-                  onClick={handleAddToCart}
-                  className="inline-flex items-center justify-center gap-2 rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand"
-                >
-                  <ShoppingBag size={15} />
-                  Add to Cart
-                </button>
+                {currentPrice ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleAddConfiguration}
+                      className="inline-flex items-center justify-center rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90"
+                    >
+                      Add Configuration
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAddToCart}
+                      className="inline-flex items-center justify-center gap-2 rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand"
+                    >
+                      <ShoppingBag size={15} />
+                      Add to Cart
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!currentVariant) return;
+                      addItems([
+                        {
+                          productId: apiProduct.id,
+                          productSlug: apiProduct.slug,
+                          productTitle: apiProduct.title,
+                          variantId: currentVariant.id,
+                          variantTitle: currentVariant.title,
+                          sku: currentVariant.sku,
+                          quantity,
+                          unitPrice: 0,
+                          currencyCode: selectedCurrency,
+                          currencySymbol: "$",
+                          selectedAttributes: currentVariant.attributeCombination,
+                        },
+                      ]);
+                      open();
+                    }}
+                    className="col-span-full inline-flex items-center justify-center gap-2 rounded-pill bg-brand px-6 py-3.5 text-[14px] font-semibold text-white transition hover:bg-brand/90"
+                  >
+                    Request Quote (RFQ)
+                  </button>
+                )}
               </div>
 
               {error && (
@@ -946,11 +984,13 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                           <p className="text-[11px] uppercase tracking-[0.14em] text-steel-2">
                             Line Total
                           </p>
-                          <p className="text-[16px] font-semibold text-ink">
-                            {formatMoney(
-                              draft.currencySymbol,
-                              draft.unitPrice * draft.quantity,
-                            )}
+                          <p className="text-[14px] font-semibold text-ink">
+                            {draft.unitPrice > 0
+                              ? formatMoney(
+                                  draft.currencySymbol,
+                                  draft.unitPrice * draft.quantity,
+                                )
+                              : "Price Upon Request"}
                           </p>
                         </div>
                       </div>
@@ -991,15 +1031,19 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                 <div className="flex items-center justify-between text-[13.5px] text-steel">
                   <span>Subtotal</span>
                   <strong className="text-ink">
-                    {formatMoney(currencySymbol, subtotal)}
+                    {subtotal > 0
+                      ? formatMoney(currencySymbol, subtotal)
+                      : "Price Upon Request"}
                   </strong>
                 </div>
                 <div className="flex items-center justify-between text-[13.5px] text-steel">
                   <span>Volume Discount</span>
                   <strong className="text-ink">
-                    {discount.percentage
-                      ? `-${formatMoney(currencySymbol, discount.amount)} (${discount.percentage}%)`
-                      : "Not applied yet"}
+                    {subtotal <= 0
+                      ? "Custom Quote"
+                      : discount.percentage
+                        ? `-${formatMoney(currencySymbol, discount.amount)} (${discount.percentage}%)`
+                        : "Not applied yet"}
                   </strong>
                 </div>
               </div>
@@ -1010,11 +1054,13 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-steel-2">
                       Estimated Total
                     </p>
-                    <p className="mt-1 text-[26px] font-semibold tracking-tight text-ink">
-                      {formatMoney(currencySymbol, discount.grandTotal)}
+                    <p className="mt-1 text-[22px] font-semibold tracking-tight text-ink">
+                      {subtotal > 0
+                        ? formatMoney(currencySymbol, discount.grandTotal)
+                        : "Price Upon Request"}
                     </p>
                   </div>
-                  {nextTier ? (
+                  {subtotal > 0 && nextTier ? (
                     <div className="max-w-[160px] text-right text-[11.5px] leading-relaxed text-steel">
                       Add{" "}
                       {formatMoney(
@@ -1023,9 +1069,13 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                       )}{" "}
                       more to unlock {nextTier.percentage}% off.
                     </div>
-                  ) : (
+                  ) : subtotal > 0 ? (
                     <div className="max-w-[160px] text-right text-[11.5px] leading-relaxed text-[#355246]">
                       Highest volume discount tier reached.
+                    </div>
+                  ) : (
+                    <div className="max-w-[160px] text-right text-[11.5px] leading-relaxed text-steel">
+                      Custom quote pricing applies for selected region.
                     </div>
                   )}
                 </div>
@@ -1033,10 +1083,31 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
 
               <button
                 type="button"
-                onClick={handleAddToQuote}
+                onClick={() => {
+                  if (drafts.length > 0) {
+                    handleAddToQuote();
+                  } else if (currentVariant) {
+                    addItems([
+                      {
+                        productId: apiProduct.id,
+                        productSlug: apiProduct.slug,
+                        productTitle: apiProduct.title,
+                        variantId: currentVariant.id,
+                        variantTitle: currentVariant.title,
+                        sku: currentVariant.sku,
+                        quantity,
+                        unitPrice: 0,
+                        currencyCode: selectedCurrency,
+                        currencySymbol: "$",
+                        selectedAttributes: currentVariant.attributeCombination,
+                      },
+                    ]);
+                    open();
+                  }
+                }}
                 className="mt-5 inline-flex w-full items-center justify-center rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90"
               >
-                Add To Quote
+                {currentPrice ? "Add To Quote" : "Request Quote (RFQ)"}
               </button>
             </div>
           </aside>

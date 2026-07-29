@@ -264,8 +264,9 @@ export default function QuoteDetailPage() {
                         />
                       </td>
                       <td className="px-4 py-3 font-semibold text-[#111]">
-                        {sym}
-                        {Number(item.total).toFixed(2)}
+                        {Number(item.total) > 0
+                          ? `${sym}${Number(item.total).toFixed(2)}`
+                          : "Price Upon Request"}
                       </td>
                     </tr>
                   ))}
@@ -276,8 +277,9 @@ export default function QuoteDetailPage() {
               <div className="flex justify-between text-[#6B6B6B]">
                 <span>Saved Subtotal</span>
                 <span>
-                  {sym}
-                  {Number(quote.subtotal).toFixed(2)}
+                  {Number(quote.subtotal) > 0
+                    ? `${sym}${Number(quote.subtotal).toFixed(2)}`
+                    : "Price Upon Request"}
                 </span>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -310,8 +312,9 @@ export default function QuoteDetailPage() {
               <div className="flex justify-between font-semibold text-[#111] text-[15px] pt-1">
                 <span>Saved Total</span>
                 <span>
-                  {sym}
-                  {Number(quote.total).toFixed(2)}
+                  {Number(quote.total) > 0
+                    ? `${sym}${Number(quote.total).toFixed(2)}`
+                    : "Price Upon Request"}
                 </span>
               </div>
               <button

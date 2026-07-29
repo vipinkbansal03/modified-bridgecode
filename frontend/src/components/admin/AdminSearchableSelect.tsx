@@ -139,10 +139,13 @@ export function AdminSearchableSelect({
   };
 
   useEffect(() => {
-    if (isOpen && inputRef.current) {
-      inputRef.current.focus();
+    if (isOpen && menuStyle) {
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 10);
+      return () => clearTimeout(timer);
     }
-  }, [isOpen]);
+  }, [isOpen, menuStyle]);
 
   return (
     <div ref={rootRef} className={cn("relative w-full min-w-[10rem] space-y-1.5", className)}>
@@ -187,6 +190,7 @@ export function AdminSearchableSelect({
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
               <input
                 ref={inputRef}
+                autoFocus
                 type="text"
                 placeholder={searchPlaceholder}
                 value={searchQuery}

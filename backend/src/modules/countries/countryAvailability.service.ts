@@ -22,11 +22,17 @@ export async function assertSellableInCountry(input: {
       id: input.productId,
       status: "ACTIVE",
       deletedAt: null,
-      countries: { some: { countryId: input.countryId, enabled: true } },
+      OR: [
+        { countries: { some: { countryId: input.countryId, enabled: true } } },
+        { countries: { none: {} } },
+      ],
       category: {
         status: "ACTIVE",
         deletedAt: null,
-        countries: { some: { countryId: input.countryId, enabled: true } },
+        OR: [
+          { countries: { some: { countryId: input.countryId, enabled: true } } },
+          { countries: { none: {} } },
+        ],
       },
       ...(input.variantId
         ? {
@@ -34,7 +40,10 @@ export async function assertSellableInCountry(input: {
               some: {
                 id: input.variantId,
                 status: "ACTIVE",
-                countries: { some: { countryId: input.countryId, enabled: true } },
+                OR: [
+                  { countries: { some: { countryId: input.countryId, enabled: true } } },
+                  { countries: { none: {} } },
+                ],
               },
             },
           }

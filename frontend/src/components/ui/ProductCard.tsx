@@ -23,7 +23,18 @@ export interface ProductCardProps {
 }
 
 export function ProductCard({ id, image, title, slug, category, shortDescription, price, badge, ctaLabel, actionSlot }: ProductCardProps) {
-  const imageSrc = image?.trim() || null;
+  const rawImage = image?.trim() || null;
+  let imageSrc: string | null = null;
+  if (rawImage) {
+    let trimmed = rawImage.replace(/^http:\/\/(?:localhost|127\.0\.0\.1):4000(\/uploads\/)/i, "$1");
+    if (trimmed.startsWith("/")) {
+      imageSrc = trimmed;
+    } else if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      imageSrc = trimmed;
+    } else {
+      imageSrc = `/${trimmed}`;
+    }
+  }
 
   return (
     <motion.div whileHover={{ y: -4 }} transition={{ duration: 0.2, ease: "easeOut" }}>
@@ -51,7 +62,13 @@ export function ProductCard({ id, image, title, slug, category, shortDescription
               {category && <span className="text-xs uppercase tracking-wide text-steel-2">{category}</span>}
               <h5 className="mt-1.5 text-[15px] font-medium text-ink">{title}</h5>
               {shortDescription && <p className="mt-1.5 text-sm text-steel">{shortDescription}</p>}
-              {price && <p className="mt-2 text-sm font-semibold text-ink">{price}</p>}
+              {price ? (
+                <p className="mt-2 text-sm font-semibold text-ink">{price}</p>
+              ) : (
+                <span className="mt-2 inline-block rounded-pill border border-[#E5E7EB] bg-[#F3F4F6] px-2.5 py-0.5 text-xs font-semibold text-[#E31E24]">
+                  Price Upon Request
+                </span>
+              )}
             </div>
           </Card>
         </Link>

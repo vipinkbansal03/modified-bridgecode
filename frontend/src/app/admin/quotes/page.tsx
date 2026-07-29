@@ -34,6 +34,7 @@ type QuoteListResponse = {
 
 function formatMoney(value: number | string, currency?: QuoteRow["currency"]) {
   const amount = Number(value ?? 0);
+  if (amount <= 0) return "Price Upon Request";
   const prefix = currency?.symbol || currency?.code || "$";
   return `${prefix}${amount.toFixed(2)}`;
 }

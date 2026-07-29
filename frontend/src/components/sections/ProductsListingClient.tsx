@@ -19,13 +19,11 @@ function formatListingPrice(
   preferredCurrency?: string,
 ) {
   if (!prices?.length) return undefined;
-  const match =
-    prices.find((price) => price.currencyCode === preferredCurrency) ??
-    prices.find((price) => price.currencyCode === "INR") ??
-    prices[0];
+  // Strictly match preferred currency. Do not fall back to INR or other currencies.
+  const match = prices.find((price) => price.currencyCode === preferredCurrency);
   if (!match || match.sellingPrice == null) return undefined;
-  const symbol = match.currencySymbol || "₹";
-  return `${symbol} ${Math.round(Number(match.sellingPrice)).toLocaleString("en-IN")}`;
+  const symbol = match.currencySymbol || "$";
+  return `${symbol} ${Math.round(Number(match.sellingPrice)).toLocaleString()}`;
 }
 
 export function ProductsListingClient() {

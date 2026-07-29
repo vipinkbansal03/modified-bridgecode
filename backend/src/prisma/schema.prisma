@@ -636,6 +636,7 @@ model Order {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   items            OrderItem[]
+  shipments        Shipment[]
   customer         Customer?        @relation(fields: [customerId], references: [id])
   country          Country          @relation(fields: [countryId], references: [id])
   coupon           Coupon?          @relation(fields: [couponId], references: [id])
@@ -680,6 +681,7 @@ model ShippingProvider {
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
   zones       ShippingZone[]
+  shipments  Shipment[]
 
   @@map("shipping_providers")
 }
@@ -700,6 +702,54 @@ model ShippingZone {
 
   @@unique([providerId, countryId])
   @@map("shipping_zones")
+}
+
+enum ShipmentStatus {
+  CREATED
+  LABEL_GENERATED
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED
+  RETURNED
+  CANCELLED
+}
+
+model Shipment {
+  id                String          @id @default(cuid())
+  orderId           String
+  providerId        String
+  status            ShipmentStatus  @default(CREATED)
+  trackingNumber    String?
+  awbNumber         String?
+  labelUrl          String?
+  estimatedDelivery String?
+  shippingCharge    Decimal?        @db.Decimal(12, 2)
+  notes             String?
+  providerResponse  Json?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider          ShippingProvider @relation(fields: [providerId], references: [id])
+  events            ShipmentEvent[]
+
+  @@index([orderId])
+  @@map("shipments")
+}
+
+model ShipmentEvent {
+  id          String          @id @default(cuid())
+  shipmentId  String
+  status      ShipmentStatus
+  location    String?
+  description String?
+  timestamp   DateTime        @default(now())
+  raw         Json?
+  shipment    Shipment        @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId])
+  @@map("shipment_events")
 }
 
 model PaymentGateway {
