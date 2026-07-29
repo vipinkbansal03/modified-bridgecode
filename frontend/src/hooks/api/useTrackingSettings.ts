@@ -18,7 +18,7 @@ export type TrackingSettings = {
   whatsapp: { number: string | null; defaultMessage: string | null; floatingButtonEnabled: boolean };
   social: { facebook: string | null; instagram: string | null; linkedin: string | null; youtube: string | null; twitter: string | null; pinterest: string | null };
   seo: { defaultTitle: string; defaultDescription: string; defaultKeywords: string | null; ogTitle: string | null; ogDescription: string | null; ogImage: string | null; twitterImage: string | null; canonicalDomain: string | null };
-  general: { siteName: string; siteUrl: string | null; logoUrl: string | null; faviconUrl: string | null };
+  general: { siteName: string; siteUrl: string | null; logoUrl: string | null; logoAlt?: string | null; mobileLogoUrl?: string | null; faviconUrl: string | null };
 };
 
 let cachedSettings: TrackingSettings | null = null;
@@ -26,7 +26,7 @@ let cachedSettings: TrackingSettings | null = null;
 export async function fetchTrackingSettings(): Promise<TrackingSettings | null> {
   if (cachedSettings) return cachedSettings;
   try {
-    const res = await fetch("/api/settings/public/tracking", { next: { revalidate: 300 } } as RequestInit);
+    const res = await fetch("/api/settings/public/tracking", { next: { revalidate: 0 } } as RequestInit);
     if (!res.ok) return null;
     const json = await res.json();
     cachedSettings = json.data;
@@ -42,12 +42,14 @@ export function useTrackingSettings() {
     queryFn: async () => {
       try {
         const r = await apiClient.get("/settings/public/tracking");
-        return r.data.data ?? null;
+        const data = r.data.data ?? null;
+        cachedSettings = data;
+        return data;
       } catch {
         return null;
       }
     },
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    staleTime: 60 * 1000,
+    gcTime: 5 * 60 * 1000,
   });
 }

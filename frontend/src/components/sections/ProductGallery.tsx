@@ -49,7 +49,11 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
               index === i ? "border-[#E31E24] shadow-2xs scale-105" : "border-[#E5E7EB] opacity-75 hover:opacity-100"
             )}
           >
-            <Image src={img} alt={`${title} thumbnail ${i + 1}`} fill sizes="72px" className="object-contain p-0.5" />
+            {img.startsWith("data:") ? (
+              <img src={img} alt={`${title} thumbnail ${i + 1}`} className="h-full w-full object-contain p-0.5" />
+            ) : (
+              <Image src={img} alt={`${title} thumbnail ${i + 1}`} fill sizes="72px" className="object-contain p-0.5" />
+            )}
           </button>
         ))}
       </div>
@@ -70,14 +74,18 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
 
         {/* Main Image Preview */}
         <div className="relative h-[260px] w-[84%] sm:h-[340px] lg:h-[400px] lg:w-[80%]">
-          <Image
-            src={safeImages[index]}
-            alt={title}
-            fill
-            sizes="(max-width: 768px) 84vw, 500px"
-            className="object-contain transition-all duration-300"
-            priority
-          />
+          {safeImages[index]?.startsWith("data:") ? (
+            <img src={safeImages[index]} alt={title} className="h-full w-full object-contain transition-all duration-300" />
+          ) : (
+            <Image
+              src={safeImages[index]}
+              alt={title}
+              fill
+              sizes="(max-width: 768px) 84vw, 500px"
+              className="object-contain transition-all duration-300"
+              priority
+            />
+          )}
         </div>
 
         {/* Next Arrow */}

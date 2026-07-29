@@ -3,6 +3,7 @@
 import type { ApiAttribute, ApiProductPrice, ApiVariant } from "@/types/api.types";
 import { QuantityInput } from "./QuantityInput";
 import { StockBadge } from "./StockBadge";
+import { formatPrice } from "@/utils/formatPrice";
 
 interface Props {
   variants: ApiVariant[];
@@ -60,11 +61,10 @@ export function BulkOrderTable({ variants, attributes, quantityMap, priceMap, on
                   <td className="py-3 pr-4 text-right font-semibold text-ink">
                     {price ? (
                       <>
-                        {price.currencySymbol}
-                        {price.sellingPrice.toLocaleString("en-IN")}
+                        {formatPrice(price.sellingPrice, price.currencySymbol, price.currencyCode)}
                         {price.mrp > price.sellingPrice && (
                           <span className="ml-1.5 text-[11px] text-[#9A9A9A] line-through">
-                            {price.mrp.toLocaleString("en-IN")}
+                            {formatPrice(price.mrp, price.currencySymbol, price.currencyCode)}
                           </span>
                         )}
                       </>
@@ -124,10 +124,7 @@ export function BulkOrderTable({ variants, attributes, quantityMap, priceMap, on
               <div className="flex flex-col gap-3 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
                 <span className="text-[14px] font-semibold text-ink">
                   {price ? (
-                    <>
-                      {price.currencySymbol}
-                      {price.sellingPrice.toLocaleString("en-IN")}
-                    </>
+                    formatPrice(price.sellingPrice, price.currencySymbol, price.currencyCode)
                   ) : (
                     <span className="text-[12px] text-[#9A9A9A]">Contact for pricing</span>
                   )}

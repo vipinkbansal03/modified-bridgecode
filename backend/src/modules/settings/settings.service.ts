@@ -232,6 +232,8 @@ export async function getPublicTrackingSettings() {
       siteName: val(m, "general.site_name") || "Modern Orthodontics",
       siteUrl: str(m, "general.site_url"),
       logoUrl: str(m, "general.logo"),
+      logoAlt: str(m, "general.logo_alt"),
+      mobileLogoUrl: str(m, "general.mobile_logo"),
       faviconUrl: str(m, "general.favicon"),
     },
   };

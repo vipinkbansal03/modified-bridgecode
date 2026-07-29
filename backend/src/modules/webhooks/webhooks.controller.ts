@@ -52,9 +52,22 @@ export async function razorpayWebhook(req: Request, res: Response): Promise<void
 // ─── Stripe ──────────────────────────────────────────────
 
 export async function stripeWebhook(req: Request, res: Response): Promise<void> {
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!secret) {
-    res.status(500).json({ error: "Stripe webhook secret not configured." });
+  let secret = process.env.STRIPE_WEBHOOK_SECRET;
+  let secretKey = process.env.STRIPE_SECRET_KEY;
+
+  if (!secret || !secretKey) {
+    const pm = await prisma.paymentMethod.findUnique({
+      where: { code: "STRIPE" },
+      include: { configs: true },
+    });
+    if (pm) {
+      secret = secret || pm.configs.find((c) => c.configKey === "STRIPE_WEBHOOK_SECRET")?.configValue;
+      secretKey = secretKey || pm.configs.find((c) => c.configKey === "STRIPE_SECRET_KEY")?.configValue;
+    }
+  }
+
+  if (!secret || !secretKey) {
+    res.status(500).json({ error: "Stripe webhook secret or key is not configured." });
     return;
   }
 
@@ -65,30 +78,86 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
     return;
   }
 
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
+  const stripe = new Stripe(secretKey);
 
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(rawBody, sig, secret);
-  } catch {
-    res.status(400).json({ error: "Invalid Stripe signature." });
+  } catch (err: any) {
+    res.status(400).json({ error: `Invalid Stripe signature: ${err?.message || err}` });
     return;
   }
 
   try {
-    if (event.type === "payment_intent.succeeded") {
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const orderId = session.client_reference_id || session.metadata?.orderId;
+      const paymentIntentId =
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : session.id;
+
+      if (orderId) {
+        await prisma.order.update({
+          where: { id: orderId },
+          data: {
+            paymentStatus: "PAID",
+            status: "PROCESSING",
+            paymentMethod: "STRIPE",
+            paymentId: paymentIntentId,
+          },
+        });
+        logger.info(`Stripe: checkout session completed for order ${orderId}, paymentId: ${paymentIntentId}`);
+      } else if (session.id) {
+        await prisma.order.updateMany({
+          where: { paymentId: session.id },
+          data: {
+            paymentStatus: "PAID",
+            status: "PROCESSING",
+            paymentMethod: "STRIPE",
+            paymentId: paymentIntentId,
+          },
+        });
+      }
+    } else if (event.type === "payment_intent.succeeded") {
       const intent = event.data.object as Stripe.PaymentIntent;
-      await prisma.order.updateMany({
-        where: { paymentId: intent.id },
-        data: { paymentStatus: "PAID" },
-      });
+      const orderId = intent.metadata?.orderId;
+      if (orderId) {
+        await prisma.order.update({
+          where: { id: orderId },
+          data: {
+            paymentStatus: "PAID",
+            status: "PROCESSING",
+            paymentMethod: "STRIPE",
+            paymentId: intent.id,
+          },
+        });
+      } else {
+        await prisma.order.updateMany({
+          where: { paymentId: intent.id },
+          data: {
+            paymentStatus: "PAID",
+            status: "PROCESSING",
+            paymentMethod: "STRIPE",
+          },
+        });
+      }
       logger.info(`Stripe: payment succeeded for intent ${intent.id}`);
     } else if (event.type === "payment_intent.payment_failed") {
       const intent = event.data.object as Stripe.PaymentIntent;
-      await prisma.order.updateMany({
-        where: { paymentId: intent.id },
-        data: { paymentStatus: "FAILED" },
-      });
+      const orderId = intent.metadata?.orderId;
+      if (orderId) {
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { paymentStatus: "FAILED" },
+        });
+      } else {
+        await prisma.order.updateMany({
+          where: { paymentId: intent.id },
+          data: { paymentStatus: "FAILED" },
+        });
+      }
+      logger.info(`Stripe: payment failed for intent ${intent.id}`);
     } else if (event.type === "charge.refunded") {
       const charge = event.data.object as Stripe.Charge;
       if (charge.payment_intent) {

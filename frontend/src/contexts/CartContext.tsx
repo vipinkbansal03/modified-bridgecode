@@ -10,6 +10,7 @@ import {
 } from "react";
 import { apiClient } from "@/lib/apiClient";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
+import { useCountries } from "@/hooks/api/useCurrencies";
 
 export interface CartItem {
   variantId: string;
@@ -56,7 +57,11 @@ interface CartContextValue {
 const CartContext = createContext<CartContextValue | null>(null);
 const STORAGE_KEY = "purchase_cart_v1";
 
-function computeTotals(items: CartItem[]): CartTotals {
+function computeTotals(
+  items: CartItem[],
+  fallbackCurrencyCode = "USD",
+  fallbackCurrencySymbol = "$"
+): CartTotals {
   const first = items[0];
   const originalSubtotal = items.reduce(
     (sum, item) => sum + item.quantity * (item.basePrice ?? item.unitPrice),
@@ -73,8 +78,8 @@ function computeTotals(items: CartItem[]): CartTotals {
     originalSubtotal,
     subtotal,
     roleDiscount,
-    currencyCode: first?.currencyCode ?? "INR",
-    currencySymbol: first?.currencySymbol ?? "₹",
+    currencyCode: first?.currencyCode ?? fallbackCurrencyCode,
+    currencySymbol: first?.currencySymbol ?? fallbackCurrencySymbol,
   };
 }
 
@@ -92,8 +97,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
 
   const { selectedCountryCode } = useCurrencyContext();
+  const { data: countries = [] } = useCountries();
+  const activeCountry = countries.find((c) => c.code === selectedCountryCode);
+  const fallbackCurrencyCode = activeCountry?.currency?.code ?? "USD";
+  const fallbackCurrencySymbol = activeCountry?.currency?.symbol ?? "$";
 
-  const totals = useMemo(() => computeTotals(items), [items]);
+  const totals = useMemo(
+    () => computeTotals(items, fallbackCurrencyCode, fallbackCurrencySymbol),
+    [items, fallbackCurrencyCode, fallbackCurrencySymbol],
+  );
 
   useEffect(() => {
     try {

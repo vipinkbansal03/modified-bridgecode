@@ -83,10 +83,12 @@ export function formatCurrency(amount: number, currencyCode = "USD", locale = "e
   return new Intl.NumberFormat(locale, { style: "currency", currency: currencyCode }).format(amount);
 }
 
-// ─── Price Converter ─────────────────────────────────────
-
-export function convertPrice(amountInBase: number, targetExchangeRate: number): number {
-  return parseFloat((amountInBase * targetExchangeRate).toFixed(2));
+/**
+ * Converts price from base currency to target currency.
+ * targetAmount = amountInBase * (targetCurrency.exchangeRate / baseCurrency.exchangeRate)
+ */
+export function convertPrice(amountInBase: number, targetExchangeRateRatio: number): number {
+  return parseFloat((amountInBase * targetExchangeRateRatio).toFixed(2));
 }
 
 // ─── Generate variant key ────────────────────────────────

@@ -315,18 +315,42 @@ async function main() {
     },
   });
 
+  const stripe = await prisma.paymentMethod.upsert({
+    where: { code: "STRIPE" },
+    update: {
+      name: "Credit Card / Debit Card (Stripe)",
+      description: "Fast & secure international card payment via Stripe",
+      type: PaymentMethodType.HOSTED_REDIRECT,
+      isEnabled: true,
+      sortOrder: 3,
+    },
+    create: {
+      code: "STRIPE",
+      name: "Credit Card / Debit Card (Stripe)",
+      description: "Fast & secure international card payment via Stripe",
+      type: PaymentMethodType.HOSTED_REDIRECT,
+      isEnabled: true,
+      sortOrder: 3,
+    },
+  });
+
   const allCountriesForPayment = await prisma.country.findMany();
   for (const c of allCountriesForPayment) {
     const isIndia = c.code.toUpperCase() === "IN";
     await prisma.paymentMethodCountry.upsert({
       where: { paymentMethodId_countryId: { paymentMethodId: cod.id, countryId: c.id } },
-      update: { isEnabled: true, isDefault: !isIndia },
-      create: { paymentMethodId: cod.id, countryId: c.id, isEnabled: true, isDefault: !isIndia },
+      update: { isEnabled: true, isDefault: false },
+      create: { paymentMethodId: cod.id, countryId: c.id, isEnabled: true, isDefault: false },
     });
     await prisma.paymentMethodCountry.upsert({
       where: { paymentMethodId_countryId: { paymentMethodId: razorpay.id, countryId: c.id } },
       update: { isEnabled: isIndia, isDefault: isIndia },
       create: { paymentMethodId: razorpay.id, countryId: c.id, isEnabled: isIndia, isDefault: isIndia },
+    });
+    await prisma.paymentMethodCountry.upsert({
+      where: { paymentMethodId_countryId: { paymentMethodId: stripe.id, countryId: c.id } },
+      update: { isEnabled: !isIndia, isDefault: !isIndia },
+      create: { paymentMethodId: stripe.id, countryId: c.id, isEnabled: !isIndia, isDefault: !isIndia },
     });
   }
 
@@ -1468,6 +1492,8 @@ async function main() {
     { key: "general.phone", value: "+91-98765-43210", group: "general", label: "Phone", type: "string" },
     { key: "general.address", value: "Ludhiana, Punjab, India", group: "general", label: "Address", type: "string" },
     { key: "general.logo", value: "", group: "general", label: "Logo URL", type: "string" },
+    { key: "general.logo_alt", value: "Modern Orthodontics", group: "general", label: "Logo Alt Text", type: "string" },
+    { key: "general.mobile_logo", value: "", group: "general", label: "Mobile Logo URL", type: "string" },
     { key: "general.favicon", value: "", group: "general", label: "Favicon URL", type: "string" },
     { key: "general.default_language", value: "en", group: "general", label: "Default Language", type: "string" },
     { key: "general.default_currency", value: "INR", group: "general", label: "Default Currency", type: "string" },

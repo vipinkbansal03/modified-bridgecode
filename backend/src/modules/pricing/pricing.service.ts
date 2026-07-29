@@ -1197,6 +1197,15 @@ export type GenerateCountryPricesInput = {
   >;
 };
 
+/**
+ * Converts a base currency price into a target country's currency and applies landed costs.
+ * 
+ * Base Formula:
+ * targetAmount = baseAmount * (targetCurrency.exchangeRate / baseCurrency.exchangeRate)
+ * 
+ * Landed Cost Formula:
+ * landedPrice = targetAmount + (targetAmount * dutyPercentage / 100) + shippingCharge
+ */
 function computeLandedPrice(
   basePriceInBaseCurrency: number,
   country: { currency?: { exchangeRate: Prisma.Decimal | number } | null; dutyPercentage?: Prisma.Decimal | number | null; shippingCharge?: Prisma.Decimal | number | null },
@@ -1204,6 +1213,7 @@ function computeLandedPrice(
 ) {
   const currencyRate = country.currency ? Number(country.currency.exchangeRate) || 1 : 1;
   const safeBaseRate = baseCurrencyRate || 1;
+  // targetAmount = baseAmount * (targetCurrency.exchangeRate / baseCurrency.exchangeRate)
   const localBase = convertPrice(basePriceInBaseCurrency, currencyRate / safeBaseRate);
   const dutyPercent = Number(country.dutyPercentage) || 0;
   const shipping = Number(country.shippingCharge) || 0;
@@ -1246,13 +1256,13 @@ export async function generateCountryPrices(
 
     const landedMRP = computeLandedPrice(input.mrp, country, baseCurrencyRate).mrp;
     const landedSelling = input.sellingPrice != null 
-      ? computeLandedPrice(input.sellingPrice, country, baseCurrencyRate).mrp 
+      ? computeLandedPrice(input.sellingPrice, country, baseCurrencyRate).sellingPrice 
       : landedMRP;
     const landedDealer = input.dealerPrice != null 
-      ? computeLandedPrice(input.dealerPrice, country, baseCurrencyRate).mrp 
+      ? computeLandedPrice(input.dealerPrice, country, baseCurrencyRate).sellingPrice 
       : null;
     const landedDistributor = input.distributorPrice != null 
-      ? computeLandedPrice(input.distributorPrice, country, baseCurrencyRate).mrp 
+      ? computeLandedPrice(input.distributorPrice, country, baseCurrencyRate).sellingPrice 
       : null;
 
     const baseRow = {
@@ -1269,18 +1279,18 @@ export async function generateCountryPrices(
 
     const variantRows = variants.map((variant) => {
       const override = input.variantOverrides?.[variant.id];
-      const vMRP = override 
+      const vMRP = override?.mrp != null
         ? computeLandedPrice(override.mrp, country, baseCurrencyRate).mrp 
         : landedMRP;
-      const vSelling = override && override.sellingPrice != null 
-        ? computeLandedPrice(override.sellingPrice, country, baseCurrencyRate).mrp 
-        : landedSelling;
-      const vDealer = override && override.dealerPrice != null 
-        ? computeLandedPrice(override.dealerPrice, country, baseCurrencyRate).mrp 
-        : landedDealer;
-      const vDistributor = override && override.distributorPrice != null 
-        ? computeLandedPrice(override.distributorPrice, country, baseCurrencyRate).mrp 
-        : landedDistributor;
+      const vSelling = override?.sellingPrice != null 
+        ? computeLandedPrice(override.sellingPrice, country, baseCurrencyRate).sellingPrice 
+        : (override?.mrp != null ? vMRP : landedSelling);
+      const vDealer = override?.dealerPrice != null 
+        ? computeLandedPrice(override.dealerPrice, country, baseCurrencyRate).sellingPrice 
+        : (override?.mrp != null ? null : landedDealer);
+      const vDistributor = override?.distributorPrice != null 
+        ? computeLandedPrice(override.distributorPrice, country, baseCurrencyRate).sellingPrice 
+        : (override?.mrp != null ? null : landedDistributor);
 
       return {
         ...baseRow,

@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
+import { useCountries } from "@/hooks/api/useCurrencies";
 import { useProduct } from "@/hooks/api/useProducts";
 import { useQuoteCart, type QuoteCartItem } from "@/contexts/QuoteCartContext";
 import { useCart } from "@/contexts/CartContext";
@@ -313,15 +314,12 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
         apiProduct.prices ?? [],
       )
     : null;
+  const { data: countries = [] } = useCountries();
+  const activeCountry = countries.find((c) => c.code === selectedCountryCode);
   const currencySymbol =
     currentPrice?.currencySymbol ??
-    (selectedCurrency === "USD"
-      ? "$"
-      : selectedCurrency === "EUR"
-        ? "€"
-        : selectedCurrency === "GBP"
-          ? "£"
-          : "₹");
+    activeCountry?.currency?.symbol ??
+    "$";
   const currencyCode = currentPrice?.currencyCode ?? selectedCurrency;
   const currentResolvedUnitPrice = currentVariant
     ? (previewPriceMap[currentVariant.id] ?? currentPrice?.sellingPrice ?? 0)

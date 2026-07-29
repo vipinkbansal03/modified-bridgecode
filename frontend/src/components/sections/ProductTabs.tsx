@@ -91,7 +91,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
   ] as const;
 
   return (
-    <section className="mt-8 rounded-xl border border-[#E5E7EB] bg-white shadow-2xs overflow-hidden">
+    <section id="product-specifications" className="mt-8 scroll-mt-28 rounded-xl border border-[#E5E7EB] bg-white shadow-2xs overflow-hidden">
       {/* Horizontal Tabs Header Bar */}
       <div className="border-b border-[#E5E7EB] bg-[#FAFAFA] overflow-x-auto scrollbar-none">
         <div className="flex min-w-max items-center px-2">
