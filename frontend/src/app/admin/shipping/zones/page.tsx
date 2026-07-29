@@ -1,12 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
-import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
+import { getAdminErrorMessage } from "@/services/adminApi";
+import {
+  useAdminShippingProviders,
+  useAdminShippingZones,
+  useCreateShippingZone,
+  useUpdateShippingZone,
+  useDeleteShippingZone,
+} from "@/hooks/admin/useAdminHooks";
+import { useAdminCountries } from "@/hooks/admin/useAdminHooks";
 
 interface Provider {
   id: string;
@@ -58,51 +66,35 @@ function money(value: string | number | null | undefined) {
 
 export default function ShippingZonesPage() {
   const { hasPermission } = useAdminAuth();
-  const canCreate = hasPermission("shipping.create");
-  const canUpdate = hasPermission("shipping.update");
+  const canCreate = hasPermission("shipping.manage");
+  const canUpdate = hasPermission("shipping.manage");
   const canDelete = hasPermission("shipping.delete");
 
   const { showToast, ToastComponent } = useToast();
-  const [zones, setZones] = useState<ShippingZone[]>([]);
-  const [providers, setProviders] = useState<Provider[]>([]);
-  const [countries, setCountries] = useState<Country[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editingZone, setEditingZone] = useState<ShippingZone | null>(null);
-  const [deleteZone, setDeleteZone] = useState<ShippingZone | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ShippingZone | null>(null);
   const [form, setForm] = useState<ZoneForm>(emptyForm);
 
-  async function loadData() {
-    setIsLoading(true);
-    try {
-      const [zonesRes, providersRes, countriesRes] = await Promise.all([
-        adminApi.get("/shipping/zones"),
-        adminApi.get("/shipping/providers"),
-        adminApi.get("/countries"),
-      ]);
-      setZones(zonesRes.data.data || []);
-      setProviders(providersRes.data.data || []);
-      setCountries(countriesRes.data.data || []);
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Could not load shipping zones."), "error");
-    } finally {
-      setIsLoading(false);
-    }
-  }
+  const { data: zones, isLoading: zonesLoading } = useAdminShippingZones();
+  const { data: providers = [] } = useAdminShippingProviders();
+  const { data: countries = [] } = useAdminCountries();
+  const createMutation = useCreateShippingZone();
+  const updateMutation = useUpdateShippingZone();
+  const deleteMutation = useDeleteShippingZone();
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const zoneList: ShippingZone[] = zones ?? [];
+  const providerList: Provider[] = providers ?? [];
+  const countryList: Country[] = countries ?? [];
 
   const providerOptions = useMemo(
-    () => [{ value: "", label: "Select provider" }, ...providers.map((provider) => ({ value: provider.id, label: `${provider.displayName}${provider.isEnabled ? "" : " (disabled)"}` }))],
-    [providers],
+    () => [{ value: "", label: "Select provider" }, ...providerList.map((p) => ({ value: p.id, label: `${p.displayName}${p.isEnabled ? "" : " (disabled)"}` }))],
+    [providerList],
   );
 
   const countryOptions = useMemo(
-    () => [{ value: "", label: "Select country" }, ...countries.map((country) => ({ value: country.id, label: `${country.name} (${country.code})` }))],
-    [countries],
+    () => [{ value: "", label: "Select country" }, ...countryList.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))],
+    [countryList],
   );
 
   function openCreate() {
@@ -130,44 +122,36 @@ export default function ShippingZonesPage() {
       showToast("Provider, country, and charge are required.", "error");
       return;
     }
-    setIsSaving(true);
+    const payload = {
+      providerId: form.providerId,
+      countryId: form.countryId,
+      charge: Number(form.charge),
+      freeAbove: form.freeAbove ? Number(form.freeAbove) : null,
+      estimatedDays: form.estimatedDays.trim() || null,
+      status: form.status,
+    };
     try {
-      const payload = {
-        providerId: form.providerId,
-        countryId: form.countryId,
-        charge: Number(form.charge),
-        freeAbove: form.freeAbove ? Number(form.freeAbove) : null,
-        estimatedDays: form.estimatedDays.trim() || null,
-        status: form.status,
-      };
       if (editingZone) {
-        await adminApi.put(`/shipping/zones/${editingZone.id}`, payload);
+        await updateMutation.mutateAsync({ id: editingZone.id, ...payload });
         showToast("Shipping zone updated.");
       } else {
-        await adminApi.post("/shipping/zones", payload);
+        await createMutation.mutateAsync(payload);
         showToast("Shipping zone created.");
       }
       setFormOpen(false);
-      await loadData();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Could not save shipping zone."), "error");
-    } finally {
-      setIsSaving(false);
     }
   }
 
   async function handleDelete() {
-    if (!deleteZone) return;
-    setIsSaving(true);
+    if (!deleteTarget) return;
     try {
-      await adminApi.delete(`/shipping/zones/${deleteZone.id}`);
+      await deleteMutation.mutateAsync(deleteTarget.id);
       showToast("Shipping zone deleted.");
-      setDeleteZone(null);
-      await loadData();
+      setDeleteTarget(null);
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Could not delete shipping zone."), "error");
-    } finally {
-      setIsSaving(false);
     }
   }
 
@@ -189,7 +173,7 @@ export default function ShippingZonesPage() {
             </button>
           )}
           {canDelete && (
-            <button onClick={() => setDeleteZone(zone)} className="rounded-md border border-red-100 p-2 text-red-600 hover:bg-red-50" title="Delete zone">
+            <button onClick={() => setDeleteTarget(zone)} className="rounded-md border border-red-100 p-2 text-red-600 hover:bg-red-50" title="Delete zone">
               <Trash2 size={14} />
             </button>
           )}
@@ -215,7 +199,7 @@ export default function ShippingZonesPage() {
           )}
         </div>
 
-        <DataTable columns={columns} data={zones} isLoading={isLoading} rowKey="id" emptyMessage="No shipping zones configured." />
+        <DataTable columns={columns} data={zoneList} isLoading={zonesLoading} rowKey="id" emptyMessage="No shipping zones configured." />
       </div>
 
       {formOpen && (
@@ -249,8 +233,8 @@ export default function ShippingZonesPage() {
                 <button type="button" onClick={() => setFormOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2]">
                   Cancel
                 </button>
-                <button type="submit" disabled={isSaving} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
-                  {isSaving ? "Saving..." : editingZone ? "Save Changes" : "Create Zone"}
+                <button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
+                  {createMutation.isPending || updateMutation.isPending ? "Saving..." : editingZone ? "Save Changes" : "Create Zone"}
                 </button>
               </div>
             </form>
@@ -259,12 +243,12 @@ export default function ShippingZonesPage() {
       )}
 
       <ConfirmModal
-        open={Boolean(deleteZone)}
+        open={Boolean(deleteTarget)}
         title="Delete shipping zone?"
-        message={`This removes the ${deleteZone?.country?.code ?? ""} zone for ${deleteZone?.provider?.displayName ?? "this provider"}.`}
+        message={`This removes the ${deleteTarget?.country?.code ?? ""} zone for ${deleteTarget?.provider?.displayName ?? "this provider"}.`}
         onConfirm={handleDelete}
-        onCancel={() => setDeleteZone(null)}
-        isLoading={isSaving}
+        onCancel={() => setDeleteTarget(null)}
+        isLoading={deleteMutation.isPending}
       />
       {ToastComponent}
     </AdminLayout>

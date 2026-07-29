@@ -134,6 +134,7 @@ export async function createAdminOrder(input: {
   companyName?: string | null;
   countryId?: string | null;
   shippingAddress?: Record<string, unknown>;
+  shippingZoneId?: string | null;
   shippingCharge?: number | string | null;
   discount?: number | string | null;
   notes?: string | null;
@@ -224,6 +225,7 @@ export async function createAdminOrder(input: {
       subtotal,
       discount,
       shippingCharge,
+      shippingZoneId: input.shippingZoneId ?? null,
       total,
       status: "CONFIRMED",
       paymentStatus: "PENDING",
