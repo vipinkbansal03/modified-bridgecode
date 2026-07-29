@@ -869,6 +869,14 @@ function PreviewStep({
                 <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[160px]">
                   Variant Title
                 </th>
+                {attributeNames?.map((name) => (
+                  <th
+                    key={name}
+                    className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[100px]"
+                  >
+                    {name}
+                  </th>
+                ))}
                 <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-20">
                   Stock
                 </th>
@@ -929,6 +937,22 @@ function PreviewStep({
                   <td className="px-3 py-2 text-[#374151] font-medium">
                     {row.variantTitle}
                   </td>
+                  {/* Dynamic parsed attributes (read only for reference/mismatch correction) */}
+                  {attributeNames?.map((name) => {
+                    const attrVal = row.attributeValues?.find(
+                      (v) => v.attributeName.toLowerCase() === name.toLowerCase()
+                    );
+                    return (
+                      <td key={name} className="px-3 py-2 text-[#4B5563]">
+                        <span className={cn(
+                          "inline-block rounded px-1.5 py-0.5 text-[11px] font-mono",
+                          attrVal ? "bg-gray-100 text-gray-800" : "bg-red-50 text-red-700 border border-red-200"
+                        )}>
+                          {attrVal ? attrVal.value : "Missing / Bad Value"}
+                        </span>
+                      </td>
+                    );
+                  })}
                   <EditableCell
                     value={String(row.stock)}
                     rowNumber={row.rowNumber}
