@@ -13,6 +13,10 @@ type CustomerProfileInput = {
   status?: Status;
   customerType?: CustomerType;
   approvalStatus?: ApprovalStatus;
+  taxId?: string | null;
+  taxIdType?: string | null;
+  taxIdStatus?: string;
+  taxExemptCertificateUrl?: string | null;
 };
 
 type CustomerListQuery = {
@@ -148,6 +152,10 @@ export async function updateCustomerProfile(id: string, data: CustomerProfileInp
     if (!Object.values(ApprovalStatus).includes(data.approvalStatus)) throw new AppError("Invalid approval status.", 400);
     next.approvalStatus = data.approvalStatus;
   }
+  if (data.taxId !== undefined) next.taxId = data.taxId;
+  if (data.taxIdType !== undefined) next.taxIdType = data.taxIdType;
+  if (data.taxIdStatus !== undefined) next.taxIdStatus = data.taxIdStatus;
+  if (data.taxExemptCertificateUrl !== undefined) next.taxExemptCertificateUrl = data.taxExemptCertificateUrl;
 
   return prisma.customer.update({
     where: { id },

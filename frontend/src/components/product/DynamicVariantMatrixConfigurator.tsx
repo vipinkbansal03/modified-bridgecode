@@ -451,7 +451,57 @@ export function DynamicVariantMatrixConfigurator({
     });
   };
 
+  useEffect(() => {
+    const previewItems = currentCustomer
+      ? apiProduct.variants.map((v) => ({ variantId: v.id, quantity: quantityMap[v.id] || 1 }))
+      : Object.entries(quantityMap)
+          .filter(([, quantity]) => quantity > 0)
+          .map(([variantId, quantity]) => ({ variantId, quantity }));
 
+    if (!previewItems.length) {
+      setPreviewPriceMap({});
+      return;
+    }
+
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        const customerToken = window.localStorage.getItem("customer_token");
+        const response = await apiClient.post(
+          `/products/${apiProduct.slug}/price-preview`,
+          { items: previewItems },
+          {
+            params: selectedCountryCode
+              ? { countryCode: selectedCountryCode }
+              : undefined,
+            headers: customerToken
+              ? { Authorization: `Bearer ${customerToken}` }
+              : undefined,
+          },
+        );
+
+        if (!active) return;
+
+        const previews = (response.data.data ?? []) as Array<{
+          variantId: string;
+          unitPrice: number;
+        }>;
+        setPreviewPriceMap(
+          previews.reduce<Record<string, number>>((acc, preview) => {
+            acc[preview.variantId] = preview.unitPrice;
+            return acc;
+          }, {}),
+        );
+      } catch {
+        if (active) setPreviewPriceMap({});
+      }
+    }, 180);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [apiProduct.slug, apiProduct.variants, quantityMap, selectedCountryCode, currentCustomer]);
 
   if (!matrixEnabled) return null;
 

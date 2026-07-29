@@ -3,6 +3,7 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -47,11 +48,67 @@ export function DeliveryAddressProvider({
   const [selectedCoordinates, setSelectedCoordinates] =
     useState<BrowserCoordinates | null>(null);
 
+  useEffect(() => {
+    try {
+      const savedAddress = localStorage.getItem("delivery_address");
+      const savedCountry = localStorage.getItem("delivery_country");
+      const savedPincode = localStorage.getItem("delivery_pincode");
+      const savedCoordinates = localStorage.getItem("delivery_coordinates");
+
+      if (savedAddress) setSelectedAddress(JSON.parse(savedAddress));
+      if (savedCountry) setSelectedCountry(savedCountry);
+      if (savedPincode) setSelectedPincode(savedPincode);
+      if (savedCoordinates) setSelectedCoordinates(JSON.parse(savedCoordinates));
+    } catch (e) {
+      console.error("Error loading delivery address from localStorage:", e);
+    }
+  }, []);
+
+  const handleSetSelectedAddress = (address: CustomerAddress | null) => {
+    setSelectedAddress(address);
+    if (address) {
+      localStorage.setItem("delivery_address", JSON.stringify(address));
+    } else {
+      localStorage.removeItem("delivery_address");
+    }
+  };
+
+  const handleSetSelectedCountry = (country: string | null) => {
+    setSelectedCountry(country);
+    if (country) {
+      localStorage.setItem("delivery_country", country);
+    } else {
+      localStorage.removeItem("delivery_country");
+    }
+  };
+
+  const handleSetSelectedPincode = (pincode: string | null) => {
+    setSelectedPincode(pincode);
+    if (pincode) {
+      localStorage.setItem("delivery_pincode", pincode);
+    } else {
+      localStorage.removeItem("delivery_pincode");
+    }
+  };
+
+  const handleSetSelectedCoordinates = (coordinates: BrowserCoordinates | null) => {
+    setSelectedCoordinates(coordinates);
+    if (coordinates) {
+      localStorage.setItem("delivery_coordinates", JSON.stringify(coordinates));
+    } else {
+      localStorage.removeItem("delivery_coordinates");
+    }
+  };
+
   const clearSelection = () => {
     setSelectedAddress(null);
     setSelectedCountry(null);
     setSelectedPincode(null);
     setSelectedCoordinates(null);
+    localStorage.removeItem("delivery_address");
+    localStorage.removeItem("delivery_country");
+    localStorage.removeItem("delivery_pincode");
+    localStorage.removeItem("delivery_coordinates");
   };
 
   const value = useMemo(
@@ -61,10 +118,10 @@ export function DeliveryAddressProvider({
       selectedPincode,
       selectedCoordinates,
 
-      setSelectedAddress,
-      setSelectedCountry,
-      setSelectedPincode,
-      setSelectedCoordinates,
+      setSelectedAddress: handleSetSelectedAddress,
+      setSelectedCountry: handleSetSelectedCountry,
+      setSelectedPincode: handleSetSelectedPincode,
+      setSelectedCoordinates: handleSetSelectedCoordinates,
 
       clearSelection,
     }),

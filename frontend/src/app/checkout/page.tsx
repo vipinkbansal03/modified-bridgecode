@@ -57,7 +57,7 @@ export default function CheckoutPage() {
   const { items, totals, updateQuantity, removeItem, clearCart } = useCart();
   const { currentCustomer, isLoading } = useCustomerAuth();
   const { selectedCountryCode, setSelectedCountryCode } = useCurrencyContext();
-  const { selectedAddress: sessionAddress } = useDeliveryAddress();
+  const { selectedAddress: sessionAddress, setSelectedAddress } = useDeliveryAddress();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<CustomerOrderSummary | null>(null);
@@ -102,6 +102,10 @@ export default function CheckoutPage() {
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [showBreakdownModal, setShowBreakdownModal] = useState(false);
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
+  const [taxIdInput, setTaxIdInput] = useState("");
+  const [isVerifyingVat, setIsVerifyingVat] = useState(false);
+  const [vatStatus, setVatStatus] = useState<"VALID" | "INVALID" | null>(null);
+  const [vatMessage, setVatMessage] = useState("");
   const [form, setForm] = useState({
     fullName: "",
     phone: "",
@@ -178,10 +182,22 @@ export default function CheckoutPage() {
   }, [currentCustomer, sessionAddress]);
 
   useEffect(() => {
-    if (selectedCountryCode && selectedCountryCode !== form.countryCode) {
+    if (selectedCountryCode) {
       setForm((current) => ({ ...current, countryCode: selectedCountryCode }));
     }
-  }, [selectedCountryCode, form.countryCode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCountryCode]);
+
+  useEffect(() => {
+    if (currentCustomer) {
+      if ((currentCustomer as any).taxId) {
+        setTaxIdInput((currentCustomer as any).taxId);
+      }
+      if ((currentCustomer as any).taxIdStatus) {
+        setVatStatus((currentCustomer as any).taxIdStatus === "VALID" ? "VALID" : "INVALID");
+      }
+    }
+  }, [currentCustomer]);
 
   const canSubmit = useMemo(() => {
     return Boolean(
@@ -201,6 +217,16 @@ export default function CheckoutPage() {
       (item.appliedTaxes as any[])?.some((tax) => tax.isSpecific),
     );
   }, [estimate]);
+
+  const taxEstimateLabel = useMemo(() => {
+    if ((estimate?.taxAmount ?? 0) > 0) {
+      return null;
+    }
+    if (vatStatus === "VALID" && estimate?.taxBreakdown?.[0]?.label) {
+      return estimate.taxBreakdown[0].label;
+    }
+    return "Tax Exempt";
+  }, [estimate, vatStatus]);
 
   const aggregatedDiscounts = useMemo(() => {
     if (!estimate?.automaticDiscounts) return [];
@@ -334,6 +360,55 @@ export default function CheckoutPage() {
     totals.subtotal,
   ]);
 
+  async function handleVerifyVat() {
+    if (!taxIdInput.trim()) return;
+    setIsVerifyingVat(true);
+    setVatStatus(null);
+    setVatMessage("");
+    try {
+      const { customerApi } = await import("@/services/customerApi");
+      const res = await customerApi.post("/tax-rules/identifiers/validate", {
+        taxId: taxIdInput.trim(),
+        taxIdType: "VAT",
+        countryCode: form.countryCode.trim().toUpperCase(),
+      });
+      const data = res.data?.data || res.data;
+      if (data && data.isValid) {
+        setVatStatus("VALID");
+        setVatMessage(data.legalName || "VAT format is valid");
+        const nextEstimate = await estimateCustomerOrder(orderPayload);
+        setEstimate(nextEstimate);
+      } else {
+        setVatStatus("INVALID");
+        setVatMessage(data?.message || "Invalid format");
+      }
+    } catch (err: any) {
+      setVatStatus("INVALID");
+      const errMsg = err.response?.data?.message || err.message || "Failed to verify Tax ID.";
+      setVatMessage(errMsg);
+    } finally {
+      setIsVerifyingVat(false);
+    }
+  }
+
+  async function handleClearVat() {
+    setTaxIdInput("");
+    setVatStatus(null);
+    setVatMessage("");
+    try {
+      const { customerApi } = await import("@/services/customerApi");
+      await customerApi.post("/tax-rules/identifiers/validate", {
+        taxId: "",
+        taxIdType: "VAT",
+        countryCode: form.countryCode.trim().toUpperCase(),
+      });
+      const nextEstimate = await estimateCustomerOrder(orderPayload);
+      setEstimate(nextEstimate);
+    } catch (err) {
+      console.error("Error clearing VAT ID:", err);
+    }
+  }
+
   async function handleApplyCoupon() {
     const code = couponInput.trim();
     if (!code) {
@@ -440,6 +515,9 @@ export default function CheckoutPage() {
 
     if (!preserveCurrentCountry && address.country?.code) {
       setSelectedCountryCode(address.country.code.toUpperCase());
+    }
+    if (sessionAddress?.id !== address.id) {
+      setSelectedAddress(address as any);
     }
   }
 
@@ -705,6 +783,52 @@ export default function CheckoutPage() {
                       }
                     }}
                   />
+                  {form.countryCode.toUpperCase() !== "IN" && (
+                    <div className="sm:col-span-2 border-t border-line pt-4 mt-2">
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-steel-2">
+                        Tax ID / VAT ID (Optional B2B)
+                      </label>
+                      <div className="flex gap-3">
+                        <input
+                          type="text"
+                          placeholder={form.countryCode.toUpperCase() === "US" ? "EIN (e.g. 12-3456789)" : "EU VAT ID (e.g. DE123456789)"}
+                          value={taxIdInput}
+                          onChange={(e) => {
+                            setTaxIdInput(e.target.value);
+                            setVatStatus(null);
+                            setVatMessage("");
+                          }}
+                          className="flex-1 rounded-md border border-line bg-white px-4 py-2.5 text-[14.5px] text-ink outline-none transition-colors focus:border-steel-2"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleVerifyVat}
+                          disabled={isVerifyingVat || !taxIdInput.trim()}
+                          className="rounded-md bg-brand px-5 py-2.5 text-[13.5px] font-bold text-white shadow-sm hover:bg-brand/90 disabled:opacity-50"
+                        >
+                          {isVerifyingVat ? "Verifying..." : "Verify/Validate"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleClearVat}
+                          disabled={isVerifyingVat}
+                          className="rounded-md border border-line px-4 py-2.5 text-[13.5px] font-medium text-steel hover:bg-grey disabled:opacity-50"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      {vatStatus === "VALID" && (
+                        <p className="mt-2 text-xs font-semibold text-green-600 flex items-center gap-1">
+                          ✓ Status: VALID {vatMessage ? `(${vatMessage})` : ""}
+                        </p>
+                      )}
+                      {vatStatus === "INVALID" && (
+                        <p className="mt-2 text-xs font-semibold text-brand flex items-center gap-1">
+                          ✗ Status: INVALID {vatMessage ? `(${vatMessage})` : ""}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1035,13 +1159,24 @@ export default function CheckoutPage() {
                   </span>
                   <strong className="text-ink">
                     {(estimate?.taxAmount ?? 0) > 0
-                      ? formatMoney(
-                          estimate?.currency?.symbol ?? totals.currencySymbol,
-                          estimate!.taxAmount,
-                        )
-                      : "Tax Exempt"}
+                      ? formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, estimate!.taxAmount)
+                      : taxEstimateLabel}
                   </strong>
                 </div>
+                {estimate?.taxBreakdown && (estimate.taxBreakdown as any[]).length > 0 && (estimate?.taxAmount ?? 0) > 0 && (
+                  <div className="space-y-1 pl-3 text-[12.5px] text-steel">
+                    {(estimate.taxBreakdown as any[]).map((tax, index) => (
+                      <div key={index} className="flex items-center justify-between">
+                        <span>
+                          {tax.label} ({tax.rate}%)
+                        </span>
+                        <span>
+                          {formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, tax.taxAmount)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="flex items-center justify-between text-[14px]">
                   <span className="text-steel">Shipping</span>
                   <strong className="text-ink">

@@ -143,6 +143,7 @@ app.use("/api/customer/orders", customerOrderRoutes);
 app.use("/api/customer/quotes", customerQuoteRoutes);
 app.use("/api/customer/wishlist", customerWishlistRoutes);
 app.use("/api/wishlist", customerWishlistRoutes);
+app.use("/api/customer/tax-rules", taxRoutes);
 app.use("/api/shipping", publicShippingRoutes);
 app.use("/api/coupons", publicCouponRoutes);
 app.use("/api/blogs", publicBlogRoutes);

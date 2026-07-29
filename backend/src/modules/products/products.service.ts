@@ -2335,3 +2335,316 @@ export async function importProductsSpreadsheet(filePath: string) {
     } satisfies SpreadsheetPreviewResult,
   };
 }
+
+function normalizeVariantAttributeValue(value: unknown): string {
+  let normalized = String(value ?? "").trim().toLowerCase();
+
+  // Normalize common smart/curly quotes.
+  normalized = normalized
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'");
+
+  // Excel may convert values such as ".022" into "0.022".
+  // Normalize numeric-looking values so both formats compare equally.
+  if (/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(normalized)) {
+    const numeric = Number(normalized);
+
+    if (Number.isFinite(numeric)) {
+      return String(numeric);
+    }
+  }
+
+  return normalized;
+}
+
+export async function previewVariantsImport(productId: string, filePath: string) {
+  const product = await getProduct(productId);
+  if (!product.hasVariants) throw new AppError("Product does not use variants.", 400);
+
+  const productAttributeMappings = await listProductAttributes(productId);
+  const rows = readSpreadsheetRows(filePath);
+
+  const parsedRows: any[] = [];
+  const skuSet = new Set<string>();
+
+  for (const [index, row] of rows.entries()) {
+    const rawSku = row["SKU"] || row["sku"] || "";
+    const sku = rawSku.trim();
+
+    const rawStock = row["Stock"] || row["Stock Level"] || row["stock"] || "0";
+    const stock = parseInt(rawStock);
+
+    const rawLowStock = row["Low Stock"] || row["Low Stock Threshold"] || row["lowStock"] || "10";
+    const lowStockThreshold = parseInt(rawLowStock);
+
+    const rawPrice = row["Price"] || row["Selling Price"] || row["Base Price"] || row["price"] || "0";
+    const price = parseFloat(rawPrice);
+
+    const rawMRP = row["MRP"] || row["mrp"] || rawPrice || "0";
+    const mrp = parseFloat(rawMRP);
+
+    const rawStatus = row["Status"] || row["status"] || "ACTIVE";
+    const status = rawStatus.trim().toUpperCase() === "INACTIVE" ? "INACTIVE" : "ACTIVE";
+
+    const errors: string[] = [];
+    const attributeValues: any[] = [];
+
+    if (!sku) {
+      errors.push("SKU is required.");
+    } else {
+      if (skuSet.has(sku.toLowerCase())) {
+        errors.push(`Duplicate SKU "${sku}" in spreadsheet.`);
+      }
+      skuSet.add(sku.toLowerCase());
+    }
+
+    if (isNaN(stock) || stock < 0) {
+      errors.push("Stock must be a non-negative number.");
+    }
+    if (isNaN(lowStockThreshold) || lowStockThreshold < 0) {
+      errors.push("Low Stock must be a non-negative number.");
+    }
+    if (isNaN(price) || price < 0) {
+      errors.push("Price must be a non-negative number.");
+    }
+    if (isNaN(mrp) || mrp < 0) {
+      errors.push("MRP must be a non-negative number.");
+    }
+
+    // Map attributes
+    for (const mapping of productAttributeMappings) {
+      let cellValue = "";
+      for (const key of Object.keys(row)) {
+        const normalizedKey = key.toLowerCase();
+        if (
+          normalizedKey === mapping.attribute.name.toLowerCase() ||
+          normalizedKey === `attr: ${mapping.attribute.name.toLowerCase()}` ||
+          normalizedKey === `attribute: ${mapping.attribute.name.toLowerCase()}`
+        ) {
+          cellValue = row[key].trim();
+          break;
+        }
+      }
+
+      if (!cellValue) {
+        if (mapping.required) {
+          errors.push(`Attribute "${mapping.attribute.name}" is required.`);
+        }
+      } else {
+        const normalizedCellValue = normalizeVariantAttributeValue(cellValue);
+
+        const matchedValue = mapping.allowedValues.find(
+          (v) =>
+            normalizeVariantAttributeValue(v.attributeValue.value) ===
+            normalizedCellValue
+        );
+        if (matchedValue) {
+          attributeValues.push({
+            attributeId: mapping.attributeId,
+            attributeName: mapping.attribute.name,
+            attributeValueId: matchedValue.attributeValueId,
+            value: matchedValue.attributeValue.value,
+          });
+        } else {
+          errors.push(`Value "${cellValue}" is not mapped for "${mapping.attribute.name}".`);
+        }
+      }
+    }
+
+    const attrValuesText = attributeValues.map((v) => v.value).join(" / ");
+    const variantTitle = attrValuesText || `Variant ${sku}`;
+
+    parsedRows.push({
+      rowNumber: index + 2,
+      sku,
+      variantTitle,
+      stock: isNaN(stock) ? 0 : stock,
+      lowStockThreshold: isNaN(lowStockThreshold) ? 10 : lowStockThreshold,
+      price: isNaN(price) ? 0 : price,
+      mrp: isNaN(mrp) ? 0 : mrp,
+      status,
+      attributeValues,
+      isValid: errors.length === 0,
+      errors,
+    });
+  }
+
+  const validRowsCount = parsedRows.filter((r) => r.isValid).length;
+  return {
+    totalRows: parsedRows.length,
+    validRows: validRowsCount,
+    invalidRows: parsedRows.length - validRowsCount,
+    rows: parsedRows,
+  };
+}
+
+export async function executeVariantsImport(productId: string, rows: any[]) {
+  const product = await getProduct(productId);
+  if (!product.hasVariants) throw new AppError("Product does not use variants.", 400);
+
+  const baseCurrency =
+    (await prisma.currency.findFirst({ where: { isBase: true } })) ||
+    (await prisma.currency.findFirst({ where: { code: "USD" } })) ||
+    (await prisma.currency.findFirst());
+  if (!baseCurrency) throw new AppError("Base currency not configured.", 400);
+
+  const summary = { created: 0, updated: 0 };
+
+  await prisma.$transaction(async (tx) => {
+    for (const row of rows) {
+      const normalizedSku = row.sku?.trim();
+      if (!normalizedSku) continue;
+
+      const existingVariant = await tx.productVariant.findFirst({
+        where: { productId, sku: normalizedSku },
+      });
+
+      let variantId = "";
+
+      if (existingVariant) {
+        await tx.productVariant.update({
+          where: { id: existingVariant.id },
+          data: {
+            status: row.status || existingVariant.status,
+          },
+        });
+        variantId = existingVariant.id;
+        summary.updated += 1;
+      } else {
+  const attributeValues = Array.isArray(row.attributeValues)
+    ? row.attributeValues.filter(
+        (v: any) => v?.attributeId && v?.attributeValueId
+      )
+    : [];
+
+  const attrValueIds = attributeValues.map(
+    (v: any) => v.attributeValueId
+  );
+
+  const variantKey = [...attrValueIds].sort().join("-");
+
+  const duplicateKeyVariant = await tx.productVariant.findFirst({
+    where: { productId, variantKey },
+  });
+
+  if (duplicateKeyVariant) {
+    await tx.productVariant.update({
+      where: { id: duplicateKeyVariant.id },
+      data: {
+        sku: normalizedSku,
+        status: row.status || duplicateKeyVariant.status,
+      },
+    });
+
+    variantId = duplicateKeyVariant.id;
+    summary.updated += 1;
+  } else {
+    const variant = await tx.productVariant.create({
+      data: {
+        productId,
+        title: row.variantTitle || "Imported Variant",
+        variantKey,
+        sku: normalizedSku,
+        status: row.status || "ACTIVE",
+      },
+    });
+
+    variantId = variant.id;
+
+    if (attributeValues.length > 0) {
+      await tx.productVariantAttributeValue.createMany({
+        data: attributeValues.map((v: any) => ({
+          variantId: variant.id,
+          attributeId: v.attributeId,
+          attributeValueId: v.attributeValueId,
+        })),
+      });
+    }
+
+    summary.created += 1;
+  }
+}
+
+      const existingInventory = await tx.inventory.findFirst({
+        where: { variantId, countryId: null },
+      });
+
+      if (existingInventory) {
+        await tx.inventory.update({
+          where: { id: existingInventory.id },
+          data: {
+            stock: row.stock ?? existingInventory.stock,
+            lowStockThreshold: row.lowStockThreshold ?? existingInventory.lowStockThreshold,
+          },
+        });
+      } else {
+        await tx.inventory.create({
+          data: {
+            productId,
+            variantId,
+            countryId: null,
+            stock: row.stock ?? 0,
+            lowStockThreshold: row.lowStockThreshold ?? 10,
+            status: (row.stock ?? 0) > 0 ? "IN_STOCK" : "OUT_OF_STOCK",
+          },
+        });
+      }
+
+      const priceCountryId = product.defaultCountryId;
+
+if (!priceCountryId) {
+  throw new AppError(
+    "Product default country is required before importing variant prices.",
+    400
+  );
+}
+
+const priceCountry = await tx.country.findUnique({
+  where: { id: priceCountryId },
+  select: {
+    id: true,
+    currencyId: true,
+  },
+});
+
+if (!priceCountry) {
+  throw new AppError("Product default country was not found.", 400);
+}
+
+const existingPrice = await tx.productPrice.findFirst({
+  where: {
+    productId,
+    variantId,
+    countryId: priceCountryId,
+  },
+});
+
+if (existingPrice) {
+  await tx.productPrice.update({
+    where: { id: existingPrice.id },
+    data: {
+      mrp: row.mrp ?? existingPrice.mrp,
+      sellingPrice:
+        row.price ??
+        row.sellingPrice ??
+        existingPrice.sellingPrice,
+    },
+  });
+} else {
+  await tx.productPrice.create({
+    data: {
+      productId,
+      variantId,
+      countryId: priceCountryId,
+      currencyId: priceCountry.currencyId || baseCurrency.id,
+      mrp: row.mrp ?? row.price ?? 0,
+      sellingPrice: row.price ?? row.sellingPrice ?? 0,
+      status: "ACTIVE",
+    },
+  });
+}
+    }
+  });
+
+  return summary;
+}

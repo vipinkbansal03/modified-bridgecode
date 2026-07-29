@@ -1189,7 +1189,12 @@ export async function bulkUpdatePricing(input: PricingBulkInput) {
 export type GenerateCountryPricesInput = {
   mrp: number;
   sellingPrice?: number;
-  variantOverrides?: Record<string, { mrp: number; sellingPrice?: number }>;
+  dealerPrice?: number;
+  distributorPrice?: number;
+  variantOverrides?: Record<
+    string,
+    { mrp: number; sellingPrice?: number; dealerPrice?: number; distributorPrice?: number }
+  >;
 };
 
 function computeLandedPrice(
@@ -1238,26 +1243,52 @@ export async function generateCountryPrices(
 
   const priceRows = countries.flatMap((country) => {
     if (!country.currencyId) return [];
-    const { mrp, sellingPrice } = computeLandedPrice(input.mrp, country, baseCurrencyRate);
+
+    const landedMRP = computeLandedPrice(input.mrp, country, baseCurrencyRate).mrp;
+    const landedSelling = input.sellingPrice != null 
+      ? computeLandedPrice(input.sellingPrice, country, baseCurrencyRate).mrp 
+      : landedMRP;
+    const landedDealer = input.dealerPrice != null 
+      ? computeLandedPrice(input.dealerPrice, country, baseCurrencyRate).mrp 
+      : null;
+    const landedDistributor = input.distributorPrice != null 
+      ? computeLandedPrice(input.distributorPrice, country, baseCurrencyRate).mrp 
+      : null;
+
     const baseRow = {
       productId,
       countryId: country.id,
       currencyId: country.currencyId,
-      mrp: input.sellingPrice != null ? input.sellingPrice : mrp,
-      sellingPrice: input.sellingPrice != null ? input.sellingPrice : mrp,
+      mrp: landedMRP,
+      sellingPrice: landedSelling,
+      dealerPrice: landedDealer,
+      distributorPrice: landedDistributor,
       status: "ACTIVE" as const,
       variantId: null as string | null,
     };
+
     const variantRows = variants.map((variant) => {
       const override = input.variantOverrides?.[variant.id];
-      const variantLanded = override
-        ? { mrp: override.mrp, sellingPrice: override.sellingPrice != null ? override.sellingPrice : override.mrp }
-        : computeLandedPrice(input.mrp, country, baseCurrencyRate);
+      const vMRP = override 
+        ? computeLandedPrice(override.mrp, country, baseCurrencyRate).mrp 
+        : landedMRP;
+      const vSelling = override && override.sellingPrice != null 
+        ? computeLandedPrice(override.sellingPrice, country, baseCurrencyRate).mrp 
+        : landedSelling;
+      const vDealer = override && override.dealerPrice != null 
+        ? computeLandedPrice(override.dealerPrice, country, baseCurrencyRate).mrp 
+        : landedDealer;
+      const vDistributor = override && override.distributorPrice != null 
+        ? computeLandedPrice(override.distributorPrice, country, baseCurrencyRate).mrp 
+        : landedDistributor;
+
       return {
         ...baseRow,
         variantId: variant.id,
-        mrp: variantLanded.mrp,
-        sellingPrice: variantLanded.sellingPrice,
+        mrp: vMRP,
+        sellingPrice: vSelling,
+        dealerPrice: vDealer,
+        distributorPrice: vDistributor,
       };
     });
     return [baseRow, ...variantRows];
@@ -1280,6 +1311,8 @@ export async function generateCountryPrices(
           currencyId: price.currencyId,
           mrp: price.mrp,
           sellingPrice: price.sellingPrice,
+          dealerPrice: price.dealerPrice,
+          distributorPrice: price.distributorPrice,
           status: price.status,
         },
       });

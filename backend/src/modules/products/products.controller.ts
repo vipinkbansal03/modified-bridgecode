@@ -284,3 +284,27 @@ export const importSpreadsheet = asyncHandler(async (req: AuthRequest, res: Resp
     removeTempFile(file.path);
   }
 });
+
+export const previewVariantsImport = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const file = req.file as Express.Multer.File | undefined;
+  if (!file) {
+    return ApiResponse.success(res, "No file uploaded.", {
+      totalRows: 0,
+      validRows: 0,
+      invalidRows: 0,
+      rows: [],
+    });
+  }
+
+  try {
+    const report = await ProductService.previewVariantsImport(req.params.id as string, file.path);
+    return ApiResponse.success(res, "Variants import preview generated.", report);
+  } finally {
+    removeTempFile(file.path);
+  }
+});
+
+export const executeVariantsImport = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await ProductService.executeVariantsImport(req.params.id as string, req.body.rows);
+  return ApiResponse.success(res, "Variants imported successfully.", result);
+});
