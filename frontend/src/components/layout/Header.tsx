@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { DeliveryAddressButton } from "@/components/ui/delivery/DeliveryAddressButton";
 import Link from "next/link";
 import { ChevronDown, ShoppingCart, Heart, Menu, X, MapPin } from "lucide-react";
@@ -10,7 +10,7 @@ import { MobileMenu } from "@/components/layout/MobileMenu";
 import { HeaderSearch } from "@/components/ui/HeaderSearch";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { useCart } from "@/contexts/CartContext";
-import { useWishlistCount } from "@/hooks/api";
+import { useWishlistCount, useCategories, useProducts } from "@/hooks/api";
 import { useCmsMenu } from "@/hooks/api/useCmsContent";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import navigation from "@/data/navigation.json";
@@ -62,7 +62,30 @@ export function Header() {
   const capabilitiesNav = hasCmsCapabilities
     ? capabilitiesLinks
     : nav.capabilitiesMenu;
-  const productsMegaNav = hasCmsProductsMega
+  const { data: categories = [] } = useCategories();
+  const { data: productsData } = useProducts({ limit: 250 });
+  const products = productsData?.data ?? [];
+
+  const dynamicMegaGroups = useMemo(() => {
+    if (!categories.length) return [];
+    return categories.map((cat) => {
+      const catProducts = products.filter(
+        (p) => p.category.slug === cat.slug || p.category.name === cat.name
+      );
+      return {
+        label: cat.name,
+        href: `/products?category=${cat.slug}`,
+        children: catProducts.map((p) => ({
+          label: p.title,
+          href: `/products/${p.slug}`,
+        })),
+      };
+    });
+  }, [categories, products]);
+
+  const productsMegaNav = dynamicMegaGroups.length > 0
+    ? dynamicMegaGroups
+    : hasCmsProductsMega
     ? productMegaGroups
     : nav.productMegaMenu;
   const ctaLabel = ctaLink?.label || label(nav.ctaLabel);

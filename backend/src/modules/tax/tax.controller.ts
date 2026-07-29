@@ -197,7 +197,7 @@ export const validateIdentifier = asyncHandler(async (req: AuthRequest, res: Res
       data: {
         taxId: normalizedResult.isValid ? normalizedResult.identifier ?? String(taxId) : String(taxId),
         taxIdType: normalizedResult.isValid ? normalizedResult.identifierType : String(taxIdType || ""),
-        taxIdStatus: normalizedResult.isValid ? "VALID" : "INVALID",
+        taxIdStatus: normalizedResult.validationStatus || (normalizedResult.isValid ? "VALID" : "INVALID"),
         taxIdVerifiedAt: normalizedResult.isValid ? new Date() : null,
         ...vatFields,
       },

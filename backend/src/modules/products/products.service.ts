@@ -1457,7 +1457,8 @@ export async function generateVariants(
         const title = buildVariantTitle(combo, pkg?.title);
         const existing = await prisma.productVariant.findFirst({ where: { productId, variantKey } });
         if (existing) {
-          const restored = existing.status === "INACTIVE"
+          const wasInactive = existing.status === "INACTIVE";
+          const restored = wasInactive
             ? await prisma.productVariant.update({ where: { id: existing.id }, data: { status: "ACTIVE" } })
             : existing;
           const existingInventories = await prisma.inventory.findMany({
@@ -1483,7 +1484,7 @@ export async function generateVariants(
                   });
             }),
           );
-          return restored;
+          return { variant: restored, isNew: false, isRestored: wasInactive };
         }
 
         const variant = await prisma.productVariant.create({
@@ -1509,19 +1510,28 @@ export async function generateVariants(
           data: inventoryTemplates.map((template) => ({ productId, variantId: variant.id, ...template })),
         });
 
-        return variant;
+        return { variant, isNew: true, isRestored: false };
       })
     )
   );
 
   const activeVariantIds = createdVariants
-    .filter((variant) => variant.status === "ACTIVE")
-    .map((variant) => variant.id);
+    .filter((v) => v.variant.status === "ACTIVE")
+    .map((v) => v.variant.id);
 
   await syncVariantsStorefrontVisibility(activeVariantIds, productId);
-  await syncVariantCountriesFromProduct(productId, createdVariants.map((variant) => variant.id));
+  await syncVariantCountriesFromProduct(productId, createdVariants.map((v) => v.variant.id));
 
-  return createdVariants;
+  const newCount = createdVariants.filter((v) => v.isNew).length;
+  const restoredCount = createdVariants.filter((v) => v.isRestored).length;
+  const totalCount = createdVariants.length;
+
+  const result: any = createdVariants.map((v) => v.variant);
+  result.newCount = newCount;
+  result.restoredCount = restoredCount;
+  result.totalCount = totalCount;
+
+  return result;
 }
 
 export async function createVariant(
@@ -2482,6 +2492,11 @@ export async function executeVariantsImport(productId: string, rows: any[]) {
   const product = await getProduct(productId);
   if (!product.hasVariants) throw new AppError("Product does not use variants.", 400);
 
+  const productCountries = await prisma.productCountry.findMany({
+    where: { productId, enabled: true },
+    select: { countryId: true },
+  });
+
   const baseCurrency =
     (await prisma.currency.findFirst({ where: { isBase: true } })) ||
     (await prisma.currency.findFirst({ where: { code: "USD" } })) ||
@@ -2640,6 +2655,24 @@ if (existingPrice) {
       mrp: row.mrp ?? row.price ?? 0,
       sellingPrice: row.price ?? row.sellingPrice ?? 0,
       status: "ACTIVE",
+    },
+  });
+}
+
+// Automatically sync country visibility from the parent product
+for (const pc of productCountries) {
+  await tx.variantCountry.upsert({
+    where: {
+      variantId_countryId: {
+        variantId,
+        countryId: pc.countryId,
+      },
+    },
+    update: { enabled: true },
+    create: {
+      variantId,
+      countryId: pc.countryId,
+      enabled: true,
     },
   });
 }

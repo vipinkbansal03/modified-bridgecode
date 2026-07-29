@@ -118,6 +118,34 @@ export default function CheckoutPage() {
     notes: "",
   });
 
+  const taxIdConfig = useMemo(() => {
+    const countryUpper = form.countryCode.trim().toUpperCase();
+    const euCountries = new Set([
+      "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HR",
+      "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK",
+    ]);
+
+    let label = "Tax ID / Business Registration (Optional B2B)";
+    let placeholder = "Enter Business Tax ID";
+    let type = "VAT";
+
+    if (countryUpper === "IN") {
+      label = "GSTIN (Optional B2B)";
+      placeholder = "GSTIN (e.g. 03AAAAA1111A1Z1)";
+      type = "GSTIN";
+    } else if (countryUpper === "US") {
+      label = "EIN / Resale Certificate (Optional B2B)";
+      placeholder = "EIN (e.g. 12-3456789) or Resale Certificate";
+      type = "EIN";
+    } else if (euCountries.has(countryUpper)) {
+      label = "EU VAT ID (Optional B2B)";
+      placeholder = "VAT ID (e.g. DE123456789)";
+      type = "VAT";
+    }
+
+    return { label, placeholder, type };
+  }, [form.countryCode]);
+
   useEffect(() => {
     let active = true;
     fetchPublicPaymentMethods(form.countryCode)
@@ -190,11 +218,20 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     if (currentCustomer) {
-      if ((currentCustomer as any).taxId) {
-        setTaxIdInput((currentCustomer as any).taxId);
-      }
-      if ((currentCustomer as any).taxIdStatus) {
-        setVatStatus((currentCustomer as any).taxIdStatus === "VALID" ? "VALID" : "INVALID");
+      const customerTaxId = (currentCustomer as any).taxId;
+      if (customerTaxId) {
+        setTaxIdInput(customerTaxId);
+        const status = (currentCustomer as any).taxIdStatus;
+        if (status === "VALID") {
+          setVatStatus("VALID");
+        } else if (status === "PENDING") {
+          setVatStatus("PENDING");
+        } else {
+          setVatStatus("INVALID");
+        }
+      } else {
+        setTaxIdInput("");
+        setVatStatus(null);
       }
     }
   }, [currentCustomer]);
@@ -222,11 +259,11 @@ export default function CheckoutPage() {
     if ((estimate?.taxAmount ?? 0) > 0) {
       return null;
     }
-    if (vatStatus === "VALID" && estimate?.taxBreakdown?.[0]?.label) {
-      return estimate.taxBreakdown[0].label;
+    if (vatStatus === "VALID") {
+      return estimate?.taxBreakdown?.[0]?.label || "Tax Exempt";
     }
-    return "Tax Exempt";
-  }, [estimate, vatStatus]);
+    return formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, 0);
+  }, [estimate, vatStatus, totals.currencySymbol]);
 
   const aggregatedDiscounts = useMemo(() => {
     if (!estimate?.automaticDiscounts) return [];
@@ -369,13 +406,17 @@ export default function CheckoutPage() {
       const { customerApi } = await import("@/services/customerApi");
       const res = await customerApi.post("/tax-rules/identifiers/validate", {
         taxId: taxIdInput.trim(),
-        taxIdType: "VAT",
+        taxIdType: taxIdConfig.type,
         countryCode: form.countryCode.trim().toUpperCase(),
       });
       const data = res.data?.data || res.data;
       if (data && data.isValid) {
-        setVatStatus("VALID");
-        setVatMessage(data.legalName || "VAT format is valid");
+        if (data.validationStatus === "PENDING") {
+          setVatStatus("PENDING");
+        } else {
+          setVatStatus("VALID");
+        }
+        setVatMessage(data.message || data.legalName || "Tax ID verified successfully");
         const nextEstimate = await estimateCustomerOrder(orderPayload);
         setEstimate(nextEstimate);
       } else {
@@ -399,7 +440,7 @@ export default function CheckoutPage() {
       const { customerApi } = await import("@/services/customerApi");
       await customerApi.post("/tax-rules/identifiers/validate", {
         taxId: "",
-        taxIdType: "VAT",
+        taxIdType: taxIdConfig.type,
         countryCode: form.countryCode.trim().toUpperCase(),
       });
       const nextEstimate = await estimateCustomerOrder(orderPayload);
@@ -783,52 +824,56 @@ export default function CheckoutPage() {
                       }
                     }}
                   />
-                  {form.countryCode.toUpperCase() !== "IN" && (
-                    <div className="sm:col-span-2 border-t border-line pt-4 mt-2">
-                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-steel-2">
-                        Tax ID / VAT ID (Optional B2B)
-                      </label>
-                      <div className="flex gap-3">
-                        <input
-                          type="text"
-                          placeholder={form.countryCode.toUpperCase() === "US" ? "EIN (e.g. 12-3456789)" : "EU VAT ID (e.g. DE123456789)"}
-                          value={taxIdInput}
-                          onChange={(e) => {
-                            setTaxIdInput(e.target.value);
-                            setVatStatus(null);
-                            setVatMessage("");
-                          }}
-                          className="flex-1 rounded-md border border-line bg-white px-4 py-2.5 text-[14.5px] text-ink outline-none transition-colors focus:border-steel-2"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleVerifyVat}
-                          disabled={isVerifyingVat || !taxIdInput.trim()}
-                          className="rounded-md bg-brand px-5 py-2.5 text-[13.5px] font-bold text-white shadow-sm hover:bg-brand/90 disabled:opacity-50"
-                        >
-                          {isVerifyingVat ? "Verifying..." : "Verify/Validate"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleClearVat}
-                          disabled={isVerifyingVat}
-                          className="rounded-md border border-line px-4 py-2.5 text-[13.5px] font-medium text-steel hover:bg-grey disabled:opacity-50"
-                        >
-                          Clear
-                        </button>
-                      </div>
-                      {vatStatus === "VALID" && (
-                        <p className="mt-2 text-xs font-semibold text-green-600 flex items-center gap-1">
-                          ✓ Status: VALID {vatMessage ? `(${vatMessage})` : ""}
-                        </p>
-                      )}
-                      {vatStatus === "INVALID" && (
-                        <p className="mt-2 text-xs font-semibold text-brand flex items-center gap-1">
-                          ✗ Status: INVALID {vatMessage ? `(${vatMessage})` : ""}
-                        </p>
-                      )}
+                  <div className="sm:col-span-2 border-t border-line pt-4 mt-2">
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-steel-2">
+                      {taxIdConfig.label}
+                    </label>
+                    <div className="flex gap-3">
+                      <input
+                        type="text"
+                        placeholder={taxIdConfig.placeholder}
+                        value={taxIdInput}
+                        onChange={(e) => {
+                          setTaxIdInput(e.target.value);
+                          setVatStatus(null);
+                          setVatMessage("");
+                        }}
+                        onBlur={handleVerifyVat}
+                        className="flex-1 rounded-md border border-line bg-white px-4 py-2.5 text-[14.5px] text-ink outline-none transition-colors focus:border-steel-2"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleVerifyVat}
+                        disabled={isVerifyingVat || !taxIdInput.trim()}
+                        className="rounded-md bg-brand px-5 py-2.5 text-[13.5px] font-bold text-white shadow-sm hover:bg-brand/90 disabled:opacity-50"
+                      >
+                        {isVerifyingVat ? "Verifying..." : "Verify/Validate"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearVat}
+                        disabled={isVerifyingVat}
+                        className="rounded-md border border-line px-4 py-2.5 text-[13.5px] font-medium text-steel hover:bg-grey disabled:opacity-50"
+                      >
+                        Clear
+                      </button>
                     </div>
-                  )}
+                    {vatStatus === "VALID" && (
+                      <p className="mt-2 text-xs font-semibold text-green-600 flex items-center gap-1">
+                        ✓ Status: VALID {vatMessage ? `(${vatMessage})` : ""}
+                      </p>
+                    )}
+                    {vatStatus === "PENDING" && (
+                      <p className="mt-2 text-xs font-semibold text-amber-600 flex items-center gap-1">
+                        ⚠ Status: PENDING {vatMessage ? `(${vatMessage})` : ""}
+                      </p>
+                    )}
+                    {vatStatus === "INVALID" && (
+                      <p className="mt-2 text-xs font-semibold text-brand flex items-center gap-1">
+                        ✗ Status: INVALID {vatMessage ? `(${vatMessage})` : ""}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
 

@@ -197,16 +197,9 @@ export async function estimateCustomerOrder(
 ) {
   const calculation = await calculateCustomerOrder(customerId, input);
 
-  const originalBaseSubtotal = roundMoney(
-    calculation.orderItems.reduce(
-      (sum, item) => sum + item.resolvedPrice.basePrice * item.quantity,
-      0,
-    ),
-  );
-
   const automaticDiscounts = calculation.orderItems.flatMap((item) =>
     item.resolvedPrice.appliedDiscounts
-      .filter((entry) => entry.type !== "BASE_PRICE" && entry.type !== "TAX")
+      .filter((entry) => entry.type === "PROMOTIONAL_DISCOUNT")
       .map((entry) => ({
         variantId: item.variant.id,
         sku: item.variant.sku,
@@ -224,8 +217,10 @@ export async function estimateCustomerOrder(
   );
 
   const automaticDiscount = roundMoney(
-    Math.max(0, originalBaseSubtotal - calculation.subtotal),
+    automaticDiscounts.reduce((sum, d) => sum + d.discountAmount, 0)
   );
+
+  const originalBaseSubtotal = roundMoney(calculation.subtotal + automaticDiscount);
 
   const hasVat = calculation.orderItems.some(
     (item) => item.resolvedPrice.taxBreakdownStructure?.taxType === "VAT",

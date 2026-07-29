@@ -153,6 +153,7 @@ export const removeAttrib = asyncHandler(async (req: AuthRequest, res: Response)
 
 export const genVariants = asyncHandler(async (req: AuthRequest, res: Response) => {
   const variants = await ProductService.generateVariants(req.params.id as string, req.body);
+  const { newCount, restoredCount, totalCount } = variants as any;
 
   const basePrice = req.body.basePrice != null ? Number(req.body.basePrice) : NaN;
   if (Number.isFinite(basePrice) && basePrice > 0) {
@@ -174,7 +175,18 @@ export const genVariants = asyncHandler(async (req: AuthRequest, res: Response) 
     );
   }
 
-  return ApiResponse.success(res, `${variants.length} variants generated.`, variants);
+  let message = "";
+  if (newCount === 0 && restoredCount === 0) {
+    message = `All ${totalCount} variant combinations already exist.`;
+  } else if (newCount > 0 && restoredCount > 0) {
+    message = `${newCount} new variants generated, ${restoredCount} restored (${totalCount - newCount - restoredCount} already existed).`;
+  } else if (newCount > 0) {
+    message = `${newCount} new variants generated (${totalCount - newCount} already existed).`;
+  } else {
+    message = `${restoredCount} variants restored (${totalCount - restoredCount} already existed).`;
+  }
+
+  return ApiResponse.success(res, message, variants);
 });
 
 export const getVariants = asyncHandler(async (req: AuthRequest, res: Response) => {

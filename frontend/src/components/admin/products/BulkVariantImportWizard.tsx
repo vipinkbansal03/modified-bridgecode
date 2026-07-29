@@ -62,6 +62,7 @@ interface BulkVariantImportWizardProps {
   onClose: () => void;
   productId: string;
   attributeNames?: string[];
+  attributeMappings?: any[];
   onSuccess: () => void;
 }
 
@@ -133,6 +134,7 @@ export function BulkVariantImportWizard({
   onClose,
   productId,
   attributeNames = [],
+  attributeMappings = [],
   onSuccess,
 }: BulkVariantImportWizardProps) {
   /* ── State ── */
@@ -294,6 +296,55 @@ export function BulkVariantImportWizard({
         prev.map((r) => {
           if (r.rowNumber !== rowNumber) return r;
           const updated = { ...r };
+
+          if (field.startsWith("attr:")) {
+            const attrName = field.substring(5);
+            const mapping = attributeMappings?.find(
+              (m: any) => m.attribute?.name.toLowerCase() === attrName.toLowerCase()
+            );
+            const allowedVal = mapping?.allowedValues?.find(
+              (av: any) => av.attributeValueId === value
+            );
+
+            if (allowedVal) {
+              const av = {
+                attributeId: mapping.attributeId,
+                attributeName: mapping.attribute.name,
+                attributeValueId: allowedVal.attributeValueId,
+                value: allowedVal.attributeValue.value,
+              };
+
+              const nextAttributeValues = [...updated.attributeValues];
+              const idx = nextAttributeValues.findIndex(
+                (item) => item.attributeName.toLowerCase() === attrName.toLowerCase()
+              );
+              if (idx !== -1) {
+                nextAttributeValues[idx] = av;
+              } else {
+                nextAttributeValues.push(av);
+              }
+              updated.attributeValues = nextAttributeValues;
+            }
+
+            // Update title
+            const titles = attributeNames?.map((name) => {
+              const matched = updated.attributeValues.find(
+                (av) => av.attributeName.toLowerCase() === name.toLowerCase()
+              );
+              return matched ? matched.value : "?";
+            }).filter(Boolean);
+            updated.variantTitle = titles?.join(" / ") || updated.variantTitle;
+
+            // Clear errors for this attribute
+            const cleanErrors = updated.errors.filter(
+              (err) => !err.includes(`"${attrName}"`) && !err.includes(`for "${attrName}"`)
+            );
+            updated.errors = cleanErrors;
+            updated.isValid = cleanErrors.length === 0;
+
+            return updated;
+          }
+
           switch (field) {
             case "sku":
               updated.sku = value;
@@ -314,20 +365,25 @@ export function BulkVariantImportWizard({
               updated.status = value;
               break;
           }
-          // Re-validate
+          // Re-validate basic fields
           const errors: string[] = [];
           if (!updated.sku.trim()) errors.push("SKU is required.");
           if (updated.stock < 0) errors.push("Stock must be non-negative.");
           if (updated.lowStockThreshold < 0) errors.push("Low Stock must be non-negative.");
           if (updated.price < 0) errors.push("Price must be non-negative.");
           if (updated.mrp < 0) errors.push("MRP must be non-negative.");
-          updated.errors = errors;
-          updated.isValid = errors.length === 0;
+
+          // Keep remaining attribute errors that weren't resolved
+          const attrErrors = updated.errors.filter(
+            (err) => err.includes("mapped for") || err.includes("is required")
+          );
+          updated.errors = [...errors, ...attrErrors];
+          updated.isValid = updated.errors.length === 0;
           return updated;
         })
       );
     },
-    []
+    [attributeMappings, attributeNames]
   );
 
   /* ── Selection helpers ── */
@@ -507,6 +563,8 @@ export function BulkVariantImportWizard({
                       onEditCell={setEditingCell}
                       onBack={() => setStep(0)}
                       onExecute={executeImport}
+                      attributeNames={attributeNames}
+                      attributeMappings={attributeMappings}
                     />
                   </motion.div>
                 )}
@@ -768,6 +826,8 @@ interface PreviewStepProps {
   onEditCell: (cell: { row: number; field: string } | null) => void;
   onBack: () => void;
   onExecute: () => void;
+  attributeNames?: string[];
+  attributeMappings?: any[];
 }
 
 function PreviewStep({
@@ -786,6 +846,8 @@ function PreviewStep({
   onEditCell,
   onBack,
   onExecute,
+  attributeNames,
+  attributeMappings,
 }: PreviewStepProps) {
   const validCount = rows.filter((r) => r.isValid).length;
   const invalidCount = rows.filter((r) => !r.isValid).length;
@@ -942,10 +1004,44 @@ function PreviewStep({
                     const attrVal = row.attributeValues?.find(
                       (v) => v.attributeName.toLowerCase() === name.toLowerCase()
                     );
+                    const isEditing = editingCell?.row === row.rowNumber && editingCell?.field === `attr:${name}`;
+                    const mapping = attributeMappings?.find(
+                      (m: any) => m.attribute?.name.toLowerCase() === name.toLowerCase()
+                    );
+
+                    if (isEditing && mapping) {
+                      return (
+                        <td key={name} className="px-1 py-1">
+                          <select
+                            autoFocus
+                            value={attrVal?.attributeValueId ?? ""}
+                            onChange={(e) => {
+                              onUpdateRow(row.rowNumber, `attr:${name}`, e.target.value);
+                              onEditCell(null);
+                            }}
+                            onBlur={() => onEditCell(null)}
+                            className="w-full rounded border border-[#E31E24] bg-white px-2 py-1 text-[12px] text-[#1A1A1A] outline-none ring-2 ring-red-100"
+                          >
+                            <option value="">Select value...</option>
+                            {mapping.allowedValues?.map((av: any) => (
+                              <option key={av.attributeValueId} value={av.attributeValueId}>
+                                {av.attributeValue.value}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      );
+                    }
+
                     return (
-                      <td key={name} className="px-3 py-2 text-[#4B5563]">
+                      <td
+                        key={name}
+                        className="px-3 py-2 cursor-pointer transition-colors hover:bg-yellow-50/50"
+                        onClick={() => onEditCell({ row: row.rowNumber, field: `attr:${name}` })}
+                        title="Click to edit attribute"
+                      >
                         <span className={cn(
-                          "inline-block rounded px-1.5 py-0.5 text-[11px] font-mono",
+                          "inline-block rounded px-1.5 py-0.5 text-[11px] font-mono transition-colors group-hover:bg-yellow-50 group-hover:ring-1 group-hover:ring-yellow-200",
                           attrVal ? "bg-gray-100 text-gray-800" : "bg-red-50 text-red-700 border border-red-200"
                         )}>
                           {attrVal ? attrVal.value : "Missing / Bad Value"}

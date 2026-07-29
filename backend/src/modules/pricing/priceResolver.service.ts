@@ -595,9 +595,9 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
       taxPercent = money(selectedRule.percentage);
       ruleIdApplied = selectedRule.id;
     } else {
-      // Fallback legacy percentage
-      taxPercent = money(basePrice.taxPercentage);
-      primaryTaxMode = "EXCLUSIVE";
+      // Default to 0 when no rules are configured
+      taxPercent = 0;
+      primaryTaxMode = "EXEMPT";
     }
   }
 

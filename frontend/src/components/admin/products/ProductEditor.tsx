@@ -7554,6 +7554,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         onClose={() => setBulkImportOpen(false)}
         productId={productId}
         attributeNames={productAttributeMappings.map((m: any) => m.attribute?.name).filter(Boolean)}
+        attributeMappings={productAttributeMappings}
         onSuccess={() => {
           refetch();
           showToast("Variants imported successfully!", "success");
