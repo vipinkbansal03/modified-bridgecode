@@ -1192,6 +1192,15 @@ export type GenerateCountryPricesInput = {
   variantOverrides?: Record<string, { mrp: number; sellingPrice?: number }>;
 };
 
+/**
+ * Converts a base currency price into a target country's currency and applies landed costs.
+ * 
+ * Base Formula:
+ * targetAmount = baseAmount * (targetCurrency.exchangeRate / baseCurrency.exchangeRate)
+ * 
+ * Landed Cost Formula:
+ * landedPrice = targetAmount + (targetAmount * dutyPercentage / 100) + shippingCharge
+ */
 function computeLandedPrice(
   basePriceInBaseCurrency: number,
   country: { currency?: { exchangeRate: Prisma.Decimal | number } | null; dutyPercentage?: Prisma.Decimal | number | null; shippingCharge?: Prisma.Decimal | number | null },
@@ -1199,6 +1208,7 @@ function computeLandedPrice(
 ) {
   const currencyRate = country.currency ? Number(country.currency.exchangeRate) || 1 : 1;
   const safeBaseRate = baseCurrencyRate || 1;
+  // targetAmount = baseAmount * (targetCurrency.exchangeRate / baseCurrency.exchangeRate)
   const localBase = convertPrice(basePriceInBaseCurrency, currencyRate / safeBaseRate);
   const dutyPercent = Number(country.dutyPercentage) || 0;
   const shipping = Number(country.shippingCharge) || 0;
@@ -1238,26 +1248,34 @@ export async function generateCountryPrices(
 
   const priceRows = countries.flatMap((country) => {
     if (!country.currencyId) return [];
-    const { mrp, sellingPrice } = computeLandedPrice(input.mrp, country, baseCurrencyRate);
+    const mrpLanded = computeLandedPrice(input.mrp, country, baseCurrencyRate);
+    const sellingLanded = input.sellingPrice != null
+      ? computeLandedPrice(input.sellingPrice, country, baseCurrencyRate)
+      : mrpLanded;
+
     const baseRow = {
       productId,
       countryId: country.id,
       currencyId: country.currencyId,
-      mrp: input.sellingPrice != null ? input.sellingPrice : mrp,
-      sellingPrice: input.sellingPrice != null ? input.sellingPrice : mrp,
+      mrp: mrpLanded.mrp,
+      sellingPrice: sellingLanded.sellingPrice,
       status: "ACTIVE" as const,
       variantId: null as string | null,
     };
     const variantRows = variants.map((variant) => {
       const override = input.variantOverrides?.[variant.id];
-      const variantLanded = override
-        ? { mrp: override.mrp, sellingPrice: override.sellingPrice != null ? override.sellingPrice : override.mrp }
-        : computeLandedPrice(input.mrp, country, baseCurrencyRate);
+      const variantMrpLanded = override?.mrp != null
+        ? computeLandedPrice(override.mrp, country, baseCurrencyRate)
+        : mrpLanded;
+      const variantSellingLanded = override?.sellingPrice != null
+        ? computeLandedPrice(override.sellingPrice, country, baseCurrencyRate)
+        : (override?.mrp != null ? variantMrpLanded : sellingLanded);
+
       return {
         ...baseRow,
         variantId: variant.id,
-        mrp: variantLanded.mrp,
-        sellingPrice: variantLanded.sellingPrice,
+        mrp: variantMrpLanded.mrp,
+        sellingPrice: variantSellingLanded.sellingPrice,
       };
     });
     return [baseRow, ...variantRows];

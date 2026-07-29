@@ -160,8 +160,7 @@ async function assertBaseCurrencyAllowed(id: string | null, isBase: boolean) {
   if (!isBase) return;
   const where: { isBase: true; id?: { not: string } } = { isBase: true };
   if (id) where.id = { not: id };
-  const existing = await prisma.currency.findFirst({ where, select: { id: true } });
-  if (existing) throw new AppError("Only one base currency can exist at a time.", 400);
+  await prisma.currency.updateMany({ where, data: { isBase: false } });
 }
 
 export async function createCurrency(input: CurrencyInput) {

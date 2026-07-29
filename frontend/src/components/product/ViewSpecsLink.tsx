@@ -1,0 +1,31 @@
+"use client";
+
+import { ChevronDown } from "lucide-react";
+
+export function ViewSpecsLink() {
+  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    const element = document.getElementById("product-specifications");
+    if (element) {
+      const headerOffset = 100;
+      const elementPosition = element.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: "smooth",
+      });
+    }
+  };
+
+  return (
+    <a
+      href="#product-specifications"
+      onClick={handleClick}
+      className="inline-flex items-center gap-1 text-[13px] font-medium text-[#6B7280] hover:text-[#E31E24] transition-colors underline decoration-dotted underline-offset-4 pt-1.5"
+    >
+      <span>View full specifications</span>
+      <ChevronDown size={14} className="text-[#9CA3AF]" />
+    </a>
+  );
+}

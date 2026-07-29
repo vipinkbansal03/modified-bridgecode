@@ -14,8 +14,7 @@ export const upsertMany = asyncHandler(async (req: AuthRequest, res: Response) =
 
 // Public
 export const publicTracking = asyncHandler(async (_req: AuthRequest, res: Response) => {
-  // Cache 5 minutes
-  res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
+  res.setHeader("Cache-Control", "no-cache, must-revalidate");
   return ApiResponse.success(res, "Tracking settings.", await S.getPublicTrackingSettings());
 });
 

@@ -3,6 +3,7 @@
 import type { ApiVariant, ApiProductPrice } from "@/types/api.types";
 import { StockBadge } from "./StockBadge";
 import { QuantityInput } from "./QuantityInput";
+import { formatPrice } from "@/utils/formatPrice";
 
 interface Props {
   variants: ApiVariant[];
@@ -37,8 +38,7 @@ export function BulkOrderFlat({ variants, productTitle, quantityMap, priceMap, o
               <div className="text-right">
                 {price ? (
                   <p className="text-[14px] font-semibold text-ink">
-                    {price.currencySymbol}
-                    {price.sellingPrice.toLocaleString("en-IN")}
+                    {formatPrice(price.sellingPrice, price.currencySymbol, price.currencyCode)}
                   </p>
                 ) : (
                   <p className="text-[12px] text-[#9A9A9A]">Contact for pricing</p>

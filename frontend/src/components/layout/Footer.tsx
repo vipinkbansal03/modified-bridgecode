@@ -7,6 +7,7 @@ import { NewsletterForm } from "@/components/forms/NewsletterForm";
 import { Container } from "@/components/ui/Container";
 import { Logo } from "@/components/ui/Logo";
 import { useCmsFooter, useCmsMenu } from "@/hooks/api/useCmsContent";
+import { useTrackingSettings } from "@/hooks/api/useTrackingSettings";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import type { StaticMessageKey } from "@/i18n/staticMessages";
 import {
@@ -209,6 +210,7 @@ export function Footer() {
   const label = (value: string) =>
     footerLabelKeys[value] ? t(footerLabelKeys[value]) : value;
   const { data: cmsFooter } = useCmsFooter();
+  const { data: trackingSettings, isLoading: trackingLoading } = useTrackingSettings();
   const { data: footerAboutMenu } = useCmsMenu("footer-about");
   const { data: footerProductsMenu } = useCmsMenu("footer-products");
   const { data: footerCapabilitiesMenu } = useCmsMenu("footer-capabilities");
@@ -340,11 +342,16 @@ export function Footer() {
           {cmsFooter?.logo?.trim() ? (
             <img
               src={cmsFooter.logo.trim()}
-              alt="Modern Orthodontics"
+              alt={trackingSettings?.general?.logoAlt || trackingSettings?.general?.siteName || "Modern Orthodontics"}
               className="h-8 md:h-9 w-auto max-w-[200px] md:max-w-[220px] object-contain"
             />
           ) : (
-            <Logo variant="light" />
+            <Logo
+              variant="light"
+              src={trackingSettings?.general?.logoUrl}
+              alt={trackingSettings?.general?.logoAlt || trackingSettings?.general?.siteName}
+              isLoading={trackingLoading}
+            />
           )}
         </div>
 

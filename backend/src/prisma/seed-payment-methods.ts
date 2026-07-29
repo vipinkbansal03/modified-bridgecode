@@ -47,12 +47,31 @@ async function seedPaymentMethods() {
       sortOrder: 2,
     },
   });
-  console.log("Seeded Razorpay:", razorpay.id);
+  // 3. Create or update Stripe
+  const stripe = await prisma.paymentMethod.upsert({
+    where: { code: "STRIPE" },
+    update: {
+      name: "Credit Card / Debit Card (Stripe)",
+      description: "Fast & secure international card payment via Stripe",
+      type: PaymentMethodType.HOSTED_REDIRECT,
+      isEnabled: true,
+      sortOrder: 3,
+    },
+    create: {
+      code: "STRIPE",
+      name: "Credit Card / Debit Card (Stripe)",
+      description: "Fast & secure international card payment via Stripe",
+      type: PaymentMethodType.HOSTED_REDIRECT,
+      isEnabled: true,
+      sortOrder: 3,
+    },
+  });
+  console.log("Seeded Stripe:", stripe.id);
 
   // Fetch all active countries
   const countries = await prisma.country.findMany();
 
-  // 3. Map countries
+  // 4. Map countries
   for (const country of countries) {
     const isIndia = country.code.toUpperCase() === "IN";
 
@@ -64,16 +83,16 @@ async function seedPaymentMethods() {
           countryId: country.id,
         },
       },
-      update: { isEnabled: true, isDefault: !isIndia },
+      update: { isEnabled: true, isDefault: false },
       create: {
         paymentMethodId: cod.id,
         countryId: country.id,
         isEnabled: true,
-        isDefault: !isIndia,
+        isDefault: false,
       },
     });
 
-    // Enable Razorpay ONLY for India (IN)
+    // Enable Razorpay for India (IN)
     await prisma.paymentMethodCountry.upsert({
       where: {
         paymentMethodId_countryId: {
@@ -87,6 +106,23 @@ async function seedPaymentMethods() {
         countryId: country.id,
         isEnabled: isIndia,
         isDefault: isIndia,
+      },
+    });
+
+    // Enable Stripe for international countries (US, DE, AU, etc.)
+    await prisma.paymentMethodCountry.upsert({
+      where: {
+        paymentMethodId_countryId: {
+          paymentMethodId: stripe.id,
+          countryId: country.id,
+        },
+      },
+      update: { isEnabled: !isIndia, isDefault: !isIndia },
+      create: {
+        paymentMethodId: stripe.id,
+        countryId: country.id,
+        isEnabled: !isIndia,
+        isDefault: !isIndia,
       },
     });
   }

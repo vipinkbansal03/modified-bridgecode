@@ -397,6 +397,16 @@ export default function CheckoutPage() {
       );
 
       if (
+        selectedMethod?.type === "HOSTED_REDIRECT" ||
+        selectedPaymentCode === "STRIPE"
+      ) {
+        const paymentRes = await initiateCustomerPayment(created.id, selectedPaymentCode);
+        if (paymentRes.redirectUrl) {
+          clearCart();
+          window.location.href = paymentRes.redirectUrl;
+          return;
+        }
+      } else if (
         selectedMethod?.type === "SDK_MODAL" ||
         selectedPaymentCode === "RAZORPAY"
       ) {

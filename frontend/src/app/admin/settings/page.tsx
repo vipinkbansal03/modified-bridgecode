@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Globe, Search, BarChart2, Megaphone, Share2, ShieldCheck, Code2, Cookie, MessageCircle, Mail,
-  CheckCircle2, AlertCircle, Eye, EyeOff, Save, RefreshCw, Lock, Upload, Plus, Trash2, ArrowUp, ArrowDown,
+  CheckCircle2, AlertCircle, Eye, EyeOff, Save, RefreshCw, Lock, Upload, Plus, Trash2, ArrowUp, ArrowDown, Info,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminTextarea, AdminSelect, useToast } from "@/components/admin/AdminComponents";
-import { adminApi } from "@/services/adminApi";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
+import { Logo } from "@/components/ui/Logo";
 import { cn } from "@/utils/cn";
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
@@ -149,6 +151,8 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
   "general.phone":           { group: "general",  type: "string" },
   "general.address":         { group: "general",  type: "string" },
   "general.logo":            { group: "general",  type: "string" },
+  "general.logo_alt":        { group: "general",  type: "string" },
+  "general.mobile_logo":     { group: "general",  type: "string" },
   "general.favicon":         { group: "general",  type: "string" },
   "general.default_currency":{ group: "general",  type: "string" },
   "general.timezone":        { group: "general",  type: "string" },
@@ -258,7 +262,9 @@ export default function SettingsPage() {
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const shouldScrollToNewSlideRef = useRef(false);
   const newestSlideRef = useRef<HTMLDivElement | null>(null);
+  const [savedSettings, setSavedSettings] = useState<SettingMap>({});
   const savedLoginSlidesRef = useRef<LoginSlide[]>(DEFAULT_LOGIN_SLIDES);
+  const queryClient = useQueryClient();
   const { showToast, ToastComponent } = useToast();
 
   const loadSettings = useCallback(async () => {
@@ -271,14 +277,18 @@ export default function SettingsPage() {
       rows.forEach((s) => { map[s.key] = s.value === "***" ? "" : s.value; });
       const parsedSlides = parseLoginSlides(map);
       setSettings(map);
+      setSavedSettings(map);
       setLoginSlides(parsedSlides);
       savedLoginSlidesRef.current = parsedSlides;
     } catch { showToast("Failed to load settings.", "error"); }
     finally { setLoading(false); }
-  }, [showToast]);
+  }, [authLoading, hasPermission, showToast]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { loadSettings(); }, [loadSettings]);
+  useEffect(() => {
+    if (!authLoading && hasPermission("settings.view")) {
+      loadSettings();
+    }
+  }, [authLoading, hasPermission, loadSettings]);
 
   useEffect(() => {
     if (!shouldScrollToNewSlideRef.current) return;
@@ -295,6 +305,22 @@ export default function SettingsPage() {
   const g = (key: string) => settings[key] ?? "";
   const b = (key: string) => settings[key] === "true";
   const authSliderEnabled = g("auth.login_slider_enabled") !== "false";
+
+  const isLogoDirty = useMemo(() => {
+    return (
+      (settings["general.logo"] ?? "") !== (savedSettings["general.logo"] ?? "") ||
+      (settings["general.mobile_logo"] ?? "") !== (savedSettings["general.mobile_logo"] ?? "") ||
+      (settings["general.logo_alt"] ?? "") !== (savedSettings["general.logo_alt"] ?? "")
+    );
+  }, [settings, savedSettings]);
+
+  const isDirty = useMemo(() => {
+    const isSlidesChanged = JSON.stringify(loginSlides) !== JSON.stringify(savedLoginSlidesRef.current);
+    const isSettingsChanged = Object.keys(settings).some(
+      (k) => (settings[k] ?? "") !== (savedSettings[k] ?? "")
+    );
+    return isSlidesChanged || isSettingsChanged;
+  }, [settings, loginSlides, savedSettings]);
 
   function updateLoginSlide<K extends keyof LoginSlide>(index: number, field: K, value: LoginSlide[K]) {
     setLoginSlides((slides) =>
@@ -380,6 +406,38 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSettingImageUpload = async (
+    key: "general.logo" | "general.mobile_logo" | "general.favicon",
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadingKey(key);
+    const formData = new FormData();
+    formData.append("files", file);
+    formData.append("folder", "modortho/branding");
+
+    try {
+      const response = await adminApi.post("/media", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const uploaded = response.data.data?.[0] as UploadedMedia | undefined;
+
+      if (!uploaded?.url) {
+        throw new Error("Upload response did not include an image URL.");
+      }
+
+      set(key, uploaded.url);
+      showToast("Image uploaded. Click 'Save Settings' to apply changes.", "success");
+    } catch (err) {
+      showToast(getAdminErrorMessage(err, "Image upload failed."), "error");
+    } finally {
+      setUploadingKey(null);
+      event.target.value = "";
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -404,6 +462,8 @@ export default function SettingsPage() {
         showToast("Settings saved, but old image cleanup failed.", "error");
       }
       savedLoginSlidesRef.current = loginSlides;
+      setSavedSettings({ ...settingsToSave });
+      queryClient.invalidateQueries({ queryKey: ["tracking-settings"] });
       showToast("Settings saved successfully.", "success");
     } catch { showToast("Failed to save settings.", "error"); }
     finally { setSaving(false); }
@@ -454,10 +514,22 @@ export default function SettingsPage() {
               )}
             </div>
             {canUpdate && (
-              <button onClick={handleSave} disabled={saving}
-                className="flex items-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white shadow-[0_8px_20px_rgba(227,30,36,0.28)] transition-colors hover:bg-[#B5151B] disabled:opacity-50">
-                <Save size={13} />{saving ? "Saving…" : "Save Settings"}
-              </button>
+              <div className="flex items-center gap-3">
+                {isDirty && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 border border-amber-200 shadow-2xs">
+                    <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                    Unsaved Changes
+                  </span>
+                )}
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex items-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white shadow-[0_8px_20px_rgba(227,30,36,0.28)] transition-colors hover:bg-[#B5151B] disabled:opacity-50"
+                >
+                  <Save size={13} />
+                  {saving ? "Saving…" : "Save Settings"}
+                </button>
+              </div>
             )}
           </div>
 
@@ -465,14 +537,119 @@ export default function SettingsPage() {
 
             {/* ── General ── */}
             {activeTab === "general" && (
-              <div>
+              <div className="space-y-4">
                 <FieldRow label="Website Name"><AdminInput value={g("general.site_name")} onChange={(e) => set("general.site_name", e.target.value)} placeholder="Modern Orthodontics" /></FieldRow>
                 <FieldRow label="Website URL"><AdminInput value={g("general.site_url")} onChange={(e) => set("general.site_url", e.target.value)} placeholder="https://modortho.com" /></FieldRow>
                 <FieldRow label="Company Name"><AdminInput value={g("general.company_name")} onChange={(e) => set("general.company_name", e.target.value)} /></FieldRow>
                 <FieldRow label="Contact Email"><AdminInput type="email" value={g("general.email")} onChange={(e) => set("general.email", e.target.value)} /></FieldRow>
                 <FieldRow label="Phone"><AdminInput value={g("general.phone")} onChange={(e) => set("general.phone", e.target.value)} /></FieldRow>
                 <FieldRow label="Address"><AdminTextarea value={g("general.address")} onChange={(e) => set("general.address", e.target.value)} rows={2} /></FieldRow>
-                <FieldRow label="Logo URL" hint="Full URL or /uploads/... path"><AdminInput value={g("general.logo")} onChange={(e) => set("general.logo", e.target.value)} /></FieldRow>
+
+                {/* ── Logo & Branding Section ── */}
+                <div className="my-6 rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
+                    <div>
+                      <h4 className="text-[14.5px] font-bold text-[#1A1A1A]">Storefront Logo & Branding</h4>
+                      <p className="text-[12px] text-[#6B7280]">Manage desktop and mobile header logos, alt text, and fallback behavior.</p>
+                    </div>
+                    {(g("general.logo") || g("general.mobile_logo")) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          set("general.logo", "");
+                          set("general.mobile_logo", "");
+                          showToast("Logo reset to static SVG/text fallback.", "info");
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-[#E5E7EB] bg-white px-3 py-1.5 text-xs font-semibold text-[#E31E24] shadow-2xs hover:bg-[#FEF2F2]"
+                      >
+                        <RefreshCw size={13} /> Reset to Default Fallback
+                      </button>
+                    )}
+                  </div>
+
+                  {isLogoDirty ? (
+                    <div className="flex items-center gap-2 rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3.5 py-2 text-xs text-[#92400E]">
+                      <AlertCircle size={15} className="shrink-0 text-[#D97706]" />
+                      <span>Unsaved logo changes. Click <strong>Save Settings</strong> at the top right to publish your changes live to the website.</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 rounded-md border border-[#BBF7D0] bg-[#F0FDF4] px-3.5 py-2 text-xs text-[#166534]">
+                      <CheckCircle2 size={15} className="shrink-0 text-[#16A34A]" />
+                      <span>Storefront logo settings are saved and active on the website.</span>
+                    </div>
+                  )}
+
+                  {/* Logo Live Previews */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    <div className="rounded-lg border border-[#E5E7EB] bg-white p-3.5 shadow-2xs">
+                      <span className="block text-[11px] font-semibold uppercase tracking-wider text-[#6B7280] mb-2">Desktop Header Preview</span>
+                      <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-[#D1D5DB] bg-[#FAFAFA] p-2">
+                        <Logo src={g("general.logo")} alt={g("general.logo_alt") || g("general.site_name")} />
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-[#E5E7EB] bg-white p-3.5 shadow-2xs">
+                      <span className="block text-[11px] font-semibold uppercase tracking-wider text-[#6B7280] mb-2">Mobile Header Preview</span>
+                      <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-[#D1D5DB] bg-[#FAFAFA] p-2">
+                        <Logo src={g("general.logo")} mobileSrc={g("general.mobile_logo")} alt={g("general.logo_alt") || g("general.site_name")} isMobile />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Desktop Logo Upload & Input */}
+                  <FieldRow label="Desktop Logo URL" hint="Full URL or /uploads/... path">
+                    <div className="flex items-center gap-2">
+                      <AdminInput
+                        value={g("general.logo")}
+                        onChange={(e) => set("general.logo", e.target.value)}
+                        placeholder="e.g. /uploads/modortho/branding/logo.png"
+                      />
+                      <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-xs font-semibold text-[#374151] shadow-2xs hover:bg-[#F9FAFB]">
+                        <Upload size={14} />
+                        <span>{uploadingKey === "general.logo" ? "Uploading…" : "Upload"}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => void handleSettingImageUpload("general.logo", e)}
+                          disabled={Boolean(uploadingKey)}
+                        />
+                      </label>
+                    </div>
+                  </FieldRow>
+
+                  {/* Logo Alt Text */}
+                  <FieldRow label="Logo Alt Text" hint="Alternative text for accessibility & SEO">
+                    <AdminInput
+                      value={g("general.logo_alt")}
+                      onChange={(e) => set("general.logo_alt", e.target.value)}
+                      placeholder="Modern Orthodontics"
+                    />
+                  </FieldRow>
+
+                  {/* Mobile Logo Upload & Input */}
+                  <FieldRow label="Mobile Logo URL (Optional)" hint="Leave blank to use desktop logo on mobile header">
+                    <div className="flex items-center gap-2">
+                      <AdminInput
+                        value={g("general.mobile_logo")}
+                        onChange={(e) => set("general.mobile_logo", e.target.value)}
+                        placeholder="e.g. /uploads/modortho/branding/mobile-logo.png"
+                      />
+                      <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-xs font-semibold text-[#374151] shadow-2xs hover:bg-[#F9FAFB]">
+                        <Upload size={14} />
+                        <span>{uploadingKey === "general.mobile_logo" ? "Uploading…" : "Upload"}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => void handleSettingImageUpload("general.mobile_logo", e)}
+                          disabled={Boolean(uploadingKey)}
+                        />
+                      </label>
+                    </div>
+                  </FieldRow>
+                </div>
+
                 <FieldRow label="Favicon URL"><AdminInput value={g("general.favicon")} onChange={(e) => set("general.favicon", e.target.value)} /></FieldRow>
                 <FieldRow label="Default Currency">
                   <AdminSelect value={g("general.default_currency")} onChange={(e) => set("general.default_currency", e.target.value)}

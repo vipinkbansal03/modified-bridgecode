@@ -3,6 +3,7 @@
 import type { ApiProductPrice, ApiVariant } from "@/types/api.types";
 import { QuantityInput } from "./QuantityInput";
 import { StockBadge } from "./StockBadge";
+import { formatPrice } from "@/utils/formatPrice";
 
 interface Props {
   variants: ApiVariant[];
@@ -38,8 +39,7 @@ function PriceCell({ price }: { price: ApiProductPrice | null }) {
 
   return (
     <span className="text-[13px] font-semibold text-ink">
-      {price.currencySymbol}
-      {price.sellingPrice.toLocaleString("en-IN")}
+      {formatPrice(price.sellingPrice, price.currencySymbol, price.currencyCode)}
     </span>
   );
 }
@@ -177,7 +177,7 @@ export function BulkOrderMatrix({ variants, quantityMap, priceMap, onQtyChange }
                     <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-[#9A9A9A]">Upper</p>
                     <p className="mb-1 text-[13px] font-semibold text-ink">
                       {priceMap[upper.id]
-                        ? `${priceMap[upper.id]!.currencySymbol}${priceMap[upper.id]!.sellingPrice.toLocaleString("en-IN")}`
+                        ? formatPrice(priceMap[upper.id]!.sellingPrice, priceMap[upper.id]!.currencySymbol, priceMap[upper.id]!.currencyCode)
                         : "—"}
                     </p>
                     <StockBadge status={upper.inventory?.status} />
@@ -201,7 +201,7 @@ export function BulkOrderMatrix({ variants, quantityMap, priceMap, onQtyChange }
                     <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-[#9A9A9A]">Lower</p>
                     <p className="mb-1 text-[13px] font-semibold text-ink">
                       {priceMap[lower.id]
-                        ? `${priceMap[lower.id]!.currencySymbol}${priceMap[lower.id]!.sellingPrice.toLocaleString("en-IN")}`
+                        ? formatPrice(priceMap[lower.id]!.sellingPrice, priceMap[lower.id]!.currencySymbol, priceMap[lower.id]!.currencyCode)
                         : "—"}
                     </p>
                     <StockBadge status={lower.inventory?.status} />

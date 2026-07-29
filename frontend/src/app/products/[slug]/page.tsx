@@ -15,6 +15,7 @@ import { BundleSection } from "@/components/sections/BundleSection";
 import { RecentlySeenSection } from "@/components/sections/RecentlySeenSection";
 import { ContactCTASection } from "@/components/sections/ContactCTASection";
 import { WishlistButton } from "@/components/product/WishlistButton";
+import { ViewSpecsLink } from "@/components/product/ViewSpecsLink";
 import { buildMetadata } from "@/lib/seo";
 import productsData from "@/data/products.json";
 import homeContent from "@/data/home.json";
@@ -294,14 +295,14 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                     Product Code: {product.productCode}
                   </span>
                 )}
+                <div>
+                  <ViewSpecsLink />
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Full Width 7 Horizontal Tabs Section (First) */}
-          <ProductTabs product={product} apiProduct={apiProduct} />
-
-          {/* Original Variant Flow (Second: Configurator / Matrix / Bulk Order / Inquiry) */}
+          {/* Variant Configurator Flow (First: Configurator / Matrix / Bulk Order / Inquiry) */}
           {apiProduct && apiProduct.variants.length > 0 ? (
             <VariantConfigurator apiProduct={apiProduct} />
           ) : product.prescriptionOptions && product.slotOptions && product.packagingOptions && product.discountTiers ? (
@@ -309,6 +310,9 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           ) : (
             <SimpleInquiryPanel product={product} productId={apiProduct?.id} />
           )}
+
+          {/* Full Width Horizontal Tabs Section (Second) */}
+          <ProductTabs product={product} apiProduct={apiProduct} />
 
           {/* Dentalkart Style Feedback Section */}
           <ProductFeedbackSection product={product} />

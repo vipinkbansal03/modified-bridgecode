@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { DeliveryAddressButton } from "@/components/ui/delivery/DeliveryAddressButton";
 import Link from "next/link";
 import { ChevronDown, ShoppingCart, Heart, Menu, X, MapPin } from "lucide-react";
@@ -10,7 +10,8 @@ import { MobileMenu } from "@/components/layout/MobileMenu";
 import { HeaderSearch } from "@/components/ui/HeaderSearch";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { useCart } from "@/contexts/CartContext";
-import { useWishlistCount } from "@/hooks/api";
+import { useWishlistCount, useCategories, useProducts } from "@/hooks/api";
+import { useTrackingSettings } from "@/hooks/api/useTrackingSettings";
 import { useCmsMenu } from "@/hooks/api/useCmsContent";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import navigation from "@/data/navigation.json";
@@ -19,6 +20,7 @@ import { cn } from "@/utils/cn";
 import type { NavigationData } from "@/types/common.types";
 import type { StaticMessageKey } from "@/i18n/staticMessages";
 import { LocaleSwitcher } from "@/components/ui/LocaleSwitcher";
+import { HAS_LIVE_API } from "@/lib/apiClient";
 
 const nav = navigation as NavigationData;
 const navLabelKeys: Record<string, StaticMessageKey> = {
@@ -43,6 +45,10 @@ export function Header() {
   const { totals, openCart } = useCart();
   const { currentCustomer, logout } = useCustomerAuth();
   const { data: wishlistCount = 0 } = useWishlistCount();
+  const { data: trackingSettings, isLoading: trackingLoading } = useTrackingSettings();
+  const logoUrl = trackingSettings?.general?.logoUrl ?? null;
+  const mobileLogoUrl = trackingSettings?.general?.mobileLogoUrl ?? null;
+  const logoAlt = trackingSettings?.general?.logoAlt ?? trackingSettings?.general?.siteName ?? "Modern Orthodontics";
   const { t } = useStaticTranslations();
   const label = (value: string) =>
     navLabelKeys[value] ? t(navLabelKeys[value]) : value;
@@ -50,6 +56,27 @@ export function Header() {
   const { data: cmsCapabilitiesMenu } = useCmsMenu("header-capabilities");
   const { data: cmsProductsMegaMenu } = useCmsMenu("header-products-mega");
   const { data: cmsCtaMenu } = useCmsMenu("header-cta");
+
+  const { data: categories = [] } = useCategories();
+  const { data: productsRes } = useProducts({ limit: 100 });
+  const products = productsRes?.data ?? [];
+
+  const dynamicMegaMenu = useMemo(() => {
+    if (!categories.length) return [];
+    return categories
+      .map((cat) => {
+        const catProducts = products.filter((p) => p.category?.slug === cat.slug);
+        return {
+          label: cat.name,
+          href: `/products?category=${cat.slug}`,
+          children: catProducts.map((p) => ({
+            label: p.title,
+            href: `/products/${p.slug}`,
+          })),
+        };
+      })
+      .filter((group) => group.children.length > 0);
+  }, [categories, products]);
 
   const primaryLinks = cmsMenuToLinks(cmsPrimaryMenu);
   const capabilitiesLinks = cmsMenuToLinks(cmsCapabilitiesMenu);
@@ -64,7 +91,9 @@ export function Header() {
     : nav.capabilitiesMenu;
   const productsMegaNav = hasCmsProductsMega
     ? productMegaGroups
-    : nav.productMegaMenu;
+    : (HAS_LIVE_API
+        ? dynamicMegaMenu
+        : nav.productMegaMenu);
   const ctaLabel = ctaLink?.label || label(nav.ctaLabel);
   const ctaHref = ctaLink?.href || nav.ctaHref;
   const mobileLinks = [
@@ -126,7 +155,7 @@ export function Header() {
             {/* Logo + Delivery */}
             <div className="flex shrink-0 items-center gap-6">
               <Link href="/" className="shrink-0">
-                <Logo />
+                <Logo src={logoUrl} alt={logoAlt} isLoading={trackingLoading} />
               </Link>
 
               <DeliveryAddressButton />
@@ -309,7 +338,7 @@ export function Header() {
               className="shrink-0"
               onClick={() => setMobileOpen(false)}
             >
-              <Logo />
+              <Logo src={logoUrl} mobileSrc={mobileLogoUrl} alt={logoAlt} isMobile isLoading={trackingLoading} />
             </Link>
 
             <div className="flex items-center gap-1.5">
