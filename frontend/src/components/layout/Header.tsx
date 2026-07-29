@@ -89,34 +89,11 @@ export function Header() {
   const capabilitiesNav = hasCmsCapabilities
     ? capabilitiesLinks
     : nav.capabilitiesMenu;
-  const { data: categories = [] } = useCategories();
-  const { data: productsData } = useProducts({ limit: 250 });
-  const products = productsData?.data ?? [];
-
-  const dynamicMegaGroups = useMemo(() => {
-    if (!categories.length) return [];
-    return categories.map((cat) => {
-      const catProducts = products.filter(
-        (p) => p.category.slug === cat.slug || p.category.name === cat.name
-      );
-      return {
-        label: cat.name,
-        href: `/products?category=${cat.slug}`,
-        children: catProducts.map((p) => ({
-          label: p.title,
-          href: `/products/${p.slug}`,
-        })),
-      };
-    });
-  }, [categories, products]);
-
-  const productsMegaNav = dynamicMegaGroups.length > 0
-    ? dynamicMegaGroups
-    : hasCmsProductsMega
+  const productsMegaNav = hasCmsProductsMega
     ? productMegaGroups
-    : (HAS_LIVE_API
-        ? dynamicMegaMenu
-        : nav.productMegaMenu);
+    : dynamicMegaMenu.length > 0
+    ? dynamicMegaMenu
+    : nav.productMegaMenu;
   const ctaLabel = ctaLink?.label || label(nav.ctaLabel);
   const ctaHref = ctaLink?.href || nav.ctaHref;
   const mobileLinks = [
