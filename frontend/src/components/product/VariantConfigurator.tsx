@@ -283,6 +283,9 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   const [drafts, setDrafts] = useState<DraftConfiguration[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [added, setAdded] = useState(false);
+  const [previewPriceMap, setPreviewPriceMap] = useState<
+    Record<string, number>
+  >({});
   const [summaryHighlighted, setSummaryHighlighted] = useState(false);
   const [quoteSummaryHighlighted, setQuoteSummaryHighlighted] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -325,7 +328,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
           : "₹");
   const currencyCode = currentPrice?.currencyCode ?? selectedCurrency;
   const currentResolvedUnitPrice = currentVariant
-    ? (currentPrice?.sellingPrice ?? 0)
+    ? (previewPriceMap[currentVariant.id] ?? currentPrice?.sellingPrice ?? 0)
     : 0;
 
   const subtotal = drafts.reduce(
