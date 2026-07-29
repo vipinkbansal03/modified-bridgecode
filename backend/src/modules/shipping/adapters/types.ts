@@ -60,10 +60,17 @@ export interface TrackingResult {
   raw?: unknown;
 }
 
+export interface CancelResult {
+  success: boolean;
+  message: string;
+  raw?: unknown;
+}
+
 export interface ShippingProviderAdapter {
   name: string;
   testConnection(credentials: ShippingProviderCredentials): Promise<ConnectionTestResult>;
   getRates(credentials: ShippingProviderCredentials, request: RateRequest): Promise<RateResult[]>;
   createShipment(credentials: ShippingProviderCredentials, request: ShipmentRequest): Promise<ShipmentResult>;
   trackShipment(credentials: ShippingProviderCredentials, trackingNumber: string): Promise<TrackingResult>;
+  cancelShipment?(credentials: ShippingProviderCredentials, trackingNumber: string): Promise<CancelResult>;
 }

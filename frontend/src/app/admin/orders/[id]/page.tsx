@@ -16,6 +16,7 @@ import {
   useCreateShipment,
   useDeleteShipment,
   useTrackShipment,
+  useCancelShipment,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
@@ -132,6 +133,7 @@ export default function OrderDetailPage() {
   const { mutate: createShipment, isPending: creatingShipment } = useCreateShipment();
   const { mutate: deleteShipment, isPending: deletingShipment } = useDeleteShipment();
   const { mutate: trackShipment, isPending: tracking } = useTrackShipment();
+  const { mutate: cancelShipment, isPending: cancelling } = useCancelShipment();
 
   const [showNewShipment, setShowNewShipment] = useState(false);
   const [newShipmentProvider, setNewShipmentProvider] = useState("");
@@ -139,6 +141,7 @@ export default function OrderDetailPage() {
   const [newShipmentAwb, setNewShipmentAwb] = useState("");
   const [newShipmentCharge, setNewShipmentCharge] = useState("");
   const [newShipmentNotes, setNewShipmentNotes] = useState("");
+  const [newShipmentCallProvider, setNewShipmentCallProvider] = useState(false);
 
   if (isLoading) {
     return (
@@ -194,6 +197,7 @@ export default function OrderDetailPage() {
         awbNumber: newShipmentAwb || undefined,
         shippingCharge: newShipmentCharge ? parseFloat(newShipmentCharge) : undefined,
         notes: newShipmentNotes || undefined,
+        callProvider: newShipmentCallProvider,
       },
       {
         onSuccess: () => {
@@ -203,6 +207,7 @@ export default function OrderDetailPage() {
           setNewShipmentAwb("");
           setNewShipmentCharge("");
           setNewShipmentNotes("");
+          setNewShipmentCallProvider(false);
         },
       }
     );
@@ -217,6 +222,22 @@ export default function OrderDetailPage() {
     trackShipment(shipmentId, {
       onSuccess: () => {
         alert("Tracking updated — refresh page to see latest events.");
+      },
+    });
+  }
+
+  function handleCancelShipment(shipmentId: string) {
+    if (!confirm("Cancel this shipment with the provider?")) return;
+    cancelShipment(shipmentId, {
+      onSuccess: (result: { success?: boolean; message?: string }) => {
+        if (result?.success === false) {
+          alert(`Cancel failed: ${result.message ?? "Unknown error"}`);
+        } else {
+          alert("Shipment cancelled.");
+        }
+      },
+      onError: (error: Error) => {
+        alert(`Cancel failed: ${error.message}`);
       },
     });
   }
@@ -420,6 +441,15 @@ export default function OrderDetailPage() {
                       placeholder="0.00"
                     />
                     <AdminInput label="Notes" value={newShipmentNotes} onChange={(e) => setNewShipmentNotes(e.target.value)} placeholder="Optional notes" />
+                    <label className="flex items-center gap-2 text-[13px] text-[#111]">
+                      <input
+                        type="checkbox"
+                        checked={newShipmentCallProvider}
+                        onChange={(e) => setNewShipmentCallProvider(e.target.checked)}
+                        className="h-4 w-4 rounded border-[#E6E6E6] text-[#111] focus:ring-[#111]"
+                      />
+                      Book shipment with provider API (generates AWB &amp; label)
+                    </label>
                     <button
                       onClick={handleCreateShipment}
                       disabled={creatingShipment}
@@ -450,6 +480,15 @@ export default function OrderDetailPage() {
                       >
                         <RotateCw size={12} /> Refresh
                       </button>
+                      {s.status !== "CANCELLED" && s.status !== "DELIVERED" && (
+                        <button
+                          onClick={() => handleCancelShipment(s.id)}
+                          disabled={cancelling}
+                          className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-white px-2.5 py-1.5 text-[12px] font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDeleteShipment(s.id)}
                         disabled={deletingShipment}

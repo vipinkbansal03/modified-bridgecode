@@ -392,11 +392,12 @@ export async function createShipment(input: {
   shippingCharge?: number | string;
   estimatedDelivery?: string;
   notes?: string;
+  callProvider?: boolean;
 }) {
   if (!input.orderId) throw new AppError("Order ID is required.", 400);
   if (!input.providerId) throw new AppError("Provider ID is required.", 400);
 
-  const order = await prisma.order.findUnique({ where: { id: input.orderId }, select: { id: true, orderNumber: true, customerName: true, customerEmail: true, shippingAddress: true, country: { select: { id: true, code: true } }, items: { select: { title: true, sku: true, quantity: true, total: true } } } });
+  const order = await prisma.order.findUnique({ where: { id: input.orderId }, select: { id: true, orderNumber: true, customerName: true, customerEmail: true, shippingAddress: true, country: { select: { id: true, code: true } }, items: { select: { title: true, sku: true, quantity: true, total: true, variant: { select: { weight: true } } } } } });
   if (!order) throw new AppError("Order not found.", 404);
 
   const provider = await prisma.shippingProvider.findUnique({ where: { id: input.providerId }, select: { id: true, name: true, apiKey: true, apiSecret: true, baseUrl: true } });
@@ -404,16 +405,61 @@ export async function createShipment(input: {
 
   const shippingCharge = input.shippingCharge != null ? Number(input.shippingCharge) : null;
 
+  let trackingNumber = input.trackingNumber?.trim() || null;
+  let awbNumber = input.awbNumber?.trim() || null;
+  let labelUrl: string | null = null;
+  let estimatedDelivery = input.estimatedDelivery?.trim() || null;
+  let providerResponse: Record<string, unknown> | null = null;
+
+  // Call provider API if requested and adapter is available
+  if (input.callProvider && provider.apiKey) {
+    const adapter = getAdapter(provider.name);
+    if (adapter) {
+      const shipAddr = (order.shippingAddress as Record<string, string>) ?? {};
+      const adapterResult = await adapter.createShipment(
+        { apiKey: provider.apiKey, apiSecret: provider.apiSecret, baseUrl: provider.baseUrl },
+        {
+          orderNumber: order.orderNumber,
+          recipientName: order.customerName,
+          recipientEmail: order.customerEmail ?? undefined,
+          address: shipAddr,
+          countryCode: order.country?.code ?? "IN",
+          items: order.items.map((item) => ({
+            title: item.title,
+            sku: item.sku ?? undefined,
+            quantity: item.quantity,
+            weight: item.variant?.weight != null ? Number(item.variant.weight) : undefined,
+            value: Number(item.total),
+          })),
+          totalValue: Number(order.items.reduce((sum, item) => sum + Number(item.total), 0)),
+          reference: order.orderNumber,
+        },
+      );
+
+      if (adapterResult.success) {
+        trackingNumber = adapterResult.trackingNumber ?? trackingNumber;
+        awbNumber = adapterResult.trackingNumber ?? awbNumber;
+        labelUrl = adapterResult.labelUrl ?? null;
+        estimatedDelivery = adapterResult.estimatedDelivery ?? estimatedDelivery;
+        providerResponse = adapterResult.providerResponse as Record<string, unknown> ?? null;
+      } else {
+        logger.warn(`Provider API call failed for ${provider.name}: ${adapterResult.error}`);
+      }
+    }
+  }
+
   const shipment = await prisma.shipment.create({
     data: {
       orderId: input.orderId,
       providerId: input.providerId,
-      status: "CREATED",
-      trackingNumber: input.trackingNumber?.trim() || null,
-      awbNumber: input.awbNumber?.trim() || null,
-      estimatedDelivery: input.estimatedDelivery?.trim() || null,
+      status: trackingNumber ? "LABEL_GENERATED" : "CREATED",
+      trackingNumber,
+      awbNumber,
+      labelUrl,
+      estimatedDelivery,
       shippingCharge,
       notes: input.notes?.trim() || null,
+      providerResponse: providerResponse as Prisma.InputJsonValue | undefined,
     },
     select: SHIPMENT_SELECT,
   });
@@ -421,8 +467,8 @@ export async function createShipment(input: {
   await prisma.shipmentEvent.create({
     data: {
       shipmentId: shipment.id,
-      status: "CREATED",
-      description: `Shipment created with ${provider.name}.`,
+      status: trackingNumber ? "LABEL_GENERATED" : "CREATED",
+      description: `Shipment created with ${provider.name}${trackingNumber ? ` (AWB: ${trackingNumber})` : ""}.`,
     },
   });
 
@@ -518,6 +564,40 @@ export async function trackShipmentFromProvider(id: string) {
       })),
       skipDuplicates: true,
     });
+  }
+
+  return result;
+}
+
+export async function cancelShipmentFromProvider(id: string) {
+  const shipment = await prisma.shipment.findUnique({
+    where: { id },
+    select: { id: true, status: true, trackingNumber: true, provider: { select: { name: true, apiKey: true, apiSecret: true, baseUrl: true } } },
+  });
+  if (!shipment) throw new AppError("Shipment not found.", 404);
+  if (shipment.status === "CANCELLED") throw new AppError("Shipment is already cancelled.", 400);
+  if (shipment.status === "DELIVERED") throw new AppError("Cannot cancel a delivered shipment.", 400);
+  if (!shipment.trackingNumber) throw new AppError("This shipment has no tracking number to cancel.", 400);
+
+  const adapter = getAdapter(shipment.provider.name);
+  if (!adapter?.cancelShipment) throw new AppError(`${shipment.provider.name} does not support shipment cancellation.`, 400);
+
+  const result = await adapter.cancelShipment(
+    { apiKey: shipment.provider.apiKey ?? "", apiSecret: shipment.provider.apiSecret, baseUrl: shipment.provider.baseUrl },
+    shipment.trackingNumber,
+  );
+
+  if (result.success) {
+    await prisma.shipment.update({ where: { id }, data: { status: "CANCELLED" } });
+    await prisma.shipmentEvent.create({
+      data: {
+        shipmentId: id,
+        status: "CANCELLED",
+        description: result.message,
+        raw: result.raw as Prisma.InputJsonValue | undefined,
+      },
+    });
+    logger.info(`Shipment ${id} cancelled via ${shipment.provider.name}`);
   }
 
   return result;

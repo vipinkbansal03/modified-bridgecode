@@ -2274,6 +2274,16 @@ export const useDeleteShipment = () => {
   });
 };
 
+export const useCancelShipment = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.post(`/shipping/shipments/${id}/cancel`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-shipments"] });
+    },
+  });
+};
+
 // ─── Media ───────────────────────────────────────────────
 
 export const useAdminMedia = (params?: { page?: number }) =>

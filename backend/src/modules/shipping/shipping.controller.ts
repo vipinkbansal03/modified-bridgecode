@@ -93,6 +93,10 @@ export const trackShipment = asyncHandler(async (req: AuthRequest, res: Response
   ApiResponse.success(res, "Tracking info.", await S.trackShipmentFromProvider(String(req.params.id)))
 );
 
+export const cancelShipment = asyncHandler(async (req: AuthRequest, res: Response) =>
+  ApiResponse.success(res, "Cancel result.", await S.cancelShipmentFromProvider(String(req.params.id)))
+);
+
 export const deleteShipment = asyncHandler(async (req: AuthRequest, res: Response) => {
   await S.deleteShipment(String(req.params.id));
   return ApiResponse.success(res, "Shipment deleted.");

@@ -15,4 +15,4 @@ export function registerAdapter(name: string, adapter: ShippingProviderAdapter) 
   adapters[name.toUpperCase()] = adapter;
 }
 
-export type { ShippingProviderAdapter, ShippingProviderCredentials, ConnectionTestResult, RateRequest, RateResult, ShipmentRequest, ShipmentResult, TrackingResult, TrackingUpdate } from "./types";
+export type { ShippingProviderAdapter, ShippingProviderCredentials, ConnectionTestResult, RateRequest, RateResult, ShipmentRequest, ShipmentResult, TrackingResult, TrackingUpdate, CancelResult } from "./types";

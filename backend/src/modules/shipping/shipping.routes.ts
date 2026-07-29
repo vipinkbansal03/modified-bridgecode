@@ -29,6 +29,7 @@ router.put("/shipments/:id", requirePermission("shipping.manage"), C.updateShipm
 router.post("/shipments/:id/status", requirePermission("shipping.manage"), C.updateShipmentStatus);
 router.post("/shipments/:id/events", requirePermission("shipping.manage"), C.addShipmentEvent);
 router.post("/shipments/:id/track", requirePermission("shipping.view", "shipping.manage"), C.trackShipment);
+router.post("/shipments/:id/cancel", requirePermission("shipping.manage"), C.cancelShipment);
 router.delete("/shipments/:id", requirePermission("shipping.manage"), C.deleteShipment);
 
 // ─── Order shipments lookup ─────────────────────────────

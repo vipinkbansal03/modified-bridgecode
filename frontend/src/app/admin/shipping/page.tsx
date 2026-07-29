@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Loader2, Plug } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, useToast } from "@/components/admin/AdminComponents";
 import {
   useAdminShippingProviders,
   useUpsertShippingProvider,
@@ -21,8 +21,27 @@ interface Provider {
   baseUrl: string | null;
   trackingUrl: string | null;
   isEnabled: boolean;
+  config: Record<string, unknown> | null;
   _count: { zones: number };
 }
+
+interface ProviderConfig {
+  apiKey: string;
+  apiSecret: string;
+  baseUrl: string;
+  trackingUrl: string;
+  accountNumber: string;
+  mode: "sandbox" | "production";
+}
+
+const defaultConfig: ProviderConfig = {
+  apiKey: "",
+  apiSecret: "",
+  baseUrl: "",
+  trackingUrl: "",
+  accountNumber: "",
+  mode: "production",
+};
 
 export default function ShippingPage() {
   const { hasPermission } = useAdminAuth();
@@ -35,15 +54,23 @@ export default function ShippingPage() {
   const testConnection = useTestShippingConnection();
 
   const providerList: Provider[] = providers ?? [];
-  const [configs, setConfigs] = useState<Record<string, { apiKey: string; apiSecret: string; baseUrl: string; trackingUrl: string }>>({});
+  const [configs, setConfigs] = useState<Record<string, ProviderConfig>>({});
   const [dirty, setDirty] = useState<Record<string, boolean>>({});
 
-  const getConfig = (p: Provider) => {
+  const getConfig = (p: Provider): ProviderConfig => {
     if (configs[p.name]) return configs[p.name];
-    return { apiKey: p.apiKey ?? "", apiSecret: p.apiSecret ?? "", baseUrl: p.baseUrl ?? "", trackingUrl: p.trackingUrl ?? "" };
+    const cfg = p.config ?? {};
+    return {
+      apiKey: p.apiKey ?? "",
+      apiSecret: p.apiSecret ?? "",
+      baseUrl: p.baseUrl ?? "",
+      trackingUrl: p.trackingUrl ?? "",
+      accountNumber: (cfg.accountNumber as string) ?? "",
+      mode: (cfg.mode as "sandbox" | "production") ?? "production",
+    };
   };
 
-  const updateField = (pName: string, field: string, value: string) => {
+  const updateField = (pName: string, field: keyof ProviderConfig, value: string) => {
     const current = getConfig({ name: pName } as Provider);
     setConfigs((prev) => ({ ...prev, [pName]: { ...current, [field]: value } }));
     setDirty((prev) => ({ ...prev, [pName]: true }));
@@ -52,7 +79,14 @@ export default function ShippingPage() {
   const handleSave = async (p: Provider) => {
     const cfg = getConfig(p);
     try {
-      await upsertMutation.mutateAsync({ name: p.name, ...cfg });
+      await upsertMutation.mutateAsync({
+        name: p.name,
+        apiKey: cfg.apiKey || undefined,
+        apiSecret: cfg.apiSecret || undefined,
+        baseUrl: cfg.baseUrl || undefined,
+        trackingUrl: cfg.trackingUrl || undefined,
+        config: { accountNumber: cfg.accountNumber || undefined, mode: cfg.mode },
+      });
       setDirty((prev) => ({ ...prev, [p.name]: false }));
       showToast(`${p.displayName} settings saved.`);
     } catch {
@@ -82,13 +116,6 @@ export default function ShippingPage() {
     }
   };
 
-  const defaults: Provider[] = [
-    { id: "dhl", name: "DHL", displayName: "DHL Express", apiKey: null, apiSecret: null, baseUrl: "https://express.api.dhl.com/mydhlapi", trackingUrl: "https://track.dhl.com/{tracking}", isEnabled: false, _count: { zones: 0 } },
-    { id: "dtdc", name: "DTDC", displayName: "DTDC Courier", apiKey: null, apiSecret: null, baseUrl: "https://dtdc.com/api", trackingUrl: "https://www.dtdc.in/tracking/{tracking}", isEnabled: false, _count: { zones: 0 } },
-  ];
-
-  const displayProviders = providerList.length ? providerList : defaults;
-
   return (
     <AdminLayout title="Shipping Providers" breadcrumb={[{ label: "Shipping", href: "/admin/shipping" }, { label: "Providers" }]}>
       <div className="space-y-5">
@@ -106,8 +133,13 @@ export default function ShippingPage() {
             <Loader2 className="h-6 w-6 animate-spin text-[#E31E24]" />
             <span className="ml-2 text-[13px] text-[#6B6B6B]">Loading providers...</span>
           </div>
+        ) : providerList.length === 0 ? (
+          <div className="rounded-xl border border-[#E6E6E6] bg-white px-5 py-12 text-center">
+            <p className="text-[13.5px] font-medium text-[#6B6B6B]">No shipping providers configured.</p>
+            <p className="mt-1 text-[13px] text-[#9A9A9A]">Run the seed script to create default providers.</p>
+          </div>
         ) : (
-          displayProviders.map((p) => {
+          providerList.map((p) => {
             const cfg = getConfig(p);
             const isDirty = dirty[p.name] ?? false;
             const isTestable = Boolean(cfg.baseUrl && cfg.apiKey);
@@ -171,6 +203,23 @@ export default function ShippingPage() {
                     value={cfg.baseUrl}
                     onChange={(e) => updateField(p.name, "baseUrl", e.target.value)}
                     disabled={!canUpdate}
+                  />
+                  <AdminInput
+                    label="Account Number"
+                    placeholder="Optional account number"
+                    value={cfg.accountNumber}
+                    onChange={(e) => updateField(p.name, "accountNumber", e.target.value)}
+                    disabled={!canUpdate}
+                  />
+                  <AdminSelect
+                    label="Mode"
+                    value={cfg.mode}
+                    onChange={(e) => updateField(p.name, "mode", e.target.value)}
+                    disabled={!canUpdate}
+                    options={[
+                      { value: "production", label: "Production" },
+                      { value: "sandbox", label: "Sandbox / Test" },
+                    ]}
                   />
                   <AdminInput
                     label="Tracking URL Pattern"
