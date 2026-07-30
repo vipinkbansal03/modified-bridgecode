@@ -67,7 +67,7 @@ export function Header() {
       .map((cat) => {
         const catProducts = products.filter((p) => p.category?.slug === cat.slug);
         return {
-          label: cat.name,
+          label: cat.title,
           href: `/products?category=${cat.slug}`,
           children: catProducts.map((p) => ({
             label: p.title,
@@ -89,10 +89,10 @@ export function Header() {
   const capabilitiesNav = hasCmsCapabilities
     ? capabilitiesLinks
     : nav.capabilitiesMenu;
-  const productsMegaNav = hasCmsProductsMega
-    ? productMegaGroups
-    : dynamicMegaMenu.length > 0
+  const productsMegaNav = dynamicMegaMenu.length > 0
     ? dynamicMegaMenu
+    : hasCmsProductsMega
+    ? productMegaGroups
     : nav.productMegaMenu;
   const ctaLabel = ctaLink?.label || label(nav.ctaLabel);
   const ctaHref = ctaLink?.href || nav.ctaHref;
