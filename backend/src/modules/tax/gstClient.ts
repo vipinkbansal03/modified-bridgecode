@@ -54,7 +54,7 @@ export async function validateGstinWithApi(gstin: string): Promise<GstValidation
       };
     }
 
-    const payload = await response.json();
+    const payload = (await response.json()) as any;
     const valid = Boolean(payload?.valid);
     const companyName = payload?.companyName || payload?.name || null;
     const address = payload?.address || payload?.location || null;

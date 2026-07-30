@@ -149,11 +149,11 @@ export const validateIdentifier = asyncHandler(async (req: AuthRequest, res: Res
     });
   }
 
-  const result = await TaxService.validateTaxIdentifier(
+  const result = (await TaxService.validateTaxIdentifier(
     String(taxId),
     String(taxIdType || ""),
     String(countryCode || "")
-  );
+  )) as any;
 
   const normalizedResult = {
     success: true,

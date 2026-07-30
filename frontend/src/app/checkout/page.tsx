@@ -104,7 +104,7 @@ export default function CheckoutPage() {
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [taxIdInput, setTaxIdInput] = useState("");
   const [isVerifyingVat, setIsVerifyingVat] = useState(false);
-  const [vatStatus, setVatStatus] = useState<"VALID" | "INVALID" | null>(null);
+  const [vatStatus, setVatStatus] = useState<"VALID" | "INVALID" | "PENDING" | null>(null);
   const [vatMessage, setVatMessage] = useState("");
   const [form, setForm] = useState({
     fullName: "",
@@ -175,13 +175,19 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     if (currentCustomer) {
-      setForm((current) => ({
-        ...current,
-        fullName:
-          current.fullName ||
-          `${currentCustomer.firstName} ${currentCustomer.lastName}`.trim(),
-        phone: current.phone || currentCustomer.phone || "",
-      }));
+      const defaultName = `${currentCustomer.firstName} ${currentCustomer.lastName}`.trim();
+      const defaultPhone = currentCustomer.phone || "";
+      
+      Promise.resolve().then(() => {
+        setForm((current) => {
+          if (current.fullName && current.phone) return current;
+          return {
+            ...current,
+            fullName: current.fullName || defaultName,
+            phone: current.phone || defaultPhone,
+          };
+        });
+      });
       listCustomerAddresses()
         .then((saved) => {
           setAddresses(saved);
@@ -335,9 +341,9 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     if (!currentCustomer || !canSubmit) {
-      setEstimate(null);
-      setShippingEstimate(null);
-      setShippingError(null);
+      if (estimate !== null) setEstimate(null);
+      if (shippingEstimate !== null) setShippingEstimate(null);
+      if (shippingError !== null) setShippingError(null);
       return;
     }
 
