@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, type ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useFormik } from "formik";
 import * as Yup from "yup";
-import { Upload, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search } from "lucide-react";
+import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column, toastMessages } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
@@ -85,6 +85,17 @@ const basicSchema = Yup.object({
   warranty: Yup.array().of(Yup.string()),
   primaryFeatures: Yup.array().of(Yup.object({ title: Yup.string(), description: Yup.string() })),
 });
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
 
 type ProductEditorFormValues = {
   title: string;
@@ -331,6 +342,7 @@ type BulkVariantDraft = {
 
 type BulkCountryOption = {
   id: string;
+  code?: string;
   label: string;
   currencySymbol?: string | null;
 };
@@ -606,6 +618,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [bulkDrafts, setBulkDrafts] = useState<Record<string, BulkVariantDraft>>({});
   const [bulkRowErrors, setBulkRowErrors] = useState<Record<string, string>>({});
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [variantPriceExporting, setVariantPriceExporting] = useState(false);
+  const [variantPriceImporting, setVariantPriceImporting] = useState(false);
+  const variantPriceImportInputRef = useRef<HTMLInputElement>(null);
   const [selectedVariantIds, setSelectedVariantIds] = useState<string[]>([]);
   const [tierRuleDraft, setTierRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
   const [moqRuleDraft, setMoqRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
@@ -1074,6 +1089,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     (productCountries as CountryAvailability[]).forEach((country) => {
       countries.set(country.id, {
         id: country.id,
+        code: country.code,
         label: `${country.name} (${country.code})`,
         currencySymbol: country.currency?.symbol,
       });
@@ -1093,6 +1109,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         if (!countryId || countries.has(countryId)) return;
         countries.set(countryId, {
           id: countryId,
+          code: price.country?.code,
           label: price.country ? `${price.country.name} (${price.country.code})` : countryId,
           currencySymbol: price.currency?.symbol,
         });
@@ -1502,6 +1519,62 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       showToast(getAdminErrorMessage(error, "Bulk update failed."), "error");
     } finally {
       setBulkSaving(false);
+    }
+  };
+
+  const exportSelectedCountryVariantPrices = async () => {
+    if (!selectedBulkCountryId) {
+      showToast("Select a country before exporting variant prices.", "error");
+      return;
+    }
+    const country = bulkCountryOptions.find((option) => option.id === selectedBulkCountryId);
+    setVariantPriceExporting(true);
+    try {
+      const response = await adminApi.get(`/products/${productId}/variants/prices/export`, {
+        params: { countryId: selectedBulkCountryId },
+        responseType: "blob",
+      });
+      const countryCode = country?.code || "country";
+      downloadBlob(response.data as Blob, `${product.slug || productId}-${countryCode}-variant-prices.xlsx`);
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to export variant prices."), "error");
+    } finally {
+      setVariantPriceExporting(false);
+    }
+  };
+
+  const importSelectedCountryVariantPrices = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!selectedBulkCountryId) {
+      showToast("Select a country before importing variant prices.", "error");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("countryId", selectedBulkCountryId);
+
+    setVariantPriceImporting(true);
+    try {
+      const response = await adminApi.post(`/products/${productId}/variants/prices/import`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const summary = response.data?.data?.summary as { succeeded?: number; failed?: number } | undefined;
+      showToast(
+        summary?.failed
+          ? `Imported ${summary.succeeded ?? 0}; ${summary.failed} failed.`
+          : `Imported ${summary?.succeeded ?? 0} variant price${summary?.succeeded === 1 ? "" : "s"}.`,
+        summary?.failed ? "error" : "success",
+      );
+      setBulkDrafts({});
+      setBulkRowErrors({});
+      await refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to import variant prices."), "error");
+    } finally {
+      setVariantPriceImporting(false);
     }
   };
 
@@ -2997,6 +3070,35 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       <option key={country.id} value={country.id}>{country.label}</option>
                     ))}
                   </select>
+                )}
+                {bulkEditMode && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={exportSelectedCountryVariantPrices}
+                      disabled={!selectedBulkCountryId || variantPriceExporting}
+                      className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] disabled:opacity-40"
+                    >
+                      <Download size={14} />
+                      {variantPriceExporting ? "Exporting..." : "Export Prices"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => variantPriceImportInputRef.current?.click()}
+                      disabled={!selectedBulkCountryId || variantPriceImporting}
+                      className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] disabled:opacity-40"
+                    >
+                      <Upload size={14} />
+                      {variantPriceImporting ? "Importing..." : "Import Prices"}
+                    </button>
+                    <input
+                      ref={variantPriceImportInputRef}
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={importSelectedCountryVariantPrices}
+                    />
+                  </>
                 )}
                 {bulkEditMode && (
                   <button
