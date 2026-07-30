@@ -363,8 +363,8 @@ async function main() {
 
   await prisma.shippingProvider.upsert({
     where: { name: "DHL" },
-    update: { displayName: "DHL Express", baseUrl: "https://express.api.dhl.com/mydhlapi", trackingUrl: "https://track.dhl.com/{tracking}" },
-    create: { name: "DHL", displayName: "DHL Express", baseUrl: "https://express.api.dhl.com/mydhlapi", trackingUrl: "https://track.dhl.com/{tracking}", isEnabled: false },
+    update: { displayName: "DHL Express", baseUrl: "https://api.dhl.com/mydhlapi", trackingUrl: "https://track.dhl.com/{tracking}" },
+    create: { name: "DHL", displayName: "DHL Express", baseUrl: "https://api.dhl.com/mydhlapi", trackingUrl: "https://track.dhl.com/{tracking}", isEnabled: false },
   });
 
   await prisma.shippingProvider.upsert({

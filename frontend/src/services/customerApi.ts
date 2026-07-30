@@ -116,6 +116,7 @@ export interface CreateCustomerOrderPayload {
   shippingAddress: CustomerOrderAddressPayload;
   couponCode?: string;
   notes?: string;
+  shippingZoneId?: string;
 }
 
 export interface CustomerOrderSummary {
@@ -245,6 +246,15 @@ export interface ShippingEstimate {
   message?: string;
 }
 
+export interface AvailableShippingOption {
+  provider: string;
+  providerId: string;
+  zoneId: string;
+  charge: number;
+  isFree: boolean;
+  estimatedDays: string | null;
+}
+
 export async function createCustomerOrder(payload: CreateCustomerOrderPayload) {
   const res = await customerApi.post("/orders", payload);
   return res.data.data as CustomerOrderSummary;
@@ -263,6 +273,14 @@ export async function calculateShipping(payload: {
 }) {
   const res = await shippingApi.post("/calculate", payload);
   return res.data.data as ShippingEstimate;
+}
+
+export async function fetchAvailableProviders(payload: {
+  countryCode: string;
+  orderValue: number;
+}) {
+  const res = await shippingApi.post("/available-providers", payload);
+  return res.data.data as AvailableShippingOption[];
 }
 
 export async function validateCoupon(payload: {

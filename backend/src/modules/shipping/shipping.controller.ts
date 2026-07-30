@@ -23,7 +23,7 @@ export const toggleProvider = asyncHandler(async (req: AuthRequest, res: Respons
 );
 
 export const testConnection = asyncHandler(async (req: AuthRequest, res: Response) =>
-  ApiResponse.success(res, "Connection test completed.", await S.testConnection(String(req.params.id)))
+  ApiResponse.success(res, "Connection test completed.", await S.testConnection(String(req.params.id), req.body))
 );
 
 // ─── Zones ──────────────────────────────────────────────
@@ -55,6 +55,12 @@ export const calculate = asyncHandler(async (req: AuthRequest, res: Response) =>
 export const calculatePublic = asyncHandler(async (req: Request, res: Response) => {
   const { countryCode, orderValue, orderTotal } = req.body as { countryCode?: string; orderValue?: number; orderTotal?: number };
   return ApiResponse.success(res, "Shipping calculated.", await S.calculateShipping(String(countryCode ?? "").toUpperCase(), Number(orderValue ?? orderTotal ?? 0)));
+});
+
+export const availableProviders = asyncHandler(async (req: Request, res: Response) => {
+  const { countryCode, orderValue, orderTotal } = req.body as { countryCode?: string; orderValue?: number; orderTotal?: number };
+  const result = await S.getAvailableProviders(String(countryCode ?? "").toUpperCase(), Number(orderValue ?? orderTotal ?? 0));
+  return ApiResponse.success(res, "Available providers.", result);
 });
 
 // ─── Shipments ──────────────────────────────────────────

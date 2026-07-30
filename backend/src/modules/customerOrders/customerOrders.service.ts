@@ -165,7 +165,7 @@ async function calculateCustomerOrder(
       ? sum + item.taxTotal
       : sum;
   }, 0);
-  const shipping = await calculateRequiredShipping(orderCountry.code, subtotal);
+  const shipping = await calculateRequiredShipping(orderCountry.code, subtotal, input.shippingZoneId);
   const shippingCharge = shipping.charge;
   const couponValidation = input.couponCode?.trim()
     ? await validateCoupon(input.couponCode, subtotal, orderCountry.code)

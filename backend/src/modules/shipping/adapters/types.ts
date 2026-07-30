@@ -2,6 +2,7 @@ export interface ShippingProviderCredentials {
   apiKey: string;
   apiSecret?: string | null;
   baseUrl?: string | null;
+  mode?: "sandbox" | "production";
 }
 
 export interface ConnectionTestResult {

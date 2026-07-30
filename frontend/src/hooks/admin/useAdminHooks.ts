@@ -2165,8 +2165,10 @@ export const useToggleShippingProvider = () => {
 
 export const useTestShippingConnection = () =>
   useMutation({
-    mutationFn: (id: string) =>
-      adminApi.post(`/shipping/providers/${id}/test-connection`).then((r) => r.data.data),
+    mutationFn: (params: { id: string; apiKey: string; apiSecret: string; baseUrl: string }) => {
+      const { id, ...credentials } = params;
+      return adminApi.post(`/shipping/providers/${id}/test-connection`, credentials).then((r) => r.data.data);
+    },
   });
 
 // ─── Shipping Zones ──────────────────────────────────────
