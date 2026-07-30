@@ -2505,6 +2505,44 @@ export const useAdminCmsMenus = () =>
     queryFn: () => adminApi.get("/cms/menus").then((r) => r.data.data),
   });
 
+export const useAdminShippingBoxes = () =>
+  useQuery({
+    queryKey: ["admin-shipping-boxes"],
+    queryFn: () => adminApi.get("/shipping/boxes").then((r) => r.data.data),
+  });
+
+export const useCreateShippingBox = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => adminApi.post("/shipping/boxes", data).then((r) => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-shipping-boxes"] }); },
+  });
+};
+
+export const useUpdateShippingBox = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => adminApi.put(`/shipping/boxes/${id}`, data).then((r) => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-shipping-boxes"] }); },
+  });
+};
+
+export const useDeleteShippingBox = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.delete(`/shipping/boxes/${id}`).then((r) => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-shipping-boxes"] }); },
+  });
+};
+
+export const useToggleShippingBox = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.post(`/shipping/boxes/${id}/toggle`).then((r) => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-shipping-boxes"] }); },
+  });
+};
+
 export const useAddQuoteNote = () => {
   const qc = useQueryClient();
   return useMutation({

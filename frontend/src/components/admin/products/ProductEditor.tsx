@@ -63,6 +63,7 @@ const ALL_TABS: TabConfig[] = [
   { id: 8, label: "Product Attributes", permission: "attributes.view" },
   { id: 9, label: "Country Availability", permission: "countries.view" },
   { id: 10, label: "SEO" },
+  { id: 11, label: "Shipping Info" },
 ];
 
 const basicSchema = Yup.object({
@@ -616,6 +617,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [filterStatus, setFilterStatus] = useState("");
   const [pageSize, setPageSize] = useState(100);
   const [currentPage, setCurrentPage] = useState(1);
+  const [shippingPackageWeight, setShippingPackageWeight] = useState("");
+  const [shippingPackageLength, setShippingPackageLength] = useState("");
+  const [shippingPackageWidth, setShippingPackageWidth] = useState("");
+  const [shippingPackageHeight, setShippingPackageHeight] = useState("");
+  const [shippingClass, setShippingClass] = useState("");
+  const [shippingFragile, setShippingFragile] = useState(false);
+  const [shippingHazardous, setShippingHazardous] = useState(false);
+  const [savingShipping, setSavingShipping] = useState(false);
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [bulkActionType, setBulkActionType] = useState("Bulk Action");
@@ -1925,6 +1934,18 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       setCurrentPage(1);
     }
   }, [totalPages, currentPage]);
+
+  useEffect(() => {
+    if (product) {
+      setShippingPackageWeight(product.packageWeight != null ? String(product.packageWeight) : "");
+      setShippingPackageLength(product.packageLength != null ? String(product.packageLength) : "");
+      setShippingPackageWidth(product.packageWidth != null ? String(product.packageWidth) : "");
+      setShippingPackageHeight(product.packageHeight != null ? String(product.packageHeight) : "");
+      setShippingClass(product.shippingClass || "");
+      setShippingFragile(product.fragile || false);
+      setShippingHazardous(product.hazardous || false);
+    }
+  }, [product]);
 
   const paginatedVariantRows = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -6242,6 +6263,90 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               <p className="cursor-pointer text-[16px] font-medium text-[#1A0DAB] hover:underline">{formik.values.seoTitle || product.title}</p>
               <p className="text-[13px] text-[#006621]">modortho.com › products › {product.slug}</p>
               <p className="mt-1 line-clamp-2 text-[13.5px] text-[#545454]">{formik.values.seoDescription || product.shortDescription || "No meta description."}</p>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 11 && (
+          <div className="p-6 space-y-5">
+            <div className="mb-4">
+              <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Shipping Information</h3>
+              <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Package weight and dimensions used by the shipping calculator.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <AdminInput
+                label="Package Weight (kg)"
+                type="text"
+                placeholder="e.g. 0.5"
+                value={shippingPackageWeight}
+                onChange={(e) => setShippingPackageWeight(e.target.value)}
+              />
+              <AdminInput
+                label="Package Length (cm)"
+                type="text"
+                placeholder="e.g. 30"
+                value={shippingPackageLength}
+                onChange={(e) => setShippingPackageLength(e.target.value)}
+              />
+              <AdminInput
+                label="Package Width (cm)"
+                type="text"
+                placeholder="e.g. 20"
+                value={shippingPackageWidth}
+                onChange={(e) => setShippingPackageWidth(e.target.value)}
+              />
+              <AdminInput
+                label="Package Height (cm)"
+                type="text"
+                placeholder="e.g. 10"
+                value={shippingPackageHeight}
+                onChange={(e) => setShippingPackageHeight(e.target.value)}
+              />
+              <AdminInput
+                label="Shipping Class"
+                type="text"
+                placeholder="e.g. Standard, Express, Heavy"
+                value={shippingClass}
+                onChange={(e) => setShippingClass(e.target.value)}
+              />
+              <div className="flex items-end gap-6 pb-2">
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input type="checkbox" checked={shippingFragile} onChange={(e) => setShippingFragile(e.target.checked)} className="rounded" />
+                  <span className="text-[13.5px] text-[#1A1A1A]">Fragile</span>
+                </label>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input type="checkbox" checked={shippingHazardous} onChange={(e) => setShippingHazardous(e.target.checked)} className="rounded" />
+                  <span className="text-[13.5px] text-[#1A1A1A]">Hazardous</span>
+                </label>
+              </div>
+            </div>
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  setSavingShipping(true);
+                  try {
+                    await adminApi.put(`/products/${productId}/shipping-info`, {
+                      packageWeight: shippingPackageWeight ? Number(shippingPackageWeight) : null,
+                      packageLength: shippingPackageLength ? Number(shippingPackageLength) : null,
+                      packageWidth: shippingPackageWidth ? Number(shippingPackageWidth) : null,
+                      packageHeight: shippingPackageHeight ? Number(shippingPackageHeight) : null,
+                      shippingClass: shippingClass || null,
+                      fragile: shippingFragile,
+                      hazardous: shippingHazardous,
+                    });
+                    showToast("Shipping info saved.");
+                  } catch (error) {
+                    showToast(getAdminErrorMessage(error, "Failed to save shipping info."), "error");
+                  } finally {
+                    setSavingShipping(false);
+                  }
+                }}
+                disabled={savingShipping}
+                className="rounded-md bg-[#E31E24] px-5 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
+              >
+                {savingShipping ? "Saving…" : "Save Shipping Info"}
+              </button>
             </div>
           </div>
         )}

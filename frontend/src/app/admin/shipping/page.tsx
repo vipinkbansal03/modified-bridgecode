@@ -146,6 +146,9 @@ export default function ShippingPage() {
             <Link href="/admin/shipping/zones" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
               Zones
             </Link>
+            <Link href="/admin/shipping/boxes" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
+              Boxes
+            </Link>
           </div>
         </div>
 

@@ -140,6 +140,23 @@ type ProductInput = {
   technicalSpecs?: ProductSpecInput[];
   warranty?: string[];
   primaryFeatures?: ProductHighlightInput[];
+  packageWeight?: number | string | null;
+  packageLength?: number | string | null;
+  packageWidth?: number | string | null;
+  packageHeight?: number | string | null;
+  shippingClass?: string | null;
+  fragile?: boolean;
+  hazardous?: boolean;
+};
+
+type ShippingInfoInput = {
+  packageWeight?: number | string | null;
+  packageLength?: number | string | null;
+  packageWidth?: number | string | null;
+  packageHeight?: number | string | null;
+  shippingClass?: string | null;
+  fragile?: boolean;
+  hazardous?: boolean;
 };
 
 type ProductListQuery = {
@@ -693,6 +710,26 @@ export async function updateProduct(id: string, data: Partial<ProductInput>) {
     const product = await tx.product.update({ where: { id }, data: updateData as Prisma.ProductUpdateInput });
     await syncStorefrontVisibility(tx, product.id, product.status, existing.status);
     return product;
+  });
+}
+
+// ─── Shipping Info ────────────────────────────────────────
+
+export async function updateShippingInfo(id: string, data: ShippingInfoInput) {
+  const existing = await prisma.product.findUnique({ where: { id, deletedAt: null }, select: { id: true } });
+  if (!existing) throw new AppError("Product not found.", 404);
+
+  return prisma.product.update({
+    where: { id },
+    data: {
+      ...(data.packageWeight !== undefined ? { packageWeight: data.packageWeight } : {}),
+      ...(data.packageLength !== undefined ? { packageLength: data.packageLength } : {}),
+      ...(data.packageWidth !== undefined ? { packageWidth: data.packageWidth } : {}),
+      ...(data.packageHeight !== undefined ? { packageHeight: data.packageHeight } : {}),
+      ...(data.shippingClass !== undefined ? { shippingClass: data.shippingClass || null } : {}),
+      ...(data.fragile !== undefined ? { fragile: data.fragile } : {}),
+      ...(data.hazardous !== undefined ? { hazardous: data.hazardous } : {}),
+    },
   });
 }
 
