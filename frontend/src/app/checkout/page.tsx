@@ -1044,7 +1044,7 @@ export default function CheckoutPage() {
                 {estimate && Number(estimate.automaticDiscount ?? 0) > 0 && (
                   <>
                     <div className="flex items-center justify-between text-[13.5px]">
-                      <span className="text-steel">Original Base Subtotal</span>
+                      <span className="text-steel">Items Subtotal</span>
                       <span className="text-steel line-through">
                         {formatMoney(
                           estimate.currency?.symbol ?? totals.currencySymbol,
@@ -1212,32 +1212,7 @@ export default function CheckoutPage() {
                       </strong>
                     </div>
                   )}
-                <div className="flex items-center justify-between text-[14px]">
-                  <span className="text-steel">
-                    {(estimate as any)?.isTaxInclusive
-                      ? "Estimated tax (included)"
-                      : "Estimated tax"}
-                  </span>
-                  <strong className="text-ink">
-                    {(estimate?.taxAmount ?? 0) > 0
-                      ? formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, estimate!.taxAmount)
-                      : taxEstimateLabel}
-                  </strong>
-                </div>
-                {estimate?.taxBreakdown && (estimate.taxBreakdown as any[]).length > 0 && (estimate?.taxAmount ?? 0) > 0 && (
-                  <div className="space-y-1 pl-3 text-[12.5px] text-steel">
-                    {(estimate.taxBreakdown as any[]).map((tax, index) => (
-                      <div key={index} className="flex items-center justify-between">
-                        <span>
-                          {tax.label} ({tax.rate}%)
-                        </span>
-                        <span>
-                          {formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, tax.taxAmount)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+
                 <div className="flex items-center justify-between text-[14px]">
                   <span className="text-steel">Shipping</span>
                   <strong className="text-ink">
@@ -1303,12 +1278,17 @@ export default function CheckoutPage() {
 
                 <div className="flex items-center justify-between border-t border-line pt-3 text-[16px]">
                   <span className="font-semibold text-ink">Total Payable</span>
-                  <strong className="text-[18px] font-extrabold text-brand">
-                    {formatMoney(
-                      estimate?.currency?.symbol ?? totals.currencySymbol,
-                      estimate?.total ?? totals.subtotal,
-                    )}
-                  </strong>
+                  <div className="text-right">
+                    <strong className="text-[18px] font-extrabold text-brand block">
+                      {formatMoney(
+                        estimate?.currency?.symbol ?? totals.currencySymbol,
+                        estimate?.total ?? totals.subtotal,
+                      )}
+                    </strong>
+                    <span className="text-[11px] text-steel">
+                      {(estimate as any)?.isTaxInclusive ? "Inclusive of all taxes" : "Tax calculated at checkout"}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -1391,7 +1371,7 @@ export default function CheckoutPage() {
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-6 text-[13.5px] text-[#1A1A1A] space-y-4">
           <div className="flex justify-between items-center text-steel pb-2 border-b border-[#E6E6E6]">
-            <span>Original Base Subtotal</span>
+            <span>Items Subtotal</span>
             <span className="font-semibold text-ink font-mono">
               {formatMoney(
                 estimate?.currency?.symbol ?? totals.currencySymbol,
@@ -1401,7 +1381,6 @@ export default function CheckoutPage() {
               )}
             </span>
           </div>
-
           {aggregatedDiscounts.length > 0 && (
             <div className="space-y-4 py-1 border-b border-[#E6E6E6]">
               <div className="flex justify-between items-center font-semibold text-[#2A6A40]">
@@ -1436,7 +1415,7 @@ export default function CheckoutPage() {
                     </div>
 
                     <div className="flex justify-between text-[12.5px] text-steel">
-                      <span>Original Unit Price</span>
+                      <span>Price</span>
                       <span className="font-mono">
                         {formatMoney(
                           estimate?.currency?.symbol ?? totals.currencySymbol,
@@ -1446,7 +1425,7 @@ export default function CheckoutPage() {
                     </div>
 
                     <div className="flex justify-between text-[12.5px] text-steel">
-                      <span>New Unit Price</span>
+                      <span>Your Price</span>
                       <span className="font-mono">
                         {formatMoney(
                           estimate?.currency?.symbol ?? totals.currencySymbol,
@@ -1461,17 +1440,12 @@ export default function CheckoutPage() {
                     </div>
 
                     <div className="flex justify-between items-center text-[12.5px] font-semibold text-[#2A6A40] pt-1">
-                      <span>You Saved</span>
+                      <span>You saved</span>
                       <span>
                         {formatMoney(
                           estimate?.currency?.symbol ?? totals.currencySymbol,
-                          savingsPerUnit,
-                        )}{" "}
-                        × {discount.quantity} = -
-                        {formatMoney(
-                          estimate?.currency?.symbol ?? totals.currencySymbol,
                           discount.amount,
-                        )}
+                        )} ({discount.originalUnitPrice > 0 ? Math.round((savingsPerUnit / discount.originalUnitPrice) * 100) : 0}%)
                       </span>
                     </div>
                   </div>
@@ -1515,7 +1489,7 @@ export default function CheckoutPage() {
           </div>
 
           <div className="flex justify-between items-center text-steel">
-            <span>Tax (Included)</span>
+            <span>{estimate?.taxMode === "EXCLUSIVE" ? "GST (added at checkout)" : "GST (included in price)"}</span>
             <span className="font-mono">
               {formatMoney(
                 estimate?.currency?.symbol ?? totals.currencySymbol,

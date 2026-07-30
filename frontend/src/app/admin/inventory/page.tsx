@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock3, Download, Filter, History, Layers, Search, SlidersHorizontal, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import {
   useAdminInventory,
   useAdminInventoryAdjustments,
@@ -13,14 +13,15 @@ import {
   useAdminVariantInventoryAdjustments,
   useBulkUpdateInventory,
   useUpdateInventory,
+  useAdminWarehouses,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
 type InventoryRow = {
   id: string;
   variantId?: string | null;
-  countryId?: string | null;
-  country?: { id: string; name: string; code: string } | null;
+  warehouseId?: string | null;
+  warehouse?: { id: string; name: string; gstin?: string; state?: string; countryId?: string } | null;
   product: {
     id: string;
     title: string;
@@ -62,10 +63,10 @@ type SpreadsheetReport = {
   sampleRows: Array<Record<string, unknown>>;
 };
 
-type InventoryColumnKey = "country" | "reserved" | "threshold" | "status" | "updated";
+type InventoryColumnKey = "warehouse" | "reserved" | "threshold" | "status" | "updated";
 
 const DEFAULT_COLUMNS: Record<InventoryColumnKey, boolean> = {
-  country: true,
+  warehouse: true,
   reserved: true,
   threshold: true,
   status: true,
@@ -139,6 +140,8 @@ export default function InventoryPage() {
   const [historyRow, setHistoryRow] = useState<InventoryRow | null>(null);
   const [bulkStock, setBulkStock] = useState("");
   const [bulkThreshold, setBulkThreshold] = useState("");
+  const [bulkWarehouseId, setBulkWarehouseId] = useState("");
+  const [bulkAction, setBulkAction] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importPreview, setImportPreview] = useState<SpreadsheetReport | null>(null);
@@ -189,6 +192,8 @@ export default function InventoryPage() {
   const { data: rowAdjustments, isLoading: rowHistoryLoading } = useAdminVariantInventoryAdjustments(historyRow?.variantId ?? undefined, { page: 1, limit: 25 });
   const updateInv = useUpdateInventory();
   const bulkUpdate = useBulkUpdateInventory();
+  const { data: warehousesData } = useAdminWarehouses({ limit: 100 });
+  const warehouses = warehousesData?.data || [];
 
   const rows = (data?.data ?? []) as InventoryRow[];
   const recentRows = (recentAdjustments?.data ?? []) as Adjustment[];
@@ -200,7 +205,7 @@ export default function InventoryPage() {
   const visibleColumnEntries = useMemo(
     () =>
       [
-        { key: "country" as const, label: "Country Availability", width: "150px" },
+        { key: "warehouse" as const, label: "Warehouse", width: "150px" },
         { key: "reserved" as const, label: "Reserved Stock", width: "120px" },
         { key: "threshold" as const, label: "Low Stock At", width: "120px" },
         { key: "status" as const, label: "Status", width: "120px" },
@@ -319,18 +324,38 @@ export default function InventoryPage() {
   };
 
   const applyBulkUpdate = async () => {
-    const stockValue = bulkStock.trim() === "" ? undefined : Number(bulkStock);
-    const thresholdValue = bulkThreshold.trim() === "" ? undefined : Number(bulkThreshold);
-    if (stockValue === undefined && thresholdValue === undefined) {
-      showToast("Enter stock or low stock threshold for the bulk update.", "error");
-      return;
-    }
-    if (stockValue !== undefined && (!Number.isInteger(stockValue) || stockValue < 0)) {
-      showToast("Stock must be a non-negative integer.", "error");
-      return;
-    }
-    if (thresholdValue !== undefined && (!Number.isInteger(thresholdValue) || thresholdValue < 0)) {
-      showToast("Low stock threshold must be a non-negative integer.", "error");
+    let stockValue: number | undefined = undefined;
+    let thresholdValue: number | undefined = undefined;
+    let warehouseId: string | undefined | null = undefined;
+
+    if (bulkAction === "stock") {
+      stockValue = bulkStock.trim() === "" ? undefined : Number(bulkStock);
+      if (stockValue === undefined) {
+        showToast("Enter stock value.", "error");
+        return;
+      }
+      if (!Number.isInteger(stockValue) || stockValue < 0) {
+        showToast("Stock must be a positive integer.", "error");
+        return;
+      }
+    } else if (bulkAction === "threshold") {
+      thresholdValue = bulkThreshold.trim() === "" ? undefined : Number(bulkThreshold);
+      if (thresholdValue === undefined) {
+        showToast("Enter threshold value.", "error");
+        return;
+      }
+      if (!Number.isInteger(thresholdValue) || thresholdValue < 0) {
+        showToast("Threshold must be a positive integer.", "error");
+        return;
+      }
+    } else if (bulkAction === "warehouse") {
+      warehouseId = bulkWarehouseId === "" ? undefined : (bulkWarehouseId === "NONE" ? null : bulkWarehouseId);
+      if (warehouseId === undefined) {
+        showToast("Select a warehouse.", "error");
+        return;
+      }
+    } else {
+      showToast("Select a bulk action to apply.", "error");
       return;
     }
 
@@ -339,10 +364,13 @@ export default function InventoryPage() {
         ids: selectedIds,
         ...(stockValue !== undefined ? { stock: stockValue } : {}),
         ...(thresholdValue !== undefined ? { lowStockThreshold: thresholdValue } : {}),
+        ...(warehouseId !== undefined ? { warehouseId } : {}),
       });
       setSelectedIds([]);
       setBulkStock("");
       setBulkThreshold("");
+      setBulkWarehouseId("");
+      setBulkAction("");
       showToast("Selected inventory rows updated.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Bulk inventory update failed."), "error");
@@ -405,7 +433,7 @@ export default function InventoryPage() {
               <div className="grid gap-2">
                 {(Object.keys(DEFAULT_COLUMNS) as InventoryColumnKey[]).map((key) => (
                   <label key={key} className="flex items-center justify-between gap-3 rounded border border-[#F0F0F0] px-2.5 py-1.5 text-[12.5px] text-[#1A1A1A]">
-                    <span>{key === "country" ? "Country Availability" : key === "reserved" ? "Reserved Stock" : key === "threshold" ? "Low Stock At" : key === "status" ? "Status" : "Updated Date"}</span>
+                    <span>{key === "warehouse" ? "Warehouse" : key === "reserved" ? "Reserved Stock" : key === "threshold" ? "Low Stock At" : key === "status" ? "Status" : "Updated Date"}</span>
                     <input
                       type="checkbox"
                       checked={visibleColumns[key]}
@@ -565,30 +593,53 @@ export default function InventoryPage() {
 
       {selectedCount > 0 ? (
         <div className="mb-4 rounded-lg border border-[#E6E6E6] bg-white p-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-[13px] font-semibold text-[#1A1A1A]">{selectedCount} selected</span>
-            <div className="flex items-center gap-2">
-              <AdminInput label="Stock" type="number" min={0} value={bulkStock} onChange={(event) => setBulkStock(event.target.value)} className="w-28" />
-              <AdminInput
-                label="Low Stock At"
-                type="number"
-                min={0}
-                value={bulkThreshold}
-                onChange={(event) => setBulkThreshold(event.target.value)}
-                className="w-32"
-              />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-4">
+              <span className="text-[13px] font-semibold text-[#1A1A1A]">{selectedCount} selected</span>
             </div>
-            <button
-              type="button"
-              onClick={() => void applyBulkUpdate()}
-              disabled={bulkUpdate.isPending}
-              className="h-9 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white disabled:opacity-60"
-            >
-              Apply
-            </button>
-            <button type="button" onClick={() => setSelectedIds([])} className="h-9 rounded-md border border-[#E6E6E6] px-4 text-[13px] font-semibold text-[#555]">
-              Clear
-            </button>
+            
+            <div className="flex items-center gap-2">
+              {bulkAction === "stock" && (
+                <AdminInput placeholder="Value" type="number" min={0} value={bulkStock} onChange={(e) => setBulkStock(e.target.value)} className="w-32" />
+              )}
+              {bulkAction === "threshold" && (
+                <AdminInput placeholder="Value" type="number" min={0} value={bulkThreshold} onChange={(e) => setBulkThreshold(e.target.value)} className="w-32" />
+              )}
+              {bulkAction === "warehouse" && (
+                <AdminSelect
+                  value={bulkWarehouseId}
+                  onChange={(e) => setBulkWarehouseId(e.target.value)}
+                  className="w-48"
+                  options={[
+                    { value: "", label: "Select warehouse" },
+                    { value: "NONE", label: "Unassigned (Base)" },
+                    ...warehouses.map((w: any) => ({ value: w.id, label: w.name }))
+                  ]}
+                />
+              )}
+              <AdminSelect
+                value={bulkAction}
+                onChange={(e) => setBulkAction(e.target.value)}
+                className="w-56"
+                options={[
+                  { value: "", label: "Bulk Action" },
+                  { value: "stock", label: "Update stock" },
+                  { value: "threshold", label: "Update low stock threshold" },
+                  { value: "warehouse", label: "Assign warehouse" },
+                ]}
+              />
+              <button
+                type="button"
+                onClick={() => void applyBulkUpdate()}
+                disabled={bulkUpdate.isPending}
+                className="h-9 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#C91A20] disabled:opacity-60"
+              >
+                Apply
+              </button>
+              <button type="button" onClick={() => setSelectedIds([])} className="h-9 rounded-md border border-[#E6E6E6] px-4 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]">
+                Clear Filters
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -602,7 +653,7 @@ export default function InventoryPage() {
               <span className="px-2">SKU</span>
               <span className="px-2">Stock</span>
               <span className="px-2">Available</span>
-              {visibleColumns.country && <span className="px-2">Country Availability</span>}
+              {visibleColumns.warehouse && <span className="px-2">Warehouse</span>}
               {visibleColumns.reserved && <span className="px-2">Reserved Stock</span>}
               {visibleColumns.threshold && <span className="px-2">Low Stock At</span>}
               {visibleColumns.status && <span className="px-2">Status</span>}
@@ -628,7 +679,7 @@ export default function InventoryPage() {
               <div className="divide-y divide-[#E6E6E6]">
                 {rows.map((row) => {
                   const availableStock = Math.max(0, row.stock - row.reservedStock);
-                  const countryLabel = row.country ? `${row.country.name} (${row.country.code})` : "Base";
+                  const warehouseLabel = row.warehouse ? `${row.warehouse.name} (${row.warehouse.gstin || row.warehouse.state || 'N/A'})` : "Base";
                   const nextStockValue = String(row.stock);
                   const nextThresholdValue = String(row.lowStockThreshold);
 
@@ -654,7 +705,7 @@ export default function InventoryPage() {
                       </div>
                       <div className="px-2 text-[13px] text-[#555]">{tinyNumber(row.stock)}</div>
                       <div className="px-2 text-[13px] text-[#555]">{tinyNumber(availableStock)}</div>
-                      {visibleColumns.country && <div className="px-2 text-[13px] text-[#555]">{countryLabel}</div>}
+                      {visibleColumns.warehouse && <div className="px-2 text-[13px] text-[#555]">{warehouseLabel}</div>}
                       {visibleColumns.reserved && <div className="px-2 text-[13px] text-[#555]">{tinyNumber(row.reservedStock)}</div>}
                       {visibleColumns.threshold && (
                         <div className="px-2">

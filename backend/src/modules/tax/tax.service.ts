@@ -14,7 +14,7 @@ type TaxRuleInput = {
   type?: string;
   taxMode?: string;
   percentage?: number | string;
-  countryId?: string;
+  countryIds?: string[];
   status?: string;
   sortOrder?: number | string;
   productIds?: string[];
@@ -75,7 +75,7 @@ function taxRuleClient() {
 
 function includeCountryAndProducts() {
   return {
-    country: { include: { currency: true } },
+    countries: { include: { currency: true } },
     products: { select: { id: true, title: true } },
   };
 }
@@ -145,7 +145,7 @@ function taxRuleOrderBy(query: TaxListQuery) {
     case "sortOrder":
       return [{ sortOrder: dir }, { name: "asc" }];
     case "country":
-      return [{ country: { name: dir } }, { sortOrder: "asc" }, { name: "asc" }];
+      return [{ createdAt: dir }, { sortOrder: "asc" }, { name: "asc" }]; // Prisma cannot natively order by m-to-n relations easily
     case "updatedAt":
     default:
       return [{ updatedAt: dir }, { sortOrder: "asc" }, { name: "asc" }];
@@ -155,7 +155,7 @@ function taxRuleOrderBy(query: TaxListQuery) {
 function buildWhere(query: TaxListQuery) {
   const where: Record<string, unknown> = {};
   const search = query.search?.trim();
-  if (query.countryId) where.countryId = query.countryId;
+  if (query.countryId) where.countries = { some: { id: query.countryId } };
   if (query.status) where.status = normalizeStatus(query.status);
   if (query.type) where.type = normalizeType(query.type);
 
@@ -184,7 +184,12 @@ export async function listTaxRules(query: TaxListQuery) {
       where,
       skip,
       take: limit,
-      include: includeCountryAndProducts(),
+      include: {
+        countries: {
+          include: { currency: true },
+        },
+        products: { select: { id: true, title: true } },
+      },
       orderBy: orderBy as never,
     }),
     taxRuleClient().count({ where }),
@@ -193,22 +198,22 @@ export async function listTaxRules(query: TaxListQuery) {
   return { data, total, page, limit };
 }
 
-async function assertCountry(countryId: string) {
-  const country = await prisma.country.findUnique({ where: { id: countryId }, select: { id: true, status: true } });
-  if (!country) throw new AppError("Country not found.", 404);
-  if (country.status !== "ACTIVE") throw new AppError("Inactive countries cannot receive tax rules.", 400);
+async function assertCountries(countryIds: string[]) {
+  if (!countryIds || countryIds.length === 0) return;
+  const countries = await prisma.country.findMany({ where: { id: { in: countryIds } }, select: { id: true, status: true } });
+  if (countries.length !== countryIds.length) throw new AppError("One or more countries not found.", 404);
+  const inactive = countries.find((c) => c.status !== "ACTIVE");
+  if (inactive) throw new AppError(`Country ID ${inactive.id} is not active.`, 400);
 }
 
-async function assertUniqueName(countryId: string, name: string, excludeId?: string) {
-  const existing = await taxRuleClient().findFirst({
+async function assertUniqueName(name: string, excludeId?: string) {
+  const existing = await prisma.taxRule.findFirst({
     where: {
-      countryId,
       name,
-      ...(excludeId ? { NOT: { id: excludeId } } : {}),
+      id: excludeId ? { not: excludeId } : undefined,
     },
-    select: { id: true },
   });
-  if (existing) throw new AppError("A tax rule with this name already exists for this country.", 409);
+  if (existing) throw new AppError(`A tax rule with name "${name}" already exists.`, 409);
 }
 
 export async function getTaxDashboard() {
@@ -266,7 +271,7 @@ export async function previewTaxImpact(input: TaxPreviewInput) {
   if (!country) throw new AppError("Country not found.", 404);
 
   const activeRules = await taxRuleClient().findMany({
-    where: { countryId, status: "ACTIVE" },
+    where: { countries: { some: { id: countryId } }, status: "ACTIVE" },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
 
@@ -315,13 +320,13 @@ export async function createTaxRule(input: TaxRuleInput) {
   const type = normalizeType(input.type);
   const taxMode = normalizeTaxMode(input.taxMode);
   const percentage = parsePercentage(input.percentage);
-  const countryId = input.countryId?.trim();
+  const countryIds = input.countryIds && Array.isArray(input.countryIds) ? input.countryIds.map(c => c.trim()).filter(Boolean) : [];
   if (!name) throw new AppError("Tax rule name is required.", 400);
   if (!type) throw new AppError("Tax rule type is required.", 400);
   if (percentage === undefined) throw new AppError("Tax percentage is required.", 400);
-  if (!countryId) throw new AppError("Country is required.", 400);
-  await assertCountry(countryId);
-  await assertUniqueName(countryId, name);
+  if (countryIds.length === 0) throw new AppError("At least one Country is required.", 400);
+  await assertCountries(countryIds);
+  await assertUniqueName(name);
 
   return taxRuleClient().create({
     data: {
@@ -329,7 +334,9 @@ export async function createTaxRule(input: TaxRuleInput) {
       type,
       taxMode,
       percentage,
-      countryId,
+      countries: {
+        connect: countryIds.map((cid) => ({ id: cid })),
+      },
       status: normalizeStatus(input.status) ?? "ACTIVE",
       sortOrder: parseSortOrder(input.sortOrder) ?? 0,
       products: input.productIds && Array.isArray(input.productIds) ? {
@@ -345,14 +352,19 @@ export async function updateTaxRule(id: string, input: TaxRuleInput) {
   if (!existing) throw new AppError("Tax rule not found.", 404);
 
   const data: Record<string, unknown> = {};
-  const nextCountryId = input.countryId?.trim() || existing.countryId;
   const nextName = input.name !== undefined ? input.name.trim() : existing.name;
   if (!nextName) throw new AppError("Tax rule name is required.", 400);
-  if (input.countryId !== undefined) await assertCountry(nextCountryId);
-  if (input.name !== undefined || input.countryId !== undefined) await assertUniqueName(nextCountryId, nextName, id);
+  if (input.countryIds !== undefined) {
+    const validCountryIds = Array.isArray(input.countryIds) ? input.countryIds.map(c => c.trim()).filter(Boolean) : [];
+    if (validCountryIds.length === 0) throw new AppError("At least one Country is required.", 400);
+    await assertCountries(validCountryIds);
+    data.countries = {
+      set: validCountryIds.map((cid) => ({ id: cid })),
+    };
+  }
+  if (input.name !== undefined) await assertUniqueName(nextName, id);
 
   if (input.name !== undefined) data.name = nextName;
-  if (input.countryId !== undefined) data.countryId = nextCountryId;
   if (input.type !== undefined) data.type = normalizeType(input.type);
   if (input.taxMode !== undefined) data.taxMode = normalizeTaxMode(input.taxMode);
   if (input.percentage !== undefined) data.percentage = parsePercentage(input.percentage);
@@ -470,13 +482,13 @@ async function previewTaxRows(rows: Record<string, string>[]) {
   const [countries, existingRules] = await Promise.all([
     prisma.country.findMany({ where: { code: { in: Array.from(countryCodes) } }, select: { id: true, code: true, status: true } }),
     taxRuleClient().findMany({
-      where: { country: { code: { in: Array.from(countryCodes) } } },
-      select: { id: true, name: true, country: { select: { code: true } } },
+      where: { countries: { some: { code: { in: Array.from(countryCodes) } } } },
+      select: { id: true, name: true, countries: { select: { code: true } } },
     }),
   ]);
 
   const countryByCode = new Map(countries.map((country) => [country.code, country]));
-  const existingByKey = new Map(existingRules.map((rule) => [`${rule.country.code}::${rule.name.toLowerCase()}`, rule]));
+  const existingByKey = new Map(existingRules.map((rule) => [`${rule.countries[0]?.code}::${rule.name.toLowerCase()}`, rule]));
 
   for (const [index, row] of parsed.entries()) {
     const rowNumber = index + 2;
@@ -511,7 +523,7 @@ export async function exportTaxSpreadsheet(query: TaxListQuery & { ids?: string 
       name: rule.name,
       type: rule.type,
       percentage: rule.percentage,
-      countryCode: rule.country.code,
+      countryCode: rule.countries[0]?.code,
       status: rule.status,
       sortOrder: rule.sortOrder,
     })),
@@ -553,13 +565,12 @@ export async function importTaxSpreadsheet(filePath: string) {
         name: row.name.trim(),
         type: row.type as (typeof TAX_RULE_TYPES)[number],
         percentage: Number(row.percentage),
-        countryId: country.id,
         status: (row.status as (typeof STATUS_VALUES)[number]) ?? "ACTIVE",
         sortOrder: Number(row.sortOrder),
       };
 
       const existing = await tx.taxRule.findFirst({
-        where: { countryId: country.id, name: payload.name },
+        where: { countries: { some: { id: country.id } }, name: payload.name },
         select: { id: true },
       });
 

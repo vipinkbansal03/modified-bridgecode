@@ -192,6 +192,7 @@ export interface CustomerOrderEstimate {
   originalBaseSubtotal?: number;
   subtotal: number;
   taxAmount: number;
+  taxMode?: "INCLUSIVE" | "EXCLUSIVE" | "EXEMPT";
   shippingCharge: number;
   shippingProvider?: string | null;
   shippingZoneId?: string | null;

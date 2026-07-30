@@ -4,6 +4,7 @@ import { AppError, getPagination } from "../../utils/apiResponse";
 import { assertActiveCountry, assertSellableInCountry } from "../countries/countryAvailability.service";
 import { decrementVariantStock } from "../inventory/inventory.service";
 import { resolvePrice } from "../pricing/priceResolver.service";
+import { releaseStock } from "../customerOrders/customerOrders.service";
 
 export async function getAnalytics() {
   const twelveMonthsAgo = new Date();
@@ -246,7 +247,17 @@ export async function createAdminOrder(input: {
   });
 }
 
-export const updateStatus = (id: string, status: string) => prisma.order.update({ where: { id }, data: { status: status as never } });
+export const updateStatus = async (id: string, status: string) => {
+  const existing = await prisma.order.findUnique({ where: { id } });
+  if (!existing) throw new AppError("Order not found.", 404);
+  
+  const updated = await prisma.order.update({ where: { id }, data: { status: status as never } });
+  
+  if (status === "CANCELLED" && existing.status !== "CANCELLED") {
+    await releaseStock(id);
+  }
+  return updated;
+};
 export const updatePaymentStatus = (id: string, paymentStatus: string) => prisma.order.update({ where: { id }, data: { paymentStatus: paymentStatus as never } });
 export const updateShipping = (id: string, data: { shippingProvider?: string; trackingNumber?: string }) =>
   prisma.order.update({ where: { id }, data });

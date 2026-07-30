@@ -10,7 +10,7 @@ type InventoryListQuery = {
   limit?: string;
   search?: string;
   status?: string;
-  countryId?: string;
+  warehouseId?: string;
   sortBy?: string;
   sortDir?: string;
 };
@@ -26,7 +26,7 @@ type InventoryImportRow = {
   variantId?: string;
   variantSku?: string;
   productSku?: string;
-  countryCode?: string;
+  warehouseId?: string;
   stock?: string;
   reservedStock?: string;
   lowStockThreshold?: string;
@@ -37,7 +37,7 @@ const INVENTORY_EXPORT_COLUMNS = [
   { key: "productSku", header: "productSku" },
   { key: "variantTitle", header: "variantTitle" },
   { key: "variantSku", header: "variantSku" },
-  { key: "countryCode", header: "countryCode" },
+  { key: "warehouseId", header: "warehouseId" },
   { key: "scope", header: "scope" },
   { key: "stock", header: "stock" },
   { key: "reservedStock", header: "reservedStock" },
@@ -123,8 +123,8 @@ function buildInventoryWhere(query: InventoryListQuery): Prisma.InventoryWhereIn
       { product: { sku: { contains: search, mode: "insensitive" } } },
       { variant: { title: { contains: search, mode: "insensitive" } } },
       { variant: { sku: { contains: search, mode: "insensitive" } } },
-      { country: { name: { contains: search, mode: "insensitive" } } },
-      { country: { code: { contains: search, mode: "insensitive" } } },
+      { warehouse: { name: { contains: search, mode: "insensitive" } } },
+      { warehouse: { state: { contains: search, mode: "insensitive" } } },
     ];
   }
 
@@ -132,8 +132,8 @@ function buildInventoryWhere(query: InventoryListQuery): Prisma.InventoryWhereIn
     where.status = status;
   }
 
-  if (query.countryId) {
-    where.countryId = query.countryId;
+  if (query.warehouseId) {
+    where.warehouseId = query.warehouseId;
   }
 
   return where;
@@ -154,8 +154,8 @@ function buildInventoryOrder(query: InventoryListQuery): Prisma.InventoryOrderBy
       return [{ product: { title: dir } }, { updatedAt: "desc" }];
     case "variant":
       return [{ variant: { title: dir } }, { updatedAt: "desc" }];
-    case "country":
-      return [{ country: { name: dir } }, { updatedAt: "desc" }];
+    case "warehouse":
+      return [{ warehouse: { name: dir } }, { updatedAt: "desc" }];
     case "sku":
       return [{ variant: { sku: dir } }, { product: { sku: dir } }, { updatedAt: "desc" }];
     case "updatedAt":
@@ -299,27 +299,27 @@ async function createAdjustment(
 async function findVariantInventoryRecord(
   client: InventoryClient,
   variantId: string,
-  countryId?: string | null,
+  warehouseId?: string | null,
 ) {
-  if (countryId) {
+  if (warehouseId) {
     const override = await client.inventory.findFirst({
-      where: { variantId, countryId },
+      where: { variantId, warehouseId },
     });
     if (override) return override;
   }
 
   return client.inventory.findFirst({
-    where: { variantId, countryId: null },
+    where: { variantId, warehouseId: null },
   });
 }
 
 async function ensureVariantInventoryRecord(
   client: InventoryClient,
   variantId: string,
-  countryId?: string | null,
+  warehouseId?: string | null,
 ) {
   const existing = await client.inventory.findFirst({
-    where: { variantId, countryId: countryId ?? null },
+    where: { variantId, warehouseId: warehouseId ?? null },
   });
   if (existing) return existing;
 
@@ -333,7 +333,7 @@ async function ensureVariantInventoryRecord(
     data: {
       productId: variant.productId,
       variantId,
-      countryId: countryId ?? null,
+      warehouseId: warehouseId ?? null,
       stock: 0,
       reservedStock: 0,
       lowStockThreshold: 10,
@@ -344,7 +344,7 @@ async function ensureVariantInventoryRecord(
 
 export async function upsertVariantInventory(data: {
   variantId: string;
-  countryId?: string | null;
+  warehouseId?: string | null;
   stock: number;
   lowStockThreshold?: number;
 }) {
@@ -360,12 +360,12 @@ export async function upsertVariantInventory(data: {
   });
   if (!variant) throw new AppError("Variant not found.", 404);
 
-  if (data.countryId) {
-    const country = await prisma.country.findUnique({ where: { id: data.countryId }, select: { id: true } });
+  if (data.warehouseId) {
+    const country = await prisma.country.findUnique({ where: { id: data.warehouseId }, select: { id: true } });
     if (!country) throw new AppError("Country not found.", 404);
   }
 
-  const existing = await ensureVariantInventoryRecord(prisma, data.variantId, data.countryId ?? null);
+  const existing = await ensureVariantInventoryRecord(prisma, data.variantId, data.warehouseId ?? null);
   if (!existing) throw new AppError("Unable to create inventory record.", 500);
 
   return updateInventory(existing.id, {
@@ -408,14 +408,14 @@ export async function updateInventory(
 
 export async function upsertProductInventory(
   productId: string,
-  data: { countryId?: string | null; stock?: number; reservedStock?: number; lowStockThreshold?: number },
+  data: { warehouseId?: string | null; stock?: number; reservedStock?: number; lowStockThreshold?: number },
 ) {
   const product = await prisma.product.findFirst({ where: { id: productId, deletedAt: null }, select: { id: true } });
   if (!product) throw new AppError("Product not found.", 404);
 
-  const countryId = data.countryId ?? null;
-  if (countryId) {
-    const country = await prisma.country.findUnique({ where: { id: countryId }, select: { id: true } });
+  const warehouseId = data.warehouseId ?? null;
+  if (warehouseId) {
+    const country = await prisma.country.findUnique({ where: { id: warehouseId }, select: { id: true } });
     if (!country) throw new AppError("Country not found.", 404);
   }
 
@@ -427,14 +427,14 @@ export async function upsertProductInventory(
   }
   if (reservedStock > stock) throw new AppError("Reserved stock cannot exceed stock.", 400);
 
-  const existing = await prisma.inventory.findFirst({ where: { productId, variantId: null, countryId } });
+  const existing = await prisma.inventory.findFirst({ where: { productId, variantId: null, warehouseId } });
   if (existing) return updateInventory(existing.id, { stock, reservedStock, lowStockThreshold });
 
   return prisma.inventory.create({
     data: {
       productId,
       variantId: null,
-      countryId,
+      warehouseId,
       stock,
       reservedStock,
       lowStockThreshold,
@@ -497,19 +497,19 @@ export async function bulkUpdateInventory(input: InventoryBulkUpdateInput) {
 export async function decrementVariantStock(
   variantId: string,
   quantity: number,
-  countryIdOrMeta: string | { reason?: string; adjustedBy?: string } | null = {},
+  warehouseIdOrMeta: string | { reason?: string; adjustedBy?: string } | null = {},
   metaOrClient: { reason?: string; adjustedBy?: string } | InventoryClient = {},
   client: InventoryClient = prisma,
 ) {
-  const countryId = typeof countryIdOrMeta === "string" || countryIdOrMeta === null ? countryIdOrMeta : undefined;
+  const warehouseId = typeof warehouseIdOrMeta === "string" || warehouseIdOrMeta === null ? warehouseIdOrMeta : undefined;
   const resolvedMeta: { reason?: string; adjustedBy?: string } =
-    typeof countryIdOrMeta === "object" && countryIdOrMeta !== null && !("$transaction" in countryIdOrMeta)
-      ? (countryIdOrMeta as { reason?: string; adjustedBy?: string })
+    typeof warehouseIdOrMeta === "object" && warehouseIdOrMeta !== null && !("$transaction" in warehouseIdOrMeta)
+      ? (warehouseIdOrMeta as { reason?: string; adjustedBy?: string })
       : typeof metaOrClient === "object" && metaOrClient !== null && !("$transaction" in metaOrClient)
         ? (metaOrClient as { reason?: string; adjustedBy?: string })
         : {};
   const resolvedClient = typeof metaOrClient === "object" && metaOrClient !== null && "$transaction" in metaOrClient ? metaOrClient : client;
-  const existing = await findVariantInventoryRecord(resolvedClient, variantId, countryId);
+  const existing = await findVariantInventoryRecord(resolvedClient, variantId, warehouseId);
   if (!existing) return null;
 
   const nextStock = existing.stock - quantity;
@@ -529,19 +529,19 @@ export async function decrementVariantStock(
 export async function setVariantStock(
   variantId: string,
   stock: number,
-  countryIdOrMeta: string | { reason?: string; adjustedBy?: string } | null = {},
+  warehouseIdOrMeta: string | { reason?: string; adjustedBy?: string } | null = {},
   metaOrClient: { reason?: string; adjustedBy?: string } | InventoryClient = {},
   client: InventoryClient = prisma,
 ) {
-  const countryId = typeof countryIdOrMeta === "string" || countryIdOrMeta === null ? countryIdOrMeta : undefined;
+  const warehouseId = typeof warehouseIdOrMeta === "string" || warehouseIdOrMeta === null ? warehouseIdOrMeta : undefined;
   const resolvedMeta: { reason?: string; adjustedBy?: string } =
-    typeof countryIdOrMeta === "object" && countryIdOrMeta !== null && !("$transaction" in countryIdOrMeta)
-      ? (countryIdOrMeta as { reason?: string; adjustedBy?: string })
+    typeof warehouseIdOrMeta === "object" && warehouseIdOrMeta !== null && !("$transaction" in warehouseIdOrMeta)
+      ? (warehouseIdOrMeta as { reason?: string; adjustedBy?: string })
       : typeof metaOrClient === "object" && metaOrClient !== null && !("$transaction" in metaOrClient)
         ? (metaOrClient as { reason?: string; adjustedBy?: string })
         : {};
   const resolvedClient = typeof metaOrClient === "object" && metaOrClient !== null && "$transaction" in metaOrClient ? metaOrClient : client;
-  const existing = await ensureVariantInventoryRecord(resolvedClient, variantId, countryId);
+  const existing = await ensureVariantInventoryRecord(resolvedClient, variantId, warehouseId);
   if (!existing) return null;
 
   const updated = await resolvedClient.inventory.update({
@@ -576,7 +576,7 @@ function parseInventoryImportRow(row: Record<string, string>) {
     variantId,
     variantSku,
     productSku,
-    countryCode: row.countryCode?.trim().toUpperCase() || "",
+    warehouseId: row.warehouseId?.trim().toUpperCase() || "",
     stock: row.stock?.trim() || "",
     reservedStock: row.reservedStock?.trim() || "",
     lowStockThreshold: row.lowStockThreshold?.trim() || "",
@@ -631,13 +631,13 @@ async function previewInventoryImportRows(rows: Record<string, string>[]) {
     },
     include: {
       product: { select: { id: true, title: true, sku: true, status: true } },
-      inventories: { where: { countryId: null }, take: 1 },
+      inventories: { where: { warehouseId: null }, take: 1 },
     },
   });
 
-  const countryCodes = Array.from(new Set(parsedRows.map((row) => row.countryCode).filter(Boolean)));
+  const warehouseIds = Array.from(new Set(parsedRows.map((row) => row.warehouseId).filter(Boolean)));
   const countries = await prisma.country.findMany({
-    where: countryCodes.length ? { code: { in: countryCodes } } : { id: "__never__" },
+    where: warehouseIds.length ? { code: { in: warehouseIds } } : { id: "__never__" },
     select: { id: true, code: true },
   });
   const countryByCode = new Map(countries.map((country) => [country.code, country]));
@@ -667,8 +667,8 @@ async function previewInventoryImportRows(rows: Record<string, string>[]) {
       issues.push({ row: rowNumber, field: "variantId", message: "Variant belongs to an archived product." });
     }
 
-    if (row.countryCode && !countryByCode.has(row.countryCode)) {
-      issues.push({ row: rowNumber, field: "countryCode", message: "Country code was not found." });
+    if (row.warehouseId && !countryByCode.has(row.warehouseId)) {
+      issues.push({ row: rowNumber, field: "warehouseId", message: "Country code was not found." });
     }
   }
 
@@ -717,8 +717,8 @@ export async function importInventorySpreadsheet(filePath: string) {
         throw new AppError(`Variant not found during import on row ${index + 2}.`, 400);
       }
 
-      const countryId = row.countryCode ? preview.countryByCode.get(row.countryCode)?.id ?? null : null;
-      const existing = await tx.inventory.findFirst({ where: { variantId: variant.id, countryId } });
+      const warehouseId = row.warehouseId ? preview.countryByCode.get(row.warehouseId)?.id ?? null : null;
+      const existing = await tx.inventory.findFirst({ where: { variantId: variant.id, warehouseId } });
       const baseInventory = variant.inventories[0];
       const stock = parseOptionalInt(row.stock, "Stock") ?? existing?.stock ?? baseInventory?.stock ?? 0;
       const reservedStock = parseOptionalInt(row.reservedStock, "Reserved stock") ?? existing?.reservedStock ?? baseInventory?.reservedStock ?? 0;
@@ -745,7 +745,7 @@ export async function importInventorySpreadsheet(filePath: string) {
           data: {
             productId: variant.productId,
             variantId: variant.id,
-            countryId,
+            warehouseId,
             stock,
             reservedStock,
             lowStockThreshold,
@@ -780,7 +780,7 @@ function buildInventoryExportRow(inventory: Prisma.InventoryGetPayload<{ include
     productSku: inventory.product.sku ?? "",
     variantTitle: variant?.title ?? "",
     variantSku: variant?.sku ?? "",
-    countryCode: inventory.country?.code ?? "",
+    warehouseId: inventory.country?.code ?? "",
     scope: inventory.country ? "COUNTRY_OVERRIDE" : "BASE",
     stock: inventory.stock,
     reservedStock: inventory.reservedStock,
@@ -807,4 +807,16 @@ export async function exportInventorySpreadsheet(query: InventoryListQuery & { i
     "Inventory",
     INVENTORY_EXPORT_COLUMNS.map((column) => ({ key: column.key, header: column.header })),
   );
+}
+
+
+export async function deleteInventory(id: string) {
+  const existing = await prisma.inventory.findUnique({ where: { id } });
+  if (!existing) throw new AppError("Inventory record not found.", 404);
+
+  if (existing.stock > 0 || (existing.reservedStock && existing.reservedStock > 0)) {
+    throw new AppError("Cannot remove warehouse assignment while stock or reserved stock is greater than zero.", 400);
+  }
+
+  await prisma.inventory.delete({ where: { id } });
 }

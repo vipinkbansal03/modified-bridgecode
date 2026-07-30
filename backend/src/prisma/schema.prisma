@@ -27,6 +27,24 @@ model User {
   @@map("users")
 }
 
+model Warehouse {
+  id        String   @id @default(cuid())
+  name      String
+  countryId String
+  state     String
+  address   String?
+  gstin     String?
+  status    Status   @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  country     Country     @relation(fields: [countryId], references: [id])
+  inventories Inventory[]
+  orders      Order[]
+
+  @@map("warehouses")
+}
+
 model Role {
   id          String   @id @default(cuid())
   name        String   @unique
@@ -305,12 +323,13 @@ model Country {
   Order               Order[]
   prices              ProductPrice[]
   shippingZones       ShippingZone[]
-  taxRules            TaxRule[]
+  taxRules            TaxRule[]            @relation("TaxRuleCountries")
   defaultProducts     Product[]
   tierPricing         TierPricing[]
   Quote               Quote[]
   variantCountries    VariantCountry[]
   paymentMethods      PaymentMethodCountry[]
+  warehouses          Warehouse[]
 
   @@map("countries")
 }
@@ -487,8 +506,10 @@ model Inventory {
   product           Product               @relation(fields: [productId], references: [id])
   country           Country?              @relation(fields: [countryId], references: [id])
   adjustments       InventoryAdjustment[]
+  warehouseId       String?
+  warehouse         Warehouse?            @relation(fields: [warehouseId], references: [id])
 
-  @@unique([variantId, countryId])
+  @@unique([variantId, warehouseId])
   @@map("inventory")
 }
 
@@ -644,6 +665,8 @@ model Order {
   quote            Quote?
   shippingZone     ShippingZone?    @relation(fields: [shippingZoneId], references: [id])
   paymentMethodRef PaymentMethod?   @relation(fields: [paymentMethodId], references: [id])
+  warehouseId      String?
+  warehouse        Warehouse?       @relation(fields: [warehouseId], references: [id])
 
   @@map("orders")
 }
@@ -1325,15 +1348,14 @@ model TaxRule {
   type       TaxRuleType
   taxMode    TaxMode     @default(EXCLUSIVE)
   percentage Decimal     @db.Decimal(5, 2)
-  countryId  String
   status     Status      @default(ACTIVE)
   sortOrder  Int         @default(0)
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
-  country    Country     @relation(fields: [countryId], references: [id])
+  countries  Country[]   @relation("TaxRuleCountries")
   products   Product[]   @relation("ProductTaxRules")
 
-  @@unique([countryId, name])
+  @@unique([name])
   @@map("tax_rules")
 }
 

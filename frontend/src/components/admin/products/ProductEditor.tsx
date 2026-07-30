@@ -31,6 +31,7 @@ import {
   useAssignProductAttributes,
   useRemoveProductAttribute,
   useAdminCountries,
+  useAdminWarehouses,
   useAdminTiers,
   useUpdateProductFilterVisibility,
 } from "@/hooks/admin/useAdminHooks";
@@ -130,8 +131,8 @@ type VariantRow = {
   inventories?: {
     id?: string;
     variantId?: string | null;
-    countryId?: string | null;
-    country?: { id: string; name: string; code: string } | null;
+    warehouseId?: string | null;
+    warehouse?: { id: string; name: string; country?: { id: string; name: string; code: string } | null; state?: string | null } | null;
     stock: number;
     reservedStock?: number | null;
     lowStockThreshold?: number | null;
@@ -238,8 +239,8 @@ type AttributeValueDetail = {
 const getAttributeValues = <T extends { id: string; value: string }>(attribute?: { values?: T[] | null }): T[] =>
   Array.isArray(attribute?.values) ? attribute.values : [];
 
-const getBaseInventory = <T extends { countryId?: string | null }>(inventories?: T[] | null) =>
-  Array.isArray(inventories) ? inventories.find((inventory) => !inventory.countryId) ?? null : null;
+const getBaseInventory = <T extends { warehouseId?: string | null }>(inventories?: T[] | null) =>
+  Array.isArray(inventories) ? inventories.find((inventory) => !inventory.warehouseId) ?? null : null;
 
 const resolveEditSelectedValue = (
   attributeId: string,
@@ -1264,32 +1265,41 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
     setBulkSaving(true);
     try {
-      if (invBulkActionType === "Delete selected overrides") {
-        const overridesToDelete = paginatedVariantInventories.filter(
+      if (invBulkActionType === "Delete selected assignments") {
+        const assignmentsToDelete = paginatedVariantInventories.filter(
           (inv: any) => selectedInvIds.includes(inv.id) && inv.isOverride
         );
-        if (!overridesToDelete.length) {
-          showToast("No country override inventory rows were selected to delete.", "error");
+        if (!assignmentsToDelete.length) {
+          showToast("No warehouse assignment inventory rows were selected to delete.", "error");
           setBulkSaving(false);
           return;
         }
-        if (!window.confirm(`Delete ${overridesToDelete.length} selected country inventory override(s)?`)) {
+
+        // Safety Check: Check if any assignment has stock
+        const hasStock = assignmentsToDelete.some((inv: any) => inv.stock > 0 || (inv.reservedStock && inv.reservedStock > 0));
+        if (hasStock) {
+          alert("Cannot remove warehouse assignment while stock or reserved stock is greater than zero. Please update stock to 0 first.");
+          setBulkSaving(false);
+          return;
+        }
+
+        if (!window.confirm(`Delete ${assignmentsToDelete.length} selected warehouse assignment(s)?`)) {
           setBulkSaving(false);
           return;
         }
         await Promise.all(
-          overridesToDelete.map((inv) => adminApi.delete(`/inventory/${inv.id}`))
+          assignmentsToDelete.map((inv) => adminApi.delete(`/inventory/${inv.id}`))
         );
-        showToast(`Successfully deleted ${overridesToDelete.length} country override(s).`, "success");
-      } else if (invBulkActionType === "Add country override") {
-        if (!invBulkCountryId) {
-          showToast("Please select a country.", "error");
+        showToast(`Successfully deleted ${assignmentsToDelete.length} warehouse assignment(s).`, "success");
+      } else if (invBulkActionType === "Assign to new warehouse") {
+        if (!invBulkCountryId) { // We are reusing this state variable for warehouseId
+          showToast("Please select a warehouse.", "error");
           setBulkSaving(false);
           return;
         }
         const stockVal = parseInt(invBulkActionValue || "0");
         if (isNaN(stockVal) || stockVal < 0) {
-          showToast("Please enter a valid stock override.", "error");
+          showToast("Please enter a valid initial stock.", "error");
           setBulkSaving(false);
           return;
         }
@@ -1304,12 +1314,12 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           uniqueVariantIds.map((vId) =>
             adminApi.post("/inventory/upsert", {
               variantId: vId,
-              countryId: invBulkCountryId,
+              warehouseId: invBulkCountryId,
               stock: stockVal,
             })
           )
         );
-        showToast(`Successfully added country override to ${uniqueVariantIds.length} variant(s).`, "success");
+        showToast(`Successfully assigned ${uniqueVariantIds.length} variant(s) to warehouse.`, "success");
       } else {
         const payload: any = {};
         if (invBulkActionType === "Update stock") {
@@ -1367,6 +1377,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const { data: categories = [] } = useAdminCategories();
   const { data: attributes = [] } = useAdminAttributes();
   const { data: countries = [] } = useAdminCountries();
+  const { data: warehouses = [] } = useAdminWarehouses({ limit: 100 });
   const { data: tiers = [] } = useAdminTiers();
   const { data: selectedAttributeDetail } = useAdminAttribute(selectedMappingAttributeId);
   const { data: languages = [] } = useAdminLanguages();
@@ -1668,17 +1679,18 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         });
       }
       
-      const countryOverridesList = (variant.inventories ?? []).filter((inv) => inv.countryId);
-      countryOverridesList.forEach((inv) => {
+      const warehouseAssignmentsList = (variant.inventories ?? []).filter((inv) => inv.warehouseId);
+      warehouseAssignmentsList.forEach((inv) => {
         list.push({
           ...inv,
           id: inv.id,
           variantId: variant.id,
           variantTitle: variant.title,
           variantSku: variant.sku ?? "",
-          type: "Country Override",
-          countryName: inv.country?.name ?? "Unknown Country",
-          countryCode: inv.country?.code ?? "",
+          type: "Warehouse Assignment",
+          warehouseName: inv.warehouse?.name ?? "Unknown Warehouse",
+          warehouseState: inv.warehouse?.state ?? "",
+          warehouseCountryCode: inv.warehouse?.country?.code ?? "",
           isOverride: true,
         });
       });
@@ -5193,7 +5205,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             <div className="mb-5">
               {(() => {
                 const productLevelInventories = ((product?.inventories ?? []) as NonNullable<VariantRow["inventories"]>).filter((inventory) => !inventory.variantId);
-                const baseInventory = productLevelInventories.find((inventory) => !inventory.countryId) ?? null;
+                const baseInventory = productLevelInventories.find((inventory) => !inventory.warehouseId) ?? null;
                 return (
                   <ProductBaseInventoryEditor
                     key={baseInventory?.id ?? "new-product-base-inventory"}
@@ -5210,8 +5222,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             {variantRows.length > 0 && (
               <section className="mt-8">
                 <div className="mb-4">
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Variant Inventories</h3>
-                  <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Manage stock level and low stock warnings for specific variants & countries.</p>
+                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Warehouse Availability</h3>
+                  <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Manage stock level and assignments for specific variants & warehouses.</p>
                 </div>
 
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E6E6E6] bg-white p-3">
@@ -5232,9 +5244,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       className="rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] outline-none"
                     >
                       {[10, 25, 50, 100].map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
+                        <option key={size} value={size}>{size}</option>
                       ))}
                     </select>
                     <div className="flex items-center gap-1">
@@ -5261,26 +5271,26 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    {invBulkActionType === "Add country override" && (
+                    {invBulkActionType === "Assign to new warehouse" && (
                       <select
                         value={invBulkCountryId}
                         onChange={(e) => setInvBulkCountryId(e.target.value)}
                         className="h-8.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[12.5px] outline-none focus:border-[#E31E24]"
                       >
-                        <option value="">Select country...</option>
-                        {productCountries.map((c: any) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name} ({c.code})
+                        <option value="">Select warehouse...</option>
+                        {(warehouses.data ?? warehouses).map((w: any) => (
+                          <option key={w.id} value={w.id}>
+                            {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
                           </option>
                         ))}
                       </select>
                     )}
                     <input
-                      type="text"
-                      placeholder="Value"
+                      type="number"
+                      placeholder="Initial Stock"
                       value={invBulkActionValue}
                       onChange={(e) => setInvBulkActionValue(e.target.value)}
-                      disabled={bulkSaving || ["Bulk Action", "Delete selected overrides"].includes(invBulkActionType)}
+                      disabled={bulkSaving || ["Bulk Action", "Delete selected assignments"].includes(invBulkActionType)}
                       className="h-8.5 rounded-md border border-[#E6E6E6] px-3 text-[12.5px] outline-none disabled:bg-[#FAFAFA]"
                     />
                     <select
@@ -5290,9 +5300,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     >
                       <option>Bulk Action</option>
                       <option>Update stock</option>
-                      <option>Update low stock threshold</option>
-                      <option>Add country override</option>
-                      <option>Delete selected overrides</option>
+                      <option>Assign to new warehouse</option>
+                      <option>Delete selected assignments</option>
                     </select>
                     <button
                       type="button"
@@ -5307,8 +5316,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       onClick={() => {
                         setFilterInvVariant("");
                         setFilterInvType("");
-                        setFilterInvStock("");
-                        setFilterInvLowStock("");
                         setSelectedInvIds([]);
                       }}
                       className="h-8.5 rounded-md border border-[#E6E6E6] bg-white px-4 text-[12.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
@@ -5354,28 +5361,21 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                           }}
                           className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none"
                         >
-                          Inventory Type / Country {invSortField === "type" ? (invSortDirection === "asc" ? "↑" : "↓") : "⇅"}
+                          Warehouse / Location {invSortField === "type" ? (invSortDirection === "asc" ? "↑" : "↓") : "⇅"}
                         </th>
                         <th
                           onClick={() => {
                             setInvSortField("stock");
                             setInvSortDirection((d) => (d === "asc" ? "desc" : "asc"));
                           }}
-                          className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none w-36 text-center"
+                          className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none w-28 text-center"
                         >
                           Stock {invSortField === "stock" ? (invSortDirection === "asc" ? "↑" : "↓") : "⇅"}
                         </th>
-                        <th
-                          onClick={() => {
-                            setInvSortField("lowStockThreshold");
-                            setInvSortDirection((d) => (d === "asc" ? "desc" : "asc"));
-                          }}
-                          className="border-b border-[#E6E6E6] px-4 py-3 cursor-pointer select-none w-36 text-center"
-                        >
-                          Low Stock Threshold {invSortField === "lowStockThreshold" ? (invSortDirection === "asc" ? "↑" : "↓") : "⇅"}
-                        </th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-3 w-28 text-center">Reserved</th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-3 w-28 text-center">Available</th>
                         <th className="border-b border-[#E6E6E6] px-4 py-3 w-28 text-center">Status</th>
-                        <th className="border-b border-[#E6E6E6] px-4 py-3 w-24">ACTIONS</th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-3 w-24 text-right">ACTIONS</th>
                       </tr>
                       <tr className="bg-[#FCFCFC]">
                         <th className="border-b border-[#E6E6E6] px-4 py-2"></th>
@@ -5391,46 +5391,33 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                         <th className="border-b border-[#E6E6E6] px-4 py-2">
                           <input
                             type="text"
-                            placeholder="Filter Type"
+                            placeholder="Filter Warehouse"
                             value={filterInvType}
                             onChange={(e) => setFilterInvType(e.target.value)}
                             className="w-full rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24]"
                           />
                         </th>
-                        <th className="border-b border-[#E6E6E6] px-4 py-2">
-                          <input
-                            type="text"
-                            placeholder="Filter Stock"
-                            value={filterInvStock}
-                            onChange={(e) => setFilterInvStock(e.target.value)}
-                            className="w-full rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24] text-center"
-                          />
-                        </th>
-                        <th className="border-b border-[#E6E6E6] px-4 py-2">
-                          <input
-                            type="text"
-                            placeholder="Filter Low Stock"
-                            value={filterInvLowStock}
-                            onChange={(e) => setFilterInvLowStock(e.target.value)}
-                            className="w-full rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] font-normal outline-none focus:border-[#E31E24] text-center"
-                          />
-                        </th>
                         <th className="border-b border-[#E6E6E6] px-4 py-2"></th>
-                        <th className="border-b border-[#E6E6E6] px-4 py-2 text-[11px] text-[#9A9A9A] font-normal">Filters</th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2"></th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2"></th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2"></th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-2 text-right text-[11px] text-[#9A9A9A] font-normal">Filters</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E6E6E6]">
                       {paginatedVariantInventories.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="px-4 py-8 text-center text-[#9A9A9A]">
-                            No variant inventories matching filters found.
+                          <td colSpan={8} className="px-4 py-8 text-center text-[#9A9A9A]">
+                            No assignments matching filters found.
                           </td>
                         </tr>
                       ) : (
                         paginatedVariantInventories.map((inventory: any) => {
                           const stockLevel = inventory.stock ?? 0;
+                          const reserved = inventory.reservedStock ?? 0;
+                          const available = Math.max(0, stockLevel - reserved);
                           const threshold = inventory.lowStockThreshold ?? 10;
-                          const isLowStock = stockLevel <= threshold;
+                          const isLowStock = available <= threshold;
 
                           return (
                             <tr key={inventory.id} className="hover:bg-[#FAFAFA]">
@@ -5453,9 +5440,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                               </td>
                               <td className="px-4 py-3 text-[#6B6B6B]">
                                 {inventory.isOverride ? (
-                                  <span className="inline-flex items-center gap-1.5 font-semibold text-[#1A1A1A]">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-[#E31E24]" />
-                                    {inventory.countryName} ({inventory.countryCode}) Override
+                                  <span className="inline-flex flex-col">
+                                    <span className="font-semibold text-[#1A1A1A]">{inventory.warehouseName}</span>
+                                    <span className="text-[11.5px]">
+                                      {inventory.warehouseState ? `${inventory.warehouseState}, ` : ''}{inventory.warehouseCountryCode}
+                                    </span>
                                   </span>
                                 ) : (
                                   <span className="text-[#8A8A8A]">Base Inventory Default</span>
@@ -5477,47 +5466,46 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                   }}
                                 />
                               </td>
-                              <td className="px-4 py-3 text-center">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  defaultValue={threshold}
-                                  disabled={isReadOnly}
-                                  className="w-20 rounded border border-[#E6E6E6] px-2 py-1 text-center text-[13px] outline-none focus:border-[#E31E24]"
-                                  onBlur={async (e) => {
-                                    const nextThreshold = parseInt(e.target.value);
-                                    if (isNaN(nextThreshold) || nextThreshold < 0) return;
-                                    await adminApi.put(`/inventory/${inventory.id}`, { lowStockThreshold: nextThreshold });
-                                    showToast("Low stock threshold updated.");
-                                    refetch();
-                                  }}
-                                />
+                              <td className="px-4 py-3 text-center text-[#6B6B6B]">
+                                {reserved}
+                              </td>
+                              <td className="px-4 py-3 text-center font-semibold text-[#1A1A1A]">
+                                {available}
                               </td>
                               <td className="px-4 py-3 text-center">
                                 <span
                                   className={cn(
                                     "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                                    stockLevel > 0 
+                                    available > 0 
                                       ? (isLowStock ? "bg-[#FFF4E5] text-[#B06000]" : "bg-[#E6F4EA] text-[#137333]") 
                                       : "bg-[#FCE8E6] text-[#C5221F]"
                                   )}
                                 >
-                                  {stockLevel > 0 ? (isLowStock ? "LOW STOCK" : "IN STOCK") : "OUT OF STOCK"}
+                                  {available > 0 ? (isLowStock ? "LOW STOCK" : "IN STOCK") : "OUT OF STOCK"}
                                 </span>
                               </td>
-                              <td className="px-4 py-3">
+                              <td className="px-4 py-3 text-right">
                                 {inventory.isOverride && (
                                   <button
                                     type="button"
                                     onClick={async () => {
-                                      if (!window.confirm(`Delete override for ${inventory.countryName}?`)) return;
-                                      await adminApi.delete(`/inventory/${inventory.id}`);
-                                      showToast("Override deleted.");
-                                      refetch();
+                                      if (stockLevel > 0 || reserved > 0) {
+                                        alert("Cannot remove warehouse assignment while stock or reserved stock is greater than zero.");
+                                        return;
+                                      }
+                                      if (!window.confirm(`Delete assignment for ${inventory.warehouseName}?`)) return;
+                                      try {
+                                        await adminApi.delete(`/inventory/${inventory.id}`);
+                                        showToast("Assignment removed.");
+                                        refetch();
+                                      } catch (err: any) {
+                                        showToast(err?.response?.data?.error || "Error removing assignment.", "error");
+                                      }
                                     }}
-                                    className="rounded border border-[#F2C9C9] p-1 text-red-600 hover:bg-red-50"
+                                    className="rounded border border-[#F2C9C9] p-1.5 text-red-600 hover:bg-red-50"
+                                    title="Remove Assignment"
                                   >
-                                    <Trash2 size={13} />
+                                    <Trash2 size={14} />
                                   </button>
                                 )}
                               </td>

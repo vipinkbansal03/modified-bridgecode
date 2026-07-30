@@ -7,6 +7,7 @@ import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   AdminInput,
   AdminSelect,
+  AdminMultiSelect,
   ConfirmModal,
   DataTable,
   Pagination,
@@ -38,8 +39,7 @@ type TaxRule = {
   type: "CGST" | "SGST" | "VAT" | "SALES_TAX";
   taxMode: "EXCLUSIVE" | "INCLUSIVE" | "EXEMPT";
   percentage: string | number;
-  countryId: string;
-  country?: { id: string; name: string; code: string; currency?: { code: string; symbol: string } | null };
+  countries?: Array<{ id: string; name: string; code: string; currency?: { code: string; symbol: string } | null }>;
   status: "ACTIVE" | "INACTIVE";
   sortOrder: number;
   createdAt: string;
@@ -79,7 +79,7 @@ type TaxFormState = {
   type: TaxRule["type"];
   taxMode: TaxRule["taxMode"];
   percentage: string;
-  countryId: string;
+  countryIds: string[];
   status: TaxRule["status"];
   sortOrder: string;
   productIds: string[];
@@ -105,7 +105,7 @@ const emptyForm: TaxFormState = {
   type: "VAT",
   taxMode: "EXCLUSIVE",
   percentage: "",
-  countryId: "",
+  countryIds: [],
   status: "ACTIVE",
   sortOrder: "0",
   productIds: [],
@@ -212,11 +212,18 @@ export default function AdminTaxPage() {
 
   const countryOptions = [
     { value: "", label: "All countries" },
-    ...countries.map((country: { id: string; name: string; code: string }) => ({
+    ...countries.map((country: { id: string; name: string; code: string; status?: string }) => ({
       value: country.id,
       label: `${country.name} (${country.code})`,
     })),
   ];
+
+  const activeCountryOptions = countries
+    .filter((country: { id: string; name: string; code: string; status?: string }) => country.status === "ACTIVE")
+    .map((country: { id: string; name: string; code: string; status?: string }) => ({
+      value: country.id,
+      label: `${country.name} (${country.code})`,
+    }));
 
   const [visibleColumns, setVisibleColumns] = useState(visibleColumnsDefault);
 
@@ -228,19 +235,28 @@ export default function AdminTaxPage() {
         render: (row) => (
           <div className="min-w-0">
             <div className="truncate font-medium text-[#1A1A1A]">{row.name}</div>
-            <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">{row.country?.code ?? "—"}</div>
+            <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">{row.countries?.map(c => c.code).join(", ") || "—"}</div>
           </div>
         ),
       },
       { key: "type", label: "Rule Type", width: "140px", render: (row) => row.type.replace("_", " ") },
       {
         key: "country",
-        label: "Country",
+        label: "Countries",
         width: "180px",
         render: (row) => (
           <div>
-            <div className="font-medium">{row.country?.name ?? "—"}</div>
-            <div className="text-[11.5px] text-[#9A9A9A]">{row.country?.code ?? ""}</div>
+            {row.countries?.length ? (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {row.countries.map((c) => (
+                  <span key={c.id} className="inline-flex items-center rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-800">
+                    {c.code}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span className="text-[#9A9A9A]">—</span>
+            )}
           </div>
         ),
       },
@@ -302,7 +318,7 @@ export default function AdminTaxPage() {
       type: row.type,
       taxMode: row.taxMode || "EXCLUSIVE",
       percentage: String(row.percentage),
-      countryId: row.countryId,
+      countryIds: (row.countries ?? []).map((c) => c.id),
       status: row.status,
       sortOrder: String(row.sortOrder ?? 0),
       productIds: (row.products ?? []).map((p) => p.id),
@@ -331,7 +347,7 @@ export default function AdminTaxPage() {
         type: form.type,
         taxMode: form.taxMode,
         percentage: form.percentage,
-        countryId: form.countryId,
+        countryIds: form.countryIds,
         status: form.status,
         sortOrder: form.sortOrder,
         productIds: form.productIds,
@@ -840,7 +856,7 @@ export default function AdminTaxPage() {
                         <div className="min-w-0">
                           <div className="truncate text-[13px] font-medium text-[#1A1A1A]">{row.name}</div>
                           <div className="text-[11.5px] text-[#9A9A9A]">
-                            {row.type.replace("_", " ")} · {row.country?.name ?? "—"}
+                            {row.type.replace("_", " ")} · {row.countries?.map(c => c.name).join(", ") || "—"}
                           </div>
                         </div>
                         <StatusBadge status={row.status} />
@@ -888,11 +904,25 @@ export default function AdminTaxPage() {
                   { value: "EXEMPT", label: "Exempt (0% Tax / Tax Free)" },
                 ]}
               />
-              <AdminSelect
-                label="Country"
-                value={form.countryId}
-                onChange={(event) => setForm((current) => ({ ...current, countryId: event.target.value }))}
-                options={countryOptions.filter((option) => option.value !== "")}
+              <AdminMultiSelect
+                label="Countries"
+                value={form.countryIds}
+                onChange={(value) => {
+                  if (value.includes("ALL")) {
+                    if (form.countryIds.length === activeCountryOptions.length) {
+                      setForm(current => ({ ...current, countryIds: [] }));
+                    } else {
+                      setForm(current => ({ ...current, countryIds: activeCountryOptions.map((o: { value: string; label: string }) => o.value) }));
+                    }
+                  } else {
+                    setForm(current => ({ ...current, countryIds: value.filter(v => v !== "ALL") }));
+                  }
+                }}
+                options={[
+                  { value: "ALL", label: form.countryIds.length === activeCountryOptions.length ? "Deselect All" : "Select All" },
+                  ...activeCountryOptions
+                ]}
+                placeholder="Select countries..."
               />
               <AdminInput
                 label="Tax Percentage (%)"

@@ -9,6 +9,10 @@ export const list = asyncHandler(async (req: AuthRequest, res: Response) => {
 });
 export const dashboard = asyncHandler(async (_req: AuthRequest, res: Response) => ApiResponse.success(res, "Inventory dashboard fetched.", await S.getInventoryDashboard()));
 export const update = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Updated.", await S.updateInventory(String(req.params.id), req.body)));
+export const remove = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await S.deleteInventory(String(req.params.id));
+  return ApiResponse.success(res, "Inventory removed.");
+});
 export const upsert = asyncHandler(async (req: AuthRequest, res: Response) =>
   ApiResponse.success(res, "Inventory saved.", await S.upsertVariantInventory(req.body)),
 );

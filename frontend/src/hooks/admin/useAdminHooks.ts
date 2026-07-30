@@ -111,6 +111,7 @@ export const useBulkUpdateProducts = () => {
       categoryId?: string;
       countryIds?: string[];
       collectionIds?: string[];
+      warehouseId?: string;
     }) => adminApi.post("/products/bulk", data).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-products"] });
@@ -2513,3 +2514,36 @@ export const useAddQuoteNote = () => {
     },
   });
 };
+
+// ─── Warehouses ───────────────────────────────────────────
+
+export const useAdminWarehouses = (params?: { page?: number; limit?: number; search?: string }) =>
+  useQuery({
+    queryKey: ["admin-warehouses", params],
+    queryFn: () => adminApi.get("/warehouses", { params }).then((r) => r.data),
+  });
+
+export const useCreateWarehouse = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: unknown) => adminApi.post("/warehouses", data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-warehouses"] }),
+  });
+};
+
+export const useUpdateWarehouse = (id: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: unknown) => adminApi.put(`/warehouses/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-warehouses"] }),
+  });
+};
+
+export const useDeleteWarehouse = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.delete(`/warehouses/${id}`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-warehouses"] }),
+  });
+};
+

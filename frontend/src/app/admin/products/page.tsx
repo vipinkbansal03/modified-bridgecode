@@ -17,6 +17,7 @@ import {
   useDeleteProduct,
   useReorderProducts,
   useRestoreProduct,
+  useAdminWarehouses,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -42,7 +43,7 @@ interface ProductRow {
   createdAt: string;
 }
 
-type BulkAction = "enable" | "disable" | "archive" | "restore" | "assignCategory" | "assignCountries" | "assignCollections" | "delete";
+type BulkAction = "enable" | "disable" | "archive" | "restore" | "assignCategory" | "assignCountries" | "assignCollections" | "assignWarehouse" | "delete";
 
 type ColumnKey = "image" | "name" | "sku" | "brand" | "category" | "status" | "countries" | "inventory" | "price" | "updated" | "actions";
 
@@ -88,6 +89,7 @@ export default function AdminProductsPage() {
   const [bulkAction, setBulkAction] = useState<BulkAction>("enable");
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const [bulkCountryIds, setBulkCountryIds] = useState<string[]>([]);
+  const [bulkWarehouseId, setBulkWarehouseId] = useState("");
   const [bulkCollectionIds, setBulkCollectionIds] = useState<string[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -118,6 +120,7 @@ export default function AdminProductsPage() {
   const { data, isLoading, refetch } = useAdminProducts({ page, search, status, categoryId: categoryId || undefined, limit: 20, sortBy, sortDir });
   const { data: categories = [] } = useAdminCategories();
   const { data: countries = [] } = useAdminCountries();
+  const { data: warehouses = [] } = useAdminWarehouses({ limit: 100 });
   const { data: collectionsData } = useAdminCollections({ limit: 200 });
   const deleteMutation = useDeleteProduct();
   const duplicateMutation = useDuplicateProduct();
@@ -212,6 +215,7 @@ export default function AdminProductsPage() {
         categoryId: bulkAction === "assignCategory" ? bulkCategoryId : undefined,
         countryIds: bulkAction === "assignCountries" ? bulkCountryIds : undefined,
         collectionIds: bulkAction === "assignCollections" ? bulkCollectionIds : undefined,
+        warehouseId: bulkAction === "assignWarehouse" ? bulkWarehouseId : undefined,
       });
       setSelectedIds([]);
       showToast("Bulk action completed.");
@@ -445,6 +449,7 @@ export default function AdminProductsPage() {
               <option value="assignCategory">Assign category</option>
               <option value="assignCountries">Enable countries</option>
               <option value="assignCollections">Assign collections</option>
+              <option value="assignWarehouse">Assign warehouse</option>
               <option value="delete">Delete</option>
             </select>
             {bulkAction === "assignCategory" ? (
@@ -488,6 +493,16 @@ export default function AdminProductsPage() {
                   </label>
                 ))}
               </div>
+            ) : null}
+            {bulkAction === "assignWarehouse" ? (
+              <select value={bulkWarehouseId} onChange={(event) => setBulkWarehouseId(event.target.value)} className="h-9 rounded-md border border-[#E6E6E6] px-3 text-[13px]">
+                <option value="">Select warehouse</option>
+                {(warehouses.data ?? warehouses).map((w: any) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
+                  </option>
+                ))}
+              </select>
             ) : null}
             <button
               type="button"

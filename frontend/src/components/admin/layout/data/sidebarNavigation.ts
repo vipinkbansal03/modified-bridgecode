@@ -63,6 +63,7 @@ export const sidebarSections: SidebarSection[] = [
       { label: "Quote Requests", href: "/admin/quotes", icon: FileText, permission: "quotes.view" },
       { label: "Products", href: "/admin/products", icon: Package, permission: "products.view" },
       { label: "Inventory", href: "/admin/inventory", icon: Warehouse, permission: "inventory.view" },
+      { label: "Warehouses", href: "/admin/warehouses", icon: Map, permission: "inventory.manage" },
       {
         label: "Catalog",
         icon: Tag,

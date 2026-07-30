@@ -1014,6 +1014,7 @@ type PriceRecord = {
   distributorPrice?: Prisma.Decimal | number | null;
   country: { code: string; name: string; dutyPercentage?: Prisma.Decimal | number; shippingCharge?: Prisma.Decimal | number };
   currency: { code: string; symbol: string };
+  taxMode?: string;
 };
 
 type PublicProductRecord = {
@@ -1048,6 +1049,8 @@ function toPriceDto(pr: PriceRecord) {
       pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
     distributorPrice:
       pr.distributorPrice != null ? Number(pr.distributorPrice) : null,
+    taxMode: pr.taxMode,
+    landedCost: buildPublicPriceBreakdown({ country: pr.country, mrp: pr.mrp }),
   };
 }
 
@@ -1244,7 +1247,7 @@ async function toPublicProductDetail(
 
   const activeTaxRules = countryId
     ? await (prisma as any).taxRule.findMany({
-        where: { countryId, status: "ACTIVE" },
+        where: { countries: { some: { id: countryId } }, status: "ACTIVE" },
         include: { products: { select: { id: true } } },
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       })

@@ -53,18 +53,20 @@ export async function generateInvoice(orderId: string): Promise<Buffer> {
       country: true,
       currency: true,
       shippingZone: { include: { provider: true, country: true } },
+      warehouse: true,
     },
   });
   if (!order) throw new AppError("Order not found.", 404);
 
-  const [siteNameSetting, siteUrlSetting, sellerName, sellerGstin, sellerIec, shipFromState] = await Promise.all([
+  const [siteNameSetting, siteUrlSetting, sellerName, sellerIec] = await Promise.all([
     getSettingValue("general.site_name").catch(() => ""),
     getSettingValue("general.site_url").catch(() => ""),
     getSettingValue("tax.seller_name").catch(() => "Modern Orthodontics Pvt Ltd"),
-    getSettingValue("tax.seller_gstin").catch(() => ""),
     getSettingValue("tax.seller_iec").catch(() => ""),
-    getSettingValue("tax.ship_from_state").catch(() => "Punjab"),
   ]);
+
+  const shipFromState = order.warehouse?.state || "Punjab";
+  const sellerGstin = order.warehouse?.gstin || "";
   const storeName = process.env.STORE_NAME || sellerName || siteNameSetting || "Store";
   const storeAddress = process.env.STORE_ADDRESS || "";
   const storeEmail = process.env.STORE_EMAIL || process.env.EMAIL_FROM || "";
