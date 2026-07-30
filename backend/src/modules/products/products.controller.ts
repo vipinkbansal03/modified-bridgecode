@@ -213,6 +213,34 @@ export const bulkUpdateVariants = asyncHandler(async (req: AuthRequest, res: Res
   return ApiResponse.success(res, "Bulk variant update processed.", result);
 });
 
+export const exportVariantCountryPrices = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const countryId = typeof req.query.countryId === "string" ? req.query.countryId : "";
+  if (!countryId) throw new AppError("countryId is required.", 400);
+  const buffer = await ProductService.exportVariantCountryPricesSpreadsheet(req.params.id as string, countryId);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="variant-country-prices-${Date.now()}.xlsx"`);
+  return res.status(200).send(buffer);
+});
+
+export const importVariantCountryPrices = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const file = req.file as Express.Multer.File | undefined;
+  const countryId = typeof req.body?.countryId === "string" ? req.body.countryId : "";
+  if (!countryId) throw new AppError("countryId is required.", 400);
+  if (!file) throw new AppError("Spreadsheet file is required.", 400);
+
+  try {
+    const result = await ProductService.importVariantCountryPricesSpreadsheet(
+      req.params.id as string,
+      countryId,
+      file.path,
+      req.user?.id ? `admin:${req.user.id}` : "admin",
+    );
+    return ApiResponse.success(res, "Variant country prices imported.", result);
+  } finally {
+    removeTempFile(file.path);
+  }
+});
+
 export const deleteVariant = asyncHandler(async (req: AuthRequest, res: Response) => {
   await ProductService.deleteVariant(req.params.id as string, req.params.variantId as string);
   return ApiResponse.success(res, "Variant deleted.");
@@ -319,4 +347,10 @@ export const previewVariantsImport = asyncHandler(async (req: AuthRequest, res: 
 export const executeVariantsImport = asyncHandler(async (req: AuthRequest, res: Response) => {
   const result = await ProductService.executeVariantsImport(req.params.id as string, req.body.rows);
   return ApiResponse.success(res, "Variants imported successfully.", result);
+});
+
+export const updateShippingInfo = asyncHandler(async (req: AuthRequest, res: Response) => {
+  console.log("[updateShippingInfo] body:", JSON.stringify(req.body));
+  const product = await ProductService.updateShippingInfo(req.params.id as string, req.body);
+  return ApiResponse.success(res, "Shipping info updated.", product);
 });

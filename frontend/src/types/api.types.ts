@@ -94,6 +94,13 @@ export interface ApiProductSummary {
   shortDescription: string | null;
   informationImage?: string | null;
   informationDescription?: string | null;
+  packageWeight?: number | null;
+  packageLength?: number | null;
+  packageWidth?: number | null;
+  packageHeight?: number | null;
+  shippingClass?: string | null;
+  fragile?: boolean;
+  hazardous?: boolean;
   category: { name: string; slug: string };
   images: string[];
   thumbnail: string | null;
@@ -114,6 +121,13 @@ export interface ApiProductDetail extends Omit<ApiProductSummary, "images"> {
   technicalSpecs?: any;
   warranty?: any;
   primaryFeatures?: any;
+  packageWeight?: number | null;
+  packageLength?: number | null;
+  packageWidth?: number | null;
+  packageHeight?: number | null;
+  shippingClass?: string | null;
+  fragile?: boolean;
+  hazardous?: boolean;
   images: { url: string; alt: string }[];
   documents: { url: string; label: string }[];
   packages: ApiProductPackage[];
@@ -174,6 +188,18 @@ export interface ApiQuoteSubmit {
     unitPrice?: number;
   }[];
   message?: string;
+}
+
+export interface ApiShippingBox {
+  id: string;
+  name: string;
+  length: number;
+  width: number;
+  height: number;
+  maxWeight: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ApiContactSubmit {

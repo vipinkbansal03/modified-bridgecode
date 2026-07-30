@@ -21,6 +21,7 @@ export const createCustomerOrderSchema = z.object({
   shippingAddress: customerOrderAddressSchema,
   couponCode: z.string().trim().optional(),
   notes: z.string().trim().optional(),
+  shippingZoneId: z.string().optional(),
 });
 
 export type CreateCustomerOrderInput = z.infer<typeof createCustomerOrderSchema>;

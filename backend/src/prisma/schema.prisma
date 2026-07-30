@@ -123,6 +123,13 @@ model Product {
   technicalSpecs    Json?
   warranty          Json?
   primaryFeatures   Json?
+  packageWeight     Decimal?             @db.Decimal(10, 3)
+  packageLength     Decimal?             @db.Decimal(10, 2)
+  packageWidth      Decimal?             @db.Decimal(10, 2)
+  packageHeight     Decimal?             @db.Decimal(10, 2)
+  shippingClass     String?
+  fragile           Boolean              @default(false)
+  hazardous         Boolean              @default(false)
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
   deletedAt         DateTime?
@@ -773,6 +780,20 @@ model ShipmentEvent {
 
   @@index([shipmentId])
   @@map("shipment_events")
+}
+
+model ShippingBox {
+  id        String   @id @default(cuid())
+  name      String
+  length    Decimal  @db.Decimal(10, 2)
+  width     Decimal  @db.Decimal(10, 2)
+  height    Decimal  @db.Decimal(10, 2)
+  maxWeight Decimal  @db.Decimal(10, 2)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("shipping_boxes")
 }
 
 model PaymentGateway {

@@ -98,7 +98,15 @@ export const sidebarSections: SidebarSection[] = [
   {
     title: "Global Operations",
     items: [
-      { label: "Shipping", href: "/admin/shipping", icon: Truck, permission: "shipping.view" },
+      {
+        label: "Shipping",
+        icon: Truck,
+        permission: "shipping.view",
+        subItems: [
+          { label: "Providers & Zones", href: "/admin/shipping", permission: "shipping.view" },
+          { label: "Boxes", href: "/admin/shipping/boxes", permission: "shipping.view" },
+        ],
+      },
       { label: "Tax Configuration", href: "/admin/tax", icon: Calculator, permission: "tax.view" },
       {
         label: "Regions",

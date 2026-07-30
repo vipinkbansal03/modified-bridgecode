@@ -140,6 +140,23 @@ type ProductInput = {
   technicalSpecs?: ProductSpecInput[];
   warranty?: string[];
   primaryFeatures?: ProductHighlightInput[];
+  packageWeight?: number | string | null;
+  packageLength?: number | string | null;
+  packageWidth?: number | string | null;
+  packageHeight?: number | string | null;
+  shippingClass?: string | null;
+  fragile?: boolean;
+  hazardous?: boolean;
+};
+
+type ShippingInfoInput = {
+  packageWeight?: number | string | null;
+  packageLength?: number | string | null;
+  packageWidth?: number | string | null;
+  packageHeight?: number | string | null;
+  shippingClass?: string | null;
+  fragile?: boolean;
+  hazardous?: boolean;
 };
 
 type ProductListQuery = {
@@ -300,6 +317,19 @@ type BulkVariantResult = {
   success: boolean;
   error?: string;
 };
+
+const VARIANT_COUNTRY_PRICE_EXPORT_COLUMNS = [
+  { key: "variantId", header: "variantId" },
+  { key: "sku", header: "sku" },
+  { key: "variantTitle", header: "variantTitle" },
+  { key: "countryCode", header: "countryCode" },
+  { key: "currencyCode", header: "currencyCode" },
+  { key: "mrp", header: "mrp" },
+  { key: "sellingPrice", header: "sellingPrice" },
+  { key: "dealerPrice", header: "dealerPrice" },
+  { key: "doctorRetailerPrice", header: "doctorRetailerPrice" },
+  { key: "stock", header: "stock" },
+] as const;
 
 type PricingRuleInput = {
   tierId?: string | null;
@@ -680,6 +710,26 @@ export async function updateProduct(id: string, data: Partial<ProductInput>) {
     const product = await tx.product.update({ where: { id }, data: updateData as Prisma.ProductUpdateInput });
     await syncStorefrontVisibility(tx, product.id, product.status, existing.status);
     return product;
+  });
+}
+
+// ─── Shipping Info ────────────────────────────────────────
+
+export async function updateShippingInfo(id: string, data: ShippingInfoInput) {
+  const existing = await prisma.product.findUnique({ where: { id, deletedAt: null }, select: { id: true } });
+  if (!existing) throw new AppError("Product not found.", 404);
+
+  return prisma.product.update({
+    where: { id },
+    data: {
+      ...(data.packageWeight !== undefined ? { packageWeight: data.packageWeight } : {}),
+      ...(data.packageLength !== undefined ? { packageLength: data.packageLength } : {}),
+      ...(data.packageWidth !== undefined ? { packageWidth: data.packageWidth } : {}),
+      ...(data.packageHeight !== undefined ? { packageHeight: data.packageHeight } : {}),
+      ...(data.shippingClass !== undefined ? { shippingClass: data.shippingClass || null } : {}),
+      ...(data.fragile !== undefined ? { fragile: data.fragile } : {}),
+      ...(data.hazardous !== undefined ? { hazardous: data.hazardous } : {}),
+    },
   });
 }
 
@@ -1840,6 +1890,139 @@ export async function bulkUpdateVariants(
       succeeded: results.filter((result) => result.success).length,
       failed: results.filter((result) => !result.success).length,
     },
+  };
+}
+
+async function getVariantPriceImportCountry(productId: string, countryId: string) {
+  await getProduct(productId);
+  const country = await prisma.country.findUnique({
+    where: { id: countryId },
+    select: { id: true, name: true, code: true, currency: { select: { code: true, symbol: true } } },
+  });
+  if (!country) throw new AppError("Selected country was not found.", 404);
+  return country;
+}
+
+export async function exportVariantCountryPricesSpreadsheet(productId: string, countryId: string) {
+  const country = await getVariantPriceImportCountry(productId, countryId);
+  const variants = await prisma.productVariant.findMany({
+    where: { productId },
+    orderBy: [{ title: "asc" }, { sku: "asc" }],
+    include: {
+      prices: {
+        where: { countryId },
+        take: 1,
+        include: { currency: true },
+      },
+      inventories: {
+        where: { countryId: null },
+        take: 1,
+      },
+    },
+  });
+
+  return writeSpreadsheetBuffer(
+    variants.map((variant) => {
+      const price = variant.prices[0];
+      const inventory = variant.inventories[0];
+      return {
+        variantId: variant.id,
+        sku: variant.sku ?? "",
+        variantTitle: variant.title,
+        countryCode: country.code,
+        currencyCode: price?.currency.code ?? country.currency.code,
+        mrp: price ? Number(price.mrp) : "",
+        sellingPrice: price ? Number(price.sellingPrice) : "",
+        dealerPrice: price?.dealerPrice != null ? Number(price.dealerPrice) : "",
+        doctorRetailerPrice: price?.distributorPrice != null ? Number(price.distributorPrice) : "",
+        stock: inventory ? inventory.stock : "",
+      };
+    }),
+    `${country.code} Variant Prices`,
+    VARIANT_COUNTRY_PRICE_EXPORT_COLUMNS.map((column) => ({ key: column.key, header: column.header })),
+  );
+}
+
+function readVariantPriceCell(row: Record<string, string>, key: string) {
+  return row[key]?.trim() ?? "";
+}
+
+export async function importVariantCountryPricesSpreadsheet(
+  productId: string,
+  countryId: string,
+  filePath: string,
+  adjustedBy?: string,
+) {
+  const country = await getVariantPriceImportCountry(productId, countryId);
+  const rows = readSpreadsheetRows(filePath);
+  if (!rows.length) throw new AppError("Spreadsheet did not contain any variant price rows.", 400);
+
+  const variantIds = Array.from(new Set(rows.map((row) => readVariantPriceCell(row, "variantId")).filter(Boolean)));
+  const skus = Array.from(new Set(rows.map((row) => readVariantPriceCell(row, "sku")).filter(Boolean)));
+  if (!variantIds.length && !skus.length) {
+    throw new AppError("Spreadsheet must include variantId or sku values from the export file.", 400);
+  }
+  const variants = await prisma.productVariant.findMany({
+    where: {
+      productId,
+      OR: [
+        ...(variantIds.length ? [{ id: { in: variantIds } }] : []),
+        ...(skus.length ? [{ sku: { in: skus } }] : []),
+      ],
+    },
+    select: { id: true, sku: true },
+  });
+  const variantById = new Map(variants.map((variant) => [variant.id, variant]));
+  const variantBySku = new Map(variants.filter((variant) => variant.sku).map((variant) => [variant.sku as string, variant]));
+
+  const updates: BulkVariantUpdate[] = [];
+  const issues: { row: number; message: string }[] = [];
+
+  rows.forEach((row, index) => {
+    const rowNumber = index + 2;
+    const rowCountryCode = readVariantPriceCell(row, "countryCode").toUpperCase();
+    if (rowCountryCode && rowCountryCode !== country.code) {
+      issues.push({ row: rowNumber, message: `Row countryCode must be ${country.code} for the selected country.` });
+      return;
+    }
+
+    const variantId = readVariantPriceCell(row, "variantId");
+    const sku = readVariantPriceCell(row, "sku");
+    const variant = (variantId && variantById.get(variantId)) || (sku && variantBySku.get(sku));
+    if (!variant) {
+      issues.push({ row: rowNumber, message: "Variant was not found for this product. Keep variantId or sku from the export file." });
+      return;
+    }
+
+    const price = {
+      mrp: readVariantPriceCell(row, "mrp"),
+      sellingPrice: readVariantPriceCell(row, "sellingPrice"),
+      dealerPrice: readVariantPriceCell(row, "dealerPrice"),
+      distributorPrice: readVariantPriceCell(row, "doctorRetailerPrice"),
+    };
+    const stock = readVariantPriceCell(row, "stock");
+
+    if (!price.mrp && !price.sellingPrice && !price.dealerPrice && !price.distributorPrice && !stock) {
+      issues.push({ row: rowNumber, message: "Provide at least one price field or stock value." });
+      return;
+    }
+
+    updates.push({
+      variantId: variant.id,
+      countryId,
+      price,
+      ...(stock ? { stock } : {}),
+    });
+  });
+
+  if (issues.length) {
+    throw new AppError(`Import validation failed: ${issues.slice(0, 5).map((issue) => `row ${issue.row}: ${issue.message}`).join("; ")}`, 400);
+  }
+
+  const result = await bulkUpdateVariants(productId, updates, adjustedBy);
+  return {
+    country: { id: country.id, code: country.code, name: country.name },
+    ...result,
   };
 }
 

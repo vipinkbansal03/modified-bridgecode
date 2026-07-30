@@ -39,6 +39,7 @@ import contactSubmissionRoutes from "./modules/contactSubmissions/contactSubmiss
 import orderRoutes from "./modules/orders/orders.routes";
 import shippingRoutes from "./modules/shipping/shipping.routes";
 import publicShippingRoutes from "./modules/shipping/publicShipping.routes";
+import shippingBoxRoutes from "./modules/shippingBoxes/shippingBoxes.routes";
 import paymentRoutes from "./modules/payments/payments.routes";
 import mediaRoutes from "./modules/media/media.routes";
 import translationRoutes from "./modules/translations/translations.routes";
@@ -127,6 +128,7 @@ app.use(`${API}/customers`, customerRoutes);
 app.use(`${API}/customer-roles`, customerRoleRoutes);
 app.use(`${API}/tiers`, tierRoutes);
 app.use(`${API}/shipping`, shippingRoutes);
+app.use(`${API}/shipping/boxes`, shippingBoxRoutes);
 app.use(`${API}/payments`, paymentRoutes);
 app.use(`${API}/media`, mediaRoutes);
 app.use(`${API}/translations`, translationRoutes);

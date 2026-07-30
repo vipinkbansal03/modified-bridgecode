@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, type ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useFormik } from "formik";
 import * as Yup from "yup";
-import { Upload, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search } from "lucide-react";
+import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column, toastMessages } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
@@ -64,6 +64,7 @@ const ALL_TABS: TabConfig[] = [
   { id: 8, label: "Product Attributes", permission: "attributes.view" },
   { id: 9, label: "Country Availability", permission: "countries.view" },
   { id: 10, label: "SEO" },
+  { id: 11, label: "Shipping Info" },
 ];
 
 const basicSchema = Yup.object({
@@ -87,6 +88,17 @@ const basicSchema = Yup.object({
   warranty: Yup.array().of(Yup.string()),
   primaryFeatures: Yup.array().of(Yup.object({ title: Yup.string(), description: Yup.string() })),
 });
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
 
 type ProductEditorFormValues = {
   title: string;
@@ -333,6 +345,7 @@ type BulkVariantDraft = {
 
 type BulkCountryOption = {
   id: string;
+  code?: string;
   label: string;
   currencySymbol?: string | null;
 };
@@ -605,6 +618,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [filterStatus, setFilterStatus] = useState("");
   const [pageSize, setPageSize] = useState(100);
   const [currentPage, setCurrentPage] = useState(1);
+  const [shippingPackageWeight, setShippingPackageWeight] = useState("");
+  const [shippingPackageLength, setShippingPackageLength] = useState("");
+  const [shippingPackageWidth, setShippingPackageWidth] = useState("");
+  const [shippingPackageHeight, setShippingPackageHeight] = useState("");
+  const [shippingClass, setShippingClass] = useState("");
+  const [shippingFragile, setShippingFragile] = useState(false);
+  const [shippingHazardous, setShippingHazardous] = useState(false);
+  const [savingShipping, setSavingShipping] = useState(false);
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [bulkActionType, setBulkActionType] = useState("Bulk Action");
@@ -659,6 +680,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [bulkDrafts, setBulkDrafts] = useState<Record<string, BulkVariantDraft>>({});
   const [bulkRowErrors, setBulkRowErrors] = useState<Record<string, string>>({});
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [variantPriceExporting, setVariantPriceExporting] = useState(false);
+  const [variantPriceImporting, setVariantPriceImporting] = useState(false);
+  const variantPriceImportInputRef = useRef<HTMLInputElement>(null);
   const [selectedVariantIds, setSelectedVariantIds] = useState<string[]>([]);
   const [tierRuleDraft, setTierRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
   const [moqRuleDraft, setMoqRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
@@ -1923,6 +1947,18 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   }, [totalPages, currentPage]);
 
+  useEffect(() => {
+    if (product) {
+      setShippingPackageWeight(product.packageWeight != null ? String(product.packageWeight) : "");
+      setShippingPackageLength(product.packageLength != null ? String(product.packageLength) : "");
+      setShippingPackageWidth(product.packageWidth != null ? String(product.packageWidth) : "");
+      setShippingPackageHeight(product.packageHeight != null ? String(product.packageHeight) : "");
+      setShippingClass(product.shippingClass || "");
+      setShippingFragile(product.fragile || false);
+      setShippingHazardous(product.hazardous || false);
+    }
+  }, [product]);
+
   const paginatedVariantRows = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     const end = start + pageSize;
@@ -1933,6 +1969,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     (productCountries as CountryAvailability[]).forEach((country) => {
       countries.set(country.id, {
         id: country.id,
+        code: country.code,
         label: `${country.name} (${country.code})`,
         currencySymbol: country.currency?.symbol,
       });
@@ -1952,6 +1989,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         if (!countryId || countries.has(countryId)) return;
         countries.set(countryId, {
           id: countryId,
+          code: price.country?.code,
           label: price.country ? `${price.country.name} (${price.country.code})` : countryId,
           currencySymbol: price.currency?.symbol,
         });
@@ -2361,6 +2399,62 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       showToast(getAdminErrorMessage(error, "Bulk update failed."), "error");
     } finally {
       setBulkSaving(false);
+    }
+  };
+
+  const exportSelectedCountryVariantPrices = async () => {
+    if (!selectedBulkCountryId) {
+      showToast("Select a country before exporting variant prices.", "error");
+      return;
+    }
+    const country = bulkCountryOptions.find((option) => option.id === selectedBulkCountryId);
+    setVariantPriceExporting(true);
+    try {
+      const response = await adminApi.get(`/products/${productId}/variants/prices/export`, {
+        params: { countryId: selectedBulkCountryId },
+        responseType: "blob",
+      });
+      const countryCode = country?.code || "country";
+      downloadBlob(response.data as Blob, `${product.slug || productId}-${countryCode}-variant-prices.xlsx`);
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to export variant prices."), "error");
+    } finally {
+      setVariantPriceExporting(false);
+    }
+  };
+
+  const importSelectedCountryVariantPrices = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!selectedBulkCountryId) {
+      showToast("Select a country before importing variant prices.", "error");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("countryId", selectedBulkCountryId);
+
+    setVariantPriceImporting(true);
+    try {
+      const response = await adminApi.post(`/products/${productId}/variants/prices/import`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const summary = response.data?.data?.summary as { succeeded?: number; failed?: number } | undefined;
+      showToast(
+        summary?.failed
+          ? `Imported ${summary.succeeded ?? 0}; ${summary.failed} failed.`
+          : `Imported ${summary?.succeeded ?? 0} variant price${summary?.succeeded === 1 ? "" : "s"}.`,
+        summary?.failed ? "error" : "success",
+      );
+      setBulkDrafts({});
+      setBulkRowErrors({});
+      await refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to import variant prices."), "error");
+    } finally {
+      setVariantPriceImporting(false);
     }
   };
 
@@ -3874,6 +3968,35 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       <option key={country.id} value={country.id}>{country.label}</option>
                     ))}
                   </select>
+                )}
+                {bulkEditMode && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={exportSelectedCountryVariantPrices}
+                      disabled={!selectedBulkCountryId || variantPriceExporting}
+                      className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] disabled:opacity-40"
+                    >
+                      <Download size={14} />
+                      {variantPriceExporting ? "Exporting..." : "Export Prices"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => variantPriceImportInputRef.current?.click()}
+                      disabled={!selectedBulkCountryId || variantPriceImporting}
+                      className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] disabled:opacity-40"
+                    >
+                      <Upload size={14} />
+                      {variantPriceImporting ? "Importing..." : "Import Prices"}
+                    </button>
+                    <input
+                      ref={variantPriceImportInputRef}
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={importSelectedCountryVariantPrices}
+                    />
+                  </>
                 )}
                 {bulkEditMode && (
                   <button
@@ -6128,6 +6251,90 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               <p className="cursor-pointer text-[16px] font-medium text-[#1A0DAB] hover:underline">{formik.values.seoTitle || product.title}</p>
               <p className="text-[13px] text-[#006621]">modortho.com › products › {product.slug}</p>
               <p className="mt-1 line-clamp-2 text-[13.5px] text-[#545454]">{formik.values.seoDescription || product.shortDescription || "No meta description."}</p>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 11 && (
+          <div className="p-6 space-y-5">
+            <div className="mb-4">
+              <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Shipping Information</h3>
+              <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Package weight and dimensions used by the shipping calculator.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <AdminInput
+                label="Package Weight (kg)"
+                type="text"
+                placeholder="e.g. 0.5"
+                value={shippingPackageWeight}
+                onChange={(e) => setShippingPackageWeight(e.target.value)}
+              />
+              <AdminInput
+                label="Package Length (cm)"
+                type="text"
+                placeholder="e.g. 30"
+                value={shippingPackageLength}
+                onChange={(e) => setShippingPackageLength(e.target.value)}
+              />
+              <AdminInput
+                label="Package Width (cm)"
+                type="text"
+                placeholder="e.g. 20"
+                value={shippingPackageWidth}
+                onChange={(e) => setShippingPackageWidth(e.target.value)}
+              />
+              <AdminInput
+                label="Package Height (cm)"
+                type="text"
+                placeholder="e.g. 10"
+                value={shippingPackageHeight}
+                onChange={(e) => setShippingPackageHeight(e.target.value)}
+              />
+              <AdminInput
+                label="Shipping Class"
+                type="text"
+                placeholder="e.g. Standard, Express, Heavy"
+                value={shippingClass}
+                onChange={(e) => setShippingClass(e.target.value)}
+              />
+              <div className="flex items-end gap-6 pb-2">
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input type="checkbox" checked={shippingFragile} onChange={(e) => setShippingFragile(e.target.checked)} className="rounded" />
+                  <span className="text-[13.5px] text-[#1A1A1A]">Fragile</span>
+                </label>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input type="checkbox" checked={shippingHazardous} onChange={(e) => setShippingHazardous(e.target.checked)} className="rounded" />
+                  <span className="text-[13.5px] text-[#1A1A1A]">Hazardous</span>
+                </label>
+              </div>
+            </div>
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  setSavingShipping(true);
+                  try {
+                    await adminApi.put(`/products/${productId}/shipping-info`, {
+                      packageWeight: shippingPackageWeight ? Number(shippingPackageWeight) : null,
+                      packageLength: shippingPackageLength ? Number(shippingPackageLength) : null,
+                      packageWidth: shippingPackageWidth ? Number(shippingPackageWidth) : null,
+                      packageHeight: shippingPackageHeight ? Number(shippingPackageHeight) : null,
+                      shippingClass: shippingClass || null,
+                      fragile: shippingFragile,
+                      hazardous: shippingHazardous,
+                    });
+                    showToast("Shipping info saved.");
+                  } catch (error) {
+                    showToast(getAdminErrorMessage(error, "Failed to save shipping info."), "error");
+                  } finally {
+                    setSavingShipping(false);
+                  }
+                }}
+                disabled={savingShipping}
+                className="rounded-md bg-[#E31E24] px-5 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
+              >
+                {savingShipping ? "Saving…" : "Save Shipping Info"}
+              </button>
             </div>
           </div>
         )}

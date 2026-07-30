@@ -20,9 +20,11 @@ import {
   listCustomerAddresses,
   validateCoupon,
   fetchPublicPaymentMethods,
+  fetchAvailableProviders,
   initiateCustomerPayment,
   verifyCustomerPayment,
   type AvailablePaymentMethod,
+  type AvailableShippingOption,
   type CouponValidationResult,
   type CustomerAddress,
   type CustomerOrderEstimate,
@@ -72,6 +74,10 @@ export default function CheckoutPage() {
   const [shippingEstimate, setShippingEstimate] =
     useState<ShippingEstimate | null>(null);
   const [shippingError, setShippingError] = useState<string | null>(null);
+  const [availableProviders, setAvailableProviders] = useState<
+    AvailableShippingOption[]
+  >([]);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [appliedCoupon, setAppliedCoupon] = useState<CouponValidationResult | null>(() => {
     if (typeof window !== "undefined") {
       const stored = window.localStorage.getItem("applied_coupon");
@@ -311,11 +317,15 @@ export default function CheckoutPage() {
     totals.currencySymbol,
   ]);
 
+  const selectedShippingOption = useMemo(() => {
+    return availableProviders.find((p) => p.zoneId === selectedZoneId) ?? null;
+  }, [availableProviders, selectedZoneId]);
+
   const approvalBlockMessage = currentCustomer?.approvalStatus
     ? APPROVAL_MESSAGES[currentCustomer.approvalStatus]
     : null;
   const canPlaceOrder =
-    canSubmit && Boolean(shippingEstimate?.available) && !approvalBlockMessage;
+    canSubmit && Boolean(shippingEstimate?.available) && Boolean(selectedZoneId) && !approvalBlockMessage;
 
   const orderPayload = useMemo(
     () => ({
@@ -344,14 +354,18 @@ export default function CheckoutPage() {
       if (estimate !== null) setEstimate(null);
       if (shippingEstimate !== null) setShippingEstimate(null);
       if (shippingError !== null) setShippingError(null);
+      setAvailableProviders([]);
+      setSelectedZoneId(null);
       return;
     }
 
     let cancelled = false;
     setShippingError(null);
+    const countryCode = form.countryCode.trim().toUpperCase();
+    const orderValue = totals.subtotal;
     calculateShipping({
-      countryCode: form.countryCode.trim().toUpperCase(),
-      orderValue: totals.subtotal,
+      countryCode,
+      orderValue,
     })
       .then((nextShipping) => {
         if (cancelled) return;
@@ -369,6 +383,15 @@ export default function CheckoutPage() {
             getCustomerErrorMessage(err, SHIPPING_UNAVAILABLE_MESSAGE),
           );
         }
+      });
+    fetchAvailableProviders({ countryCode, orderValue })
+      .then((providers) => {
+        if (cancelled) return;
+        setAvailableProviders(providers);
+        setSelectedZoneId(providers.length > 0 ? providers[0].zoneId : null);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailableProviders([]);
       });
     estimateCustomerOrder(orderPayload)
       .then((nextEstimate) => {
@@ -513,7 +536,10 @@ export default function CheckoutPage() {
     setIsSubmitting(true);
     setError(null);
     try {
-      const created = await createCustomerOrder(orderPayload);
+      const created = await createCustomerOrder({
+        ...orderPayload,
+        shippingZoneId: selectedZoneId ?? undefined,
+      });
       const selectedMethod = availablePaymentMethods.find(
         (m) => m.code === selectedPaymentCode,
       );
@@ -897,37 +923,63 @@ export default function CheckoutPage() {
                 <h2 className="mb-4 text-[18px] font-semibold text-ink">
                   Shipping method
                 </h2>
-                <div className="rounded-md border border-line bg-grey px-4 py-3">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-[14px] font-semibold text-ink">
-                        {shippingEstimate?.available
-                          ? (shippingEstimate.provider ?? "Shipping")
-                          : "Shipping unavailable"}
-                      </p>
-                      <p className="mt-1 text-[12.5px] text-steel">
-                        {shippingEstimate?.available
-                          ? shippingEstimate.estimatedDays
-                            ? `Estimated delivery: ${shippingEstimate.estimatedDays}`
-                            : "Calculated from the selected shipping country."
-                          : (shippingError ??
-                            "Complete the address to check shipping availability.")}
-                      </p>
-                    </div>
-                    <strong className="text-[14px] text-ink">
-                      {shippingEstimate?.available
-                        ? shippingEstimate.isFree
-                          ? "Free"
-                          : formatMoney(
-                              estimate?.currency?.symbol ??
-                                totals.currencySymbol,
-                              estimate?.shippingCharge ??
-                                shippingEstimate.charge,
-                            )
-                        : "-"}
-                    </strong>
+                {availableProviders.length > 0 ? (
+                  <div className="space-y-2">
+                    {availableProviders.map((option) => {
+                      const isSelected = selectedZoneId === option.zoneId;
+                      return (
+                        <label
+                          key={option.zoneId}
+                          className={`flex items-center justify-between rounded-lg border p-3 cursor-pointer transition-colors ${
+                            isSelected
+                              ? "border-brand bg-brand/5"
+                              : "border-line bg-white"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="radio"
+                              name="shippingMethod"
+                              checked={isSelected}
+                              onChange={() => setSelectedZoneId(option.zoneId)}
+                              className="text-brand focus:ring-brand"
+                            />
+                            <div>
+                              <p className="text-[14px] font-semibold text-ink">
+                                {option.provider}
+                              </p>
+                              {option.estimatedDays && (
+                                <p className="text-[12px] text-steel mt-0.5">
+                                  Estimated delivery: {option.estimatedDays}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <strong className="text-[14px] text-ink">
+                            {option.isFree
+                              ? "Free"
+                              : formatMoney(
+                                  estimate?.currency?.symbol ??
+                                    totals.currencySymbol,
+                                  option.charge,
+                                )}
+                          </strong>
+                        </label>
+                      );
+                    })}
                   </div>
-                </div>
+                ) : (
+                  <div className="rounded-md border border-line bg-grey px-4 py-3">
+                    <p className="text-[14px] font-semibold text-ink">
+                      {shippingError || "Shipping unavailable"}
+                    </p>
+                    <p className="mt-1 text-[12.5px] text-steel">
+                      {shippingError
+                        ? ""
+                        : "Complete the address to check shipping availability."}
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="rounded-md border border-line bg-white p-5">
@@ -1216,14 +1268,21 @@ export default function CheckoutPage() {
                 <div className="flex items-center justify-between text-[14px]">
                   <span className="text-steel">Shipping</span>
                   <strong className="text-ink">
-                    {shippingEstimate?.available
-                      ? shippingEstimate.isFree
+                    {selectedShippingOption
+                      ? selectedShippingOption.isFree
                         ? "Free"
                         : formatMoney(
                             estimate?.currency?.symbol ?? totals.currencySymbol,
-                            estimate?.shippingCharge ?? shippingEstimate.charge,
+                            selectedShippingOption.charge,
                           )
-                      : "Unavailable"}
+                      : shippingEstimate?.available
+                        ? shippingEstimate.isFree
+                          ? "Free"
+                          : formatMoney(
+                              estimate?.currency?.symbol ?? totals.currencySymbol,
+                              estimate?.shippingCharge ?? shippingEstimate.charge,
+                            )
+                        : "Unavailable"}
                   </strong>
                 </div>
                 <div className="mt-4 space-y-2 border-t border-line pt-3">
@@ -1503,17 +1562,26 @@ export default function CheckoutPage() {
               <span>Shipping</span>
 
               <span className="font-mono">
-                {estimate?.shippingIsFree
-                  ? "FREE"
-                  : formatMoney(
-                      estimate?.currency?.symbol ?? totals.currencySymbol,
-                      estimate?.shippingCharge ?? 0,
-                    )}
+                {selectedShippingOption
+                  ? selectedShippingOption.isFree
+                    ? "FREE"
+                    : formatMoney(
+                        estimate?.currency?.symbol ?? totals.currencySymbol,
+                        selectedShippingOption.charge,
+                      )
+                  : estimate?.shippingIsFree
+                    ? "FREE"
+                    : formatMoney(
+                        estimate?.currency?.symbol ?? totals.currencySymbol,
+                        estimate?.shippingCharge ?? 0,
+                      )}
               </span>
             </div>
 
             <div className="mt-1 text-[12px] text-steel-2">
-              {estimate?.shippingProvider || "Standard Shipping"}
+              {selectedShippingOption?.provider ??
+                estimate?.shippingProvider ??
+                "Standard Shipping"}
             </div>
           </div>
         </div>
