@@ -1,6 +1,8 @@
 import { prisma } from "../../config/database";
 import { AppError, getPagination } from "../../utils/apiResponse";
+import { logger } from "../../config/logger";
 import { readSpreadsheetRows, writeSpreadsheetBuffer } from "../../utils/spreadsheet";
+import { validateIdentifier, clearTaxValidationCache as clearIdentifierValidationCache } from "./taxValidation.service";
 
 const TAX_RULE_TYPES = ["CGST", "SGST", "VAT", "SALES_TAX"] as const;
 const TAX_MODES = ["EXCLUSIVE", "INCLUSIVE", "EXEMPT"] as const;
@@ -120,6 +122,8 @@ function normalizeStatus(value: string | undefined) {
   if (!STATUS_VALUES.includes(status as never)) throw new AppError("Invalid tax rule status.", 400);
   return status;
 }
+
+export { clearIdentifierValidationCache as clearVatValidationCache };
 
 function normalizeSortBy(value?: string) {
   if (!value) return "updatedAt";
@@ -584,3 +588,65 @@ export async function importTaxSpreadsheet(filePath: string) {
     },
   };
 }
+
+/**
+ * Validates a business tax identifier (GSTIN for India, VAT ID for Europe, EIN for US)
+ */
+export async function validateTaxIdentifier(taxId: string, taxIdType: string, countryCode: string) {
+  const result = await validateIdentifier(taxId, taxIdType, countryCode);
+  return {
+    isValid: result.isValid,
+    taxId: result.taxId ?? result.identifier,
+    type: result.identifierType,
+    legalName: result.companyName ?? null,
+    tradeName: result.companyName ?? null,
+    address: result.companyAddress ?? null,
+    verifiedAt: result.validatedAt,
+    validatedBy: result.validationSource,
+    countryCode: result.countryCode,
+    validationSource: result.validationSource,
+    message: result.message,
+  };
+}
+
+/**
+ * Validates shipping address jurisdiction fields for correct tax billing
+ */
+export async function validateAddressDetails(address: {
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  countryId?: string;
+}) {
+  if (!address.city || address.city.trim().length < 2) {
+    throw new AppError("City name is invalid or missing.", 400);
+  }
+  if (!address.state || address.state.trim().length < 2) {
+    throw new AppError("State/Jurisdiction is missing or invalid.", 400);
+  }
+  if (!address.postalCode || address.postalCode.trim().length < 3) {
+    throw new AppError("Postal code is missing or too short.", 400);
+  }
+  if (!address.countryId) {
+    throw new AppError("Country is required.", 400);
+  }
+
+  const country = await prisma.country.findUnique({
+    where: { id: address.countryId }
+  });
+  if (!country || country.status !== "ACTIVE") {
+    throw new AppError("Shipping country is not active or supported.", 400);
+  }
+
+  return {
+    isValid: true,
+    normalizedAddress: {
+      city: address.city.trim(),
+      state: address.state.trim(),
+      postalCode: address.postalCode.trim().replace(/[-\s]/g, ""),
+      countryId: address.countryId,
+      countryCode: country.code
+    }
+  };
+}
+

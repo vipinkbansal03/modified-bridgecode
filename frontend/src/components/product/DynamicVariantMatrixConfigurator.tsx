@@ -148,6 +148,7 @@ function buildCartItems(
   variants: NormalizedVariant[],
   quantityMap: Record<string, number>,
   priceMap: Record<string, ApiProductPrice | null>,
+  previewPriceMap?: Record<string, number>,
 ) {
   const items: Array<{ cart: CartItem; quote: QuoteCartItem }> = [];
 
@@ -165,7 +166,7 @@ function buildCartItems(
       variantTitle: variant.title,
       sku: variant.sku,
       quantity,
-      unitPrice: price.sellingPrice,
+      unitPrice: previewPriceMap?.[variantId] ?? price.sellingPrice,
       currencyCode: price.currencyCode,
       currencySymbol: price.currencySymbol,
       selectedAttributes: variant.attributeCombination,
@@ -269,6 +270,9 @@ export function DynamicVariantMatrixConfigurator({
     () => packageOptions[0]?.id ?? "",
   );
   const [quantityMap, setQuantityMap] = useState<Record<string, number>>({});
+  const [previewPriceMap, setPreviewPriceMap] = useState<
+    Record<string, number>
+  >({});
   const [feedback, setFeedback] = useState<{
     kind: "success" | "error";
     message: string;
@@ -329,13 +333,16 @@ export function DynamicVariantMatrixConfigurator({
                 variant,
                 quantity,
                 price,
-                resolvedUnitPrice: price.sellingPrice,
-                total: price.sellingPrice * quantity,
+                resolvedUnitPrice:
+                  previewPriceMap[variant.id] ?? price.sellingPrice,
+                total:
+                  (previewPriceMap[variant.id] ?? price.sellingPrice) *
+                  quantity,
               }
             : null;
         })
         .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
-    [normalizedVariants, quantityMap, variantPriceMap],
+    [normalizedVariants, previewPriceMap, quantityMap, variantPriceMap],
   );
 
   const totals = useMemo(() => {
@@ -386,6 +393,7 @@ export function DynamicVariantMatrixConfigurator({
       normalizedVariants,
       quantityMap,
       variantPriceMap,
+      previewPriceMap,
     );
     if (!items.length) {
       setFeedback({
@@ -410,6 +418,7 @@ export function DynamicVariantMatrixConfigurator({
       normalizedVariants,
       quantityMap,
       variantPriceMap,
+      previewPriceMap,
     );
     if (!items.length) {
       setFeedback({
@@ -447,7 +456,57 @@ export function DynamicVariantMatrixConfigurator({
     });
   };
 
+  useEffect(() => {
+    const previewItems = currentCustomer
+      ? apiProduct.variants.map((v) => ({ variantId: v.id, quantity: quantityMap[v.id] || 1 }))
+      : Object.entries(quantityMap)
+          .filter(([, quantity]) => quantity > 0)
+          .map(([variantId, quantity]) => ({ variantId, quantity }));
 
+    if (!previewItems.length) {
+      setPreviewPriceMap({});
+      return;
+    }
+
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        const customerToken = window.localStorage.getItem("customer_token");
+        const response = await apiClient.post(
+          `/products/${apiProduct.slug}/price-preview`,
+          { items: previewItems },
+          {
+            params: selectedCountryCode
+              ? { countryCode: selectedCountryCode }
+              : undefined,
+            headers: customerToken
+              ? { Authorization: `Bearer ${customerToken}` }
+              : undefined,
+          },
+        );
+
+        if (!active) return;
+
+        const previews = (response.data.data ?? []) as Array<{
+          variantId: string;
+          unitPrice: number;
+        }>;
+        setPreviewPriceMap(
+          previews.reduce<Record<string, number>>((acc, preview) => {
+            acc[preview.variantId] = preview.unitPrice;
+            return acc;
+          }, {}),
+        );
+      } catch {
+        if (active) setPreviewPriceMap({});
+      }
+    }, 180);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [apiProduct.slug, apiProduct.variants, quantityMap, selectedCountryCode, currentCustomer]);
 
   if (!matrixEnabled) return null;
 
@@ -594,7 +653,7 @@ export function DynamicVariantMatrixConfigurator({
                           const minPositive = Math.max(1, variant?.moq ?? 1);
                           const displayUnitPrice =
                             variant && price
-                              ? price.sellingPrice
+                              ? (previewPriceMap[variant.id] ?? price.sellingPrice)
                               : null;
 
                           return (

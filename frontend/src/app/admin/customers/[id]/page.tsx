@@ -36,6 +36,10 @@ type Customer = {
   customerRole?: { id: string; key: string; name: string } | null;
   tierId?: string | null;
   tier?: { id: string; name: string } | null;
+  taxId?: string | null;
+  taxIdType?: string | null;
+  taxIdStatus?: string | null;
+  taxExemptCertificateUrl?: string | null;
 };
 
 type CustomerOrder = {
@@ -142,7 +146,19 @@ export default function AdminCustomerDetailPage() {
     }
   };
 
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", status: "ACTIVE", customerType: "RETAIL", approvalStatus: "ACTIVE" });
+  const [form, setForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    status: "ACTIVE",
+    customerType: "RETAIL",
+    approvalStatus: "ACTIVE",
+    taxId: "",
+    taxIdType: "",
+    taxIdStatus: "UNVERIFIED",
+    taxExemptCertificateUrl: "",
+  });
 
   useEffect(() => {
     if (!customer) return;
@@ -154,6 +170,10 @@ export default function AdminCustomerDetailPage() {
       status: customer.status ?? "ACTIVE",
       customerType: customer.customerType ?? "RETAIL",
       approvalStatus: customer.approvalStatus ?? "ACTIVE",
+      taxId: customer.taxId ?? "",
+      taxIdType: customer.taxIdType ?? "",
+      taxIdStatus: customer.taxIdStatus ?? "UNVERIFIED",
+      taxExemptCertificateUrl: customer.taxExemptCertificateUrl ?? "",
     });
   }, [customer]);
 
@@ -168,6 +188,10 @@ export default function AdminCustomerDetailPage() {
         status: form.status,
         customerType: form.customerType,
         approvalStatus: form.approvalStatus,
+        taxId: form.taxId || null,
+        taxIdType: form.taxIdType || null,
+        taxIdStatus: form.taxIdStatus,
+        taxExemptCertificateUrl: form.taxExemptCertificateUrl || null,
       });
       showToast("Customer profile updated.", "success");
       router.push(`/admin/customers/${customerId}?mode=view`);
@@ -283,6 +307,41 @@ export default function AdminCustomerDetailPage() {
                     { value: "SUSPENDED", label: "Suspended" },
                   ]}
                 />
+                <AdminInput label="Tax ID" value={form.taxId} onChange={(event) => setForm((prev) => ({ ...prev, taxId: event.target.value }))} disabled={isReadOnly} />
+                <AdminSelect
+                  label="Tax ID Type"
+                  value={form.taxIdType}
+                  onChange={(event) => setForm((prev) => ({ ...prev, taxIdType: event.target.value }))}
+                  disabled={isReadOnly}
+                  options={[
+                    { value: "", label: "None / Unspecified" },
+                    { value: "GSTIN", label: "India GSTIN" },
+                    { value: "VAT", label: "EU VAT ID" },
+                    { value: "EIN", label: "US EIN" },
+                    { value: "OTHER", label: "Other" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Tax ID Verification Status"
+                  value={form.taxIdStatus}
+                  onChange={(event) => setForm((prev) => ({ ...prev, taxIdStatus: event.target.value }))}
+                  disabled={isReadOnly}
+                  options={[
+                    { value: "UNVERIFIED", label: "Unverified" },
+                    { value: "PENDING", label: "Pending Verification" },
+                    { value: "VALID", label: "Valid" },
+                    { value: "INVALID", label: "Invalid" },
+                  ]}
+                />
+                <AdminInput label="Tax Resale Certificate URL" value={form.taxExemptCertificateUrl} onChange={(event) => setForm((prev) => ({ ...prev, taxExemptCertificateUrl: event.target.value }))} disabled={isReadOnly} />
+                {form.taxExemptCertificateUrl && (
+                  <div className="col-span-2 pt-2">
+                    <span className="text-[12.5px] font-medium text-[#6B6B6B]">Uploaded Resale Certificate: </span>
+                    <a href={form.taxExemptCertificateUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-[12.5px] font-medium">
+                      View Uploaded Document
+                    </a>
+                  </div>
+                )}
               </div>
 
               {!isReadOnly && (

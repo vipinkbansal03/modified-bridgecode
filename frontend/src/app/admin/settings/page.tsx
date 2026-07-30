@@ -5,7 +5,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } fr
 import { useRouter } from "next/navigation";
 import {
   Globe, Search, BarChart2, Megaphone, Share2, ShieldCheck, Code2, Cookie, MessageCircle, Mail,
-  CheckCircle2, AlertCircle, Eye, EyeOff, Save, RefreshCw, Lock, Upload, Plus, Trash2, ArrowUp, ArrowDown, Info,
+  CheckCircle2, AlertCircle, Eye, EyeOff, Save, RefreshCw, Lock, Upload, Plus, Trash2, ArrowUp, ArrowDown, Scale, Info,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -28,6 +28,7 @@ const TABS = [
   { id: "auth",         label: "Auth Pages",        icon: Lock },
   { id: "whatsapp",     label: "WhatsApp",          icon: MessageCircle },
   { id: "email",        label: "Email / SMTP",      icon: Mail },
+  { id: "tax",          label: "Tax & Compliance",  icon: Scale },
 ];
 
 type Setting = { id: string; key: string; value: string; group: string; label?: string | null; type: string; isSecret: boolean; isEnabled: boolean };
@@ -156,6 +157,11 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
   "general.favicon":         { group: "general",  type: "string" },
   "general.default_currency":{ group: "general",  type: "string" },
   "general.timezone":        { group: "general",  type: "string" },
+  // Tax & Compliance
+  "tax.seller_name":         { group: "tax",      type: "string" },
+  "tax.seller_gstin":        { group: "tax",      type: "string" },
+  "tax.seller_iec":          { group: "tax",      type: "string" },
+  "tax.ship_from_state":     { group: "tax",      type: "string" },
   // SEO
   "seo.default_title":              { group: "seo", type: "string" },
   "seo.default_description":        { group: "seo", type: "string" },
@@ -1075,6 +1081,25 @@ export default function SettingsPage() {
                 </FieldRow>
                 <FieldRow label="From Email">
                   <AdminInput type="email" value={g("email.from_email")} onChange={(e) => set("email.from_email", e.target.value)} placeholder="noreply@modortho.com" />
+                </FieldRow>
+              </div>
+            )}
+
+            {/* ── Tax & Compliance ── */}
+            {activeTab === "tax" && (
+              <div>
+                <p className="mb-4 text-[13px] text-[#8B8B8B]">Manage corporate tax registration numbers and fulfillment warehouse origin details.</p>
+                <FieldRow label="Seller Legal Name">
+                  <AdminInput value={g("tax.seller_name")} onChange={(e) => set("tax.seller_name", e.target.value)} placeholder="Modern Orthodontics Pvt Ltd" />
+                </FieldRow>
+                <FieldRow label="Seller GSTIN" hint="15-character GSTIN format for India domestic operations">
+                  <AdminInput value={g("tax.seller_gstin")} onChange={(e) => set("tax.seller_gstin", e.target.value)} placeholder="03AAAAA1111A1Z1" />
+                </FieldRow>
+                <FieldRow label="Seller Import Export Code (IEC)">
+                  <AdminInput value={g("tax.seller_iec")} onChange={(e) => set("tax.seller_iec", e.target.value)} placeholder="0300000000" />
+                </FieldRow>
+                <FieldRow label="Fulfillment Origin State" hint="Dynamic state code used for CGST/SGST vs IGST split calculations">
+                  <AdminInput value={g("tax.ship_from_state")} onChange={(e) => set("tax.ship_from_state", e.target.value)} placeholder="Punjab" />
                 </FieldRow>
               </div>
             )}

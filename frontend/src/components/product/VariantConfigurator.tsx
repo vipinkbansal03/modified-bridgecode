@@ -280,6 +280,9 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   const [drafts, setDrafts] = useState<DraftConfiguration[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [added, setAdded] = useState(false);
+  const [previewPriceMap, setPreviewPriceMap] = useState<
+    Record<string, number>
+  >({});
   const [summaryHighlighted, setSummaryHighlighted] = useState(false);
   const [quoteSummaryHighlighted, setQuoteSummaryHighlighted] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -319,7 +322,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     "$";
   const currencyCode = currentPrice?.currencyCode ?? selectedCurrency;
   const currentResolvedUnitPrice = currentVariant
-    ? (currentPrice?.sellingPrice ?? 0)
+    ? (previewPriceMap[currentVariant.id] ?? currentPrice?.sellingPrice ?? 0)
     : 0;
 
   const subtotal = drafts.reduce(
@@ -346,6 +349,57 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
+  useEffect(() => {
+    const previewItems = currentCustomer
+      ? apiProduct.variants.map((v) => ({ variantId: v.id, quantity: v.id === currentVariant?.id ? quantity : 1 }))
+      : currentVariant && quantity >= 1
+        ? [{ variantId: currentVariant.id, quantity }]
+        : [];
+
+    if (!previewItems.length) {
+      setPreviewPriceMap({});
+      return;
+    }
+
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        const customerToken = window.localStorage.getItem("customer_token");
+        const response = await apiClient.post(
+          `/products/${apiProduct.slug}/price-preview`,
+          { items: previewItems },
+          {
+            params: selectedCountryCode
+              ? { countryCode: selectedCountryCode }
+              : undefined,
+            headers: customerToken
+              ? { Authorization: `Bearer ${customerToken}` }
+              : undefined,
+          },
+        );
+
+        if (!active) return;
+
+        const previews = (response.data.data ?? []) as Array<{
+          variantId: string;
+          unitPrice: number;
+        }>;
+        setPreviewPriceMap(
+          previews.reduce<Record<string, number>>((acc, preview) => {
+            acc[preview.variantId] = preview.unitPrice;
+            return acc;
+          }, {}),
+        );
+      } catch {
+        if (active) setPreviewPriceMap({});
+      }
+    }, 180);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [apiProduct.slug, apiProduct.variants, currentVariant?.id, quantity, selectedCountryCode, currentCustomer]);
   if (isMatrixLayout) {
     return <DynamicVariantMatrixConfigurator apiProduct={apiProduct} />;
   }

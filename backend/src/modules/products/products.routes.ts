@@ -44,6 +44,8 @@ router.get("/:id/variants", requirePermission("products.view", "products.create"
 router.put("/:id/variants/bulk", requirePermission("products.update"), C.bulkUpdateVariants);
 router.get("/:id/variants/prices/export", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.exportVariantCountryPrices);
 router.post("/:id/variants/prices/import", requirePermission("products.update"), upload.single("file"), C.importVariantCountryPrices);
+router.post("/:id/variants/import-preview", requirePermission("products.update"), upload.single("file"), C.previewVariantsImport);
+router.post("/:id/variants/import-execute", requirePermission("products.update"), C.executeVariantsImport);
 router.post("/:id/variants", requirePermission("products.update"), C.createVariant);
 router.get("/:id/variants/:variantId/countries", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listVariantCountries);
 router.put("/:id/variants/:variantId/countries", requirePermission("products.update"), C.updateVariantCountries);

@@ -91,9 +91,9 @@ export function Header() {
     : nav.capabilitiesMenu;
   const productsMegaNav = hasCmsProductsMega
     ? productMegaGroups
-    : (HAS_LIVE_API
-        ? dynamicMegaMenu
-        : nav.productMegaMenu);
+    : dynamicMegaMenu.length > 0
+    ? dynamicMegaMenu
+    : nav.productMegaMenu;
   const ctaLabel = ctaLink?.label || label(nav.ctaLabel);
   const ctaHref = ctaLink?.href || nav.ctaHref;
   const mobileLinks = [

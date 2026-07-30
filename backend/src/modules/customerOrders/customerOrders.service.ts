@@ -126,7 +126,7 @@ async function calculateCustomerOrder(
         customerId: customer.id,
         quantity: item.quantity,
         buyerState: input.shippingAddress?.state ?? null,
-        sellerState: "Rajasthan",
+        sellerState: null,
       });
 
       const unitPrice = resolvedPrice.finalPrice;
@@ -197,16 +197,9 @@ export async function estimateCustomerOrder(
 ) {
   const calculation = await calculateCustomerOrder(customerId, input);
 
-  const originalBaseSubtotal = roundMoney(
-    calculation.orderItems.reduce(
-      (sum, item) => sum + item.resolvedPrice.basePrice * item.quantity,
-      0,
-    ),
-  );
-
   const automaticDiscounts = calculation.orderItems.flatMap((item) =>
     item.resolvedPrice.appliedDiscounts
-      .filter((entry) => entry.type !== "BASE_PRICE" && entry.type !== "TAX")
+      .filter((entry) => entry.type === "PROMOTIONAL_DISCOUNT")
       .map((entry) => ({
         variantId: item.variant.id,
         sku: item.variant.sku,
@@ -224,27 +217,75 @@ export async function estimateCustomerOrder(
   );
 
   const automaticDiscount = roundMoney(
-    Math.max(0, originalBaseSubtotal - calculation.subtotal),
+    automaticDiscounts.reduce((sum, d) => sum + d.discountAmount, 0)
   );
+
+  const originalBaseSubtotal = roundMoney(calculation.subtotal + automaticDiscount);
 
   const hasVat = calculation.orderItems.some(
     (item) => item.resolvedPrice.taxBreakdownStructure?.taxType === "VAT",
   );
+  const hasVatReverseCharge = calculation.orderItems.some(
+    (item) =>
+      item.resolvedPrice.taxBreakdownStructure?.taxType === "VAT" &&
+      item.resolvedPrice.taxBreakdownStructure?.rate === 0,
+  );
   const isExempt =
-    calculation.taxAmount === 0 ||
     calculation.orderItems.every(
       (item) => item.resolvedPrice.taxBreakdownStructure?.taxType === "EXEMPT",
     );
-  const taxLabel = isExempt ? "Tax Exempt" : hasVat ? "VAT" : "GST";
+  const taxLabel = hasVatReverseCharge
+    ? "VAT Reverse Charge"
+    : isExempt
+    ? "Tax Exempt"
+    : hasVat
+    ? "VAT"
+    : "GST";
 
-  const customerTaxBreakdown = [
-    {
-      taxLabel,
-      totalTax: calculation.taxAmount,
-      taxAmount: calculation.taxAmount,
-      label: taxLabel,
-    },
-  ];
+  let totalIgst = 0;
+  let totalCgst = 0;
+  let totalSgst = 0;
+  let totalVat = 0;
+
+  for (const item of calculation.orderItems) {
+    const bd = item.resolvedPrice.taxBreakdownStructure;
+    if (bd) {
+      if (bd.taxType === "IGST") {
+        totalIgst += (bd.igst || 0) * item.quantity;
+      } else if (bd.taxType === "CGST_SGST") {
+        totalCgst += (bd.cgst || 0) * item.quantity;
+        totalSgst += (bd.sgst || 0) * item.quantity;
+      } else if (bd.taxType === "VAT") {
+        totalVat += (bd.vat || 0) * item.quantity;
+      }
+    }
+  }
+
+  const resolvedTaxType =
+    calculation.orderItems[0]?.resolvedPrice.taxBreakdownStructure?.taxType ||
+    (calculation.taxAmount === 0 ? "EXEMPT" : "IGST");
+  const taxPercent = calculation.orderItems[0]?.resolvedPrice.taxBreakdownStructure?.rate || 0;
+
+  const customerTaxBreakdown: Array<{ label: string; taxAmount: number; rate: number }> = [];
+  if (resolvedTaxType === "CGST_SGST") {
+    customerTaxBreakdown.push(
+      { label: "CGST", taxAmount: roundMoney(totalCgst), rate: taxPercent / 2 },
+      { label: "SGST", taxAmount: roundMoney(totalSgst), rate: taxPercent / 2 }
+    );
+  } else if (resolvedTaxType === "IGST" && calculation.taxAmount > 0) {
+    customerTaxBreakdown.push({
+      label: "IGST",
+      taxAmount: roundMoney(totalIgst),
+      rate: taxPercent,
+    });
+  } else if (resolvedTaxType === "VAT") {
+    const label = hasVatReverseCharge ? "VAT Reverse Charge" : "VAT";
+    customerTaxBreakdown.push({
+      label,
+      taxAmount: roundMoney(totalVat),
+      rate: taxPercent,
+    });
+  }
 
   const primaryTaxMode =
     calculation.orderItems[0]?.resolvedPrice.taxMode || "EXCLUSIVE";
@@ -314,6 +355,42 @@ export async function createCustomerOrder(
     orderItems[0]?.resolvedPrice.taxBreakdownStructure?.taxType ||
     (taxAmount === 0 ? "EXEMPT" : "IGST");
 
+  let totalIgst = 0;
+  let totalCgst = 0;
+  let totalSgst = 0;
+  let totalVat = 0;
+  let totalSalesTax = 0;
+  let isZeroRated = false;
+
+  for (const item of orderItems) {
+    const bd = item.resolvedPrice.taxBreakdownStructure;
+    if (bd) {
+      if (bd.taxType === "IGST") {
+        totalIgst += (bd.igst || 0) * item.quantity;
+      } else if (bd.taxType === "CGST_SGST") {
+        totalCgst += (bd.cgst || 0) * item.quantity;
+        totalSgst += (bd.sgst || 0) * item.quantity;
+      } else if (bd.taxType === "VAT") {
+        totalVat += (bd.vat || 0) * item.quantity;
+      }
+    }
+  }
+
+  const destinationCountryCode = orderCountry.code?.toUpperCase() || "IN";
+  if (destinationCountryCode !== "IN" && taxAmount === 0) {
+    isZeroRated = true;
+  }
+
+  const hasVat = orderItems.some((item) => item.resolvedPrice.taxBreakdownStructure?.taxType === "VAT");
+  const hasVatReverseCharge = orderItems.some(
+    (item) =>
+      item.resolvedPrice.taxBreakdownStructure?.taxType === "VAT" &&
+      item.resolvedPrice.taxBreakdownStructure?.rate === 0,
+  );
+  const isExempt = orderItems.every((item) => item.resolvedPrice.taxBreakdownStructure?.taxType === "EXEMPT");
+  const taxLabel = hasVatReverseCharge ? "VAT Reverse Charge" : isExempt ? "Tax Exempt" : hasVat ? "VAT" : "GST";
+  const primaryTaxMode = orderItems[0]?.resolvedPrice.taxMode || "EXCLUSIVE";
+
   return prisma.$transaction(async (tx) => {
     const order = await tx.order.create({
       data: {
@@ -330,6 +407,16 @@ export async function createCustomerOrder(
         shippingCharge,
         taxAmount,
         taxType: resolvedTaxType,
+        taxIdSnapshot: customer.taxIdStatus === "VALID" ? customer.taxId : null,
+        taxIdTypeSnapshot: customer.taxIdStatus === "VALID" ? customer.taxIdType : null,
+        taxMode: primaryTaxMode,
+        taxLabel: taxLabel,
+        igstAmount: totalIgst,
+        cgstAmount: totalCgst,
+        sgstAmount: totalSgst,
+        vatAmount: totalVat,
+        salesTaxAmount: totalSalesTax,
+        isZeroRated: isZeroRated,
         total,
         couponId: couponValidation?.coupon.id ?? null,
         couponCode: couponValidation?.coupon.code ?? null,
@@ -349,6 +436,8 @@ export async function createCustomerOrder(
             quantity: item.quantity,
             unitPrice: item.unitPriceBeforeTax,
             total: item.subtotal,
+            hsnCode: item.variant.product.hsnCode,
+            taxAmount: item.taxTotal,
           })),
         },
       },
