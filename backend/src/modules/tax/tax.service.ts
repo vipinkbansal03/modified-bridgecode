@@ -309,7 +309,7 @@ export async function previewTaxImpact(input: TaxPreviewInput) {
   if (!country) throw new AppError("Country not found.", 404);
 
   const activeRules = await taxRuleClient().findMany({
-    where: { countries: { some: { id: countryId } }, status: "ACTIVE" },
+    where: { countries: { some: { countryId: countryId } }, status: "ACTIVE" },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
 
