@@ -224,6 +224,11 @@ export async function listTaxRules(query: TaxListQuery) {
   return { data: data.map(formatTaxRuleResponse), total, page, limit };
 }
 
+async function assertCountry(countryId: string) {
+  if (!countryId) return;
+  await assertCountries([countryId]);
+}
+
 async function assertCountries(countryIds: string[]) {
   if (!countryIds || countryIds.length === 0) return;
   const countries = await prisma.country.findMany({ where: { id: { in: countryIds } }, select: { id: true, status: true } });
@@ -351,7 +356,7 @@ export async function createTaxRule(input: TaxRuleInput) {
     : input.countryId
     ? [input.countryId]
     : [];
-  const countryIds = [...new Set(rawCountryIds)];
+  const countryIds: string[] = [...new Set(rawCountryIds.map(String))];
   const countryId = countryIds[0] ?? input.countryId?.trim() ?? null;
   if (!name) throw new AppError("Tax rule name is required.", 400);
   if (!type) throw new AppError("Tax rule type is required.", 400);
@@ -388,10 +393,12 @@ export async function updateTaxRule(id: string, input: TaxRuleInput) {
   if (!existing) throw new AppError("Tax rule not found.", 404);
 
   const data: Record<string, unknown> = {};
-  const rawCountryIds = input.countryIds !== undefined
-    ? (Array.isArray(input.countryIds) ? input.countryIds.filter(Boolean) : [])
-    : (input.countryId !== undefined ? (input.countryId ? [input.countryId] : []) : existing.countryIds ?? []);
-  const countryIds = [...new Set(rawCountryIds)];
+  const rawCountryIds: string[] = (
+    input.countryIds !== undefined
+      ? (Array.isArray(input.countryIds) ? input.countryIds.filter(Boolean) : [])
+      : (input.countryId !== undefined ? (input.countryId ? [input.countryId] : []) : (existing as any).countryIds ?? [])
+  ) as string[];
+  const countryIds: string[] = [...new Set(rawCountryIds.map((s) => String(s)))];
   const nextCountryId = countryIds[0] ?? existing.countryId;
   const nextName = input.name !== undefined ? input.name.trim() : existing.name;
   if (!nextName) throw new AppError("Tax rule name is required.", 400);

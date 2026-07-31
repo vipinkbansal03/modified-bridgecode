@@ -38,6 +38,7 @@ type CurrencyDashboard = {
   activeCurrencies: number;
   inactiveCurrencies: number;
   baseCurrencies: number;
+  baseCurrency?: CurrencyRow | null;
   mappedCountries: number;
   recentlyUpdated: CurrencyRow[];
 };
@@ -356,7 +357,35 @@ export default function CurrenciesPage() {
           <StatCard title="Total Currencies" value={dashboard?.totalCurrencies ?? 0} subtitle="All records" icon={<SquareCheckBig size={18} />} isLoading={dashboardLoading} />
           <StatCard title="Active" value={dashboard?.activeCurrencies ?? 0} subtitle="Usable now" icon={<SlidersHorizontal size={18} />} color="bg-green-600" isLoading={dashboardLoading} />
           <StatCard title="Inactive" value={dashboard?.inactiveCurrencies ?? 0} subtitle="Disabled records" icon={<X size={18} />} color="bg-gray-600" isLoading={dashboardLoading} />
-          <StatCard title="Base Currency" value={dashboard?.baseCurrencies ?? 0} subtitle="Should stay one" icon={<RefreshCw size={18} />} color="bg-[#0F6CBD]" isLoading={dashboardLoading} />
+          <div className="flex flex-col justify-between rounded-xl border border-[#E6E6E6] bg-white p-4 shadow-sm relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] font-medium text-[#6B7280]">Base Currency</span>
+              <span className="inline-flex items-center rounded-full bg-[#0F6CBD]/10 px-2 py-0.5 text-[10px] font-bold text-[#0F6CBD]">
+                BASE
+              </span>
+            </div>
+            {dashboardLoading ? (
+              <div className="h-8 animate-pulse bg-gray-100 rounded my-1.5" />
+            ) : dashboard?.baseCurrency ? (
+              <div className="mt-1.5 space-y-0.5">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[16px] font-bold text-[#1A1A1A] truncate">{dashboard.baseCurrency.name}</span>
+                  <span className="text-[12px] font-semibold text-[#0F6CBD]">({dashboard.baseCurrency.code})</span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-[#6B7280]">
+                  <span>Rate: <strong className="text-[#1A1A1A]">1.000000</strong></span>
+                  <span className="font-semibold text-[#1A1A1A]">{dashboard.baseCurrency.symbol}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-1.5 text-[12px] font-semibold text-amber-600">
+                ⚠️ No Base Currency set!
+              </div>
+            )}
+            <div className="mt-1.5 text-[10px] text-[#9A9A9A]">
+              {dashboard?.baseCurrency?.updatedAt ? `Last updated: ${formatDate(dashboard.baseCurrency.updatedAt)}` : "Primary system currency"}
+            </div>
+          </div>
           <StatCard title="Mapped Countries" value={dashboard?.mappedCountries ?? 0} subtitle="Countries using currencies" icon={<Filter size={18} />} color="bg-[#7A4F01]" isLoading={dashboardLoading} />
         </div>
 
@@ -616,13 +645,20 @@ export default function CurrenciesPage() {
                           )}
                           {visibleColumnKeys.includes("name") ? (
                             <td className="px-4 py-4 align-top">
-                              <div className="font-medium text-[#1A1A1A]">{currency.name}</div>
+                              <div className="font-medium text-[#1A1A1A] flex items-center gap-2">
+                                <span>{currency.name}</span>
+                                {currency.isBase && (
+                                  <span className="inline-flex items-center rounded-full bg-[#0F6CBD]/10 px-2 py-0.5 text-[10px] font-bold text-[#0F6CBD]">
+                                    BASE
+                                  </span>
+                                )}
+                              </div>
                             </td>
                           ) : null}
                           {visibleColumnKeys.includes("code") ? <td className="px-4 py-4 align-top font-mono font-semibold text-[#1A1A1A]">{currency.code}</td> : null}
                           {visibleColumnKeys.includes("symbol") ? <td className="px-4 py-4 align-top text-[#1A1A1A]">{currency.symbol}</td> : null}
                           {visibleColumnKeys.includes("exchangeRate") ? <td className="px-4 py-4 align-top text-[#1A1A1A]">{formatRate(currency.exchangeRate)}</td> : null}
-                          {visibleColumnKeys.includes("isBase") ? <td className="px-4 py-4 align-top">{currency.isBase ? <span className="font-medium text-green-600">Base</span> : "-"}</td> : null}
+                          {visibleColumnKeys.includes("isBase") ? <td className="px-4 py-4 align-top">{currency.isBase ? <span className="inline-flex items-center rounded-full bg-[#0F6CBD]/15 px-2 py-0.5 text-[11px] font-bold text-[#0F6CBD]">BASE</span> : "-"}</td> : null}
                           {visibleColumnKeys.includes("status") ? (
                             <td className="px-4 py-4 align-top">
                               <StatusBadge status={currency.status} />
@@ -833,7 +869,20 @@ export default function CurrenciesPage() {
                 </>
               )}
               <AdminInput label="Symbol *" value={form.symbol} onChange={(event) => setForm((current) => ({ ...current, symbol: event.target.value }))} placeholder="$" />
-              <AdminInput label="Exchange Rate *" type="number" min="0" step="0.000001" value={form.exchangeRate} onChange={(event) => setForm((current) => ({ ...current, exchangeRate: event.target.value }))} />
+              <div className="space-y-1">
+                <AdminInput
+                  label="Exchange Rate *"
+                  type="number"
+                  min="0"
+                  step="0.000001"
+                  disabled={form.isBase}
+                  value={form.isBase ? "1" : form.exchangeRate}
+                  onChange={(event) => setForm((current) => ({ ...current, exchangeRate: event.target.value }))}
+                />
+                {form.isBase && (
+                  <p className="text-[11px] font-medium text-[#0F6CBD]">Base currency exchange rate is fixed at 1.000000</p>
+                )}
+              </div>
               <AdminSelect
                 label="Status *"
                 value={form.status}
@@ -845,7 +894,18 @@ export default function CurrenciesPage() {
               />
               <div className="pt-7">
                 <label className="inline-flex items-center gap-2.5 text-[13.5px] font-medium text-[#1A1A1A] cursor-pointer">
-                  <input type="checkbox" checked={form.isBase} onChange={(event) => setForm((current) => ({ ...current, isBase: event.target.checked }))} className="h-4 w-4 rounded border-[#D1D5DB] accent-[#E31E24]" />
+                  <input
+                    type="checkbox"
+                    checked={form.isBase}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        isBase: event.target.checked,
+                        exchangeRate: event.target.checked ? "1" : current.exchangeRate,
+                      }))
+                    }
+                    className="h-4 w-4 rounded border-[#D1D5DB] accent-[#E31E24]"
+                  />
                   Base currency
                 </label>
               </div>

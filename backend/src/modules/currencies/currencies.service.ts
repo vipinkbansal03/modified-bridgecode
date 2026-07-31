@@ -144,31 +144,57 @@ export async function listCurrenciesSimple() {
 }
 
 export async function getCurrencyDashboard() {
-  const [total, active, inactive, baseCount, mappedCountries, recentlyUpdated] = await Promise.all([
+  const [total, active, inactive, baseCount, baseCurrency, mappedCountries, recentlyUpdated] = await Promise.all([
     prisma.currency.count(),
     prisma.currency.count({ where: { status: "ACTIVE" } }),
     prisma.currency.count({ where: { status: "INACTIVE" } }),
     prisma.currency.count({ where: { isBase: true } }),
+    prisma.currency.findFirst({
+      where: { isBase: true },
+      include: currencyInclude(),
+    }),
     prisma.currency.count({ where: { countries: { some: {} } } }),
     prisma.currency.findMany({ take: 5, orderBy: [{ updatedAt: "desc" }, { code: "asc" }], include: currencyInclude() }),
   ]);
 
-  return { totalCurrencies: total, activeCurrencies: active, inactiveCurrencies: inactive, baseCurrencies: baseCount, mappedCountries, recentlyUpdated };
+  return {
+    totalCurrencies: total,
+    activeCurrencies: active,
+    inactiveCurrencies: inactive,
+    baseCurrencies: baseCount,
+    baseCurrency: baseCurrency
+      ? {
+          ...baseCurrency,
+          exchangeRate: Number(baseCurrency.exchangeRate),
+        }
+      : null,
+    mappedCountries,
+    recentlyUpdated,
+  };
 }
 
 async function assertBaseCurrencyAllowed(id: string | null, isBase: boolean) {
-  if (!isBase) return;
-  const where: { isBase: true; id?: { not: string } } = { isBase: true };
-  if (id) where.id = { not: id };
-  await prisma.currency.updateMany({ where, data: { isBase: false } });
+  if (isBase) {
+    const where: { isBase: true; id?: { not: string } } = { isBase: true };
+    if (id) where.id = { not: id };
+    await prisma.currency.updateMany({ where, data: { isBase: false } });
+  } else if (id) {
+    const existing = await prisma.currency.findUnique({ where: { id }, select: { isBase: true } });
+    if (existing?.isBase) {
+      const otherBase = await prisma.currency.findFirst({ where: { isBase: true, id: { not: id } } });
+      if (!otherBase) {
+        throw new AppError("Cannot remove base status from the only base currency. Please mark another currency as base first.", 400);
+      }
+    }
+  }
 }
 
 export async function createCurrency(input: CurrencyInput) {
   const code = normalizeCode(input.code);
   const symbol = normalizeSymbol(input.symbol);
-  const exchangeRate = normalizeExchangeRate(input.exchangeRate);
-  const status = normalizeStatus(input.status) ?? Status.ACTIVE;
   const isBase = normalizeBoolean(input.isBase);
+  const exchangeRate = isBase ? 1 : normalizeExchangeRate(input.exchangeRate);
+  const status = normalizeStatus(input.status) ?? Status.ACTIVE;
 
   const duplicate = await prisma.currency.findUnique({ where: { code } });
   if (duplicate) throw new AppError("Currency code already exists.", 409);
@@ -193,9 +219,9 @@ export async function updateCurrency(id: string, input: CurrencyInput) {
 
   const code = input.code !== undefined ? normalizeCode(input.code) : existing.code;
   const symbol = input.symbol !== undefined ? normalizeSymbol(input.symbol) : existing.symbol;
-  const exchangeRate = input.exchangeRate !== undefined ? normalizeExchangeRate(input.exchangeRate) : Number(existing.exchangeRate);
-  const status = input.status !== undefined ? normalizeStatus(input.status) : existing.status;
   const isBase = input.isBase !== undefined ? normalizeBoolean(input.isBase) : existing.isBase;
+  const exchangeRate = isBase ? 1 : (input.exchangeRate !== undefined ? normalizeExchangeRate(input.exchangeRate) : Number(existing.exchangeRate));
+  const status = input.status !== undefined ? normalizeStatus(input.status) : existing.status;
 
   if (code !== existing.code) {
     const duplicate = await prisma.currency.findFirst({ where: { code, id: { not: id } } });
