@@ -20,6 +20,7 @@ router.delete("/zones/:id", requirePermission("shipping.manage"), C.deleteZone);
 
 // ─── Calculation (admin) ────────────────────────────────
 router.post("/calculate", requirePermission("shipping.view", "shipping.manage"), C.calculate);
+router.post("/calculate-packages", requirePermission("shipping.view", "shipping.manage"), C.calculatePackages);
 
 // ─── Shipments ──────────────────────────────────────────
 router.get("/shipments", requirePermission("shipping.view", "shipping.manage"), C.listShipments);
