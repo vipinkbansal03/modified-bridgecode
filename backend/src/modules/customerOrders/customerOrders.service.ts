@@ -500,15 +500,9 @@ export async function assertCustomerInvoiceAccess(
     select: { id: true, status: true, paymentStatus: true },
   });
   if (!order) throw new AppError("Order not found.", 404);
-  const invoiceStatuses = new Set([
-    "CONFIRMED",
-    "PROCESSING",
-    "SHIPPED",
-    "DELIVERED",
-  ]);
-  if (!invoiceStatuses.has(order.status) && order.paymentStatus !== "PAID") {
+  if (order.status === "CANCELLED") {
     throw new AppError(
-      "Invoice is available after the order is confirmed or paid.",
+      "Invoice is not available for cancelled orders.",
       400,
     );
   }

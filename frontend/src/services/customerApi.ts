@@ -418,6 +418,8 @@ export async function updateCustomerProfile(data: {
   currentPractice?: string | null;
   currentPracticeOther?: string;
   usingModernProducts?: boolean;
+  taxId?: string | null;
+  taxIdType?: string | null;
 }) {
   const res = await customerApi.put("/auth/profile", data);
   return res.data.data;

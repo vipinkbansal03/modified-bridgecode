@@ -22,6 +22,8 @@ export const customerRegisterSchema = z.object({
   currentPractice: z.enum(["STUDENT", "ORTHODONTIST", "OTHER"]).optional(),
   currentPracticeOther: z.string().trim().optional(),
   usingModernProducts: z.boolean().optional(),
+  taxId: z.string().trim().optional(),
+  taxIdType: z.string().trim().optional(),
 });
 
 export const customerLoginSchema = z.object({
@@ -50,6 +52,8 @@ export const updateCustomerProfileSchema = z.object({
   currentPractice: z.enum(["STUDENT", "ORTHODONTIST", "OTHER"]).nullable().optional(),
   currentPracticeOther: z.string().trim().optional(),
   usingModernProducts: z.boolean().optional(),
+  taxId: z.string().trim().nullable().optional(),
+  taxIdType: z.string().trim().nullable().optional(),
 });
 
 export type CustomerRegisterInput = z.infer<typeof customerRegisterSchema>;

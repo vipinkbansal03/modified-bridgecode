@@ -55,6 +55,11 @@ function inventoryInclude() {
         code: true,
       },
     },
+    warehouse: {
+      include: {
+        country: true
+      }
+    },
     product: {
       select: {
         id: true,
@@ -361,8 +366,8 @@ export async function upsertVariantInventory(data: {
   if (!variant) throw new AppError("Variant not found.", 404);
 
   if (data.warehouseId) {
-    const country = await prisma.country.findUnique({ where: { id: data.warehouseId }, select: { id: true } });
-    if (!country) throw new AppError("Country not found.", 404);
+    const warehouse = await prisma.warehouse.findUnique({ where: { id: data.warehouseId }, select: { id: true } });
+    if (!warehouse) throw new AppError("Warehouse not found.", 404);
   }
 
   const existing = await ensureVariantInventoryRecord(prisma, data.variantId, data.warehouseId ?? null);
@@ -415,8 +420,8 @@ export async function upsertProductInventory(
 
   const warehouseId = data.warehouseId ?? null;
   if (warehouseId) {
-    const country = await prisma.country.findUnique({ where: { id: warehouseId }, select: { id: true } });
-    if (!country) throw new AppError("Country not found.", 404);
+    const warehouse = await prisma.warehouse.findUnique({ where: { id: warehouseId }, select: { id: true } });
+    if (!warehouse) throw new AppError("Warehouse not found.", 404);
   }
 
   const stock = Math.trunc(Number(data.stock ?? 0));

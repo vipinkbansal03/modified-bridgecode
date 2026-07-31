@@ -1557,6 +1557,22 @@ export default function CheckoutPage() {
             </span>
           </div>
 
+          {estimate?.taxBreakdown && estimate.taxBreakdown.length > 0 && (
+            <div className="pl-3 border-l-2 border-[#E31E24]/20 text-[12px] text-steel space-y-0.5 my-1">
+              {estimate.taxBreakdown.map((item: any, idx: number) => (
+                <div key={idx} className="flex justify-between items-center">
+                  <span>{item.label}</span>
+                  <span className="font-mono">
+                    {formatMoney(
+                      estimate?.currency?.symbol ?? totals.currencySymbol,
+                      item.amount,
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="pb-1">
             <div className="flex justify-between text-steel">
               <span>Shipping</span>
