@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { asyncHandler, ApiResponse } from "../../utils/apiResponse";
 import { AuthRequest } from "../../middleware/auth.middleware";
 import * as S from "./shipping.service";
+import { calculateShipment } from "./shippingCalculator.service";
 
 // ─── Providers ──────────────────────────────────────────
 
@@ -23,7 +24,7 @@ export const toggleProvider = asyncHandler(async (req: AuthRequest, res: Respons
 );
 
 export const testConnection = asyncHandler(async (req: AuthRequest, res: Response) =>
-  ApiResponse.success(res, "Connection test completed.", await S.testConnection(String(req.params.id)))
+  ApiResponse.success(res, "Connection test completed.", await S.testConnection(String(req.params.id), req.body))
 );
 
 // ─── Zones ──────────────────────────────────────────────
@@ -52,9 +53,28 @@ export const calculate = asyncHandler(async (req: AuthRequest, res: Response) =>
   return ApiResponse.success(res, "Shipping calculated.", await S.calculateShipping(countryCode, orderTotal));
 });
 
+export const calculatePackages = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { items, countryCode, orderTotal } = req.body as {
+    items: { productId: string; quantity: number }[];
+    countryCode?: string;
+    orderTotal?: number;
+  };
+  const packages = await calculateShipment(items);
+  if (countryCode) {
+    packages.pricing = await S.calculateShipping(String(countryCode).toUpperCase(), Number(orderTotal ?? 0));
+  }
+  return ApiResponse.success(res, "Package calculation completed.", packages);
+});
+
 export const calculatePublic = asyncHandler(async (req: Request, res: Response) => {
   const { countryCode, orderValue, orderTotal } = req.body as { countryCode?: string; orderValue?: number; orderTotal?: number };
   return ApiResponse.success(res, "Shipping calculated.", await S.calculateShipping(String(countryCode ?? "").toUpperCase(), Number(orderValue ?? orderTotal ?? 0)));
+});
+
+export const availableProviders = asyncHandler(async (req: Request, res: Response) => {
+  const { countryCode, orderValue, orderTotal } = req.body as { countryCode?: string; orderValue?: number; orderTotal?: number };
+  const result = await S.getAvailableProviders(String(countryCode ?? "").toUpperCase(), Number(orderValue ?? orderTotal ?? 0));
+  return ApiResponse.success(res, "Available providers.", result);
 });
 
 // ─── Shipments ──────────────────────────────────────────

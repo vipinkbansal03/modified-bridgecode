@@ -37,7 +37,24 @@ function sanitizeProvider(provider: ProviderRow) {
 
 // ─── Provider CRUD ──────────────────────────────────────
 
+const DEFAULT_PROVIDERS = [
+  { name: "STANDARD_EXPRESS", displayName: "Standard Delivery", isEnabled: true },
+  { name: "DHL", displayName: "DHL Express", isEnabled: false, baseUrl: "https://api.dhl.com/mydhlapi", trackingUrl: "https://track.dhl.com/{tracking}" },
+  { name: "DTDC", displayName: "DTDC Courier", isEnabled: false, baseUrl: "https://api.dtdc.in", trackingUrl: "https://www.dtdc.in/tracking/{tracking}" },
+];
+
+async function ensureDefaultProviders() {
+  for (const p of DEFAULT_PROVIDERS) {
+    await prisma.shippingProvider.upsert({
+      where: { name: p.name },
+      update: { displayName: p.displayName },
+      create: { ...p, config: {} },
+    });
+  }
+}
+
 export async function listProviders() {
+  await ensureDefaultProviders();
   const providers = await prisma.shippingProvider.findMany({
     select: PROVIDER_SELECT,
     orderBy: { createdAt: "asc" },
@@ -117,11 +134,20 @@ export async function toggleProvider(id: string) {
 
 // ─── Connection Test ────────────────────────────────────
 
-export async function testConnection(id: string) {
-  const provider = await prisma.shippingProvider.findUnique({ where: { id }, select: { id: true, name: true, apiKey: true, apiSecret: true, baseUrl: true, displayName: true } });
+export async function testConnection(id: string, override?: { apiKey?: string; apiSecret?: string; baseUrl?: string; mode?: string }) {
+  const provider = await prisma.shippingProvider.findUnique({
+    where: { id },
+    select: { id: true, name: true, apiKey: true, apiSecret: true, baseUrl: true, displayName: true, config: true },
+  });
   if (!provider) throw new AppError("Shipping provider not found.", 404);
 
-  if (!provider.apiKey) {
+  const apiKey = override?.apiKey ?? provider.apiKey;
+  const apiSecret = override?.apiSecret ?? provider.apiSecret;
+  const baseUrl = override?.baseUrl ?? provider.baseUrl;
+  const providerConfig = (provider.config ?? {}) as Record<string, unknown>;
+  const mode = (override?.mode as "sandbox" | "production" | undefined) ?? (providerConfig.mode as "sandbox" | "production") ?? "production";
+
+  if (!apiKey) {
     return { success: false, message: `${provider.displayName} API key is not configured.`, latencyMs: 0 };
   }
 
@@ -130,7 +156,7 @@ export async function testConnection(id: string) {
     return { success: false, message: `No adapter available for ${provider.displayName}.`, latencyMs: 0 };
   }
 
-  return adapter.testConnection({ apiKey: provider.apiKey, apiSecret: provider.apiSecret, baseUrl: provider.baseUrl });
+  return adapter.testConnection({ apiKey, apiSecret, baseUrl, mode });
 }
 
 // ─── Zone CRUD ──────────────────────────────────────────
@@ -250,6 +276,41 @@ export async function deleteZone(id: string) {
 // ─── Shipping Calculation ───────────────────────────────
 
 /**
+ * Get all available (active, enabled) shipping options for a country.
+ * Used by checkout to let customers choose a provider.
+ */
+export async function getAvailableProviders(countryCode: string, orderTotal: number): Promise<{
+  provider: string;
+  providerId: string;
+  zoneId: string;
+  charge: number;
+  isFree: boolean;
+  estimatedDays: string | null;
+}[]> {
+  const country = await prisma.country.findUnique({ where: { code: countryCode } });
+  if (!country) return [];
+
+  const zones = await prisma.shippingZone.findMany({
+    where: { countryId: country.id, status: "ACTIVE", provider: { isEnabled: true } },
+    include: { provider: true },
+    orderBy: { charge: "asc" },
+  });
+
+  return zones.map((zone) => {
+    const freeAbove = zone.freeAbove ? Number(zone.freeAbove) : null;
+    const isFree = freeAbove !== null && orderTotal >= freeAbove;
+    return {
+      provider: zone.provider.displayName,
+      providerId: zone.providerId,
+      zoneId: zone.id,
+      charge: isFree ? 0 : Number(zone.charge),
+      isFree,
+      estimatedDays: zone.estimatedDays,
+    };
+  });
+}
+
+/**
  * Calculate shipping charge for a given country and order subtotal.
  * Returns the cheapest enabled zone that covers the country, applying
  * free-shipping threshold if the order total qualifies.
@@ -312,7 +373,28 @@ export async function calculateShipping(countryCode: string, orderTotal: number)
   };
 }
 
-export async function calculateRequiredShipping(countryCode: string, orderTotal: number) {
+export async function calculateRequiredShipping(countryCode: string, orderTotal: number, zoneId?: string) {
+  if (zoneId) {
+    const zone = await prisma.shippingZone.findUnique({
+      where: { id: zoneId },
+      include: { provider: true },
+    });
+    if (!zone) throw new AppError("Shipping zone not found.", 404);
+    if (!zone.provider.isEnabled) throw new AppError("Selected shipping provider is not available.", 400);
+
+    const freeAbove = zone.freeAbove ? Number(zone.freeAbove) : null;
+    const isFree = freeAbove !== null && orderTotal >= freeAbove;
+
+    return {
+      available: true,
+      charge: isFree ? 0 : Number(zone.charge),
+      isFree,
+      provider: zone.provider.displayName,
+      providerId: zone.providerId,
+      zoneId: zone.id,
+      estimatedDays: zone.estimatedDays,
+    };
+  }
   const shipping = await calculateShipping(countryCode, orderTotal);
   if (!shipping.available || !shipping.zoneId) {
     throw new AppError(shipping.message ?? "Shipping is not available to your country yet. Please contact support.", 400);

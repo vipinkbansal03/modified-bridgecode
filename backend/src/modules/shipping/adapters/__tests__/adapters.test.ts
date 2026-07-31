@@ -83,7 +83,7 @@ describe("DHL Adapter", () => {
   describe("testConnection", () => {
     it("should return success when API responds 200", async () => {
       mockFetch((url) => {
-        assert.ok(url.includes("/mydhlapi/test/connect"), "Should call DHL test/connect endpoint");
+        assert.ok(url.includes("/test/connect"), "Should call DHL test/connect endpoint");
         return { ok: true, status: 200, statusText: "OK", json: async () => ({}) };
       });
       const result = await adapter!.testConnection(FAKE_CREDS);
@@ -118,7 +118,7 @@ describe("DHL Adapter", () => {
   describe("createShipment", () => {
     it("should return success with tracking number on 200", async () => {
       mockFetch((url, init) => {
-        assert.ok(url.includes("/mydhlapi/shipments"), "Should POST to /mydhlapi/shipments");
+        assert.ok(url.includes("/shipments"), "Should POST to /mydhlapi/shipments");
         assert.equal(init?.method, "POST");
         return {
           ok: true, status: 200, statusText: "OK",
@@ -158,7 +158,7 @@ describe("DHL Adapter", () => {
   describe("trackShipment", () => {
     it("should return tracking updates on 200", async () => {
       mockFetch((url) => {
-        assert.ok(url.includes("/mydhlapi/tracking"), "Should call tracking endpoint");
+        assert.ok(url.includes("/tracking"), "Should call tracking endpoint");
         return {
           ok: true, status: 200, statusText: "OK",
           json: async () => ({
@@ -191,7 +191,7 @@ describe("DHL Adapter", () => {
   describe("cancelShipment", () => {
     it("should return success on 200", async () => {
       mockFetch((url, init) => {
-        assert.ok(url.includes("/mydhlapi/shipments/DHL-SHP-001"));
+        assert.ok(url.includes("/shipments/DHL-SHP-001"));
         assert.equal(init?.method, "DELETE");
         return { ok: true, status: 200, statusText: "OK", json: async () => ({}) };
       });

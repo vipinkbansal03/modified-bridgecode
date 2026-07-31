@@ -16,4 +16,5 @@ router.post("/upsert", requirePermission("inventory.manage"), C.upsert);
 router.put("/product/:productId", requirePermission("inventory.manage"), C.upsertProduct);
 router.get("/:variantId/adjustments", requirePermission("inventory.view", "inventory.manage"), C.listVariantAdjustments);
 router.put("/:id", requirePermission("inventory.manage"), C.update);
+router.delete("/:id", requirePermission("inventory.manage"), C.remove);
 export default router;

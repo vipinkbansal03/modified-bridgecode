@@ -20,9 +20,11 @@ import {
   listCustomerAddresses,
   validateCoupon,
   fetchPublicPaymentMethods,
+  fetchAvailableProviders,
   initiateCustomerPayment,
   verifyCustomerPayment,
   type AvailablePaymentMethod,
+  type AvailableShippingOption,
   type CouponValidationResult,
   type CustomerAddress,
   type CustomerOrderEstimate,
@@ -72,6 +74,10 @@ export default function CheckoutPage() {
   const [shippingEstimate, setShippingEstimate] =
     useState<ShippingEstimate | null>(null);
   const [shippingError, setShippingError] = useState<string | null>(null);
+  const [availableProviders, setAvailableProviders] = useState<
+    AvailableShippingOption[]
+  >([]);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [appliedCoupon, setAppliedCoupon] = useState<CouponValidationResult | null>(() => {
     if (typeof window !== "undefined") {
       const stored = window.localStorage.getItem("applied_coupon");
@@ -311,11 +317,15 @@ export default function CheckoutPage() {
     totals.currencySymbol,
   ]);
 
+  const selectedShippingOption = useMemo(() => {
+    return availableProviders.find((p) => p.zoneId === selectedZoneId) ?? null;
+  }, [availableProviders, selectedZoneId]);
+
   const approvalBlockMessage = currentCustomer?.approvalStatus
     ? APPROVAL_MESSAGES[currentCustomer.approvalStatus]
     : null;
   const canPlaceOrder =
-    canSubmit && Boolean(shippingEstimate?.available) && !approvalBlockMessage;
+    canSubmit && Boolean(shippingEstimate?.available) && Boolean(selectedZoneId) && !approvalBlockMessage;
 
   const orderPayload = useMemo(
     () => ({
@@ -344,14 +354,18 @@ export default function CheckoutPage() {
       if (estimate !== null) setEstimate(null);
       if (shippingEstimate !== null) setShippingEstimate(null);
       if (shippingError !== null) setShippingError(null);
+      setAvailableProviders([]);
+      setSelectedZoneId(null);
       return;
     }
 
     let cancelled = false;
     setShippingError(null);
+    const countryCode = form.countryCode.trim().toUpperCase();
+    const orderValue = totals.subtotal;
     calculateShipping({
-      countryCode: form.countryCode.trim().toUpperCase(),
-      orderValue: totals.subtotal,
+      countryCode,
+      orderValue,
     })
       .then((nextShipping) => {
         if (cancelled) return;
@@ -369,6 +383,15 @@ export default function CheckoutPage() {
             getCustomerErrorMessage(err, SHIPPING_UNAVAILABLE_MESSAGE),
           );
         }
+      });
+    fetchAvailableProviders({ countryCode, orderValue })
+      .then((providers) => {
+        if (cancelled) return;
+        setAvailableProviders(providers);
+        setSelectedZoneId(providers.length > 0 ? providers[0].zoneId : null);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailableProviders([]);
       });
     estimateCustomerOrder(orderPayload)
       .then((nextEstimate) => {
@@ -513,7 +536,10 @@ export default function CheckoutPage() {
     setIsSubmitting(true);
     setError(null);
     try {
-      const created = await createCustomerOrder(orderPayload);
+      const created = await createCustomerOrder({
+        ...orderPayload,
+        shippingZoneId: selectedZoneId ?? undefined,
+      });
       const selectedMethod = availablePaymentMethods.find(
         (m) => m.code === selectedPaymentCode,
       );
@@ -897,37 +923,63 @@ export default function CheckoutPage() {
                 <h2 className="mb-4 text-[18px] font-semibold text-ink">
                   Shipping method
                 </h2>
-                <div className="rounded-md border border-line bg-grey px-4 py-3">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-[14px] font-semibold text-ink">
-                        {shippingEstimate?.available
-                          ? (shippingEstimate.provider ?? "Shipping")
-                          : "Shipping unavailable"}
-                      </p>
-                      <p className="mt-1 text-[12.5px] text-steel">
-                        {shippingEstimate?.available
-                          ? shippingEstimate.estimatedDays
-                            ? `Estimated delivery: ${shippingEstimate.estimatedDays}`
-                            : "Calculated from the selected shipping country."
-                          : (shippingError ??
-                            "Complete the address to check shipping availability.")}
-                      </p>
-                    </div>
-                    <strong className="text-[14px] text-ink">
-                      {shippingEstimate?.available
-                        ? shippingEstimate.isFree
-                          ? "Free"
-                          : formatMoney(
-                              estimate?.currency?.symbol ??
-                                totals.currencySymbol,
-                              estimate?.shippingCharge ??
-                                shippingEstimate.charge,
-                            )
-                        : "-"}
-                    </strong>
+                {availableProviders.length > 0 ? (
+                  <div className="space-y-2">
+                    {availableProviders.map((option) => {
+                      const isSelected = selectedZoneId === option.zoneId;
+                      return (
+                        <label
+                          key={option.zoneId}
+                          className={`flex items-center justify-between rounded-lg border p-3 cursor-pointer transition-colors ${
+                            isSelected
+                              ? "border-brand bg-brand/5"
+                              : "border-line bg-white"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="radio"
+                              name="shippingMethod"
+                              checked={isSelected}
+                              onChange={() => setSelectedZoneId(option.zoneId)}
+                              className="text-brand focus:ring-brand"
+                            />
+                            <div>
+                              <p className="text-[14px] font-semibold text-ink">
+                                {option.provider}
+                              </p>
+                              {option.estimatedDays && (
+                                <p className="text-[12px] text-steel mt-0.5">
+                                  Estimated delivery: {option.estimatedDays}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <strong className="text-[14px] text-ink">
+                            {option.isFree
+                              ? "Free"
+                              : formatMoney(
+                                  estimate?.currency?.symbol ??
+                                    totals.currencySymbol,
+                                  option.charge,
+                                )}
+                          </strong>
+                        </label>
+                      );
+                    })}
                   </div>
-                </div>
+                ) : (
+                  <div className="rounded-md border border-line bg-grey px-4 py-3">
+                    <p className="text-[14px] font-semibold text-ink">
+                      {shippingError || "Shipping unavailable"}
+                    </p>
+                    <p className="mt-1 text-[12.5px] text-steel">
+                      {shippingError
+                        ? ""
+                        : "Complete the address to check shipping availability."}
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="rounded-md border border-line bg-white p-5">
@@ -1044,7 +1096,7 @@ export default function CheckoutPage() {
                 {estimate && Number(estimate.automaticDiscount ?? 0) > 0 && (
                   <>
                     <div className="flex items-center justify-between text-[13.5px]">
-                      <span className="text-steel">Original Base Subtotal</span>
+                      <span className="text-steel">Items Subtotal</span>
                       <span className="text-steel line-through">
                         {formatMoney(
                           estimate.currency?.symbol ?? totals.currencySymbol,
@@ -1212,43 +1264,25 @@ export default function CheckoutPage() {
                       </strong>
                     </div>
                   )}
-                <div className="flex items-center justify-between text-[14px]">
-                  <span className="text-steel">
-                    {(estimate as any)?.isTaxInclusive
-                      ? "Estimated tax (included)"
-                      : "Estimated tax"}
-                  </span>
-                  <strong className="text-ink">
-                    {(estimate?.taxAmount ?? 0) > 0
-                      ? formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, estimate!.taxAmount)
-                      : taxEstimateLabel}
-                  </strong>
-                </div>
-                {estimate?.taxBreakdown && (estimate.taxBreakdown as any[]).length > 0 && (estimate?.taxAmount ?? 0) > 0 && (
-                  <div className="space-y-1 pl-3 text-[12.5px] text-steel">
-                    {(estimate.taxBreakdown as any[]).map((tax, index) => (
-                      <div key={index} className="flex items-center justify-between">
-                        <span>
-                          {tax.label} ({tax.rate}%)
-                        </span>
-                        <span>
-                          {formatMoney(estimate?.currency?.symbol ?? totals.currencySymbol, tax.taxAmount)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+
                 <div className="flex items-center justify-between text-[14px]">
                   <span className="text-steel">Shipping</span>
                   <strong className="text-ink">
-                    {shippingEstimate?.available
-                      ? shippingEstimate.isFree
+                    {selectedShippingOption
+                      ? selectedShippingOption.isFree
                         ? "Free"
                         : formatMoney(
                             estimate?.currency?.symbol ?? totals.currencySymbol,
-                            estimate?.shippingCharge ?? shippingEstimate.charge,
+                            selectedShippingOption.charge,
                           )
-                      : "Unavailable"}
+                      : shippingEstimate?.available
+                        ? shippingEstimate.isFree
+                          ? "Free"
+                          : formatMoney(
+                              estimate?.currency?.symbol ?? totals.currencySymbol,
+                              estimate?.shippingCharge ?? shippingEstimate.charge,
+                            )
+                        : "Unavailable"}
                   </strong>
                 </div>
                 <div className="mt-4 space-y-2 border-t border-line pt-3">
@@ -1303,12 +1337,17 @@ export default function CheckoutPage() {
 
                 <div className="flex items-center justify-between border-t border-line pt-3 text-[16px]">
                   <span className="font-semibold text-ink">Total Payable</span>
-                  <strong className="text-[18px] font-extrabold text-brand">
-                    {formatMoney(
-                      estimate?.currency?.symbol ?? totals.currencySymbol,
-                      estimate?.total ?? totals.subtotal,
-                    )}
-                  </strong>
+                  <div className="text-right">
+                    <strong className="text-[18px] font-extrabold text-brand block">
+                      {formatMoney(
+                        estimate?.currency?.symbol ?? totals.currencySymbol,
+                        estimate?.total ?? totals.subtotal,
+                      )}
+                    </strong>
+                    <span className="text-[11px] text-steel">
+                      {(estimate as any)?.isTaxInclusive ? "Inclusive of all taxes" : "Tax calculated at checkout"}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -1391,7 +1430,7 @@ export default function CheckoutPage() {
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-6 text-[13.5px] text-[#1A1A1A] space-y-4">
           <div className="flex justify-between items-center text-steel pb-2 border-b border-[#E6E6E6]">
-            <span>Original Base Subtotal</span>
+            <span>Items Subtotal</span>
             <span className="font-semibold text-ink font-mono">
               {formatMoney(
                 estimate?.currency?.symbol ?? totals.currencySymbol,
@@ -1401,7 +1440,6 @@ export default function CheckoutPage() {
               )}
             </span>
           </div>
-
           {aggregatedDiscounts.length > 0 && (
             <div className="space-y-4 py-1 border-b border-[#E6E6E6]">
               <div className="flex justify-between items-center font-semibold text-[#2A6A40]">
@@ -1436,7 +1474,7 @@ export default function CheckoutPage() {
                     </div>
 
                     <div className="flex justify-between text-[12.5px] text-steel">
-                      <span>Original Unit Price</span>
+                      <span>Price</span>
                       <span className="font-mono">
                         {formatMoney(
                           estimate?.currency?.symbol ?? totals.currencySymbol,
@@ -1446,7 +1484,7 @@ export default function CheckoutPage() {
                     </div>
 
                     <div className="flex justify-between text-[12.5px] text-steel">
-                      <span>New Unit Price</span>
+                      <span>Your Price</span>
                       <span className="font-mono">
                         {formatMoney(
                           estimate?.currency?.symbol ?? totals.currencySymbol,
@@ -1461,17 +1499,12 @@ export default function CheckoutPage() {
                     </div>
 
                     <div className="flex justify-between items-center text-[12.5px] font-semibold text-[#2A6A40] pt-1">
-                      <span>You Saved</span>
+                      <span>You saved</span>
                       <span>
                         {formatMoney(
                           estimate?.currency?.symbol ?? totals.currencySymbol,
-                          savingsPerUnit,
-                        )}{" "}
-                        × {discount.quantity} = -
-                        {formatMoney(
-                          estimate?.currency?.symbol ?? totals.currencySymbol,
                           discount.amount,
-                        )}
+                        )} ({discount.originalUnitPrice > 0 ? Math.round((savingsPerUnit / discount.originalUnitPrice) * 100) : 0}%)
                       </span>
                     </div>
                   </div>
@@ -1515,7 +1548,7 @@ export default function CheckoutPage() {
           </div>
 
           <div className="flex justify-between items-center text-steel">
-            <span>Tax (Included)</span>
+            <span>{estimate?.taxMode === "EXCLUSIVE" ? "GST (added at checkout)" : "GST (included in price)"}</span>
             <span className="font-mono">
               {formatMoney(
                 estimate?.currency?.symbol ?? totals.currencySymbol,
@@ -1529,17 +1562,26 @@ export default function CheckoutPage() {
               <span>Shipping</span>
 
               <span className="font-mono">
-                {estimate?.shippingIsFree
-                  ? "FREE"
-                  : formatMoney(
-                      estimate?.currency?.symbol ?? totals.currencySymbol,
-                      estimate?.shippingCharge ?? 0,
-                    )}
+                {selectedShippingOption
+                  ? selectedShippingOption.isFree
+                    ? "FREE"
+                    : formatMoney(
+                        estimate?.currency?.symbol ?? totals.currencySymbol,
+                        selectedShippingOption.charge,
+                      )
+                  : estimate?.shippingIsFree
+                    ? "FREE"
+                    : formatMoney(
+                        estimate?.currency?.symbol ?? totals.currencySymbol,
+                        estimate?.shippingCharge ?? 0,
+                      )}
               </span>
             </div>
 
             <div className="mt-1 text-[12px] text-steel-2">
-              {estimate?.shippingProvider || "Standard Shipping"}
+              {selectedShippingOption?.provider ??
+                estimate?.shippingProvider ??
+                "Standard Shipping"}
             </div>
           </div>
         </div>

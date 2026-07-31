@@ -348,3 +348,9 @@ export const executeVariantsImport = asyncHandler(async (req: AuthRequest, res: 
   const result = await ProductService.executeVariantsImport(req.params.id as string, req.body.rows);
   return ApiResponse.success(res, "Variants imported successfully.", result);
 });
+
+export const updateShippingInfo = asyncHandler(async (req: AuthRequest, res: Response) => {
+  console.log("[updateShippingInfo] body:", JSON.stringify(req.body));
+  const product = await ProductService.updateShippingInfo(req.params.id as string, req.body);
+  return ApiResponse.success(res, "Shipping info updated.", product);
+});

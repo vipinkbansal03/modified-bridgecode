@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, createContext, useContext, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, XCircle, Info } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, XCircle, Info, Check } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { adminApi } from "@/services/adminApi";
 
@@ -800,3 +800,112 @@ export function useToast() {
   }
   return { showToast: context.showToast, ToastComponent: null };
 }
+// This is a temporary file to hold the component so I can replace_file_content it into AdminComponents.tsx
+export interface AdminMultiSelectProps {
+  label?: string;
+  error?: string;
+  options: { value: string; label: string }[];
+  value: string[];
+  onChange: (value: string[]) => void;
+  className?: string;
+  placeholder?: string;
+}
+
+export function AdminMultiSelect({ label, error, options, value, onChange, className, placeholder = "Select options..." }: AdminMultiSelectProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [menuStyle, setMenuStyle] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node) && menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const menuHeight = Math.min(options.length * 40, 256); // approx 40px per item, max 256px
+
+      if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
+        setMenuStyle({ bottom: window.innerHeight - rect.top + 4, left: rect.left, width: rect.width, maxHeight: Math.min(spaceAbove - 16, 256) });
+      } else {
+        setMenuStyle({ top: rect.bottom + 4, left: rect.left, width: rect.width, maxHeight: Math.min(spaceBelow - 16, 256) });
+      }
+    }
+  }, [isOpen, options.length]);
+
+  const toggleOption = (optValue: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (value.includes(optValue)) {
+      onChange(value.filter((v) => v !== optValue));
+    } else {
+      onChange([...value, optValue]);
+    }
+  };
+
+  const selectedLabels = value.map(v => options.find(o => o.value === v)?.label).filter(Boolean).join(", ");
+
+  return (
+    <div className={cn("flex flex-col gap-1.5", className)} ref={rootRef}>
+      {label && <label className="text-[13px] font-semibold text-slate-700">{label}</label>}
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          "flex h-9 w-full items-center justify-between rounded-md border bg-white px-3 text-sm text-left shadow-sm transition-all focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20",
+          error ? "border-red-300 bg-red-50/30" : "border-slate-200 hover:border-slate-300",
+        )}
+      >
+        <span className={cn("block truncate", !value.length && "text-slate-500")}>
+          {value.length > 0 ? selectedLabels : placeholder}
+        </span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200", isOpen && "rotate-180")} />
+      </button>
+      {error && <p className="text-xs font-medium text-red-500">{error}</p>}
+      
+      {isOpen && typeof document !== "undefined" && createPortal(
+        <div
+          ref={menuRef}
+          style={menuStyle ? { position: "fixed", top: menuStyle.top, bottom: menuStyle.bottom, left: menuStyle.left, width: menuStyle.width, maxHeight: menuStyle.maxHeight, zIndex: 9999 } : undefined}
+          className="overflow-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg animate-in fade-in zoom-in-95"
+        >
+          {options.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-slate-500">No options available</div>
+          ) : (
+            options.map((option) => {
+              const isSelected = value.includes(option.value);
+              return (
+                <div
+                  key={option.value}
+                  onClick={(e) => toggleOption(option.value, e)}
+                  className={cn(
+                    "flex cursor-pointer items-center px-3 py-2 text-sm transition-colors hover:bg-slate-50",
+                    isSelected && "bg-brand/5 font-medium text-brand"
+                  )}
+                >
+                  <div className={cn("mr-2 flex h-4 w-4 items-center justify-center rounded border", isSelected ? "border-brand bg-brand text-white" : "border-slate-300")}>
+                    {isSelected && <Check className="h-3 w-3" />}
+                  </div>
+                  {option.label}
+                </div>
+              );
+            })
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+

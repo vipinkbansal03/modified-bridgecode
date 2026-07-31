@@ -29,6 +29,7 @@ router.post("/:id/duplicate", requirePermission("products.update"), C.duplicate)
 router.post("/:id/archive", requirePermission("products.update"), C.archive);
 router.post("/:id/restore", requirePermission("products.update"), C.restore);
 router.delete("/:id", requirePermission("products.delete"), C.remove);
+router.put("/:id/shipping-info", requirePermission("products.update"), C.updateShippingInfo);
 router.post("/:id/packages", requirePermission("products.update"), C.createPackage);
 router.put("/:id/packages/:packageId", requirePermission("products.update"), C.updatePackage);
 router.delete("/:id/packages/:packageId", requirePermission("products.update"), C.deletePackage);

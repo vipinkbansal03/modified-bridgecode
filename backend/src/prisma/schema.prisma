@@ -27,6 +27,24 @@ model User {
   @@map("users")
 }
 
+model Warehouse {
+  id        String   @id @default(cuid())
+  name      String
+  countryId String
+  state     String
+  address   String?
+  gstin     String?
+  status    Status   @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  country     Country     @relation(fields: [countryId], references: [id])
+  inventories Inventory[]
+  orders      Order[]
+
+  @@map("warehouses")
+}
+
 model Role {
   id          String   @id @default(cuid())
   name        String   @unique
@@ -105,6 +123,13 @@ model Product {
   technicalSpecs    Json?
   warranty          Json?
   primaryFeatures   Json?
+  packageWeight     Decimal?             @db.Decimal(10, 3)
+  packageLength     Decimal?             @db.Decimal(10, 2)
+  packageWidth      Decimal?             @db.Decimal(10, 2)
+  packageHeight     Decimal?             @db.Decimal(10, 2)
+  shippingClass     String?
+  fragile           Boolean              @default(false)
+  hazardous         Boolean              @default(false)
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
   deletedAt         DateTime?
@@ -314,6 +339,7 @@ model Country {
   Quote               Quote[]
   variantCountries    VariantCountry[]
   paymentMethods      PaymentMethodCountry[]
+  warehouses          Warehouse[]
 
   @@map("countries")
 }
@@ -490,8 +516,10 @@ model Inventory {
   product           Product               @relation(fields: [productId], references: [id])
   country           Country?              @relation(fields: [countryId], references: [id])
   adjustments       InventoryAdjustment[]
+  warehouseId       String?
+  warehouse         Warehouse?            @relation(fields: [warehouseId], references: [id])
 
-  @@unique([variantId, countryId])
+  @@unique([variantId, warehouseId])
   @@map("inventory")
 }
 
@@ -661,6 +689,8 @@ model Order {
   quote            Quote?
   shippingZone     ShippingZone?    @relation(fields: [shippingZoneId], references: [id])
   paymentMethodRef PaymentMethod?   @relation(fields: [paymentMethodId], references: [id])
+  warehouseId      String?
+  warehouse        Warehouse?       @relation(fields: [warehouseId], references: [id])
 
   @@map("orders")
 }
@@ -767,6 +797,20 @@ model ShipmentEvent {
 
   @@index([shipmentId])
   @@map("shipment_events")
+}
+
+model ShippingBox {
+  id        String   @id @default(cuid())
+  name      String
+  length    Decimal  @db.Decimal(10, 2)
+  width     Decimal  @db.Decimal(10, 2)
+  height    Decimal  @db.Decimal(10, 2)
+  maxWeight Decimal  @db.Decimal(10, 2)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("shipping_boxes")
 }
 
 model PaymentGateway {
@@ -1364,7 +1408,6 @@ model TaxRule {
   country    Country?         @relation(fields: [countryId], references: [id])
   countries  TaxRuleCountry[]
   products   Product[]        @relation("ProductTaxRules")
-
   @@map("tax_rules")
 }
 

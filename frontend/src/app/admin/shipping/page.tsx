@@ -34,6 +34,17 @@ interface ProviderConfig {
   mode: "sandbox" | "production";
 }
 
+const PROVIDER_URLS: Record<string, Record<string, { baseUrl: string; trackingUrl: string }>> = {
+  DHL: {
+    production: { baseUrl: "https://api.dhl.com/mydhlapi", trackingUrl: "https://track.dhl.com/{tracking}" },
+    sandbox: { baseUrl: "https://api-test.dhl.com/mydhlapi", trackingUrl: "https://track.dhl.com/{tracking}" },
+  },
+  DTDC: {
+    production: { baseUrl: "https://api.dtdc.in", trackingUrl: "https://www.dtdc.in/tracking/{tracking}" },
+    sandbox: { baseUrl: "https://api.dtdc.in", trackingUrl: "https://www.dtdc.in/tracking/{tracking}" },
+  },
+};
+
 const defaultConfig: ProviderConfig = {
   apiKey: "",
   apiSecret: "",
@@ -71,8 +82,17 @@ export default function ShippingPage() {
   };
 
   const updateField = (pName: string, field: keyof ProviderConfig, value: string) => {
-    const current = getConfig({ name: pName } as Provider);
-    setConfigs((prev) => ({ ...prev, [pName]: { ...current, [field]: value } }));
+    const provider = providerList.find((p) => p.name === pName);
+    const current = provider ? getConfig(provider) : defaultConfig;
+    const newCfg = { ...current, [field]: value };
+    if (field === "mode") {
+      const urls = PROVIDER_URLS[pName]?.[value];
+      if (urls) {
+        newCfg.baseUrl = urls.baseUrl;
+        newCfg.trackingUrl = urls.trackingUrl;
+      }
+    }
+    setConfigs((prev) => ({ ...prev, [pName]: newCfg }));
     setDirty((prev) => ({ ...prev, [pName]: true }));
   };
 
@@ -105,7 +125,8 @@ export default function ShippingPage() {
 
   const handleTest = async (p: Provider) => {
     try {
-      const result = await testConnection.mutateAsync(p.id);
+      const cfg = getConfig(p);
+      const result = await testConnection.mutateAsync({ id: p.id, apiKey: cfg.apiKey, apiSecret: cfg.apiSecret, baseUrl: cfg.baseUrl });
       if (result.success) {
         showToast(`${p.displayName}: ${result.message} (${result.latencyMs}ms)`);
       } else {
@@ -124,6 +145,9 @@ export default function ShippingPage() {
             <span className="border-b-2 border-[#E31E24] px-4 py-2 text-[13px] font-semibold text-[#111]">Providers</span>
             <Link href="/admin/shipping/zones" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
               Zones
+            </Link>
+            <Link href="/admin/shipping/boxes" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
+              Boxes
             </Link>
           </div>
         </div>

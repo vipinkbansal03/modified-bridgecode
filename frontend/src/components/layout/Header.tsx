@@ -67,7 +67,7 @@ export function Header() {
       .map((cat) => {
         const catProducts = products.filter((p) => p.category?.slug === cat.slug);
         return {
-          label: cat.name,
+          label: cat.title,
           href: `/products?category=${cat.slug}`,
           children: catProducts.map((p) => ({
             label: p.title,
@@ -113,11 +113,11 @@ export function Header() {
     : nav.capabilitiesMenu;
   const productsMegaNav = storefrontProductsMegaMenu.length > 0
     ? storefrontProductsMegaMenu
-    : !HAS_LIVE_API && productMegaGroups.length > 0
-    ? productMegaGroups
-    : !HAS_LIVE_API
+    : dynamicMegaMenu.length > 0
     ? dynamicMegaMenu
-    : [];
+    : productMegaGroups.length > 0
+    ? productMegaGroups
+    : nav.productMegaMenu;
   const ctaLabel = ctaLink?.label || label(nav.ctaLabel);
   const ctaHref = ctaLink?.href || nav.ctaHref;
   const mobileLinks = [

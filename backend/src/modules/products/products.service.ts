@@ -140,6 +140,23 @@ type ProductInput = {
   technicalSpecs?: ProductSpecInput[];
   warranty?: string[];
   primaryFeatures?: ProductHighlightInput[];
+  packageWeight?: number | string | null;
+  packageLength?: number | string | null;
+  packageWidth?: number | string | null;
+  packageHeight?: number | string | null;
+  shippingClass?: string | null;
+  fragile?: boolean;
+  hazardous?: boolean;
+};
+
+type ShippingInfoInput = {
+  packageWeight?: number | string | null;
+  packageLength?: number | string | null;
+  packageWidth?: number | string | null;
+  packageHeight?: number | string | null;
+  shippingClass?: string | null;
+  fragile?: boolean;
+  hazardous?: boolean;
 };
 
 type ProductListQuery = {
@@ -696,6 +713,26 @@ export async function updateProduct(id: string, data: Partial<ProductInput>) {
   });
 }
 
+// ─── Shipping Info ────────────────────────────────────────
+
+export async function updateShippingInfo(id: string, data: ShippingInfoInput) {
+  const existing = await prisma.product.findUnique({ where: { id, deletedAt: null }, select: { id: true } });
+  if (!existing) throw new AppError("Product not found.", 404);
+
+  return prisma.product.update({
+    where: { id },
+    data: {
+      ...(data.packageWeight !== undefined ? { packageWeight: data.packageWeight } : {}),
+      ...(data.packageLength !== undefined ? { packageLength: data.packageLength } : {}),
+      ...(data.packageWidth !== undefined ? { packageWidth: data.packageWidth } : {}),
+      ...(data.packageHeight !== undefined ? { packageHeight: data.packageHeight } : {}),
+      ...(data.shippingClass !== undefined ? { shippingClass: data.shippingClass || null } : {}),
+      ...(data.fragile !== undefined ? { fragile: data.fragile } : {}),
+      ...(data.hazardous !== undefined ? { hazardous: data.hazardous } : {}),
+    },
+  });
+}
+
 // ─── Soft delete ─────────────────────────────────────────
 
 export async function deleteProduct(id: string) {
@@ -933,10 +970,11 @@ export async function reorderProducts(items: { id: string; sortOrder: number }[]
 
 export async function bulkUpdateProducts(data: {
   ids?: string[];
-  action?: "delete" | "enable" | "disable" | "archive" | "restore" | "assignCategory" | "assignCountries" | "assignCollections";
+  action?: "delete" | "enable" | "disable" | "archive" | "restore" | "assignCategory" | "assignCountries" | "assignCollections" | "assignWarehouse";
   categoryId?: string;
   countryIds?: string[];
   collectionIds?: string[];
+  warehouseId?: string;
 }) {
   const ids = Array.from(new Set(data.ids ?? []));
   if (!ids.length) throw new AppError("Select at least one product.", 400);
@@ -1024,6 +1062,26 @@ export async function bulkUpdateProducts(data: {
         ),
       ),
     );
+    return { updated: ids.length };
+  }
+
+  if (data.action === "assignWarehouse") {
+    if (!data.warehouseId) throw new AppError("warehouseId is required.", 400);
+    const warehouse = await prisma.warehouse.findUnique({ where: { id: data.warehouseId } });
+    if (!warehouse) throw new AppError("Warehouse not found.", 400);
+
+    const variants = await prisma.productVariant.findMany({ where: { productId: { in: ids } }, select: { id: true, productId: true } });
+    if (variants.length) {
+      await prisma.$transaction(
+        variants.map((v) =>
+          prisma.inventory.upsert({
+            where: { variantId_warehouseId: { variantId: v.id, warehouseId: data.warehouseId! } },
+            update: {},
+            create: { productId: v.productId, variantId: v.id, warehouseId: data.warehouseId!, stock: 0 },
+          })
+        )
+      );
+    }
     return { updated: ids.length };
   }
 

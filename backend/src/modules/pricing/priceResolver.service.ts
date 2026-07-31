@@ -458,6 +458,7 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
     currentPrice = applied.nextPrice;
     layers.push(applied.layer);
   }
+  const resolvedTierPrice = currentPrice;
 
   const promotionalTierDiscount = selectBestPromotionalDiscount(
     pricingContext.tierId && pricingContext.tierEligibleForCountry
@@ -524,7 +525,7 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
 
   // 3. Fetch tax rules from database
   const countryTaxRules = (await (prisma as unknown as { taxRule: { findMany: (args: unknown) => Promise<any[]> } }).taxRule.findMany({
-    where: { countryId: input.countryId, status: "ACTIVE" },
+    where: { countries: { some: { id: input.countryId } }, status: "ACTIVE" },
     include: { products: { select: { id: true } } },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   })) as any[];
@@ -698,7 +699,7 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
       : undefined;
 
   return {
-    basePrice: money(basePrice.sellingPrice),
+    basePrice: resolvedTierPrice,
     appliedDiscounts: layers,
     priceBeforeTax,
     taxAmount: roundMoney(totalTaxAmount),

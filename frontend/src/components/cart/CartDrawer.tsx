@@ -175,12 +175,15 @@ export function CartDrawer() {
                               )}
                             </p>
                           )}
-                          <p className="text-[15px] font-semibold text-ink">
-                            {formatMoney(
-                              item.currencySymbol,
-                              item.unitPrice * item.quantity,
-                            )}
-                          </p>
+                          <div className="mt-0.5">
+                            <p className="text-[15px] font-semibold text-ink">
+                              {formatMoney(
+                                item.currencySymbol,
+                                item.unitPrice * item.quantity,
+                              )}
+                            </p>
+                            <p className="text-[10px] text-steel">Tax calculated at checkout</p>
+                          </div>
                         </div>
                       )}
                     </div>

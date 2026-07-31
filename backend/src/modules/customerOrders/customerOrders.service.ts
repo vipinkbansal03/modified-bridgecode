@@ -54,7 +54,7 @@ async function calculateCustomerOrder(
           defaultCurrency: true,
         },
       },
-      inventories: true,
+      inventories: { include: { warehouse: true } },
     },
   });
 
@@ -165,7 +165,7 @@ async function calculateCustomerOrder(
       ? sum + item.taxTotal
       : sum;
   }, 0);
-  const shipping = await calculateRequiredShipping(orderCountry.code, subtotal);
+  const shipping = await calculateRequiredShipping(orderCountry.code, subtotal, input.shippingZoneId);
   const shippingCharge = shipping.charge;
   const couponValidation = input.couponCode?.trim()
     ? await validateCoupon(input.couponCode, subtotal, orderCountry.code)
@@ -615,4 +615,42 @@ export async function verifyRazorpayPayment(
   });
 
   return updatedOrder;
+}
+
+export async function releaseStock(orderId: string) {
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!order || !order.warehouseId) return;
+
+    for (const item of order.items) {
+      if (!item.variantId) continue;
+      
+      const inv = await tx.inventory.findFirst({
+        where: { variantId: item.variantId, warehouseId: order.warehouseId },
+      });
+      if (!inv) continue;
+
+      const updated = await tx.$executeRaw`
+        UPDATE "inventory"
+        SET stock = stock + ${item.quantity}
+        WHERE id = ${inv.id}
+      `;
+
+      if (updated > 0) {
+        await tx.inventoryAdjustment.create({
+          data: {
+            inventoryId: inv.id,
+            variantId: item.variantId,
+            previousQty: inv.stock,
+            newQty: inv.stock + item.quantity,
+            adjustedBy: `system:release_stock;order:${order.id}`,
+            reason: "order_cancelled",
+          }
+        });
+      }
+    }
+  });
 }

@@ -17,12 +17,13 @@ export interface ProductCardProps {
   category?: string;
   shortDescription?: string;
   price?: string;
+  taxLabel?: string;
   badge?: string;
   ctaLabel?: string;
   actionSlot?: React.ReactNode;
 }
 
-export function ProductCard({ id, image, title, slug, category, shortDescription, price, badge, ctaLabel, actionSlot }: ProductCardProps) {
+export function ProductCard({ id, image, title, slug, category, shortDescription, price, taxLabel = "Inclusive of all taxes", badge, ctaLabel, actionSlot }: ProductCardProps) {
   const rawImage = image?.trim() || null;
   let imageSrc: string | null = null;
   if (rawImage) {
@@ -69,7 +70,10 @@ export function ProductCard({ id, image, title, slug, category, shortDescription
               <h5 className="mt-1.5 text-[15px] font-medium text-ink">{title}</h5>
               {shortDescription && <p className="mt-1.5 text-sm text-steel">{shortDescription}</p>}
               {price ? (
-                <p className="mt-2 text-sm font-semibold text-ink">{price}</p>
+                <div className="mt-2">
+                  <p className="text-sm font-semibold text-ink">{price}</p>
+                  <p className="mt-0.5 text-[11px] font-normal text-steel">{taxLabel}</p>
+                </div>
               ) : (
                 <span className="mt-2 inline-block rounded-pill border border-[#E5E7EB] bg-[#F3F4F6] px-2.5 py-0.5 text-xs font-semibold text-[#E31E24]">
                   Price Upon Request
