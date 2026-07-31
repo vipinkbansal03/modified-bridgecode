@@ -134,6 +134,10 @@ export interface CustomerOrderSummary {
   shippingCharge?: string | number;
   shippingProvider?: string | null;
   shippingZoneId?: string | null;
+  shippingBox?: ShippingBoxSummary | null;
+  shippingBoxName?: string | null;
+  packageWeight?: string | number;
+  packageVolume?: string | number;
   total: string | number;
   createdAt: string;
   currency?: { code: string; symbol: string };
@@ -198,6 +202,9 @@ export interface CustomerOrderEstimate {
   shippingZoneId?: string | null;
   shippingEstimatedDays?: string | null;
   shippingIsFree?: boolean;
+  shippingBox?: ShippingBoxSummary | null;
+  packageWeight?: number;
+  packageVolume?: number;
   discount: number;
   automaticDiscount?: number;
   automaticDiscounts?: {
@@ -233,6 +240,15 @@ export interface CouponValidationResult {
   discountValue: number;
   discountAmount: number;
   description?: string | null;
+}
+
+export interface ShippingBoxSummary {
+  id: string;
+  name: string;
+  length: number;
+  width: number;
+  height: number;
+  maxWeight: number;
 }
 
 export interface ShippingEstimate {

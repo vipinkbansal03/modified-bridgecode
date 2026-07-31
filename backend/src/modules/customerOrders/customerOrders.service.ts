@@ -4,6 +4,7 @@ import { decrementVariantStock } from "../inventory/inventory.service";
 import { assertSellableInCountry } from "../countries/countryAvailability.service";
 import { resolvePrice } from "../pricing/priceResolver.service";
 import { calculateRequiredShipping } from "../shipping/shipping.service";
+import { calculateShipment } from "../shipping/shippingCalculator.service";
 import { validateCoupon } from "../coupons/coupons.service";
 import type { CreateCustomerOrderInput } from "./customerOrders.validation";
 
@@ -167,6 +168,12 @@ async function calculateCustomerOrder(
   }, 0);
   const shipping = await calculateRequiredShipping(orderCountry.code, subtotal, input.shippingZoneId);
   const shippingCharge = shipping.charge;
+  const packaging = await calculateShipment(
+    orderItems.map((item) => ({
+      productId: item.variant.productId,
+      quantity: item.quantity,
+    })),
+  );
   const couponValidation = input.couponCode?.trim()
     ? await validateCoupon(input.couponCode, subtotal, orderCountry.code)
     : null;
@@ -185,6 +192,7 @@ async function calculateCustomerOrder(
     exclusiveTaxAmount,
     shipping,
     shippingCharge,
+    packaging,
     discount,
     couponValidation,
     total,
@@ -302,6 +310,9 @@ export async function estimateCustomerOrder(
     shippingZoneId: calculation.shipping.zoneId,
     shippingEstimatedDays: calculation.shipping.estimatedDays,
     shippingIsFree: calculation.shipping.isFree,
+    shippingBox: calculation.packaging.box,
+    packageWeight: calculation.packaging.totalWeight,
+    packageVolume: calculation.packaging.totalVolume,
     discount: calculation.discount,
     couponCode: calculation.couponValidation?.coupon.code ?? null,
     couponDiscount: calculation.discount,
@@ -346,6 +357,7 @@ export async function createCustomerOrder(
     taxAmount,
     shipping,
     shippingCharge,
+    packaging,
     discount,
     couponValidation,
     total,
@@ -426,6 +438,10 @@ export async function createCustomerOrder(
         paymentMethod: CUSTOMER_CHECKOUT_PAYMENT_METHOD,
         shippingProvider: shipping.provider,
         shippingZoneId: shipping.zoneId,
+        shippingBoxId: packaging.box?.id ?? null,
+        shippingBoxName: packaging.box?.name ?? null,
+        packageWeight: packaging.totalWeight,
+        packageVolume: packaging.totalVolume,
         notes: input.notes,
         items: {
           create: orderItems.map((item) => ({
@@ -446,6 +462,7 @@ export async function createCustomerOrder(
         country: true,
         currency: true,
         shippingZone: { include: { provider: true, country: true } },
+        shippingBox: true,
       },
     });
 
@@ -487,6 +504,7 @@ export async function listCustomerOrders(customerId: string) {
       country: true,
       currency: true,
       shippingZone: { include: { provider: true, country: true } },
+      shippingBox: true,
     },
   });
 }

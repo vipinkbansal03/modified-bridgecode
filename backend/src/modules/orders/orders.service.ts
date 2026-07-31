@@ -116,7 +116,7 @@ export async function listOrders(query: {
 }
 
 export async function getOrder(id: string) {
-  const o = await prisma.order.findUnique({ where: { id }, include: { items: { include: { product: true, variant: true } }, country: true, currency: true, coupon: true, shippingZone: { include: { provider: true, country: true } } } });
+  const o = await prisma.order.findUnique({ where: { id }, include: { items: { include: { product: true, variant: true } }, country: true, currency: true, coupon: true, shippingZone: { include: { provider: true, country: true } }, shippingBox: true } });
   if (!o) throw new AppError("Order not found.", 404);
   return o;
 }

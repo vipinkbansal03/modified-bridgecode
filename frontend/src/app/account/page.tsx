@@ -524,6 +524,15 @@ export default function AccountPage() {
                                   {money(order, order.shippingCharge)}
                                 </strong>
                               </div>
+                              {(order.shippingBox || order.shippingBoxName || order.packageWeight != null) && (
+                                <div className="flex justify-between">
+                                  <span className="text-steel">Packaging</span>
+                                  <strong className="text-ink">
+                                    {order.shippingBox?.name ?? order.shippingBoxName ?? "Standard box"} ·{" "}
+                                    {Number(order.packageWeight ?? 0).toFixed(3)} kg
+                                  </strong>
+                                </div>
+                              )}
                               <div className="flex justify-between">
                                 <span className="text-steel">
                                   Payment method
