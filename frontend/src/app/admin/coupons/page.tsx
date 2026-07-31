@@ -103,7 +103,7 @@ function toForm(coupon: CouponRow): FormState {
     startDate: dateInput(coupon.startDate),
     endDate: dateInput(coupon.endDate),
     usageLimit: coupon.usageLimit ? String(coupon.usageLimit) : "",
-    countryIds: coupon.countryId ? [coupon.countryId] : [],
+    countryIds: (coupon as any).countryIds?.length ? (coupon as any).countryIds : (coupon.countryId ? [coupon.countryId] : []),
     status: coupon.status === "INACTIVE" ? "INACTIVE" : "ACTIVE",
   };
 }
@@ -220,6 +220,7 @@ export default function CouponsPage() {
       startDate: form.startDate,
       endDate: form.endDate,
       usageLimit: form.usageLimit || null,
+      countryIds: form.countryIds,
       countryId: form.countryIds.length > 0 ? form.countryIds[0] : null,
       status: form.status,
     };

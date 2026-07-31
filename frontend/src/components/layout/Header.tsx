@@ -81,19 +81,43 @@ export function Header() {
   const primaryLinks = cmsMenuToLinks(cmsPrimaryMenu);
   const capabilitiesLinks = cmsMenuToLinks(cmsCapabilitiesMenu);
   const productMegaGroups = cmsMenuToMegaGroups(cmsProductsMegaMenu);
+  const activeProductMegaUrls = useMemo(() => {
+    if (!productMegaGroups.length) return null;
+    return new Set(
+      productMegaGroups.flatMap((group) => [
+        group.href,
+        ...group.children.map((child) => child.href),
+      ]),
+    );
+  }, [productMegaGroups]);
+  const storefrontProductsMegaMenu = useMemo(() => {
+    if (!activeProductMegaUrls) return dynamicMegaMenu;
+    return dynamicMegaMenu
+      .map((group) => ({
+        ...group,
+        children: group.children.filter((child) =>
+          activeProductMegaUrls.has(child.href),
+        ),
+      }))
+      .filter(
+        (group) =>
+          group.children.length > 0 && activeProductMegaUrls.has(group.href),
+      );
+  }, [activeProductMegaUrls, dynamicMegaMenu]);
   const ctaLink = cmsMenuToLinks(cmsCtaMenu)[0];
   const hasCmsPrimary = primaryLinks.length > 0;
   const hasCmsCapabilities = capabilitiesLinks.length > 0;
-  const hasCmsProductsMega = productMegaGroups.length > 0;
   const primaryNav = hasCmsPrimary ? primaryLinks : nav.primary.slice(1);
   const capabilitiesNav = hasCmsCapabilities
     ? capabilitiesLinks
     : nav.capabilitiesMenu;
-  const productsMegaNav = dynamicMegaMenu.length > 0
-    ? dynamicMegaMenu
-    : hasCmsProductsMega
+  const productsMegaNav = storefrontProductsMegaMenu.length > 0
+    ? storefrontProductsMegaMenu
+    : !HAS_LIVE_API && productMegaGroups.length > 0
     ? productMegaGroups
-    : nav.productMegaMenu;
+    : !HAS_LIVE_API
+    ? dynamicMegaMenu
+    : [];
   const ctaLabel = ctaLink?.label || label(nav.ctaLabel);
   const ctaHref = ctaLink?.href || nav.ctaHref;
   const mobileLinks = [

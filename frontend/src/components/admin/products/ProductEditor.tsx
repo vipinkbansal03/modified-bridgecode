@@ -8,6 +8,8 @@ import * as Yup from "yup";
 import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column, toastMessages } from "@/components/admin/AdminComponents";
+import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
+import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
 import { BulkVariantImportWizard } from "@/components/admin/products/BulkVariantImportWizard";
 import {
@@ -365,6 +367,8 @@ type RuleDraft = {
   tierId: string;
   countryId: string;
   variantId: string;
+  countryIds?: string[];
+  variantIds?: string[];
   minQuantity: string;
   mode: "discount" | "fixed";
   discountPercent: string;
@@ -375,6 +379,8 @@ const emptyRuleDraft: RuleDraft = {
   tierId: "",
   countryId: "",
   variantId: "",
+  countryIds: [],
+  variantIds: [],
   minQuantity: "10",
   mode: "discount",
   discountPercent: "",
@@ -2490,28 +2496,48 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   });
 
   const handleCreateTierRule = async () => {
-    if (!tierRuleDraft.tierId || !tierRuleDraft.countryId) {
-      showToast("Choose tier and country.", "error");
+    const countriesToApply = tierRuleDraft.countryIds?.length ? tierRuleDraft.countryIds : [tierRuleDraft.countryId].filter(Boolean);
+    const variantsToApply = tierRuleDraft.variantIds?.length ? tierRuleDraft.variantIds : [tierRuleDraft.variantId];
+
+    if (!tierRuleDraft.tierId || countriesToApply.length === 0) {
+      showToast("Choose tier and at least one country.", "error");
       return;
     }
+
     try {
-      await createTierPricing.mutateAsync(buildRulePayload(tierRuleDraft, false));
+      let createdCount = 0;
+      for (const countryId of countriesToApply) {
+        for (const variantId of variantsToApply) {
+          await createTierPricing.mutateAsync(buildRulePayload({ ...tierRuleDraft, countryId, variantId }, false));
+          createdCount++;
+        }
+      }
       setTierRuleDraft(emptyRuleDraft);
-      showToast("Tier pricing rule created.");
+      showToast(`${createdCount} Tier pricing rule(s) created.`);
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to create tier pricing rule."), "error");
     }
   };
 
   const handleCreateMoqRule = async () => {
-    if (!moqRuleDraft.countryId) {
-      showToast("Choose country.", "error");
+    const countriesToApply = moqRuleDraft.countryIds?.length ? moqRuleDraft.countryIds : [moqRuleDraft.countryId].filter(Boolean);
+    const variantsToApply = moqRuleDraft.variantIds?.length ? moqRuleDraft.variantIds : [moqRuleDraft.variantId];
+
+    if (countriesToApply.length === 0) {
+      showToast("Choose at least one country.", "error");
       return;
     }
+
     try {
-      await createMoqPricing.mutateAsync(buildRulePayload(moqRuleDraft, true));
+      let createdCount = 0;
+      for (const countryId of countriesToApply) {
+        for (const variantId of variantsToApply) {
+          await createMoqPricing.mutateAsync(buildRulePayload({ ...moqRuleDraft, countryId, variantId }, true));
+          createdCount++;
+        }
+      }
       setMoqRuleDraft(emptyRuleDraft);
-      showToast("MOQ pricing rule created.");
+      showToast(`${createdCount} MOQ pricing rule(s) created.`);
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to create MOQ pricing rule."), "error");
     }
@@ -5264,8 +5290,22 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 </div>
                 <div className="grid gap-3 lg:grid-cols-6">
                   <AdminSelect label="Tier" value={tierRuleDraft.tierId} onChange={(e) => setTierRuleDraft((d) => ({ ...d, tierId: e.target.value }))} options={[{ value: "", label: "Select tier" }, ...tierRows.map((tier) => ({ value: tier.id, label: tier.name }))]} />
-                  <AdminSelect label="Country" value={tierRuleDraft.countryId} onChange={(e) => setTierRuleDraft((d) => ({ ...d, countryId: e.target.value }))} options={[{ value: "", label: "Select country" }, ...countryRows.map((country) => ({ value: country.id, label: `${country.name} (${country.code})` }))]} />
-                  <AdminSelect label="Variant" value={tierRuleDraft.variantId} onChange={(e) => setTierRuleDraft((d) => ({ ...d, variantId: e.target.value }))} options={[{ value: "", label: "Product-level" }, ...variantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]} />
+                  <AdminMultiSearchableSelect
+                    label="Countries"
+                    values={tierRuleDraft.countryIds ?? (tierRuleDraft.countryId ? [tierRuleDraft.countryId] : [])}
+                    onValuesChange={(values) => setTierRuleDraft((d) => ({ ...d, countryIds: values, countryId: values[0] ?? "" }))}
+                    options={countryRows.map((country) => ({ value: country.id, label: `${country.name} (${country.code})` }))}
+                    placeholder="Select countries"
+                    allowSelectAll
+                    selectAllLabel="All countries"
+                  />
+                  <AdminMultiSearchableSelect
+                    label="Variants"
+                    values={tierRuleDraft.variantIds ?? (tierRuleDraft.variantId ? [tierRuleDraft.variantId] : [])}
+                    onValuesChange={(values) => setTierRuleDraft((d) => ({ ...d, variantIds: values, variantId: values[0] ?? "" }))}
+                    options={[{ value: "", label: "Product-level" }, ...variantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]}
+                    placeholder="Select variants"
+                  />
                   <AdminSelect label="Mode" value={tierRuleDraft.mode} onChange={(e) => setTierRuleDraft((d) => ({ ...d, mode: e.target.value as "discount" | "fixed" }))} options={[{ value: "discount", label: "% Discount" }, { value: "fixed", label: "Fixed Price" }]} />
                   <AdminInput label={tierRuleDraft.mode === "discount" ? "Discount %" : "Fixed Price"} type="number" min={0} step="0.01" value={tierRuleDraft.mode === "discount" ? tierRuleDraft.discountPercent : tierRuleDraft.fixedPrice} onChange={(e) => setTierRuleDraft((d) => ({ ...d, [d.mode === "discount" ? "discountPercent" : "fixedPrice"]: e.target.value }))} />
                   <div className="flex items-end">
@@ -5295,8 +5335,22 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Create quantity price-break rules. Existing variant MOQ remains a minimum-quantity gate only.</p>
                 </div>
                 <div className="grid gap-3 lg:grid-cols-6">
-                  <AdminSelect label="Country" value={moqRuleDraft.countryId} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, countryId: e.target.value }))} options={[{ value: "", label: "Select country" }, ...countryRows.map((country) => ({ value: country.id, label: `${country.name} (${country.code})` }))]} />
-                  <AdminSelect label="Variant" value={moqRuleDraft.variantId} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, variantId: e.target.value }))} options={[{ value: "", label: "Product-level" }, ...variantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]} />
+                  <AdminMultiSearchableSelect
+                    label="Countries"
+                    values={moqRuleDraft.countryIds ?? (moqRuleDraft.countryId ? [moqRuleDraft.countryId] : [])}
+                    onValuesChange={(values) => setMoqRuleDraft((d) => ({ ...d, countryIds: values, countryId: values[0] ?? "" }))}
+                    options={countryRows.map((country) => ({ value: country.id, label: `${country.name} (${country.code})` }))}
+                    placeholder="Select countries"
+                    allowSelectAll
+                    selectAllLabel="All countries"
+                  />
+                  <AdminMultiSearchableSelect
+                    label="Variants"
+                    values={moqRuleDraft.variantIds ?? (moqRuleDraft.variantId ? [moqRuleDraft.variantId] : [])}
+                    onValuesChange={(values) => setMoqRuleDraft((d) => ({ ...d, variantIds: values, variantId: values[0] ?? "" }))}
+                    options={[{ value: "", label: "Product-level" }, ...variantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]}
+                    placeholder="Select variants"
+                  />
                   <AdminInput label="Min Qty" type="number" min={1} value={moqRuleDraft.minQuantity} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, minQuantity: e.target.value }))} />
                   <AdminSelect label="Mode" value={moqRuleDraft.mode} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, mode: e.target.value as "discount" | "fixed" }))} options={[{ value: "discount", label: "% Discount" }, { value: "fixed", label: "Fixed Price" }]} />
                   <AdminInput label={moqRuleDraft.mode === "discount" ? "Discount %" : "Fixed Price"} type="number" min={0} step="0.01" value={moqRuleDraft.mode === "discount" ? moqRuleDraft.discountPercent : moqRuleDraft.fixedPrice} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, [d.mode === "discount" ? "discountPercent" : "fixedPrice"]: e.target.value }))} />

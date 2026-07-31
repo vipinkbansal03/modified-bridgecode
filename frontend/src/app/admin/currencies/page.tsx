@@ -16,6 +16,7 @@ import {
   useExportCurrencies,
   useImportCurrencies,
   usePreviewCurrencyImport,
+  useSyncCurrencyRates,
   useUpdateCurrency,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
@@ -159,6 +160,7 @@ export default function CurrenciesPage() {
   const exportCurrencies = useExportCurrencies();
   const previewCurrencyImport = usePreviewCurrencyImport();
   const importCurrencies = useImportCurrencies();
+  const syncCurrencyRates = useSyncCurrencyRates();
 
   const visibleColumnKeys = useMemo(
     () => Object.entries(visibleColumns).filter(([, enabled]) => enabled).map(([key]) => key),
@@ -297,10 +299,12 @@ export default function CurrenciesPage() {
 
   async function handleSyncRates() {
     try {
-      await adminApi.post("/currencies/sync-rates");
-      showToast("Currency rates sync started.");
+      const result = await syncCurrencyRates.mutateAsync();
+      showToast(
+        `Rates synced! Updated ${result.updatedCount ?? 0} currency rate(s) based on ${result.baseCode ?? "base currency"}.`,
+      );
     } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to sync rates."), "error");
+      showToast(getAdminErrorMessage(error, "Failed to sync exchange rates."), "error");
     }
   }
 
@@ -391,11 +395,12 @@ export default function CurrenciesPage() {
               {canUpdate && (
                 <button
                   type="button"
+                  disabled={syncCurrencyRates.isPending}
                   onClick={handleSyncRates}
-                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]"
+                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-60"
                 >
-                  <RefreshCw size={14} />
-                  Sync Rates
+                  <RefreshCw size={14} className={syncCurrencyRates.isPending ? "animate-spin text-[#E31E24]" : ""} />
+                  {syncCurrencyRates.isPending ? "Syncing..." : "Sync Rates"}
                 </button>
               )}
               <button

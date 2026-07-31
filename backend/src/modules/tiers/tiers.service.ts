@@ -56,7 +56,12 @@ function buildTierWhere(query: TierListQuery) {
   const search = query.search?.trim();
   if (query.status) where.status = normalizeStatus(query.status);
   if (query.countryId) {
-    where.countries = { some: { countryId: query.countryId, enabled: true } };
+    const ids = query.countryId.split(",").map((s) => s.trim()).filter(Boolean);
+    if (ids.length > 1) {
+      where.countries = { some: { countryId: { in: ids }, enabled: true } };
+    } else if (ids.length === 1) {
+      where.countries = { some: { countryId: ids[0], enabled: true } };
+    }
   }
   if (search) {
     where.OR = [

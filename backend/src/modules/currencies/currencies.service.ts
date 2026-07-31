@@ -396,6 +396,48 @@ export async function importCurrencySpreadsheet(filePath: string) {
   };
 }
 
-export async function syncExchangeRates() {
-  return { message: "Connect to OpenExchangeRates or similar API here." };
+import { defaultExchangeRateProvider } from "./providers/erApiProvider";
+import { IExchangeRateProvider } from "./providers/exchangeRateProvider.interface";
+
+export async function syncExchangeRates(provider: IExchangeRateProvider = defaultExchangeRateProvider) {
+  const baseCurrency = await prisma.currency.findFirst({ where: { isBase: true }, select: { id: true, code: true } });
+  const baseCode = baseCurrency?.code ?? "USD";
+
+  const fetched = await provider.fetchLatestRates(baseCode);
+
+  const existingCurrencies = await prisma.currency.findMany({ select: { id: true, code: true, isBase: true, exchangeRate: true } });
+
+  const updatedCurrencies: Array<{ code: string; oldRate: number; newRate: number }> = [];
+  let skippedCount = 0;
+
+  await prisma.$transaction(async (tx) => {
+    for (const currency of existingCurrencies) {
+      if (currency.isBase) {
+        if (Number(currency.exchangeRate) !== 1) {
+          await tx.currency.update({ where: { id: currency.id }, data: { exchangeRate: 1 } });
+        }
+        continue;
+      }
+
+      const rate = fetched.rates[currency.code];
+      if (rate !== undefined && Number.isFinite(rate) && rate > 0) {
+        const oldRate = Number(currency.exchangeRate);
+        const newRate = Number(rate.toFixed(6));
+        await tx.currency.update({ where: { id: currency.id }, data: { exchangeRate: newRate } });
+        updatedCurrencies.push({ code: currency.code, oldRate, newRate });
+      } else {
+        skippedCount++;
+      }
+    }
+  });
+
+  return {
+    provider: provider.name,
+    baseCode,
+    totalCurrencies: existingCurrencies.length,
+    updatedCount: updatedCurrencies.length,
+    skippedCount,
+    updatedCurrencies,
+    lastUpdateUtc: fetched.timeLastUpdateUtc ?? new Date().toISOString(),
+  };
 }

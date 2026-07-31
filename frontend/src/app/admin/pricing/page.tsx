@@ -28,6 +28,8 @@ import {
   useToast,
 } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
+import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
+import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import {
   useAdminCountries,
   useAdminCustomerRoles,
@@ -816,7 +818,18 @@ export default function PricingPage() {
                 <div className="mt-4 pt-4 border-t border-[#FAFAFA] space-y-4">
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <AdminSelect label="Status" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as PricingStatusFilter); setPage(1); }} options={[{ value: "ALL", label: "All statuses" }, { value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
-                    <AdminSelect label="Country" value={countryFilter} onChange={(event) => { setCountryFilter(event.target.value); setPage(1); }} options={countryOptions} />
+                    <AdminMultiSearchableSelect
+                      label="Country"
+                      values={countryFilter ? countryFilter.split(",").filter(Boolean) : []}
+                      onValuesChange={(values) => {
+                        setCountryFilter(values.join(","));
+                        setPage(1);
+                      }}
+                      options={(countries as any[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+                      placeholder="Select countries"
+                      allowSelectAll
+                      selectAllLabel="All countries"
+                    />
                     <AdminSelect label="Tier" value={tierFilter} onChange={(event) => { setTierFilter(event.target.value); setPage(1); }} options={tierOptions} />
                     <AdminSelect label="Product" value={productFilter} onChange={(event) => { setProductFilter(event.target.value); setPage(1); }} options={productOptions} />
                     <AdminSelect label="Variant" value={variantFilter} onChange={(event) => { setVariantFilter(event.target.value); setPage(1); }} options={[{ value: "", label: "All variants" }, ...(filterProductData?.variants ?? []).map((variant: { id: string; title: string; sku?: string | null }) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]} />
@@ -907,7 +920,15 @@ export default function PricingPage() {
                   Delete
                 </button>
                 <div className="ml-auto grid gap-2 md:grid-cols-2">
-                  <AdminSelect label="Bulk country assignment" value={bulkCountryId} onChange={(event) => setBulkCountryId(event.target.value)} options={countryOptions} />
+                  <AdminMultiSearchableSelect
+                    label="Bulk country assignment"
+                    values={bulkCountryId ? [bulkCountryId] : []}
+                    onValuesChange={(values) => setBulkCountryId(values[0] ?? "")}
+                    options={(countries as any[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+                    placeholder="Select countries"
+                    allowSelectAll
+                    selectAllLabel="All countries"
+                  />
                   <AdminSelect label="Bulk tier assignment" value={bulkTierId} onChange={(event) => setBulkTierId(event.target.value)} options={tierOptions} />
                 </div>
               </div>
@@ -1082,7 +1103,7 @@ export default function PricingPage() {
                 onChange={(event) => setPreviewInput((current) => ({ ...current, variantId: event.target.value }))}
                 options={previewVariantOptions}
               />
-              <AdminSelect
+              <AdminSearchableSelect
                 label="Country"
                 value={previewInput.countryId}
                 onChange={(event) => setPreviewInput((current) => ({ ...current, countryId: event.target.value }))}
@@ -1313,7 +1334,15 @@ export default function PricingPage() {
               />
               <AdminSelect label="Product" value={form.productId} onChange={(event) => setForm((current) => ({ ...current, productId: event.target.value, variantId: "" }))} options={productOptions} />
               <AdminSelect label="Variant" value={form.variantId} onChange={(event) => setForm((current) => ({ ...current, variantId: event.target.value }))} options={variantOptions} />
-              <AdminSelect label="Country" value={form.countryId} onChange={(event) => setForm((current) => ({ ...current, countryId: event.target.value }))} options={countryOptions} />
+              <AdminMultiSearchableSelect
+                label="Countries"
+                values={(form as any).countryIds ?? (form.countryId ? [form.countryId] : [])}
+                onValuesChange={(values) => setForm((current) => ({ ...current, countryIds: values, countryId: values[0] ?? "" } as any))}
+                options={(countries as any[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+                placeholder="Select countries"
+                allowSelectAll
+                selectAllLabel="All countries"
+              />
               <AdminSelect label="Status" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as "ACTIVE" | "INACTIVE" }))} options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
               <AdminSelect
                 label="Customer Role"

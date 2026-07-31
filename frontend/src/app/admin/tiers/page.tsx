@@ -19,6 +19,7 @@ import {
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, ConfirmModal, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
 import {
   useAdminCountries,
@@ -492,14 +493,20 @@ export default function AdminTiersPage() {
                     { value: "INACTIVE", label: "Inactive" },
                   ]}
                 />
-                <AdminSelect
+                <AdminMultiSearchableSelect
                   label="Country"
-                  value={countryFilter}
-                  onChange={(event) => {
+                  values={countryFilter ? countryFilter.split(",").filter(Boolean) : []}
+                  onValuesChange={(values) => {
                     setPage(1);
-                    setCountryFilter(event.target.value);
+                    setCountryFilter(values.join(","));
                   }}
-                  options={countryOptions}
+                  options={countries.map((country: { id: string; name: string; code: string }) => ({
+                    value: country.id,
+                    label: `${country.name} (${country.code})`,
+                  }))}
+                  placeholder="Select countries"
+                  allowSelectAll
+                  selectAllLabel="All countries"
                 />
                 <AdminSelect
                   label="Sort By"

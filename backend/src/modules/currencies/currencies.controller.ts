@@ -24,7 +24,26 @@ export const remove = asyncHandler(async (req: AuthRequest, res: Response) => {
 
 export const bulk = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Bulk action completed.", await S.bulkCurrencies(req.body)));
 
-export const syncRates = asyncHandler(async (_r: AuthRequest, res: Response) => ApiResponse.success(res, "Rates synced.", await S.syncExchangeRates()));
+import { prisma } from "../../config/database";
+
+export const syncRates = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await S.syncExchangeRates();
+  if (req.user?.id) {
+    try {
+      await prisma.activityLog.create({
+        data: {
+          userId: req.user.id,
+          action: "CURRENCY_RATES_SYNCED",
+          entityType: "Currency",
+          entityId: "ALL",
+        },
+      });
+    } catch {
+      // Non-blocking activity log write
+    }
+  }
+  return ApiResponse.success(res, "Rates synced.", result);
+});
 
 export const exportSpreadsheet = asyncHandler(async (req: AuthRequest, res: Response) => {
   const buffer = await S.exportCurrenciesSpreadsheet(req.query as never);

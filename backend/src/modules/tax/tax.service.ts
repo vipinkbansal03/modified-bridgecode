@@ -14,6 +14,7 @@ type TaxRuleInput = {
   type?: string;
   taxMode?: string;
   percentage?: number | string;
+  countryId?: string;
   countryIds?: string[];
   status?: string;
   sortOrder?: number | string;
@@ -75,8 +76,20 @@ function taxRuleClient() {
 
 function includeCountryAndProducts() {
   return {
-    countries: { include: { currency: true } },
+    country: { include: { currency: true } },
+    countries: { include: { country: { include: { currency: true } } } },
     products: { select: { id: true, title: true } },
+  };
+}
+
+function formatTaxRuleResponse(rule: any) {
+  if (!rule) return rule;
+  const countryIds = rule.countries?.length > 0
+    ? rule.countries.map((c: any) => c.countryId)
+    : (rule.countryId ? [rule.countryId] : []);
+  return {
+    ...rule,
+    countryIds,
   };
 }
 
@@ -155,7 +168,20 @@ function taxRuleOrderBy(query: TaxListQuery) {
 function buildWhere(query: TaxListQuery) {
   const where: Record<string, unknown> = {};
   const search = query.search?.trim();
-  if (query.countryId) where.countries = { some: { id: query.countryId } };
+  if (query.countryId) {
+    const ids = query.countryId.split(",").map((s) => s.trim()).filter(Boolean);
+    if (ids.length > 1) {
+      where.OR = [
+        { countryId: { in: ids } },
+        { countries: { some: { countryId: { in: ids } } } },
+      ];
+    } else if (ids.length === 1) {
+      where.OR = [
+        { countryId: ids[0] },
+        { countries: { some: { countryId: ids[0] } } },
+      ];
+    }
+  }
   if (query.status) where.status = normalizeStatus(query.status);
   if (query.type) where.type = normalizeType(query.type);
 
@@ -195,7 +221,7 @@ export async function listTaxRules(query: TaxListQuery) {
     taxRuleClient().count({ where }),
   ]);
 
-  return { data, total, page, limit };
+  return { data: data.map(formatTaxRuleResponse), total, page, limit };
 }
 
 async function assertCountries(countryIds: string[]) {
@@ -320,15 +346,23 @@ export async function createTaxRule(input: TaxRuleInput) {
   const type = normalizeType(input.type);
   const taxMode = normalizeTaxMode(input.taxMode);
   const percentage = parsePercentage(input.percentage);
-  const countryIds = input.countryIds && Array.isArray(input.countryIds) ? input.countryIds.map(c => c.trim()).filter(Boolean) : [];
+  const rawCountryIds = Array.isArray(input.countryIds)
+    ? input.countryIds.filter(Boolean)
+    : input.countryId
+    ? [input.countryId]
+    : [];
+  const countryIds = [...new Set(rawCountryIds)];
+  const countryId = countryIds[0] ?? input.countryId?.trim() ?? null;
   if (!name) throw new AppError("Tax rule name is required.", 400);
   if (!type) throw new AppError("Tax rule type is required.", 400);
   if (percentage === undefined) throw new AppError("Tax percentage is required.", 400);
-  if (countryIds.length === 0) throw new AppError("At least one Country is required.", 400);
-  await assertCountries(countryIds);
-  await assertUniqueName(name);
+  if (countryIds.length === 0 && !countryId) throw new AppError("At least one country is required.", 400);
 
-  return taxRuleClient().create({
+  for (const cId of countryIds) {
+    await assertCountry(cId);
+  }
+
+  const created = await taxRuleClient().create({
     data: {
       name,
       type,
@@ -339,32 +373,37 @@ export async function createTaxRule(input: TaxRuleInput) {
       },
       status: normalizeStatus(input.status) ?? "ACTIVE",
       sortOrder: parseSortOrder(input.sortOrder) ?? 0,
+      countries: countryIds.length > 0
+        ? { create: countryIds.map((cId) => ({ countryId: cId })) }
+        : undefined,
       products: input.productIds && Array.isArray(input.productIds) ? {
         connect: input.productIds.map((pid) => ({ id: pid })),
       } : undefined,
     },
     include: includeCountryAndProducts(),
   });
+  return formatTaxRuleResponse(created);
 }
 
 export async function updateTaxRule(id: string, input: TaxRuleInput) {
-  const existing = await taxRuleClient().findUnique({ where: { id } });
+  const existing = await taxRuleClient().findUnique({ where: { id }, include: includeCountryAndProducts() });
   if (!existing) throw new AppError("Tax rule not found.", 404);
 
   const data: Record<string, unknown> = {};
+  const rawCountryIds = input.countryIds !== undefined
+    ? (Array.isArray(input.countryIds) ? input.countryIds.filter(Boolean) : [])
+    : (input.countryId !== undefined ? (input.countryId ? [input.countryId] : []) : existing.countryIds ?? []);
+  const countryIds = [...new Set(rawCountryIds)];
+  const nextCountryId = countryIds[0] ?? existing.countryId;
   const nextName = input.name !== undefined ? input.name.trim() : existing.name;
   if (!nextName) throw new AppError("Tax rule name is required.", 400);
-  if (input.countryIds !== undefined) {
-    const validCountryIds = Array.isArray(input.countryIds) ? input.countryIds.map(c => c.trim()).filter(Boolean) : [];
-    if (validCountryIds.length === 0) throw new AppError("At least one Country is required.", 400);
-    await assertCountries(validCountryIds);
-    data.countries = {
-      set: validCountryIds.map((cid) => ({ id: cid })),
-    };
+
+  for (const cId of countryIds) {
+    await assertCountry(cId);
   }
-  if (input.name !== undefined) await assertUniqueName(nextName, id);
 
   if (input.name !== undefined) data.name = nextName;
+  data.countryId = nextCountryId;
   if (input.type !== undefined) data.type = normalizeType(input.type);
   if (input.taxMode !== undefined) data.taxMode = normalizeTaxMode(input.taxMode);
   if (input.percentage !== undefined) data.percentage = parsePercentage(input.percentage);
@@ -376,7 +415,13 @@ export async function updateTaxRule(id: string, input: TaxRuleInput) {
     };
   }
 
-  return taxRuleClient().update({ where: { id }, data, include: includeCountryAndProducts() });
+  await (prisma as any).taxRuleCountry.deleteMany({ where: { taxRuleId: id } });
+  if (countryIds.length > 0) {
+    data.countries = { create: countryIds.map((cId) => ({ countryId: cId })) };
+  }
+
+  const updated = await taxRuleClient().update({ where: { id }, data, include: includeCountryAndProducts() });
+  return formatTaxRuleResponse(updated);
 }
 
 export async function deleteTaxRule(id: string) {

@@ -1316,10 +1316,29 @@ export const useImportCurrencies = () => {
   });
 };
 
-export const useAdminCountries = () =>
+export const useSyncCurrencyRates = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => adminApi.post("/currencies/sync-rates").then((r) => r.data.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-currencies"] });
+      qc.invalidateQueries({ queryKey: ["admin-currencies-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-currency-dashboard"] });
+    },
+  });
+};
+
+export const useAdminCountries = (options?: { includeInactive?: boolean }) =>
   useQuery({
-    queryKey: ["admin-countries"],
-    queryFn: () => adminApi.get("/countries").then((r) => r.data.data),
+    queryKey: ["admin-countries", options?.includeInactive ?? false],
+    queryFn: async () => {
+      const res = await adminApi.get("/countries");
+      const list = (res.data.data ?? []) as any[];
+      if (!options?.includeInactive) {
+        return list.filter((c: any) => c.status === "ACTIVE");
+      }
+      return list;
+    },
   });
 
 export const useBulkCountries = () => {

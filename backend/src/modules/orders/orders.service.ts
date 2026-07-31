@@ -70,7 +70,14 @@ export async function listOrders(query: {
   if (query.status) where.status = query.status as never;
   if (query.paymentStatus) where.paymentStatus = query.paymentStatus as never;
   if (query.paymentMethod) where.paymentMethod = query.paymentMethod;
-  if (query.countryId) where.countryId = query.countryId;
+  if (query.countryId) {
+    const ids = query.countryId.split(",").map((s) => s.trim()).filter(Boolean);
+    if (ids.length > 1) {
+      where.countryId = { in: ids } as never;
+    } else if (ids.length === 1) {
+      where.countryId = ids[0];
+    }
+  }
   if (query.search?.trim()) {
     const search = query.search.trim();
     where.OR = [
