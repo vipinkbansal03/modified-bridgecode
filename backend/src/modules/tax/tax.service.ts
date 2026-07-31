@@ -84,11 +84,18 @@ function includeCountryAndProducts() {
 
 function formatTaxRuleResponse(rule: any) {
   if (!rule) return rule;
-  const countryIds = rule.countries?.length > 0
-    ? rule.countries.map((c: any) => c.countryId)
+  const countryRows = rule.countries ?? [];
+  const countryIds = countryRows.length > 0
+    ? countryRows.map((c: any) => c.countryId)
     : (rule.countryId ? [rule.countryId] : []);
   return {
     ...rule,
+    countries: countryRows.map((c: any) => ({
+      id: c.countryId,
+      name: c.country?.name ?? null,
+      code: c.country?.code ?? null,
+      currency: c.country?.currency ?? null,
+    })),
     countryIds,
   };
 }
@@ -212,7 +219,7 @@ export async function listTaxRules(query: TaxListQuery) {
       take: limit,
       include: {
         countries: {
-          include: { currency: true },
+          include: { country: { include: { currency: true } } },
         },
         products: { select: { id: true, title: true } },
       },
