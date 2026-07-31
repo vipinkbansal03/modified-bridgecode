@@ -27,6 +27,16 @@ export type CalculatorResult = {
     width: number;
     height: number;
   }[];
+  pricing?: {
+    available: boolean;
+    charge: number;
+    isFree: boolean;
+    provider: string | null;
+    providerId: string | null;
+    zoneId: string | null;
+    estimatedDays: string | null;
+    message?: string;
+  };
 };
 
 async function getProductShippingInfo(productId: string) {

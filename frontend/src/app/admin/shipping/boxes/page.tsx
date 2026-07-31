@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Edit2, Plus, Trash2, X } from "lucide-react";
+import { Calculator, Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, ConfirmModal, DataTable, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { ApiShippingBox } from "@/types/api.types";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAdminProducts, useAdminCountries } from "@/hooks/admin/useAdminHooks";
 
 export default function ShippingBoxesPage() {
   const { hasPermission } = useAdminAuth();
@@ -52,6 +53,20 @@ export default function ShippingBoxesPage() {
   const [formMaxWeight, setFormMaxWeight] = useState("");
   const [formIsActive, setFormIsActive] = useState(true);
   const [deletingBox, setDeletingBox] = useState<ApiShippingBox | null>(null);
+
+  const [activeSubTab, setActiveSubTab] = useState<"boxes" | "preview">("boxes");
+
+  const { data: productsData } = useAdminProducts({ limit: 200, status: "ACTIVE" });
+  const products = useMemo(() => (productsData?.data ?? []) as { id: string; title: string }[], [productsData]);
+  const { data: countries = [] } = useAdminCountries();
+
+  const [previewProductId, setPreviewProductId] = useState("");
+  const [previewQuantity, setPreviewQuantity] = useState("1");
+  const [previewCountryId, setPreviewCountryId] = useState("");
+  const [previewOrderTotal, setPreviewOrderTotal] = useState("");
+  const [previewItems, setPreviewItems] = useState<{ productId: string; quantity: number }[]>([]);
+  const [previewResult, setPreviewResult] = useState<any>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const openCreate = () => {
     setEditingBox(null);
@@ -165,7 +180,170 @@ export default function ShippingBoxesPage() {
           )}
         </div>
 
-        <DataTable columns={columns} data={boxes} isLoading={isLoading} rowKey="id" emptyMessage="No shipping boxes configured." />
+        <div className="flex gap-2 border-b border-[#E6E6E6]">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("boxes")}
+            className={`px-4 py-2 text-[13px] font-medium ${activeSubTab === "boxes" ? "border-b-2 border-[#E31E24] font-semibold text-[#111]" : "text-[#6B6B6B] hover:text-[#111]"}`}
+          >
+            Package Size
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("preview")}
+            className={`flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium ${activeSubTab === "preview" ? "border-b-2 border-[#E31E24] font-semibold text-[#111]" : "text-[#6B6B6B] hover:text-[#111]"}`}
+          >
+            <Calculator size={13} /> Package Preview
+          </button>
+        </div>
+
+        {activeSubTab === "boxes" ? (
+          <DataTable columns={columns} data={boxes} isLoading={isLoading} rowKey="id" emptyMessage="No shipping boxes configured." />
+        ) : (
+          <div className="grid gap-5 lg:grid-cols-[1fr_1.2fr]">
+            <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 space-y-4">
+              <div>
+                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Package Preview</h3>
+                <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Add items to see which box fits and the estimated shipping charge.</p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <AdminSelect
+                  label="Product *"
+                  value={previewProductId}
+                  onChange={(e) => setPreviewProductId(e.target.value)}
+                  options={[{ value: "", label: "Select product..." }, ...products.map((p) => ({ value: p.id, label: p.title }))]}
+                />
+                <AdminInput label="Quantity" type="text" value={previewQuantity} onChange={(e) => setPreviewQuantity(e.target.value)} />
+                <AdminSelect
+                  label="Country (for charge)"
+                  value={previewCountryId}
+                  onChange={(e) => setPreviewCountryId(e.target.value)}
+                  options={[{ value: "", label: "Optional..." }, ...(countries as { id: string; name: string; code: string }[]).map((c) => ({ value: c.code, label: `${c.name} (${c.code})` }))]}
+                />
+                <AdminInput label="Order Total (for free-shipping threshold)" type="text" value={previewOrderTotal} onChange={(e) => setPreviewOrderTotal(e.target.value)} />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (previewProductId && previewQuantity) {
+                    setPreviewItems((prev) => [...prev, { productId: previewProductId, quantity: Math.max(1, Number(previewQuantity) || 1) }]);
+                    setPreviewProductId("");
+                    setPreviewQuantity("1");
+                  }
+                }}
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+              >
+                Add Item
+              </button>
+              {previewItems.length > 0 && (
+                <div className="space-y-2">
+                  {previewItems.map((item, idx) => {
+                    const p = products.find((x) => x.id === item.productId);
+                    return (
+                      <div key={idx} className="flex items-center justify-between rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px]">
+                        <span className="truncate pr-2">{p?.title ?? item.productId}</span>
+                        <span className="flex items-center gap-2">
+                          <span className="text-[#9A9A9A]">×{item.quantity}</span>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewItems((prev) => prev.filter((_, i) => i !== idx))}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <X size={14} />
+                          </button>
+                        </span>
+                      </div>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!previewItems.length) return;
+                      setPreviewLoading(true);
+                      try {
+                        const res = await adminApi.post("/shipping/calculate-packages", {
+                          items: previewItems,
+                          countryCode: previewCountryId || undefined,
+                          orderTotal: previewOrderTotal ? Number(previewOrderTotal) : undefined,
+                        });
+                        setPreviewResult(res.data.data);
+                      } catch (error) {
+                        showToast(getAdminErrorMessage(error, "Calculation failed."), "error");
+                      } finally {
+                        setPreviewLoading(false);
+                      }
+                    }}
+                    disabled={previewLoading}
+                    className="rounded-md bg-[#1A1A1A] px-4 py-2 text-[13px] font-semibold text-white hover:bg-black disabled:opacity-60"
+                  >
+                    {previewLoading ? "Calculating..." : "Calculate Package"}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-[#E6E6E6] bg-white p-5">
+              {previewResult ? (
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-[13px] font-semibold text-[#1A1A1A]">Total Weight</h4>
+                    <p className="text-[24px] font-bold text-[#E31E24]">{Number(previewResult.totalWeight || 0).toFixed(3)} kg</p>
+                  </div>
+                  <div>
+                    <h4 className="text-[13px] font-semibold text-[#1A1A1A]">Total Volume</h4>
+                    <p className="text-[14px] text-[#1A1A1A]">{Number(previewResult.totalVolume || 0).toFixed(2)} cm³</p>
+                  </div>
+                  <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
+                    {previewResult.box ? (
+                      <>
+                        <h4 className="text-[13px] font-semibold text-[#1A1A1A]">Selected Box</h4>
+                        <p className="mt-1 text-[15px] font-semibold text-[#1A1A1A]">{previewResult.box.name}</p>
+                        <p className="text-[13px] text-[#6B6B6B]">
+                          {previewResult.box.length} × {previewResult.box.width} × {previewResult.box.height} cm | Max {previewResult.box.maxWeight} kg
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-[13px] text-[#9A9A9A]">No active box fits this shipment weight. Add a box with a higher max weight.</p>
+                    )}
+                  </div>
+                  {previewResult.pricing && (
+                    <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
+                      <h4 className="text-[13px] font-semibold text-[#1A1A1A]">Shipping Charge</h4>
+                      {previewResult.pricing.available ? (
+                        <>
+                          <p className="mt-1 text-[18px] font-bold text-[#1A1A1A]">
+                            {previewResult.pricing.isFree ? "FREE" : `${previewResult.pricing.charge}`}
+                          </p>
+                          <p className="text-[12.5px] text-[#6B6B6B]">
+                            {previewResult.pricing.provider ?? "Standard"} {previewResult.pricing.isFree ? "(free shipping threshold met)" : ""}
+                            {previewResult.pricing.estimatedDays ? ` | ${previewResult.pricing.estimatedDays} days` : ""}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="mt-1 text-[13px] text-[#9A9A9A]">{previewResult.pricing.message ?? "No shipping available for this country."}</p>
+                      )}
+                    </div>
+                  )}
+                  <div>
+                    <h4 className="mb-2 text-[13px] font-semibold text-[#1A1A1A]">Item Breakdown</h4>
+                    <div className="space-y-1.5">
+                      {previewResult.items.map((it: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between rounded-md border border-[#E6E6E6] px-3 py-2 text-[12.5px]">
+                          <span className="truncate pr-2">{it.title}</span>
+                          <span className="text-[#6B6B6B]">
+                            ×{it.quantity} | {Number(it.weight).toFixed(3)} kg | {it.length}×{it.width}×{it.height} cm
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-center text-[13px] text-[#9A9A9A] py-10">Add items and click "Calculate Package" to see results.</p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {formOpen && (

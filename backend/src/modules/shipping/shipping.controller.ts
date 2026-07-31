@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { asyncHandler, ApiResponse } from "../../utils/apiResponse";
 import { AuthRequest } from "../../middleware/auth.middleware";
 import * as S from "./shipping.service";
+import { calculateShipment } from "./shippingCalculator.service";
 
 // ─── Providers ──────────────────────────────────────────
 
@@ -50,6 +51,19 @@ export const deleteZone = asyncHandler(async (req: AuthRequest, res: Response) =
 export const calculate = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { countryCode, orderTotal } = req.body as { countryCode: string; orderTotal: number };
   return ApiResponse.success(res, "Shipping calculated.", await S.calculateShipping(countryCode, orderTotal));
+});
+
+export const calculatePackages = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { items, countryCode, orderTotal } = req.body as {
+    items: { productId: string; quantity: number }[];
+    countryCode?: string;
+    orderTotal?: number;
+  };
+  const packages = await calculateShipment(items);
+  if (countryCode) {
+    packages.pricing = await S.calculateShipping(String(countryCode).toUpperCase(), Number(orderTotal ?? 0));
+  }
+  return ApiResponse.success(res, "Package calculation completed.", packages);
 });
 
 export const calculatePublic = asyncHandler(async (req: Request, res: Response) => {
