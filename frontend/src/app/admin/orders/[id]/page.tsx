@@ -102,6 +102,10 @@ interface OrderDetail {
   paymentId: string | null;
   shippingProvider: string | null;
   shippingZone: { estimatedDays: string | null; provider?: { name: string; displayName: string } | null; country?: { name: string; code: string } | null } | null;
+  shippingBox: { id: string; name: string; length: number; width: number; height: number; maxWeight: number } | null;
+  shippingBoxName: string | null;
+  packageWeight: string | number | null;
+  packageVolume: string | number | null;
   trackingNumber: string | null;
   notes: string | null;
   createdAt: string;
@@ -588,6 +592,20 @@ export default function OrderDetailPage() {
               {order.shippingZone?.country && <InfoRow label="Zone" value={`${order.shippingZone.country.name} (${order.shippingZone.country.code})`} />}
               {order.shippingZone?.estimatedDays && <InfoRow label="Estimated" value={order.shippingZone.estimatedDays} />}
               <InfoRow label="Charge" value={`${sym}${Number(order.shippingCharge).toFixed(2)}`} />
+              {(order.shippingBox || order.shippingBoxName || order.packageWeight != null) && (
+                <InfoRow
+                  label="Packaging"
+                  value={
+                    <>
+                      {order.shippingBox?.name ?? order.shippingBoxName ?? "Standard box"} ·{" "}
+                      {Number(order.packageWeight ?? 0).toFixed(3)} kg ·{" "}
+                      {order.shippingBox
+                        ? `${order.shippingBox.length}×${order.shippingBox.width}×${order.shippingBox.height} cm`
+                        : `${Number(order.packageVolume ?? 0).toFixed(2)} cm³`}
+                    </>
+                  }
+                />
+              )}
               {order.trackingNumber && <InfoRow label="Tracking #" value={<span className="font-mono">{order.trackingNumber}</span>} />}
             </div>
           )}
