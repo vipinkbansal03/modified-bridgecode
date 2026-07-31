@@ -7,6 +7,8 @@ import { CheckCircle2, Eye, Filter, Search, Shield, Store, UserCog, Users, XCirc
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
+import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import {
   useAdminCountries,
   useAdminCustomerRoles,
@@ -462,7 +464,15 @@ export default function AdminCustomersPage() {
               </div>
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">Country</label>
-                <AdminSelect label="" value={countryFilter} onChange={(e) => setCountryFilter(e.target.value)} options={countryOptions} />
+                <AdminMultiSearchableSelect
+                  label=""
+                  values={countryFilter ? countryFilter.split(",").filter(Boolean) : []}
+                  onValuesChange={(values) => setCountryFilter(values.join(","))}
+                  options={(countries as any[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+                  placeholder="Select countries"
+                  allowSelectAll
+                  selectAllLabel="All countries"
+                />
               </div>
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">Sort Field</label>

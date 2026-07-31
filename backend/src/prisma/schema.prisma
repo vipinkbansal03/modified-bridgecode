@@ -301,6 +301,9 @@ model Country {
   moqPricing          MoqPricing[]
   tierCountries       TierCountry[]
   attributeValues     AttributeValue[]    @relation("CountryAttributeValues")
+  couponCountries     CouponCountry[]
+  bannerCountries     BannerCountry[]
+  taxRuleCountries    TaxRuleCountry[]
   Coupon              Coupon[]
   Order               Order[]
   prices              ProductPrice[]
@@ -509,11 +512,25 @@ model Coupon {
   status        Status       @default(ACTIVE)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
-  country       Country?     @relation(fields: [countryId], references: [id])
-  currency      Currency?    @relation(fields: [currencyId], references: [id])
+  country       Country?        @relation(fields: [countryId], references: [id])
+  currency      Currency?       @relation(fields: [currencyId], references: [id])
+  countries     CouponCountry[]
   orders        Order[]
 
   @@map("coupons")
+}
+
+model CouponCountry {
+  id        String   @id @default(cuid())
+  couponId  String
+  countryId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  coupon    Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  country   Country  @relation(fields: [countryId], references: [id])
+
+  @@unique([couponId, countryId])
+  @@map("coupon_countries")
 }
 
 model Quote {
@@ -1071,8 +1088,22 @@ model Banner {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   country     Country?        @relation(fields: [countryId], references: [id])
+  countries   BannerCountry[]
 
   @@map("banners")
+}
+
+model BannerCountry {
+  id        String   @id @default(cuid())
+  bannerId  String
+  countryId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  banner    Banner   @relation(fields: [bannerId], references: [id], onDelete: Cascade)
+  country   Country  @relation(fields: [countryId], references: [id])
+
+  @@unique([bannerId, countryId])
+  @@map("banner_countries")
 }
 
 model BlogAuthor {
@@ -1320,21 +1351,34 @@ model DiscountCollection {
 }
 
 model TaxRule {
-  id         String      @id @default(cuid())
+  id         String           @id @default(cuid())
   name       String
   type       TaxRuleType
-  taxMode    TaxMode     @default(EXCLUSIVE)
-  percentage Decimal     @db.Decimal(5, 2)
-  countryId  String
-  status     Status      @default(ACTIVE)
-  sortOrder  Int         @default(0)
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  country    Country     @relation(fields: [countryId], references: [id])
-  products   Product[]   @relation("ProductTaxRules")
+  taxMode    TaxMode          @default(EXCLUSIVE)
+  percentage Decimal          @db.Decimal(5, 2)
+  countryId  String?
+  status     Status           @default(ACTIVE)
+  sortOrder  Int              @default(0)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  country    Country?         @relation(fields: [countryId], references: [id])
+  countries  TaxRuleCountry[]
+  products   Product[]        @relation("ProductTaxRules")
 
-  @@unique([countryId, name])
   @@map("tax_rules")
+}
+
+model TaxRuleCountry {
+  id        String   @id @default(cuid())
+  taxRuleId String
+  countryId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  taxRule   TaxRule  @relation(fields: [taxRuleId], references: [id], onDelete: Cascade)
+  country   Country  @relation(fields: [countryId], references: [id])
+
+  @@unique([taxRuleId, countryId])
+  @@map("tax_rule_countries")
 }
 
 enum TaxMode {

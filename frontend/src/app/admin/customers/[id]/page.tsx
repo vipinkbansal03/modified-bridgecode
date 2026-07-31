@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useState, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, CheckCircle2, MapPin, PackageSearch, Save, XCircle, Edit2, X } from "lucide-react";
 import { AdminInput, AdminSelect, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { Modal } from "@/components/ui/Modal";
@@ -94,7 +95,7 @@ export default function AdminCustomerDetailPage() {
   const { data: orders = [], isLoading: ordersLoading } = useAdminCustomerOrders(customerId) as { data?: CustomerOrder[]; isLoading: boolean };
   const { data: addresses = [], isLoading: addressesLoading, refetch: refetchAddresses } = useAdminCustomerAddresses(customerId) as { data?: CustomerAddress[]; isLoading: boolean; refetch: () => void };
   const { data: countries = [] } = useAdminCountries() as { data?: any[] };
-  const activeCountries = useMemo(() => countries.filter((c: any) => c.status === "ACTIVE"), [countries]);
+  const activeCountries = useMemo(() => (Array.isArray(countries) ? countries : []), [countries]);
 
   const updateTier = useUpdateCustomerTier();
   const updateCustomerRole = useUpdateCustomerRole();
@@ -573,11 +574,10 @@ export default function AdminCustomerDetailPage() {
                 onChange={(e) => setAddressForm(prev => ({ ...prev, postalCode: e.target.value }))}
                 required
               />
-              <AdminSelect
+              <AdminSearchableSelect
                 label="Country *"
                 value={addressForm.countryId}
                 onChange={(e) => setAddressForm(prev => ({ ...prev, countryId: e.target.value }))}
-                required
                 options={[
                   { value: "", label: "Select Country" },
                   ...activeCountries.map((c: any) => ({ value: c.id, label: c.name })),

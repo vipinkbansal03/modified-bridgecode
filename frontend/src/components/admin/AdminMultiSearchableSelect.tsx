@@ -340,10 +340,10 @@ export function AdminMultiSearchableSelect({
                           : "text-[#1A1A1A]",
                       )}
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-start gap-2.5">
                         <div
                           className={cn(
-                            "flex h-4 w-4 items-center justify-center rounded border transition-colors",
+                            "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors mt-0.5",
                             isSelected
                               ? "border-[#E31E24] bg-[#E31E24] text-white"
                               : "border-[#CFCFCF] bg-white",
@@ -354,7 +354,7 @@ export function AdminMultiSearchableSelect({
                           )}
                         </div>
 
-                        <span>{option.label}</span>
+                        <span className="break-words text-[13px] leading-snug">{option.label}</span>
                       </div>
                     </button>
                   );

@@ -5,6 +5,7 @@ import { Archive, Copy, Edit2, Globe, Image as ImageIcon, Plus, RotateCcw, Searc
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
 import {
   useAdminCollectionCountries,
@@ -204,17 +205,24 @@ export default function CollectionsPage() {
 
   const createDiscount = async (event: React.FormEvent) => {
     event.preventDefault();
+    const selectedCountries = (discountForm as any).countryIds?.length ? (discountForm as any).countryIds : (discountForm.countryId ? [discountForm.countryId] : []);
+    const basePayload = {
+      ...discountForm,
+      tierId: discountForm.type === "TIER" ? discountForm.tierId || null : null,
+      minQuantity: discountForm.type === "MOQ" ? discountForm.minQuantity || null : null,
+      discountPercent: discountForm.discountPercent || null,
+      fixedAmount: discountForm.fixedAmount || null,
+      startDate: discountForm.startDate || null,
+      endDate: discountForm.endDate || null,
+    };
     try {
-      await createCollectionDiscount.mutateAsync({
-        ...discountForm,
-        tierId: discountForm.type === "TIER" ? discountForm.tierId || null : null,
-        minQuantity: discountForm.type === "MOQ" ? discountForm.minQuantity || null : null,
-        discountPercent: discountForm.discountPercent || null,
-        fixedAmount: discountForm.fixedAmount || null,
-        countryId: discountForm.countryId || null,
-        startDate: discountForm.startDate || null,
-        endDate: discountForm.endDate || null,
-      });
+      if (selectedCountries.length > 1) {
+        for (const cId of selectedCountries) {
+          await createCollectionDiscount.mutateAsync({ ...basePayload, countryId: cId });
+        }
+      } else {
+        await createCollectionDiscount.mutateAsync({ ...basePayload, countryId: selectedCountries[0] || null });
+      }
       setDiscountForm(emptyDiscountForm);
       showToast("Collection discount created.");
     } catch (error) {
@@ -524,11 +532,17 @@ export default function CollectionsPage() {
                     ) : (
                       <AdminInput label="Minimum Qty" type="number" value={discountForm.minQuantity} onChange={(event) => setDiscountForm({ ...discountForm, minQuantity: event.target.value })} />
                     )}
-                    <AdminSelect
-                      label="Country"
-                      value={discountForm.countryId}
-                      onChange={(event) => setDiscountForm({ ...discountForm, countryId: event.target.value })}
-                      options={[{ value: "", label: "All countries" }, ...allCountries.map((country: { id: string; code: string; name: string }) => ({ value: country.id, label: `${country.code} - ${country.name}` }))]}
+                    <AdminMultiSearchableSelect
+                      label="Countries"
+                      values={(discountForm as any).countryIds ?? (discountForm.countryId ? [discountForm.countryId] : [])}
+                      onValuesChange={(values) => setDiscountForm({ ...discountForm, countryIds: values, countryId: values[0] ?? "" } as any)}
+                      options={(allCountries as any[]).map((country) => ({
+                        value: country.id,
+                        label: `${country.name} (${country.code})`,
+                      }))}
+                      placeholder="Select countries"
+                      allowSelectAll
+                      selectAllLabel="All countries"
                     />
                     <AdminInput label="Discount %" type="number" value={discountForm.discountPercent} onChange={(event) => setDiscountForm({ ...discountForm, discountPercent: event.target.value, fixedAmount: "" })} />
                     <AdminInput label="Fixed Amount" type="number" value={discountForm.fixedAmount} onChange={(event) => setDiscountForm({ ...discountForm, fixedAmount: event.target.value, discountPercent: "" })} />

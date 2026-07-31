@@ -143,7 +143,7 @@ export default function RegisterPage() {
 
   const { data: dbCountries = [] } = useCountries();
   const activeCountries = dbCountries.length > 0
-    ? dbCountries.filter((c) => c.status === "ACTIVE")
+    ? dbCountries.filter((c) => c.status?.toUpperCase() === "ACTIVE")
     : worldCountries;
 
   const [phoneCountry, setPhoneCountry] = useState<string>("IN");

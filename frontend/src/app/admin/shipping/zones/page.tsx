@@ -6,6 +6,7 @@ import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { getAdminErrorMessage } from "@/services/adminApi";
 import {
   useAdminShippingProviders,
@@ -215,7 +216,7 @@ export default function ShippingZonesPage() {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <AdminSelect label="Provider" options={providerOptions} value={form.providerId} onChange={(event) => setForm((current) => ({ ...current, providerId: event.target.value }))} />
-                <AdminSelect label="Country" options={countryOptions} value={form.countryId} onChange={(event) => setForm((current) => ({ ...current, countryId: event.target.value }))} />
+                <AdminSearchableSelect label="Country" options={countryOptions} value={form.countryId} onChange={(event) => setForm((current) => ({ ...current, countryId: event.target.value }))} />
                 <AdminInput label="Charge" type="number" min="0" step="0.01" value={form.charge} onChange={(event) => setForm((current) => ({ ...current, charge: event.target.value }))} />
                 <AdminInput label="Free Above" type="number" min="0" step="0.01" value={form.freeAbove} onChange={(event) => setForm((current) => ({ ...current, freeAbove: event.target.value }))} placeholder="Optional" />
                 <AdminInput label="Estimated Days" value={form.estimatedDays} onChange={(event) => setForm((current) => ({ ...current, estimatedDays: event.target.value }))} placeholder="e.g. 3-5 business days" />

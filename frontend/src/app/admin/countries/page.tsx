@@ -88,7 +88,7 @@ export default function CountriesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
 
-  const { data: countries = [], isLoading, refetch } = useAdminCountries();
+  const { data: countries = [], isLoading, refetch } = useAdminCountries({ includeInactive: true });
   const { data: currencies = [] } = useAdminCurrencies();
   const bulkMutation = useBulkCountries();
 

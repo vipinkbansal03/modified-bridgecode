@@ -41,8 +41,12 @@ export async function listCustomers(query: CustomerListQuery) {
     ...(query.customerType && { customerType: query.customerType }),
     ...(query.approvalStatus && { approvalStatus: query.approvalStatus }),
     ...(query.customerRoleId && { customerRoleId: query.customerRoleId }),
-    ...(query.tierId && { tierId: query.tierId }),
-    ...(query.countryId && { defaultCountryId: query.countryId }),
+    ...(query.countryId
+      ? (() => {
+          const ids = query.countryId.split(",").map((s) => s.trim()).filter(Boolean);
+          return ids.length > 1 ? { defaultCountryId: { in: ids } } : { defaultCountryId: ids[0] };
+        })()
+      : {}),
     ...(query.search && {
       OR: [
         { email: { contains: query.search, mode: "insensitive" as const } },

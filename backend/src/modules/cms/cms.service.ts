@@ -37,6 +37,8 @@ const cmsTranslatableFields: Record<CmsEntityType, string[]> = {
   footer: ["title", "description", "address"],
 };
 
+const HEADER_PRODUCTS_MEGA_LOCATION = "header-products-mega";
+
 // ─── Pages ────────────────────────────────────────────────────────────────────
 
 export async function listPages(query: { page?: string; limit?: string; status?: string }) {
@@ -156,9 +158,158 @@ export async function upsertFooter(body: FooterBody) {
   return prisma.cMSFooter.create({ data: body });
 }
 
+async function syncHeaderProductsMegaMenu() {
+  const [menu, products] = await Promise.all([
+    prisma.cMSMenu.upsert({
+      where: { location: HEADER_PRODUCTS_MEGA_LOCATION },
+      create: {
+        name: "Header Products Mega Menu",
+        location: HEADER_PRODUCTS_MEGA_LOCATION,
+        status: "ACTIVE",
+      },
+      update: {},
+      include: { items: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] } },
+    }),
+    prisma.product.findMany({
+      where: {
+        status: "ACTIVE",
+        deletedAt: null,
+        category: {
+          status: "ACTIVE",
+          deletedAt: null,
+        },
+      },
+      select: {
+        title: true,
+        slug: true,
+        sortOrder: true,
+        category: {
+          select: {
+            name: true,
+            slug: true,
+            sortOrder: true,
+          },
+        },
+      },
+      orderBy: [{ sortOrder: "asc" }, { title: "asc" }],
+    }),
+  ]);
+
+  const categoryGroups = new Map<
+    string,
+    {
+      name: string;
+      slug: string;
+      sortOrder: number;
+      products: Array<{ title: string; slug: string; sortOrder: number }>;
+    }
+  >();
+
+  for (const product of products) {
+    const category = product.category;
+    const group =
+      categoryGroups.get(category.slug) ??
+      {
+        name: category.name,
+        slug: category.slug,
+        sortOrder: category.sortOrder,
+        products: [],
+      };
+
+    group.products.push({
+      title: product.title,
+      slug: product.slug,
+      sortOrder: product.sortOrder,
+    });
+    categoryGroups.set(category.slug, group);
+  }
+
+  const groups = Array.from(categoryGroups.values()).sort((a, b) => {
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    return a.name.localeCompare(b.name);
+  });
+
+  for (const group of groups) {
+    group.products.sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+      return a.title.localeCompare(b.title);
+    });
+  }
+
+  const existingByUrl = new Map<string, (typeof menu.items)[number]>();
+  const duplicateIds: string[] = [];
+
+  for (const item of menu.items) {
+    const existing = existingByUrl.get(item.url);
+    if (existing) duplicateIds.push(item.id);
+    else existingByUrl.set(item.url, item);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (duplicateIds.length) {
+      await tx.cMSMenuItem.deleteMany({ where: { id: { in: duplicateIds } } });
+    }
+
+    const touchedIds = new Set<string>();
+
+    for (const [categoryIndex, group] of groups.entries()) {
+      const categoryUrl = `/products?category=${group.slug}`;
+      const existingCategory = existingByUrl.get(categoryUrl);
+      const categoryData = {
+        menuId: menu.id,
+        parentId: null,
+        label: group.name,
+        url: categoryUrl,
+        sortOrder: categoryIndex * 100,
+        openInNewTab: false,
+      };
+      const categoryItem = existingCategory
+        ? await tx.cMSMenuItem.update({
+            where: { id: existingCategory.id },
+            data: categoryData,
+          })
+        : await tx.cMSMenuItem.create({
+            data: { ...categoryData, status: "ACTIVE" },
+          });
+
+      touchedIds.add(categoryItem.id);
+
+      for (const [productIndex, product] of group.products.entries()) {
+        const productUrl = `/products/${product.slug}`;
+        const existingProduct = existingByUrl.get(productUrl);
+        const productData = {
+          menuId: menu.id,
+          parentId: categoryItem.id,
+          label: product.title,
+          url: productUrl,
+          sortOrder: categoryIndex * 100 + productIndex + 1,
+          openInNewTab: false,
+        };
+        const productItem = existingProduct
+          ? await tx.cMSMenuItem.update({
+              where: { id: existingProduct.id },
+              data: productData,
+            })
+          : await tx.cMSMenuItem.create({
+              data: { ...productData, status: "ACTIVE" },
+            });
+
+        touchedIds.add(productItem.id);
+      }
+    }
+
+    await tx.cMSMenuItem.deleteMany({
+      where: touchedIds.size
+        ? { menuId: menu.id, id: { notIn: Array.from(touchedIds) } }
+        : { menuId: menu.id },
+    });
+  });
+}
+
 // ─── Menus ────────────────────────────────────────────────────────────────────
 
 export async function listMenus() {
+  await syncHeaderProductsMegaMenu();
   const menus = await prisma.cMSMenu.findMany({ include: { items: { orderBy: { sortOrder: "asc" } } } });
   return Promise.all(menus.map(attachMenuCmsTranslations));
 }
@@ -168,6 +319,8 @@ export async function createMenu(body: MenuBody) {
 }
 
 export async function getMenu(id: string) {
+  const existing = await prisma.cMSMenu.findUnique({ where: { id }, select: { location: true } });
+  if (existing?.location === HEADER_PRODUCTS_MEGA_LOCATION) await syncHeaderProductsMegaMenu();
   const m = await prisma.cMSMenu.findUnique({ where: { id }, include: { items: { orderBy: { sortOrder: "asc" } } } });
   if (!m) throw new AppError("Menu not found.", 404);
   return attachMenuCmsTranslations(m);
@@ -246,6 +399,7 @@ export async function publicGetPageBySlug(slug: string, languageCode?: string) {
 }
 
 export async function publicGetMenuByLocation(location: string, languageCode?: string) {
+  if (location === HEADER_PRODUCTS_MEGA_LOCATION) await syncHeaderProductsMegaMenu();
   const menu = await prisma.cMSMenu.findFirst({
     where: { location, status: "ACTIVE" },
     include: { items: { where: { status: "ACTIVE" }, orderBy: { sortOrder: "asc" } } },

@@ -10,6 +10,7 @@ type BannerInput = {
   linkText?: string | null;
   placement?: BannerPlacement;
   countryId?: string | null;
+  countryIds?: string[] | null;
   sortOrder?: number | string | null;
   status?: boolean;
   startDate?: string | Date | null;
@@ -34,6 +35,15 @@ function normalize(input: BannerInput, current?: BannerInput) {
   const startDate = optionalDate(merged.startDate);
   const endDate = optionalDate(merged.endDate);
   if (startDate && endDate && endDate < startDate) throw new AppError("End date must be after start date.", 400);
+
+  const rawCountryIds = Array.isArray(merged.countryIds)
+    ? merged.countryIds.filter(Boolean)
+    : merged.countryId
+    ? [merged.countryId]
+    : [];
+  const countryIds = [...new Set(rawCountryIds)];
+  const countryId = countryIds[0] ?? (merged.countryId || null);
+
   return {
     title,
     image,
@@ -41,7 +51,8 @@ function normalize(input: BannerInput, current?: BannerInput) {
     linkUrl: merged.linkUrl?.trim() || null,
     linkText: merged.linkText?.trim() || null,
     placement,
-    countryId: merged.countryId || null,
+    countryId,
+    countryIds,
     sortOrder: Number(merged.sortOrder ?? 0) || 0,
     status: merged.status ?? true,
     startDate,
@@ -49,28 +60,83 @@ function normalize(input: BannerInput, current?: BannerInput) {
   };
 }
 
+const bannerInclude = {
+  country: true,
+  countries: {
+    include: { country: true },
+  },
+};
+
+function formatBannerResponse(banner: any) {
+  const countryIds = banner.countries?.length > 0
+    ? banner.countries.map((c: any) => c.countryId)
+    : (banner.countryId ? [banner.countryId] : []);
+  return {
+    ...banner,
+    countryIds,
+  };
+}
+
 export async function listBanners(query: { placement?: BannerPlacement; countryId?: string; status?: string }) {
   const where: Prisma.BannerWhereInput = {
     ...(query.placement ? { placement: query.placement } : {}),
-    ...(query.countryId ? { countryId: query.countryId } : {}),
+    ...(query.countryId
+      ? {
+          OR: [
+            { countryId: query.countryId },
+            { countries: { some: { countryId: query.countryId } } },
+          ],
+        }
+      : {}),
     ...(query.status !== undefined && query.status !== "" ? { status: query.status === "true" || query.status === "ACTIVE" } : {}),
   };
-  return prisma.banner.findMany({ where, orderBy: [{ placement: "asc" }, { sortOrder: "asc" }, { createdAt: "desc" }], include: { country: true } });
+  const banners = await prisma.banner.findMany({
+    where,
+    orderBy: [{ placement: "asc" }, { sortOrder: "asc" }, { createdAt: "desc" }],
+    include: bannerInclude,
+  });
+  return banners.map(formatBannerResponse);
 }
 
 export async function getBanner(id: string) {
-  const banner = await prisma.banner.findUnique({ where: { id }, include: { country: true } });
+  const banner = await prisma.banner.findUnique({ where: { id }, include: bannerInclude });
   if (!banner) throw new AppError("Banner not found.", 404);
-  return banner;
+  return formatBannerResponse(banner);
 }
 
 export async function createBanner(input: BannerInput) {
-  return prisma.banner.create({ data: normalize(input), include: { country: true } });
+  const data = normalize(input);
+  const { countryIds, ...bannerData } = data;
+  const banner = await prisma.banner.create({
+    data: {
+      ...bannerData,
+      countries: countryIds.length > 0
+        ? { create: countryIds.map((cId) => ({ countryId: cId })) }
+        : undefined,
+    } as Prisma.BannerUncheckedCreateInput,
+    include: bannerInclude,
+  });
+  return formatBannerResponse(banner);
 }
 
 export async function updateBanner(id: string, input: BannerInput) {
   const current = await getBanner(id);
-  return prisma.banner.update({ where: { id }, data: normalize(input, current), include: { country: true } });
+  const data = normalize(input, current as any);
+  const { countryIds, ...bannerData } = data;
+
+  await prisma.bannerCountry.deleteMany({ where: { bannerId: id } });
+
+  const banner = await prisma.banner.update({
+    where: { id },
+    data: {
+      ...bannerData,
+      countries: countryIds.length > 0
+        ? { create: countryIds.map((cId) => ({ countryId: cId })) }
+        : undefined,
+    } as Prisma.BannerUncheckedUpdateInput,
+    include: bannerInclude,
+  });
+  return formatBannerResponse(banner);
 }
 
 export async function deleteBanner(id: string) {

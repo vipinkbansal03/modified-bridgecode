@@ -13,6 +13,7 @@ type CouponInput = {
   endDate?: string | Date | null;
   usageLimit?: number | string | null;
   countryId?: string | null;
+  countryIds?: string[] | null;
   currencyId?: string | null;
   status?: Status;
 };
@@ -43,7 +44,7 @@ function decimalOrNull(value: unknown, field: string) {
   const normalized = blankToNull(value);
   if (normalized === null) return null;
   const numberValue = Number(normalized);
-  if (!Number.isFinite(numberValue) || numberValue < 0) {
+  if (Number.isNaN(numberValue) || numberValue < 0) {
     throw new AppError(`${field} must be a non-negative number.`, 400);
   }
   return new Prisma.Decimal(numberValue);
@@ -108,12 +109,29 @@ async function normalizeCouponInput(input: CouponInput, currentId?: string) {
   if (endDate < startDate) throw new AppError("End date must be after start date.", 400);
 
   const usageLimit = intOrNull(input.usageLimit, "Usage limit");
-  const countryId = blankToNull(input.countryId) as string | null;
+  const rawCountryIds = Array.isArray(input.countryIds)
+    ? input.countryIds.filter(Boolean)
+    : input.countryId
+    ? [input.countryId]
+    : [];
+  const countryIds = [...new Set(rawCountryIds)];
+  const countryId = countryIds[0] ?? (blankToNull(input.countryId) as string | null);
   const currencyId = blankToNull(input.currencyId) as string | null;
   const status = input.status ?? "ACTIVE";
   if (!["ACTIVE", "INACTIVE"].includes(status)) throw new AppError("Status must be ACTIVE or INACTIVE.", 400);
 
-  await Promise.all([assertExists("country", countryId), assertExists("currency", currencyId)]);
+  if (countryIds.length > 0) {
+    const existingCountries = await prisma.country.findMany({
+      where: { id: { in: countryIds } },
+      select: { id: true },
+    });
+    if (existingCountries.length !== countryIds.length) {
+      throw new AppError("One or more selected countries were not found.", 404);
+    }
+  } else if (countryId) {
+    await assertExists("country", countryId);
+  }
+  await assertExists("currency", currencyId);
 
   const duplicate = await prisma.coupon.findUnique({ where: { code }, select: { id: true } });
   if (duplicate && duplicate.id !== currentId) {
@@ -131,6 +149,7 @@ async function normalizeCouponInput(input: CouponInput, currentId?: string) {
     endDate,
     usageLimit,
     countryId,
+    countryIds,
     currencyId,
     status,
   };
@@ -156,6 +175,25 @@ export function getEffectiveStatus(
     return "EXPIRED";
   }
   return "ACTIVE";
+}
+
+const couponInclude = {
+  country: true,
+  currency: true,
+  countries: {
+    include: { country: true },
+  },
+};
+
+function formatCouponResponse(coupon: any, now: Date = new Date()) {
+  const countryIds = coupon.countries?.length > 0
+    ? coupon.countries.map((c: any) => c.countryId)
+    : (coupon.countryId ? [coupon.countryId] : []);
+  return {
+    ...coupon,
+    countryIds,
+    effectiveStatus: getEffectiveStatus(coupon.status, coupon.startDate, coupon.endDate, now),
+  };
 }
 
 export async function listCoupons(query: CouponListQuery) {
@@ -214,45 +252,51 @@ export async function listCoupons(query: CouponListQuery) {
       skip,
       take: limit,
       orderBy: orderBy as never,
-      include: { country: true, currency: true },
+      include: couponInclude,
     }),
     prisma.coupon.count({ where }),
   ]);
 
-  const couponsWithEffectiveStatus = data.map((coupon) => ({
-    ...coupon,
-    effectiveStatus: getEffectiveStatus(coupon.status, coupon.startDate, coupon.endDate, now),
-  }));
+  const couponsWithEffectiveStatus = data.map((coupon) => formatCouponResponse(coupon, now));
 
   return { data: couponsWithEffectiveStatus, total, page, limit };
 }
 
 export async function createCoupon(input: CouponInput) {
   const data = await normalizeCouponInput(input);
+  const { countryIds, ...couponData } = data;
   const coupon = await prisma.coupon.create({
-    data: data as Prisma.CouponUncheckedCreateInput,
-    include: { country: true, currency: true },
+    data: {
+      ...couponData,
+      countries: countryIds.length > 0
+        ? { create: countryIds.map((cId) => ({ countryId: cId })) }
+        : undefined,
+    } as Prisma.CouponUncheckedCreateInput,
+    include: couponInclude,
   });
-  return {
-    ...coupon,
-    effectiveStatus: getEffectiveStatus(coupon.status, coupon.startDate, coupon.endDate),
-  };
+  return formatCouponResponse(coupon);
 }
 
 export async function updateCoupon(id: string, input: CouponInput) {
-  const current = await prisma.coupon.findUnique({ where: { id } });
+  const current = await prisma.coupon.findUnique({ where: { id }, include: couponInclude });
   if (!current) throw new AppError("Coupon not found.", 404);
 
   const data = await normalizeCouponInput({ ...current, ...input }, id);
+  const { countryIds, ...couponData } = data;
+
+  await prisma.couponCountry.deleteMany({ where: { couponId: id } });
+
   const coupon = await prisma.coupon.update({
     where: { id },
-    data: data as Prisma.CouponUncheckedUpdateInput,
-    include: { country: true, currency: true },
+    data: {
+      ...couponData,
+      countries: countryIds.length > 0
+        ? { create: countryIds.map((cId) => ({ countryId: cId })) }
+        : undefined,
+    } as Prisma.CouponUncheckedUpdateInput,
+    include: couponInclude,
   });
-  return {
-    ...coupon,
-    effectiveStatus: getEffectiveStatus(coupon.status, coupon.startDate, coupon.endDate),
-  };
+  return formatCouponResponse(coupon);
 }
 
 export const deleteCoupon = (id: string) => prisma.coupon.delete({ where: { id } });
@@ -262,7 +306,14 @@ export async function validateCoupon(code: string, orderTotal: number, countryCo
   if (!normalizedCode) throw new AppError("Coupon code is required.", 400);
   if (!Number.isFinite(orderTotal) || orderTotal <= 0) throw new AppError("Order value must be greater than 0.", 400);
 
-  const coupon = await prisma.coupon.findUnique({ where: { code: normalizedCode }, include: { country: true, currency: true } });
+  const coupon = await prisma.coupon.findUnique({
+    where: { code: normalizedCode },
+    include: {
+      country: true,
+      currency: true,
+      countries: { include: { country: true } },
+    },
+  });
   if (!coupon) throw new AppError("Coupon not found.", 404);
 
   const effectiveStatus = getEffectiveStatus(coupon.status, coupon.startDate, coupon.endDate);
@@ -270,8 +321,14 @@ export async function validateCoupon(code: string, orderTotal: number, countryCo
   if (effectiveStatus === "SCHEDULED") throw new AppError("Coupon has not started yet.", 400);
   if (effectiveStatus === "EXPIRED") throw new AppError("Coupon has expired.", 400);
 
-  if (coupon.countryId) {
-    if (!countryCode || coupon.country?.code !== countryCode.toUpperCase()) {
+  const allowedCountryCodes = coupon.countries?.length > 0
+    ? coupon.countries.map((c) => c.country?.code?.toUpperCase()).filter(Boolean)
+    : coupon.country?.code
+    ? [coupon.country.code.toUpperCase()]
+    : [];
+
+  if (allowedCountryCodes.length > 0) {
+    if (!countryCode || !allowedCountryCodes.includes(countryCode.toUpperCase())) {
       throw new AppError("Coupon is not available in your region.", 400);
     }
   }

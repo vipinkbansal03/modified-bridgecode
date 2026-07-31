@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Edit2, Plus, Trash2, Upload, X } from "lucide-react";
 import { AdminInput, AdminSelect, ConfirmModal, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { SortableList } from "@/components/admin/SortableList";
 import { useAdminBanners, useAdminCountries, useBulkBanners, useCreateBanner, useDeleteBanner, useReorderBanners, useUpdateBanner } from "@/hooks/admin/useAdminHooks";
@@ -10,7 +11,7 @@ import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
 type Banner = { id: string; title: string; image: string; mobileImage?: string | null; linkUrl?: string | null; linkText?: string | null; placement: string; countryId?: string | null; country?: { code: string; name: string } | null; sortOrder: number; status: boolean; startDate?: string | null; endDate?: string | null };
 const placements = ["", "HOMEPAGE_HERO", "HOMEPAGE_PROMO", "CATEGORY_TOP", "PRODUCT_TOP", "SIDEBAR"];
-const empty = { id: "", title: "", image: "", mobileImage: "", linkUrl: "", linkText: "", placement: "HOMEPAGE_HERO", countryId: "", status: true, startDate: "", endDate: "" };
+const empty = { id: "", title: "", image: "", mobileImage: "", linkUrl: "", linkText: "", placement: "HOMEPAGE_HERO", countryId: "", countryIds: [] as string[], status: true, startDate: "", endDate: "" };
 
 export default function BannersPage() {
   const [placement, setPlacement] = useState("");
@@ -30,15 +31,31 @@ export default function BannersPage() {
   const banners = useMemo(() => ((data ?? []) as Banner[]).slice().sort((a, b) => a.sortOrder - b.sortOrder), [data]);
   const set = (key: keyof typeof form, value: unknown) => setForm((prev) => ({ ...prev, [key]: value }));
   const edit = (row: Banner) => {
-    setForm({ id: row.id, title: row.title, image: row.image, mobileImage: row.mobileImage ?? "", linkUrl: row.linkUrl ?? "", linkText: row.linkText ?? "", placement: row.placement, countryId: row.countryId ?? "", status: row.status, startDate: row.startDate?.slice(0, 10) ?? "", endDate: row.endDate?.slice(0, 10) ?? "" });
+    setForm({ id: row.id, title: row.title, image: row.image, mobileImage: row.mobileImage ?? "", linkUrl: row.linkUrl ?? "", linkText: row.linkText ?? "", placement: row.placement, countryId: row.countryId ?? "", countryIds: row.countryId ? [row.countryId] : [], status: row.status, startDate: row.startDate?.slice(0, 10) ?? "", endDate: row.endDate?.slice(0, 10) ?? "" });
     setShowForm(true);
   };
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
-    const payload = { ...form, countryId: form.countryId || null, mobileImage: form.mobileImage || null, linkUrl: form.linkUrl || null, linkText: form.linkText || null, startDate: form.startDate || null, endDate: form.endDate || null };
+    const selectedCountries = form.countryIds?.length ? form.countryIds : (form.countryId ? [form.countryId] : []);
+    const basePayload = {
+      title: form.title,
+      image: form.image,
+      mobileImage: form.mobileImage || null,
+      linkUrl: form.linkUrl || null,
+      linkText: form.linkText || null,
+      placement: form.placement,
+      countryIds: selectedCountries,
+      countryId: selectedCountries[0] || null,
+      status: form.status,
+      startDate: form.startDate || null,
+      endDate: form.endDate || null,
+    };
     try {
-      if (form.id) await updateBanner.mutateAsync(payload);
-      else await createBanner.mutateAsync(payload);
+      if (form.id) {
+        await updateBanner.mutateAsync({ ...basePayload, id: form.id });
+      } else {
+        await createBanner.mutateAsync(basePayload);
+      }
       setForm(empty); setShowForm(false); showToast("Banner saved.");
     } catch (error) { showToast(getAdminErrorMessage(error, "Failed to save banner."), "error"); }
   };
@@ -68,7 +85,18 @@ export default function BannersPage() {
         <div className="grid gap-4 md:grid-cols-3">
           <AdminInput label="Title" value={form.title} onChange={(event) => set("title", event.target.value)} />
           <AdminSelect label="Placement" value={form.placement} onChange={(event) => set("placement", event.target.value)} options={placements.filter(Boolean).map((row) => ({ value: row, label: row.replace(/_/g, " ") }))} />
-          <AdminSelect label="Country" value={form.countryId} onChange={(event) => set("countryId", event.target.value)} options={[{ value: "", label: "All Countries" }, ...countries.map((country: { id: string; code: string; name: string }) => ({ value: country.id, label: `${country.code} - ${country.name}` }))]} />
+          <AdminMultiSearchableSelect
+            label="Countries"
+            values={form.countryIds ?? (form.countryId ? [form.countryId] : [])}
+            onValuesChange={(values) => setForm((prev) => ({ ...prev, countryIds: values, countryId: values[0] ?? "" }))}
+            options={(countries as any[]).map((country) => ({
+              value: country.id,
+              label: `${country.name} (${country.code})`,
+            }))}
+            placeholder="Select countries"
+            allowSelectAll
+            selectAllLabel="All countries"
+          />
           <AdminInput label="Link URL" value={form.linkUrl} onChange={(event) => set("linkUrl", event.target.value)} />
           <AdminInput label="Link Text" value={form.linkText} onChange={(event) => set("linkText", event.target.value)} />
           <AdminSelect label="Status" value={form.status ? "true" : "false"} onChange={(event) => set("status", event.target.value === "true")} options={[{ value: "true", label: "Active" }, { value: "false", label: "Inactive" }]} />

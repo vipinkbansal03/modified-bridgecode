@@ -413,10 +413,15 @@ async function collectPricingRows(query: PricingListQuery) {
   const status = query.status ? normalizeStatus(query.status) : null;
 
   const ids = query.ids?.filter(Boolean) ?? [];
+  const countryIdsFilter = query.countryId
+    ? (() => {
+        const parsedIds = query.countryId.split(",").map((s) => s.trim()).filter(Boolean);
+        return parsedIds.length > 1 ? { countryId: { in: parsedIds } } : parsedIds.length === 1 ? { countryId: parsedIds[0] } : {};
+      })()
+    : {};
   const filters = {
     productId: query.productId || undefined,
     variantId: query.variantId || undefined,
-    countryId: query.countryId || undefined,
     tierId: query.tierId || undefined,
     minQuantity: query.minQuantity ? Number(query.minQuantity) : undefined,
   };
@@ -428,7 +433,7 @@ async function collectPricingRows(query: PricingListQuery) {
           where: {
             ...(filters.productId ? { productId: filters.productId } : {}),
             ...(filters.variantId ? { variantId: filters.variantId } : {}),
-            ...(filters.countryId ? { countryId: filters.countryId } : {}),
+            ...countryIdsFilter,
             ...(ids.length ? { id: { in: ids } } : {}),
             ...(status ? { status } : {}),
             ...(search
@@ -458,7 +463,7 @@ async function collectPricingRows(query: PricingListQuery) {
           where: {
             ...(filters.productId ? { productId: filters.productId } : {}),
             ...(filters.variantId ? { variantId: filters.variantId } : {}),
-            ...(filters.countryId ? { countryId: filters.countryId } : {}),
+            ...countryIdsFilter,
             ...(filters.tierId ? { tierId: filters.tierId } : {}),
             ...(ids.length ? { id: { in: ids } } : {}),
             ...(search
@@ -489,7 +494,7 @@ async function collectPricingRows(query: PricingListQuery) {
           where: {
             ...(filters.productId ? { productId: filters.productId } : {}),
             ...(filters.variantId ? { variantId: filters.variantId } : {}),
-            ...(filters.countryId ? { countryId: filters.countryId } : {}),
+            ...countryIdsFilter,
             ...(filters.minQuantity ? { minQuantity: filters.minQuantity } : {}),
             ...(ids.length ? { id: { in: ids } } : {}),
             ...(search

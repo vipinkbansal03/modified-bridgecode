@@ -195,11 +195,17 @@ export default function CreateQuotePage() {
             <AdminInput label="Customer Email *" type="email" value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} placeholder="email@example.com" />
             <AdminInput label="Phone" value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="+1 234 567 890" />
             <AdminInput label="Company" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Clinic / Company Name" />
-            <AdminSelect
+            <AdminSearchableSelect
               label="Country *"
               value={countryId}
               onChange={(event) => setCountryId(event.target.value)}
-              options={[{ value: "", label: "Select Country" }, ...countries.map((country: { id: string; name: string; code: string }) => ({ value: country.id, label: `${country.name} (${country.code})` }))]}
+              options={[
+                { value: "", label: "Select Country" },
+                ...(countries as any[]).map((country) => ({
+                  value: country.id,
+                  label: `${country.name} (${country.code})`,
+                })),
+              ]}
             />
             <AdminInput
               label="Quote Expiry Date"

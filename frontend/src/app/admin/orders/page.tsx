@@ -6,6 +6,8 @@ import { Clock3, Eye, Filter, Pencil, Plus, Search, ShoppingCart, Trash2, Truck,
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
+import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { useAdminCountries, useAdminOrders, useDeleteAdminOrder, useOrderAnalytics } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
 
@@ -305,17 +307,20 @@ export default function OrdersPage() {
                     { value: "RAZORPAY", label: "Razorpay" },
                   ]}
                 />
-                <AdminSelect
+                <AdminMultiSearchableSelect
                   label="Country"
-                  value={countryId}
-                  onChange={(event) => {
-                    setCountryId(event.target.value);
+                  values={countryId ? countryId.split(",").filter(Boolean) : []}
+                  onValuesChange={(values) => {
+                    setCountryId(values.join(","));
                     setPage(1);
                   }}
-                  options={[
-                    { value: "", label: "All countries" },
-                    ...countries.map((country: { id: string; code: string; name: string }) => ({ value: country.id, label: `${country.code} - ${country.name}` })),
-                  ]}
+                  options={(countries as any[]).map((country) => ({
+                    value: country.id,
+                    label: `${country.name} (${country.code})`,
+                  }))}
+                  placeholder="Select countries"
+                  allowSelectAll
+                  selectAllLabel="All countries"
                 />
                 <AdminSelect
                   label="Page Size"

@@ -15,6 +15,8 @@ import {
   useToast,
   type Column,
 } from "@/components/admin/AdminComponents";
+import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
+import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
 import {
   useAdminCountries,
@@ -326,12 +328,14 @@ export default function AdminTaxPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
+      const selectedCountries = (form as any).countryIds?.length ? (form as any).countryIds : (form.countryId ? [form.countryId] : []);
       const payload = {
         name: form.name,
         type: form.type,
         taxMode: form.taxMode,
         percentage: form.percentage,
-        countryId: form.countryId,
+        countryIds: selectedCountries,
+        countryId: selectedCountries[0] || null,
         status: form.status,
         sortOrder: form.sortOrder,
         productIds: form.productIds,
@@ -716,11 +720,14 @@ export default function AdminTaxPage() {
                 </button>
               </div>
               <div className="grid gap-3">
-                <AdminSelect
+                <AdminMultiSearchableSelect
                   label="Country"
-                  value={previewForm.countryId}
-                  onChange={(event) => setPreviewForm((current) => ({ ...current, countryId: event.target.value }))}
-                  options={countryOptions}
+                  values={previewForm.countryId ? [previewForm.countryId] : []}
+                  onValuesChange={(values) => setPreviewForm((current) => ({ ...current, countryId: values[0] ?? "" }))}
+                  options={(countries as any[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+                  placeholder="Select country"
+                  allowSelectAll
+                  selectAllLabel="All countries"
                 />
                 <AdminInput
                   label="Subtotal"
@@ -888,11 +895,14 @@ export default function AdminTaxPage() {
                   { value: "EXEMPT", label: "Exempt (0% Tax / Tax Free)" },
                 ]}
               />
-              <AdminSelect
-                label="Country"
-                value={form.countryId}
-                onChange={(event) => setForm((current) => ({ ...current, countryId: event.target.value }))}
-                options={countryOptions.filter((option) => option.value !== "")}
+              <AdminMultiSearchableSelect
+                label="Countries"
+                values={(form as any).countryIds ?? (form.countryId ? [form.countryId] : [])}
+                onValuesChange={(values) => setForm((current) => ({ ...current, countryIds: values, countryId: values[0] ?? "" } as any))}
+                options={(countries as any[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+                placeholder="Select countries"
+                allowSelectAll
+                selectAllLabel="All countries"
               />
               <AdminInput
                 label="Tax Percentage (%)"

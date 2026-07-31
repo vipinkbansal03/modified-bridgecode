@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminSelect, useToast } from "@/components/admin/AdminComponents";
+import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { useAdminCountries, useAdminCustomers, useAdminProduct, useAdminProducts, useCreateAdminOrder } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
 
@@ -80,7 +81,18 @@ export default function CreateOrderPage() {
               </>
             )}
             <AdminInput label="Phone" value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} />
-            <AdminSelect label="Country" value={countryId} onChange={(event) => setCountryId(event.target.value)} options={[{ value: "", label: "Use default country" }, ...countries.map((country: { id: string; name: string; code: string }) => ({ value: country.id, label: `${country.name} (${country.code})` }))]} />
+            <AdminSearchableSelect
+              label="Country"
+              value={countryId}
+              onChange={(event) => setCountryId(event.target.value)}
+              options={[
+                { value: "", label: "Use default country" },
+                ...(countries as any[]).map((country) => ({
+                  value: country.id,
+                  label: `${country.name} (${country.code})`,
+                })),
+              ]}
+            />
           </div>
         </div>
 
