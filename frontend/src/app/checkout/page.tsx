@@ -661,6 +661,15 @@ export default function CheckoutPage() {
                   {shippingLabel} ({formatMoney(symbol, shippingCharge)})
                 </strong>
               </div>
+              {(order.shippingBox || order.shippingBoxName || order.packageWeight != null) && (
+                <div className="flex items-center justify-between text-[14px]">
+                  <span className="text-steel">Packaging</span>
+                  <strong className="text-ink">
+                    {order.shippingBox?.name ?? order.shippingBoxName ?? "Standard box"} ·{" "}
+                    {Number(order.packageWeight ?? 0).toFixed(3)} kg
+                  </strong>
+                </div>
+              )}
               <div className="flex items-center justify-between text-[14px]">
                 <span className="text-steel">Tax</span>
                 <strong className="text-ink">
@@ -1285,6 +1294,27 @@ export default function CheckoutPage() {
                         : "Unavailable"}
                   </strong>
                 </div>
+                {estimate?.shippingBox && (
+                  <div className="rounded-lg border border-line bg-offwhite px-3 py-2.5 text-[12.5px] text-steel">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-ink">Packaging</span>
+                      <span className="font-semibold text-ink">
+                        {estimate.shippingBox.name}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span>Weight</span>
+                      <span>{Number(estimate.packageWeight ?? 0).toFixed(3)} kg</span>
+                    </div>
+                    <div className="mt-0.5 flex items-center justify-between">
+                      <span>Dimensions</span>
+                      <span>
+                        {estimate.shippingBox.length} × {estimate.shippingBox.width} ×{" "}
+                        {estimate.shippingBox.height} cm
+                      </span>
+                    </div>
+                  </div>
+                )}
                 <div className="mt-4 space-y-2 border-t border-line pt-3">
                   <span className="block text-xs uppercase tracking-wide text-steel-2 font-semibold">
                     Payment Options ({availablePaymentMethods.length})
@@ -1583,6 +1613,15 @@ export default function CheckoutPage() {
                 estimate?.shippingProvider ??
                 "Standard Shipping"}
             </div>
+
+            {estimate?.shippingBox && (
+              <div className="mt-2 border-t border-[#E6E6E6] pt-2 text-[12px] text-steel-2">
+                Packaging: <span className="font-medium text-ink">{estimate.shippingBox.name}</span> ·{" "}
+                {Number(estimate.packageWeight ?? 0).toFixed(3)} kg ·{" "}
+                {estimate.shippingBox.length}×{estimate.shippingBox.width}×
+                {estimate.shippingBox.height} cm
+              </div>
+            )}
           </div>
         </div>
 
