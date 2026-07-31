@@ -1595,7 +1595,7 @@ export default function CheckoutPage() {
                   <span className="font-mono">
                     {formatMoney(
                       estimate?.currency?.symbol ?? totals.currencySymbol,
-                      item.amount,
+                      item.taxAmount,
                     )}
                   </span>
                 </div>

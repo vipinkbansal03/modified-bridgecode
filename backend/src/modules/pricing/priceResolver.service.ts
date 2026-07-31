@@ -525,7 +525,7 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
 
   // 3. Fetch tax rules from database
   const countryTaxRules = (await (prisma as unknown as { taxRule: { findMany: (args: unknown) => Promise<any[]> } }).taxRule.findMany({
-    where: { countries: { some: { id: input.countryId } }, status: "ACTIVE" },
+    where: { countries: { some: { countryId: input.countryId } }, status: "ACTIVE" },
     include: { products: { select: { id: true } } },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   })) as any[];
