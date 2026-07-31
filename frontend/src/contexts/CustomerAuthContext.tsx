@@ -25,6 +25,9 @@ export interface CustomerSession {
   customerRole?: { id: string; key: string; name: string } | null;
   tierId?: string | null;
   defaultCountryId?: string | null;
+  taxId?: string | null;
+  taxIdType?: string | null;
+  taxIdStatus?: string | null;
 }
 
 type RegisterPayload = {
@@ -48,6 +51,8 @@ type RegisterPayload = {
   currentPractice?: "STUDENT" | "ORTHODONTIST" | "OTHER";
   currentPracticeOther?: string;
   usingModernProducts?: boolean;
+  taxId?: string;
+  taxIdType?: string;
 };
 
 interface CustomerAuthContextType {

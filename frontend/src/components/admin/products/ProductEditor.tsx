@@ -1327,8 +1327,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           setBulkSaving(false);
           return;
         }
-        const stockVal = parseInt(invBulkActionValue || "0");
-        if (isNaN(stockVal) || stockVal < 0) {
+        const hasExplicitStock = invBulkActionValue.trim() !== "";
+        const stockVal = hasExplicitStock ? parseInt(invBulkActionValue) : null;
+        if (hasExplicitStock && (stockVal === null || isNaN(stockVal) || stockVal < 0)) {
           showToast("Please enter a valid initial stock.", "error");
           setBulkSaving(false);
           return;
@@ -1341,13 +1342,21 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           )
         );
         await Promise.all(
-          uniqueVariantIds.map((vId) =>
-            adminApi.post("/inventory/upsert", {
+          uniqueVariantIds.map((vId) => {
+            let finalStock = 0;
+            if (stockVal !== null) {
+              finalStock = stockVal;
+            } else {
+              const variant = (product?.variants ?? []).find((v: any) => v.id === vId);
+              const baseInv = getBaseInventory(variant?.inventories) as any;
+              finalStock = baseInv ? (baseInv.stock ?? 0) : 0;
+            }
+            return adminApi.post("/inventory/upsert", {
               variantId: vId,
               warehouseId: invBulkCountryId,
-              stock: stockVal,
-            })
-          )
+              stock: finalStock,
+            });
+          })
         );
         showToast(`Successfully assigned ${uniqueVariantIds.length} variant(s) to warehouse.`, "success");
       } else {
@@ -1744,9 +1753,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       const q = filterInvType.toLowerCase().trim();
       rows = rows.filter(
         (inv: any) =>
-          inv.countryName.toLowerCase().includes(q) ||
-          inv.countryCode.toLowerCase().includes(q) ||
-          inv.type.toLowerCase().includes(q)
+          (inv.countryName?.toLowerCase() || "").includes(q) ||
+          (inv.countryCode?.toLowerCase() || "").includes(q) ||
+          (inv.warehouseName?.toLowerCase() || "").includes(q) ||
+          (inv.warehouseCountryCode?.toLowerCase() || "").includes(q) ||
+          (inv.type?.toLowerCase() || "").includes(q)
       );
     }
 
@@ -1793,8 +1804,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           valA = a.variantTitle ?? "";
           valB = b.variantTitle ?? "";
         } else if (invSortField === "type") {
-          valA = a.countryName ?? "";
-          valB = b.countryName ?? "";
+          valA = a.countryName ?? a.warehouseName ?? "";
+          valB = b.countryName ?? b.warehouseName ?? "";
         } else if (invSortField === "stock") {
           valA = a.stock ?? 0;
           valB = b.stock ?? 0;
@@ -5629,6 +5640,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                               </td>
                               <td className="px-4 py-3 text-center">
                                 <input
+                                  key={inventory.id}
                                   type="number"
                                   min="0"
                                   defaultValue={stockLevel}

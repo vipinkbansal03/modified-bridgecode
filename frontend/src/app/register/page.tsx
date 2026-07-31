@@ -40,6 +40,8 @@ const registerSchema = Yup.object({
   country: Yup.string().trim().required("Country is required"),
   zipcode: Yup.string().trim().required("Zipcode is required"),
   website: Yup.string().trim(),
+  taxId: Yup.string().trim().nullable(),
+  taxIdType: Yup.string().trim().nullable(),
   password: Yup.string()
     .min(8, "Password must be at least 8 characters")
     .required("Password is required"),
@@ -162,6 +164,8 @@ export default function RegisterPage() {
       country: "India",
       zipcode: "",
       website: "",
+      taxId: "",
+      taxIdType: "GSTIN",
       password: "",
       confirmPassword: "",
       preferredPrescription: "MBT",
@@ -205,6 +209,8 @@ export default function RegisterPage() {
               | "OTHER",
             currentPracticeOther: values.currentPracticeOther,
             usingModernProducts: values.usingModernProducts === "YES",
+            taxId: values.taxId || undefined,
+            taxIdType: values.taxIdType || undefined,
           },
           returnTo,
         );
@@ -431,6 +437,29 @@ export default function RegisterPage() {
                 error={formik.errors.website}
                 touched={formik.touched.website}
               />
+              <div className="flex h-9 overflow-hidden rounded-md border border-[#E0E0E0] bg-[#EEF4FF] transition-colors focus-within:border-[#E31E24]">
+                <select
+                  name="taxIdType"
+                  value={formik.values.taxIdType || "GSTIN"}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  className="bg-transparent border-r border-[#E0E0E0] px-2 text-[12px] text-[#6B6B6B] outline-none"
+                >
+                  <option value="GSTIN">GSTIN (IN)</option>
+                  <option value="VAT">VAT ID (EU)</option>
+                  <option value="EIN">EIN (US)</option>
+                  <option value="TAX_ID">Tax ID</option>
+                </select>
+                <input
+                  type="text"
+                  name="taxId"
+                  placeholder="GSTIN / Tax ID (optional)"
+                  value={formik.values.taxId || ""}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  className="min-w-0 flex-1 bg-transparent px-3 text-[12.5px] text-[#1A1A1A] outline-none placeholder:text-[#8A8A8A]"
+                />
+              </div>
               <div className="relative">
                 <IconInput
                   icon={<KeyRound size={14} />}

@@ -73,10 +73,7 @@ function StatusBadge({ value }: { value: string }) {
 }
 
 function canDownloadInvoice(order: CustomerOrderSummary) {
-  return (
-    order.paymentStatus === "PAID" ||
-    ["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED"].includes(order.status)
-  );
+  return order.status !== "CANCELLED" && order.status !== "REJECTED";
 }
 
 export default function AccountPage() {
@@ -288,6 +285,23 @@ export default function AccountPage() {
                     </p>
                     <p className="mt-1 text-ink">
                       {currentCustomer.companyName}
+                    </p>
+                  </div>
+                )}
+                {currentCustomer.taxId && (
+                  <div>
+                    <p className="text-[12px] font-semibold uppercase tracking-wide text-steel-2">
+                      {currentCustomer.taxIdType || "Tax ID"}
+                    </p>
+                    <p className="mt-1 font-mono text-[13.5px] text-ink">
+                      {currentCustomer.taxId}
+                      <span className={`ml-2 text-[10.5px] font-semibold px-2 py-0.5 rounded ${
+                        currentCustomer.taxIdStatus === "VALID" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                        currentCustomer.taxIdStatus === "INVALID" ? "bg-rose-50 text-rose-700 border border-rose-200" :
+                        "bg-amber-50 text-amber-700 border border-amber-200"
+                      }`}>
+                        {currentCustomer.taxIdStatus ?? "PENDING"}
+                      </span>
                     </p>
                   </div>
                 )}

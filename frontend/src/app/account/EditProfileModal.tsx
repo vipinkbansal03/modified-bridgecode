@@ -31,6 +31,8 @@ const profileSchema = Yup.object({
   preferredPrescription: Yup.string().nullable(),
   preferredSlot: Yup.string().nullable(),
   currentPractice: Yup.string().nullable(),
+  taxId: Yup.string().trim().nullable(),
+  taxIdType: Yup.string().trim().nullable(),
 });
 
 export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditProfileModalProps) {
@@ -47,6 +49,8 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
       preferredPrescription: currentCustomer?.preferredPrescription || "",
       preferredSlot: currentCustomer?.preferredSlot || "",
       currentPractice: currentCustomer?.currentPractice || "",
+      taxId: currentCustomer?.taxId || "",
+      taxIdType: currentCustomer?.taxIdType || "GSTIN",
     },
     enableReinitialize: true,
     validationSchema: profileSchema,
@@ -62,6 +66,8 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
           preferredPrescription: values.preferredPrescription || null,
           preferredSlot: values.preferredSlot || null,
           currentPractice: values.currentPractice || null,
+          taxId: values.taxId || null,
+          taxIdType: values.taxIdType || null,
         });
         onSuccess(updated);
         onClose();
@@ -161,6 +167,35 @@ export default function EditProfileModal({ isOpen, onClose, onSuccess }: EditPro
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
                 className="w-full rounded-lg border border-[#D1D5DB] pl-9 pr-3 py-2 text-[13.5px] text-[#111827] focus:border-[#E31E24] focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-1">
+              <label className="block text-[12.5px] font-bold text-[#374151] mb-1">Tax ID Type</label>
+              <select
+                name="taxIdType"
+                value={formik.values.taxIdType}
+                onChange={formik.handleChange}
+                className="w-full rounded-lg border border-[#D1D5DB] px-3 py-2 text-[13.5px] text-[#111827] focus:border-[#E31E24] focus:outline-none bg-white"
+              >
+                <option value="GSTIN">GSTIN (India)</option>
+                <option value="VAT">VAT ID</option>
+                <option value="EIN">EIN (US)</option>
+                <option value="TAX_ID">Other Tax ID</option>
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="block text-[12.5px] font-bold text-[#374151] mb-1">Tax ID / GSTIN</label>
+              <input
+                type="text"
+                name="taxId"
+                placeholder="Enter GSTIN/Tax ID"
+                value={formik.values.taxId}
+                onChange={formik.handleChange}
+                onBlur={formik.handleBlur}
+                className="w-full rounded-lg border border-[#D1D5DB] px-3 py-2 text-[13.5px] text-[#111827] focus:border-[#E31E24] focus:outline-none"
               />
             </div>
           </div>

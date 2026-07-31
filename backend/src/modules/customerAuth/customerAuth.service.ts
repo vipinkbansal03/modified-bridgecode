@@ -4,6 +4,7 @@ import type { SignOptions } from "jsonwebtoken";
 import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
 import { sendCustomerPasswordResetEmail } from "../../utils/email";
+import { validateGstinWithApi } from "../tax/gstClient";
 import {
   SYSTEM_CUSTOMER_ROLE_KEYS,
   ensureCustomerRoleByKey,
@@ -49,6 +50,7 @@ function toCustomerSession(customer: {
   tierId: string | null;
   defaultCountryId: string | null;
   taxId?: string | null;
+  taxIdType?: string | null;
   taxIdStatus?: string | null;
 }) {
   return {
@@ -73,6 +75,7 @@ function toCustomerSession(customer: {
     tierId: customer.tierId,
     defaultCountryId: customer.defaultCountryId,
     taxId: customer.taxId,
+    taxIdType: (customer as any).taxIdType || null,
     taxIdStatus: customer.taxIdStatus,
   };
 }
@@ -102,6 +105,20 @@ export async function register(input: CustomerRegisterInput) {
 
   const country = await resolveCountry(input.country);
   if (!country) throw new AppError("The selected country is not available.", 400);
+
+  let taxIdStatus: "PENDING" | "VALID" | "INVALID" | undefined = undefined;
+  if (input.taxId) {
+    const nextTaxId = input.taxId.trim();
+    if (nextTaxId) {
+      const nextType = input.taxIdType || "GSTIN";
+      if (nextType === "GSTIN") {
+        const gstResult = await validateGstinWithApi(nextTaxId);
+        taxIdStatus = gstResult.valid ? "VALID" : "INVALID";
+      } else {
+        taxIdStatus = "PENDING";
+      }
+    }
+  }
 
   const passwordHash = await bcrypt.hash(input.password, 12);
   const customerType = input.customerType ?? "RETAIL";
@@ -136,6 +153,9 @@ export async function register(input: CustomerRegisterInput) {
         customerRoleId: customerRole.id,
         approvalStatus: customerType === "WHOLESALE" ? "PENDING_APPROVAL" : "ACTIVE",
         defaultCountryId: country.id,
+        taxId: input.taxId ? input.taxId.trim() : null,
+        taxIdType: input.taxIdType ? input.taxIdType.trim() : (input.taxId ? "GSTIN" : null),
+        taxIdStatus: taxIdStatus || "PENDING",
       },
       include: {
         customerRole: { select: { id: true, key: true, name: true } },
@@ -234,6 +254,22 @@ export async function updateProfile(customerId: string, input: UpdateCustomerPro
   const existing = await prisma.customer.findUnique({ where: { id: customerId, deletedAt: null } });
   if (!existing) throw new AppError("Customer profile not found.", 404);
 
+  let taxIdStatus: "PENDING" | "VALID" | "INVALID" | undefined = undefined;
+  if (input.taxId !== undefined) {
+    const nextTaxId = input.taxId ? input.taxId.trim() : "";
+    if (!nextTaxId) {
+      taxIdStatus = "PENDING";
+    } else {
+      const nextType = input.taxIdType || existing.taxIdType || "GSTIN";
+      if (nextType === "GSTIN") {
+        const gstResult = await validateGstinWithApi(nextTaxId);
+        taxIdStatus = gstResult.valid ? "VALID" : "INVALID";
+      } else {
+        taxIdStatus = "PENDING";
+      }
+    }
+  }
+
   const updatedCustomer = await prisma.customer.update({
     where: { id: customerId },
     data: {
@@ -248,11 +284,14 @@ export async function updateProfile(customerId: string, input: UpdateCustomerPro
       ...(input.currentPractice !== undefined && { currentPractice: input.currentPractice }),
       ...(input.currentPracticeOther !== undefined && { currentPracticeOther: cleanOptional(input.currentPracticeOther) }),
       ...(input.usingModernProducts !== undefined && { usingModernProducts: input.usingModernProducts }),
+      ...(input.taxId !== undefined && { taxId: input.taxId ? input.taxId.trim() : null }),
+      ...(input.taxIdType !== undefined && { taxIdType: input.taxIdType ? input.taxIdType.trim() : null }),
+      ...(taxIdStatus !== undefined && { taxIdStatus }),
     },
     include: {
       customerRole: { select: { id: true, key: true, name: true } },
     },
   });
 
-  return toCustomerSession(updatedCustomer);
+  return toCustomerSession(updatedCustomer as any);
 }

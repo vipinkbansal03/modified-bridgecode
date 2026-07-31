@@ -108,6 +108,11 @@ interface OrderDetail {
   packageVolume: string | number | null;
   trackingNumber: string | null;
   notes: string | null;
+  taxIdSnapshot?: string | null;
+  taxIdTypeSnapshot?: string | null;
+  cgstAmount?: number | null;
+  sgstAmount?: number | null;
+  igstAmount?: number | null;
   createdAt: string;
   updatedAt: string;
   items: OrderItem[];
@@ -357,7 +362,34 @@ export default function OrderDetailPage() {
                   {order.couponCode && Number(order.couponDiscount ?? 0) > 0 && (
                     <div className="flex justify-between text-[#2A6A40]"><span>Coupon ({order.couponCode})</span><span>−{sym}{Number(order.couponDiscount).toFixed(2)}</span></div>
                   )}
-                  <div className="flex justify-between text-[#6B6B6B]"><span>Tax</span><span>{sym}{Number(order.taxAmount ?? 0).toFixed(2)}</span></div>
+                  <div className="flex justify-between text-[#6B6B6B]">
+                    <span>Tax</span>
+                    <span>{sym}{Number(order.taxAmount ?? 0).toFixed(2)}</span>
+                  </div>
+                  {((order.cgstAmount && Number(order.cgstAmount) > 0) ||
+                    (order.sgstAmount && Number(order.sgstAmount) > 0) ||
+                    (order.igstAmount && Number(order.igstAmount) > 0)) && (
+                    <div className="pl-3 border-l-2 border-brand/20 text-[12px] text-[#6B6B6B] space-y-0.5 my-1">
+                      {order.cgstAmount && Number(order.cgstAmount) > 0 && (
+                        <div className="flex justify-between">
+                          <span>CGST</span>
+                          <span>{sym}{Number(order.cgstAmount).toFixed(2)}</span>
+                        </div>
+                      )}
+                      {order.sgstAmount && Number(order.sgstAmount) > 0 && (
+                        <div className="flex justify-between">
+                          <span>SGST</span>
+                          <span>{sym}{Number(order.sgstAmount).toFixed(2)}</span>
+                        </div>
+                      )}
+                      {order.igstAmount && Number(order.igstAmount) > 0 && (
+                        <div className="flex justify-between">
+                          <span>IGST</span>
+                          <span>{sym}{Number(order.igstAmount).toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="flex justify-between text-[#6B6B6B]"><span>Shipping</span><span>{sym}{Number(order.shippingCharge).toFixed(2)}</span></div>
                   <div className="flex justify-between font-semibold text-[#111] text-[15px]"><span>Total</span><span>{sym}{Number(order.total).toFixed(2)}</span></div>
                 </div>
@@ -559,8 +591,14 @@ export default function OrderDetailPage() {
             <h3 className="text-[14px] font-semibold text-[#111]">Customer</h3>
             <InfoRow label="Name" value={order.customerName} />
             <InfoRow label="Email" value={<a href={`mailto:${order.customerEmail}`} className="text-brand hover:underline">{order.customerEmail}</a>} />
-            {order.customerPhone && <InfoRow label="Phone" value={order.customerPhone} />}
+             {order.customerPhone && <InfoRow label="Phone" value={order.customerPhone} />}
             {order.companyName && <InfoRow label="Company" value={order.companyName} />}
+            {order.taxIdSnapshot && (
+              <InfoRow
+                label={order.taxIdTypeSnapshot || "Tax ID"}
+                value={<span className="font-mono text-brand font-semibold">{order.taxIdSnapshot}</span>}
+              />
+            )}
           </div>
 
           {/* Shipping address */}
