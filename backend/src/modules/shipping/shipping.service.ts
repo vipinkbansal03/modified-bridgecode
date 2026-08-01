@@ -65,7 +65,7 @@ export async function listProviders() {
 export async function getProvider(id: string) {
   const provider = await prisma.shippingProvider.findUnique({
     where: { id },
-    select: { ...PROVIDER_SELECT, zones: { include: { country: true }, orderBy: { charge: "asc" } } },
+    select: { ...PROVIDER_SELECT, zones: { include: { countries: { include: { country: true } } }, orderBy: { charge: "asc" } } },
   });
   if (!provider) throw new AppError("Shipping provider not found.", 404);
   return {
@@ -164,26 +164,29 @@ export async function testConnection(id: string, override?: { apiKey?: string; a
 export async function listZones(query?: { providerId?: string; countryId?: string; status?: string }) {
   const where: Prisma.ShippingZoneWhereInput = {};
   if (query?.providerId) where.providerId = query.providerId;
-  if (query?.countryId) where.countryId = query.countryId;
+  if (query?.countryId) where.countries = { some: { countryId: query.countryId } };
   if (query?.status) where.status = query.status as "ACTIVE" | "INACTIVE";
 
   return prisma.shippingZone.findMany({
     where,
-    include: { provider: true, country: true },
-    orderBy: [{ country: { name: "asc" } }, { charge: "asc" }],
+    include: { provider: true, countries: { include: { country: true } } },
+    orderBy: { charge: "asc" },
   });
 }
 
 export async function createZone(input: {
   providerId: string;
-  countryId: string;
+  countryIds?: string[];
+  countryId?: string;
   charge: number | string;
   freeAbove?: number | string | null;
   estimatedDays?: string | null;
   status?: string;
 }) {
   if (!input.providerId) throw new AppError("Provider is required.", 400);
-  if (!input.countryId) throw new AppError("Country is required.", 400);
+
+  const countryIds = [...new Set(input.countryIds ?? (input.countryId ? [input.countryId] : []))];
+  if (countryIds.length === 0) throw new AppError("At least one country is required.", 400);
 
   const charge = Number(input.charge);
   if (!Number.isFinite(charge) || charge < 0) throw new AppError("Charge must be a non-negative number.", 400);
@@ -191,11 +194,14 @@ export async function createZone(input: {
   const provider = await prisma.shippingProvider.findUnique({ where: { id: input.providerId }, select: { id: true } });
   if (!provider) throw new AppError("Shipping provider not found.", 404);
 
-  const country = await prisma.country.findUnique({ where: { id: input.countryId }, select: { id: true } });
-  if (!country) throw new AppError("Country not found.", 404);
+  const foundCountries = await prisma.country.findMany({ where: { id: { in: countryIds } }, select: { id: true } });
+  if (foundCountries.length !== countryIds.length) throw new AppError("One or more countries were not found.", 404);
 
-  const duplicate = await prisma.shippingZone.findFirst({ where: { providerId: input.providerId, countryId: input.countryId }, select: { id: true } });
-  if (duplicate) throw new AppError("A shipping zone already exists for this provider and country.", 409);
+  const duplicate = await prisma.shippingZone.findFirst({
+    where: { providerId: input.providerId, countries: { some: { countryId: { in: countryIds } } } },
+    select: { id: true },
+  });
+  if (duplicate) throw new AppError("A shipping zone already exists for this provider and one of the selected countries.", 409);
 
   const freeAbove = input.freeAbove != null && input.freeAbove !== "" ? Number(input.freeAbove) : null;
   if (freeAbove !== null && (!Number.isFinite(freeAbove) || freeAbove < 0)) throw new AppError("Free above must be a non-negative number.", 400);
@@ -203,25 +209,25 @@ export async function createZone(input: {
   return prisma.shippingZone.create({
     data: {
       providerId: input.providerId,
-      countryId: input.countryId,
       charge,
       freeAbove,
       estimatedDays: input.estimatedDays?.trim() || null,
       status: (input.status as "ACTIVE" | "INACTIVE") || "ACTIVE",
+      countries: { create: countryIds.map((countryId) => ({ countryId })) },
     },
-    include: { provider: true, country: true },
+    include: { provider: true, countries: { include: { country: true } } },
   });
 }
 
 export async function updateZone(id: string, input: {
   providerId?: string;
-  countryId?: string;
+  countryIds?: string[];
   charge?: number | string;
   freeAbove?: number | string | null;
   estimatedDays?: string | null;
   status?: string;
 }) {
-  const existing = await prisma.shippingZone.findUnique({ where: { id }, select: { id: true, providerId: true, countryId: true } });
+  const existing = await prisma.shippingZone.findUnique({ where: { id }, select: { id: true, providerId: true } });
   if (!existing) throw new AppError("Shipping zone not found.", 404);
 
   if (input.charge !== undefined) {
@@ -236,26 +242,35 @@ export async function updateZone(id: string, input: {
 
   const data: Prisma.ShippingZoneUncheckedUpdateInput = {};
   if (input.providerId) data.providerId = input.providerId;
-  if (input.countryId) data.countryId = input.countryId;
   if (input.charge !== undefined) data.charge = Number(input.charge);
   if (input.freeAbove !== undefined) data.freeAbove = input.freeAbove != null && input.freeAbove !== "" ? Number(input.freeAbove) : null;
   if (input.estimatedDays !== undefined) data.estimatedDays = input.estimatedDays?.trim() || null;
   if (input.status) data.status = input.status as "ACTIVE" | "INACTIVE";
 
-  if (data.providerId || data.countryId) {
-    const checkProvider = (data.providerId as string) ?? existing.providerId;
-    const checkCountry = (data.countryId as string) ?? existing.countryId;
+  let nextCountryIds: string[] | null = null;
+  if (input.countryIds) {
+    nextCountryIds = [...new Set(input.countryIds)];
+    if (nextCountryIds.length === 0) throw new AppError("At least one country is required.", 400);
+    const foundCountries = await prisma.country.findMany({ where: { id: { in: nextCountryIds } }, select: { id: true } });
+    if (foundCountries.length !== nextCountryIds.length) throw new AppError("One or more countries were not found.", 404);
+    data.countries = {
+      deleteMany: {},
+      create: nextCountryIds.map((countryId) => ({ countryId })),
+    };
+  }
+
+  if (input.providerId && nextCountryIds) {
     const duplicate = await prisma.shippingZone.findFirst({
-      where: { providerId: checkProvider, countryId: checkCountry, NOT: { id } },
+      where: { providerId: input.providerId, countries: { some: { countryId: { in: nextCountryIds } } }, NOT: { id } },
       select: { id: true },
     });
-    if (duplicate) throw new AppError("A shipping zone already exists for this provider and country.", 409);
+    if (duplicate) throw new AppError("A shipping zone already exists for this provider and one of the selected countries.", 409);
   }
 
   return prisma.shippingZone.update({
     where: { id },
     data,
-    include: { provider: true, country: true },
+    include: { provider: true, countries: { include: { country: true } } },
   });
 }
 
@@ -291,7 +306,7 @@ export async function getAvailableProviders(countryCode: string, orderTotal: num
   if (!country) return [];
 
   const zones = await prisma.shippingZone.findMany({
-    where: { countryId: country.id, status: "ACTIVE", provider: { isEnabled: true } },
+    where: { countries: { some: { countryId: country.id } }, status: "ACTIVE", provider: { isEnabled: true } },
     include: { provider: true },
     orderBy: { charge: "asc" },
   });
@@ -340,7 +355,7 @@ export async function calculateShipping(countryCode: string, orderTotal: number)
   }
 
   const zones = await prisma.shippingZone.findMany({
-    where: { countryId: country.id, status: "ACTIVE", provider: { isEnabled: true } },
+    where: { countries: { some: { countryId: country.id } }, status: "ACTIVE", provider: { isEnabled: true } },
     include: { provider: true },
     orderBy: { charge: "asc" },
   });

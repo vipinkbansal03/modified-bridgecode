@@ -5,8 +5,7 @@ import { useMemo, useState } from "react";
 import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
-import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
+import { AdminInput, AdminMultiSelect, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
 import { getAdminErrorMessage } from "@/services/adminApi";
 import {
   useAdminShippingProviders,
@@ -33,18 +32,17 @@ interface Country {
 interface ShippingZone {
   id: string;
   providerId: string;
-  countryId: string;
   charge: string | number;
   freeAbove: string | number | null;
   estimatedDays: string | null;
   status: string;
   provider: Provider;
-  country: Country;
+  countries: { country: Country }[];
 }
 
 interface ZoneForm {
   providerId: string;
-  countryId: string;
+  countryIds: string[];
   charge: string;
   freeAbove: string;
   estimatedDays: string;
@@ -53,7 +51,7 @@ interface ZoneForm {
 
 const emptyForm: ZoneForm = {
   providerId: "",
-  countryId: "",
+  countryIds: [],
   charge: "",
   freeAbove: "",
   estimatedDays: "",
@@ -93,8 +91,8 @@ export default function ShippingZonesPage() {
     [providerList],
   );
 
-  const countryOptions = useMemo(
-    () => [{ value: "", label: "Select country" }, ...countryList.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))],
+  const countryMultiOptions = useMemo(
+    () => countryList.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` })),
     [countryList],
   );
 
@@ -108,7 +106,7 @@ export default function ShippingZonesPage() {
     setEditingZone(zone);
     setForm({
       providerId: zone.providerId,
-      countryId: zone.countryId,
+      countryIds: (zone.countries ?? []).map((entry) => entry.country.id),
       charge: String(zone.charge ?? ""),
       freeAbove: zone.freeAbove === null || zone.freeAbove === undefined ? "" : String(zone.freeAbove),
       estimatedDays: zone.estimatedDays ?? "",
@@ -119,13 +117,13 @@ export default function ShippingZonesPage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!form.providerId || !form.countryId || !form.charge) {
-      showToast("Provider, country, and charge are required.", "error");
+    if (!form.providerId || form.countryIds.length === 0 || !form.charge) {
+      showToast("Provider, at least one country, and charge are required.", "error");
       return;
     }
     const payload = {
       providerId: form.providerId,
-      countryId: form.countryId,
+      countryIds: form.countryIds,
       charge: Number(form.charge),
       freeAbove: form.freeAbove ? Number(form.freeAbove) : null,
       estimatedDays: form.estimatedDays.trim() || null,
@@ -158,7 +156,7 @@ export default function ShippingZonesPage() {
 
   const columns: Column<ShippingZone>[] = [
     { key: "provider", label: "Provider", render: (zone) => zone.provider?.displayName ?? "-" },
-    { key: "country", label: "Country", render: (zone) => `${zone.country?.name ?? "-"}${zone.country?.code ? ` (${zone.country.code})` : ""}` },
+    { key: "country", label: "Country", render: (zone) => (zone.countries ?? []).map((entry) => `${entry.country.name} (${entry.country.code})`).join(", ") || "-" },
     { key: "charge", label: "Charge", render: (zone) => money(zone.charge) },
     { key: "freeAbove", label: "Free Above", render: (zone) => money(zone.freeAbove) },
     { key: "estimatedDays", label: "Est. Days", render: (zone) => zone.estimatedDays ?? "-" },
@@ -219,7 +217,7 @@ export default function ShippingZonesPage() {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <AdminSelect label="Provider" options={providerOptions} value={form.providerId} onChange={(event) => setForm((current) => ({ ...current, providerId: event.target.value }))} />
-                <AdminSearchableSelect label="Country" options={countryOptions} value={form.countryId} onChange={(event) => setForm((current) => ({ ...current, countryId: event.target.value }))} />
+                <AdminMultiSelect label="Countries" options={countryMultiOptions} value={form.countryIds} onChange={(values) => setForm((current) => ({ ...current, countryIds: values }))} selectAllLabel="Select All" />
                 <AdminInput label="Charge" type="number" min="0" step="0.01" value={form.charge} onChange={(event) => setForm((current) => ({ ...current, charge: event.target.value }))} />
                 <AdminInput label="Free Above" type="number" min="0" step="0.01" value={form.freeAbove} onChange={(event) => setForm((current) => ({ ...current, freeAbove: event.target.value }))} placeholder="Optional" />
                 <AdminInput label="Estimated Days" value={form.estimatedDays} onChange={(event) => setForm((current) => ({ ...current, estimatedDays: event.target.value }))} placeholder="e.g. 3-5 business days" />
@@ -249,7 +247,7 @@ export default function ShippingZonesPage() {
       <ConfirmModal
         open={Boolean(deleteTarget)}
         title="Delete shipping zone?"
-        message={`This removes the ${deleteTarget?.country?.code ?? ""} zone for ${deleteTarget?.provider?.displayName ?? "this provider"}.`}
+        message={`This removes the ${(deleteTarget?.countries ?? []).map((entry) => entry.country.code).join(", ") || "selected countries"} zone for ${deleteTarget?.provider?.displayName ?? "this provider"}.`}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
         isLoading={deleteMutation.isPending}

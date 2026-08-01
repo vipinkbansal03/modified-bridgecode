@@ -31,29 +31,36 @@ async function main() {
 
   for (const country of countries) {
     const rate = defaultRates[country.code] || { charge: 10, freeAbove: 100, estimatedDays: "5-7 days" };
-    const zone = await prisma.shippingZone.upsert({
+    const existing = await prisma.shippingZone.findFirst({
       where: {
-        providerId_countryId: {
-          providerId: provider.id,
-          countryId: country.id
-        }
-      },
-      update: {
-        charge: rate.charge,
-        freeAbove: rate.freeAbove,
-        estimatedDays: rate.estimatedDays,
-        status: "ACTIVE"
-      },
-      create: {
         providerId: provider.id,
-        countryId: country.id,
-        charge: rate.charge,
-        freeAbove: rate.freeAbove,
-        estimatedDays: rate.estimatedDays,
-        status: "ACTIVE"
+        countries: { some: { countryId: country.id } }
       }
     });
-    console.log(`Upserted shipping zone for ${country.code}:`, zone.id);
+    if (existing) {
+      const zone = await prisma.shippingZone.update({
+        where: { id: existing.id },
+        data: {
+          charge: rate.charge,
+          freeAbove: rate.freeAbove,
+          estimatedDays: rate.estimatedDays,
+          status: "ACTIVE"
+        }
+      });
+      console.log(`Upserted shipping zone for ${country.code}:`, zone.id);
+    } else {
+      const zone = await prisma.shippingZone.create({
+        data: {
+          providerId: provider.id,
+          charge: rate.charge,
+          freeAbove: rate.freeAbove,
+          estimatedDays: rate.estimatedDays,
+          status: "ACTIVE",
+          countries: { create: [{ countryId: country.id }] }
+        }
+      });
+      console.log(`Upserted shipping zone for ${country.code}:`, zone.id);
+    }
   }
 }
 

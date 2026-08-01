@@ -809,9 +809,10 @@ export interface AdminMultiSelectProps {
   onChange: (value: string[]) => void;
   className?: string;
   placeholder?: string;
+  selectAllLabel?: string;
 }
 
-export function AdminMultiSelect({ label, error, options, value, onChange, className, placeholder = "Select options..." }: AdminMultiSelectProps) {
+export function AdminMultiSelect({ label, error, options, value, onChange, className, placeholder = "Select options...", selectAllLabel }: AdminMultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -883,7 +884,23 @@ export function AdminMultiSelect({ label, error, options, value, onChange, class
           {options.length === 0 ? (
             <div className="px-3 py-2 text-sm text-slate-500">No options available</div>
           ) : (
-            options.map((option) => {
+            <>
+              {selectAllLabel && (
+                <div
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onChange(value.length === options.length ? [] : options.map((o) => o.value));
+                  }}
+                  className="flex cursor-pointer items-center border-b border-slate-100 px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                >
+                  <div className={cn("mr-2 flex h-4 w-4 items-center justify-center rounded border", value.length === options.length ? "border-brand bg-brand text-white" : "border-slate-300")}>
+                    {value.length === options.length && <Check className="h-3 w-3" />}
+                  </div>
+                  {selectAllLabel}
+                </div>
+              )}
+              {options.map((option) => {
               const isSelected = value.includes(option.value);
               return (
                 <div
@@ -900,7 +917,8 @@ export function AdminMultiSelect({ label, error, options, value, onChange, class
                   {option.label}
                 </div>
               );
-            })
+            })}
+            </>
           )}
         </div>,
         document.body

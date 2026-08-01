@@ -332,7 +332,7 @@ model Country {
   Coupon              Coupon[]
   Order               Order[]
   prices              ProductPrice[]
-  shippingZones       ShippingZone[]
+  shippingZoneCountries ShippingZoneCountry[]
   taxRules            TaxRule[]
   defaultProducts     Product[]
   tierPricing         TierPricing[]
@@ -739,21 +739,31 @@ model ShippingProvider {
 }
 
 model ShippingZone {
-  id            String           @id @default(cuid())
+  id            String               @id @default(cuid())
   providerId    String
-  countryId     String
-  charge        Decimal          @db.Decimal(10, 2)
-  freeAbove     Decimal?         @db.Decimal(10, 2)
+  charge        Decimal              @db.Decimal(10, 2)
+  freeAbove     Decimal?             @db.Decimal(10, 2)
   estimatedDays String?
-  status        Status           @default(ACTIVE)
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  status        Status               @default(ACTIVE)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
   orders        Order[]
-  country       Country          @relation(fields: [countryId], references: [id])
-  provider      ShippingProvider @relation(fields: [providerId], references: [id])
+  provider      ShippingProvider     @relation(fields: [providerId], references: [id])
+  countries     ShippingZoneCountry[]
 
-  @@unique([providerId, countryId])
   @@map("shipping_zones")
+}
+
+model ShippingZoneCountry {
+  id        String        @id @default(cuid())
+  zoneId    String
+  countryId String
+  createdAt DateTime      @default(now())
+  zone      ShippingZone  @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  country   Country       @relation(fields: [countryId], references: [id])
+
+  @@unique([zoneId, countryId])
+  @@map("shipping_zone_countries")
 }
 
 enum ShipmentStatus {

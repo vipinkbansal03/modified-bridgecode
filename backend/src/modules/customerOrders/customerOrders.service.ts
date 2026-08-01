@@ -461,7 +461,7 @@ export async function createCustomerOrder(
         items: { include: { product: true, variant: true } },
         country: true,
         currency: true,
-        shippingZone: { include: { provider: true, country: true } },
+        shippingZone: { include: { provider: true, countries: { include: { country: true } } } },
         shippingBox: true,
       },
     });
@@ -503,7 +503,7 @@ export async function listCustomerOrders(customerId: string) {
       items: { include: { product: true, variant: true } },
       country: true,
       currency: true,
-      shippingZone: { include: { provider: true, country: true } },
+      shippingZone: { include: { provider: true, countries: { include: { country: true } } } },
       shippingBox: true,
     },
   });
