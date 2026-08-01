@@ -2,6 +2,7 @@ export interface ShippingProviderCredentials {
   apiKey: string;
   apiSecret?: string | null;
   baseUrl?: string | null;
+  rateEndpoint?: string | null;
   mode?: "sandbox" | "production";
 }
 
@@ -16,6 +17,7 @@ export interface RateRequest {
   orderTotal: number;
   weight?: number;
   dimensions?: { length: number; width: number; height: number };
+  destinationPincode?: string;
 }
 
 export interface RateResult {

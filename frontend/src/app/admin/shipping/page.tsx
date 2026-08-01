@@ -31,6 +31,7 @@ interface ProviderConfig {
   baseUrl: string;
   trackingUrl: string;
   accountNumber: string;
+  rateEndpoint: string;
   mode: "sandbox" | "production";
 }
 
@@ -51,6 +52,7 @@ const defaultConfig: ProviderConfig = {
   baseUrl: "",
   trackingUrl: "",
   accountNumber: "",
+  rateEndpoint: "",
   mode: "production",
 };
 
@@ -77,6 +79,7 @@ export default function ShippingPage() {
       baseUrl: p.baseUrl ?? "",
       trackingUrl: p.trackingUrl ?? "",
       accountNumber: (cfg.accountNumber as string) ?? "",
+      rateEndpoint: (cfg.rateEndpoint as string) ?? "",
       mode: (cfg.mode as "sandbox" | "production") ?? "production",
     };
   };
@@ -105,7 +108,7 @@ export default function ShippingPage() {
         apiSecret: cfg.apiSecret || undefined,
         baseUrl: cfg.baseUrl || undefined,
         trackingUrl: cfg.trackingUrl || undefined,
-        config: { accountNumber: cfg.accountNumber || undefined, mode: cfg.mode },
+        config: { accountNumber: cfg.accountNumber || undefined, rateEndpoint: cfg.rateEndpoint || undefined, mode: cfg.mode },
       });
       setDirty((prev) => ({ ...prev, [p.name]: false }));
       showToast(`${p.displayName} settings saved.`);
@@ -233,6 +236,13 @@ export default function ShippingPage() {
                     placeholder="Optional account number"
                     value={cfg.accountNumber}
                     onChange={(e) => updateField(p.name, "accountNumber", e.target.value)}
+                    disabled={!canUpdate}
+                  />
+                  <AdminInput
+                    label="Rate Endpoint"
+                    placeholder="https://api.dtdc.in/api/v1/rates"
+                    value={cfg.rateEndpoint}
+                    onChange={(e) => updateField(p.name, "rateEndpoint", e.target.value)}
                     disabled={!canUpdate}
                   />
                   <AdminSelect

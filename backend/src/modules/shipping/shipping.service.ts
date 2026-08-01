@@ -202,7 +202,7 @@ export async function getDefaultRate(providerId: string, countryCode: string) {
     const providerConfig = (provider.config ?? {}) as Record<string, unknown>;
     const mode = (providerConfig.mode as "sandbox" | "production") ?? "production";
     const rates = await adapter.getRates(
-      { apiKey: provider.apiKey, apiSecret: provider.apiSecret, baseUrl: provider.baseUrl, mode },
+      { apiKey: provider.apiKey, apiSecret: provider.apiSecret, baseUrl: provider.baseUrl, rateEndpoint: providerConfig.rateEndpoint as string | undefined, mode },
       { countryCode: code, orderTotal: 0 },
     );
     if (rates.length > 0) {

@@ -68,12 +68,71 @@ export const dtdcAdapter: ShippingProviderAdapter = {
     }
   },
 
-  async getRates(_c: ShippingProviderCredentials, _request: RateRequest): Promise<RateResult[]> {
-    // TODO: Implement DTDC rate lookup when rate API is available
-    // DTDC does not expose a public rate calculator API.
-    // Rates should be managed via ShippingZone records in the database.
-    logger.info("DTDC rate API not available — using zone-based rates from database");
-    return [];
+  async getRates(c: ShippingProviderCredentials, request: RateRequest): Promise<RateResult[]> {
+    // DTDC does not expose a public rate API. When a contracted rate endpoint is
+    // configured (provider.config.rateEndpoint) a live rate is requested; otherwise
+    // zone-based rates from the database are used. DTDC is a domestic courier, so a
+    // destination pincode is required for a live quote.
+    const endpoint = (c.rateEndpoint ?? `${baseUrl(c)}/api/v1/rates`).replace(/\/+$/, "");
+    if (!request.destinationPincode) {
+      logger.info("DTDC rate lookup skipped: destination pincode is required for a live quote");
+      return [];
+    }
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          ...authHeaders(c),
+          ...(c.apiKey ? { "api-key": c.apiKey } : {}),
+        },
+        body: JSON.stringify({
+          serviceType: "D",
+          origin: { pincode: "400001" },
+          destination: { pincode: request.destinationPincode },
+          countryCode: request.countryCode,
+          weight: request.weight ?? 1,
+          length: request.dimensions?.length ?? 0,
+          width: request.dimensions?.width ?? 0,
+          height: request.dimensions?.height ?? 0,
+          declaredValue: request.orderTotal,
+          paymentMode: "PPD",
+        }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+
+      if (!res.ok) {
+        logger.warn(`DTDC rates HTTP ${res.status}`);
+        return [];
+      }
+
+      const body = await parseJson(res);
+      if (!body) return [];
+
+      const data = (body.data ?? body) as JsonBody;
+      const rates = (data.rates ?? data.rate ?? [data]) as JsonBody[];
+      const results: RateResult[] = [];
+
+      for (const rate of rates) {
+        const charge = Number(
+          rate.totalCost ?? rate.total_charges ?? rate.totalFrightCharge ?? rate.totalFright ?? rate.freightCharge ?? rate.freight ?? rate.total ?? 0,
+        );
+        if (!Number.isFinite(charge) || charge <= 0) continue;
+        results.push({
+          provider: "DTDC",
+          service: String(rate.serviceName ?? rate.product ?? rate.serviceType ?? "DTDC Express"),
+          charge,
+          currency: String(rate.currency ?? data.currency ?? "INR"),
+          estimatedDays: String(rate.estimatedDays ?? rate.transitDays ?? rate.deliveryDays ?? rate.eta ?? data.eta ?? ""),
+          raw: rate,
+        });
+      }
+
+      return results;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      logger.warn(`DTDC rates failed: ${msg}`);
+      return [];
+    }
   },
 
   async createShipment(c: ShippingProviderCredentials, request: ShipmentRequest): Promise<ShipmentResult> {
