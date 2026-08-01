@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -13,6 +13,7 @@ import {
   useCreateShippingZone,
   useUpdateShippingZone,
   useDeleteShippingZone,
+  useGetShippingDefaultRate,
 } from "@/hooks/admin/useAdminHooks";
 import { useAdminCountries } from "@/hooks/admin/useAdminHooks";
 
@@ -74,6 +75,8 @@ export default function ShippingZonesPage() {
   const [editingZone, setEditingZone] = useState<ShippingZone | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ShippingZone | null>(null);
   const [form, setForm] = useState<ZoneForm>(emptyForm);
+  const [rateLoading, setRateLoading] = useState(false);
+  const [rateCurrency, setRateCurrency] = useState("");
 
   const { data: zones, isLoading: zonesLoading } = useAdminShippingZones();
   const { data: providers = [] } = useAdminShippingProviders();
@@ -81,6 +84,7 @@ export default function ShippingZonesPage() {
   const createMutation = useCreateShippingZone();
   const updateMutation = useUpdateShippingZone();
   const deleteMutation = useDeleteShippingZone();
+  const rateMutation = useGetShippingDefaultRate();
 
   const zoneList: ShippingZone[] = zones ?? [];
   const providerList: Provider[] = providers ?? [];
@@ -95,6 +99,34 @@ export default function ShippingZonesPage() {
     () => countryList.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` })),
     [countryList],
   );
+
+  useEffect(() => {
+    if (!form.providerId || form.countryIds.length === 0) return;
+    const firstCountry = countryList.find((c) => c.id === form.countryIds[0]);
+    if (!firstCountry) return;
+
+    const timer = setTimeout(() => {
+      setRateLoading(true);
+      rateMutation
+        .mutateAsync({ id: form.providerId, countryCode: firstCountry.code })
+        .then((result) => {
+          setRateCurrency(result.currency ?? "");
+          setForm((current) => ({
+            ...current,
+            charge: result.charge != null ? String(result.charge) : "",
+            estimatedDays: result.estimatedDays ?? "",
+          }));
+        })
+        .catch(() => {
+          setRateCurrency("");
+          setForm((current) => ({ ...current, charge: "", estimatedDays: "" }));
+        })
+        .finally(() => setRateLoading(false));
+    }, 300);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.providerId, form.countryIds]);
 
   function openCreate() {
     setEditingZone(null);
@@ -118,7 +150,7 @@ export default function ShippingZonesPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!form.providerId || form.countryIds.length === 0 || !form.charge) {
-      showToast("Provider, at least one country, and charge are required.", "error");
+      showToast("Select a provider and at least one country to fetch the default rate.", "error");
       return;
     }
     const payload = {
@@ -216,11 +248,28 @@ export default function ShippingZonesPage() {
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="grid gap-4 sm:grid-cols-2">
-                <AdminSelect label="Provider" options={providerOptions} value={form.providerId} onChange={(event) => setForm((current) => ({ ...current, providerId: event.target.value }))} />
-                <AdminMultiSelect label="Countries" options={countryMultiOptions} value={form.countryIds} onChange={(values) => setForm((current) => ({ ...current, countryIds: values }))} selectAllLabel="Select All" />
-                <AdminInput label="Charge" type="number" min="0" step="0.01" value={form.charge} onChange={(event) => setForm((current) => ({ ...current, charge: event.target.value }))} />
-                <AdminInput label="Free Above" type="number" min="0" step="0.01" value={form.freeAbove} onChange={(event) => setForm((current) => ({ ...current, freeAbove: event.target.value }))} placeholder="Optional" />
-                <AdminInput label="Estimated Days" value={form.estimatedDays} onChange={(event) => setForm((current) => ({ ...current, estimatedDays: event.target.value }))} placeholder="e.g. 3-5 business days" />
+                <AdminSelect
+                  label="Provider"
+                  options={providerOptions}
+                  value={form.providerId}
+                  onChange={(event) => {
+                    setRateCurrency("");
+                    setForm((current) => ({ ...current, providerId: event.target.value, charge: "", estimatedDays: "" }));
+                  }}
+                />
+                <AdminMultiSelect
+                  label="Countries"
+                  options={countryMultiOptions}
+                  value={form.countryIds}
+                  onChange={(values) => {
+                    if (values.length === 0) setRateCurrency("");
+                    setForm((current) => ({ ...current, countryIds: values, charge: values.length ? current.charge : "", estimatedDays: values.length ? current.estimatedDays : "" }));
+                  }}
+                  selectAllLabel="Select All"
+                />
+                <AdminInput label={rateCurrency ? `Charge (${rateCurrency})` : "Charge"} type="number" min="0" step="0.01" value={form.charge} disabled className="cursor-not-allowed bg-[#F5F5F5] text-[#6B6B6B]" />
+                <AdminInput label={rateCurrency ? `Free Above (${rateCurrency})` : "Free Above"} type="number" min="0" step="0.01" value={form.freeAbove} onChange={(event) => setForm((current) => ({ ...current, freeAbove: event.target.value }))} placeholder="Optional" />
+                <AdminInput label="Estimated Days" value={form.estimatedDays} disabled className="cursor-not-allowed bg-[#F5F5F5] text-[#6B6B6B]" />
                 <AdminSelect
                   label="Status"
                   options={[
@@ -231,6 +280,9 @@ export default function ShippingZonesPage() {
                   onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as ZoneForm["status"] }))}
                 />
               </div>
+              <p className="text-[12px] text-[#6B6B6B]">
+                {rateLoading ? "Fetching default rate from provider..." : "Charge and estimated days are fetched from the selected provider and are read-only."}
+              </p>
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setFormOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2]">
                   Cancel

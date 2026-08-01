@@ -159,6 +159,80 @@ export async function testConnection(id: string, override?: { apiKey?: string; a
   return adapter.testConnection({ apiKey, apiSecret, baseUrl, mode });
 }
 
+// ─── Default Rate (zone auto-fill) ──────────────────────
+
+const DUMMY_RATES: Record<string, { base: number; days: string }> = {
+  STANDARD_EXPRESS: { base: 12, days: "3-5 business days" },
+  DHL: { base: 25, days: "2-4 business days" },
+  DTDC: { base: 15, days: "3-6 business days" },
+};
+
+function dummyDefaultRate(providerName: string, countryCode: string, currency: string) {
+  const preset = DUMMY_RATES[providerName.toUpperCase()] ?? DUMMY_RATES.STANDARD_EXPRESS;
+  let hash = 0;
+  for (const ch of `${providerName}:${countryCode}`) hash = (hash * 31 + ch.charCodeAt(0)) | 0;
+  const charge = preset.base + (Math.abs(hash) % 40);
+  return { charge, estimatedDays: preset.days, currency };
+}
+
+/**
+ * Fetch the provider's default shipping rate + ETA for a country.
+ * Uses the provider adapter when live credentials are configured; otherwise
+ * returns a deterministic sandbox/dummy rate. Used only to prefill the
+ * Shipping Zone form (charge + estimated days are read-only there).
+ */
+export async function getDefaultRate(providerId: string, countryCode: string) {
+  const code = (countryCode ?? "").trim().toUpperCase();
+  if (!code) throw new AppError("Country code is required.", 400);
+
+  const [provider, country] = await Promise.all([
+    prisma.shippingProvider.findUnique({
+      where: { id: providerId },
+      select: { id: true, name: true, displayName: true, apiKey: true, apiSecret: true, baseUrl: true, config: true },
+    }),
+    prisma.country.findUnique({ where: { code }, include: { currency: true } }),
+  ]);
+  if (!provider) throw new AppError("Shipping provider not found.", 404);
+  if (!country) throw new AppError("Country not found.", 404);
+
+  const currency = country.currency?.code ?? "USD";
+
+  const adapter = getAdapter(provider.name);
+  if (adapter && provider.apiKey) {
+    const providerConfig = (provider.config ?? {}) as Record<string, unknown>;
+    const mode = (providerConfig.mode as "sandbox" | "production") ?? "production";
+    const rates = await adapter.getRates(
+      { apiKey: provider.apiKey, apiSecret: provider.apiSecret, baseUrl: provider.baseUrl, mode },
+      { countryCode: code, orderTotal: 0 },
+    );
+    if (rates.length > 0) {
+      const best = rates.reduce((min, rate) => (Number(rate.charge) < Number(min.charge) ? rate : min), rates[0]);
+      return {
+        provider: provider.displayName,
+        providerName: provider.name,
+        countryCode: code,
+        charge: Number(best.charge),
+        estimatedDays: best.estimatedDays || null,
+        currency: best.currency || currency,
+        service: best.service,
+        source: "live",
+      };
+    }
+  }
+
+  const dummy = dummyDefaultRate(provider.name, code, currency);
+  return {
+    provider: provider.displayName,
+    providerName: provider.name,
+    countryCode: code,
+    charge: dummy.charge,
+    estimatedDays: dummy.estimatedDays,
+    currency: dummy.currency,
+    service: `${provider.displayName} Default`,
+    source: "sandbox",
+  };
+}
+
 // ─── Zone CRUD ──────────────────────────────────────────
 
 export async function listZones(query?: { providerId?: string; countryId?: string; status?: string }) {
