@@ -17,6 +17,7 @@ export async function listWarehouses(query: {
   page?: string;
   limit?: string;
   search?: string;
+  requestingUserId?: string;
 }) {
   const { page, limit, skip } = getPagination(query);
   const where: Prisma.WarehouseWhereInput = {};
@@ -26,6 +27,23 @@ export async function listWarehouses(query: {
       { name: { contains: query.search.trim(), mode: "insensitive" } },
       { gstin: { contains: query.search.trim(), mode: "insensitive" } },
     ];
+  }
+
+  if (query.requestingUserId) {
+    const user = await prisma.user.findUnique({
+      where: { id: query.requestingUserId },
+      include: { role: true }
+    });
+    if (user && !["Super Admin", "Admin"].includes(user.role.name)) {
+      const userWarehouses = await prisma.userWarehouse.findMany({
+        where: { userId: query.requestingUserId },
+        select: { warehouseId: true }
+      });
+      if (userWarehouses.length > 0) {
+        const allowedIds = userWarehouses.map((uw) => uw.warehouseId);
+        where.id = { in: allowedIds };
+      }
+    }
   }
 
   const [data, total] = await Promise.all([
@@ -47,6 +65,10 @@ export async function createWarehouse(data: {
   countryId: string;
   state?: string;
   address?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  postalCode?: string;
   gstin?: string;
   status: any;
 }) {
@@ -57,12 +79,23 @@ export async function createWarehouse(data: {
     throw new AppError("A valid GSTIN is required to activate an India warehouse.", 400);
   }
 
+  const formattedAddress = data.address || [
+    data.addressLine1,
+    data.addressLine2,
+    data.city,
+    data.postalCode
+  ].filter(Boolean).join(", ");
+
   return prisma.warehouse.create({ data: {
     name: data.name,
     countryId: data.countryId,
     status: data.status,
     state: data.state ?? "",
-    address: data.address ?? "",
+    address: formattedAddress,
+    addressLine1: data.addressLine1 ?? null,
+    addressLine2: data.addressLine2 ?? null,
+    city: data.city ?? null,
+    postalCode: data.postalCode ?? null,
     gstin: data.gstin ?? ""
   } });
 }
@@ -72,6 +105,10 @@ export async function updateWarehouse(id: string, data: {
   countryId?: string;
   state?: string;
   address?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  postalCode?: string;
   gstin?: string;
   status?: any;
 }) {
@@ -89,12 +126,28 @@ export async function updateWarehouse(id: string, data: {
     throw new AppError("A valid GSTIN is required to activate an India warehouse.", 400);
   }
 
+  const finalAddressLine1 = data.addressLine1 !== undefined ? data.addressLine1 : existing.addressLine1;
+  const finalAddressLine2 = data.addressLine2 !== undefined ? data.addressLine2 : existing.addressLine2;
+  const finalCity = data.city !== undefined ? data.city : existing.city;
+  const finalPostalCode = data.postalCode !== undefined ? data.postalCode : existing.postalCode;
+
+  const formattedAddress = data.address || [
+    finalAddressLine1,
+    finalAddressLine2,
+    finalCity,
+    finalPostalCode
+  ].filter(Boolean).join(", ");
+
   return prisma.warehouse.update({ where: { id }, data: {
     name: data.name,
     countryId: data.countryId,
     status: data.status,
     state: data.state,
-    address: data.address,
+    address: formattedAddress,
+    addressLine1: data.addressLine1,
+    addressLine2: data.addressLine2,
+    city: data.city,
+    postalCode: data.postalCode,
     gstin: data.gstin
   } });
 }

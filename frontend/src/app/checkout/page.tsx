@@ -23,6 +23,7 @@ import {
   fetchAvailableProviders,
   initiateCustomerPayment,
   verifyCustomerPayment,
+  validateCustomerAddress,
   type AvailablePaymentMethod,
   type AvailableShippingOption,
   type CouponValidationResult,
@@ -32,6 +33,7 @@ import {
   type ShippingEstimate,
 } from "@/services/customerApi";
 import { RazorpayPaymentButton } from "@/components/checkout/RazorpayPaymentButton";
+import { AddressValidationDialog } from "@/components/ui/delivery/AddressValidationDialog";
 
 const DEMO_PAYMENT_LABEL = "Pay on Delivery";
 const SHIPPING_UNAVAILABLE_MESSAGE =
@@ -108,6 +110,12 @@ export default function CheckoutPage() {
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [showBreakdownModal, setShowBreakdownModal] = useState(false);
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
+  const [validationState, setValidationState] = useState<{
+    isOpen: boolean;
+    originalAddress: any;
+    recommendedAddress: any;
+    isValid: boolean;
+  } | null>(null);
   const [taxIdInput, setTaxIdInput] = useState("");
   const [isVerifyingVat, setIsVerifyingVat] = useState(false);
   const [vatStatus, setVatStatus] = useState<"VALID" | "INVALID" | "PENDING" | null>(null);
@@ -518,28 +526,27 @@ export default function CheckoutPage() {
     }
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!canSubmit) {
-      setError("Complete the shipping address before placing the order.");
-      return;
-    }
-    if (!shippingEstimate?.available) {
-      setError(shippingError ?? SHIPPING_UNAVAILABLE_MESSAGE);
-      return;
-    }
-    if (approvalBlockMessage) {
-      setError(approvalBlockMessage);
-      return;
-    }
-
+  async function executeSubmit(overrideAddress?: any) {
     setIsSubmitting(true);
     setError(null);
     try {
-      const created = await createCustomerOrder({
+      const finalPayload = {
         ...orderPayload,
         shippingZoneId: selectedZoneId ?? undefined,
-      });
+      };
+      if (overrideAddress) {
+        finalPayload.shippingAddress = {
+          ...finalPayload.shippingAddress,
+          addressLine1: overrideAddress.addressLine1,
+          addressLine2: overrideAddress.addressLine2 || undefined,
+          city: overrideAddress.city,
+          state: overrideAddress.state,
+          postalCode: overrideAddress.postalCode,
+          countryCode: overrideAddress.countryCode,
+        };
+      }
+
+      const created = await createCustomerOrder(finalPayload);
       const selectedMethod = availablePaymentMethods.find(
         (m) => m.code === selectedPaymentCode,
       );
@@ -567,6 +574,76 @@ export default function CheckoutPage() {
     } catch (err) {
       setError(getCustomerErrorMessage(err, "Could not place order."));
     } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const handleSelectOriginal = async () => {
+    setValidationState(null);
+    await executeSubmit();
+  };
+
+  const handleSelectRecommended = async () => {
+    if (!validationState || !validationState.recommendedAddress) return;
+    const recommended = validationState.recommendedAddress;
+    setValidationState(null);
+    setForm((current) => ({
+      ...current,
+      addressLine1: recommended.addressLine1,
+      addressLine2: recommended.addressLine2 || "",
+      city: recommended.city,
+      state: recommended.state,
+      postalCode: recommended.postalCode,
+    }));
+    await executeSubmit(recommended);
+  };
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canSubmit) {
+      setError("Complete the shipping address before placing the order.");
+      return;
+    }
+    if (!shippingEstimate?.available) {
+      setError(shippingError ?? SHIPPING_UNAVAILABLE_MESSAGE);
+      return;
+    }
+    if (approvalBlockMessage) {
+      setError(approvalBlockMessage);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const addressPayload = {
+        addressLine1: form.addressLine1.trim(),
+        addressLine2: form.addressLine2.trim() || undefined,
+        city: form.city.trim(),
+        state: form.state.trim(),
+        postalCode: form.postalCode.trim(),
+        countryCode: form.countryCode.trim().toUpperCase(),
+      };
+
+      const valResult = await validateCustomerAddress(addressPayload);
+
+      if (valResult.isCorrected) {
+        setValidationState({
+          isOpen: true,
+          originalAddress: {
+            ...addressPayload,
+            fullName: form.fullName.trim(),
+            phone: form.phone.trim(),
+          },
+          recommendedAddress: valResult.normalizedAddress,
+          isValid: valResult.isValid,
+        });
+        setIsSubmitting(false);
+      } else {
+        await executeSubmit();
+      }
+    } catch (err) {
+      setError(getCustomerErrorMessage(err, "Could not validate shipping address."));
       setIsSubmitting(false);
     }
   }
@@ -1669,6 +1746,18 @@ export default function CheckoutPage() {
           </div>
         </div>
       </Modal>
+
+      {validationState && (
+        <AddressValidationDialog
+          isOpen={validationState.isOpen}
+          onClose={() => setValidationState(null)}
+          originalAddress={validationState.originalAddress}
+          recommendedAddress={validationState.recommendedAddress}
+          isValid={validationState.isValid}
+          onSelectOriginal={handleSelectOriginal}
+          onSelectRecommended={handleSelectRecommended}
+        />
+      )}
     </Container>
   );
 }

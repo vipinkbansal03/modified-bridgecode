@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useQueries } from "@tanstack/react-query";
 import { Download, Eye, Filter, Plus, RefreshCw, Search, SquareCheckBig, Trash2, Upload, X, SlidersHorizontal, Pencil } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -148,52 +149,45 @@ function formatDate(value: string) {
   return new Date(value).toLocaleDateString();
 }
 
-function ProductVariantSelector({
-  productId,
+function TaxVariantsDropdown({
+  selectedProductIds,
   selectedVariantIds,
   onChange,
 }: {
-  productId: string;
+  selectedProductIds: string[];
   selectedVariantIds: string[];
   onChange: (ids: string[]) => void;
 }) {
-  const { data: product, isLoading } = useAdminProduct(productId);
+  const productQueries = useQueries({
+    queries: selectedProductIds.map((id) => ({
+      queryKey: ["admin-product", id],
+      queryFn: () => adminApi.get(`/products/${id}`).then((r) => r.data.data),
+      enabled: !!id,
+    })),
+  });
 
+  const isLoading = productQueries.some((q) => q.isLoading);
   if (isLoading) {
-    return <div className="pl-6 text-[10.5px] text-[#9A9A9A] py-1">Loading variants...</div>;
+    return <div className="text-xs text-[#9CA3AF] py-2">Loading variants...</div>;
   }
 
-  const variants = product?.variants ?? [];
-  if (variants.length === 0) return null;
+  const allVariants = productQueries
+    .flatMap((q) => (q.data as any)?.variants ?? []);
+
+  if (allVariants.length === 0) return null;
 
   return (
-    <div className="pl-6 pt-1 pb-2 space-y-1">
-      <div className="text-[10.5px] font-medium text-[#6B6B6B]">Select specific variants (optional):</div>
-      <div className="flex flex-wrap gap-1.5">
-        {variants.map((v: any) => {
-          const isSelected = selectedVariantIds.includes(v.id);
-          return (
-            <button
-              key={v.id}
-              type="button"
-              onClick={() => {
-                if (isSelected) {
-                  onChange(selectedVariantIds.filter((id) => id !== v.id));
-                } else {
-                  onChange([...selectedVariantIds, v.id]);
-                }
-              }}
-              className={`rounded border px-2 py-0.5 text-[10px] font-medium transition-all ${
-                isSelected
-                  ? "border-[#E31E24] bg-[#FFF5F5] text-[#B5151B]"
-                  : "border-[#E6E6E6] bg-white text-[#6B6B6B] hover:border-[#9A9A9A]"
-              }`}
-            >
-              {v.title} {v.sku ? `(${v.sku})` : ""}
-            </button>
-          );
-        })}
-      </div>
+    <div className="pt-2">
+      <AdminMultiSelect
+        label="Select Specific Variants (Optional)"
+        placeholder="Select specific variants..."
+        options={allVariants.map((v: any) => ({
+          value: v.id,
+          label: `${v.title} ${v.sku ? `[${v.sku}]` : ""}`
+        }))}
+        selectedValues={selectedVariantIds}
+        onChange={onChange}
+      />
     </div>
   );
 }
@@ -1070,43 +1064,25 @@ export default function AdminTaxPage() {
             </div>
 
             {/* Applicable Categories Section */}
-            <div className="pt-2 space-y-2">
+            <div className="pt-2 space-y-3">
               <label className="block text-xs font-bold uppercase tracking-wider text-[#374151]">
                 Applicable Categories (Optional)
               </label>
-              <div className="border border-[#E5E7EB] rounded-xl p-3.5 bg-[#F9FAFB] space-y-3">
-                {categories.length === 0 ? (
-                  <p className="text-xs text-[#9CA3AF] text-center py-2">No categories configured</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {categories.map((cat: any) => {
-                      const isChecked = form.categoryIds?.includes(cat.id);
-                      return (
-                        <button
-                          key={cat.id}
-                          type="button"
-                          onClick={() => {
-                            setForm((current) => {
-                              const cIds = current.categoryIds ?? [];
-                              if (isChecked) {
-                                return { ...current, categoryIds: cIds.filter((id) => id !== cat.id) };
-                              } else {
-                                return { ...current, categoryIds: [...cIds, cat.id] };
-                              }
-                            });
-                          }}
-                          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
-                            isChecked
-                              ? "border-[#E31E24] bg-[#FFF5F5] text-[#B5151B] font-semibold"
-                              : "border-[#E5E7EB] bg-white text-[#4A4A4A] hover:border-[#9A9A9A]"
-                          }`}
-                        >
-                          {cat.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+              <div className="space-y-3">
+                <AdminMultiSelect
+                  placeholder="Select categories..."
+                  options={categories.map((cat: any) => ({
+                    value: cat.id,
+                    label: cat.name
+                  }))}
+                  selectedValues={form.categoryIds ?? []}
+                  onChange={(nextIds) => {
+                    setForm((current) => ({
+                      ...current,
+                      categoryIds: nextIds,
+                    }));
+                  }}
+                />
               </div>
               <p className="text-[11.5px] text-[#6B7280] leading-normal">
                 If categories are selected, this tax rule will apply to all products in those categories.
@@ -1114,86 +1090,38 @@ export default function AdminTaxPage() {
             </div>
 
             {/* Applicable Products Section */}
-            <div className="pt-2 space-y-2">
+            <div className="pt-2 space-y-3">
               <label className="block text-xs font-bold uppercase tracking-wider text-[#374151]">
                 Applicable Products (Optional)
               </label>
-              <div className="border border-[#E5E7EB] rounded-xl p-3.5 bg-[#F9FAFB] space-y-3">
-                <div className="relative">
-                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-                  <input
-                    type="text"
-                    placeholder="Search products..."
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                    className="w-full pl-9 pr-3.5 py-2 text-xs border border-[#E5E7EB] rounded-lg bg-white outline-none focus:border-[#E31E24]"
+              <div className="space-y-3">
+                <AdminMultiSelect
+                  placeholder="Select products..."
+                  options={products.map((p: any) => ({
+                    value: p.id,
+                    label: `${p.title} ${p.productCode ? `[${p.productCode}]` : ""}`
+                  }))}
+                  selectedValues={form.productIds ?? []}
+                  onChange={(nextIds) => {
+                    setForm((current) => ({
+                      ...current,
+                      productIds: nextIds,
+                    }));
+                  }}
+                />
+
+                {form.productIds && form.productIds.length > 0 && (
+                  <TaxVariantsDropdown
+                    selectedProductIds={form.productIds}
+                    selectedVariantIds={form.variantIds ?? []}
+                    onChange={(nextVariantIds) => {
+                      setForm((current) => ({
+                        ...current,
+                        variantIds: nextVariantIds,
+                      }));
+                    }}
                   />
-                </div>
-
-                <div className="max-h-60 overflow-y-auto space-y-2.5 pr-1">
-                  {filteredProducts.length === 0 ? (
-                    <p className="text-xs text-[#9CA3AF] text-center py-3">No products found</p>
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      {filteredProducts.map((p: any) => {
-                        const isChecked = form.productIds?.includes(p.id);
-                        return (
-                          <div
-                            key={p.id}
-                            className={`rounded-xl border transition-all ${
-                              isChecked
-                                ? "border-[#E31E24]/30 bg-[#FFF5F5]/30 shadow-xs"
-                                : "border-[#E5E7EB] bg-white hover:bg-[#FAFAFA]"
-                            }`}
-                          >
-                            <label className="flex items-center gap-3 p-3 text-xs cursor-pointer select-none">
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={() => {
-                                  setForm((current) => {
-                                    const pIds = current.productIds ?? [];
-                                    if (isChecked) {
-                                      return {
-                                        ...current,
-                                        productIds: pIds.filter((id) => id !== p.id),
-                                      };
-                                    } else {
-                                      return {
-                                        ...current,
-                                        productIds: [...pIds, p.id],
-                                      };
-                                    }
-                                  });
-                                }}
-                                className="h-4 w-4 rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24]"
-                              />
-                              <div className="min-w-0 flex-1">
-                                <span className="font-semibold text-[#111827] block truncate">{p.title}</span>
-                                {p.productCode && <span className="text-[10px] text-[#6B7280]">{p.productCode}</span>}
-                              </div>
-                            </label>
-
-                            {isChecked && (
-                              <div className="border-t border-[#E5E7EB] bg-white rounded-b-xl">
-                                <ProductVariantSelector
-                                  productId={p.id}
-                                  selectedVariantIds={form.variantIds ?? []}
-                                  onChange={(vIds) => {
-                                    setForm((current) => ({
-                                      ...current,
-                                      variantIds: vIds,
-                                    }));
-                                  }}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
               <p className="text-[11.5px] text-[#6B7280] leading-normal">
                 If no products/categories/variants are selected, this tax rule will apply globally to all products in the selected country.

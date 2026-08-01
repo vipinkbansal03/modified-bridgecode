@@ -4,7 +4,11 @@ import { AuthRequest } from "../../middleware/auth.middleware";
 import * as S from "./warehouse.service";
 
 export const list = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const r = await S.listWarehouses(req.query as never);
+  const query = {
+    ...req.query,
+    requestingUserId: req.user?.id,
+  };
+  const r = await S.listWarehouses(query as any);
   return ApiResponse.paginated(res, "Warehouses fetched.", r.data, { page: r.page, limit: r.limit, total: r.total });
 });
 

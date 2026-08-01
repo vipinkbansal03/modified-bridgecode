@@ -6,6 +6,7 @@ const router = Router();
 router.use(protectCustomer);
 
 router.get("/", C.list);
+router.post("/validate", C.validate);
 router.post("/", C.create);
 router.put("/:id", C.update);
 router.delete("/:id", C.remove);

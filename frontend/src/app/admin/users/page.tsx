@@ -7,11 +7,11 @@ import * as Yup from "yup";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { Modal } from "@/components/ui/Modal";
-import { DataTable, Column, StatusBadge, AdminInput, AdminSelect, ConfirmModal, useToast } from "@/components/admin/AdminComponents";
-import { useAdminUsers, useAdminRoles } from "@/hooks/admin/useAdminHooks";
+import { DataTable, Column, StatusBadge, AdminInput, AdminSelect, AdminMultiSelect, ConfirmModal, useToast } from "@/components/admin/AdminComponents";
+import { useAdminUsers, useAdminRoles, useAdminWarehouses } from "@/hooks/admin/useAdminHooks";
 import { adminApi } from "@/services/adminApi";
 import { Plus, X, Trash2, Edit2 } from "lucide-react";
-interface User { id: string; name: string; email: string; roleId: string; role: { name: string }; status: string; lastLoginAt: string }
+interface User { id: string; name: string; email: string; roleId: string; role: { name: string }; status: string; lastLoginAt: string; warehouses?: { warehouseId: string }[] }
 export default function UsersPage() {
   const { hasPermission, isLoading: authLoading } = useAdminAuth();
   const router = useRouter();
@@ -32,6 +32,8 @@ export default function UsersPage() {
   const { showToast, ToastComponent } = useToast();
   const { data: users = [], isLoading, refetch } = useAdminUsers();
   const { data: roles = [] } = useAdminRoles();
+  const { data: warehousesData } = useAdminWarehouses({ limit: 100 });
+  const warehouses = warehousesData?.data || [];
   const roleOptions = [{ value: "", label: "Select role…" }, ...roles.map((r: { id: string; name: string }) => ({ value: r.id, label: r.name }))];
   const formik = useFormik({
     enableReinitialize: true,
@@ -41,6 +43,7 @@ export default function UsersPage() {
       password: "",
       roleId: editingUser?.roleId || "",
       status: editingUser?.status || "ACTIVE",
+      warehouseIds: editingUser?.warehouses?.map((uw: any) => uw.warehouseId) || [] as string[],
     },
     validationSchema: Yup.object({
       name: Yup.string().required("Name is required"),
@@ -218,6 +221,22 @@ export default function UsersPage() {
                   {...formik.getFieldProps("status")}
                   error={formik.touched.status ? (formik.errors.status as string) : ""}
                 />
+                <div className="md:col-span-2 border-t border-[#E6E6E6] pt-4 mt-2">
+                  <AdminMultiSelect
+                    label="Assigned Warehouses"
+                    placeholder="Select assigned warehouses..."
+                    options={warehouses.map((w: any) => ({
+                      value: w.id,
+                      label: `${w.name} ${w.state ? `(${w.state})` : ""}`
+                    }))}
+                    selectedValues={formik.values.warehouseIds}
+                    onChange={(nextIds) => formik.setFieldValue("warehouseIds", nextIds)}
+                    error={formik.touched.warehouseIds ? (formik.errors.warehouseIds as string) : ""}
+                  />
+                  <p className="mt-1.5 text-[11px] text-[#9A9A9A]">
+                    Leave all unchecked if this staff member should have access to all warehouses.
+                  </p>
+                </div>
               </div>
             </div>
 

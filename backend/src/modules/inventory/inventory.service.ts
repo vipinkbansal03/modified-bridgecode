@@ -13,6 +13,7 @@ type InventoryListQuery = {
   warehouseId?: string;
   sortBy?: string;
   sortDir?: string;
+  requestingUserId?: string;
 };
 
 type InventoryBulkUpdateInput = {
@@ -117,7 +118,7 @@ function parseBooleanText(value: string | undefined) {
   return String(value ?? "").trim().toLowerCase() === "true";
 }
 
-function buildInventoryWhere(query: InventoryListQuery): Prisma.InventoryWhereInput {
+async function buildInventoryWhere(query: InventoryListQuery): Promise<Prisma.InventoryWhereInput> {
   const where: Prisma.InventoryWhereInput = {};
   const search = query.search?.trim();
   const status = normalizeInventoryStatus(query.status);
@@ -137,8 +138,35 @@ function buildInventoryWhere(query: InventoryListQuery): Prisma.InventoryWhereIn
     where.status = status;
   }
 
+  let allowedWarehouseIds: string[] | null = null;
+  if (query.requestingUserId) {
+    const user = await prisma.user.findUnique({
+      where: { id: query.requestingUserId },
+      include: { role: true }
+    });
+    if (user && !["Super Admin", "Admin"].includes(user.role.name)) {
+      const userWarehouses = await prisma.userWarehouse.findMany({
+        where: { userId: query.requestingUserId },
+        select: { warehouseId: true }
+      });
+      if (userWarehouses.length > 0) {
+        allowedWarehouseIds = userWarehouses.map((uw) => uw.warehouseId);
+      }
+    }
+  }
+
   if (query.warehouseId) {
-    where.warehouseId = query.warehouseId;
+    if (allowedWarehouseIds) {
+      if (allowedWarehouseIds.includes(query.warehouseId)) {
+        where.warehouseId = query.warehouseId;
+      } else {
+        where.warehouseId = "none";
+      }
+    } else {
+      where.warehouseId = query.warehouseId;
+    }
+  } else if (allowedWarehouseIds) {
+    where.warehouseId = { in: allowedWarehouseIds };
   }
 
   return where;
@@ -172,7 +200,7 @@ function buildInventoryOrder(query: InventoryListQuery): Prisma.InventoryOrderBy
 
 export async function listInventory(query: InventoryListQuery) {
   const { page, limit, skip } = getPagination(query);
-  const where = buildInventoryWhere(query);
+  const where = await buildInventoryWhere(query);
   const orderBy = buildInventoryOrder(query);
 
   const [data, total] = await Promise.all([
@@ -799,7 +827,7 @@ export async function exportInventorySpreadsheet(query: InventoryListQuery & { i
   const ids = query.ids?.split(",").map((id) => id.trim()).filter(Boolean) ?? [];
   const where = ids.length
     ? { id: { in: ids } }
-    : buildInventoryWhere(query);
+    : await buildInventoryWhere(query);
 
   const inventories = await prisma.inventory.findMany({
     where,

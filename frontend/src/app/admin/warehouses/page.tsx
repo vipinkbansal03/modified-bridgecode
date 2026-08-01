@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useState, useMemo, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Edit2, Plus, Search, Trash2, Warehouse } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
@@ -9,6 +9,7 @@ import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard,
 import { Modal } from "@/components/ui/Modal";
 import { useAdminWarehouses, useCreateWarehouse, useUpdateWarehouse, useDeleteWarehouse, useAdminCountries } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
+import { State } from "country-state-city";
 
 type WarehouseRow = {
   id: string;
@@ -16,6 +17,10 @@ type WarehouseRow = {
   countryId: string;
   state: string;
   address?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  postalCode?: string;
   gstin?: string;
   status: "ACTIVE" | "INACTIVE";
   country?: { code: string; name: string };
@@ -27,6 +32,10 @@ type WarehouseFormState = {
   countryId: string;
   state: string;
   address: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  postalCode: string;
   gstin: string;
   status: "ACTIVE" | "INACTIVE";
 };
@@ -37,6 +46,10 @@ const emptyForm: WarehouseFormState = {
   countryId: "",
   state: "",
   address: "",
+  addressLine1: "",
+  addressLine2: "",
+  city: "",
+  postalCode: "",
   gstin: "",
   status: "ACTIVE",
 };
@@ -71,6 +84,22 @@ export default function WarehousesPage() {
   const updateMutation = useUpdateWarehouse(editing?.id || "");
   const deleteMutation = useDeleteWarehouse();
 
+  const selectedCountry = countries.find((c: any) => c.id === form.countryId);
+  const countryCode = selectedCountry?.code || "";
+
+  const statesOfSelectedCountry = useMemo(() => {
+    if (!countryCode) return [];
+    try {
+      return State.getStatesOfCountry(countryCode.toUpperCase()).map((s) => ({
+        value: s.name,
+        label: s.name,
+      }));
+    } catch (err) {
+      console.error("Failed to load states for country code:", countryCode, err);
+      return [];
+    }
+  }, [countryCode]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
     return () => window.clearTimeout(timer);
@@ -88,6 +117,10 @@ export default function WarehousesPage() {
       countryId: w.countryId,
       state: w.state,
       address: w.address || "",
+      addressLine1: w.addressLine1 || "",
+      addressLine2: w.addressLine2 || "",
+      city: w.city || "",
+      postalCode: w.postalCode || "",
       gstin: w.gstin || "",
       status: w.status,
     });
@@ -121,6 +154,10 @@ export default function WarehousesPage() {
         countryId: form.countryId,
         state: form.state,
         address: form.address || null,
+        addressLine1: form.addressLine1 || null,
+        addressLine2: form.addressLine2 || null,
+        city: form.city || null,
+        postalCode: form.postalCode || null,
         gstin: form.gstin || null,
         status: form.status,
       };
@@ -258,22 +295,68 @@ export default function WarehousesPage() {
             <AdminSelect 
               label="Country" 
               value={form.countryId} 
-              onChange={(e) => setForm({ ...form, countryId: e.target.value })} 
+              onChange={(e) => {
+                setForm({ ...form, countryId: e.target.value, state: "" });
+              }} 
               required
               options={[
                 { value: "", label: "Select country..." },
                 ...countries.map((c: any) => ({ value: c.id, label: `${c.name} (${c.code})` }))
               ]}
             />
-            <AdminInput label="State / Province" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} required />
+            {statesOfSelectedCountry.length > 0 ? (
+              <AdminSelect
+                label="State / Province"
+                value={form.state}
+                onChange={(e) => setForm({ ...form, state: e.target.value })}
+                required
+                options={[
+                  { value: "", label: "Select state..." },
+                  ...statesOfSelectedCountry
+                ]}
+              />
+            ) : (
+              <AdminInput 
+                label="State / Province" 
+                value={form.state} 
+                onChange={(e) => setForm({ ...form, state: e.target.value })} 
+                required 
+              />
+            )}
           </div>
 
-          <AdminInput 
-            label="Address" 
-            value={form.address} 
-            onChange={(e) => setForm({ ...form, address: e.target.value })} 
-            placeholder="Optional detailed address"
-          />
+          <div className="grid grid-cols-2 gap-5">
+            <AdminInput 
+              label="Address Line 1" 
+              value={form.addressLine1} 
+              onChange={(e) => setForm({ ...form, addressLine1: e.target.value })} 
+              required
+              placeholder="Building/Street number"
+            />
+            <AdminInput 
+              label="Address Line 2" 
+              value={form.addressLine2} 
+              onChange={(e) => setForm({ ...form, addressLine2: e.target.value })} 
+              placeholder="Apartment, suite, unit (optional)"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-5">
+            <AdminInput 
+              label="City" 
+              value={form.city} 
+              onChange={(e) => setForm({ ...form, city: e.target.value })} 
+              required
+              placeholder="City name"
+            />
+            <AdminInput 
+              label="Postal / ZIP Code" 
+              value={form.postalCode} 
+              onChange={(e) => setForm({ ...form, postalCode: e.target.value })} 
+              required
+              placeholder="ZIP code"
+            />
+          </div>
 
           <AdminInput 
             label="GSTIN / Tax ID" 

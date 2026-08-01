@@ -4,7 +4,11 @@ import { AuthRequest } from "../../middleware/auth.middleware";
 import { removeTempFile } from "../../utils/spreadsheet";
 import * as S from "./inventory.service";
 export const list = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const r = await S.listInventory(req.query as never);
+  const query = {
+    ...req.query,
+    requestingUserId: req.user?.id,
+  };
+  const r = await S.listInventory(query as any);
   return ApiResponse.paginated(res, "Inventory fetched.", r.data, { page: r.page, limit: r.limit, total: r.total });
 });
 export const dashboard = asyncHandler(async (_req: AuthRequest, res: Response) => ApiResponse.success(res, "Inventory dashboard fetched.", await S.getInventoryDashboard()));

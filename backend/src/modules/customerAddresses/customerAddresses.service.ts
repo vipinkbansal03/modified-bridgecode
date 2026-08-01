@@ -1,5 +1,6 @@
 import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
+import { AddressValidationStatus } from "@prisma/client";
 
 export async function listCustomerAddresses(customerId: string) {
   return prisma.customerAddress.findMany({
@@ -23,6 +24,11 @@ export async function createCustomerAddress(
     countryId?: string;
     country?: string;
     isDefault?: boolean;
+    originalAddress?: any;
+    normalizedAddress?: any;
+    validationProvider?: string;
+    validationResult?: any;
+    validationStatus?: AddressValidationStatus;
   }
 ) {
   let countryId = data.countryId;
@@ -69,6 +75,11 @@ export async function createCustomerAddress(
         postalCode: data.postalCode.trim(),
         countryId,
         isDefault,
+        originalAddress: data.originalAddress || null,
+        normalizedAddress: data.normalizedAddress || null,
+        validationProvider: data.validationProvider || null,
+        validationResult: data.validationResult || null,
+        validationStatus: data.validationStatus || "UNVALIDATED",
       },
       include: { country: true },
     });
@@ -90,6 +101,11 @@ export async function updateCustomerAddress(
     countryId?: string;
     country?: string;
     isDefault?: boolean;
+    originalAddress?: any;
+    normalizedAddress?: any;
+    validationProvider?: string;
+    validationResult?: any;
+    validationStatus?: AddressValidationStatus;
   }
 ) {
   const existing = await prisma.customerAddress.findFirst({
@@ -132,6 +148,11 @@ export async function updateCustomerAddress(
         ...(data.postalCode !== undefined && { postalCode: data.postalCode.trim() }),
         ...(countryId && { countryId }),
         ...(data.isDefault !== undefined && { isDefault: data.isDefault }),
+        ...(data.originalAddress !== undefined && { originalAddress: data.originalAddress }),
+        ...(data.normalizedAddress !== undefined && { normalizedAddress: data.normalizedAddress }),
+        ...(data.validationProvider !== undefined && { validationProvider: data.validationProvider }),
+        ...(data.validationResult !== undefined && { validationResult: data.validationResult }),
+        ...(data.validationStatus !== undefined && { validationStatus: data.validationStatus }),
       },
       include: { country: true },
     });

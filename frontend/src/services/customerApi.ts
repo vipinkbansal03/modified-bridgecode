@@ -458,6 +458,18 @@ export async function createCustomerAddress(data: {
   return res.data.data as CustomerAddress;
 }
 
+export async function validateCustomerAddress(data: {
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  countryCode: string;
+}) {
+  const res = await customerApi.post("/addresses/validate", data);
+  return res.data.data;
+}
+
 export async function updateCustomerAddress(
   addressId: string,
   data: Partial<{
