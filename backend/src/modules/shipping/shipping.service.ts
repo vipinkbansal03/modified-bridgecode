@@ -568,7 +568,7 @@ export async function createShipment(input: {
   if (!input.orderId) throw new AppError("Order ID is required.", 400);
   if (!input.providerId) throw new AppError("Provider ID is required.", 400);
 
-  const order = await prisma.order.findUnique({ where: { id: input.orderId }, select: { id: true, orderNumber: true, customerName: true, customerEmail: true, shippingAddress: true, country: { select: { id: true, code: true } }, items: { select: { title: true, sku: true, quantity: true, total: true, variant: { select: { weight: true } } } } } });
+  const order = await prisma.order.findUnique({ where: { id: input.orderId }, select: { id: true, orderNumber: true, customerName: true, customerEmail: true, shippingAddress: true, country: { select: { id: true, code: true } }, items: { select: { title: true, sku: true, quantity: true, total: true, variant: { select: { id: true, weight: true, length: true, width: true, height: true, shippingClass: true, fragile: true, hazardous: true, product: { select: { packageWeight: true, packageLength: true, packageWidth: true, packageHeight: true, shippingClass: true, fragile: true, hazardous: true } } } } } } } });
   if (!order) throw new AppError("Order not found.", 404);
 
   const provider = await prisma.shippingProvider.findUnique({ where: { id: input.providerId }, select: { id: true, name: true, apiKey: true, apiSecret: true, baseUrl: true } });
@@ -595,13 +595,23 @@ export async function createShipment(input: {
           recipientEmail: order.customerEmail ?? undefined,
           address: shipAddr,
           countryCode: order.country?.code ?? "IN",
-          items: order.items.map((item) => ({
-            title: item.title,
-            sku: item.sku ?? undefined,
-            quantity: item.quantity,
-            weight: item.variant?.weight != null ? Number(item.variant.weight) : undefined,
-            value: Number(item.total),
-          })),
+          items: order.items.map((item) => {
+            const v = item.variant;
+            const p = v?.product;
+            return {
+              title: item.title,
+              sku: item.sku ?? undefined,
+              quantity: item.quantity,
+              weight: v?.weight != null ? Number(v.weight) : p?.packageWeight != null ? Number(p.packageWeight) : undefined,
+              length: v?.length != null ? Number(v.length) : p?.packageLength != null ? Number(p.packageLength) : undefined,
+              width: v?.width != null ? Number(v.width) : p?.packageWidth != null ? Number(p.packageWidth) : undefined,
+              height: v?.height != null ? Number(v.height) : p?.packageHeight != null ? Number(p.packageHeight) : undefined,
+              shippingClass: v?.shippingClass || p?.shippingClass || null,
+              fragile: v ? !!v.fragile : !!p?.fragile,
+              hazardous: v ? !!v.hazardous : !!p?.hazardous,
+              value: Number(item.total),
+            };
+          }),
           totalValue: Number(order.items.reduce((sum, item) => sum + Number(item.total), 0)),
           reference: order.orderNumber,
         },

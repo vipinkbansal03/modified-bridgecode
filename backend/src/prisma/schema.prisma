@@ -274,6 +274,9 @@ model ProductVariant {
   packageId            String?
   weight               Decimal?                       @db.Decimal(10, 3)
   width                Decimal?                       @db.Decimal(10, 2)
+  shippingClass        String?
+  fragile              Boolean                        @default(false)
+  hazardous            Boolean                        @default(false)
   inventories          Inventory[]
   inventoryAdjustments InventoryAdjustment[]
   moqPricing           MoqPricing[]

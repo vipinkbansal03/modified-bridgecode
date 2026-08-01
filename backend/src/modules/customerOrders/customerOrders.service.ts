@@ -172,6 +172,7 @@ async function calculateCustomerOrder(
   const packaging = await calculateShipment(
     orderItems.map((item) => ({
       productId: item.variant.productId,
+      variantId: item.variant.id,
       quantity: item.quantity,
     })),
     { countryCode: orderCountry.code },

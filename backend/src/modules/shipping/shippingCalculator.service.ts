@@ -24,6 +24,9 @@ export type CalculatorBoxPack = {
     length: number;
     width: number;
     height: number;
+    shippingClass: string | null;
+    fragile: boolean;
+    hazardous: boolean;
   }[];
 };
 
@@ -47,6 +50,9 @@ export type CalculatorResult = {
     length: number;
     width: number;
     height: number;
+    shippingClass: string | null;
+    fragile: boolean;
+    hazardous: boolean;
   }[];
   pricing?: {
     available: boolean;
@@ -70,11 +76,12 @@ async function getProductShippingInfo(productId: string) {
       packageLength: true,
       packageWidth: true,
       packageHeight: true,
+      shippingClass: true,
       fragile: true,
       hazardous: true,
       variants: {
         where: { status: "ACTIVE" },
-        select: { id: true, weight: true, length: true, width: true, height: true },
+        select: { id: true, weight: true, length: true, width: true, height: true, shippingClass: true, fragile: true, hazardous: true },
       },
     },
   });
@@ -104,32 +111,35 @@ function fitsInBox(box: { length: number; width: number; height: number; maxWeig
 }
 
 /**
- * Resolve the item's shipping dimensions. Prefers the product's package fields
- * and falls back to the variant's own dimensions when the package fields are
- * missing.
+ * Resolve the item's effective shipping attributes. Variant-level values
+ * override the product defaults when defined; otherwise the product package
+ * fields act as the fallback. When no variant is supplied, the first active
+ * variant fills any missing product package fields (legacy behaviour).
  */
-function resolveUnitDims(product: {
+function resolveEffectiveShipping(product: {
   packageWeight: unknown;
   packageLength: unknown;
   packageWidth: unknown;
   packageHeight: unknown;
-  variants: { id: string; weight: unknown; length: unknown; width: unknown; height: unknown }[];
+  shippingClass: unknown;
+  fragile: unknown;
+  hazardous: unknown;
+  variants: { id: string; weight: unknown; length: unknown; width: unknown; height: unknown; shippingClass: unknown; fragile: unknown; hazardous: unknown }[];
 }, variantId?: string | null) {
-  let weight = toNumber(product.packageWeight);
-  let length = toNumber(product.packageLength);
-  let width = toNumber(product.packageWidth);
-  let height = toNumber(product.packageHeight);
+  const variant =
+    product.variants.find((v) => v.id === variantId) ??
+    (variantId ? null : product.variants[0]) ??
+    null;
 
-  if (!weight || !length || !width || !height) {
-    const fallback =
-      product.variants.find((v) => v.id === variantId) ?? product.variants[0] ?? null;
-    weight = weight || toNumber(fallback?.weight);
-    length = length || toNumber(fallback?.length);
-    width = width || toNumber(fallback?.width);
-    height = height || toNumber(fallback?.height);
-  }
-
-  return { weight, length, width, height };
+  return {
+    weight: variant?.weight != null ? toNumber(variant.weight) : toNumber(product.packageWeight),
+    length: variant?.length != null ? toNumber(variant.length) : toNumber(product.packageLength),
+    width: variant?.width != null ? toNumber(variant.width) : toNumber(product.packageWidth),
+    height: variant?.height != null ? toNumber(variant.height) : toNumber(product.packageHeight),
+    shippingClass: (variant?.shippingClass || product.shippingClass || null) as string | null,
+    fragile: variant ? !!variant.fragile : !!product.fragile,
+    hazardous: variant ? !!variant.hazardous : !!product.hazardous,
+  };
 }
 
 export async function calculateShipment(
@@ -177,7 +187,7 @@ export async function calculateShipment(
   for (const item of items) {
     const product = await getProductShippingInfo(item.productId);
     const qty = Math.max(1, item.quantity);
-    const dims = resolveUnitDims(product, item.variantId);
+    const dims = resolveEffectiveShipping(product, item.variantId);
 
     totalWeight += dims.weight * qty;
     totalVolume += dims.length * dims.width * dims.height * qty;
@@ -190,6 +200,9 @@ export async function calculateShipment(
       length: dims.length,
       width: dims.width,
       height: dims.height,
+      shippingClass: dims.shippingClass,
+      fragile: dims.fragile,
+      hazardous: dims.hazardous,
     });
 
     const candidates = boxes.filter((box) => fitsInBox(box, dims));
@@ -241,6 +254,9 @@ export async function calculateShipment(
           length: dims.length,
           width: dims.width,
           height: dims.height,
+          shippingClass: dims.shippingClass,
+          fragile: dims.fragile,
+          hazardous: dims.hazardous,
         });
       }
     }
