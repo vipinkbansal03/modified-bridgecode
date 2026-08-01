@@ -362,10 +362,12 @@ interface AdminMultiSelectProps {
   label?: string;
   error?: string;
   options: { value: string; label: string }[];
-  selectedValues: string[];
+  selectedValues?: string[];
+  value?: string[];
   onChange: (nextValues: string[]) => void;
   placeholder?: string;
   className?: string;
+  selectAllLabel?: string;
 }
 
 export function AdminMultiSelect({
@@ -373,15 +375,19 @@ export function AdminMultiSelect({
   error,
   options,
   selectedValues,
+  value,
   onChange,
   placeholder = "Select...",
   className,
+  selectAllLabel,
 }: AdminMultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [menuStyle, setMenuStyle] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
+
+  const currentValues = value || selectedValues || [];
 
   const updateMenuPosition = useCallback(() => {
     if (!buttonRef.current) return;
@@ -432,24 +438,26 @@ export function AdminMultiSelect({
     window.addEventListener("resize", handleReflow);
     window.addEventListener("scroll", handleReflow, true);
     return () => {
-      window.removeEventListener("resize", handleReflow);
+      window.addEventListener("resize", handleReflow);
       window.removeEventListener("scroll", handleReflow, true);
     };
   }, [isOpen, updateMenuPosition]);
 
   const toggleOption = (val: string) => {
-    const next = selectedValues.includes(val)
-      ? selectedValues.filter((v) => v !== val)
-      : [...selectedValues, val];
+    const next = currentValues.includes(val)
+      ? currentValues.filter((v) => v !== val)
+      : [...currentValues, val];
     onChange(next);
   };
 
-  const displayedText = selectedValues.length > 0
+  const displayedText = currentValues.length > 0
     ? options
-        .filter((o) => selectedValues.includes(o.value))
+        .filter((o) => currentValues.includes(o.value))
         .map((o) => o.label)
         .join(", ")
     : placeholder;
+
+  const allSelected = options.every((o) => currentValues.includes(o.value));
 
   return (
     <div ref={rootRef} className="relative w-full min-w-[10rem] space-y-1.5">
@@ -464,7 +472,7 @@ export function AdminMultiSelect({
           className
         )}
       >
-        <span className={cn("truncate", selectedValues.length === 0 && "text-[#9A9A9A]")}>
+        <span className={cn("truncate", currentValues.length === 0 && "text-[#9A9A9A]")}>
           {displayedText}
         </span>
         <ChevronDown size={15} className={cn("shrink-0 text-[#9A9A9A] transition", isOpen && "rotate-180")} />
@@ -489,7 +497,6 @@ export function AdminMultiSelect({
                   <button
                     type="button"
                     onClick={() => {
-                      const allSelected = options.every((o) => selectedValues.includes(o.value));
                       if (allSelected) {
                         onChange([]);
                       } else {
@@ -498,12 +505,12 @@ export function AdminMultiSelect({
                     }}
                     className="text-xs font-semibold text-[#E31E24] hover:text-[#B5151B] transition cursor-pointer select-none"
                   >
-                    {options.every((o) => selectedValues.includes(o.value)) ? "Deselect All" : "Select All"}
+                    {selectAllLabel || (allSelected ? "Deselect All" : "Select All")}
                   </button>
                 </div>
               )}
               {options.map((option) => {
-                const isSelected = selectedValues.includes(option.value);
+                const isSelected = currentValues.includes(option.value);
                 return (
                   <button
                     key={option.value}
@@ -980,129 +987,4 @@ export function useToast() {
   return { showToast: context.showToast, ToastComponent: null };
 }
 
-export interface AdminMultiSelectProps {
-  label?: string;
-  error?: string;
-  options: { value: string; label: string }[];
-  value: string[];
-  onChange: (value: string[]) => void;
-  className?: string;
-  placeholder?: string;
-  selectAllLabel?: string;
-}
-
-export function AdminMultiSelect({ label, error, options, value, onChange, className, placeholder = "Select options...", selectAllLabel }: AdminMultiSelectProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const [menuStyle, setMenuStyle] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node) && menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  useEffect(() => {
-    if (isOpen && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-      const menuHeight = Math.min(options.length * 40, 256); // approx 40px per item, max 256px
-
-      if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
-        setMenuStyle({ bottom: window.innerHeight - rect.top + 4, left: rect.left, width: rect.width, maxHeight: Math.min(spaceAbove - 16, 256) });
-      } else {
-        setMenuStyle({ top: rect.bottom + 4, left: rect.left, width: rect.width, maxHeight: Math.min(spaceBelow - 16, 256) });
-      }
-    }
-  }, [isOpen, options.length]);
-
-  const toggleOption = (optValue: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (value.includes(optValue)) {
-      onChange(value.filter((v) => v !== optValue));
-    } else {
-      onChange([...value, optValue]);
-    }
-  };
-
-  const selectedLabels = value.map(v => options.find(o => o.value === v)?.label).filter(Boolean).join(", ");
-
-  return (
-    <div className={cn("flex flex-col gap-1.5", className)} ref={rootRef}>
-      {label && <label className="text-[13px] font-semibold text-slate-700">{label}</label>}
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className={cn(
-          "flex h-9 w-full items-center justify-between rounded-md border bg-white px-3 text-sm text-left shadow-sm transition-all focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20",
-          error ? "border-red-300 bg-red-50/30" : "border-slate-200 hover:border-slate-300",
-        )}
-      >
-        <span className={cn("block truncate", !value.length && "text-slate-500")}>
-          {value.length > 0 ? selectedLabels : placeholder}
-        </span>
-        <ChevronDown className={cn("h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200", isOpen && "rotate-180")} />
-      </button>
-      {error && <p className="text-xs font-medium text-red-500">{error}</p>}
-      
-      {isOpen && typeof document !== "undefined" && createPortal(
-        <div
-          ref={menuRef}
-          style={menuStyle ? { position: "fixed", top: menuStyle.top, bottom: menuStyle.bottom, left: menuStyle.left, width: menuStyle.width, maxHeight: menuStyle.maxHeight, zIndex: 9999 } : undefined}
-          className="overflow-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg animate-in fade-in zoom-in-95"
-        >
-          {options.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-slate-500">No options available</div>
-          ) : (
-            <>
-              {selectAllLabel && (
-                <div
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onChange(value.length === options.length ? [] : options.map((o) => o.value));
-                  }}
-                  className="flex cursor-pointer items-center border-b border-slate-100 px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                >
-                  <div className={cn("mr-2 flex h-4 w-4 items-center justify-center rounded border", value.length === options.length ? "border-brand bg-brand text-white" : "border-slate-300")}>
-                    {value.length === options.length && <Check className="h-3 w-3" />}
-                  </div>
-                  {selectAllLabel}
-                </div>
-              )}
-              {options.map((option) => {
-              const isSelected = value.includes(option.value);
-              return (
-                <div
-                  key={option.value}
-                  onClick={(e) => toggleOption(option.value, e)}
-                  className={cn(
-                    "flex cursor-pointer items-center px-3 py-2 text-sm transition-colors hover:bg-slate-50",
-                    isSelected && "bg-brand/5 font-medium text-brand"
-                  )}
-                >
-                  <div className={cn("mr-2 flex h-4 w-4 items-center justify-center rounded border", isSelected ? "border-brand bg-brand text-white" : "border-slate-300")}>
-                    {isSelected && <Check className="h-3 w-3" />}
-                  </div>
-                  {option.label}
-                </div>
-              );
-            })}
-            </>
-          )}
-        </div>,
-        document.body
-      )}
-    </div>
-  );
-}
 
