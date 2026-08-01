@@ -36,6 +36,7 @@ import { RazorpayPaymentButton } from "@/components/checkout/RazorpayPaymentButt
 const DEMO_PAYMENT_LABEL = "Pay on Delivery";
 const SHIPPING_UNAVAILABLE_MESSAGE =
   "Shipping is not available to your country yet. Please contact support.";
+const SHIPPING_ZONE_STORAGE_KEY = "checkout_shipping_zone";
 const APPROVAL_MESSAGES: Record<string, string> = {
   PENDING_APPROVAL:
     "Your account is pending approval. You will be notified once approved.",
@@ -77,7 +78,12 @@ export default function CheckoutPage() {
   const [availableProviders, setAvailableProviders] = useState<
     AvailableShippingOption[]
   >([]);
-  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return window.localStorage.getItem(SHIPPING_ZONE_STORAGE_KEY);
+    }
+    return null;
+  });
   const [appliedCoupon, setAppliedCoupon] = useState<CouponValidationResult | null>(() => {
     if (typeof window !== "undefined") {
       const stored = window.localStorage.getItem("applied_coupon");
@@ -321,6 +327,23 @@ export default function CheckoutPage() {
     return availableProviders.find((p) => p.zoneId === selectedZoneId) ?? null;
   }, [availableProviders, selectedZoneId]);
 
+  const totalPayable = useMemo(() => {
+    if (estimate?.total != null) return estimate.total;
+    const shippingCharge = selectedShippingOption
+      ? selectedShippingOption.isFree
+        ? 0
+        : selectedShippingOption.charge
+      : shippingEstimate?.available && !shippingEstimate.isFree
+        ? shippingEstimate.charge
+        : 0;
+    return totals.subtotal + shippingCharge;
+  }, [
+    estimate?.total,
+    selectedShippingOption,
+    shippingEstimate,
+    totals.subtotal,
+  ]);
+
   const approvalBlockMessage = currentCustomer?.approvalStatus
     ? APPROVAL_MESSAGES[currentCustomer.approvalStatus]
     : null;
@@ -345,8 +368,9 @@ export default function CheckoutPage() {
       },
       couponCode: appliedCoupon?.code,
       notes: form.notes.trim() || undefined,
+      shippingZoneId: selectedZoneId ?? undefined,
     }),
-    [appliedCoupon?.code, form, items],
+    [appliedCoupon?.code, form, items, selectedZoneId],
   );
 
   useEffect(() => {
@@ -388,7 +412,17 @@ export default function CheckoutPage() {
       .then((providers) => {
         if (cancelled) return;
         setAvailableProviders(providers);
-        setSelectedZoneId(providers.length > 0 ? providers[0].zoneId : null);
+        const storedZoneId =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem(SHIPPING_ZONE_STORAGE_KEY)
+            : null;
+        const preferredZoneId =
+          storedZoneId && providers.some((p) => p.zoneId === storedZoneId)
+            ? storedZoneId
+            : providers.length > 0
+              ? providers[0].zoneId
+              : null;
+        setSelectedZoneId(preferredZoneId);
       })
       .catch(() => {
         if (!cancelled) setAvailableProviders([]);
@@ -661,15 +695,6 @@ export default function CheckoutPage() {
                   {shippingLabel} ({formatMoney(symbol, shippingCharge)})
                 </strong>
               </div>
-              {(order.shippingBox || order.shippingBoxName || order.packageWeight != null) && (
-                <div className="flex items-center justify-between text-[14px]">
-                  <span className="text-steel">Packaging</span>
-                  <strong className="text-ink">
-                    {order.shippingBox?.name ?? order.shippingBoxName ?? "Standard box"} ·{" "}
-                    {Number(order.packageWeight ?? 0).toFixed(3)} kg
-                  </strong>
-                </div>
-              )}
               <div className="flex items-center justify-between text-[14px]">
                 <span className="text-steel">Tax</span>
                 <strong className="text-ink">
@@ -950,7 +975,15 @@ export default function CheckoutPage() {
                               type="radio"
                               name="shippingMethod"
                               checked={isSelected}
-                              onChange={() => setSelectedZoneId(option.zoneId)}
+                              onChange={() => {
+                                setSelectedZoneId(option.zoneId);
+                                if (typeof window !== "undefined") {
+                                  window.localStorage.setItem(
+                                    SHIPPING_ZONE_STORAGE_KEY,
+                                    option.zoneId,
+                                  );
+                                }
+                              }}
                               className="text-brand focus:ring-brand"
                             />
                             <div>
@@ -1294,27 +1327,6 @@ export default function CheckoutPage() {
                         : "Unavailable"}
                   </strong>
                 </div>
-                {estimate?.shippingBox && (
-                  <div className="rounded-lg border border-line bg-offwhite px-3 py-2.5 text-[12.5px] text-steel">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-ink">Packaging</span>
-                      <span className="font-semibold text-ink">
-                        {estimate.shippingBox.name}
-                      </span>
-                    </div>
-                    <div className="mt-1 flex items-center justify-between">
-                      <span>Weight</span>
-                      <span>{Number(estimate.packageWeight ?? 0).toFixed(3)} kg</span>
-                    </div>
-                    <div className="mt-0.5 flex items-center justify-between">
-                      <span>Dimensions</span>
-                      <span>
-                        {estimate.shippingBox.length} × {estimate.shippingBox.width} ×{" "}
-                        {estimate.shippingBox.height} cm
-                      </span>
-                    </div>
-                  </div>
-                )}
                 <div className="mt-4 space-y-2 border-t border-line pt-3">
                   <span className="block text-xs uppercase tracking-wide text-steel-2 font-semibold">
                     Payment Options ({availablePaymentMethods.length})
@@ -1371,7 +1383,7 @@ export default function CheckoutPage() {
                     <strong className="text-[18px] font-extrabold text-brand block">
                       {formatMoney(
                         estimate?.currency?.symbol ?? totals.currencySymbol,
-                        estimate?.total ?? totals.subtotal,
+                        totalPayable,
                       )}
                     </strong>
                     <span className="text-[11px] text-steel">
@@ -1629,15 +1641,6 @@ export default function CheckoutPage() {
                 estimate?.shippingProvider ??
                 "Standard Shipping"}
             </div>
-
-            {estimate?.shippingBox && (
-              <div className="mt-2 border-t border-[#E6E6E6] pt-2 text-[12px] text-steel-2">
-                Packaging: <span className="font-medium text-ink">{estimate.shippingBox.name}</span> ·{" "}
-                {Number(estimate.packageWeight ?? 0).toFixed(3)} kg ·{" "}
-                {estimate.shippingBox.length}×{estimate.shippingBox.width}×
-                {estimate.shippingBox.height} cm
-              </div>
-            )}
           </div>
         </div>
 
@@ -1648,7 +1651,7 @@ export default function CheckoutPage() {
             <span className="text-[18px]">
               {formatMoney(
                 estimate?.currency?.symbol ?? totals.currencySymbol,
-                estimate?.total ?? totals.subtotal,
+                totalPayable,
               )}
             </span>
           </div>
