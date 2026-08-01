@@ -144,7 +144,17 @@ export async function listCurrenciesSimple() {
 }
 
 export async function getCurrencyDashboard() {
-  const [total, active, inactive, baseCount, baseCurrency, mappedCountries, recentlyUpdated] = await Promise.all([
+  const [
+    total,
+    active,
+    inactive,
+    baseCount,
+    baseCurrency,
+    mappedCountries,
+    recentlyUpdated,
+    lastBaseChangedSetting,
+    lastRatesSyncSetting,
+  ] = await Promise.all([
     prisma.currency.count(),
     prisma.currency.count({ where: { status: "ACTIVE" } }),
     prisma.currency.count({ where: { status: "INACTIVE" } }),
@@ -155,7 +165,25 @@ export async function getCurrencyDashboard() {
     }),
     prisma.currency.count({ where: { countries: { some: {} } } }),
     prisma.currency.findMany({ take: 5, orderBy: [{ updatedAt: "desc" }, { code: "asc" }], include: currencyInclude() }),
+    prisma.setting.findUnique({ where: { key: "currency.last_base_changed_at" } }),
+    prisma.setting.findUnique({ where: { key: "currency.last_rates_sync_at" } }),
   ]);
+
+  const lastBaseChangedAtStr = lastBaseChangedSetting?.value || null;
+  const lastRatesSyncAtStr = lastRatesSyncSetting?.value || null;
+
+  let ratesNeedSync = false;
+  if (lastBaseChangedAtStr) {
+    if (!lastRatesSyncAtStr) {
+      ratesNeedSync = true;
+    } else {
+      const baseChanged = new Date(lastBaseChangedAtStr);
+      const ratesSynced = new Date(lastRatesSyncAtStr);
+      if (baseChanged > ratesSynced) {
+        ratesNeedSync = true;
+      }
+    }
+  }
 
   return {
     totalCurrencies: total,
@@ -170,6 +198,9 @@ export async function getCurrencyDashboard() {
       : null,
     mappedCountries,
     recentlyUpdated,
+    ratesNeedSync,
+    lastBaseChangedAt: lastBaseChangedAtStr,
+    lastRatesSyncAt: lastRatesSyncAtStr,
   };
 }
 
@@ -177,6 +208,19 @@ async function assertBaseCurrencyAllowed(id: string | null, isBase: boolean) {
   if (isBase) {
     const where: { isBase: true; id?: { not: string } } = { isBase: true };
     if (id) where.id = { not: id };
+
+    // Find the current base currency to check if it's changing
+    const currentBase = await prisma.currency.findFirst({ where: { isBase: true } });
+    const isChanging = !currentBase || (id ? currentBase.id !== id : true);
+
+    if (isChanging) {
+      await prisma.setting.upsert({
+        where: { key: "currency.last_base_changed_at" },
+        create: { key: "currency.last_base_changed_at", value: new Date().toISOString(), group: "currency", type: "string" },
+        update: { value: new Date().toISOString() }
+      });
+    }
+
     await prisma.currency.updateMany({ where, data: { isBase: false } });
   } else if (id) {
     const existing = await prisma.currency.findUnique({ where: { id }, select: { isBase: true } });
@@ -455,6 +499,12 @@ export async function syncExchangeRates(provider: IExchangeRateProvider = defaul
         skippedCount++;
       }
     }
+  });
+
+  await prisma.setting.upsert({
+    where: { key: "currency.last_rates_sync_at" },
+    create: { key: "currency.last_rates_sync_at", value: new Date().toISOString(), group: "currency", type: "string" },
+    update: { value: new Date().toISOString() }
   });
 
   return {
