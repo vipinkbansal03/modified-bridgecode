@@ -2193,6 +2193,12 @@ export const useTestShippingConnection = () =>
     },
   });
 
+export const useGetShippingDefaultRate = () =>
+  useMutation({
+    mutationFn: ({ id, countryCode }: { id: string; countryCode: string }) =>
+      adminApi.post(`/shipping/providers/${id}/default-rate`, { countryCode }).then((r) => r.data.data),
+  });
+
 // ─── Shipping Zones ──────────────────────────────────────
 
 export const useAdminShippingZones = (params?: { providerId?: string; countryId?: string; status?: string }) =>

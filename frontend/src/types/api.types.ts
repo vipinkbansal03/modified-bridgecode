@@ -200,6 +200,12 @@ export interface ApiShippingBox {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  countries: {
+    id: string;
+    boxId: string;
+    countryId: string;
+    country: { id: string; code: string; name: string };
+  }[];
 }
 
 export interface ApiContactSubmit {

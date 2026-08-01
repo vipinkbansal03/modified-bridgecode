@@ -141,6 +141,13 @@ type VariantRow = {
   status: string;
   moq?: number | null;
   packageId?: string | null;
+  weight?: number | string | null;
+  length?: number | string | null;
+  width?: number | string | null;
+  height?: number | string | null;
+  shippingClass?: string | null;
+  fragile?: boolean;
+  hazardous?: boolean;
   package?: { id: string; title: string } | null;
   inventories?: {
     id?: string;
@@ -608,6 +615,13 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [editVariantSku, setEditVariantSku] = useState("");
   const [editVariantTitle, setEditVariantTitle] = useState("");
   const [editVariantMoq, setEditVariantMoq] = useState(1);
+  const [editVariantWeight, setEditVariantWeight] = useState("");
+  const [editVariantLength, setEditVariantLength] = useState("");
+  const [editVariantWidth, setEditVariantWidth] = useState("");
+  const [editVariantHeight, setEditVariantHeight] = useState("");
+  const [editVariantShippingClass, setEditVariantShippingClass] = useState("");
+  const [editVariantFragile, setEditVariantFragile] = useState(false);
+  const [editVariantHazardous, setEditVariantHazardous] = useState(false);
   const [editVariantStatus, setEditVariantStatus] = useState("ACTIVE");
   const [translationLanguageId, setTranslationLanguageId] = useState("");
   const [translationDrafts, setTranslationDrafts] = useState<Record<string, ProductTranslationDraft>>({});
@@ -2950,6 +2964,13 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     setEditVariantSku(variant.sku ?? "");
     setEditVariantTitle(variant.title ?? "");
     setEditVariantMoq(Math.max(1, Number(variant.moq) || 1));
+    setEditVariantWeight(variant.weight != null ? String(variant.weight) : "");
+    setEditVariantLength(variant.length != null ? String(variant.length) : "");
+    setEditVariantWidth(variant.width != null ? String(variant.width) : "");
+    setEditVariantHeight(variant.height != null ? String(variant.height) : "");
+    setEditVariantShippingClass(variant.shippingClass || "");
+    setEditVariantFragile(variant.fragile || false);
+    setEditVariantHazardous(variant.hazardous || false);
     setEditVariantStatus(variant.status || "ACTIVE");
     setEditVariantSelections(
       Object.fromEntries((variant.attributeValues ?? []).map((value) => [value.attributeId, value.attributeValueId]))
@@ -3185,6 +3206,13 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         sku: editVariantSku.trim() || null,
         title: editVariantTitle.trim() || null,
         moq: Math.max(1, editVariantMoq),
+        weight: editVariantWeight ? Number(editVariantWeight) : null,
+        length: editVariantLength ? Number(editVariantLength) : null,
+        width: editVariantWidth ? Number(editVariantWidth) : null,
+        height: editVariantHeight ? Number(editVariantHeight) : null,
+        shippingClass: editVariantShippingClass.trim() || null,
+        fragile: editVariantFragile,
+        hazardous: editVariantHazardous,
         status: editVariantStatus,
       });
 
@@ -7099,6 +7127,27 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   <AdminInput label="Variant Title" value={editVariantTitle} onChange={(e) => setEditVariantTitle(e.target.value)} placeholder="Optional custom title" />
                   <AdminInput label="SKU" value={editVariantSku} onChange={(e) => setEditVariantSku(e.target.value)} placeholder="Variant SKU" />
                   <AdminInput label="MOQ" type="number" min={1} value={editVariantMoq} onChange={(e) => setEditVariantMoq(Math.max(1, Number(e.target.value) || 1))} />
+                </div>
+
+                <div className="rounded-lg border border-[#E6E6E6] p-4 bg-white">
+                  <div className="mb-3 text-[13px] font-medium text-[#1A1A1A]">Shipping Information</div>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <AdminInput label="Weight (kg)" type="text" placeholder="e.g. 0.5" value={editVariantWeight} onChange={(e) => setEditVariantWeight(e.target.value)} />
+                    <AdminInput label="Length (cm)" type="text" placeholder="e.g. 30" value={editVariantLength} onChange={(e) => setEditVariantLength(e.target.value)} />
+                    <AdminInput label="Width (cm)" type="text" placeholder="e.g. 20" value={editVariantWidth} onChange={(e) => setEditVariantWidth(e.target.value)} />
+                    <AdminInput label="Height (cm)" type="text" placeholder="e.g. 10" value={editVariantHeight} onChange={(e) => setEditVariantHeight(e.target.value)} />
+                    <AdminInput label="Shipping Class" type="text" placeholder="e.g. Standard, Express, Heavy" value={editVariantShippingClass} onChange={(e) => setEditVariantShippingClass(e.target.value)} />
+                    <div className="flex items-end gap-6 pb-2">
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <input type="checkbox" checked={editVariantFragile} onChange={(e) => setEditVariantFragile(e.target.checked)} className="rounded" />
+                        <span className="text-[13.5px] text-[#1A1A1A]">Fragile</span>
+                      </label>
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <input type="checkbox" checked={editVariantHazardous} onChange={(e) => setEditVariantHazardous(e.target.checked)} className="rounded" />
+                        <span className="text-[13.5px] text-[#1A1A1A]">Hazardous</span>
+                      </label>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="mt-5 rounded-lg border border-[#E6E6E6] p-4 bg-white">

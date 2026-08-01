@@ -41,6 +41,9 @@ type CurrencyDashboard = {
   baseCurrency?: CurrencyRow | null;
   mappedCountries: number;
   recentlyUpdated: CurrencyRow[];
+  ratesNeedSync?: boolean;
+  lastBaseChangedAt?: string | null;
+  lastRatesSyncAt?: string | null;
 };
 
 type CurrencyFormState = {
@@ -137,6 +140,7 @@ export default function CurrenciesPage() {
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
   const [importMessage, setImportMessage] = useState("");
   const [importing, setImporting] = useState(false);
+  const [dismissedSyncAt, setDismissedSyncAt] = useState<string | null>(null);
 
   const { data: dashboardData, isLoading: dashboardLoading } = useAdminCurrencyDashboard();
   const currenciesQuery = useAdminCurrenciesPaged({
@@ -178,6 +182,8 @@ export default function CurrenciesPage() {
   useEffect(() => {
     setSelectedIds([]);
   }, [page, limit, debouncedSearch, statusFilter, sortBy, sortDir]);
+
+  const showSyncReminder = !!dashboard?.ratesNeedSync && dashboard?.lastBaseChangedAt !== dismissedSyncAt;
 
   function resetForm() {
     setForm(emptyForm);
@@ -241,12 +247,30 @@ export default function CurrenciesPage() {
     }
 
     try {
+      const baseCurrencyChanged = payload.isBase && (!dashboard?.baseCurrency || dashboard.baseCurrency.id !== form.id);
+
       if (form.id) {
         await updateCurrency.mutateAsync({ id: form.id, ...payload });
-        showToast("Currency updated.");
+        if (baseCurrencyChanged) {
+          showToast(
+            "Base currency updated successfully. The selected currency has been set to an exchange rate of 1.000000. Other exchange rates are still based on the previous base currency. Please click 'Sync Rates' to refresh.",
+            "success"
+          );
+          setDismissedSyncAt(null);
+        } else {
+          showToast("Currency updated.");
+        }
       } else {
         await createCurrency.mutateAsync(payload);
-        showToast("Currency created.");
+        if (baseCurrencyChanged) {
+          showToast(
+            "Base currency created successfully. The selected currency has been set to an exchange rate of 1.000000. Other exchange rates are still based on the previous base currency. Please click 'Sync Rates' to refresh.",
+            "success"
+          );
+          setDismissedSyncAt(null);
+        } else {
+          showToast("Currency created.");
+        }
       }
       resetForm();
     } catch (error) {
@@ -304,6 +328,7 @@ export default function CurrenciesPage() {
       showToast(
         `Rates synced! Updated ${result.updatedCount ?? 0} currency rate(s) based on ${result.baseCode ?? "base currency"}.`,
       );
+      setDismissedSyncAt(null);
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to sync exchange rates."), "error");
     }
@@ -388,6 +413,40 @@ export default function CurrenciesPage() {
           </div>
           <StatCard title="Mapped Countries" value={dashboard?.mappedCountries ?? 0} subtitle="Countries using currencies" icon={<Filter size={18} />} color="bg-[#7A4F01]" isLoading={dashboardLoading} />
         </div>
+
+        {showSyncReminder && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <h4 className="text-[14px] font-bold flex items-center gap-2">
+                ⚠️ Synchronization Required
+              </h4>
+              <p className="text-[12.5px] leading-relaxed text-amber-800">
+                The base currency was updated. Other exchange rates are still based on the previous base currency. Please click 'Sync Rates' to refresh all exchange rates using the new base currency.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                disabled={syncCurrencyRates.isPending}
+                onClick={handleSyncRates}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-amber-600 px-4 text-[13px] font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
+              >
+                <RefreshCw size={14} className={syncCurrencyRates.isPending ? "animate-spin" : ""} />
+                Sync Rates Now
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDismissedSyncAt(dashboard?.lastBaseChangedAt || null);
+                }}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-amber-300 text-amber-700 hover:bg-amber-100"
+                title="Dismiss reminder"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">

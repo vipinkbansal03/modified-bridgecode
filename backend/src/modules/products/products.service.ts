@@ -1579,6 +1579,13 @@ export async function generateVariants(
             title,
             variantKey,
             sku: buildGeneratedVariantSku(product, variantKey),
+            weight: product.packageWeight ?? null,
+            length: product.packageLength ?? null,
+            width: product.packageWidth ?? null,
+            height: product.packageHeight ?? null,
+            shippingClass: product.shippingClass ?? null,
+            fragile: product.fragile,
+            hazardous: product.hazardous,
             status: "ACTIVE",
           },
         });
@@ -1631,6 +1638,9 @@ export async function createVariant(
     length?: number | null;
     width?: number | null;
     height?: number | null;
+    shippingClass?: string | null;
+    fragile?: boolean;
+    hazardous?: boolean;
     status?: string;
   }
 ) {
@@ -1651,10 +1661,13 @@ export async function createVariant(
       title,
       variantKey,
       moq: data.moq ?? 1,
-      weight: data.weight ?? null,
-      length: data.length ?? null,
-      width: data.width ?? null,
-      height: data.height ?? null,
+      weight: data.weight !== undefined ? data.weight : product.packageWeight ?? null,
+      length: data.length !== undefined ? data.length : product.packageLength ?? null,
+      width: data.width !== undefined ? data.width : product.packageWidth ?? null,
+      height: data.height !== undefined ? data.height : product.packageHeight ?? null,
+      shippingClass: data.shippingClass !== undefined ? data.shippingClass || null : product.shippingClass ?? null,
+      fragile: data.fragile !== undefined ? data.fragile : product.fragile,
+      hazardous: data.hazardous !== undefined ? data.hazardous : product.hazardous,
       status: (data.status as never) || "ACTIVE",
     },
   });
@@ -1692,6 +1705,9 @@ export async function updateVariant(
     length?: number | null;
     width?: number | null;
     height?: number | null;
+    shippingClass?: string | null;
+    fragile?: boolean;
+    hazardous?: boolean;
     status?: string;
   }
 ) {
@@ -1719,6 +1735,9 @@ export async function updateVariant(
     ...(data.length !== undefined ? { length: data.length } : {}),
     ...(data.width !== undefined ? { width: data.width } : {}),
     ...(data.height !== undefined ? { height: data.height } : {}),
+    ...(data.shippingClass !== undefined ? { shippingClass: data.shippingClass } : {}),
+    ...(data.fragile !== undefined ? { fragile: data.fragile } : {}),
+    ...(data.hazardous !== undefined ? { hazardous: data.hazardous } : {}),
     ...(data.status !== undefined ? { status: data.status as never } : {}),
   };
   await prisma.productVariant.update({

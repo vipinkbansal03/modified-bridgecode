@@ -115,7 +115,7 @@ export async function generateInvoice(orderId: string): Promise<Buffer> {
       items: { include: { product: true, variant: true } },
       country: true,
       currency: true,
-      shippingZone: { include: { provider: true, country: true } },
+      shippingZone: { include: { provider: true, countries: { include: { country: true } } } },
       warehouse: true,
     },
   });

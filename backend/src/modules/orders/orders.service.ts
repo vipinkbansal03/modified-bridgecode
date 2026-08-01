@@ -117,14 +117,14 @@ export async function listOrders(query: {
   })();
 
   const [data, total] = await Promise.all([
-    prisma.order.findMany({ where, skip, take: limit, orderBy: orderBy as never, include: { country: true, currency: true, shippingZone: { include: { provider: true, country: true } }, _count: { select: { items: true } } } }),
+    prisma.order.findMany({ where, skip, take: limit, orderBy: orderBy as never, include: { country: true, currency: true, shippingZone: { include: { provider: true, countries: { include: { country: true } } } }, _count: { select: { items: true } } } }),
     prisma.order.count({ where }),
   ]);
   return { data, total, page, limit };
 }
 
 export async function getOrder(id: string) {
-  const o = await prisma.order.findUnique({ where: { id }, include: { items: { include: { product: true, variant: true } }, country: true, currency: true, coupon: true, shippingZone: { include: { provider: true, country: true } }, shippingBox: true } });
+  const o = await prisma.order.findUnique({ where: { id }, include: { items: { include: { product: true, variant: true } }, country: true, currency: true, coupon: true, shippingZone: { include: { provider: true, countries: { include: { country: true } } } }, shippingBox: true, orderBoxes: true } });
   if (!o) throw new AppError("Order not found.", 404);
   return o;
 }

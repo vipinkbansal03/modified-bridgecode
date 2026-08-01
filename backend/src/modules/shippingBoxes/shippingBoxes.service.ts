@@ -8,20 +8,33 @@ type BoxInput = {
   height: number;
   maxWeight: number;
   isActive?: boolean;
+  countryIds?: string[];
 };
 
 export async function listBoxes() {
-  return prisma.shippingBox.findMany({ orderBy: { name: "asc" } });
+  return prisma.shippingBox.findMany({
+    include: { countries: { include: { country: true } } },
+    orderBy: { name: "asc" },
+  });
 }
 
 export async function getBox(id: string) {
-  const box = await prisma.shippingBox.findUnique({ where: { id } });
+  const box = await prisma.shippingBox.findUnique({
+    where: { id },
+    include: { countries: { include: { country: true } } },
+  });
   if (!box) throw new AppError("Shipping box not found.", 404);
   return box;
 }
 
 export async function createBox(data: BoxInput) {
   if (!data.name?.trim()) throw new AppError("Box name is required.", 400);
+
+  const countryIds = [...new Set(data.countryIds ?? [])];
+  if (countryIds.length === 0) throw new AppError("At least one country is required.", 400);
+  const foundCountries = await prisma.country.findMany({ where: { id: { in: countryIds } }, select: { id: true } });
+  if (foundCountries.length !== countryIds.length) throw new AppError("One or more countries were not found.", 404);
+
   return prisma.shippingBox.create({
     data: {
       name: data.name.trim(),
@@ -30,12 +43,24 @@ export async function createBox(data: BoxInput) {
       height: data.height,
       maxWeight: data.maxWeight,
       isActive: data.isActive ?? true,
+      countries: { create: countryIds.map((countryId) => ({ countryId })) },
     },
+    include: { countries: { include: { country: true } } },
   });
 }
 
 export async function updateBox(id: string, data: Partial<BoxInput>) {
   await getBox(id);
+
+  let countriesData: { deleteMany: Record<string, never>; create: { countryId: string }[] } | undefined;
+  if (data.countryIds) {
+    const countryIds = [...new Set(data.countryIds)];
+    if (countryIds.length === 0) throw new AppError("At least one country is required.", 400);
+    const foundCountries = await prisma.country.findMany({ where: { id: { in: countryIds } }, select: { id: true } });
+    if (foundCountries.length !== countryIds.length) throw new AppError("One or more countries were not found.", 404);
+    countriesData = { deleteMany: {}, create: countryIds.map((countryId) => ({ countryId })) };
+  }
+
   return prisma.shippingBox.update({
     where: { id },
     data: {
@@ -45,7 +70,9 @@ export async function updateBox(id: string, data: Partial<BoxInput>) {
       ...(data.height !== undefined ? { height: data.height } : {}),
       ...(data.maxWeight !== undefined ? { maxWeight: data.maxWeight } : {}),
       ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+      ...(countriesData ? { countries: countriesData } : {}),
     },
+    include: { countries: { include: { country: true } } },
   });
 }
 

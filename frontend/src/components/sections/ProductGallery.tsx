@@ -59,7 +59,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
       </div>
 
       {/* Main Image Box */}
-      <div className="relative order-1 flex min-h-[280px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-4 sm:order-2 sm:min-h-[360px] lg:min-h-[440px]">
+      <div className="group relative order-1 flex min-h-[280px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-4 sm:order-2 sm:min-h-[360px] lg:min-h-[440px]">
         {/* Previous Arrow */}
         {safeImages.length > 1 && (
           <button
@@ -73,7 +73,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
         )}
 
         {/* Main Image Preview */}
-        <div className="relative h-[260px] w-[84%] sm:h-[340px] lg:h-[400px] lg:w-[80%]">
+        <div className="relative h-[260px] w-[84%] transition-transform duration-300 ease-out group-hover:scale-[1.05] sm:h-[340px] lg:h-[400px] lg:w-[80%]">
           {safeImages[index]?.startsWith("data:") ? (
             <img src={safeImages[index]} alt={title} className="h-full w-full object-contain transition-all duration-300" />
           ) : (

@@ -101,7 +101,7 @@ interface OrderDetail {
   paymentProvider: string | null;
   paymentId: string | null;
   shippingProvider: string | null;
-  shippingZone: { estimatedDays: string | null; provider?: { name: string; displayName: string } | null; country?: { name: string; code: string } | null } | null;
+  shippingZone: { estimatedDays: string | null; provider?: { name: string; displayName: string } | null; countries?: { country: { name: string; code: string } }[] } | null;
   shippingBox: { id: string; name: string; length: number; width: number; height: number; maxWeight: number } | null;
   shippingBoxName: string | null;
   packageWeight: string | number | null;
@@ -627,7 +627,7 @@ export default function OrderDetailPage() {
             <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-2">
               <h3 className="text-[14px] font-semibold text-[#111]">Shipping Info</h3>
               <InfoRow label="Provider" value={order.shippingProvider ?? order.shippingZone?.provider?.displayName ?? "—"} />
-              {order.shippingZone?.country && <InfoRow label="Zone" value={`${order.shippingZone.country.name} (${order.shippingZone.country.code})`} />}
+              {order.shippingZone?.countries?.length ? <InfoRow label="Zone" value={order.shippingZone.countries.map((entry) => `${entry.country.name} (${entry.country.code})`).join(", ")} /> : null}
               {order.shippingZone?.estimatedDays && <InfoRow label="Estimated" value={order.shippingZone.estimatedDays} />}
               <InfoRow label="Charge" value={`${sym}${Number(order.shippingCharge).toFixed(2)}`} />
               {(order.shippingBox || order.shippingBoxName || order.packageWeight != null) && (

@@ -375,34 +375,52 @@ async function main() {
 
   const indiaCountry = allCountriesForPayment.find((c) => c.code.toUpperCase() === "IN");
   if (indiaCountry) {
-    await prisma.shippingZone.upsert({
-      where: { providerId_countryId: { providerId: standardProvider.id, countryId: indiaCountry.id } },
-      update: { status: "ACTIVE", charge: 0, freeAbove: 0, estimatedDays: "3-5 business days" },
-      create: {
-        providerId: standardProvider.id,
-        countryId: indiaCountry.id,
-        charge: 0,
-        freeAbove: 0,
-        estimatedDays: "3-5 business days",
-        status: "ACTIVE",
-      },
+    const existingIndiaZone = await prisma.shippingZone.findFirst({
+      where: { providerId: standardProvider.id, countries: { some: { countryId: indiaCountry.id } } },
+      select: { id: true },
     });
+    if (existingIndiaZone) {
+      await prisma.shippingZone.update({
+        where: { id: existingIndiaZone.id },
+        data: { status: "ACTIVE", charge: 0, freeAbove: 0, estimatedDays: "3-5 business days" },
+      });
+    } else {
+      await prisma.shippingZone.create({
+        data: {
+          providerId: standardProvider.id,
+          charge: 0,
+          freeAbove: 0,
+          estimatedDays: "3-5 business days",
+          status: "ACTIVE",
+          countries: { create: [{ countryId: indiaCountry.id }] },
+        },
+      });
+    }
   }
 
   const usCountry = allCountriesForPayment.find((c) => c.code.toUpperCase() === "US");
   if (usCountry) {
-    await prisma.shippingZone.upsert({
-      where: { providerId_countryId: { providerId: standardProvider.id, countryId: usCountry.id } },
-      update: { status: "ACTIVE", charge: 15, freeAbove: 200, estimatedDays: "5-7 business days" },
-      create: {
-        providerId: standardProvider.id,
-        countryId: usCountry.id,
-        charge: 15,
-        freeAbove: 200,
-        estimatedDays: "5-7 business days",
-        status: "ACTIVE",
-      },
+    const existingUsZone = await prisma.shippingZone.findFirst({
+      where: { providerId: standardProvider.id, countries: { some: { countryId: usCountry.id } } },
+      select: { id: true },
     });
+    if (existingUsZone) {
+      await prisma.shippingZone.update({
+        where: { id: existingUsZone.id },
+        data: { status: "ACTIVE", charge: 15, freeAbove: 200, estimatedDays: "5-7 business days" },
+      });
+    } else {
+      await prisma.shippingZone.create({
+        data: {
+          providerId: standardProvider.id,
+          charge: 15,
+          freeAbove: 200,
+          estimatedDays: "5-7 business days",
+          status: "ACTIVE",
+          countries: { create: [{ countryId: usCountry.id }] },
+        },
+      });
+    }
   }
 
   // Default customer pricing tiers. Country/pricing mappings are intentionally empty until admins enable them.
