@@ -134,12 +134,14 @@ function RadioOption({
 export default function RegisterPage() {
   const router = useRouter();
   const { register } = useCustomerAuth();
-  const [returnTo] = useState(() => {
-    if (typeof window === "undefined") return "/";
+  const [returnTo, setReturnTo] = useState("/");
 
+  useEffect(() => {
     const next = new URLSearchParams(window.location.search).get("returnTo");
-    return next?.startsWith("/") ? next : "/";
-  });
+    if (next?.startsWith("/")) {
+      setReturnTo(next);
+    }
+  }, []);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 

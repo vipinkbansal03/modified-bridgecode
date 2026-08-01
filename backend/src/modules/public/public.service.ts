@@ -775,6 +775,7 @@ export async function publicSearch(
           : {}),
         category: {
           select: {
+            id: true,
             name: true,
             slug: true,
             description: true,
@@ -1026,7 +1027,7 @@ type PublicProductRecord = {
   shortDescription: string | null;
   informationImage?: string | null;
   informationDescription?: string | null;
-  category: CategoryTextSource & { slug: string };
+  category: CategoryTextSource & { id?: string; slug: string };
   media: Array<{ type: string; url: string; altText?: string | null }>;
   isFeatured: boolean;
   hasVariants: boolean;
@@ -1130,7 +1131,7 @@ type PublicProductDetailRecord = {
   informationImage?: string | null;
   informationDescription?: string | null;
   description?: string | null;
-  category: CategoryTextSource & { slug: string };
+  category: CategoryTextSource & { id?: string; slug: string };
   media: Array<{ type: string; url: string; altText?: string | null }>;
   packages: Array<{ id: string; title: string; slug: string; image: string | null; description: string | null; sortOrder: number }>;
   attributes: Array<{
@@ -1247,8 +1248,12 @@ async function toPublicProductDetail(
 
   const activeTaxRules = countryId
     ? await (prisma as any).taxRule.findMany({
-        where: { countries: { some: { id: countryId } }, status: "ACTIVE" },
-        include: { products: { select: { id: true } } },
+        where: { countries: { some: { countryId } }, status: "ACTIVE" },
+        include: {
+          products: { select: { id: true } },
+          categories: { select: { id: true } },
+          variants: { select: { id: true } },
+        },
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       })
     : [];
@@ -1256,8 +1261,26 @@ async function toPublicProductDetail(
   const productSpecificRules = activeTaxRules.filter((rule: any) =>
     rule.products.some((prod: any) => prod.id === p.id),
   );
-  const globalCountryRules = activeTaxRules.filter((r: any) => r.products.length === 0);
-  const activeRules = productSpecificRules.length > 0 ? productSpecificRules : globalCountryRules;
+
+  const categorySpecificRules = p.category?.id
+    ? activeTaxRules.filter((rule: any) =>
+        rule.categories.some((c: any) => c.id === p.category?.id),
+      )
+    : [];
+
+  const globalCountryRules = activeTaxRules.filter(
+    (r: any) =>
+      r.products.length === 0 &&
+      r.categories.length === 0 &&
+      r.variants.length === 0,
+  );
+
+  const activeRules =
+    productSpecificRules.length > 0
+      ? productSpecificRules
+      : categorySpecificRules.length > 0
+      ? categorySpecificRules
+      : globalCountryRules;
 
   let resolvedTaxMode = "EXCLUSIVE";
   if (activeRules.length > 0) {
@@ -1455,6 +1478,7 @@ async function toPublicProductDetail(
     informationDescription: p.informationDescription,
     description: text.description,
     category: {
+      id: p.category?.id ?? "",
       name: categoryText.name,
       slug: p.category?.slug ?? "",
     },

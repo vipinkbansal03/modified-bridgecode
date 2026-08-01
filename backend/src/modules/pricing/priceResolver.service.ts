@@ -207,6 +207,9 @@ async function findPromotionalDiscounts(
   if (type === "PROMOTIONAL" && !(await supportsPromotionalDiscountType())) return [];
 
   const now = new Date();
+  const startOfCurrentDay = new Date(now);
+  startOfCurrentDay.setUTCHours(0, 0, 0, 0);
+
   const scopeFilters: Prisma.DiscountWhereInput[] = [
     { products: { some: { productId: input.productId } } },
     { products: { none: {} }, collections: { none: {} }, categories: { none: {} } },
@@ -228,7 +231,7 @@ async function findPromotionalDiscounts(
       AND: [
         { OR: [{ countries: { some: { countryId: input.countryId } } }, { countries: { none: {} } }] },
         { OR: [{ startDate: null }, { startDate: { lte: now } }] },
-        { OR: [{ endDate: null }, { endDate: { gte: now } }] },
+        { OR: [{ endDate: null }, { endDate: { gte: startOfCurrentDay } }] },
       ],
     },
     include: {
@@ -526,18 +529,49 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
   // 3. Fetch tax rules from database
   const countryTaxRules = (await (prisma as unknown as { taxRule: { findMany: (args: unknown) => Promise<any[]> } }).taxRule.findMany({
     where: { countries: { some: { countryId: input.countryId } }, status: "ACTIVE" },
-    include: { products: { select: { id: true } } },
+    include: {
+      products: { select: { id: true } },
+      categories: { select: { id: true } },
+      variants: { select: { id: true } },
+    },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   })) as any[];
 
+  // Find rules matching specific variant first
+  const variantSpecificRules = input.variantId
+    ? countryTaxRules.filter((rule) =>
+        rule.variants.some((v: any) => v.id === input.variantId)
+      )
+    : [];
+
+  // Find rules matching specific product next
   const productSpecificRules = countryTaxRules.filter((rule) =>
     rule.products.some((p: any) => p.id === input.productId)
   );
 
+  // Find rules matching product categories next
+  const categorySpecificRules = product?.categoryId
+    ? countryTaxRules.filter((rule) =>
+        rule.categories.some((c: any) => c.id === product.categoryId)
+      )
+    : [];
+
+  // Find global country-wide rules (rules with no variants, products or categories)
+  const globalCountryRules = countryTaxRules.filter(
+    (rule) =>
+      rule.products.length === 0 &&
+      rule.categories.length === 0 &&
+      rule.variants.length === 0
+  );
+
   const activeTaxRules = (
-    productSpecificRules.length > 0
+    variantSpecificRules.length > 0
+      ? variantSpecificRules
+      : productSpecificRules.length > 0
       ? productSpecificRules
-      : countryTaxRules.filter((rule) => rule.products.length === 0)
+      : categorySpecificRules.length > 0
+      ? categorySpecificRules
+      : globalCountryRules
   ) as ActiveTaxRule[];
 
   let primaryTaxMode = "EXCLUSIVE";

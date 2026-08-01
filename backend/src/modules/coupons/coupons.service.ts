@@ -106,6 +106,7 @@ async function normalizeCouponInput(input: CouponInput, currentId?: string) {
 
   const startDate = requiredDate(input.startDate, "Start date");
   const endDate = requiredDate(input.endDate, "End date");
+  endDate.setUTCHours(23, 59, 59, 999);
   if (endDate < startDate) throw new AppError("End date must be after start date.", 400);
 
   const usageLimit = intOrNull(input.usageLimit, "Usage limit");
@@ -167,7 +168,9 @@ export function getEffectiveStatus(
     return "INACTIVE";
   }
   const start = new Date(startDate);
+  start.setUTCHours(0, 0, 0, 0);
   const end = new Date(endDate);
+  end.setUTCHours(23, 59, 59, 999);
   if (now < start) {
     return "SCHEDULED";
   }
@@ -205,15 +208,18 @@ export async function listCoupons(query: CouponListQuery) {
   }
 
   const now = new Date();
+  const startOfCurrentDay = new Date(now);
+  startOfCurrentDay.setUTCHours(0, 0, 0, 0);
+
   const where: Prisma.CouponWhereInput = {
     ...(status === "INACTIVE"
       ? { status: "INACTIVE" }
       : status === "ACTIVE"
-      ? { status: "ACTIVE", startDate: { lte: now }, endDate: { gte: now } }
+      ? { status: "ACTIVE", startDate: { lte: now }, endDate: { gte: startOfCurrentDay } }
       : status === "SCHEDULED"
       ? { status: "ACTIVE", startDate: { gt: now } }
       : status === "EXPIRED"
-      ? { status: "ACTIVE", endDate: { lt: now } }
+      ? { status: "ACTIVE", endDate: { lt: startOfCurrentDay } }
       : {}),
     ...(search
       ? {

@@ -11,6 +11,7 @@ export const useAdminProducts = (params?: {
   status?: string;
   sortBy?: string;
   sortDir?: string;
+  warehouseId?: string;
 }) =>
   useQuery({
     queryKey: ["admin-products", params],
@@ -859,6 +860,7 @@ export const useAdminInventory = (params?: {
   status?: string;
   sortBy?: string;
   sortDir?: string;
+  warehouseId?: string;
 }) =>
   useQuery({
     queryKey: ["admin-inventory", params],

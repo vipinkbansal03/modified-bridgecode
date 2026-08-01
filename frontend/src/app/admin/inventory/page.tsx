@@ -135,6 +135,7 @@ export default function InventoryPage() {
   const [sortBy, setSortBy] = useState("updatedAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [warehouseFilterId, setWarehouseFilterId] = useState("");
   const [visibleColumns, setVisibleColumns] = useState<Record<InventoryColumnKey, boolean>>(DEFAULT_COLUMNS);
   const [columnsReady, setColumnsReady] = useState(false);
   const [historyRow, setHistoryRow] = useState<InventoryRow | null>(null);
@@ -175,7 +176,7 @@ export default function InventoryPage() {
 
   useEffect(() => {
     setSelectedIds([]);
-  }, [page, search, status, sortBy, sortDir]);
+  }, [page, search, status, sortBy, sortDir, warehouseFilterId]);
 
   const inventoryQuery = useAdminInventory({
     page,
@@ -184,6 +185,7 @@ export default function InventoryPage() {
     status: status || undefined,
     sortBy,
     sortDir,
+    warehouseId: warehouseFilterId || undefined,
   });
   const { data, isLoading, refetch } = inventoryQuery;
   const dashboard = useAdminInventoryDashboard();
@@ -403,6 +405,21 @@ export default function InventoryPage() {
             <option value="LOW_STOCK">Low Stock</option>
             <option value="OUT_OF_STOCK">Out of Stock</option>
             <option value="BACKORDER">Backorder</option>
+          </select>
+          <select
+            value={warehouseFilterId}
+            onChange={(event) => {
+              setWarehouseFilterId(event.target.value);
+              setPage(1);
+            }}
+            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none"
+          >
+            <option value="">All Warehouses</option>
+            {warehouses.map((w: any) => (
+              <option key={w.id} value={w.id}>
+                {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
+              </option>
+            ))}
           </select>
           <select
             value={sortBy}
@@ -697,7 +714,7 @@ export default function InventoryPage() {
                       </div>
                       <div className="min-w-0 px-2">
                         <div className="truncate text-[13.5px] font-medium text-[#1A1A1A]">{row.product.title}</div>
-                        <div className="truncate text-[11.5px] text-[#9A9A9A]">{row.variant?.title || row.product.brand || "Variant stock"}</div>
+                        <div className="truncate text-[11.5px] text-[#9A9A9A]">{row.variant?.title || (row.variantId ? row.product.brand : "Product Stock")}</div>
                       </div>
                       <div className="space-y-1 px-2">
                         <div className="truncate text-[13px] text-[#555]">{row.variant?.sku || row.product.sku || "—"}</div>

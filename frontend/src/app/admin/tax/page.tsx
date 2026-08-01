@@ -32,6 +32,8 @@ import {
   usePreviewTaxImport,
   useUpdateTaxRule,
   useAdminProducts,
+  useAdminCategories,
+  useAdminProduct,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
@@ -47,6 +49,8 @@ type TaxRule = {
   createdAt: string;
   updatedAt: string;
   products?: Array<{ id: string; title: string }>;
+  categories?: Array<{ id: string; name: string }>;
+  variants?: Array<{ id: string; title: string; sku?: string }>;
 };
 
 type TaxDashboard = {
@@ -85,6 +89,8 @@ type TaxFormState = {
   status: TaxRule["status"];
   sortOrder: string;
   productIds: string[];
+  categoryIds: string[];
+  variantIds: string[];
 };
 
 type PreviewState = {
@@ -111,6 +117,8 @@ const emptyForm: TaxFormState = {
   status: "ACTIVE",
   sortOrder: "0",
   productIds: [],
+  categoryIds: [],
+  variantIds: [],
 };
 
 const emptyPreview: PreviewState = {
@@ -122,6 +130,7 @@ const visibleColumnsDefault = {
   name: true,
   type: true,
   country: true,
+  applicability: true,
   percentage: true,
   status: true,
   sortOrder: true,
@@ -137,6 +146,56 @@ function formatMoney(value: number | string | null | undefined, currencySymbol?:
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString();
+}
+
+function ProductVariantSelector({
+  productId,
+  selectedVariantIds,
+  onChange,
+}: {
+  productId: string;
+  selectedVariantIds: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const { data: product, isLoading } = useAdminProduct(productId);
+
+  if (isLoading) {
+    return <div className="pl-6 text-[10.5px] text-[#9A9A9A] py-1">Loading variants...</div>;
+  }
+
+  const variants = product?.variants ?? [];
+  if (variants.length === 0) return null;
+
+  return (
+    <div className="pl-6 pt-1 pb-2 space-y-1">
+      <div className="text-[10.5px] font-medium text-[#6B6B6B]">Select specific variants (optional):</div>
+      <div className="flex flex-wrap gap-1.5">
+        {variants.map((v: any) => {
+          const isSelected = selectedVariantIds.includes(v.id);
+          return (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => {
+                if (isSelected) {
+                  onChange(selectedVariantIds.filter((id) => id !== v.id));
+                } else {
+                  onChange([...selectedVariantIds, v.id]);
+                }
+              }}
+              className={`rounded border px-2 py-0.5 text-[10px] font-medium transition-all ${
+                isSelected
+                  ? "border-[#E31E24] bg-[#FFF5F5] text-[#B5151B]"
+                  : "border-[#E6E6E6] bg-white text-[#6B6B6B] hover:border-[#9A9A9A]"
+              }`}
+            >
+              {v.title} {v.sku ? `(${v.sku})` : ""}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function AdminTaxPage() {
@@ -169,6 +228,7 @@ export default function AdminTaxPage() {
 
   const { data: dashboardData, isLoading: dashboardLoading } = useAdminTaxDashboard();
   const { data: countries = [] } = useAdminCountries();
+  const { data: categories = [] } = useAdminCategories();
   const { data: productsData } = useAdminProducts({ limit: 1000 });
   const products = productsData?.data ?? [];
   const filteredProducts = products.filter((p: any) =>
@@ -237,7 +297,7 @@ export default function AdminTaxPage() {
         render: (row) => (
           <div className="min-w-0">
             <div className="truncate font-medium text-[#1A1A1A]">{row.name}</div>
-            <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">{row.countries?.map(c => c.code).join(", ") || "—"}</div>
+            <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">{row.countries?.map(c => c.code).join(", ") || "All countries"}</div>
           </div>
         ),
       },
@@ -257,10 +317,65 @@ export default function AdminTaxPage() {
                 ))}
               </div>
             ) : (
-              <span className="text-[#9A9A9A]">—</span>
+              <span className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                All countries
+              </span>
             )}
           </div>
         ),
+      },
+      {
+        key: "applicability" as any,
+        label: "Applicability",
+        width: "260px",
+        render: (row) => {
+          const hasCategories = row.categories && row.categories.length > 0;
+          const hasProducts = row.products && row.products.length > 0;
+          const hasVariants = row.variants && row.variants.length > 0;
+
+          if (!hasCategories && !hasProducts && !hasVariants) {
+            return (
+              <span className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                🌍 Global (All Products)
+              </span>
+            );
+          }
+
+          return (
+            <div className="flex flex-col gap-1 py-0.5">
+              {hasCategories && (
+                <div className="flex flex-wrap gap-1 items-center">
+                  <span className="text-[10px] uppercase font-bold text-[#6B7280]">Categories:</span>
+                  {row.categories?.map((cat) => (
+                    <span key={cat.id} className="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                      {cat.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {hasProducts && (
+                <div className="flex flex-wrap gap-1 items-center">
+                  <span className="text-[10px] uppercase font-bold text-[#6B7280]">Products:</span>
+                  {row.products?.map((prod) => (
+                    <span key={prod.id} className="inline-flex items-center rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700">
+                      {prod.title}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {hasVariants && (
+                <div className="flex flex-wrap gap-1 items-center">
+                  <span className="text-[10px] uppercase font-bold text-[#6B7280]">Variants:</span>
+                  {row.variants?.map((v) => (
+                    <span key={v.id} className="inline-flex items-center rounded bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
+                      {v.title}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }
       },
       {
         key: "percentage",
@@ -324,6 +439,8 @@ export default function AdminTaxPage() {
       status: row.status,
       sortOrder: String(row.sortOrder ?? 0),
       productIds: (row.products ?? []).map((p) => p.id),
+      categoryIds: (row as any).categoryIds ?? [],
+      variantIds: (row as any).variantIds ?? [],
     });
     setProductSearch("");
     setShowForm(true);
@@ -355,6 +472,8 @@ export default function AdminTaxPage() {
         status: form.status,
         sortOrder: form.sortOrder,
         productIds: form.productIds,
+        categoryIds: form.categoryIds,
+        variantIds: form.variantIds,
       };
 
       if (form.id) {
@@ -950,6 +1069,50 @@ export default function AdminTaxPage() {
               />
             </div>
 
+            {/* Applicable Categories Section */}
+            <div className="pt-2 space-y-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#374151]">
+                Applicable Categories (Optional)
+              </label>
+              <div className="border border-[#E5E7EB] rounded-xl p-3.5 bg-[#F9FAFB] space-y-3">
+                {categories.length === 0 ? (
+                  <p className="text-xs text-[#9CA3AF] text-center py-2">No categories configured</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {categories.map((cat: any) => {
+                      const isChecked = form.categoryIds?.includes(cat.id);
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => {
+                            setForm((current) => {
+                              const cIds = current.categoryIds ?? [];
+                              if (isChecked) {
+                                return { ...current, categoryIds: cIds.filter((id) => id !== cat.id) };
+                              } else {
+                                return { ...current, categoryIds: [...cIds, cat.id] };
+                              }
+                            });
+                          }}
+                          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
+                            isChecked
+                              ? "border-[#E31E24] bg-[#FFF5F5] text-[#B5151B] font-semibold"
+                              : "border-[#E5E7EB] bg-white text-[#4A4A4A] hover:border-[#9A9A9A]"
+                          }`}
+                        >
+                          {cat.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <p className="text-[11.5px] text-[#6B7280] leading-normal">
+                If categories are selected, this tax rule will apply to all products in those categories.
+              </p>
+            </div>
+
             {/* Applicable Products Section */}
             <div className="pt-2 space-y-2">
               <label className="block text-xs font-bold uppercase tracking-wider text-[#374151]">
@@ -967,39 +1130,65 @@ export default function AdminTaxPage() {
                   />
                 </div>
 
-                <div className="max-h-44 overflow-y-auto pr-1">
+                <div className="max-h-60 overflow-y-auto space-y-2.5 pr-1">
                   {filteredProducts.length === 0 ? (
                     <p className="text-xs text-[#9CA3AF] text-center py-3">No products found</p>
                   ) : (
-                    <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
+                    <div className="flex flex-col gap-2">
                       {filteredProducts.map((p: any) => {
                         const isChecked = form.productIds?.includes(p.id);
                         return (
-                          <label
+                          <div
                             key={p.id}
-                            className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                            className={`rounded-xl border transition-all ${
                               isChecked
-                                ? "border-[#E31E24]/40 bg-[#FFF5F5] font-semibold text-[#111827]"
-                                : "border-[#E5E7EB] bg-white hover:bg-[#F3F4F6] text-[#374151]"
+                                ? "border-[#E31E24]/30 bg-[#FFF5F5]/30 shadow-xs"
+                                : "border-[#E5E7EB] bg-white hover:bg-[#FAFAFA]"
                             }`}
                           >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => {
-                                setForm((current) => {
-                                  const pIds = current.productIds ?? [];
-                                  if (isChecked) {
-                                    return { ...current, productIds: pIds.filter((id) => id !== p.id) };
-                                  } else {
-                                    return { ...current, productIds: [...pIds, p.id] };
-                                  }
-                                });
-                              }}
-                              className="h-4 w-4 rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24]"
-                            />
-                            <span className="truncate">{p.title}</span>
-                          </label>
+                            <label className="flex items-center gap-3 p-3 text-xs cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  setForm((current) => {
+                                    const pIds = current.productIds ?? [];
+                                    if (isChecked) {
+                                      return {
+                                        ...current,
+                                        productIds: pIds.filter((id) => id !== p.id),
+                                      };
+                                    } else {
+                                      return {
+                                        ...current,
+                                        productIds: [...pIds, p.id],
+                                      };
+                                    }
+                                  });
+                                }}
+                                className="h-4 w-4 rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24]"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <span className="font-semibold text-[#111827] block truncate">{p.title}</span>
+                                {p.productCode && <span className="text-[10px] text-[#6B7280]">{p.productCode}</span>}
+                              </div>
+                            </label>
+
+                            {isChecked && (
+                              <div className="border-t border-[#E5E7EB] bg-white rounded-b-xl">
+                                <ProductVariantSelector
+                                  productId={p.id}
+                                  selectedVariantIds={form.variantIds ?? []}
+                                  onChange={(vIds) => {
+                                    setForm((current) => ({
+                                      ...current,
+                                      variantIds: vIds,
+                                    }));
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
@@ -1007,7 +1196,7 @@ export default function AdminTaxPage() {
                 </div>
               </div>
               <p className="text-[11.5px] text-[#6B7280] leading-normal">
-                If no products are selected, this tax rule will apply globally to all products in the selected country.
+                If no products/categories/variants are selected, this tax rule will apply globally to all products in the selected country.
               </p>
             </div>
           </div>

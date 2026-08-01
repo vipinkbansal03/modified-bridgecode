@@ -61,6 +61,7 @@ interface BulkVariantImportWizardProps {
   open: boolean;
   onClose: () => void;
   productId: string;
+  productName?: string;
   attributeNames?: string[];
   attributeMappings?: any[];
   onSuccess: () => void;
@@ -133,6 +134,7 @@ export function BulkVariantImportWizard({
   open,
   onClose,
   productId,
+  productName = "",
   attributeNames = [],
   attributeMappings = [],
   onSuccess,
@@ -247,20 +249,38 @@ export function BulkVariantImportWizard({
 
   /* ── Download Template ── */
   const downloadTemplate = useCallback(() => {
-    const baseHeaders = ["SKU", "Stock", "Low Stock", "Price", "MRP", "Status"];
+    const baseHeaders = ["Product", "SKU", "Stock", "Low Stock", "Price", "MRP", "Status"];
     const headers = [...baseHeaders, ...attributeNames];
-    const baseSample = ["SAMPLE-SKU-001", "100", "10", "29.99", "39.99", "ACTIVE"];
-    const attrSamples = attributeNames.map((name) => `Enter ${name}`);
+    
+    // Attempt to map real allowed attribute values as sample template data so the CSV is valid on import
+    const attrSamples = attributeNames.map((name) => {
+      const mapping = attributeMappings?.find(
+        (m: any) => m.attribute?.name.toLowerCase() === name.toLowerCase()
+      );
+      const firstAllowed = mapping?.allowedValues?.[0]?.attributeValue?.value;
+      return firstAllowed || `Enter ${name}`;
+    });
+
+    const baseSample = [
+      productName || "Product Name",
+      "SAMPLE-SKU-001",
+      "100",
+      "10",
+      "29.99",
+      "39.99",
+      "ACTIVE"
+    ];
     const sampleRow = [...baseSample, ...attrSamples];
     const csvContent = [headers.join(","), sampleRow.join(",")].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "variant_import_template.csv";
+    const sanitizedProdName = productName ? productName.replace(/[^a-zA-Z0-9]/g, "_") : "variants";
+    a.download = `import_template_for_${sanitizedProdName}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [attributeNames]);
+  }, [attributeNames, attributeMappings, productName]);
 
   /* ── Upload & Preview ── */
   const uploadAndPreview = useCallback(async () => {
@@ -292,8 +312,9 @@ export function BulkVariantImportWizard({
   /* ── Inline edit handler ── */
   const updateRow = useCallback(
     (rowNumber: number, field: string, value: string) => {
-      setRows((prev) =>
-        prev.map((r) => {
+      setRows((prev) => {
+        let isRowNowValid = false;
+        const next = prev.map((r) => {
           if (r.rowNumber !== rowNumber) return r;
           const updated = { ...r };
 
@@ -342,6 +363,7 @@ export function BulkVariantImportWizard({
             updated.errors = cleanErrors;
             updated.isValid = cleanErrors.length === 0;
 
+            isRowNowValid = updated.isValid;
             return updated;
           }
 
@@ -379,9 +401,24 @@ export function BulkVariantImportWizard({
           );
           updated.errors = [...errors, ...attrErrors];
           updated.isValid = updated.errors.length === 0;
+
+          isRowNowValid = updated.isValid;
           return updated;
-        })
-      );
+        });
+
+        // Update selected IDs set based on final validation status of this row
+        setSelectedIds((prevSelected) => {
+          const nextSelected = new Set(prevSelected);
+          if (isRowNowValid) {
+            nextSelected.add(rowNumber);
+          } else {
+            nextSelected.delete(rowNumber);
+          }
+          return nextSelected;
+        });
+
+        return next;
+      });
     },
     [attributeMappings, attributeNames]
   );
@@ -484,7 +521,7 @@ export function BulkVariantImportWizard({
             <div className="shrink-0 border-b border-[#E6E6E6] px-6 py-4 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-bold text-[#1A1A1A]">
-                  Bulk Import Variants
+                  Bulk Import Variants {productName ? `for "${productName}"` : ""}
                 </h3>
                 <p className="text-[12px] text-[#6B6B6B] mt-0.5">
                   Import variants from a CSV or Excel spreadsheet
@@ -525,6 +562,7 @@ export function BulkVariantImportWizard({
                       fileInputRef={fileInputRef}
                       accepted={ACCEPTED}
                       attributeNames={attributeNames}
+                      productName={productName}
                       onDrop={handleDrop}
                       onDragOver={handleDragOver}
                       onDragLeave={handleDragLeave}
@@ -555,6 +593,7 @@ export function BulkVariantImportWizard({
                       filter={filter}
                       editingCell={editingCell}
                       selectedValidCount={selectedValidCount}
+                      productName={productName}
                       onFilterChange={setFilter}
                       onToggleRow={toggleRow}
                       onSelectAllValid={selectAllValid}
@@ -609,6 +648,7 @@ interface UploadStepProps {
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   accepted: string;
   attributeNames: string[];
+  productName?: string;
   onDrop: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
@@ -628,6 +668,7 @@ function UploadStep({
   fileInputRef,
   accepted,
   attributeNames,
+  productName = "",
   onDrop,
   onDragOver,
   onDragLeave,
@@ -733,7 +774,7 @@ function UploadStep({
               Need a template?
             </p>
             <p className="text-[11px] text-[#6B6B6B] mt-0.5">
-              Download a sample CSV with the required columns
+              Download a sample CSV template for "{productName || 'this product'}" with the required columns
             </p>
           </div>
           <button
@@ -818,6 +859,7 @@ interface PreviewStepProps {
   filter: "all" | "valid" | "invalid";
   editingCell: { row: number; field: string } | null;
   selectedValidCount: number;
+  productName?: string;
   onFilterChange: (f: "all" | "valid" | "invalid") => void;
   onToggleRow: (rowNumber: number) => void;
   onSelectAllValid: () => void;
@@ -838,6 +880,7 @@ function PreviewStep({
   filter,
   editingCell,
   selectedValidCount,
+  productName = "",
   onFilterChange,
   onToggleRow,
   onSelectAllValid,
@@ -856,17 +899,24 @@ function PreviewStep({
     <>
       <div className="flex-1 overflow-hidden flex flex-col">
         {/* Summary bar */}
-        <div className="shrink-0 px-6 py-4 flex flex-wrap items-center gap-4 border-b border-[#F3F4F6]">
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-[#F3F4F6] px-3 py-1 text-[12px] font-semibold text-[#4B5563]">
-              {preview?.totalRows ?? 0} Total
-            </span>
-            <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[12px] font-semibold text-emerald-700">
-              {validCount} Valid
-            </span>
-            <span className="rounded-full bg-red-50 border border-red-200 px-3 py-1 text-[12px] font-semibold text-red-600">
-              {invalidCount} Invalid
-            </span>
+        <div className="shrink-0 px-6 py-4 flex flex-wrap items-center justify-between border-b border-[#F3F4F6]">
+          <div className="flex items-center gap-4">
+            {productName && (
+              <span className="text-[13px] font-semibold text-[#1A1A1A]">
+                Product: <span className="font-bold text-[#E31E24]">{productName}</span>
+              </span>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-[#F3F4F6] px-3 py-1 text-[12px] font-semibold text-[#4B5563]">
+                {preview?.totalRows ?? 0} Total
+              </span>
+              <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[12px] font-semibold text-emerald-700">
+                {validCount} Valid
+              </span>
+              <span className="rounded-full bg-red-50 border border-red-200 px-3 py-1 text-[12px] font-semibold text-red-600">
+                {invalidCount} Invalid
+              </span>
+            </div>
           </div>
 
           <div className="flex-1" />

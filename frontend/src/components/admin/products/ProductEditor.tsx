@@ -616,6 +616,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [variantTabSearchQuery, setVariantTabSearchQuery] = useState("");
   const [variantTabStatusFilter, setVariantTabStatusFilter] = useState("");
   const [variantTabStockFilter, setVariantTabStockFilter] = useState("");
+  const [variantTabWarehouseFilter, setVariantTabWarehouseFilter] = useState("");
   const [filterSku, setFilterSku] = useState("");
   const [filterVariantName, setFilterVariantName] = useState("");
   const [filterAttributes, setFilterAttributes] = useState("");
@@ -693,6 +694,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [tierRuleDraft, setTierRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
   const [moqRuleDraft, setMoqRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
   const [countryPriceModalOpen, setCountryPriceModalOpen] = useState(false);
+  const [warehouseAssignModalOpen, setWarehouseAssignModalOpen] = useState(false);
+  const [warehouseAssignSelections, setWarehouseAssignSelections] = useState<Record<string, boolean>>({});
+  const [warehouseAssignStocks, setWarehouseAssignStocks] = useState<Record<string, string>>({});
   const [countryPriceMRP, setCountryPriceMRP] = useState("");
   const [countryPriceSellingPrice, setCountryPriceSellingPrice] = useState("");
   const [countryPriceDealerPrice, setCountryPriceDealerPrice] = useState("");
@@ -1284,6 +1288,68 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   };
 
+  const handleWarehouseAssignSubmit = async () => {
+    const selectedWarehouseIds = Object.keys(warehouseAssignSelections).filter(id => warehouseAssignSelections[id]);
+    if (!selectedWarehouseIds.length) {
+      showToast("Please select at least one warehouse.", "error");
+      return;
+    }
+
+    // Validate stocks
+    for (const wId of selectedWarehouseIds) {
+      const stockVal = warehouseAssignStocks[wId]?.trim();
+      if (stockVal && (isNaN(parseInt(stockVal)) || parseInt(stockVal) < 0)) {
+        showToast("Please enter a valid stock level.", "error");
+        return;
+      }
+    }
+
+    setBulkSaving(true);
+    try {
+      const uniqueVariantIds = Array.from(
+        new Set(
+          paginatedVariantInventories
+            .filter((inv: any) => selectedInvIds.includes(inv.id))
+            .map((inv: any) => inv.variantId)
+        )
+      );
+
+      // Perform updates
+      for (const wId of selectedWarehouseIds) {
+        const stockStr = warehouseAssignStocks[wId]?.trim();
+        const stockVal = stockStr ? parseInt(stockStr) : null;
+
+        await Promise.all(
+          uniqueVariantIds.map((vId) => {
+            let finalStock = 0;
+            if (stockVal !== null) {
+              finalStock = stockVal;
+            } else {
+              const variant = (product?.variants ?? []).find((v: any) => v.id === vId);
+              const baseInv = getBaseInventory(variant?.inventories) as any;
+              finalStock = baseInv ? (baseInv.stock ?? 0) : 0;
+            }
+            return adminApi.post("/inventory/upsert", {
+              variantId: vId,
+              warehouseId: wId,
+              stock: finalStock,
+            });
+          })
+        );
+      }
+
+      showToast(`Successfully assigned selected variants to warehouses.`, "success");
+      setWarehouseAssignModalOpen(false);
+      setSelectedInvIds([]);
+      setInvBulkActionType("Bulk Action");
+      await refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to assign warehouses."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   const handleInvBulkApplyAction = async () => {
     if (!selectedInvIds.length) {
       showToast("Please select at least one inventory row.", "error");
@@ -1322,43 +1388,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         );
         showToast(`Successfully deleted ${assignmentsToDelete.length} warehouse assignment(s).`, "success");
       } else if (invBulkActionType === "Assign to new warehouse") {
-        if (!invBulkCountryId) { // We are reusing this state variable for warehouseId
-          showToast("Please select a warehouse.", "error");
-          setBulkSaving(false);
-          return;
-        }
-        const hasExplicitStock = invBulkActionValue.trim() !== "";
-        const stockVal = hasExplicitStock ? parseInt(invBulkActionValue) : null;
-        if (hasExplicitStock && (stockVal === null || isNaN(stockVal) || stockVal < 0)) {
-          showToast("Please enter a valid initial stock.", "error");
-          setBulkSaving(false);
-          return;
-        }
-        const uniqueVariantIds = Array.from(
-          new Set(
-            paginatedVariantInventories
-              .filter((inv: any) => selectedInvIds.includes(inv.id))
-              .map((inv: any) => inv.variantId)
-          )
-        );
-        await Promise.all(
-          uniqueVariantIds.map((vId) => {
-            let finalStock = 0;
-            if (stockVal !== null) {
-              finalStock = stockVal;
-            } else {
-              const variant = (product?.variants ?? []).find((v: any) => v.id === vId);
-              const baseInv = getBaseInventory(variant?.inventories) as any;
-              finalStock = baseInv ? (baseInv.stock ?? 0) : 0;
-            }
-            return adminApi.post("/inventory/upsert", {
-              variantId: vId,
-              warehouseId: invBulkCountryId,
-              stock: finalStock,
-            });
-          })
-        );
-        showToast(`Successfully assigned ${uniqueVariantIds.length} variant(s) to warehouse.`, "success");
+        setWarehouseAssignSelections({});
+        setWarehouseAssignStocks({});
+        setWarehouseAssignModalOpen(true);
+        setBulkSaving(false);
+        return;
       } else {
         const payload: any = {};
         if (invBulkActionType === "Update stock") {
@@ -1830,7 +1864,28 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     invSortDirection,
   ]);
 
-  const totalInvItems = filteredVariantInventories.length;
+  const variantGroups = useMemo(() => {
+    const groups: { variantId: string; variantTitle: string; variantSku: string; inventories: any[] }[] = [];
+    const groupMap = new Map<string, typeof groups[number]>();
+
+    filteredVariantInventories.forEach((inv) => {
+      let group = groupMap.get(inv.variantId);
+      if (!group) {
+        group = {
+          variantId: inv.variantId,
+          variantTitle: inv.variantTitle,
+          variantSku: inv.variantSku,
+          inventories: [],
+        };
+        groupMap.set(inv.variantId, group);
+        groups.push(group);
+      }
+      group.inventories.push(inv);
+    });
+    return groups;
+  }, [filteredVariantInventories]);
+
+  const totalInvItems = variantGroups.length;
   const totalInvPages = Math.ceil(totalInvItems / invPageSize) || 1;
 
   useEffect(() => {
@@ -1839,16 +1894,32 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   }, [totalInvPages, invCurrentPage]);
 
-  const paginatedVariantInventories = useMemo(() => {
+  const paginatedVariantGroups = useMemo(() => {
     const start = (invCurrentPage - 1) * invPageSize;
     const end = start + invPageSize;
-    return filteredVariantInventories.slice(start, end);
-  }, [filteredVariantInventories, invCurrentPage, invPageSize]);
+    return variantGroups.slice(start, end);
+  }, [variantGroups, invCurrentPage, invPageSize]);
+
+  const paginatedVariantInventories = useMemo(() => {
+    return paginatedVariantGroups.flatMap((group) => group.inventories);
+  }, [paginatedVariantGroups]);
   const filteredVariantRows = useMemo(() => {
+    const getDisplayStock = (v: any) => {
+      if (variantTabWarehouseFilter) {
+        const inv = v.inventories?.find((i: any) => i.warehouseId === variantTabWarehouseFilter) as any;
+        return inv ? inv.stock ?? 0 : 0;
+      }
+      return (getBaseInventory(v.inventories) as any)?.stock ?? 0;
+    };
+
     let rows = variantRows.filter((variant) => {
       if (variantTabStatusFilter && variant.status !== variantTabStatusFilter) return false;
+      if (variantTabWarehouseFilter) {
+        const hasAssignment = variant.inventories?.some((inv: any) => inv.warehouseId === variantTabWarehouseFilter);
+        if (!hasAssignment) return false;
+      }
       if (variantTabStockFilter) {
-        const stock = getBaseInventory(variant.inventories)?.stock ?? 0;
+        const stock = getDisplayStock(variant);
         if (variantTabStockFilter === "IN_STOCK" && stock <= 0) return false;
         if (variantTabStockFilter === "OUT_OF_STOCK" && stock > 0) return false;
       }
@@ -1880,7 +1951,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       }
       if (filterStock.trim()) {
         const q = filterStock.trim();
-        const stock = getBaseInventory(variant.inventories)?.stock ?? 0;
+        const stock = getDisplayStock(variant);
         if (q.startsWith(">")) {
           const num = parseInt(q.slice(1), 10);
           if (isNaN(num) || stock <= num) return false;
@@ -1922,8 +1993,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           valA = a.title || "";
           valB = b.title || "";
         } else if (sortField === "stock") {
-          valA = getBaseInventory(a.inventories)?.stock ?? 0;
-          valB = getBaseInventory(b.inventories)?.stock ?? 0;
+          valA = getDisplayStock(a);
+          valB = getDisplayStock(b);
         } else if (sortField === "price") {
           valA = getVariantPriceForCountry(a)?.sellingPrice ?? getVariantPriceForCountry(a)?.mrp ?? 0;
           valB = getVariantPriceForCountry(b)?.sellingPrice ?? getVariantPriceForCountry(b)?.mrp ?? 0;
@@ -1944,6 +2015,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     variantRows,
     variantTabStatusFilter,
     variantTabStockFilter,
+    variantTabWarehouseFilter,
     variantTabSearchQuery,
     filterSku,
     filterVariantName,
@@ -2849,7 +2921,17 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       : attributeCatalog.map((attribute) => attribute.id);
     setGeneratePackageIds(packageRows.map((pkg) => pkg.id));
     setGenerateAttributeIds(seedAttributeIds);
-    setGenerateSelectionMap({});
+    
+    // Auto-select all available values for each attribute by default
+    const initialSelections: Record<string, string[]> = {};
+    for (const attributeId of seedAttributeIds) {
+      const attribute = variantGenerationCatalog.find((item) => item.id === attributeId);
+      if (attribute) {
+        initialSelections[attributeId] = getAttributeValues(attribute).map((v) => v.id);
+      }
+    }
+    setGenerateSelectionMap(initialSelections);
+
     setGenerateModeMap(
       Object.fromEntries(seedAttributeIds.map((attributeId) => [attributeId, "all"])) as GenerateModeMap,
     );
@@ -3175,14 +3257,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     const selectedAttributes = variantGenerationCatalog
       .filter((attribute) => generateAttributeIds.includes(attribute.id))
       .map((attribute) => {
-        const mode = generateModeMap[attribute.id] ?? "all";
-        if (mode === "skip") return null;
-        if (mode === "all") {
-          return {
-            attributeId: attribute.id,
-            attributeValueIds: getAttributeValues(attribute).map((value) => value.id),
-          };
-        }
         const selectedIds = generateSelectionMap[attribute.id] ?? [];
         if (!selectedIds.length) return null;
         return {
@@ -3192,38 +3266,20 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       })
       .filter(Boolean) as { attributeId: string; attributeValueIds: string[] }[];
 
-    if (!selectedAttributes.length) {
-      const skippedAttributes = variantGenerationCatalog.filter(
-        (attribute) => generateAttributeIds.includes(attribute.id) && (generateModeMap[attribute.id] ?? "all") === "skip",
-      );
-      if (skippedAttributes.length > 0) {
-        showToast(
-          `${skippedAttributes.map((attribute) => attribute.name).join(", ")} is set to Skip Attribute. Switch to Use All Values or remove it.`,
-          "error",
-        );
-        return;
-      }
-
-      const hasAddedAttributes = generateAttributeIds.length > 0;
-      showToast(
-        hasAddedAttributes
-          ? "Choose values for each attribute, or switch an attribute to Use All Values."
-          : "Add at least one attribute before generating variants.",
-        "error",
-      );
+    if (!generateAttributeIds.length) {
+      showToast("Add at least one attribute before generating variants.", "error");
       return;
     }
 
-    const specificMissing = variantGenerationCatalog
+    const missingSelections = variantGenerationCatalog
       .filter((attribute) => generateAttributeIds.includes(attribute.id))
-      .some((attribute) => {
-      const mode = generateModeMap[attribute.id] ?? "all";
-      return mode === "specific" && !(generateSelectionMap[attribute.id] ?? []).length;
-    });
-    if (specificMissing) {
-      showToast("Choose specific values for every attribute set to Specific Values.", "error");
+      .some((attribute) => !(generateSelectionMap[attribute.id] ?? []).length);
+
+    if (missingSelections) {
+      showToast("Please select at least one value for each attribute, or remove the attribute.", "error");
       return;
     }
+
     setGeneratingVariants(true);
     try {
       const payload: Record<string, unknown> = {
@@ -3359,6 +3415,22 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
   const clearManualVariantValues = (attributeId: string) => {
     setManualVariantSelectionMap((current) => ({
+      ...current,
+      [attributeId]: [],
+    }));
+  };
+
+  const selectAllGenerateValues = (attributeId: string) => {
+    const attribute = variantGenerationCatalog.find((item) => item.id === attributeId);
+    if (!attribute) return;
+    setGenerateSelectionMap((current) => ({
+      ...current,
+      [attributeId]: getAttributeValues(attribute).map((value) => value.id),
+    }));
+  };
+
+  const clearGenerateValues = (attributeId: string) => {
+    setGenerateSelectionMap((current) => ({
       ...current,
       [attributeId]: [],
     }));
@@ -3967,6 +4039,18 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   <option value="IN_STOCK">In Stock</option>
                   <option value="OUT_OF_STOCK">Out of Stock</option>
                 </select>
+                <select
+                  value={variantTabWarehouseFilter}
+                  onChange={(e) => setVariantTabWarehouseFilter(e.target.value)}
+                  className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none"
+                >
+                  <option value="">All Warehouses</option>
+                  {(warehouses.data ?? warehouses).map((w: any) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="mb-4 flex items-center justify-between gap-3">
@@ -4452,7 +4536,12 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       </tr>
                     ) : (
                       paginatedVariantRows.map((variant) => {
-                        const baseStock = getBaseInventory(variant.inventories)?.stock ?? "—";
+                        const warehouseInv = variantTabWarehouseFilter
+                          ? variant.inventories?.find((inv: any) => inv.warehouseId === variantTabWarehouseFilter)
+                          : null;
+                        const baseStock = variantTabWarehouseFilter
+                          ? (warehouseInv ? warehouseInv.stock ?? 0 : "—")
+                          : (getBaseInventory(variant.inventories)?.stock ?? "—");
                         const priceObj = getVariantPriceForCountry(variant);
                         const formattedPrice = priceObj
                           ? `${priceObj.currency?.symbol ?? "₹"}${priceObj.sellingPrice ?? priceObj.mrp ?? "0.00"}`
@@ -5459,31 +5548,32 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    {invBulkActionType === "Assign to new warehouse" && (
-                      <select
-                        value={invBulkCountryId}
-                        onChange={(e) => setInvBulkCountryId(e.target.value)}
-                        className="h-8.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[12.5px] outline-none focus:border-[#E31E24]"
-                      >
-                        <option value="">Select warehouse...</option>
-                        {(warehouses.data ?? warehouses).map((w: any) => (
-                          <option key={w.id} value={w.id}>
-                            {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
-                          </option>
-                        ))}
-                      </select>
+                    {!["Bulk Action", "Delete selected assignments", "Assign to new warehouse"].includes(invBulkActionType) && (
+                      <input
+                        type="number"
+                        placeholder="Value"
+                        value={invBulkActionValue}
+                        onChange={(e) => setInvBulkActionValue(e.target.value)}
+                        disabled={bulkSaving}
+                        className="h-8.5 rounded-md border border-[#E6E6E6] px-3 text-[12.5px] outline-none disabled:bg-[#FAFAFA]"
+                      />
                     )}
-                    <input
-                      type="number"
-                      placeholder="Initial Stock"
-                      value={invBulkActionValue}
-                      onChange={(e) => setInvBulkActionValue(e.target.value)}
-                      disabled={bulkSaving || ["Bulk Action", "Delete selected assignments"].includes(invBulkActionType)}
-                      className="h-8.5 rounded-md border border-[#E6E6E6] px-3 text-[12.5px] outline-none disabled:bg-[#FAFAFA]"
-                    />
-                    <select
+                     <select
                       value={invBulkActionType}
-                      onChange={(e) => setInvBulkActionType(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setInvBulkActionType(val);
+                        if (val === "Assign to new warehouse") {
+                          if (selectedInvIds.length === 0) {
+                            showToast("Please select at least one variant first.", "error");
+                            setTimeout(() => setInvBulkActionType("Bulk Action"), 0);
+                            return;
+                          }
+                          setWarehouseAssignSelections({});
+                          setWarehouseAssignStocks({});
+                          setWarehouseAssignModalOpen(true);
+                        }
+                      }}
                       className="h-8.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[12.5px] outline-none focus:border-[#E31E24]"
                     >
                       <option>Bulk Action</option>
@@ -5593,110 +5683,150 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E6E6E6]">
-                      {paginatedVariantInventories.length === 0 ? (
+                      {paginatedVariantGroups.length === 0 ? (
                         <tr>
                           <td colSpan={8} className="px-4 py-8 text-center text-[#9A9A9A]">
                             No assignments matching filters found.
                           </td>
                         </tr>
                       ) : (
-                        paginatedVariantInventories.map((inventory: any) => {
-                          const stockLevel = inventory.stock ?? 0;
-                          const reserved = inventory.reservedStock ?? 0;
-                          const available = Math.max(0, stockLevel - reserved);
-                          const threshold = inventory.lowStockThreshold ?? 10;
-                          const isLowStock = available <= threshold;
-
+                        paginatedVariantGroups.map((group: any) => {
                           return (
-                            <tr key={inventory.id} className="hover:bg-[#FAFAFA]">
-                              <td className="px-4 py-3 text-center">
+                            <tr key={group.variantId} className="hover:bg-[#FAFAFA] align-middle">
+                              <td className="px-4 py-3 text-center border-b border-[#E6E6E6] align-middle">
                                 <input
                                   type="checkbox"
-                                  checked={selectedInvIds.includes(inventory.id)}
+                                  checked={group.inventories.every((inv: any) => selectedInvIds.includes(inv.id))}
                                   onChange={(e) => {
+                                    const invIds = group.inventories.map((inv: any) => inv.id);
                                     if (e.target.checked) {
-                                      setSelectedInvIds((prev) => [...prev, inventory.id]);
+                                      setSelectedInvIds((prev) => Array.from(new Set([...prev, ...invIds])));
                                     } else {
-                                      setSelectedInvIds((prev) => prev.filter((id) => id !== inventory.id));
+                                      setSelectedInvIds((prev) => prev.filter((id) => !invIds.includes(id)));
                                     }
                                   }}
                                   className="h-4 w-4 accent-[#E31E24]"
                                 />
                               </td>
-                              <td className="px-4 py-3 font-medium text-[#1A1A1A]">
-                                {inventory.variantTitle} {inventory.variantSku ? `(${inventory.variantSku})` : ""}
+                              <td className="px-4 py-3 font-medium text-[#1A1A1A] border-b border-[#E6E6E6] border-r border-[#E6E6E6] align-middle">
+                                <div className="font-semibold text-[#1A1A1A]">{group.variantTitle}</div>
+                                <div className="text-[11.5px] text-[#9A9A9A] mt-0.5">{group.variantSku ? `(${group.variantSku})` : ""}</div>
                               </td>
-                              <td className="px-4 py-3 text-[#6B6B6B]">
-                                {inventory.isOverride ? (
-                                  <span className="inline-flex flex-col">
-                                    <span className="font-semibold text-[#1A1A1A]">{inventory.warehouseName}</span>
-                                    <span className="text-[11.5px]">
-                                      {inventory.warehouseState ? `${inventory.warehouseState}, ` : ''}{inventory.warehouseCountryCode}
-                                    </span>
-                                  </span>
-                                ) : (
-                                  <span className="text-[#8A8A8A]">Base Inventory Default</span>
-                                )}
+                              <td className="p-0 text-[#6B6B6B] border-b border-[#E6E6E6] align-middle">
+                                {group.inventories.map((inventory: any) => (
+                                  <div key={inventory.id} className="h-12 px-4 flex items-center border-b border-[#F0F0F0] last:border-b-0 text-[12.5px]">
+                                    {inventory.isOverride ? (
+                                      <span className="inline-flex flex-col">
+                                        <span className="font-semibold text-[#1A1A1A] leading-snug">{inventory.warehouseName}</span>
+                                        <span className="text-[10.5px] leading-none text-[#9A9A9A] mt-0.5">
+                                          {inventory.warehouseState ? `${inventory.warehouseState}, ` : ''}{inventory.warehouseCountryCode}
+                                        </span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-[#8A8A8A]">Base Inventory Default</span>
+                                    )}
+                                  </div>
+                                ))}
                               </td>
-                              <td className="px-4 py-3 text-center">
-                                <input
-                                  key={inventory.id}
-                                  type="number"
-                                  min="0"
-                                  defaultValue={stockLevel}
-                                  disabled={isReadOnly}
-                                  className="w-20 rounded border border-[#E6E6E6] px-2 py-1 text-center text-[13px] outline-none focus:border-[#E31E24]"
-                                  onBlur={async (e) => {
-                                    const nextStock = parseInt(e.target.value);
-                                    if (isNaN(nextStock) || nextStock < 0) return;
-                                    await adminApi.put(`/inventory/${inventory.id}`, { stock: nextStock });
-                                    showToast("Stock updated.");
-                                    refetch();
-                                  }}
-                                />
+                              <td className="p-0 text-center border-b border-[#E6E6E6] align-middle">
+                                {group.inventories.map((inventory: any) => {
+                                  const stockLevel = inventory.stock ?? 0;
+                                  return (
+                                    <div key={inventory.id} className="h-12 flex items-center justify-center border-b border-[#F0F0F0] last:border-b-0">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        defaultValue={stockLevel}
+                                        disabled={isReadOnly}
+                                        className="w-20 rounded border border-[#E6E6E6] px-2 py-0.5 text-center text-[12.5px] outline-none focus:border-[#E31E24]"
+                                        onBlur={async (e) => {
+                                          const nextStock = parseInt(e.target.value);
+                                          if (isNaN(nextStock) || nextStock < 0) return;
+                                          await adminApi.put(`/inventory/${inventory.id}`, { stock: nextStock });
+                                          showToast("Stock updated.");
+                                          refetch();
+                                        }}
+                                      />
+                                    </div>
+                                  );
+                                })}
                               </td>
-                              <td className="px-4 py-3 text-center text-[#6B6B6B]">
-                                {reserved}
+                              <td className="p-0 text-center text-[#6B6B6B] border-b border-[#E6E6E6] align-middle">
+                                {group.inventories.map((inventory: any) => (
+                                  <div key={inventory.id} className="h-12 flex items-center justify-center border-b border-[#F0F0F0] last:border-b-0 text-[12.5px]">
+                                    {inventory.reservedStock ?? 0}
+                                  </div>
+                                ))}
                               </td>
-                              <td className="px-4 py-3 text-center font-semibold text-[#1A1A1A]">
-                                {available}
+                              <td className="p-0 text-center font-semibold text-[#1A1A1A] border-b border-[#E6E6E6] align-middle">
+                                {group.inventories.map((inventory: any) => {
+                                  const stockLevel = inventory.stock ?? 0;
+                                  const reserved = inventory.reservedStock ?? 0;
+                                  const available = Math.max(0, stockLevel - reserved);
+                                  return (
+                                    <div key={inventory.id} className="h-12 flex items-center justify-center border-b border-[#F0F0F0] last:border-b-0 text-[12.5px]">
+                                      {available}
+                                    </div>
+                                  );
+                                })}
                               </td>
-                              <td className="px-4 py-3 text-center">
-                                <span
-                                  className={cn(
-                                    "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                                    available > 0 
-                                      ? (isLowStock ? "bg-[#FFF4E5] text-[#B06000]" : "bg-[#E6F4EA] text-[#137333]") 
-                                      : "bg-[#FCE8E6] text-[#C5221F]"
-                                  )}
-                                >
-                                  {available > 0 ? (isLowStock ? "LOW STOCK" : "IN STOCK") : "OUT OF STOCK"}
-                                </span>
+                              <td className="p-0 text-center border-b border-[#E6E6E6] align-middle">
+                                {group.inventories.map((inventory: any) => {
+                                  const stockLevel = inventory.stock ?? 0;
+                                  const reserved = inventory.reservedStock ?? 0;
+                                  const available = Math.max(0, stockLevel - reserved);
+                                  const threshold = inventory.lowStockThreshold ?? 10;
+                                  const isLowStock = available <= threshold;
+                                  return (
+                                    <div key={inventory.id} className="h-12 flex items-center justify-center border-b border-[#F0F0F0] last:border-b-0">
+                                      <span
+                                        className={cn(
+                                          "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                          available > 0 
+                                            ? (isLowStock ? "bg-[#FFF4E5] text-[#B06000]" : "bg-[#E6F4EA] text-[#137333]") 
+                                            : "bg-[#FCE8E6] text-[#C5221F]"
+                                        )}
+                                      >
+                                        {available > 0 ? (isLowStock ? "LOW" : "IN STOCK") : "OUT"}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
                               </td>
-                              <td className="px-4 py-3 text-right">
-                                {inventory.isOverride && (
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      if (stockLevel > 0 || reserved > 0) {
-                                        alert("Cannot remove warehouse assignment while stock or reserved stock is greater than zero.");
-                                        return;
-                                      }
-                                      if (!window.confirm(`Delete assignment for ${inventory.warehouseName}?`)) return;
-                                      try {
-                                        await adminApi.delete(`/inventory/${inventory.id}`);
-                                        showToast("Assignment removed.");
-                                        refetch();
-                                      } catch (err: any) {
-                                        showToast(err?.response?.data?.error || "Error removing assignment.", "error");
-                                      }
-                                    }}
-                                    className="rounded border border-[#F2C9C9] p-1.5 text-red-600 hover:bg-red-50"
-                                    title="Remove Assignment"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                )}
+                              <td className="p-0 text-right border-b border-[#E6E6E6] align-middle">
+                                {group.inventories.map((inventory: any) => {
+                                  const stockLevel = inventory.stock ?? 0;
+                                  const reserved = inventory.reservedStock ?? 0;
+                                  return (
+                                    <div key={inventory.id} className="h-12 flex items-center justify-center border-b border-[#F0F0F0] last:border-b-0 px-4">
+                                      {inventory.isOverride ? (
+                                        <button
+                                          type="button"
+                                          onClick={async () => {
+                                            if (stockLevel > 0 || reserved > 0) {
+                                              alert("Cannot remove warehouse assignment while stock or reserved stock is greater than zero.");
+                                              return;
+                                            }
+                                            if (!window.confirm(`Delete assignment for ${inventory.warehouseName}?`)) return;
+                                            try {
+                                              await adminApi.delete(`/inventory/${inventory.id}`);
+                                              showToast("Assignment removed.");
+                                              refetch();
+                                            } catch (err: any) {
+                                              showToast(err?.response?.data?.error || "Error removing assignment.", "error");
+                                            }
+                                          }}
+                                          className="rounded border border-[#F2C9C9] p-1 text-red-600 hover:bg-red-50"
+                                          title="Remove Assignment"
+                                        >
+                                          <Trash2 size={13} />
+                                        </button>
+                                      ) : (
+                                        <div className="w-6" />
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </td>
                             </tr>
                           );
@@ -6572,84 +6702,66 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               {generateAttributeIds.map((attributeId) => {
                 const attribute = variantGenerationCatalog.find((item) => item.id === attributeId);
                 if (!attribute) return null;
-                const mode = generateModeMap[attribute.id] === "skip" ? "all" : (generateModeMap[attribute.id] ?? "all");
                 const selectedValueIds = generateSelectionMap[attribute.id] ?? [];
                 const values = getAttributeValues(attribute);
-                const selectedValues = values.filter((value) => selectedValueIds.includes(value.id));
-                const availableValues = values.filter((value) => !selectedValueIds.includes(value.id));
 
                 return (
-                  <div key={attribute.id} className="rounded-lg border border-[#E6E6E6] p-4">
-                    <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                  <div key={attribute.id} className="rounded-xl border border-[#E6E6E6] bg-white p-5 transition-all duration-200 hover:shadow-md">
+                    {/* Header */}
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#F5F5F5] pb-3">
                       <div>
-                        <div className="text-[13px] font-semibold text-[#1A1A1A]">{attribute.name} <span className="ml-1 font-normal text-[#9A9A9A]">{attribute.id}</span></div>
-                      </div>
-                      <button onClick={() => removeGenerateAttribute(attribute.id)} className="text-[13px] font-medium text-[#E31E24] hover:text-[#B5151B]">
-                        Remove
-                      </button>
-                    </div>
-
-                    <div className="mb-4 max-w-[240px]">
-                      <AdminSelect
-                        value={mode}
-                        onChange={(e) => setGenerateAttributeMode(attribute.id, e.target.value as GenerateAttributeMode)}
-                        options={[
-                          { value: "all", label: "Use All Values" },
-                          { value: "specific", label: "Select Specific Values" },
-                        ]}
-                      />
-                    </div>
-
-                    {mode === "all" && (
-                      <div className="rounded-md bg-[#FAFAFA] px-3 py-2 text-[12px] text-[#6B6B6B]">
-                        All {values.length} values of {attribute.name} will be used.
-                      </div>
-                    )}
-
-                    {mode === "specific" && (
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap gap-2">
-                          {selectedValues.map((value) => (
-                            <span key={value.id} className="inline-flex items-center gap-2 rounded-full border border-[#E6E6E6] bg-white px-4 py-2 text-[12px] text-[#1A1A1A]">
-                              {value.value}
-                              <button type="button" onClick={() => removeGenerateSpecificValue(attribute.id, value.id)} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
-                                <X size={12} />
-                              </button>
-                            </span>
-                          ))}
+                        <div className="text-[14px] font-bold text-[#1A1A1A] flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-[#E31E24]"></span>
+                          {attribute.name}
                         </div>
-                        {availableValues.length > 0 && (
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                            <div className="sm:min-w-[220px]">
-                              <AdminSelect
-                                value={generateValuePickerMap[attribute.id] ?? ""}
-                                onChange={(e) => setGenerateValuePicker(attribute.id, e.target.value)}
-                                options={[
-                                  { value: "", label: "Add value" },
-                                  ...availableValues.map((value) => ({ value: value.id, label: value.value })),
-                                ]}
-                              />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const valueId = generateValuePickerMap[attribute.id] ?? "";
-                                if (!valueId) return;
-                                addGenerateSpecificValue(attribute.id, valueId);
-                                setGenerateValuePicker(attribute.id, "");
-                              }}
-                              className="rounded-full border border-dashed border-[#BDBDBD] px-4 py-2 text-[12px] font-medium text-[#6B6B6B] hover:border-[#9A9A9A] hover:bg-[#FAFAFA]"
-                            >
-                              + Add value
-                            </button>
-                          </div>
-                        )}
-                        {selectedValues.length === 0 && values.length === 0 && (
-                          <p className="text-[12px] text-[#E31E24]">No values found for this attribute. Add values in Admin → Attributes first.</p>
-                        )}
-                        {selectedValues.length === 0 && values.length > 0 && (
-                          <p className="text-[12px] text-[#9A9A9A]">Add one or more values for this attribute, or switch to Use All Values.</p>
-                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => selectAllGenerateValues(attribute.id)}
+                          className="text-[11px] font-semibold text-[#E31E24] hover:text-[#B5151B] transition-colors underline underline-offset-2"
+                        >
+                          Select All
+                        </button>
+                        <span className="text-[#D1D5DB] text-[10px]">|</span>
+                        <button
+                          type="button"
+                          onClick={() => clearGenerateValues(attribute.id)}
+                          className="text-[11px] font-semibold text-[#6B6B6B] hover:text-[#1A1A1A] transition-colors underline underline-offset-2"
+                        >
+                          Clear Selection
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Chips grid */}
+                    {values.length === 0 ? (
+                      <p className="text-[12px] text-[#9A9A9A] italic">No values found for this attribute. Add values in Admin → Attributes first.</p>
+                    ) : (
+                      <div>
+                        <div className="flex flex-wrap gap-2.5">
+                          {values.map((val) => {
+                            const isSelected = selectedValueIds.includes(val.id);
+                            return (
+                              <button
+                                key={val.id}
+                                type="button"
+                                onClick={() => toggleGenerateValue(attribute.id, val.id, !isSelected)}
+                                className={cn(
+                                  "group relative flex items-center justify-center rounded-lg border px-4 py-2 text-[12.5px] font-medium transition-all duration-200 select-none cursor-pointer",
+                                  isSelected
+                                    ? "border-[#E31E24] bg-[#E31E24] text-white shadow-sm"
+                                    : "border-[#E0E0E0] bg-white text-[#4A4A4A] hover:border-[#1A1A1A] hover:bg-[#F9FAFB]"
+                                )}
+                              >
+                                {val.value}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="mt-3 text-[11.5px] text-[#6B6B6B] font-medium">
+                          {selectedValueIds.length} of {values.length} options selected for variant combinations.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -7388,6 +7500,62 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       />
 
       <Modal
+        open={warehouseAssignModalOpen}
+        onClose={() => { setWarehouseAssignModalOpen(false); setInvBulkActionType("Bulk Action"); }}
+        title="Assign Selected Variants to Warehouses"
+        panelClassName="max-w-md"
+      >
+        <div className="space-y-4 p-6">
+          <p className="text-[13px] text-[#6B6B6B]">
+            Select which warehouses you want to assign the selected variants to, and optionally specify their initial stock levels.
+          </p>
+          <div className="max-h-[300px] overflow-y-auto border border-[#E6E6E6] rounded-md divide-y divide-[#E6E6E6] px-4 bg-white">
+            {(warehouses.data ?? warehouses).map((w: any) => (
+              <div key={w.id} className="flex items-center justify-between py-3 gap-3">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none text-[13px] text-[#1A1A1A] font-medium min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={warehouseAssignSelections[w.id] || false}
+                    onChange={(e) => setWarehouseAssignSelections(prev => ({ ...prev, [w.id]: e.target.checked }))}
+                    className="rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
+                  />
+                  <span className="truncate">
+                    {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
+                  </span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Stock"
+                  disabled={!warehouseAssignSelections[w.id]}
+                  value={warehouseAssignStocks[w.id] ?? ""}
+                  onChange={(event) => setWarehouseAssignStocks(prev => ({ ...prev, [w.id]: event.target.value }))}
+                  className="w-24 h-8 px-2 rounded-md border border-[#E6E6E6] text-[12.5px] outline-none disabled:bg-[#FAFAFA] text-center focus:border-[#E31E24]"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => { setWarehouseAssignModalOpen(false); setInvBulkActionType("Bulk Action"); }}
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleWarehouseAssignSubmit}
+              disabled={bulkSaving}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
+            >
+              {bulkSaving ? "Assigning..." : "Assign"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
         open={countryPriceModalOpen}
         onClose={closeCountryPriceModal}
         title="Generate Country Prices"
@@ -7814,6 +7982,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         open={bulkImportOpen}
         onClose={() => setBulkImportOpen(false)}
         productId={productId}
+        productName={product?.title || ""}
         attributeNames={productAttributeMappings.map((m: any) => m.attribute?.name).filter(Boolean)}
         attributeMappings={productAttributeMappings}
         onSuccess={() => {

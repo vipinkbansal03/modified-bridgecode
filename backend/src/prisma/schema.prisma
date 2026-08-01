@@ -76,6 +76,7 @@ model Category {
   products       Product[]
   countries      CategoryCountry[]
   discounts      DiscountCategory[]
+  taxRules       TaxRule[]             @relation("CategoryTaxRules")
 
   @@map("categories")
 }
@@ -285,6 +286,7 @@ model ProductVariant {
   package              ProductPackage?                @relation(fields: [packageId], references: [id])
   product              Product                        @relation(fields: [productId], references: [id])
   QuoteItem            QuoteItem[]
+  taxRules             TaxRule[]                      @relation("VariantTaxRules")
 
   @@map("product_variants")
 }
@@ -1414,6 +1416,8 @@ model TaxRule {
   country    Country?         @relation(fields: [countryId], references: [id])
   countries  TaxRuleCountry[]
   products   Product[]        @relation("ProductTaxRules")
+  categories Category[]       @relation("CategoryTaxRules")
+  variants   ProductVariant[] @relation("VariantTaxRules")
   @@map("tax_rules")
 }
 
