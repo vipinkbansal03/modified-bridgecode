@@ -63,7 +63,7 @@ export const calculatePackages = asyncHandler(async (req: AuthRequest, res: Resp
     countryCode?: string;
     orderTotal?: number;
   };
-  const packages = await calculateShipment(items);
+  const packages = await calculateShipment(items, { countryCode: countryCode ? String(countryCode).toUpperCase() : undefined });
   if (countryCode) {
     packages.pricing = await S.calculateShipping(String(countryCode).toUpperCase(), Number(orderTotal ?? 0));
   }

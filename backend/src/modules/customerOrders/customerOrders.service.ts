@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
 import { decrementVariantStock } from "../inventory/inventory.service";
@@ -173,6 +174,7 @@ async function calculateCustomerOrder(
       productId: item.variant.productId,
       quantity: item.quantity,
     })),
+    { countryCode: orderCountry.code },
   );
   const couponValidation = input.couponCode?.trim()
     ? await validateCoupon(input.couponCode, subtotal, orderCountry.code)
@@ -442,6 +444,16 @@ export async function createCustomerOrder(
         shippingBoxName: packaging.box?.name ?? null,
         packageWeight: packaging.totalWeight,
         packageVolume: packaging.totalVolume,
+        orderBoxes: {
+          create: packaging.boxes.map((pack) => ({
+            boxId: pack.boxId,
+            boxName: pack.name,
+            quantity: 1,
+            weight: pack.weight,
+            volume: pack.volume,
+            items: pack.units as Prisma.InputJsonValue,
+          })),
+        },
         notes: input.notes,
         items: {
           create: orderItems.map((item) => ({
@@ -463,6 +475,7 @@ export async function createCustomerOrder(
         currency: true,
         shippingZone: { include: { provider: true, countries: { include: { country: true } } } },
         shippingBox: true,
+        orderBoxes: true,
       },
     });
 
@@ -505,6 +518,7 @@ export async function listCustomerOrders(customerId: string) {
       currency: true,
       shippingZone: { include: { provider: true, countries: { include: { country: true } } } },
       shippingBox: true,
+      orderBoxes: true,
     },
   });
 }

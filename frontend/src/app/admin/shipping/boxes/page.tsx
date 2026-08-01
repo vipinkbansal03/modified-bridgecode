@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { Calculator, Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminMultiSelect, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { ApiShippingBox } from "@/types/api.types";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -52,6 +52,7 @@ export default function ShippingBoxesPage() {
   const [formHeight, setFormHeight] = useState("");
   const [formMaxWeight, setFormMaxWeight] = useState("");
   const [formIsActive, setFormIsActive] = useState(true);
+  const [formCountryIds, setFormCountryIds] = useState<string[]>([]);
   const [deletingBox, setDeletingBox] = useState<ApiShippingBox | null>(null);
 
   const [activeSubTab, setActiveSubTab] = useState<"boxes" | "preview">("boxes");
@@ -76,6 +77,7 @@ export default function ShippingBoxesPage() {
     setFormHeight("");
     setFormMaxWeight("");
     setFormIsActive(true);
+    setFormCountryIds([]);
     setFormOpen(true);
   };
 
@@ -87,11 +89,13 @@ export default function ShippingBoxesPage() {
     setFormHeight(String(box.height));
     setFormMaxWeight(String(box.maxWeight));
     setFormIsActive(box.isActive);
+    setFormCountryIds(box.countries?.map((c) => c.countryId) ?? []);
     setFormOpen(true);
   };
 
   const handleSave = async () => {
     if (!formName.trim()) { showToast("Box name is required.", "error"); return; }
+    if (!formCountryIds.length) { showToast("At least one country is required.", "error"); return; }
     const payload = {
       name: formName.trim(),
       length: Number(formLength),
@@ -99,6 +103,7 @@ export default function ShippingBoxesPage() {
       height: Number(formHeight),
       maxWeight: Number(formMaxWeight),
       isActive: formIsActive,
+      countryIds: formCountryIds,
     };
     try {
       await upsertMutation.mutateAsync({ id: editingBox?.id, data: payload });
@@ -118,6 +123,10 @@ export default function ShippingBoxesPage() {
     {
       key: "maxWeight", label: "Max Weight (kg)",
       render: (row) => row.maxWeight,
+    },
+    {
+      key: "countries", label: "Countries",
+      render: (row) => row.countries?.map((c) => c.country.code).join(", ") || "—",
     },
     {
       key: "isActive", label: "Status",
@@ -294,16 +303,24 @@ export default function ShippingBoxesPage() {
                     <p className="text-[14px] text-[#1A1A1A]">{Number(previewResult.totalVolume || 0).toFixed(2)} cm³</p>
                   </div>
                   <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
-                    {previewResult.box ? (
+                    {previewResult.boxes?.length ? (
                       <>
-                        <h4 className="text-[13px] font-semibold text-[#1A1A1A]">Selected Box</h4>
-                        <p className="mt-1 text-[15px] font-semibold text-[#1A1A1A]">{previewResult.box.name}</p>
-                        <p className="text-[13px] text-[#6B6B6B]">
-                          {previewResult.box.length} × {previewResult.box.width} × {previewResult.box.height} cm | Max {previewResult.box.maxWeight} kg
-                        </p>
+                        <h4 className="text-[13px] font-semibold text-[#1A1A1A]">Boxes ({previewResult.boxes.length})</h4>
+                        <div className="mt-2 space-y-2">
+                          {previewResult.boxes.map((b: any, idx: number) => (
+                            <div key={idx} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
+                              <p className="text-[14px] font-semibold text-[#1A1A1A]">
+                                {idx + 1}. {b.name}
+                              </p>
+                              <p className="text-[12.5px] text-[#6B6B6B]">
+                                {b.length} × {b.width} × {b.height} cm | {Number(b.weight).toFixed(3)} kg | {Number(b.volume).toFixed(2)} cm³
+                              </p>
+                            </div>
+                          ))}
+                        </div>
                       </>
                     ) : (
-                      <p className="text-[13px] text-[#9A9A9A]">No active box fits this shipment weight. Add a box with a higher max weight.</p>
+                      <p className="text-[13px] text-[#9A9A9A]">No active box fits this shipment for the selected country. Add a box with suitable dimensions.</p>
                     )}
                   </div>
                   {previewResult.pricing && (
@@ -339,7 +356,7 @@ export default function ShippingBoxesPage() {
                   </div>
                 </div>
               ) : (
-                <p className="text-center text-[13px] text-[#9A9A9A] py-10">Add items and click "Calculate Package" to see results.</p>
+                <p className="text-center text-[13px] text-[#9A9A9A] py-10">Add items and click &quot;Calculate Package&quot; to see results.</p>
               )}
             </div>
           </div>
@@ -363,6 +380,16 @@ export default function ShippingBoxesPage() {
               <AdminInput label="Width (cm) *" type="text" placeholder="e.g. 20" value={formWidth} onChange={(e) => setFormWidth(e.target.value)} />
               <AdminInput label="Height (cm) *" type="text" placeholder="e.g. 15" value={formHeight} onChange={(e) => setFormHeight(e.target.value)} />
               <AdminInput label="Max Weight (kg) *" type="text" placeholder="e.g. 5" value={formMaxWeight} onChange={(e) => setFormMaxWeight(e.target.value)} />
+              <div className="sm:col-span-2">
+                <AdminMultiSelect
+                  label="Countries *"
+                  options={(countries as { id: string; name: string; code: string }[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+                  value={formCountryIds}
+                  onChange={setFormCountryIds}
+                  selectAllLabel="Select All"
+                  placeholder="Select countries..."
+                />
+              </div>
               <div className="flex items-end pb-2">
                 <label className="flex cursor-pointer items-center gap-2">
                   <input type="checkbox" checked={formIsActive} onChange={(e) => setFormIsActive(e.target.checked)} className="rounded" />
