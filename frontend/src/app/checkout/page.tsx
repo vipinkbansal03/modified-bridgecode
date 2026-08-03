@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, HelpCircle, Lock, ShoppingCart } from "lucide-react";
 import { Container } from "@/components/ui/Container";
@@ -126,6 +126,7 @@ export default function CheckoutPage() {
   const [isVerifyingVat, setIsVerifyingVat] = useState(false);
   const [vatStatus, setVatStatus] = useState<"VALID" | "INVALID" | "PENDING" | null>(null);
   const [vatMessage, setVatMessage] = useState("");
+  const initialCountryRef = useRef<string | null>(null);
   const [form, setForm] = useState({
     fullName: "",
     phone: "",
@@ -137,6 +138,18 @@ export default function CheckoutPage() {
     countryCode: selectedCountryCode ? selectedCountryCode.toUpperCase() : "IN",
     notes: "",
   });
+
+  useEffect(() => {
+    if (form.countryCode) {
+      if (initialCountryRef.current === null) {
+        initialCountryRef.current = form.countryCode;
+      } else if (initialCountryRef.current !== form.countryCode) {
+        setVatStatus(null);
+        setVatMessage("");
+        initialCountryRef.current = form.countryCode;
+      }
+    }
+  }, [form.countryCode]);
 
   const taxIdConfig = useMemo(() => {
     const countryUpper = form.countryCode.trim().toUpperCase();
