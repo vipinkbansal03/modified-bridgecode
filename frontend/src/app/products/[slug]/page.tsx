@@ -117,6 +117,7 @@ function mergeProduct(api: ApiProductDetail, staticProduct: ProductDetail | unde
     trimmed = trimmed.replace(/^http:\/\/(?:localhost|127\.0\.0\.1):4000(\/uploads\/)/i, "$1");
     if (trimmed.startsWith("/")) return trimmed;
     if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
+    if (trimmed.startsWith("data:")) return trimmed;
     return `/${trimmed}`;
   };
 
