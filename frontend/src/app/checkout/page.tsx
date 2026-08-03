@@ -1198,7 +1198,10 @@ export default function CheckoutPage() {
                       />
                       <button
                         type="button"
-                        onClick={handleVerifyVat}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleVerifyVat();
+                        }}
                         disabled={isVerifyingVat || !taxIdInput.trim()}
                         className="rounded-md bg-brand px-5 py-2.5 text-[13.5px] font-bold text-white shadow-sm hover:bg-brand/90 disabled:opacity-50"
                       >
@@ -1206,7 +1209,10 @@ export default function CheckoutPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={handleClearVat}
+                        onMouseDown={(e) => {
+                          e.preventDefault(); // Prevent input from losing focus immediately
+                          handleClearVat();
+                        }}
                         disabled={isVerifyingVat}
                         className="rounded-md border border-line px-4 py-2.5 text-[13.5px] font-medium text-steel hover:bg-grey disabled:opacity-50"
                       >
