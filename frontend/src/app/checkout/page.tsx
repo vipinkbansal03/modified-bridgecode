@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, HelpCircle, Lock, ShoppingCart } from "lucide-react";
 import { Container } from "@/components/ui/Container";
@@ -45,6 +45,43 @@ const APPROVAL_MESSAGES: Record<string, string> = {
   SUSPENDED: "Your account has been suspended. Please contact support.",
 };
 
+const STATE_MAPPINGS: Record<string, string[]> = {
+  IN: [
+    "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
+    "Haryana", "Himachal Pradesh", "Jammu & Kashmir", "Jharkhand", "Karnataka", "Kerala", 
+    "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", 
+    "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", 
+    "Uttarakhand", "West Bengal", "Delhi", "Andaman & Nicobar", "Chandigarh", "Dadra & Nagar Haveli", 
+    "Daman & Diu", "Lakshadweep", "Puducherry"
+  ],
+  US: [
+    "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware", 
+    "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", 
+    "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi", 
+    "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico", 
+    "New York", "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania", 
+    "Rhode Island", "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", 
+    "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming", "District of Columbia"
+  ],
+  DE: [
+    "Baden-Württemberg", "Bavaria", "Berlin", "Brandenburg", "Bremen", "Hamburg", "Hesse", 
+    "Lower Saxony", "Mecklenburg-Vorpommern", "North Rhine-Westphalia", "Rhineland-Palatinate", 
+    "Saarland", "Saxony", "Saxony-Anhalt", "Schleswig-Holstein", "Thuringia"
+  ],
+  GB: [
+    "England", "Scotland", "Wales", "Northern Ireland"
+  ],
+  AU: [
+    "New South Wales", "Victoria", "Queensland", "Western Australia", "South Australia", "Tasmania", 
+    "Australian Capital Territory", "Northern Territory"
+  ],
+  CA: [
+    "Ontario", "Quebec", "British Columbia", "Alberta", "Manitoba", "Saskatchewan", 
+    "Nova Scotia", "New Brunswick", "Newfoundland and Labrador", "Prince Edward Island", 
+    "Northwest Territories", "Nunavut", "Yukon"
+  ]
+};
+
 function formatMoney(symbol: string, amount: number) {
   if (amount === null || amount === undefined || !Number.isFinite(amount))
     return "";
@@ -55,6 +92,109 @@ function formatMoney(symbol: string, amount: number) {
     maximumFractionDigits: 2,
   });
   return `${symbol}${formatted}`;
+}
+
+function CustomSelect({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+  required,
+}: {
+  label?: string;
+  value: string;
+  onChange: (val: string) => void;
+  options: Array<{ value: string; label: string }>;
+  placeholder: string;
+  required?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const selectedOption = options.find((opt) => opt.value === value);
+
+  return (
+    <div ref={containerRef} className="flex flex-col gap-1.5 relative">
+      {label && (
+        <label className="text-[13px] font-semibold text-[#1A1A1A]">
+          {label}
+          {required && (
+            <span className="ml-0.5 text-[#E31E24]" aria-hidden="true">
+              *
+            </span>
+          )}
+        </label>
+      )}
+      
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`w-full h-[46px] rounded-md border bg-white/80 px-4 py-2 text-[14px] text-[#1A1A1A] text-left outline-none transition-all flex items-center justify-between ${
+          isOpen ? "border-[#1A1A1A] ring-1 ring-[#1A1A1A]" : "border-[#E0E0E0] hover:border-[#B0B0B0]"
+        }`}
+      >
+        <span className={selectedOption ? "text-[#1A1A1A]" : "text-[#9A9A9A]"}>
+          {selectedOption ? selectedOption.label : placeholder}
+        </span>
+        <svg
+          className={`w-4.5 h-4.5 text-[#9A9A9A] transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-[calc(100%+4px)] left-0 w-full max-h-[300px] overflow-y-auto rounded-md border border-[#E0E0E0] bg-white py-1 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] z-50">
+          <button
+            type="button"
+            onClick={() => {
+              onChange("");
+              setIsOpen(false);
+            }}
+            className="w-full text-left px-4 py-2.5 text-[14px] text-[#9A9A9A] hover:bg-[#F5F5F5] transition-colors"
+          >
+            {placeholder}
+          </button>
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => {
+                onChange(opt.value);
+                setIsOpen(false);
+              }}
+              className={`w-full text-left px-4 py-2.5 text-[14px] hover:bg-[#F5F5F5] transition-colors flex items-center justify-between ${
+                opt.value === value ? "font-semibold text-[#E31E24] bg-[#E31E24]/5" : "text-[#1A1A1A]"
+              }`}
+            >
+              <span>{opt.label}</span>
+              {opt.value === value && (
+                <svg className="w-4 h-4 text-[#E31E24]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function CheckoutPage() {
@@ -126,6 +266,20 @@ export default function CheckoutPage() {
   const [isVerifyingVat, setIsVerifyingVat] = useState(false);
   const [vatStatus, setVatStatus] = useState<"VALID" | "INVALID" | "PENDING" | null>(null);
   const [vatMessage, setVatMessage] = useState("");
+  const [countriesList, setCountriesList] = useState<Array<{ id: string; name: string; code: string }>>([]);
+
+  useEffect(() => {
+    fetch("/api/countries")
+      .then((res) => res.json())
+      .then((payload) => {
+        if (payload?.success && Array.isArray(payload.data)) {
+          setCountriesList(payload.data);
+        }
+      })
+      .catch((err) => console.error("Failed to fetch public countries:", err));
+  }, []);
+
+  const initialCountryRef = useRef<string | null>(null);
   const [form, setForm] = useState({
     fullName: "",
     phone: "",
@@ -137,6 +291,18 @@ export default function CheckoutPage() {
     countryCode: selectedCountryCode ? selectedCountryCode.toUpperCase() : "IN",
     notes: "",
   });
+
+  useEffect(() => {
+    if (form.countryCode) {
+      if (initialCountryRef.current === null) {
+        initialCountryRef.current = form.countryCode;
+      } else if (initialCountryRef.current !== form.countryCode) {
+        setVatStatus(null);
+        setVatMessage("");
+        initialCountryRef.current = form.countryCode;
+      }
+    }
+  }, [form.countryCode]);
 
   const taxIdConfig = useMemo(() => {
     const countryUpper = form.countryCode.trim().toUpperCase();
@@ -270,7 +436,8 @@ export default function CheckoutPage() {
       form.addressLine1.trim() &&
       form.city.trim() &&
       form.state.trim() &&
-      form.postalCode.trim(),
+      form.postalCode.trim() &&
+      form.countryCode.trim(),
     );
   }, [form, items.length]);
 
@@ -891,6 +1058,7 @@ export default function CheckoutPage() {
                 )}
                 <div className="grid gap-5 sm:grid-cols-2">
                   <Input
+                    required
                     label="Full name"
                     value={form.fullName}
                     onChange={(event) =>
@@ -901,6 +1069,7 @@ export default function CheckoutPage() {
                     }
                   />
                   <Input
+                    required
                     label="Phone"
                     value={form.phone}
                     onChange={(event) =>
@@ -911,6 +1080,7 @@ export default function CheckoutPage() {
                     }
                   />
                   <Input
+                    required
                     className="sm:col-span-2"
                     label="Address line 1"
                     value={form.addressLine1}
@@ -932,7 +1102,63 @@ export default function CheckoutPage() {
                       }))
                     }
                   />
+                  <CustomSelect
+                    required
+                    label="Country"
+                    placeholder="Select Country"
+                    value={form.countryCode}
+                    options={
+                      countriesList.length > 0
+                        ? countriesList.map((c) => ({ value: c.code, label: c.name }))
+                        : [
+                            { value: "IN", label: "India" },
+                            { value: "US", label: "United States" },
+                          ]
+                    }
+                    onChange={(nextCode) => {
+                      setForm((current) => ({
+                        ...current,
+                        countryCode: nextCode,
+                        state: "", // Reset state when country changes
+                      }));
+                      setSelectedCountryCode(nextCode);
+                    }}
+                  />
+
+                  {STATE_MAPPINGS[form.countryCode] ? (
+                    <CustomSelect
+                      required
+                      label="State"
+                      placeholder="Select State"
+                      value={form.state}
+                      options={STATE_MAPPINGS[form.countryCode].map((state) => ({
+                        value: state,
+                        label: state,
+                      }))}
+                      onChange={(nextState) =>
+                        setForm((current) => ({
+                          ...current,
+                          state: nextState,
+                        }))
+                      }
+                    />
+                  ) : (
+                    <Input
+                      required
+                      label="State"
+                      placeholder="Enter state"
+                      value={form.state}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          state: event.target.value,
+                        }))
+                      }
+                    />
+                  )}
+
                   <Input
+                    required
                     label="City"
                     value={form.city}
                     onChange={(event) =>
@@ -943,16 +1169,7 @@ export default function CheckoutPage() {
                     }
                   />
                   <Input
-                    label="State"
-                    value={form.state}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        state: event.target.value,
-                      }))
-                    }
-                  />
-                  <Input
+                    required
                     label="Postal code"
                     value={form.postalCode}
                     onChange={(event) =>
@@ -961,21 +1178,6 @@ export default function CheckoutPage() {
                         postalCode: event.target.value,
                       }))
                     }
-                  />
-                  <Input
-                    label="Country code"
-                    maxLength={2}
-                    value={form.countryCode}
-                    onChange={(event) => {
-                      const nextCode = event.target.value.toUpperCase();
-                      setForm((current) => ({
-                        ...current,
-                        countryCode: nextCode,
-                      }));
-                      if (nextCode.length === 2) {
-                        setSelectedCountryCode(nextCode);
-                      }
-                    }}
                   />
                   <div className="sm:col-span-2 border-t border-line pt-4 mt-2">
                     <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-steel-2">
@@ -1553,9 +1755,11 @@ export default function CheckoutPage() {
             <span className="font-semibold text-ink font-mono">
               {formatMoney(
                 estimate?.currency?.symbol ?? totals.currencySymbol,
-                estimate?.originalBaseSubtotal ??
-                  Number(estimate?.subtotal ?? 0) +
-                    Number(estimate?.automaticDiscount ?? 0),
+                estimate
+                  ? estimate.originalBaseSubtotal ??
+                      Number(estimate.subtotal ?? 0) +
+                        Number(estimate.automaticDiscount ?? 0)
+                  : totals.subtotal,
               )}
             </span>
           </div>

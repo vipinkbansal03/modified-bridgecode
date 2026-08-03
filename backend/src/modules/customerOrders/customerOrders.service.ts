@@ -101,9 +101,12 @@ async function calculateCustomerOrder(
 
       const stockRecord =
         variant.inventories.find(
+          (inventory) => inventory.warehouse?.countryId === orderCountry.id,
+        ) ??
+        variant.inventories.find(
           (inventory) => inventory.countryId === orderCountry.id,
         ) ??
-        variant.inventories.find((inventory) => inventory.countryId === null);
+        variant.inventories.find((inventory) => inventory.warehouseId === null);
       const availableStock = Math.max(
         0,
         (stockRecord?.stock ?? 0) - (stockRecord?.reservedStock ?? 0),
@@ -128,7 +131,7 @@ async function calculateCustomerOrder(
         customerId: customer.id,
         quantity: item.quantity,
         buyerState: input.shippingAddress?.state ?? null,
-        sellerState: null,
+        sellerState: stockRecord?.warehouse?.state ?? null,
       });
 
       const unitPrice = resolvedPrice.finalPrice;

@@ -702,6 +702,7 @@ export async function validateTaxIdentifier(taxId: string, taxIdType: string, co
     countryCode: result.countryCode,
     validationSource: result.validationSource,
     message: result.message,
+    validationStatus: result.validationStatus,
   };
 }
 
