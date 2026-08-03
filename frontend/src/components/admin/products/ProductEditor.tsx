@@ -1464,7 +1464,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const { data: categories = [] } = useAdminCategories();
   const { data: attributes = [] } = useAdminAttributes();
   const { data: countries = [] } = useAdminCountries();
-  const { data: warehouses = [] } = useAdminWarehouses({ limit: 100 });
+  const { data: warehouses = [] } = useAdminWarehouses({ limit: 30 });
   const { data: tiers = [] } = useAdminTiers();
   const { data: selectedAttributeDetail } = useAdminAttribute(selectedMappingAttributeId);
   const { data: languages = [] } = useAdminLanguages();

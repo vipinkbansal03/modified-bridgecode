@@ -195,7 +195,7 @@ export default function InventoryPage() {
   const { data: rowAdjustments, isLoading: rowHistoryLoading } = useAdminVariantInventoryAdjustments(historyRow?.variantId ?? undefined, { page: 1, limit: 25 });
   const updateInv = useUpdateInventory();
   const bulkUpdate = useBulkUpdateInventory();
-  const { data: warehousesData } = useAdminWarehouses({ limit: 100 });
+  const { data: warehousesData } = useAdminWarehouses({ limit: 30 });
   const warehouses = warehousesData?.data || [];
 
   const rows = (data?.data ?? []) as InventoryRow[];
