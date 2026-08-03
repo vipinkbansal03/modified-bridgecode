@@ -7,9 +7,22 @@ const STATUS_CONFIG: Record<StockStatus, { label: string; cls: string }> = {
   BACKORDER: { label: "Backorder", cls: "bg-sky-50 text-sky-600 border-sky-200" },
 };
 
-export function StockBadge({ status }: { status: StockStatus | null | undefined }) {
-  if (!status) return <span className="text-[11px] text-[#9A9A9A]">—</span>;
-  const { label, cls } = STATUS_CONFIG[status] ?? STATUS_CONFIG.OUT_OF_STOCK;
+export function StockBadge({
+  status,
+  available,
+}: {
+  status: StockStatus | null | undefined;
+  available?: number;
+}) {
+  const effectiveStatus =
+    available !== undefined && available <= 0
+      ? "OUT_OF_STOCK"
+      : status ?? "OUT_OF_STOCK";
+
+  if (!status && available === undefined)
+    return <span className="text-[11px] text-[#9A9A9A]">—</span>;
+
+  const { label, cls } = STATUS_CONFIG[effectiveStatus] ?? STATUS_CONFIG.OUT_OF_STOCK;
   return (
     <span className={`inline-block border rounded px-1.5 py-0.5 text-[10.5px] font-medium tracking-wide ${cls}`}>
       {label}

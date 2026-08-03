@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { QuoteCartMini } from "@/components/quote/QuoteCartMini";
 import { CartDrawer } from "@/components/cart/CartDrawer";
+import { NewsletterModal } from "@/components/newsletter/NewsletterModal";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -26,6 +27,7 @@ export function AppShell({ children }: AppShellProps) {
       <Footer />
       <CartDrawer />
       <QuoteCartMini />
+      <NewsletterModal />
     </>
   );
 }

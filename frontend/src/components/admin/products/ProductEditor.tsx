@@ -12,6 +12,7 @@ import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect"
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
 import { BulkVariantImportWizard } from "@/components/admin/products/BulkVariantImportWizard";
+import { ProductPaymentOverridesTab } from "@/components/admin/products/ProductPaymentOverridesTab";
 import {
   useAdminProduct,
   useUpdateProduct,
@@ -67,6 +68,7 @@ const ALL_TABS: TabConfig[] = [
   { id: 9, label: "Country Availability", permission: "countries.view" },
   { id: 10, label: "SEO" },
   { id: 11, label: "Shipping Info" },
+  { id: 12, label: "Payments", permission: "payments.view" },
 ];
 
 const basicSchema = Yup.object({
@@ -6563,6 +6565,13 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               </button>
             </div>
           </div>
+        )}
+
+        {activeTab === 12 && (
+          <ProductPaymentOverridesTab
+            productId={productId}
+            variants={product?.variants || []}
+          />
         )}
       </div>
       </fieldset>

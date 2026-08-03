@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, XCircle, Info, Check } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { adminApi } from "@/services/adminApi";
+import { ToastProvider, useToast as useSharedToast } from "@/components/ui/ToastProvider";
 
 // ─── DataTable ────────────────────────────────────────────
 
@@ -895,7 +896,7 @@ export function StatCard({ title, value, subtitle, icon, color = "bg-[#E31E24]",
 
 // ─── Toast ────────────────────────────────────────────────
 
-export type ToastType = "success" | "error" | "info";
+export type { ToastType } from "@/components/ui/ToastProvider";
 
 export const toastMessages = {
   saved: "Changes saved successfully.",
@@ -908,87 +909,13 @@ export const toastMessages = {
   rejected: "Translation rejected.",
 } as const;
 
-interface ToastState {
-  message: string;
-  type: ToastType;
-}
-
-const AdminToastContext = createContext<{ showToast: (message: string, type?: ToastType) => void } | null>(null);
-
-const toastConfig: Record<ToastType, { icon: typeof CheckCircle2; accent: string; iconColor: string }> = {
-  success: { icon: CheckCircle2, accent: "border-l-[#E31E24]", iconColor: "text-[#E31E24]" },
-  error: { icon: XCircle, accent: "border-l-red-500", iconColor: "text-red-500" },
-  info: { icon: Info, accent: "border-l-[#9A9A9A]", iconColor: "text-[#6B6B6B]" },
-};
-
 export function AdminToastProvider({ children }: { children: ReactNode }) {
-  const [toast, setToast] = useState<ToastState | null>(null);
-  const [visible, setVisible] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setMounted(true), 0);
-    return () => {
-      clearTimeout(timer);
-      if (hideTimer.current) clearTimeout(hideTimer.current);
-      if (exitTimer.current) clearTimeout(exitTimer.current);
-    };
-  }, []);
-
-  const showToast = useCallback((message: string, type: ToastType = "success") => {
-    if (hideTimer.current) clearTimeout(hideTimer.current);
-    if (exitTimer.current) clearTimeout(exitTimer.current);
-
-    setToast({ message, type });
-    setVisible(true);
-
-    hideTimer.current = setTimeout(() => {
-      setVisible(false);
-      exitTimer.current = setTimeout(() => setToast(null), 220);
-    }, 4000);
-  }, []);
-
-  const Icon = toast ? toastConfig[toast.type].icon : CheckCircle2;
-
-  const toastPortal = mounted && toast
-    ? createPortal(
-        <div
-          role="status"
-          aria-live="polite"
-          className={cn(
-            "fixed top-5 right-5 z-[9999] flex w-[min(360px,calc(100vw-2.5rem))] items-start gap-3 rounded-lg border border-[#E6E6E6] border-l-4 bg-white px-4 py-3.5 shadow-[0_12px_32px_rgba(0,0,0,0.12)] transition-all duration-200",
-            toastConfig[toast.type].accent,
-            visible ? "translate-x-0 opacity-100" : "translate-x-2 opacity-0",
-          )}
-        >
-          <Icon size={18} className={cn("mt-0.5 shrink-0", toastConfig[toast.type].iconColor)} />
-          <div>
-            <p className="text-[13.5px] font-semibold text-[#1A1A1A]">
-              {toast.type === "success" ? "Success" : toast.type === "error" ? "Something went wrong" : "Notice"}
-            </p>
-            <p className="mt-0.5 text-[13px] leading-snug text-[#6B6B6B]">{toast.message}</p>
-          </div>
-        </div>,
-        document.body,
-      )
-    : null;
-
-  return (
-    <AdminToastContext.Provider value={{ showToast }}>
-      {children}
-      {toastPortal}
-    </AdminToastContext.Provider>
-  );
+  return <ToastProvider>{children}</ToastProvider>;
 }
 
 export function useToast() {
-  const context = useContext(AdminToastContext);
-  if (!context) {
-    throw new Error("useToast must be used within AdminToastProvider.");
-  }
-  return { showToast: context.showToast, ToastComponent: null };
+  const shared = useSharedToast();
+  return { showToast: shared.showToast, ToastComponent: null as ReactNode };
 }
 
 

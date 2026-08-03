@@ -3,9 +3,9 @@
 import { createContext, useCallback, useContext, type ReactNode } from "react";
 import { toast, ToastContainer } from "react-toastify";
 
-type ToastType = "success" | "error" | "info";
+export type ToastType = "success" | "error" | "warning" | "info";
 
-type ToastMessage = {
+export type ToastMessage = {
   title: string;
   message?: string;
   type: ToastType;
@@ -16,6 +16,7 @@ type ToastContextValue = {
 };
 
 const ToastContext = createContext<ToastContextValue | null>(null);
+const ToastContainerMountedContext = createContext<boolean>(false);
 
 function ToastContent({ title, message }: { title: string; message?: string }) {
   return (
@@ -27,6 +28,8 @@ function ToastContent({ title, message }: { title: string; message?: string }) {
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const isParentMounted = useContext(ToastContainerMountedContext);
+
   const showToast = useCallback<ToastContextValue["showToast"]>((nextToast, fallbackType = "success") => {
     const toastData =
       typeof nextToast === "string" ? { title: nextToast, type: fallbackType } : nextToast;
@@ -34,6 +37,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
     if (toastData.type === "error") {
       toast.error(content);
+      return;
+    }
+
+    if (toastData.type === "warning") {
+      toast.warning(content);
       return;
     }
 
@@ -46,25 +54,29 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <ToastContext.Provider value={{ showToast }}>
-      {children}
-      <ToastContainer
-        position="top-right"
-        autoClose={4200}
-        hideProgressBar={false}
-        newestOnTop
-        closeOnClick={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        toastClassName="modortho-toast"
-      />
-    </ToastContext.Provider>
+    <ToastContainerMountedContext.Provider value={true}>
+      <ToastContext.Provider value={{ showToast }}>
+        {children}
+        {!isParentMounted && (
+          <ToastContainer
+            position="top-right"
+            autoClose={4200}
+            hideProgressBar={false}
+            newestOnTop
+            closeOnClick={false}
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+            toastClassName="modortho-toast"
+          />
+        )}
+      </ToastContext.Provider>
+    </ToastContainerMountedContext.Provider>
   );
 }
 
 export function useToast() {
   const context = useContext(ToastContext);
   if (!context) throw new Error("useToast must be used inside ToastProvider");
-  return context;
+  return { showToast: context.showToast, ToastComponent: null as ReactNode };
 }

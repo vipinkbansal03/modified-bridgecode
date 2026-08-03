@@ -158,6 +158,11 @@ function buildCartItems(
     const price = priceMap[variantId];
     if (!variant || !price) return;
 
+    const availableStock = variant.inventory?.available ?? 0;
+    const isOutOfStock =
+      variant.inventory?.status === "OUT_OF_STOCK" || availableStock <= 0;
+    if (isOutOfStock) return;
+
     const base = {
       productId: apiProduct.id,
       productSlug: apiProduct.slug,

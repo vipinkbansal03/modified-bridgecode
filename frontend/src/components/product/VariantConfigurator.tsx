@@ -447,6 +447,23 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
       return;
     }
 
+    const availableStock = currentVariant.inventory?.available ?? 0;
+    const isOutOfStock =
+      currentVariant.inventory?.status === "OUT_OF_STOCK" ||
+      availableStock <= 0;
+
+    if (isOutOfStock) {
+      setError("This item is currently out of stock.");
+      return;
+    }
+
+    if (quantity > availableStock) {
+      setError(
+        `Only ${availableStock} unit${availableStock === 1 ? "" : "s"} available for this configuration.`,
+      );
+      return;
+    }
+
     const line: DraftConfiguration = {
       variantId: currentVariant.id,
       variantTitle: currentVariant.title,
@@ -486,10 +503,24 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
       );
       return;
     }
-    if (currentVariant.inventory?.status === "OUT_OF_STOCK") {
-      setError("This configuration is currently out of stock.");
+
+    const availableStock = currentVariant.inventory?.available ?? 0;
+    const isOutOfStock =
+      currentVariant.inventory?.status === "OUT_OF_STOCK" ||
+      availableStock <= 0;
+
+    if (isOutOfStock) {
+      setError("This item is currently out of stock.");
       return;
     }
+
+    if (quantity > availableStock) {
+      setError(
+        `Only ${availableStock} unit${availableStock === 1 ? "" : "s"} available for this configuration.`,
+      );
+      return;
+    }
+
     if (!currentPrice) {
       setError(
         "This configuration does not have an available purchase price yet.",
@@ -756,7 +787,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     {currentVariant ? (
                       <>
-                        <StockBadge status={currentVariant.inventory?.status} />
+                        <StockBadge status={currentVariant.inventory?.status} available={currentVariant.inventory?.available} />
                         {Object.entries(
                           currentVariant.attributeCombination,
                         ).map(([key, value]) => (
@@ -808,52 +839,78 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                 </div>
               )}
 
+              {currentVariant && (currentVariant.inventory?.status === "OUT_OF_STOCK" || (currentVariant.inventory?.available ?? 0) <= 0) && (
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-[13px] font-medium text-red-700">
+                  This item is currently out of stock and cannot be added to your cart.
+                </div>
+              )}
+
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3">
-                {currentPrice ? (
-                  <>
+                {(() => {
+                  const isSelectedOutOfStock =
+                    !currentVariant ||
+                    currentVariant.inventory?.status === "OUT_OF_STOCK" ||
+                    (currentVariant.inventory?.available ?? 0) <= 0;
+
+                  if (currentPrice) {
+                    return (
+                      <>
+                        <button
+                          type="button"
+                          disabled={isSelectedOutOfStock}
+                          onClick={handleAddConfiguration}
+                          className={`inline-flex items-center justify-center rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90 ${
+                            isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
+                          }`}
+                        >
+                          Add Configuration
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isSelectedOutOfStock}
+                          onClick={handleAddToCart}
+                          className={`inline-flex items-center justify-center gap-2 rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand ${
+                            isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
+                          }`}
+                        >
+                          <ShoppingBag size={15} />
+                          {isSelectedOutOfStock ? "Out of Stock" : "Add to Cart"}
+                        </button>
+                      </>
+                    );
+                  }
+
+                  return (
                     <button
                       type="button"
-                      onClick={handleAddConfiguration}
-                      className="inline-flex items-center justify-center rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90"
+                      disabled={isSelectedOutOfStock}
+                      onClick={() => {
+                        if (!currentVariant || isSelectedOutOfStock) return;
+                        addItems([
+                          {
+                            productId: apiProduct.id,
+                            productSlug: apiProduct.slug,
+                            productTitle: apiProduct.title,
+                            variantId: currentVariant.id,
+                            variantTitle: currentVariant.title,
+                            sku: currentVariant.sku,
+                            quantity,
+                            unitPrice: 0,
+                            currencyCode: selectedCurrency,
+                            currencySymbol: "$",
+                            selectedAttributes: currentVariant.attributeCombination,
+                          },
+                        ]);
+                        open();
+                      }}
+                      className={`col-span-full inline-flex items-center justify-center gap-2 rounded-pill bg-brand px-6 py-3.5 text-[14px] font-semibold text-white transition hover:bg-brand/90 ${
+                        isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
+                      }`}
                     >
-                      Add Configuration
+                      {isSelectedOutOfStock ? "Out of Stock" : "Request Quote (RFQ)"}
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleAddToCart}
-                      className="inline-flex items-center justify-center gap-2 rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand"
-                    >
-                      <ShoppingBag size={15} />
-                      Add to Cart
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!currentVariant) return;
-                      addItems([
-                        {
-                          productId: apiProduct.id,
-                          productSlug: apiProduct.slug,
-                          productTitle: apiProduct.title,
-                          variantId: currentVariant.id,
-                          variantTitle: currentVariant.title,
-                          sku: currentVariant.sku,
-                          quantity,
-                          unitPrice: 0,
-                          currencyCode: selectedCurrency,
-                          currencySymbol: "$",
-                          selectedAttributes: currentVariant.attributeCombination,
-                        },
-                      ]);
-                      open();
-                    }}
-                    className="col-span-full inline-flex items-center justify-center gap-2 rounded-pill bg-brand px-6 py-3.5 text-[14px] font-semibold text-white transition hover:bg-brand/90"
-                  >
-                    Request Quote (RFQ)
-                  </button>
-                )}
+                  );
+                })()}
               </div>
 
               {error && (

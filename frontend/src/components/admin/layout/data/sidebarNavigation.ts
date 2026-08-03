@@ -92,6 +92,7 @@ export const sidebarSections: SidebarSection[] = [
     items: [
       { label: "Users & Customers", href: "/admin/customers", icon: Users, permission: "customers.view" },
       { label: "Inquiries", href: "/admin/contact-submissions", icon: MessageSquare, permission: "contactSubmissions.view" },
+      { label: "Newsletter", href: "/admin/newsletter", icon: Newspaper, permission: "contactSubmissions.view" },
       { label: "Roles & Permissions", href: "/admin/roles", icon: Shield, permission: "roles.view" },
     ],
   },

@@ -9,6 +9,8 @@ import {
 } from "@/validations/newsletter.validation";
 import { cn } from "@/utils/cn";
 
+import { useToast } from "@/components/ui/ToastProvider";
+
 interface NewsletterFormProps {
   /** Use "light" on dark backgrounds (e.g. the red footer) and "dark" elsewhere. */
   tone?: "light" | "dark";
@@ -16,12 +18,26 @@ interface NewsletterFormProps {
 
 export function NewsletterForm({ tone = "light" }: NewsletterFormProps) {
   const { mutate, isPending, isSuccess } = useNewsletterSubmit();
+  const { showToast } = useToast();
 
   const formik = useFormik({
     initialValues: newsletterInitialValues,
     validationSchema: newsletterValidationSchema,
     onSubmit: (values, helpers) => {
-      mutate(values, { onSuccess: () => helpers.resetForm() });
+      mutate(values, {
+        onSuccess: (data) => {
+          helpers.resetForm();
+          if (data.alreadyActive) {
+            showToast("You are already subscribed.", "info");
+          } else {
+            showToast("Successfully subscribed to the newsletter!", "success");
+            localStorage.setItem("newsletter_subscribed", "true");
+          }
+        },
+        onError: (err: any) => {
+          showToast(err.message || "Failed to subscribe. Please try again.", "error");
+        }
+      });
     },
   });
 

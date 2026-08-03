@@ -20,7 +20,9 @@ export function CartDrawer() {
   const { items, totals, isOpen, closeCart, updateQuantity, removeItem } =
     useCart();
   const { t } = useStaticTranslations();
-  const hasUnavailableItems = items.some((item) => item.priceUnavailable);
+  const hasUnavailableItems = items.some(
+    (item) => item.priceUnavailable || item.isOutOfStock || item.isInsufficientStock
+  );
 
   if (!isOpen) return null;
 
@@ -61,13 +63,11 @@ export function CartDrawer() {
         <div className="custom-scrollbar flex-1 overflow-y-auto px-5 py-5">
           {hasUnavailableItems && (
             <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3">
-              <p className="text-sm font-medium text-red-700">
-                Price unavailable
+              <p className="text-sm font-semibold text-red-700">
+                Action required in cart
               </p>
               <p className="mt-1 text-xs text-red-600">
-                One or more items in your cart are not available for the
-                selected country. Remove those items or change the country to
-                continue.
+                Please remove or adjust unavailable or out-of-stock items before proceeding to checkout.
               </p>
             </div>
           )}
@@ -111,6 +111,12 @@ export function CartDrawer() {
                       <Trash2 size={16} />
                     </button>
                   </div>
+
+                  {item.stockErrorMessage && (
+                    <div className="mt-2.5 rounded-md border border-red-200 bg-red-50 p-2 text-[11.5px] font-medium text-red-700">
+                      {item.stockErrorMessage}
+                    </div>
+                  )}
 
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {Object.entries(item.selectedAttributes).map(

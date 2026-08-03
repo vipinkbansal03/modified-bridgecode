@@ -36,11 +36,6 @@ export function WishlistButton({
     e.preventDefault();
     e.stopPropagation();
 
-    if (!currentCustomer) {
-      showToast("Please log in to manage your wishlist", "info");
-      return;
-    }
-
     if (!productId) return;
 
     toggleWishlist.mutate(productId, {
