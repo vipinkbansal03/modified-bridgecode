@@ -355,10 +355,9 @@ export function Footer() {
       <Link
         key={key}
         href={href}
-        target={item.openInNewTab || isExternal ? "_blank" : undefined}
-        rel={
-          item.openInNewTab || isExternal ? "noopener noreferrer" : undefined
-        }
+        {...(item.openInNewTab || isExternal
+          ? { target: "_blank", rel: "noopener noreferrer" }
+          : {})}
         className="block break-words pb-0.5 text-[13px] text-white/80 hover:text-white"
       >
         {label(item.label)}
@@ -538,8 +537,9 @@ export function Footer() {
                   {index > 0 && <span>|</span>}
                   <Link
                     href={item.href || "#"}
-                    target={item.openInNewTab ? "_blank" : undefined}
-                    rel={item.openInNewTab ? "noopener noreferrer" : undefined}
+                    {...(item.openInNewTab
+                      ? { target: "_blank", rel: "noopener noreferrer" }
+                      : {})}
                   >
                     {label(item.label)}
                   </Link>
