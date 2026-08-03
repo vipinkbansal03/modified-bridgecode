@@ -90,7 +90,7 @@ export default function WarehousesPage() {
   const statesOfSelectedCountry = useMemo(() => {
     if (!countryCode) return [];
     try {
-      return State.getStatesOfCountry(countryCode.toUpperCase()).map((s) => ({
+      return State.getStatesOfCountry(countryCode.toUpperCase()).map((s: any) => ({
         value: s.name,
         label: s.name,
       }));
