@@ -10,10 +10,17 @@ import {
   verifyCustomerOrderPaymentController,
 } from "./paymentMethods.controller";
 
+import {
+  getProductAndVariantOverridesController,
+  updateProductAndVariantOverridesController,
+  resolvePublicPaymentMethodsController,
+} from "./paymentOverrides.controller";
+
 const router = Router();
 
-// Storefront Public Route: Fetch available payment methods by country
+// Storefront Public Routes: Fetch and Resolve available payment methods
 router.get("/public/payment-methods", asyncHandler(getPublicPaymentMethodsController));
+router.post("/public/payment-methods/resolve", asyncHandler(resolvePublicPaymentMethodsController));
 
 // Customer Routes: Initiate and Verify payment
 router.post(
@@ -27,7 +34,7 @@ router.post(
   asyncHandler(verifyCustomerOrderPaymentController),
 );
 
-// Admin Routes: Payment Matrix management
+// Admin Routes: Payment Matrix and Overrides management
 router.get(
   "/admin/payment-methods/matrix",
   protect,
@@ -37,6 +44,16 @@ router.put(
   "/admin/payment-methods/country",
   protect,
   asyncHandler(updateAdminPaymentMethodCountryController),
+);
+router.get(
+  "/admin/products/:id/payment-overrides",
+  protect,
+  asyncHandler(getProductAndVariantOverridesController),
+);
+router.put(
+  "/admin/products/:id/payment-overrides",
+  protect,
+  asyncHandler(updateProductAndVariantOverridesController),
 );
 
 export default router;

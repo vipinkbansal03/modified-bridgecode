@@ -73,6 +73,7 @@ export interface ProductListParams {
   sort?: "newest" | "name_asc" | "name_desc";
   lang?: string;
   countryCode?: string;
+  ids?: string;
 }
 
 async function fetchProducts(params: ProductListParams = {}) {
@@ -104,6 +105,7 @@ async function fetchProducts(params: ProductListParams = {}) {
       sort: params.sort,
       lang: params.lang,
       countryCode: params.countryCode,
+      ids: params.ids,
     },
   });
   return unwrapPaginated<ApiProductSummary>(res);

@@ -369,10 +369,14 @@ export interface AvailablePaymentMethod {
   publicKey?: string | null;
 }
 
-export async function fetchPublicPaymentMethods(countryCode?: string) {
-  const url = API_ORIGIN ? `${API_ORIGIN}/api/public/payment-methods` : "/api/public/payment-methods";
-  const res = await axios.get(url, {
-    params: { countryCode },
+export async function fetchPublicPaymentMethods(
+  countryCode?: string,
+  cartItems?: { productId: string; variantId: string }[]
+) {
+  const url = API_ORIGIN ? `${API_ORIGIN}/api/public/payment-methods/resolve` : "/api/public/payment-methods/resolve";
+  const res = await axios.post(url, {
+    countryCode: countryCode || "IN",
+    cartItems: cartItems || [],
   });
   return res.data.data as AvailablePaymentMethod[];
 }
@@ -544,5 +548,10 @@ export async function toggleWishlist(productId: string): Promise<{ inWishlist: b
 
 export async function getWishlistCount(): Promise<{ count: number }> {
   const res = await customerApi.get("/wishlist/count");
+  return res.data.data;
+}
+
+export async function syncWishlist(productIds: string[]): Promise<WishlistItem[]> {
+  const res = await customerApi.post("/wishlist/sync", { productIds });
   return res.data.data;
 }

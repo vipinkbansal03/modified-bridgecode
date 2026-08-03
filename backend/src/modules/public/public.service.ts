@@ -93,6 +93,7 @@ export async function publicListProducts(
     attributeValues?: string; // comma-separated attribute values
     sort?: string; // "newest" | "name_asc" | "name_desc"
     countryCode?: string;
+    ids?: string; // comma-separated IDs
   },
   languageCode?: string,
 ) {
@@ -102,10 +103,17 @@ export async function publicListProducts(
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
+  const filterIds = (query.ids ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
 
   const where: Prisma.ProductWhereInput = buildStorefrontProductWhere(
     country.id,
     {
+      ...(filterIds.length > 0 && {
+        id: { in: filterIds },
+      }),
       category: {
         ...(query.category ? { slug: query.category } : {}),
         OR: [
@@ -906,6 +914,18 @@ export async function checkInventory(
       stock: true,
       reservedStock: true,
       status: true,
+      variant: {
+        select: {
+          id: true,
+          title: true,
+          sku: true,
+          product: {
+            select: {
+              title: true,
+            },
+          },
+        },
+      },
     },
     orderBy: [{ countryId: "desc" }],
   });
@@ -925,6 +945,9 @@ export async function checkInventory(
     variantId: r.variantId,
     available: Math.max(0, r.stock - r.reservedStock),
     status: r.status,
+    productTitle: r.variant?.product?.title ?? "",
+    variantTitle: r.variant?.title ?? "",
+    sku: r.variant?.sku ?? null,
   }));
 }
 

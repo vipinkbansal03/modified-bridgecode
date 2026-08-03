@@ -339,6 +339,10 @@ svg {
   border-left-color: #1a1a1a;
 }
 
+.Toastify__toast--warning.modortho-toast {
+  border-left-color: #f59e0b;
+}
+
 .Toastify__toast-body.modortho-toast-body {
   margin: 0;
   padding: 0;

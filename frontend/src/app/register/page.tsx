@@ -22,6 +22,7 @@ import { getCustomerErrorMessage } from "@/services/customerApi";
 import PhoneInputField from "@/components/ui/PhoneInput";
 import { useCountries } from "@/hooks/api/useCurrencies";
 import { worldCountries } from "@/data/world-countries";
+import { apiClient } from "@/lib/apiClient";
 
 const registerSchema = Yup.object({
   customerType: Yup.string()
@@ -58,6 +59,7 @@ const registerSchema = Yup.object({
     [true],
     "You must agree to the terms and conditions",
   ),
+  subscribeNewsletter: Yup.boolean().optional(),
 });
 
 type RegisterFormValues = Yup.InferType<typeof registerSchema>;
@@ -177,6 +179,7 @@ export default function RegisterPage() {
       currentPracticeOther: "",
       usingModernProducts: "NO",
       termsAccepted: false,
+      subscribeNewsletter: false,
     },
     validationSchema: registerSchema,
     onSubmit: async (values, helpers) => {
@@ -216,6 +219,18 @@ export default function RegisterPage() {
           },
           returnTo,
         );
+
+        if (values.subscribeNewsletter) {
+          localStorage.setItem("newsletter_subscribed", "true");
+          localStorage.removeItem("show_newsletter_signup_modal_once");
+          try {
+            await apiClient.post("/newsletter/subscribe", { email: values.email });
+          } catch (subscribeErr) {
+            console.error("Newsletter registration subscribe error:", subscribeErr);
+          }
+        } else {
+          localStorage.setItem("show_newsletter_signup_modal_once", "true");
+        }
       } catch (error) {
         helpers.setStatus(
           getCustomerErrorMessage(error, "Could not create account."),
@@ -639,28 +654,45 @@ export default function RegisterPage() {
                 </div>
               </div>
             </div>
-            <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex flex-col gap-4 pt-1">
               <div>
-                <label className="inline-flex items-center gap-2 text-[12px] text-[#1A1A1A]">
+                <label className="inline-flex items-start gap-2 text-[12px] text-[#1A1A1A]">
                   <input
                     type="checkbox"
-                    name="termsAccepted"
-                    checked={formik.values.termsAccepted}
+                    name="subscribeNewsletter"
+                    checked={formik.values.subscribeNewsletter}
                     onChange={formik.handleChange}
                     onBlur={formik.handleBlur}
-                    className="h-4 w-4 accent-[#E31E24]"
+                    className="mt-0.5 h-4 w-4 accent-[#E31E24]"
                   />
                   <span>
-                    I have read and agree to the{" "}
-                    <Link
-                      href="/terms-and-conditions"
-                      className="text-[#E31E24] hover:underline"
-                    >
-                      Terms and Conditions
-                    </Link>
-                    .
+                    Subscribe to the Modern Orthodontics newsletter for product updates, promotions, and news.
                   </span>
                 </label>
+              </div>
+              
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <label className="inline-flex items-center gap-2 text-[12px] text-[#1A1A1A]">
+                    <input
+                      type="checkbox"
+                      name="termsAccepted"
+                      checked={formik.values.termsAccepted}
+                      onChange={formik.handleChange}
+                      onBlur={formik.handleBlur}
+                      className="h-4 w-4 accent-[#E31E24]"
+                    />
+                    <span>
+                      I have read and agree to the{" "}
+                      <Link
+                        href="/terms-and-conditions"
+                        className="text-[#E31E24] hover:underline"
+                      >
+                        Terms and Conditions
+                      </Link>
+                      .
+                    </span>
+                  </label>
                 {formik.touched.termsAccepted &&
                   formik.errors.termsAccepted && (
                     <p className="ml-6 mt-1 text-[11px] leading-none text-[#E31E24]">
@@ -677,6 +709,7 @@ export default function RegisterPage() {
                 {formik.isSubmitting ? "REGISTERING..." : "REGISTER"}
               </button>
             </div>
+          </div>
 
             <p className="text-center text-[12.5px] text-[#8A8A8A]">
               Already have an account?{" "}

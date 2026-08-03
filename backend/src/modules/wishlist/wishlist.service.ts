@@ -174,3 +174,30 @@ export async function getWishlistCount(customerId: string) {
   });
   return { count };
 }
+
+export async function syncGuestWishlist(customerId: string, productIds: string[]) {
+  if (!productIds || productIds.length === 0) {
+    return getCustomerWishlist(customerId);
+  }
+
+  // 1. Fetch valid product IDs to ensure we don't insert invalid references
+  const validProducts = await prisma.product.findMany({
+    where: { id: { in: productIds } },
+    select: { id: true },
+  });
+  const validProductIds = validProducts.map((p) => p.id);
+
+  if (validProductIds.length > 0) {
+    // 2. Perform bulk creation (skipDuplicates is supported by PostgreSQL and MySQL)
+    await prisma.wishlist.createMany({
+      data: validProductIds.map((pid) => ({
+        customerId,
+        productId: pid,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  // 3. Return the fully merged list
+  return getCustomerWishlist(customerId);
+}

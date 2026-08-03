@@ -35,7 +35,7 @@ function formatCurrency(value: number) {
   return `₹${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
-async function sendEmailSafely(params: { from: string; to: string[]; subject: string; text: string; replyTo?: string }) {
+async function sendEmailSafely(params: { from: string; to: string[]; subject: string; text: string; html?: string; replyTo?: string }) {
   if (!resend) {
     console.warn("[Resend Warning] RESEND_API_KEY is not configured. Email skipped.");
     logger.warn("[Resend Warning] RESEND_API_KEY is not configured. Email skipped.");
@@ -259,4 +259,46 @@ export async function sendContactNotification(data: ContactEmailData): Promise<v
       .filter(Boolean)
       .join("\n"),
   });
+}
+
+export async function sendNewsletterWelcomeEmail(email: string): Promise<void> {
+  const unsubscribeUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/newsletter/unsubscribe?email=${encodeURIComponent(email)}`;
+  await sendEmailSafely({
+    from: FROM,
+    to: [email],
+    subject: "Welcome to the Modern Orthodontics Newsletter",
+    text: [
+      "Hello,",
+      "",
+      "Thank you for subscribing to the Modern Orthodontics newsletter. You will now receive updates on our latest products, news, and special offers.",
+      "",
+      "If you wish to unsubscribe at any time, please click the link below:",
+      unsubscribeUrl,
+      "",
+      "Modern Orthodontics Team",
+    ].join("\n"),
+    html: `
+      <div style="font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; color: #1a1a1a;">
+        <h2 style="color: #e31e24; margin-bottom: 20px;">Modern Orthodontics</h2>
+        <p>Hello,</p>
+        <p>Thank you for subscribing to the Modern Orthodontics newsletter. You will now receive updates on our latest products, news, and special offers.</p>
+        <p>Best regards,<br/>Modern Orthodontics Team</p>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+        <p style="font-size: 11px; color: #666; text-align: center;">
+          You are receiving this because you subscribed to our newsletter.
+          <br/>
+          <a href="${unsubscribeUrl}" style="color: #e31e24; text-decoration: underline;">Unsubscribe</a> at any time.
+        </p>
+      </div>
+    `,
+  });
+}
+
+function stripHtmlTags(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .trim();
 }

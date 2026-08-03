@@ -2,7 +2,8 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { customerApi } from "@/services/customerApi";
+import { useQueryClient } from "@tanstack/react-query";
+import { customerApi, syncWishlist } from "@/services/customerApi";
 
 export interface CustomerSession {
   id: string;
@@ -88,6 +89,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const storedToken = localStorage.getItem("customer_token");
@@ -108,12 +110,28 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
+  const handleWishlistSync = async () => {
+    try {
+      const raw = localStorage.getItem("guest_wishlist");
+      const ids = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(ids) && ids.length > 0) {
+        await syncWishlist(ids);
+        localStorage.removeItem("guest_wishlist");
+      }
+    } catch (e) {
+      console.error("Failed to sync guest wishlist:", e);
+    } finally {
+      queryClient.invalidateQueries({ queryKey: ["wishlist"] });
+    }
+  };
+
   const login = async (email: string, password: string, redirectTo = "/") => {
     const res = await customerApi.post("/auth/login", { email, password });
     const { token: jwt, customer } = res.data.data as { token: string; customer: CustomerSession };
     storeCustomerSession(jwt, customer);
     setToken(jwt);
     setCurrentCustomer(customer);
+    await handleWishlistSync();
     router.push(redirectTo);
   };
 
@@ -123,6 +141,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     storeCustomerSession(jwt, customer);
     setToken(jwt);
     setCurrentCustomer(customer);
+    await handleWishlistSync();
     router.push(redirectTo);
   };
 

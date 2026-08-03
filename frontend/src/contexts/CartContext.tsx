@@ -29,6 +29,10 @@ export interface CartItem {
   selectedAttributes: Record<string, string>;
   priceUnavailable?: boolean;
   priceUnavailableMessage?: string;
+  availableStock?: number;
+  isOutOfStock?: boolean;
+  isInsufficientStock?: boolean;
+  stockErrorMessage?: string;
 }
 
 interface CartTotals {
@@ -38,6 +42,7 @@ interface CartTotals {
   roleDiscount: number;
   currencyCode: string;
   currencySymbol: string;
+  hasInvalidStockItems: boolean;
 }
 
 interface CartContextValue {
@@ -72,14 +77,18 @@ function computeTotals(
     0,
   );
   const roleDiscount = Math.max(0, originalSubtotal - subtotal);
+  const hasInvalidStockItems = items.some(
+    (item) => Boolean(item.isOutOfStock || item.isInsufficientStock || item.priceUnavailable)
+  );
 
   return {
-    itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
+    itemCount: items.length,
     originalSubtotal,
     subtotal,
     roleDiscount,
     currencyCode: first?.currencyCode ?? fallbackCurrencyCode,
     currencySymbol: first?.currencySymbol ?? fallbackCurrencySymbol,
+    hasInvalidStockItems,
   };
 }
 
@@ -223,6 +232,56 @@ export function CartProvider({ children }: { children: ReactNode }) {
           }
         }
 
+        const variantIds = updatedItems.map((item) => item.variantId);
+        if (variantIds.length > 0) {
+          try {
+            const invRes = await apiClient.get("/inventory", {
+              params: {
+                variantIds: variantIds.join(","),
+                countryCode: selectedCountryCode,
+              },
+            });
+
+            const inventoryRecords: Array<{
+              variantId: string;
+              available: number;
+              status: string;
+              productTitle?: string;
+              variantTitle?: string;
+            }> = invRes.data?.data ?? [];
+
+            const invMap = new Map(inventoryRecords.map((r) => [r.variantId, r]));
+
+            updatedItems = updatedItems.map((item) => {
+              const inv = invMap.get(item.variantId);
+              if (!inv) return item;
+
+              const isOutOfStock = inv.available <= 0 || inv.status === "OUT_OF_STOCK";
+              const isInsufficientStock = item.quantity > inv.available;
+              const pTitle = inv.productTitle || item.productTitle;
+              const vTitle = inv.variantTitle || item.variantTitle;
+              const displayName = `${pTitle}${vTitle ? ` - ${vTitle}` : ""}`;
+
+              let stockErrorMessage: string | undefined = undefined;
+              if (isOutOfStock) {
+                stockErrorMessage = `"${displayName}" is currently out of stock.`;
+              } else if (isInsufficientStock) {
+                stockErrorMessage = `Only ${inv.available} unit${inv.available === 1 ? "" : "s"} available for "${displayName}".`;
+              }
+
+              return {
+                ...item,
+                availableStock: inv.available,
+                isOutOfStock,
+                isInsufficientStock,
+                stockErrorMessage,
+              };
+            });
+          } catch (invErr) {
+            console.warn("Failed to refresh cart inventory status", invErr);
+          }
+        }
+
         if (!cancelled) {
           setItems(updatedItems);
         }
@@ -248,10 +307,30 @@ export function CartProvider({ children }: { children: ReactNode }) {
         next.push(item);
         continue;
       }
+
+      const existing = next[existingIndex];
+      const newQty = existing.quantity + item.quantity;
+      const available = existing.availableStock;
+      const isOutOfStock =
+        Boolean(existing.isOutOfStock) || (available !== undefined && available <= 0);
+      const isInsufficientStock =
+        available !== undefined && newQty > available;
+
+      let stockErrorMessage: string | undefined = undefined;
+      if (isOutOfStock) {
+        const displayName = `${item.productTitle}${item.variantTitle ? ` - ${item.variantTitle}` : ""}`;
+        stockErrorMessage = `"${displayName}" is currently out of stock.`;
+      } else if (isInsufficientStock) {
+        const displayName = `${item.productTitle}${item.variantTitle ? ` - ${item.variantTitle}` : ""}`;
+        stockErrorMessage = `Only ${available} unit${available === 1 ? "" : "s"} available for "${displayName}".`;
+      }
+
       next[existingIndex] = {
-        ...next[existingIndex],
-        quantity: next[existingIndex].quantity + item.quantity,
+        ...existing,
+        quantity: newQty,
         unitPrice: item.unitPrice,
+        isInsufficientStock,
+        stockErrorMessage,
       };
     }
     return next;
@@ -280,9 +359,31 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems((current) =>
       quantity <= 0
         ? current.filter((item) => item.variantId !== variantId)
-        : current.map((item) =>
-            item.variantId === variantId ? { ...item, quantity } : item,
-          ),
+        : current.map((item) => {
+            if (item.variantId !== variantId) return item;
+
+            const available = item.availableStock;
+            const isOutOfStock =
+              Boolean(item.isOutOfStock) || (available !== undefined && available <= 0);
+            const isInsufficientStock =
+              available !== undefined && quantity > available;
+
+            let stockErrorMessage: string | undefined = undefined;
+            if (isOutOfStock) {
+              const displayName = `${item.productTitle}${item.variantTitle ? ` - ${item.variantTitle}` : ""}`;
+              stockErrorMessage = `"${displayName}" is currently out of stock.`;
+            } else if (isInsufficientStock) {
+              const displayName = `${item.productTitle}${item.variantTitle ? ` - ${item.variantTitle}` : ""}`;
+              stockErrorMessage = `Only ${available} unit${available === 1 ? "" : "s"} available for "${displayName}".`;
+            }
+
+            return {
+              ...item,
+              quantity,
+              isInsufficientStock,
+              stockErrorMessage,
+            };
+          }),
     );
   };
 

@@ -111,9 +111,15 @@ async function calculateCustomerOrder(
         0,
         (stockRecord?.stock ?? 0) - (stockRecord?.reservedStock ?? 0),
       );
+      const isOutOfStock = availableStock <= 0 || stockRecord?.status === "OUT_OF_STOCK";
+      const displayName = `${variant.product.title}${variant.title ? ` - ${variant.title}` : ""}`;
+
+      if (isOutOfStock) {
+        throw new AppError(`"${displayName}" is currently out of stock.`, 400);
+      }
       if (availableStock < item.quantity) {
         throw new AppError(
-          `Insufficient stock for ${variant.sku ?? variant.title}.`,
+          `Insufficient stock for "${displayName}". Only ${availableStock} unit${availableStock === 1 ? "" : "s"} available.`,
           400,
         );
       }

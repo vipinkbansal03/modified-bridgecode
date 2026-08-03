@@ -2676,3 +2676,40 @@ export const useDeleteWarehouse = () => {
   });
 };
 
+export const useAdminSubscribers = (params?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  sortBy?: string;
+  sortDir?: string;
+}) =>
+  useQuery({
+    queryKey: ["admin-newsletter-subscribers", params],
+    queryFn: () =>
+      adminApi.get("/newsletter/subscribers", { params }).then((r) => r.data),
+  });
+
+export const useCreateSubscriber = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { email: string }) =>
+      adminApi.post("/newsletter/subscribers", data).then((r) => r.data),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["admin-newsletter-subscribers"] }),
+  });
+};
+
+export const useUpdateSubscriberStatus = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      adminApi
+        .patch(`/newsletter/subscribers/${id}/status`, { status })
+        .then((r) => r.data),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["admin-newsletter-subscribers"] }),
+  });
+};
+
+

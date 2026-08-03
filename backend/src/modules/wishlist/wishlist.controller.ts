@@ -43,3 +43,10 @@ export const count = asyncHandler(async (req: CustomerAuthRequest, res: Response
   const result = await WishlistService.getWishlistCount(req.customer.id);
   return ApiResponse.success(res, "Wishlist count.", result);
 });
+
+export const sync = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
+  if (!req.customer) throw new AppError("Customer authentication required.", 401);
+  const productIds = Array.isArray(req.body?.productIds) ? req.body.productIds : [];
+  const mergedWishlist = await WishlistService.syncGuestWishlist(req.customer.id, productIds);
+  return ApiResponse.success(res, "Wishlist synced successfully.", mergedWishlist);
+});

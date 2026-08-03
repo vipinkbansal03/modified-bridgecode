@@ -172,6 +172,7 @@ model Product {
   taxRules          TaxRule[]            @relation("ProductTaxRules")
   reviews           ProductReview[]
   wishlistItems     Wishlist[]
+  paymentMethods    ProductPaymentMethod[]
 
   @@map("products")
 }
@@ -308,6 +309,7 @@ model ProductVariant {
   product              Product                        @relation(fields: [productId], references: [id])
   QuoteItem            QuoteItem[]
   taxRules             TaxRule[]                      @relation("VariantTaxRules")
+  paymentMethods       VariantPaymentMethod[]
 
   @@map("product_variants")
 }
@@ -1677,6 +1679,8 @@ model PaymentMethod {
   countries       PaymentMethodCountry[]
   configs         PaymentMethodConfig[]
   orders          Order[]
+  productOverrides ProductPaymentMethod[]
+  variantOverrides VariantPaymentMethod[]
 
   @@map("payment_methods")
 }
@@ -1732,5 +1736,53 @@ enum AddressValidationStatus {
   UNVALIDATED
   CORRECTED
   INVALID
+}
+
+model NewsletterSubscriber {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  status         String    @default("ACTIVE") // ACTIVE, UNSUBSCRIBED
+  source         String    @default("FOOTER") // FOOTER, ADMIN
+  subscribedAt   DateTime  @default(now())
+  unsubscribedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("newsletter_subscribers")
+}
+
+enum PaymentMethodOverrideState {
+  ALLOW
+  BLOCK
+}
+
+model ProductPaymentMethod {
+  id              String                     @id @default(cuid())
+  productId       String
+  paymentMethodId String
+  state           PaymentMethodOverrideState
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  product         Product                    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  paymentMethod   PaymentMethod              @relation(fields: [paymentMethodId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, paymentMethodId])
+  @@map("product_payment_methods")
+}
+
+model VariantPaymentMethod {
+  id              String                     @id @default(cuid())
+  variantId       String
+  paymentMethodId String
+  state           PaymentMethodOverrideState
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  variant         ProductVariant             @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  paymentMethod   PaymentMethod              @relation(fields: [paymentMethodId], references: [id], onDelete: Cascade)
+
+  @@unique([variantId, paymentMethodId])
+  @@map("variant_payment_methods")
 }
 

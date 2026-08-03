@@ -53,7 +53,7 @@ export default function WishlistPage() {
               Keep track of products you want to purchase later.
             </p>
           </div>
-          {currentCustomer && !isLoading && wishlist.length > 0 && (
+          {!isLoading && wishlist.length > 0 && (
             <span className="rounded-full bg-grey px-3 py-1 text-xs font-semibold text-ink">
               {wishlist.length} {wishlist.length === 1 ? "Item" : "Items"}
             </span>
@@ -77,33 +77,8 @@ export default function WishlistPage() {
           </div>
         )}
 
-        {/* Unauthenticated State */}
-        {!isLoading && !currentCustomer && (
-          <div className="mx-auto max-w-md rounded-2xl border border-line bg-white p-8 text-center shadow-sm">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-brand">
-              <UserCheck size={32} />
-            </div>
-            <h3 className="mt-4 text-lg font-bold text-ink">Sign in to view your wishlist</h3>
-            <p className="mt-2 text-sm text-steel">
-              Log in to your account to save products, sync across devices, and access your saved items anytime.
-            </p>
-            <div className="mt-6 flex flex-col gap-3">
-              <Link href="/login">
-                <Button variant="primary" className="w-full">
-                  Sign In
-                </Button>
-              </Link>
-              <Link href="/register">
-                <Button variant="secondary" className="w-full">
-                  Create Account
-                </Button>
-              </Link>
-            </div>
-          </div>
-        )}
-
         {/* Empty Wishlist State */}
-        {!isLoading && currentCustomer && wishlist.length === 0 && (
+        {!isLoading && wishlist.length === 0 && (
           <div className="mx-auto max-w-md rounded-2xl border border-line bg-white p-8 text-center shadow-sm">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-brand">
               <Heart size={32} className="fill-brand/10 text-brand" />
@@ -124,7 +99,7 @@ export default function WishlistPage() {
         )}
 
         {/* Wishlist Items Grid */}
-        {!isLoading && currentCustomer && wishlist.length > 0 && (
+        {!isLoading && wishlist.length > 0 && (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {wishlist.map((item) => {
               const p = item.product;

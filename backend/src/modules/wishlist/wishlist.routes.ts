@@ -10,5 +10,6 @@ router.post("/", C.add);
 router.delete("/:productId", C.remove);
 router.post("/toggle", C.toggle);
 router.get("/count", C.count);
+router.post("/sync", C.sync);
 
 export default router;

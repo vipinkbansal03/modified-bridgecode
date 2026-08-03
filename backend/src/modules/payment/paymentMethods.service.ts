@@ -1,6 +1,7 @@
 import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
 import { PaymentGatewayRegistry } from "./paymentGatewayRegistry";
+import { resolveCartPaymentMethods } from "./paymentOverrides.service";
 
 export async function getAvailablePaymentMethodsForCountry(countryCode?: string) {
   const code = (countryCode || "IN").trim().toUpperCase();
@@ -152,6 +153,27 @@ export async function initiatePaymentForOrder(
   });
 
   if (!order) throw new AppError("Order not found.", 404);
+
+  // Validate that the payment method is supported for all items in this order
+  const cartItems = order.items
+    .filter((item) => item.variant)
+    .map((item) => ({
+      productId: item.productId,
+      variantId: item.variantId!,
+    }));
+  const allowed = await resolveCartPaymentMethods(
+    order.country.code,
+    cartItems
+  );
+  const isAllowed = allowed.some(
+    (m) => m.code.toUpperCase() === paymentMethodCode.toUpperCase()
+  );
+  if (!isAllowed) {
+    throw new AppError(
+      "The selected payment method is not supported for one or more items in this order.",
+      400
+    );
+  }
 
   const strategy = PaymentGatewayRegistry.get(paymentMethodCode);
 

@@ -334,7 +334,12 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     let active = true;
-    fetchPublicPaymentMethods(form.countryCode)
+    const cartItemsPayload = items.map((item) => ({
+      productId: item.productId,
+      variantId: item.variantId,
+    }));
+
+    fetchPublicPaymentMethods(form.countryCode, cartItemsPayload)
       .then((methods) => {
         if (!active) return;
         setAvailablePaymentMethods(methods);
@@ -351,7 +356,7 @@ export default function CheckoutPage() {
     return () => {
       active = false;
     };
-  }, [form.countryCode]);
+  }, [form.countryCode, items]);
 
   useEffect(() => {
     if (!isLoading && !currentCustomer) {
@@ -522,8 +527,20 @@ export default function CheckoutPage() {
   const approvalBlockMessage = currentCustomer?.approvalStatus
     ? APPROVAL_MESSAGES[currentCustomer.approvalStatus]
     : null;
+
+  const hasStockError = useMemo(() => {
+    return items.some(
+      (item) => Boolean(item.isOutOfStock || item.isInsufficientStock || item.priceUnavailable)
+    );
+  }, [items]);
+
   const canPlaceOrder =
-    canSubmit && Boolean(shippingEstimate?.available) && Boolean(selectedZoneId) && !approvalBlockMessage;
+    canSubmit &&
+    Boolean(shippingEstimate?.available) &&
+    Boolean(selectedZoneId) &&
+    !approvalBlockMessage &&
+    availablePaymentMethods.length > 0 &&
+    !hasStockError;
 
   const orderPayload = useMemo(
     () => ({
@@ -1650,8 +1667,8 @@ export default function CheckoutPage() {
                       );
                     })
                   ) : (
-                    <div className="rounded-lg border border-line bg-grey p-3 text-xs text-steel">
-                      Pay on Delivery is enabled for your country.
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-[12px] text-red-800 leading-relaxed font-semibold">
+                      ⚠️ Incompatible payment requirements in cart. Some items cannot be paid with the same method. Please check out items separately.
                     </div>
                   )}
                 </div>
@@ -1682,6 +1699,24 @@ export default function CheckoutPage() {
                   Price Breakdown
                 </button>
               </div>
+
+              {hasStockError && (
+                <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">
+                  <p className="font-semibold">Items in your cart require attention:</p>
+                  <ul className="mt-1 list-disc list-inside space-y-0.5 text-xs text-red-600">
+                    {items
+                      .filter((item) => item.stockErrorMessage || item.isOutOfStock || item.isInsufficientStock || item.priceUnavailable)
+                      .map((item) => (
+                        <li key={item.variantId}>
+                          {item.stockErrorMessage || item.priceUnavailableMessage || `"${item.productTitle} - ${item.variantTitle}" is unavailable.`}
+                        </li>
+                      ))}
+                  </ul>
+                  <p className="mt-2 text-xs text-red-600 font-medium">
+                    Please return to your cart or catalog to adjust or remove these items before placing your order.
+                  </p>
+                </div>
+              )}
 
               {(error || approvalBlockMessage || shippingError) && (
                 <p className="mt-4 rounded-md border border-brand/20 bg-brand/5 px-3 py-2 text-[13px] text-brand">
