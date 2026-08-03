@@ -65,7 +65,7 @@ export async function listProviders() {
 export async function getProvider(id: string) {
   const provider = await prisma.shippingProvider.findUnique({
     where: { id },
-    select: { ...PROVIDER_SELECT, zones: { include: { country: true }, orderBy: { charge: "asc" } } },
+    select: { ...PROVIDER_SELECT, zones: { include: { countries: { include: { country: true } } }, orderBy: { charge: "asc" } } },
   });
   if (!provider) throw new AppError("Shipping provider not found.", 404);
   return {
@@ -159,31 +159,108 @@ export async function testConnection(id: string, override?: { apiKey?: string; a
   return adapter.testConnection({ apiKey, apiSecret, baseUrl, mode });
 }
 
+// ─── Default Rate (zone auto-fill) ──────────────────────
+
+const DUMMY_RATES: Record<string, { base: number; days: string }> = {
+  STANDARD_EXPRESS: { base: 12, days: "3-5 business days" },
+  DHL: { base: 25, days: "2-4 business days" },
+  DTDC: { base: 15, days: "3-6 business days" },
+};
+
+function dummyDefaultRate(providerName: string, countryCode: string, currency: string) {
+  const preset = DUMMY_RATES[providerName.toUpperCase()] ?? DUMMY_RATES.STANDARD_EXPRESS;
+  let hash = 0;
+  for (const ch of `${providerName}:${countryCode}`) hash = (hash * 31 + ch.charCodeAt(0)) | 0;
+  const charge = preset.base + (Math.abs(hash) % 40);
+  return { charge, estimatedDays: preset.days, currency };
+}
+
+/**
+ * Fetch the provider's default shipping rate + ETA for a country.
+ * Uses the provider adapter when live credentials are configured; otherwise
+ * returns a deterministic sandbox/dummy rate. Used only to prefill the
+ * Shipping Zone form (charge + estimated days are read-only there).
+ */
+export async function getDefaultRate(providerId: string, countryCode: string) {
+  const code = (countryCode ?? "").trim().toUpperCase();
+  if (!code) throw new AppError("Country code is required.", 400);
+
+  const [provider, country] = await Promise.all([
+    prisma.shippingProvider.findUnique({
+      where: { id: providerId },
+      select: { id: true, name: true, displayName: true, apiKey: true, apiSecret: true, baseUrl: true, config: true },
+    }),
+    prisma.country.findUnique({ where: { code }, include: { currency: true } }),
+  ]);
+  if (!provider) throw new AppError("Shipping provider not found.", 404);
+  if (!country) throw new AppError("Country not found.", 404);
+
+  const currency = country.currency?.code ?? "USD";
+
+  const adapter = getAdapter(provider.name);
+  if (adapter && provider.apiKey) {
+    const providerConfig = (provider.config ?? {}) as Record<string, unknown>;
+    const mode = (providerConfig.mode as "sandbox" | "production") ?? "production";
+    const rates = await adapter.getRates(
+      { apiKey: provider.apiKey, apiSecret: provider.apiSecret, baseUrl: provider.baseUrl, rateEndpoint: providerConfig.rateEndpoint as string | undefined, mode },
+      { countryCode: code, orderTotal: 0 },
+    );
+    if (rates.length > 0) {
+      const best = rates.reduce((min, rate) => (Number(rate.charge) < Number(min.charge) ? rate : min), rates[0]);
+      return {
+        provider: provider.displayName,
+        providerName: provider.name,
+        countryCode: code,
+        charge: Number(best.charge),
+        estimatedDays: best.estimatedDays || null,
+        currency: best.currency || currency,
+        service: best.service,
+        source: "live",
+      };
+    }
+  }
+
+  const dummy = dummyDefaultRate(provider.name, code, currency);
+  return {
+    provider: provider.displayName,
+    providerName: provider.name,
+    countryCode: code,
+    charge: dummy.charge,
+    estimatedDays: dummy.estimatedDays,
+    currency: dummy.currency,
+    service: `${provider.displayName} Default`,
+    source: "sandbox",
+  };
+}
+
 // ─── Zone CRUD ──────────────────────────────────────────
 
 export async function listZones(query?: { providerId?: string; countryId?: string; status?: string }) {
   const where: Prisma.ShippingZoneWhereInput = {};
   if (query?.providerId) where.providerId = query.providerId;
-  if (query?.countryId) where.countryId = query.countryId;
+  if (query?.countryId) where.countries = { some: { countryId: query.countryId } };
   if (query?.status) where.status = query.status as "ACTIVE" | "INACTIVE";
 
   return prisma.shippingZone.findMany({
     where,
-    include: { provider: true, country: true },
-    orderBy: [{ country: { name: "asc" } }, { charge: "asc" }],
+    include: { provider: true, countries: { include: { country: true } } },
+    orderBy: { charge: "asc" },
   });
 }
 
 export async function createZone(input: {
   providerId: string;
-  countryId: string;
+  countryIds?: string[];
+  countryId?: string;
   charge: number | string;
   freeAbove?: number | string | null;
   estimatedDays?: string | null;
   status?: string;
 }) {
   if (!input.providerId) throw new AppError("Provider is required.", 400);
-  if (!input.countryId) throw new AppError("Country is required.", 400);
+
+  const countryIds = [...new Set(input.countryIds ?? (input.countryId ? [input.countryId] : []))];
+  if (countryIds.length === 0) throw new AppError("At least one country is required.", 400);
 
   const charge = Number(input.charge);
   if (!Number.isFinite(charge) || charge < 0) throw new AppError("Charge must be a non-negative number.", 400);
@@ -191,11 +268,14 @@ export async function createZone(input: {
   const provider = await prisma.shippingProvider.findUnique({ where: { id: input.providerId }, select: { id: true } });
   if (!provider) throw new AppError("Shipping provider not found.", 404);
 
-  const country = await prisma.country.findUnique({ where: { id: input.countryId }, select: { id: true } });
-  if (!country) throw new AppError("Country not found.", 404);
+  const foundCountries = await prisma.country.findMany({ where: { id: { in: countryIds } }, select: { id: true } });
+  if (foundCountries.length !== countryIds.length) throw new AppError("One or more countries were not found.", 404);
 
-  const duplicate = await prisma.shippingZone.findFirst({ where: { providerId: input.providerId, countryId: input.countryId }, select: { id: true } });
-  if (duplicate) throw new AppError("A shipping zone already exists for this provider and country.", 409);
+  const duplicate = await prisma.shippingZone.findFirst({
+    where: { providerId: input.providerId, countries: { some: { countryId: { in: countryIds } } } },
+    select: { id: true },
+  });
+  if (duplicate) throw new AppError("A shipping zone already exists for this provider and one of the selected countries.", 409);
 
   const freeAbove = input.freeAbove != null && input.freeAbove !== "" ? Number(input.freeAbove) : null;
   if (freeAbove !== null && (!Number.isFinite(freeAbove) || freeAbove < 0)) throw new AppError("Free above must be a non-negative number.", 400);
@@ -203,25 +283,25 @@ export async function createZone(input: {
   return prisma.shippingZone.create({
     data: {
       providerId: input.providerId,
-      countryId: input.countryId,
       charge,
       freeAbove,
       estimatedDays: input.estimatedDays?.trim() || null,
       status: (input.status as "ACTIVE" | "INACTIVE") || "ACTIVE",
+      countries: { create: countryIds.map((countryId) => ({ countryId })) },
     },
-    include: { provider: true, country: true },
+    include: { provider: true, countries: { include: { country: true } } },
   });
 }
 
 export async function updateZone(id: string, input: {
   providerId?: string;
-  countryId?: string;
+  countryIds?: string[];
   charge?: number | string;
   freeAbove?: number | string | null;
   estimatedDays?: string | null;
   status?: string;
 }) {
-  const existing = await prisma.shippingZone.findUnique({ where: { id }, select: { id: true, providerId: true, countryId: true } });
+  const existing = await prisma.shippingZone.findUnique({ where: { id }, select: { id: true, providerId: true } });
   if (!existing) throw new AppError("Shipping zone not found.", 404);
 
   if (input.charge !== undefined) {
@@ -236,26 +316,35 @@ export async function updateZone(id: string, input: {
 
   const data: Prisma.ShippingZoneUncheckedUpdateInput = {};
   if (input.providerId) data.providerId = input.providerId;
-  if (input.countryId) data.countryId = input.countryId;
   if (input.charge !== undefined) data.charge = Number(input.charge);
   if (input.freeAbove !== undefined) data.freeAbove = input.freeAbove != null && input.freeAbove !== "" ? Number(input.freeAbove) : null;
   if (input.estimatedDays !== undefined) data.estimatedDays = input.estimatedDays?.trim() || null;
   if (input.status) data.status = input.status as "ACTIVE" | "INACTIVE";
 
-  if (data.providerId || data.countryId) {
-    const checkProvider = (data.providerId as string) ?? existing.providerId;
-    const checkCountry = (data.countryId as string) ?? existing.countryId;
+  let nextCountryIds: string[] | null = null;
+  if (input.countryIds) {
+    nextCountryIds = [...new Set(input.countryIds)];
+    if (nextCountryIds.length === 0) throw new AppError("At least one country is required.", 400);
+    const foundCountries = await prisma.country.findMany({ where: { id: { in: nextCountryIds } }, select: { id: true } });
+    if (foundCountries.length !== nextCountryIds.length) throw new AppError("One or more countries were not found.", 404);
+    data.countries = {
+      deleteMany: {},
+      create: nextCountryIds.map((countryId) => ({ countryId })),
+    };
+  }
+
+  if (input.providerId && nextCountryIds) {
     const duplicate = await prisma.shippingZone.findFirst({
-      where: { providerId: checkProvider, countryId: checkCountry, NOT: { id } },
+      where: { providerId: input.providerId, countries: { some: { countryId: { in: nextCountryIds } } }, NOT: { id } },
       select: { id: true },
     });
-    if (duplicate) throw new AppError("A shipping zone already exists for this provider and country.", 409);
+    if (duplicate) throw new AppError("A shipping zone already exists for this provider and one of the selected countries.", 409);
   }
 
   return prisma.shippingZone.update({
     where: { id },
     data,
-    include: { provider: true, country: true },
+    include: { provider: true, countries: { include: { country: true } } },
   });
 }
 
@@ -291,7 +380,7 @@ export async function getAvailableProviders(countryCode: string, orderTotal: num
   if (!country) return [];
 
   const zones = await prisma.shippingZone.findMany({
-    where: { countryId: country.id, status: "ACTIVE", provider: { isEnabled: true } },
+    where: { countries: { some: { countryId: country.id } }, status: "ACTIVE", provider: { isEnabled: true } },
     include: { provider: true },
     orderBy: { charge: "asc" },
   });
@@ -340,7 +429,7 @@ export async function calculateShipping(countryCode: string, orderTotal: number)
   }
 
   const zones = await prisma.shippingZone.findMany({
-    where: { countryId: country.id, status: "ACTIVE", provider: { isEnabled: true } },
+    where: { countries: { some: { countryId: country.id } }, status: "ACTIVE", provider: { isEnabled: true } },
     include: { provider: true },
     orderBy: { charge: "asc" },
   });
@@ -479,7 +568,7 @@ export async function createShipment(input: {
   if (!input.orderId) throw new AppError("Order ID is required.", 400);
   if (!input.providerId) throw new AppError("Provider ID is required.", 400);
 
-  const order = await prisma.order.findUnique({ where: { id: input.orderId }, select: { id: true, orderNumber: true, customerName: true, customerEmail: true, shippingAddress: true, country: { select: { id: true, code: true } }, items: { select: { title: true, sku: true, quantity: true, total: true, variant: { select: { weight: true } } } } } });
+  const order = await prisma.order.findUnique({ where: { id: input.orderId }, select: { id: true, orderNumber: true, customerName: true, customerEmail: true, shippingAddress: true, country: { select: { id: true, code: true } }, items: { select: { title: true, sku: true, quantity: true, total: true, variant: { select: { id: true, weight: true, length: true, width: true, height: true, shippingClass: true, fragile: true, hazardous: true, product: { select: { packageWeight: true, packageLength: true, packageWidth: true, packageHeight: true, shippingClass: true, fragile: true, hazardous: true } } } } } } } });
   if (!order) throw new AppError("Order not found.", 404);
 
   const provider = await prisma.shippingProvider.findUnique({ where: { id: input.providerId }, select: { id: true, name: true, apiKey: true, apiSecret: true, baseUrl: true } });
@@ -506,13 +595,23 @@ export async function createShipment(input: {
           recipientEmail: order.customerEmail ?? undefined,
           address: shipAddr,
           countryCode: order.country?.code ?? "IN",
-          items: order.items.map((item) => ({
-            title: item.title,
-            sku: item.sku ?? undefined,
-            quantity: item.quantity,
-            weight: item.variant?.weight != null ? Number(item.variant.weight) : undefined,
-            value: Number(item.total),
-          })),
+          items: order.items.map((item) => {
+            const v = item.variant;
+            const p = v?.product;
+            return {
+              title: item.title,
+              sku: item.sku ?? undefined,
+              quantity: item.quantity,
+              weight: v?.weight != null ? Number(v.weight) : p?.packageWeight != null ? Number(p.packageWeight) : undefined,
+              length: v?.length != null ? Number(v.length) : p?.packageLength != null ? Number(p.packageLength) : undefined,
+              width: v?.width != null ? Number(v.width) : p?.packageWidth != null ? Number(p.packageWidth) : undefined,
+              height: v?.height != null ? Number(v.height) : p?.packageHeight != null ? Number(p.packageHeight) : undefined,
+              shippingClass: v?.shippingClass || p?.shippingClass || null,
+              fragile: v ? !!v.fragile : !!p?.fragile,
+              hazardous: v ? !!v.hazardous : !!p?.hazardous,
+              value: Number(item.total),
+            };
+          }),
           totalValue: Number(order.items.reduce((sum, item) => sum + Number(item.total), 0)),
           reference: order.orderNumber,
         },

@@ -19,6 +19,8 @@ type TaxRuleInput = {
   status?: string;
   sortOrder?: number | string;
   productIds?: string[];
+  categoryIds?: string[];
+  variantIds?: string[];
 };
 
 type TaxListQuery = {
@@ -48,6 +50,7 @@ type TaxSpreadsheetRow = {
   percentage: number | string;
   countryCode: string;
   status: string;
+  taxMode?: string;
   sortOrder: number | string;
 };
 
@@ -60,12 +63,12 @@ type SpreadsheetIssue = {
 function taxRuleClient() {
   return (prisma as unknown as {
     taxRule: {
-      findMany: (args?: unknown) => Promise<any[]>;
+      findMany: (args: unknown) => Promise<any[]>;
+      findUnique: (args: { where: { id: string }; include?: unknown }) => Promise<any>;
       findFirst: (args?: unknown) => Promise<any | null>;
-      findUnique: (args?: unknown) => Promise<any | null>;
-      create: (args: unknown) => Promise<any>;
-      update: (args: unknown) => Promise<any>;
-      delete: (args: unknown) => Promise<any>;
+      create: (args: { data: unknown; include?: unknown }) => Promise<any>;
+      update: (args: { where: { id: string }; data: unknown; include?: unknown }) => Promise<any>;
+      delete: (args: { where: { id: string } }) => Promise<any>;
       updateMany: (args: unknown) => Promise<any>;
       deleteMany: (args: unknown) => Promise<any>;
       count: (args?: unknown) => Promise<number>;
@@ -79,6 +82,8 @@ function includeCountryAndProducts() {
     country: { include: { currency: true } },
     countries: { include: { country: { include: { currency: true } } } },
     products: { select: { id: true, title: true } },
+    categories: { select: { id: true, name: true } },
+    variants: { select: { id: true, title: true, sku: true, productId: true } },
   };
 }
 
@@ -97,6 +102,10 @@ function formatTaxRuleResponse(rule: any) {
       currency: c.country?.currency ?? null,
     })),
     countryIds,
+    categoryIds: rule.categories ? rule.categories.map((c: any) => c.id) : [],
+    variantIds: rule.variants ? rule.variants.map((v: any) => v.id) : [],
+    categories: rule.categories ?? [],
+    variants: rule.variants ?? [],
   };
 }
 
@@ -222,6 +231,8 @@ export async function listTaxRules(query: TaxListQuery) {
           include: { country: { include: { currency: true } } },
         },
         products: { select: { id: true, title: true } },
+        categories: { select: { id: true, name: true } },
+        variants: { select: { id: true, title: true, sku: true } },
       },
       orderBy: orderBy as never,
     }),
@@ -389,6 +400,12 @@ export async function createTaxRule(input: TaxRuleInput) {
       products: input.productIds && Array.isArray(input.productIds) ? {
         connect: input.productIds.map((pid) => ({ id: pid })),
       } : undefined,
+      categories: input.categoryIds && Array.isArray(input.categoryIds) ? {
+        connect: input.categoryIds.map((cid) => ({ id: cid })),
+      } : undefined,
+      variants: input.variantIds && Array.isArray(input.variantIds) ? {
+        connect: input.variantIds.map((vid) => ({ id: vid })),
+      } : undefined,
     },
     include: includeCountryAndProducts(),
   });
@@ -424,6 +441,16 @@ export async function updateTaxRule(id: string, input: TaxRuleInput) {
   if (input.productIds !== undefined) {
     data.products = {
       set: Array.isArray(input.productIds) ? input.productIds.map((pid) => ({ id: pid })) : [],
+    };
+  }
+  if (input.categoryIds !== undefined) {
+    data.categories = {
+      set: Array.isArray(input.categoryIds) ? input.categoryIds.map((cid) => ({ id: cid })) : [],
+    };
+  }
+  if (input.variantIds !== undefined) {
+    data.variants = {
+      set: Array.isArray(input.variantIds) ? input.variantIds.map((vid) => ({ id: vid })) : [],
     };
   }
 
@@ -485,6 +512,7 @@ function parseTaxRow(raw: Record<string, string>): TaxSpreadsheetRow {
     percentage: raw.percentage?.trim() || "",
     countryCode: raw.countryCode?.trim().toUpperCase() || "",
     status: raw.status?.trim().toUpperCase() || "ACTIVE",
+    taxMode: raw.taxMode?.trim().toUpperCase() || "EXCLUSIVE",
     sortOrder: raw.sortOrder?.trim() || "0",
   };
 }

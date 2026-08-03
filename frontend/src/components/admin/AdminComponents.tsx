@@ -153,8 +153,11 @@ export function ConfirmModal({ open, title, message, onConfirm, onCancel, isLoad
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-    return () => setMounted(false);
+    const timer = setTimeout(() => setMounted(true), 0);
+    return () => {
+      clearTimeout(timer);
+      setMounted(false);
+    };
   }, []);
 
   if (!open || !mounted) return null;
@@ -349,6 +352,192 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
               ))}
             </div>,
             document.body,
+          )
+        : null}
+      {error && <p className="text-[12px] text-red-500">{error}</p>}
+    </div>
+  );
+}
+
+// ─── AdminMultiSelect ──────────────────────────────────────
+
+interface AdminMultiSelectProps {
+  label?: string;
+  error?: string;
+  options: { value: string; label: string }[];
+  selectedValues?: string[];
+  value?: string[];
+  onChange: (nextValues: string[]) => void;
+  placeholder?: string;
+  className?: string;
+  selectAllLabel?: string;
+}
+
+export function AdminMultiSelect({
+  label,
+  error,
+  options,
+  selectedValues,
+  value,
+  onChange,
+  placeholder = "Select...",
+  className,
+  selectAllLabel,
+}: AdminMultiSelectProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [menuStyle, setMenuStyle] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
+
+  const currentValues = value || selectedValues || [];
+
+  const updateMenuPosition = useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const gap = 6;
+    const edge = 12;
+    const spaceBelow = viewportHeight - rect.bottom - gap - edge;
+    const spaceAbove = rect.top - gap - edge;
+    const openUp = spaceBelow < 180 && spaceAbove > spaceBelow;
+    const maxHeight = Math.max(160, Math.min(320, openUp ? spaceAbove : spaceBelow));
+    const width = rect.width;
+    const left = rect.left;
+
+    if (openUp) {
+      const bottom = viewportHeight - rect.top + gap;
+      setMenuStyle({ bottom, left, width, maxHeight });
+    } else {
+      const top = rect.bottom + gap;
+      setMenuStyle({ top, left, width, maxHeight });
+    }
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node;
+      if (
+        rootRef.current &&
+        !rootRef.current.contains(target) &&
+        menuRef.current &&
+        !menuRef.current.contains(target)
+      ) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (isOpen) updateMenuPosition();
+  }, [isOpen, updateMenuPosition]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleReflow = () => updateMenuPosition();
+    window.addEventListener("resize", handleReflow);
+    window.addEventListener("scroll", handleReflow, true);
+    return () => {
+      window.removeEventListener("resize", handleReflow);
+      window.removeEventListener("scroll", handleReflow, true);
+    };
+  }, [isOpen, updateMenuPosition]);
+
+  const toggleOption = (val: string) => {
+    const next = currentValues.includes(val)
+      ? currentValues.filter((v) => v !== val)
+      : [...currentValues, val];
+    onChange(next);
+  };
+
+  const displayedText = currentValues.length > 0
+    ? options
+        .filter((o) => currentValues.includes(o.value))
+        .map((o) => o.label)
+        .join(", ")
+    : placeholder;
+
+  const allSelected = options.every((o) => currentValues.includes(o.value));
+
+  return (
+    <div ref={rootRef} className="relative w-full min-w-[10rem] space-y-1.5">
+      {label && <label className="block text-[13px] font-medium text-[#1A1A1A]">{label}</label>}
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => setIsOpen((c) => !c)}
+        className={cn(
+          "flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border bg-white px-3.5 py-2.5 text-left text-[14px] text-[#1A1A1A] outline-none transition",
+          error ? "border-red-400" : "border-[#E6E6E6] focus:border-[#E31E24]",
+          className
+        )}
+      >
+        <span className={cn("truncate", currentValues.length === 0 && "text-[#9A9A9A]")}>
+          {displayedText}
+        </span>
+        <ChevronDown size={15} className={cn("shrink-0 text-[#9A9A9A] transition", isOpen && "rotate-180")} />
+      </button>
+
+      {isOpen && menuStyle && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className="z-[10000] origin-top overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg flex flex-col space-y-0.5"
+              style={{
+                position: "fixed",
+                top: menuStyle.top !== undefined ? menuStyle.top : "auto",
+                bottom: menuStyle.bottom !== undefined ? menuStyle.bottom : "auto",
+                left: menuStyle.left,
+                width: menuStyle.width,
+                maxHeight: menuStyle.maxHeight,
+              }}
+            >
+              {options.length > 1 && (
+                <div className="flex items-center justify-between border-b border-[#F0F0F0] px-3.5 py-1.5 bg-[#FAF9F9] shrink-0 sticky top-0 z-10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (allSelected) {
+                        onChange([]);
+                      } else {
+                        onChange(options.map((o) => o.value));
+                      }
+                    }}
+                    className="text-xs font-semibold text-[#E31E24] hover:text-[#B5151B] transition cursor-pointer select-none"
+                  >
+                    {selectAllLabel || (allSelected ? "Deselect All" : "Select All")}
+                  </button>
+                </div>
+              )}
+              {options.map((option) => {
+                const isSelected = currentValues.includes(option.value);
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => toggleOption(option.value)}
+                    className="flex w-full cursor-pointer items-center gap-2 px-3.5 py-2 text-left text-[13.5px] text-[#333] hover:bg-[#FAF9F9] transition focus:outline-none"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      readOnly
+                      className="h-4 w-4 accent-[#E31E24] pointer-events-none"
+                    />
+                    <span className="truncate">{option.label}</span>
+                  </button>
+                );
+              })}
+              {options.length === 0 && (
+                <div className="px-3.5 py-2 text-xs text-[#9A9A9A] text-center">
+                  No options available.
+                </div>
+              )}
+            </div>,
+            document.body
           )
         : null}
       {error && <p className="text-[12px] text-red-500">{error}</p>}
@@ -610,7 +799,7 @@ export function AdminRichTextEditor({ label, value, onChange, placeholder, error
             1. List
           </button>
           <button type="button" title="Blockquote" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "blockquote")}>
-            "
+            {"\""}
           </button>
           <button type="button" title="Code block" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "pre")}>
             {'</>'}
@@ -740,8 +929,9 @@ export function AdminToastProvider({ children }: { children: ReactNode }) {
   const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setMounted(true);
+    const timer = setTimeout(() => setMounted(true), 0);
     return () => {
+      clearTimeout(timer);
       if (hideTimer.current) clearTimeout(hideTimer.current);
       if (exitTimer.current) clearTimeout(exitTimer.current);
     };
@@ -800,112 +990,5 @@ export function useToast() {
   }
   return { showToast: context.showToast, ToastComponent: null };
 }
-// This is a temporary file to hold the component so I can replace_file_content it into AdminComponents.tsx
-export interface AdminMultiSelectProps {
-  label?: string;
-  error?: string;
-  options: { value: string; label: string }[];
-  value: string[];
-  onChange: (value: string[]) => void;
-  className?: string;
-  placeholder?: string;
-}
 
-export function AdminMultiSelect({ label, error, options, value, onChange, className, placeholder = "Select options..." }: AdminMultiSelectProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const [menuStyle, setMenuStyle] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node) && menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  useEffect(() => {
-    if (isOpen && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-      const menuHeight = Math.min(options.length * 40, 256); // approx 40px per item, max 256px
-
-      if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
-        setMenuStyle({ bottom: window.innerHeight - rect.top + 4, left: rect.left, width: rect.width, maxHeight: Math.min(spaceAbove - 16, 256) });
-      } else {
-        setMenuStyle({ top: rect.bottom + 4, left: rect.left, width: rect.width, maxHeight: Math.min(spaceBelow - 16, 256) });
-      }
-    }
-  }, [isOpen, options.length]);
-
-  const toggleOption = (optValue: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (value.includes(optValue)) {
-      onChange(value.filter((v) => v !== optValue));
-    } else {
-      onChange([...value, optValue]);
-    }
-  };
-
-  const selectedLabels = value.map(v => options.find(o => o.value === v)?.label).filter(Boolean).join(", ");
-
-  return (
-    <div className={cn("flex flex-col gap-1.5", className)} ref={rootRef}>
-      {label && <label className="text-[13px] font-semibold text-slate-700">{label}</label>}
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className={cn(
-          "flex h-9 w-full items-center justify-between rounded-md border bg-white px-3 text-sm text-left shadow-sm transition-all focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20",
-          error ? "border-red-300 bg-red-50/30" : "border-slate-200 hover:border-slate-300",
-        )}
-      >
-        <span className={cn("block truncate", !value.length && "text-slate-500")}>
-          {value.length > 0 ? selectedLabels : placeholder}
-        </span>
-        <ChevronDown className={cn("h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200", isOpen && "rotate-180")} />
-      </button>
-      {error && <p className="text-xs font-medium text-red-500">{error}</p>}
-      
-      {isOpen && typeof document !== "undefined" && createPortal(
-        <div
-          ref={menuRef}
-          style={menuStyle ? { position: "fixed", top: menuStyle.top, bottom: menuStyle.bottom, left: menuStyle.left, width: menuStyle.width, maxHeight: menuStyle.maxHeight, zIndex: 9999 } : undefined}
-          className="overflow-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg animate-in fade-in zoom-in-95"
-        >
-          {options.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-slate-500">No options available</div>
-          ) : (
-            options.map((option) => {
-              const isSelected = value.includes(option.value);
-              return (
-                <div
-                  key={option.value}
-                  onClick={(e) => toggleOption(option.value, e)}
-                  className={cn(
-                    "flex cursor-pointer items-center px-3 py-2 text-sm transition-colors hover:bg-slate-50",
-                    isSelected && "bg-brand/5 font-medium text-brand"
-                  )}
-                >
-                  <div className={cn("mr-2 flex h-4 w-4 items-center justify-center rounded border", isSelected ? "border-brand bg-brand text-white" : "border-slate-300")}>
-                    {isSelected && <Check className="h-3 w-3" />}
-                  </div>
-                  {option.label}
-                </div>
-              );
-            })
-          )}
-        </div>,
-        document.body
-      )}
-    </div>
-  );
-}
 

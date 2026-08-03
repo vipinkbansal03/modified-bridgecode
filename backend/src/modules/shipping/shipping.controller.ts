@@ -27,6 +27,10 @@ export const testConnection = asyncHandler(async (req: AuthRequest, res: Respons
   ApiResponse.success(res, "Connection test completed.", await S.testConnection(String(req.params.id), req.body))
 );
 
+export const getDefaultRate = asyncHandler(async (req: AuthRequest, res: Response) =>
+  ApiResponse.success(res, "Default rate.", await S.getDefaultRate(String(req.params.id), String(req.body?.countryCode ?? "")))
+);
+
 // ─── Zones ──────────────────────────────────────────────
 
 export const listZones = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -59,7 +63,7 @@ export const calculatePackages = asyncHandler(async (req: AuthRequest, res: Resp
     countryCode?: string;
     orderTotal?: number;
   };
-  const packages = await calculateShipment(items);
+  const packages = await calculateShipment(items, { countryCode: countryCode ? String(countryCode).toUpperCase() : undefined });
   if (countryCode) {
     packages.pricing = await S.calculateShipping(String(countryCode).toUpperCase(), Number(orderTotal ?? 0));
   }

@@ -84,6 +84,7 @@ export default function AdminProductsPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [warehouseFilterId, setWarehouseFilterId] = useState("");
   const [sortBy, setSortBy] = useState("sortOrder");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -91,6 +92,8 @@ export default function AdminProductsPage() {
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const [bulkCountryIds, setBulkCountryIds] = useState<string[]>([]);
   const [bulkWarehouseId, setBulkWarehouseId] = useState("");
+  const [warehouseAssignModalOpen, setWarehouseAssignModalOpen] = useState(false);
+  const [warehouseAssignSelections, setWarehouseAssignSelections] = useState<Record<string, boolean>>({});
   const [bulkCollectionIds, setBulkCollectionIds] = useState<string[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -118,7 +121,7 @@ export default function AdminProductsPage() {
     localStorage.setItem(PRODUCT_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
   }, [columnsReady, visibleColumns]);
 
-  const { data, isLoading, refetch, isFetching } = useAdminProducts({ page, search, status, categoryId: categoryId || undefined, limit: 20, sortBy, sortDir });
+  const { data, isLoading, refetch, isFetching } = useAdminProducts({ page, search, status, categoryId: categoryId || undefined, warehouseId: warehouseFilterId || undefined, limit: 20, sortBy, sortDir });
   const { data: categories = [] } = useAdminCategories();
   const { data: countries = [] } = useAdminCountries();
   const { data: warehouses = [] } = useAdminWarehouses({ limit: 100 });
@@ -208,7 +211,32 @@ export default function AdminProductsPage() {
     }
   };
 
+  const handleProductsWarehouseAssignSubmit = async () => {
+    const selectedWarehouseIds = Object.keys(warehouseAssignSelections).filter(id => warehouseAssignSelections[id]);
+    if (!selectedWarehouseIds.length) {
+      showToast("Please select at least one warehouse.", "error");
+      return;
+    }
+
+    setWarehouseAssignModalOpen(false);
+    try {
+      for (const wId of selectedWarehouseIds) {
+        await bulkUpdate.mutateAsync({
+          ids: selectedIds,
+          action: "assignWarehouse",
+          warehouseId: wId,
+        });
+      }
+      setSelectedIds([]);
+      setBulkAction("enable");
+      showToast("Warehouse assignments completed successfully.", "success");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to assign warehouses."), "error");
+    }
+  };
+
   const handleBulkAction = async () => {
+    if (bulkAction === "assignWarehouse") return;
     try {
       await bulkUpdate.mutateAsync({
         ids: selectedIds,
@@ -216,7 +244,6 @@ export default function AdminProductsPage() {
         categoryId: bulkAction === "assignCategory" ? bulkCategoryId : undefined,
         countryIds: bulkAction === "assignCountries" ? bulkCountryIds : undefined,
         collectionIds: bulkAction === "assignCollections" ? bulkCollectionIds : undefined,
-        warehouseId: bulkAction === "assignWarehouse" ? bulkWarehouseId : undefined,
       });
       setSelectedIds([]);
       showToast("Bulk action completed.");
@@ -361,6 +388,21 @@ export default function AdminProductsPage() {
             ))}
           </select>
           <select
+            value={warehouseFilterId}
+            onChange={(e) => {
+              setWarehouseFilterId(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none"
+          >
+            <option value="">All Warehouses</option>
+            {(warehouses.data ?? warehouses).map((w: any) => (
+              <option key={w.id} value={w.id}>
+                {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
+              </option>
+            ))}
+          </select>
+          <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
             className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none"
@@ -443,7 +485,23 @@ export default function AdminProductsPage() {
         <div className="mb-4 rounded-lg border border-[#E6E6E6] bg-white p-3">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-[13px] font-semibold text-[#1A1A1A]">{selectedIds.length} selected</span>
-            <select value={bulkAction} onChange={(event) => setBulkAction(event.target.value as BulkAction)} className="h-9 rounded-md border border-[#E6E6E6] px-3 text-[13px]">
+            <select
+              value={bulkAction}
+              onChange={(event) => {
+                const val = event.target.value as BulkAction;
+                setBulkAction(val);
+                if (val === "assignWarehouse") {
+                  if (selectedIds.length === 0) {
+                    showToast("Please select at least one product first.", "error");
+                    setTimeout(() => setBulkAction("enable"), 0);
+                    return;
+                  }
+                  setWarehouseAssignSelections({});
+                  setWarehouseAssignModalOpen(true);
+                }
+              }}
+              className="h-9 rounded-md border border-[#E6E6E6] px-3 text-[13px]"
+            >
               <option value="enable">Enable</option>
               <option value="disable">Disable</option>
               <option value="archive">Archive</option>
@@ -496,24 +554,16 @@ export default function AdminProductsPage() {
                 ))}
               </div>
             ) : null}
-            {bulkAction === "assignWarehouse" ? (
-              <select value={bulkWarehouseId} onChange={(event) => setBulkWarehouseId(event.target.value)} className="h-9 rounded-md border border-[#E6E6E6] px-3 text-[13px]">
-                <option value="">Select warehouse</option>
-                {(warehouses.data ?? warehouses).map((w: any) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            <button
-              type="button"
-              onClick={handleBulkAction}
-              disabled={bulkUpdate.isPending}
-              className="h-9 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white disabled:opacity-60"
-            >
-              Apply
-            </button>
+            {bulkAction !== "assignWarehouse" && (
+              <button
+                type="button"
+                onClick={handleBulkAction}
+                disabled={bulkUpdate.isPending}
+                className="h-9 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white disabled:opacity-60"
+              >
+                Apply
+              </button>
+            )}
             <button type="button" onClick={() => setSelectedIds([])} className="h-9 rounded-md border border-[#E6E6E6] px-4 text-[13px] font-semibold text-[#555]">
               Clear
             </button>
@@ -628,6 +678,53 @@ export default function AdminProductsPage() {
       )}
 
       <Pagination page={page} totalPages={data?.pagination?.totalPages || 1} onPageChange={setPage} />
+
+      <Modal
+        open={warehouseAssignModalOpen}
+        onClose={() => { setWarehouseAssignModalOpen(false); setBulkAction("enable"); }}
+        title="Assign Selected Products to Warehouses"
+        panelClassName="max-w-md"
+      >
+        <div className="space-y-4 p-6">
+          <p className="text-[13px] text-[#6B6B6B]">
+            Select which warehouses you want to assign the selected products to.
+          </p>
+          <div className="max-h-[300px] overflow-y-auto border border-[#E6E6E6] rounded-md divide-y divide-[#E6E6E6] px-4 bg-white">
+            {(warehouses.data ?? warehouses).map((w: any) => (
+              <div key={w.id} className="flex items-center py-3 gap-3">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none text-[13px] text-[#1A1A1A] font-medium min-w-0 w-full">
+                  <input
+                    type="checkbox"
+                    checked={warehouseAssignSelections[w.id] || false}
+                    onChange={(e) => setWarehouseAssignSelections(prev => ({ ...prev, [w.id]: e.target.checked }))}
+                    className="rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
+                  />
+                  <span className="truncate">
+                    {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
+                  </span>
+                </label>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => { setWarehouseAssignModalOpen(false); setBulkAction("enable"); }}
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleProductsWarehouseAssignSubmit}
+              disabled={bulkUpdate.isPending}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
+            >
+              {bulkUpdate.isPending ? "Assigning..." : "Assign"}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <ConfirmModal
         open={!!deleting}

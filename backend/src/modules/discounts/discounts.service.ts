@@ -177,6 +177,9 @@ async function normalizeDiscountInput(input: DiscountInput, partial = false) {
   const fixedAmount = decimalOrNull(input.fixedAmount, "Fixed amount");
   const startDate = dateOrNull(input.startDate, "Start date");
   const endDate = dateOrNull(input.endDate, "End date");
+  if (endDate) {
+    endDate.setUTCHours(23, 59, 59, 999);
+  }
 
   if (discountPercent !== null && fixedAmount !== null) {
     throw new AppError("Set either discount percent or fixed amount, not both.", 400);

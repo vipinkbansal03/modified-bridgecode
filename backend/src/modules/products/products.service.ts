@@ -168,6 +168,7 @@ type ProductListQuery = {
   sortBy?: string;
   sortDir?: string;
   ids?: string[];
+  warehouseId?: string;
 };
 
 type VariantListQuery = {
@@ -447,6 +448,7 @@ function buildProductWhere(query: {
   categoryId?: string;
   status?: string;
   ids?: string[];
+  warehouseId?: string;
 }): Prisma.ProductWhereInput {
   return {
     deletedAt: null,
@@ -460,6 +462,13 @@ function buildProductWhere(query: {
     ...(query.categoryId && { categoryId: query.categoryId }),
     ...(query.status && { status: query.status as never }),
     ...(query.ids?.length ? { id: { in: query.ids } } : {}),
+    ...(query.warehouseId && {
+      inventories: {
+        some: {
+          warehouseId: query.warehouseId,
+        },
+      },
+    }),
   };
 }
 
@@ -1070,18 +1079,23 @@ export async function bulkUpdateProducts(data: {
     const warehouse = await prisma.warehouse.findUnique({ where: { id: data.warehouseId } });
     if (!warehouse) throw new AppError("Warehouse not found.", 400);
 
-    const variants = await prisma.productVariant.findMany({ where: { productId: { in: ids } }, select: { id: true, productId: true } });
-    if (variants.length) {
-      await prisma.$transaction(
-        variants.map((v) =>
-          prisma.inventory.upsert({
-            where: { variantId_warehouseId: { variantId: v.id, warehouseId: data.warehouseId! } },
-            update: {},
-            create: { productId: v.productId, variantId: v.id, warehouseId: data.warehouseId!, stock: 0 },
-          })
-        )
-      );
-    }
+    await prisma.$transaction(async (tx) => {
+      for (const productId of ids) {
+        const existing = await tx.inventory.findFirst({
+          where: { productId, variantId: null, warehouseId: data.warehouseId },
+        });
+        if (!existing) {
+          await tx.inventory.create({
+            data: {
+              productId,
+              variantId: null,
+              warehouseId: data.warehouseId!,
+              stock: 0,
+            },
+          });
+        }
+      }
+    });
     return { updated: ids.length };
   }
 
@@ -1565,6 +1579,13 @@ export async function generateVariants(
             title,
             variantKey,
             sku: buildGeneratedVariantSku(product, variantKey),
+            weight: product.packageWeight ?? null,
+            length: product.packageLength ?? null,
+            width: product.packageWidth ?? null,
+            height: product.packageHeight ?? null,
+            shippingClass: product.shippingClass ?? null,
+            fragile: product.fragile,
+            hazardous: product.hazardous,
             status: "ACTIVE",
           },
         });
@@ -1617,6 +1638,9 @@ export async function createVariant(
     length?: number | null;
     width?: number | null;
     height?: number | null;
+    shippingClass?: string | null;
+    fragile?: boolean;
+    hazardous?: boolean;
     status?: string;
   }
 ) {
@@ -1637,10 +1661,13 @@ export async function createVariant(
       title,
       variantKey,
       moq: data.moq ?? 1,
-      weight: data.weight ?? null,
-      length: data.length ?? null,
-      width: data.width ?? null,
-      height: data.height ?? null,
+      weight: data.weight !== undefined ? data.weight : product.packageWeight ?? null,
+      length: data.length !== undefined ? data.length : product.packageLength ?? null,
+      width: data.width !== undefined ? data.width : product.packageWidth ?? null,
+      height: data.height !== undefined ? data.height : product.packageHeight ?? null,
+      shippingClass: data.shippingClass !== undefined ? data.shippingClass || null : product.shippingClass ?? null,
+      fragile: data.fragile !== undefined ? data.fragile : product.fragile,
+      hazardous: data.hazardous !== undefined ? data.hazardous : product.hazardous,
       status: (data.status as never) || "ACTIVE",
     },
   });
@@ -1678,6 +1705,9 @@ export async function updateVariant(
     length?: number | null;
     width?: number | null;
     height?: number | null;
+    shippingClass?: string | null;
+    fragile?: boolean;
+    hazardous?: boolean;
     status?: string;
   }
 ) {
@@ -1705,6 +1735,9 @@ export async function updateVariant(
     ...(data.length !== undefined ? { length: data.length } : {}),
     ...(data.width !== undefined ? { width: data.width } : {}),
     ...(data.height !== undefined ? { height: data.height } : {}),
+    ...(data.shippingClass !== undefined ? { shippingClass: data.shippingClass } : {}),
+    ...(data.fragile !== undefined ? { fragile: data.fragile } : {}),
+    ...(data.hazardous !== undefined ? { hazardous: data.hazardous } : {}),
     ...(data.status !== undefined ? { status: data.status as never } : {}),
   };
   await prisma.productVariant.update({

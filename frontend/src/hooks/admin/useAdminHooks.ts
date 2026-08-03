@@ -11,6 +11,7 @@ export const useAdminProducts = (params?: {
   status?: string;
   sortBy?: string;
   sortDir?: string;
+  warehouseId?: string;
 }) =>
   useQuery({
     queryKey: ["admin-products", params],
@@ -888,6 +889,7 @@ export const useAdminInventory = (params?: {
   status?: string;
   sortBy?: string;
   sortDir?: string;
+  warehouseId?: string;
 }) =>
   useQuery({
     queryKey: ["admin-inventory", params],
@@ -2251,6 +2253,12 @@ export const useTestShippingConnection = () =>
       const { id, ...credentials } = params;
       return adminApi.post(`/shipping/providers/${id}/test-connection`, credentials).then((r) => r.data.data);
     },
+  });
+
+export const useGetShippingDefaultRate = () =>
+  useMutation({
+    mutationFn: ({ id, countryCode }: { id: string; countryCode: string }) =>
+      adminApi.post(`/shipping/providers/${id}/default-rate`, { countryCode }).then((r) => r.data.data),
   });
 
 // ─── Shipping Zones ──────────────────────────────────────

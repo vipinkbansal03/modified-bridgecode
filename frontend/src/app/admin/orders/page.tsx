@@ -24,7 +24,7 @@ type OrderRow = {
   country?: { id: string; name: string; code: string } | null;
   currency?: { code: string; symbol?: string | null } | null;
   shippingProvider?: string | null;
-  shippingZone?: { provider?: { displayName: string } | null; country?: { name: string; code: string } | null } | null;
+  shippingZone?: { provider?: { displayName: string } | null; countries?: { country: { name: string; code: string } }[] } | null;
   createdAt: string;
   updatedAt?: string;
   _count?: { items?: number };

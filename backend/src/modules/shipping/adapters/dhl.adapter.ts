@@ -108,6 +108,7 @@ export const dhlAdapter: ShippingProviderAdapter = {
   async createShipment(c: ShippingProviderCredentials, request: ShipmentRequest): Promise<ShipmentResult> {
     try {
       const shipAddr = request.address;
+      const itemDims = request.items.filter((item) => item.length != null && item.width != null && item.height != null);
       const body = {
         shipmentInfo: {
           serviceTypeCode: "expr",
@@ -115,9 +116,9 @@ export const dhlAdapter: ShippingProviderAdapter = {
           unitOfMeasurement: "metric",
           isNonStandardContainer: false,
           weight: request.items.reduce((sum, item) => sum + (item.weight ?? 0.5) * item.quantity, 0) || 1,
-          length: 30,
-          width: 20,
-          height: 10,
+          length: itemDims.length ? Math.max(...itemDims.map((item) => item.length as number)) : 30,
+          width: itemDims.length ? Math.max(...itemDims.map((item) => item.width as number)) : 20,
+          height: itemDims.length ? Math.max(...itemDims.map((item) => item.height as number)) : 10,
         },
         shipperDetails: {
           contactName: "Modern Orthodontics",

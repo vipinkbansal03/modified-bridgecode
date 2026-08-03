@@ -338,8 +338,61 @@ describe("DTDC Adapter", () => {
   });
 
   describe("getRates", () => {
-    it("should return empty array (not implemented)", async () => {
+    it("should return empty array when destination pincode is missing", async () => {
       const result = await adapter!.getRates(FAKE_CREDS, { countryCode: "IN", orderTotal: 5000 });
+      assert.equal(result.length, 0);
+    });
+
+    it("should parse live rates from the configured endpoint", async () => {
+      mockFetch((url, init) => {
+        assert.ok(url.includes("/api/v1/rates"), "Should POST to configured rate endpoint");
+        assert.equal(init?.method, "POST");
+        return {
+          ok: true, status: 200, statusText: "OK",
+          json: async () => ({
+            data: {
+              rates: [
+                { serviceName: "B2C PRIORITY", totalCost: 185, currency: "INR", transitDays: 2 },
+                { serviceName: "B2C SMART EXPRESS", totalCost: 145, currency: "INR", transitDays: 4 },
+              ],
+            },
+          }),
+        };
+      });
+      const result = await adapter!.getRates(FAKE_CREDS, { countryCode: "IN", orderTotal: 5000, destinationPincode: "110001" });
+      assert.equal(result.length, 2);
+      assert.equal(result[0].provider, "DTDC");
+      assert.equal(result[0].service, "B2C PRIORITY");
+      assert.equal(result[0].charge, 185);
+      assert.equal(result[0].estimatedDays, "2");
+    });
+
+    it("should use the configured rateEndpoint when provided", async () => {
+      mockFetch((url) => {
+        assert.ok(url.includes("https://custom.dtdc.example.com/freight"), "Should use configured rate endpoint");
+        return {
+          ok: true, status: 200, statusText: "OK",
+          json: async () => ({ data: { totalFrightCharge: 200, eta: "3-5 days", currency: "INR" } }),
+        };
+      });
+      const result = await adapter!.getRates({ ...FAKE_CREDS, rateEndpoint: "https://custom.dtdc.example.com/freight" }, { countryCode: "IN", orderTotal: 5000, destinationPincode: "560001" });
+      assert.equal(result.length, 1);
+      assert.equal(result[0].charge, 200);
+      assert.equal(result[0].estimatedDays, "3-5 days");
+    });
+
+    it("should return empty array on HTTP error", async () => {
+      mockFetch(() => ({
+        ok: false, status: 422, statusText: "Unprocessable",
+        json: async () => ({ message: "Invalid pincode" }),
+      }));
+      const result = await adapter!.getRates(FAKE_CREDS, { countryCode: "IN", orderTotal: 5000, destinationPincode: "999999" });
+      assert.equal(result.length, 0);
+    });
+
+    it("should handle network errors gracefully", async () => {
+      mockFetch(() => { throw new Error("TIMEOUT"); });
+      const result = await adapter!.getRates(FAKE_CREDS, { countryCode: "IN", orderTotal: 5000, destinationPincode: "110001" });
       assert.equal(result.length, 0);
     });
   });

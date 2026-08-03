@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useQueries } from "@tanstack/react-query";
 import { Download, Eye, Filter, Plus, RefreshCw, Search, SquareCheckBig, Trash2, Upload, X, SlidersHorizontal, Pencil } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -32,6 +33,8 @@ import {
   usePreviewTaxImport,
   useUpdateTaxRule,
   useAdminProducts,
+  useAdminCategories,
+  useAdminProduct,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
@@ -47,6 +50,8 @@ type TaxRule = {
   createdAt: string;
   updatedAt: string;
   products?: Array<{ id: string; title: string }>;
+  categories?: Array<{ id: string; name: string }>;
+  variants?: Array<{ id: string; title: string; sku?: string }>;
 };
 
 type TaxDashboard = {
@@ -85,6 +90,8 @@ type TaxFormState = {
   status: TaxRule["status"];
   sortOrder: string;
   productIds: string[];
+  categoryIds: string[];
+  variantIds: string[];
 };
 
 type PreviewState = {
@@ -111,6 +118,8 @@ const emptyForm: TaxFormState = {
   status: "ACTIVE",
   sortOrder: "0",
   productIds: [],
+  categoryIds: [],
+  variantIds: [],
 };
 
 const emptyPreview: PreviewState = {
@@ -122,6 +131,7 @@ const visibleColumnsDefault = {
   name: true,
   type: true,
   country: true,
+  applicability: true,
   percentage: true,
   status: true,
   sortOrder: true,
@@ -137,6 +147,49 @@ function formatMoney(value: number | string | null | undefined, currencySymbol?:
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString();
+}
+
+function TaxVariantsDropdown({
+  selectedProductIds,
+  selectedVariantIds,
+  onChange,
+}: {
+  selectedProductIds: string[];
+  selectedVariantIds: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const productQueries = useQueries({
+    queries: selectedProductIds.map((id) => ({
+      queryKey: ["admin-product", id],
+      queryFn: () => adminApi.get(`/products/${id}`).then((r) => r.data.data),
+      enabled: !!id,
+    })),
+  });
+
+  const isLoading = productQueries.some((q) => q.isLoading);
+  if (isLoading) {
+    return <div className="text-xs text-[#9CA3AF] py-2">Loading variants...</div>;
+  }
+
+  const allVariants = productQueries
+    .flatMap((q) => (q.data as any)?.variants ?? []);
+
+  if (allVariants.length === 0) return null;
+
+  return (
+    <div className="pt-2">
+      <AdminMultiSelect
+        label="Select Specific Variants (Optional)"
+        placeholder="Select specific variants..."
+        options={allVariants.map((v: any) => ({
+          value: v.id,
+          label: `${v.title} ${v.sku ? `[${v.sku}]` : ""}`
+        }))}
+        selectedValues={selectedVariantIds}
+        onChange={onChange}
+      />
+    </div>
+  );
 }
 
 export default function AdminTaxPage() {
@@ -169,6 +222,7 @@ export default function AdminTaxPage() {
 
   const { data: dashboardData, isLoading: dashboardLoading } = useAdminTaxDashboard();
   const { data: countries = [] } = useAdminCountries();
+  const { data: categories = [] } = useAdminCategories();
   const { data: productsData } = useAdminProducts({ limit: 1000 });
   const products = productsData?.data ?? [];
   const filteredProducts = products.filter((p: any) =>
@@ -237,7 +291,7 @@ export default function AdminTaxPage() {
         render: (row) => (
           <div className="min-w-0">
             <div className="truncate font-medium text-[#1A1A1A]">{row.name}</div>
-            <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">{row.countries?.map(c => c.code).join(", ") || "—"}</div>
+            <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">{row.countries?.map(c => c.code).join(", ") || "All countries"}</div>
           </div>
         ),
       },
@@ -257,10 +311,65 @@ export default function AdminTaxPage() {
                 ))}
               </div>
             ) : (
-              <span className="text-[#9A9A9A]">—</span>
+              <span className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                All countries
+              </span>
             )}
           </div>
         ),
+      },
+      {
+        key: "applicability" as any,
+        label: "Applicability",
+        width: "260px",
+        render: (row) => {
+          const hasCategories = row.categories && row.categories.length > 0;
+          const hasProducts = row.products && row.products.length > 0;
+          const hasVariants = row.variants && row.variants.length > 0;
+
+          if (!hasCategories && !hasProducts && !hasVariants) {
+            return (
+              <span className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                🌍 Global (All Products)
+              </span>
+            );
+          }
+
+          return (
+            <div className="flex flex-col gap-1 py-0.5">
+              {hasCategories && (
+                <div className="flex flex-wrap gap-1 items-center">
+                  <span className="text-[10px] uppercase font-bold text-[#6B7280]">Categories:</span>
+                  {row.categories?.map((cat) => (
+                    <span key={cat.id} className="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                      {cat.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {hasProducts && (
+                <div className="flex flex-wrap gap-1 items-center">
+                  <span className="text-[10px] uppercase font-bold text-[#6B7280]">Products:</span>
+                  {row.products?.map((prod) => (
+                    <span key={prod.id} className="inline-flex items-center rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700">
+                      {prod.title}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {hasVariants && (
+                <div className="flex flex-wrap gap-1 items-center">
+                  <span className="text-[10px] uppercase font-bold text-[#6B7280]">Variants:</span>
+                  {row.variants?.map((v) => (
+                    <span key={v.id} className="inline-flex items-center rounded bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
+                      {v.title}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }
       },
       {
         key: "percentage",
@@ -324,6 +433,8 @@ export default function AdminTaxPage() {
       status: row.status,
       sortOrder: String(row.sortOrder ?? 0),
       productIds: (row.products ?? []).map((p) => p.id),
+      categoryIds: (row as any).categoryIds ?? [],
+      variantIds: (row as any).variantIds ?? [],
     });
     setProductSearch("");
     setShowForm(true);
@@ -355,6 +466,8 @@ export default function AdminTaxPage() {
         status: form.status,
         sortOrder: form.sortOrder,
         productIds: form.productIds,
+        categoryIds: form.categoryIds,
+        variantIds: form.variantIds,
       };
 
       if (form.id) {
@@ -950,64 +1063,68 @@ export default function AdminTaxPage() {
               />
             </div>
 
+            {/* Applicable Categories Section */}
+            <div className="pt-2 space-y-3">
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#374151]">
+                Applicable Categories (Optional)
+              </label>
+              <div className="space-y-3">
+                <AdminMultiSelect
+                  placeholder="Select categories..."
+                  options={categories.map((cat: any) => ({
+                    value: cat.id,
+                    label: cat.name
+                  }))}
+                  selectedValues={form.categoryIds ?? []}
+                  onChange={(nextIds) => {
+                    setForm((current) => ({
+                      ...current,
+                      categoryIds: nextIds,
+                    }));
+                  }}
+                />
+              </div>
+              <p className="text-[11.5px] text-[#6B7280] leading-normal">
+                If categories are selected, this tax rule will apply to all products in those categories.
+              </p>
+            </div>
+
             {/* Applicable Products Section */}
-            <div className="pt-2 space-y-2">
+            <div className="pt-2 space-y-3">
               <label className="block text-xs font-bold uppercase tracking-wider text-[#374151]">
                 Applicable Products (Optional)
               </label>
-              <div className="border border-[#E5E7EB] rounded-xl p-3.5 bg-[#F9FAFB] space-y-3">
-                <div className="relative">
-                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-                  <input
-                    type="text"
-                    placeholder="Search products..."
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                    className="w-full pl-9 pr-3.5 py-2 text-xs border border-[#E5E7EB] rounded-lg bg-white outline-none focus:border-[#E31E24]"
-                  />
-                </div>
+              <div className="space-y-3">
+                <AdminMultiSelect
+                  placeholder="Select products..."
+                  options={products.map((p: any) => ({
+                    value: p.id,
+                    label: `${p.title} ${p.productCode ? `[${p.productCode}]` : ""}`
+                  }))}
+                  selectedValues={form.productIds ?? []}
+                  onChange={(nextIds) => {
+                    setForm((current) => ({
+                      ...current,
+                      productIds: nextIds,
+                    }));
+                  }}
+                />
 
-                <div className="max-h-44 overflow-y-auto pr-1">
-                  {filteredProducts.length === 0 ? (
-                    <p className="text-xs text-[#9CA3AF] text-center py-3">No products found</p>
-                  ) : (
-                    <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
-                      {filteredProducts.map((p: any) => {
-                        const isChecked = form.productIds?.includes(p.id);
-                        return (
-                          <label
-                            key={p.id}
-                            className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
-                              isChecked
-                                ? "border-[#E31E24]/40 bg-[#FFF5F5] font-semibold text-[#111827]"
-                                : "border-[#E5E7EB] bg-white hover:bg-[#F3F4F6] text-[#374151]"
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => {
-                                setForm((current) => {
-                                  const pIds = current.productIds ?? [];
-                                  if (isChecked) {
-                                    return { ...current, productIds: pIds.filter((id) => id !== p.id) };
-                                  } else {
-                                    return { ...current, productIds: [...pIds, p.id] };
-                                  }
-                                });
-                              }}
-                              className="h-4 w-4 rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24]"
-                            />
-                            <span className="truncate">{p.title}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                {form.productIds && form.productIds.length > 0 && (
+                  <TaxVariantsDropdown
+                    selectedProductIds={form.productIds}
+                    selectedVariantIds={form.variantIds ?? []}
+                    onChange={(nextVariantIds) => {
+                      setForm((current) => ({
+                        ...current,
+                        variantIds: nextVariantIds,
+                      }));
+                    }}
+                  />
+                )}
               </div>
               <p className="text-[11.5px] text-[#6B7280] leading-normal">
-                If no products are selected, this tax rule will apply globally to all products in the selected country.
+                If no products/categories/variants are selected, this tax rule will apply globally to all products in the selected country.
               </p>
             </div>
           </div>

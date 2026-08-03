@@ -11,6 +11,7 @@ router.get("/providers/:id", requirePermission("shipping.view", "shipping.manage
 router.post("/providers", requirePermission("shipping.manage"), C.upsertProvider);
 router.post("/providers/:id/toggle", requirePermission("shipping.manage"), C.toggleProvider);
 router.post("/providers/:id/test-connection", requirePermission("shipping.manage"), C.testConnection);
+router.post("/providers/:id/default-rate", requirePermission("shipping.view", "shipping.manage"), C.getDefaultRate);
 
 // ─── Zones ──────────────────────────────────────────────
 router.get("/zones", requirePermission("shipping.view", "shipping.manage"), C.listZones);

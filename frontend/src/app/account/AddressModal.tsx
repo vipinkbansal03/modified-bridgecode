@@ -7,6 +7,7 @@ import { Check } from "lucide-react";
 import {
   createCustomerAddress,
   updateCustomerAddress,
+  validateCustomerAddress,
   getCustomerErrorMessage,
   type CustomerAddress,
 } from "@/services/customerApi";
@@ -14,6 +15,7 @@ import { worldCountries } from "@/data/world-countries";
 import PhoneInputField from "@/components/ui/PhoneInput";
 import { isValidPhoneNumber } from "react-phone-number-input";
 import { Modal } from "@/components/ui/Modal";
+import { AddressValidationDialog, type AddressData } from "@/components/ui/delivery/AddressValidationDialog";
 
 interface AddressModalProps {
   isOpen: boolean;
@@ -48,6 +50,79 @@ export default function AddressModal({
   editingAddress,
 }: AddressModalProps) {
   const [error, setError] = useState<string | null>(null);
+  const [validationState, setValidationState] = useState<{
+    isOpen: boolean;
+    originalAddress: AddressData;
+    recommendedAddress: AddressData | null;
+    isValid: boolean;
+    pendingValues: any;
+  } | null>(null);
+
+  const handleSelectOriginal = async () => {
+    if (!validationState) return;
+    setError(null);
+    try {
+      const savePayload = {
+        ...validationState.pendingValues,
+        originalAddress: validationState.originalAddress,
+        normalizedAddress: null,
+        validationProvider: "google-address-validation",
+        validationResult: null,
+        validationStatus: "VALIDATED",
+      };
+
+      let result: CustomerAddress;
+      if (editingAddress) {
+        result = await updateCustomerAddress(editingAddress.id, savePayload);
+      } else {
+        result = await createCustomerAddress(savePayload);
+      }
+      onSuccess(result);
+      setValidationState(null);
+      onClose();
+    } catch (err) {
+      setError(getCustomerErrorMessage(err, "Failed to save address."));
+      setValidationState(null);
+    }
+  };
+
+  const handleSelectRecommended = async () => {
+    if (!validationState || !validationState.recommendedAddress) return;
+    const recommended = validationState.recommendedAddress;
+    setError(null);
+    try {
+      const finalValues = {
+        ...validationState.pendingValues,
+        addressLine1: recommended.addressLine1,
+        addressLine2: recommended.addressLine2 || "",
+        city: recommended.city,
+        state: recommended.state,
+        postalCode: recommended.postalCode,
+      };
+
+      const savePayload = {
+        ...finalValues,
+        originalAddress: validationState.originalAddress,
+        normalizedAddress: recommended,
+        validationProvider: "google-address-validation",
+        validationResult: null,
+        validationStatus: "CORRECTED",
+      };
+
+      let result: CustomerAddress;
+      if (editingAddress) {
+        result = await updateCustomerAddress(editingAddress.id, savePayload);
+      } else {
+        result = await createCustomerAddress(savePayload);
+      }
+      onSuccess(result);
+      setValidationState(null);
+      onClose();
+    } catch (err) {
+      setError(getCustomerErrorMessage(err, "Failed to save address."));
+      setValidationState(null);
+    }
+  };
 
   const formik = useFormik({
     initialValues: {
@@ -67,14 +142,52 @@ export default function AddressModal({
     onSubmit: async (values) => {
       setError(null);
       try {
-        let result: CustomerAddress;
-        if (editingAddress) {
-          result = await updateCustomerAddress(editingAddress.id, values);
+        const selectedCountry = worldCountries.find(
+          (c) => c.name.toLowerCase() === values.country.toLowerCase() || c.code.toLowerCase() === values.country.toLowerCase()
+        );
+        const countryCode = selectedCountry?.code || "IN";
+
+        const addressPayload = {
+          addressLine1: values.addressLine1,
+          addressLine2: values.addressLine2 || undefined,
+          city: values.city,
+          state: values.state,
+          postalCode: values.postalCode,
+          countryCode: countryCode.toUpperCase(),
+        };
+
+        const valResult = await validateCustomerAddress(addressPayload);
+
+        if (valResult.isCorrected) {
+          setValidationState({
+            isOpen: true,
+            originalAddress: {
+              ...addressPayload,
+              fullName: values.fullName,
+              phone: values.phone,
+            },
+            recommendedAddress: valResult.normalizedAddress,
+            isValid: valResult.isValid,
+            pendingValues: values,
+          });
         } else {
-          result = await createCustomerAddress(values);
+          const savePayload = {
+            ...values,
+            originalAddress: addressPayload,
+            normalizedAddress: null,
+            validationProvider: valResult.validationProvider,
+            validationResult: valResult.validationResult,
+            validationStatus: valResult.isValid ? "VALIDATED" : "INVALID",
+          };
+          let result: CustomerAddress;
+          if (editingAddress) {
+            result = await updateCustomerAddress(editingAddress.id, savePayload);
+          } else {
+            result = await createCustomerAddress(savePayload);
+          }
+          onSuccess(result);
+          onClose();
         }
-        onSuccess(result);
-        onClose();
       } catch (err) {
         setError(getCustomerErrorMessage(err, "Failed to save address."));
       }
@@ -267,6 +380,18 @@ export default function AddressModal({
           </div>
         </form>
       </div>
+
+      {validationState && (
+        <AddressValidationDialog
+          isOpen={validationState.isOpen}
+          onClose={() => setValidationState(null)}
+          originalAddress={validationState.originalAddress}
+          recommendedAddress={validationState.recommendedAddress}
+          isValid={validationState.isValid}
+          onSelectOriginal={handleSelectOriginal}
+          onSelectRecommended={handleSelectRecommended}
+        />
+      )}
     </Modal>
   );
 }
