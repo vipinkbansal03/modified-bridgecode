@@ -6,7 +6,8 @@ export class ErApiProvider implements IExchangeRateProvider {
 
   async fetchLatestRates(baseCurrencyCode: string): Promise<ExchangeRateResult> {
     const baseCode = baseCurrencyCode.trim().toUpperCase();
-    const url = `https://open.er-api.com/v6/latest/${encodeURIComponent(baseCode)}`;
+    const baseUrl = (process.env.EXCHANGE_RATE_API_URL || "https://open.er-api.com/v6/latest").replace(/\/$/, "");
+    const url = `${baseUrl}/${encodeURIComponent(baseCode)}`;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout

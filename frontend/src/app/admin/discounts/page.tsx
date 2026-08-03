@@ -28,6 +28,7 @@ import {
 } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
+import { RefreshButton } from "@/components/admin/RefreshButton";
 import {
   useAdminCategories,
   useAdminCountries,
@@ -35,6 +36,7 @@ import {
   useAdminDiscounts,
   useAdminCollections,
   useAdminProducts,
+  useAdminProductsInfinite,
   useAdminTiers,
   useBulkDiscounts,
   useCreateDiscount,
@@ -244,7 +246,7 @@ export default function DiscountsPage() {
   const { showToast, ToastComponent } = useToast();
   const { data: dashboardData, isLoading: dashboardLoading } =
     useAdminDiscountDashboard();
-  const { data, isLoading } = useAdminDiscounts({
+  const { data, isLoading, refetch, isFetching } = useAdminDiscounts({
     page,
     limit,
     search: debouncedSearch.trim() || undefined,
@@ -259,7 +261,16 @@ export default function DiscountsPage() {
   const { data: countries = [] } = useAdminCountries();
   const { data: collectionsData } = useAdminCollections({ page: 1 });
   const { data: categories = [] } = useAdminCategories();
-  const { data: productsData } = useAdminProducts({ limit: 200 });
+  const [productSearch, setProductSearch] = useState("");
+  const {
+    data: infiniteProductsData,
+    fetchNextPage: fetchNextProductsPage,
+    hasNextPage: hasNextProductsPage,
+    isFetchingNextPage: isFetchingNextProductsPage,
+  } = useAdminProductsInfinite({
+    search: productSearch || undefined,
+    limit: 20,
+  });
   const createDiscount = useCreateDiscount();
   const updateDiscount = useUpdateDiscount();
   const deleteDiscount = useDeleteDiscount();
@@ -290,7 +301,9 @@ export default function DiscountsPage() {
     sortDir,
   ]);
 
-  const products: Related[] = productsData?.data ?? [];
+  const products: Related[] = useMemo(() => {
+    return infiniteProductsData?.pages.flatMap((page: any) => page.data ?? []) ?? [];
+  }, [infiniteProductsData?.pages]);
   const collections: Related[] = collectionsData?.data ?? [];
   const discounts: Discount[] = data?.data ?? [];
   const totalPages = data?.pagination?.totalPages ?? 1;
@@ -849,6 +862,13 @@ export default function DiscountsPage() {
               allowSelectAll
               selectAllLabel="All products"
               selectionSummaryFormatter={(selected) => `${selected.length} Products Selected`}
+              onMenuScrollToBottom={() => {
+                if (hasNextProductsPage && !isFetchingNextProductsPage) {
+                  fetchNextProductsPage();
+                }
+              }}
+              isLoadingMore={isFetchingNextProductsPage}
+              onSearchChange={setProductSearch}
             />
           )}
           {form.scope === "COLLECTION" && (
@@ -964,6 +984,7 @@ export default function DiscountsPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <RefreshButton onRefresh={refetch} isRefreshing={isFetching} />
             <button
               type="button"
               onClick={() => setShowFilters((current) => !current)}

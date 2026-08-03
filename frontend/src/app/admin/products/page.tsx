@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { ConfirmModal, Pagination, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { RefreshButton } from "@/components/admin/RefreshButton";
 import { SortableList, toSortOrderPayload } from "@/components/admin/SortableList";
 import { Modal } from "@/components/ui/Modal";
 import {
@@ -117,7 +118,7 @@ export default function AdminProductsPage() {
     localStorage.setItem(PRODUCT_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
   }, [columnsReady, visibleColumns]);
 
-  const { data, isLoading, refetch } = useAdminProducts({ page, search, status, categoryId: categoryId || undefined, limit: 20, sortBy, sortDir });
+  const { data, isLoading, refetch, isFetching } = useAdminProducts({ page, search, status, categoryId: categoryId || undefined, limit: 20, sortBy, sortDir });
   const { data: categories = [] } = useAdminCategories();
   const { data: countries = [] } = useAdminCountries();
   const { data: warehouses = [] } = useAdminWarehouses({ limit: 100 });
@@ -416,6 +417,7 @@ export default function AdminProductsPage() {
           <button type="button" onClick={openImportDialog} className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">
             <Upload size={15} /> Import Excel
           </button>
+          <RefreshButton onRefresh={refetch} isRefreshing={isFetching} />
         </div>
         <input
           ref={fileInputRef}

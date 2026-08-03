@@ -1432,9 +1432,9 @@ async function main() {
     name: "Resources",
     location: "footer-resources",
     items: [
-      { key: "blog", label: "Blog", url: "https://www.modortho.com/blog", openInNewTab: true },
-      { key: "terms", label: "Terms & Conditions", url: "https://www.modortho.com/page/terms-and-conditions", openInNewTab: true },
-      { key: "privacy", label: "Privacy Policy", url: "https://www.modortho.com/page/privacy-policy", openInNewTab: true },
+      { key: "blog", label: "Blog", url: "/blog", openInNewTab: false },
+      { key: "terms", label: "Terms & Conditions", url: "/terms-and-conditions", openInNewTab: false },
+      { key: "privacy", label: "Privacy Policy", url: "/privacy-policy", openInNewTab: false },
     ],
   });
 
@@ -1474,9 +1474,8 @@ async function main() {
     name: "Legal",
     location: "footer-legal",
     items: [
-      { key: "legal", label: "Legal", url: "/contact" },
-      { key: "privacy", label: "Privacy Policy", url: "/contact" },
-      { key: "sitemap", label: "Sitemap", url: "/contact" },
+      { key: "privacy", label: "Privacy Policy", url: "/privacy-policy" },
+      { key: "sitemap", label: "Sitemap", url: "/sitemap" },
     ],
   });
 

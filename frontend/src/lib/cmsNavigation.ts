@@ -67,11 +67,22 @@ export function cmsMenuToFooterColumns(menu?: CmsMenu | null) {
     heading: menu?.name || "",
     links: activeItems(menu)
       .filter((item) => !item.parentId)
-      .map((item) => ({
-        label: item.label,
-        href: item.url || "",
-        openInNewTab: Boolean(item.openInNewTab),
-      })),
+      .map((item) => {
+        let href = item.url || "";
+        let openInNewTab = Boolean(item.openInNewTab);
+
+        if (href.startsWith("https://www.modortho.com") || href.startsWith("http://www.modortho.com")) {
+          href = href.replace(/^https?:\/\/(www\.)?modortho\.com/, "");
+          href = href.replace(/^\/page\//, "/");
+          openInNewTab = false;
+        }
+
+        return {
+          label: item.label,
+          href,
+          openInNewTab,
+        };
+      }),
   };
 }
 

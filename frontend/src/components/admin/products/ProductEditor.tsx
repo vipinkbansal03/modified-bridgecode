@@ -5314,8 +5314,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     label="Variants"
                     values={tierRuleDraft.variantIds ?? (tierRuleDraft.variantId ? [tierRuleDraft.variantId] : [])}
                     onValuesChange={(values) => setTierRuleDraft((d) => ({ ...d, variantIds: values, variantId: values[0] ?? "" }))}
-                    options={[{ value: "", label: "Product-level" }, ...variantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]}
+                    options={[{ value: "", label: "All Variants" }, ...variantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]}
                     placeholder="Select variants"
+                    isInfinite={true}
                   />
                   <AdminSelect label="Mode" value={tierRuleDraft.mode} onChange={(e) => setTierRuleDraft((d) => ({ ...d, mode: e.target.value as "discount" | "fixed" }))} options={[{ value: "discount", label: "% Discount" }, { value: "fixed", label: "Fixed Price" }]} />
                   <AdminInput label={tierRuleDraft.mode === "discount" ? "Discount %" : "Fixed Price"} type="number" min={0} step="0.01" value={tierRuleDraft.mode === "discount" ? tierRuleDraft.discountPercent : tierRuleDraft.fixedPrice} onChange={(e) => setTierRuleDraft((d) => ({ ...d, [d.mode === "discount" ? "discountPercent" : "fixedPrice"]: e.target.value }))} />
@@ -5330,7 +5331,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     <div key={rule.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-[13px]">
                       <span className="font-medium text-[#1A1A1A]">{rule.tier?.name ?? "Tier"}</span>
                       <span className="text-[#6B6B6B]">{rule.country ? `${rule.country.name} (${rule.country.code})` : "Country"}</span>
-                      <span className="text-[#6B6B6B]">{rule.variant ? rule.variant.title : "Product-level"}</span>
+                      <span className="text-[#6B6B6B]">{rule.variant ? rule.variant.title : "All Variants"}</span>
                       <span className="ml-auto font-semibold text-[#1A1A1A]">{rule.discountPercent ? `${rule.discountPercent}% off` : `${rule.fixedPrice} fixed`}</span>
                       <button type="button" onClick={() => handleDeleteTierRule(rule.id)} className="rounded border border-[#F2C9C9] px-2 py-1 text-red-600 hover:bg-red-50"><Trash2 size={13} /></button>
                     </div>
@@ -5359,8 +5360,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     label="Variants"
                     values={moqRuleDraft.variantIds ?? (moqRuleDraft.variantId ? [moqRuleDraft.variantId] : [])}
                     onValuesChange={(values) => setMoqRuleDraft((d) => ({ ...d, variantIds: values, variantId: values[0] ?? "" }))}
-                    options={[{ value: "", label: "Product-level" }, ...variantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]}
+                    options={[{ value: "", label: "All Variants" }, ...variantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]}
                     placeholder="Select variants"
+                    isInfinite={true}
                   />
                   <AdminInput label="Min Qty" type="number" min={1} value={moqRuleDraft.minQuantity} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, minQuantity: e.target.value }))} />
                   <AdminSelect label="Mode" value={moqRuleDraft.mode} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, mode: e.target.value as "discount" | "fixed" }))} options={[{ value: "discount", label: "% Discount" }, { value: "fixed", label: "Fixed Price" }]} />
@@ -5376,7 +5378,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     <div key={rule.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-[13px]">
                       <span className="font-medium text-[#1A1A1A]">{rule.minQuantity}+ units</span>
                       <span className="text-[#6B6B6B]">{rule.country ? `${rule.country.name} (${rule.country.code})` : "Country"}</span>
-                      <span className="text-[#6B6B6B]">{rule.variant ? rule.variant.title : "Product-level"}</span>
+                      <span className="text-[#6B6B6B]">{rule.variant ? rule.variant.title : "All Variants"}</span>
                       <span className="ml-auto font-semibold text-[#1A1A1A]">{rule.discountPercent ? `${rule.discountPercent}% off` : `${rule.fixedPrice} fixed`}</span>
                       <button type="button" onClick={() => handleDeleteMoqRule(rule.id)} className="rounded border border-[#F2C9C9] px-2 py-1 text-red-600 hover:bg-red-50"><Trash2 size={13} /></button>
                     </div>

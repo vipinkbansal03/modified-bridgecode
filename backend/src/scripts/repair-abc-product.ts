@@ -28,7 +28,9 @@ async function main() {
       },
       variants: {
         include: {
-          attributeValues: { include: { attribute: true, attributeValue: true } },
+          attributeValues: {
+            include: { attribute: true, attributeValue: true },
+          },
           prices: true,
         },
       },
@@ -43,14 +45,23 @@ async function main() {
 
   console.log(`Repairing product ${product.title} (${product.id})`);
 
-  const mappedAttributeNames = product.attributes.map((row) => row.attribute.name);
-  console.log("Mapped attributes:", mappedAttributeNames.join(", ") || "(none)");
+  const mappedAttributeNames = product.attributes.map(
+    (row) => row.attribute.name,
+  );
+  console.log(
+    "Mapped attributes:",
+    mappedAttributeNames.join(", ") || "(none)",
+  );
 
   // Archive variants whose attribute set does not match current product mappings.
-  const mappedAttributeIds = new Set(product.attributes.map((row) => row.attributeId));
+  const mappedAttributeIds = new Set(
+    product.attributes.map((row) => row.attributeId),
+  );
   let archived = 0;
   for (const variant of product.variants) {
-    const variantAttrIds = new Set(variant.attributeValues.map((row) => row.attributeId));
+    const variantAttrIds = new Set(
+      variant.attributeValues.map((row) => row.attributeId),
+    );
     const mismatched =
       mappedAttributeIds.size > 0 &&
       (variantAttrIds.size !== mappedAttributeIds.size ||
@@ -62,7 +73,9 @@ async function main() {
         data: { status: "INACTIVE" },
       });
       archived += 1;
-      console.log(`Archived mismatched variant: ${variant.title} (${variant.sku})`);
+      console.log(
+        `Archived mismatched variant: ${variant.title} (${variant.sku})`,
+      );
     }
   }
 
@@ -70,12 +83,16 @@ async function main() {
   const attributes = product.attributes
     .map((mapping) => ({
       attributeId: mapping.attributeId,
-      attributeValueIds: mapping.allowedValues.map((allowed) => allowed.attributeValueId),
+      attributeValueIds: mapping.allowedValues.map(
+        (allowed) => allowed.attributeValueId,
+      ),
     }))
     .filter((group) => group.attributeValueIds.length > 0);
 
   if (!attributes.length) {
-    throw new Error("Product has no mapped attribute values. Map Product Attributes first.");
+    throw new Error(
+      "Product has no mapped attribute values. Map Product Attributes first.",
+    );
   }
 
   const generated = await generateVariants(product.id, {
@@ -100,7 +117,9 @@ async function main() {
       });
     }
   }
-  console.log(`Enabled ${enabledCountryIds.length} countries on ${activeVariants.length} variants`);
+  console.log(
+    `Enabled ${enabledCountryIds.length} countries on ${activeVariants.length} variants`,
+  );
 
   // Copy product-level prices onto variants missing country prices
   let pricesCopied = 0;
@@ -141,7 +160,12 @@ async function main() {
     });
     if (!base) {
       await prisma.inventory.create({
-        data: { productId: product.id, variantId: variant.id, stock: 50, status: "IN_STOCK" },
+        data: {
+          productId: product.id,
+          variantId: variant.id,
+          stock: 50,
+          status: "IN_STOCK",
+        },
       });
     } else if (base.stock <= 0) {
       await prisma.inventory.update({

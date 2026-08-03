@@ -156,6 +156,11 @@ const footerColumns = [
         openInNewTab: false,
       },
       { label: "Privacy Policy", href: "/privacy-policy", openInNewTab: false },
+      {
+        label: "Return & Refund Policy",
+        href: "/return-policy",
+        openInNewTab: false,
+      },
     ],
   },
 ];
@@ -221,12 +226,26 @@ export function Footer() {
   const { data: footerUsaOfficeMenu } = useCmsMenu("footer-usa-office");
   const { data: footerLegalMenu } = useCmsMenu("footer-legal");
 
+  const resourcesColumn = cmsMenuToFooterColumns(footerResourcesMenu);
+  if (resourcesColumn.heading) {
+    const hasReturnPolicy = resourcesColumn.links.some(
+      (link) => link.label.toLowerCase().includes("return") || link.label.toLowerCase().includes("refund")
+    );
+    if (!hasReturnPolicy) {
+      resourcesColumn.links.push({
+        label: "Return & Refund Policy",
+        href: "/return-policy",
+        openInNewTab: false,
+      });
+    }
+  }
+
   const cmsFooterColumns = [
     cmsMenuToFooterColumns(footerAboutMenu),
     cmsMenuToFooterColumns(footerProductsMenu),
     cmsMenuToFooterColumns(footerCapabilitiesMenu),
     cmsMenuToFooterColumns(footerDealersMenu),
-    cmsMenuToFooterColumns(footerResourcesMenu),
+    resourcesColumn,
   ].filter((column) => column.heading && column.links.length > 0);
 
   const cmsExportColumn = cmsMenuToFooterColumns(footerExportMenu);
@@ -296,14 +315,26 @@ export function Footer() {
           { label: USA_ADDRESS, href: "" },
         ];
 
-  const legalLinks: FooterLink[] =
+  const legalLinks: FooterLink[] = (
     cmsLegalColumn.links.length > 0
       ? cmsLegalColumn.links
       : [
           { label: "Terms & Conditions", href: "/terms-and-conditions" },
           { label: "Privacy Policy", href: "/privacy-policy" },
           { label: "Sitemap", href: "/sitemap.xml" },
-        ];
+        ]
+  )
+    .filter((link) => link.label.toLowerCase() !== "legal")
+    .map((link) => {
+      const lower = link.label.toLowerCase();
+      if (lower === "privacy policy") {
+        return { ...link, href: "/privacy-policy" };
+      }
+      if (lower === "sitemap") {
+        return { ...link, href: "/sitemap" };
+      }
+      return link;
+    });
 
   function renderFooterItem(item: FooterLink, key: string) {
     const href = item.href.trim();

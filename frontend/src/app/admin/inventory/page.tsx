@@ -5,6 +5,7 @@ import { Clock3, Download, Filter, History, Layers, Search, SlidersHorizontal, U
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { RefreshButton } from "@/components/admin/RefreshButton";
 import {
   useAdminInventory,
   useAdminInventoryAdjustments,
@@ -185,7 +186,7 @@ export default function InventoryPage() {
     sortBy,
     sortDir,
   });
-  const { data, isLoading, refetch } = inventoryQuery;
+  const { data, isLoading, refetch, isFetching } = inventoryQuery;
   const dashboard = useAdminInventoryDashboard();
   const alerts = useAdminInventoryAlerts();
   const { data: recentAdjustments, isLoading: recentLoading } = useAdminInventoryAdjustments({ page: 1, limit: 8 });
@@ -474,6 +475,7 @@ export default function InventoryPage() {
               <Upload size={15} /> Import Excel
             </button>
           )}
+          <RefreshButton onRefresh={refetch} isRefreshing={isFetching} />
           <input
             ref={fileInputRef}
             type="file"

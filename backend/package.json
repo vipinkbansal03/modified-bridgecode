@@ -17,6 +17,7 @@
     "prisma:migrate": "prisma migrate dev --schema src/prisma/schema.prisma",
     "prisma:studio": "prisma studio --schema src/prisma/schema.prisma",
     "prisma:seed": "ts-node src/prisma/seed.ts",
+    "db:repair-menus": "ts-node src/scripts/repairMenus.ts",
     "verify:product-architecture": "ts-node-dev --exit-child --transpile-only src/prisma/verify-product-architecture.ts"
   },
   "dependencies": {

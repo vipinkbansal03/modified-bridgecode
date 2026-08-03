@@ -108,7 +108,7 @@ export default function QuoteHistoryItem({
                 getStatusBadgeClass(quote.status),
               )}
             >
-              {quote.status.replace(/_/g, " ")}
+              {quote.status === "SENT" ? "Quote Received" : quote.status.replace(/_/g, " ")}
             </span>
           </div>
 

@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { adminApi } from "@/services/adminApi";
 
 // ─── Products ─────────────────────────────────────────────
@@ -15,6 +15,35 @@ export const useAdminProducts = (params?: {
   useQuery({
     queryKey: ["admin-products", params],
     queryFn: () => adminApi.get("/products", { params }).then((r) => r.data),
+  });
+
+export const useAdminProductsInfinite = (params?: {
+  search?: string;
+  categoryId?: string;
+  status?: string;
+  limit?: number;
+}) =>
+  useInfiniteQuery({
+    queryKey: ["admin-products-infinite", params],
+    queryFn: ({ pageParam }) =>
+      adminApi
+        .get("/products", {
+          params: {
+            ...params,
+            page: pageParam,
+            limit: params?.limit ?? 20,
+          },
+        })
+        .then((r) => r.data),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const res = lastPage?.data?.data ? lastPage.data : lastPage;
+      const total = res.total ?? 0;
+      const page = res.page ?? 1;
+      const limit = res.limit ?? 20;
+      const loaded = page * limit;
+      return loaded < total ? page + 1 : undefined;
+    },
   });
 
 export const useAdminProduct = (id: string) =>
@@ -1518,6 +1547,39 @@ export const useAdminCustomers = (params?: {
   useQuery({
     queryKey: ["admin-customers", params],
     queryFn: () => adminApi.get("/customers", { params }).then((r) => r.data),
+  });
+
+export const useAdminCustomersInfinite = (params?: {
+  search?: string;
+  status?: string;
+  customerType?: string;
+  approvalStatus?: string;
+  customerRoleId?: string;
+  tierId?: string;
+  countryId?: string;
+  limit?: number;
+}) =>
+  useInfiniteQuery({
+    queryKey: ["admin-customers-infinite", params],
+    queryFn: ({ pageParam }) =>
+      adminApi
+        .get("/customers", {
+          params: {
+            ...params,
+            page: pageParam,
+            limit: params?.limit ?? 20,
+          },
+        })
+        .then((r) => r.data),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const res = lastPage?.data?.data ? lastPage.data : lastPage;
+      const total = res.total ?? 0;
+      const page = res.page ?? 1;
+      const limit = res.limit ?? 20;
+      const loaded = page * limit;
+      return loaded < total ? page + 1 : undefined;
+    },
   });
 
 export const useAdminCustomerRoles = () =>

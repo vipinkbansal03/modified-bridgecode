@@ -2,11 +2,13 @@ import "dotenv/config";
 import app from "./app";
 import { connectDB, prisma } from "./config/database";
 import { logger } from "./config/logger";
+import { initScheduledSync } from "./modules/currencies/currencies.scheduler";
 
 const PORT = parseInt(process.env.PORT || "4000", 10);
 
 async function main() {
   await connectDB();
+  await initScheduledSync();
 
   const server = app.listen(PORT, () => {
     logger.info(`🚀 Server running on http://localhost:${PORT}`);

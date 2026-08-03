@@ -9,6 +9,7 @@ import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard,
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { useAdminCountries, useAdminOrders, useDeleteAdminOrder, useOrderAnalytics } from "@/hooks/admin/useAdminHooks";
+import { RefreshButton } from "@/components/admin/RefreshButton";
 import { getAdminErrorMessage } from "@/services/adminApi";
 
 type OrderRow = {
@@ -87,7 +88,7 @@ export default function OrdersPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
 
-  const { data, isLoading } = useAdminOrders({
+  const { data, isLoading, refetch, isFetching } = useAdminOrders({
     page,
     limit,
     status: status || undefined,
@@ -232,6 +233,7 @@ export default function OrdersPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <RefreshButton onRefresh={refetch} isRefreshing={isFetching} />
               <button
                 type="button"
                 onClick={() => setShowFilters((current) => !current)}

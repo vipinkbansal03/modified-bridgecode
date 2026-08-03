@@ -14,6 +14,11 @@ interface AdminSearchableSelectProps extends React.SelectHTMLAttributes<HTMLSele
   className?: string;
   showSearch?: boolean;
   searchFields?: string[];
+  // New props for infinite scroll
+  onMenuScrollToBottom?: () => void;
+  isLoadingMore?: boolean;
+  onSearchChange?: (query: string) => void;
+  isInfinite?: boolean;
 }
 
 export function AdminSearchableSelect({
@@ -32,11 +37,17 @@ export function AdminSearchableSelect({
   disabled,
   name,
   id,
+  // Infinite scroll / paging props
+  onMenuScrollToBottom,
+  isLoadingMore = false,
+  onSearchChange,
+  isInfinite = false,
   ...props
 }: AdminSearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [internalValue, setInternalValue] = useState(String(defaultValue ?? ""));
   const [searchQuery, setSearchQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(20);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -53,7 +64,7 @@ export function AdminSearchableSelect({
   const selectedOption = options.find((option) => option.value === selectedValue);
 
   const filteredOptions = useMemo(() => {
-    if (!showSearch || !searchQuery.trim()) return options;
+    if (!showSearch || !searchQuery.trim() || onSearchChange) return options;
     const query = searchQuery.toLowerCase().trim();
     return options.filter((option) =>
       searchFields.some((field) => {
@@ -61,7 +72,32 @@ export function AdminSearchableSelect({
         return fieldValue.toLowerCase().includes(query);
       })
     );
-  }, [options, searchQuery, showSearch, searchFields]);
+  }, [options, searchQuery, showSearch, searchFields, onSearchChange]);
+
+  const displayedOptions = useMemo(() => {
+    if (isInfinite && !onMenuScrollToBottom) {
+      return filteredOptions.slice(0, visibleCount);
+    }
+    return filteredOptions;
+  }, [filteredOptions, isInfinite, onMenuScrollToBottom, visibleCount]);
+
+  useEffect(() => {
+    setVisibleCount(20);
+    if (onSearchChange) {
+      onSearchChange(searchQuery);
+    }
+  }, [searchQuery, onSearchChange]);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    if (target.scrollHeight - target.scrollTop <= target.clientHeight + 25) {
+      if (onMenuScrollToBottom) {
+        onMenuScrollToBottom();
+      } else if (isInfinite && visibleCount < filteredOptions.length) {
+        setVisibleCount((prev) => prev + 20);
+      }
+    }
+  };
 
   const updateMenuPosition = useCallback(() => {
     if (!buttonRef.current) return;
@@ -74,7 +110,7 @@ export function AdminSearchableSelect({
     const spaceAbove = rect.top - gap - edge;
     const openUp = spaceBelow < 180 && spaceAbove > spaceBelow;
     const maxHeight = Math.max(160, Math.min(320, openUp ? spaceAbove : spaceBelow));
-    const longestLabel = filteredOptions.reduce((max, option) => Math.max(max, option.label.length), 0);
+    const longestLabel = displayedOptions.reduce((max, option) => Math.max(max, option.label.length), 0);
     const contentMinWidth = Math.min(320, Math.max(168, longestLabel * 8 + 48));
     const width = Math.max(rect.width, contentMinWidth);
     const left = Math.max(edge, Math.min(rect.left, viewportWidth - width - edge));
@@ -95,7 +131,7 @@ export function AdminSearchableSelect({
       }
       return openUp ? { bottom, left, width, maxHeight } : { top, left, width, maxHeight };
     });
-  }, [filteredOptions]);
+  }, [displayedOptions]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -175,7 +211,8 @@ export function AdminSearchableSelect({
         <div
           ref={menuRef}
           role="listbox"
-          className="z-[10000] origin-top animate-admin-select-dropdown overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg"
+          onScroll={handleScroll}
+          className="z-[10000] origin-top animate-admin-select-dropdown overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg animate-in fade-in zoom-in-95 duration-100"
           style={{
             position: "fixed",
             top: menuStyle.top !== undefined ? menuStyle.top : "auto",
@@ -205,25 +242,32 @@ export function AdminSearchableSelect({
               />
             </div>
           )}
-          {filteredOptions.length === 0 ? (
+          {displayedOptions.length === 0 && !isLoadingMore ? (
             <div className="px-3.5 py-2 text-[13.5px] text-[#9A9A9A]">No options found</div>
           ) : (
-            filteredOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                role="option"
-                aria-selected={option.value === selectedValue}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => selectOption(option.value)}
-                className={cn(
-                  "w-full cursor-pointer whitespace-nowrap px-3.5 py-2 text-left text-[13.5px] transition hover:bg-[#F7F7F7]",
-                  option.value === selectedValue ? "bg-red-50 text-[#E31E24]" : "text-[#1A1A1A]",
-                )}
-              >
-                {option.label}
-              </button>
-            ))
+            <>
+              {displayedOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="option"
+                  aria-selected={option.value === selectedValue}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => selectOption(option.value)}
+                  className={cn(
+                    "w-full cursor-pointer whitespace-nowrap px-3.5 py-2 text-left text-[13.5px] transition hover:bg-[#F7F7F7]",
+                    option.value === selectedValue ? "bg-red-50 text-[#E31E24]" : "text-[#1A1A1A]",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+              {isLoadingMore && (
+                <div className="flex items-center justify-center py-2.5">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
+                </div>
+              )}
+            </>
           )}
         </div>,
         document.body,

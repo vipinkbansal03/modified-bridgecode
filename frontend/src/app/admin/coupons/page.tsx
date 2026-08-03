@@ -9,6 +9,7 @@ import { Modal } from "@/components/ui/Modal";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { useAdminCountries, useAdminCoupons, useCreateCoupon, useDeleteCoupon, useUpdateCoupon } from "@/hooks/admin/useAdminHooks";
+import { RefreshButton } from "@/components/admin/RefreshButton";
 import { getAdminErrorMessage } from "@/services/adminApi";
 
 type Related = { id: string; name?: string; code?: string };
@@ -127,7 +128,7 @@ export default function CouponsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [deleting, setDeleting] = useState<CouponRow | null>(null);
 
-  const { data, isLoading } = useAdminCoupons({
+  const { data, isLoading, refetch, isFetching } = useAdminCoupons({
     page,
     limit,
     search: debouncedSearch.trim() || undefined,
@@ -360,6 +361,7 @@ export default function CouponsPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <RefreshButton onRefresh={refetch} isRefreshing={isFetching} />
               <button
                 type="button"
                 onClick={() => setShowFilters((current) => !current)}

@@ -154,6 +154,9 @@ export async function getCurrencyDashboard() {
     recentlyUpdated,
     lastBaseChangedSetting,
     lastRatesSyncSetting,
+    lastSyncSourceSetting,
+    lastSyncStatusSetting,
+    nextScheduledSyncSetting,
   ] = await Promise.all([
     prisma.currency.count(),
     prisma.currency.count({ where: { status: "ACTIVE" } }),
@@ -167,6 +170,9 @@ export async function getCurrencyDashboard() {
     prisma.currency.findMany({ take: 5, orderBy: [{ updatedAt: "desc" }, { code: "asc" }], include: currencyInclude() }),
     prisma.setting.findUnique({ where: { key: "currency.last_base_changed_at" } }),
     prisma.setting.findUnique({ where: { key: "currency.last_rates_sync_at" } }),
+    prisma.setting.findUnique({ where: { key: "currency.last_sync_source" } }),
+    prisma.setting.findUnique({ where: { key: "currency.last_sync_status" } }),
+    prisma.setting.findUnique({ where: { key: "currency.next_scheduled_sync_time" } }),
   ]);
 
   const lastBaseChangedAtStr = lastBaseChangedSetting?.value || null;
@@ -201,6 +207,9 @@ export async function getCurrencyDashboard() {
     ratesNeedSync,
     lastBaseChangedAt: lastBaseChangedAtStr,
     lastRatesSyncAt: lastRatesSyncAtStr,
+    lastSyncSource: lastSyncSourceSetting?.value || null,
+    lastSyncStatus: lastSyncStatusSetting?.value || null,
+    nextScheduledSyncTime: nextScheduledSyncSetting?.value || null,
   };
 }
 
@@ -469,51 +478,85 @@ export async function importCurrencySpreadsheet(filePath: string) {
 import { defaultExchangeRateProvider } from "./providers/erApiProvider";
 import { IExchangeRateProvider } from "./providers/exchangeRateProvider.interface";
 
-export async function syncExchangeRates(provider: IExchangeRateProvider = defaultExchangeRateProvider) {
-  const baseCurrency = await prisma.currency.findFirst({ where: { isBase: true }, select: { id: true, code: true } });
-  const baseCode = baseCurrency?.code ?? "USD";
+export async function syncExchangeRates(
+  provider: IExchangeRateProvider = defaultExchangeRateProvider,
+  source: "Auto" | "Manual" = "Manual"
+) {
+  try {
+    const baseCurrency = await prisma.currency.findFirst({ where: { isBase: true }, select: { id: true, code: true } });
+    const baseCode = baseCurrency?.code ?? "USD";
 
-  const fetched = await provider.fetchLatestRates(baseCode);
+    const fetched = await provider.fetchLatestRates(baseCode);
 
-  const existingCurrencies = await prisma.currency.findMany({ select: { id: true, code: true, isBase: true, exchangeRate: true } });
+    const existingCurrencies = await prisma.currency.findMany({ select: { id: true, code: true, isBase: true, exchangeRate: true } });
 
-  const updatedCurrencies: Array<{ code: string; oldRate: number; newRate: number }> = [];
-  let skippedCount = 0;
+    const updatedCurrencies: Array<{ code: string; oldRate: number; newRate: number }> = [];
+    let skippedCount = 0;
 
-  await prisma.$transaction(async (tx) => {
-    for (const currency of existingCurrencies) {
-      if (currency.isBase) {
-        if (Number(currency.exchangeRate) !== 1) {
-          await tx.currency.update({ where: { id: currency.id }, data: { exchangeRate: 1 } });
+    await prisma.$transaction(async (tx) => {
+      for (const currency of existingCurrencies) {
+        if (currency.isBase) {
+          if (Number(currency.exchangeRate) !== 1) {
+            await tx.currency.update({ where: { id: currency.id }, data: { exchangeRate: 1 } });
+          }
+          continue;
         }
-        continue;
-      }
 
-      const rate = fetched.rates[currency.code];
-      if (rate !== undefined && Number.isFinite(rate) && rate > 0) {
-        const oldRate = Number(currency.exchangeRate);
-        const newRate = Number(rate.toFixed(6));
-        await tx.currency.update({ where: { id: currency.id }, data: { exchangeRate: newRate } });
-        updatedCurrencies.push({ code: currency.code, oldRate, newRate });
-      } else {
-        skippedCount++;
+        const rate = fetched.rates[currency.code];
+        if (rate !== undefined && Number.isFinite(rate) && rate > 0) {
+          const oldRate = Number(currency.exchangeRate);
+          const newRate = Number(rate.toFixed(6));
+          await tx.currency.update({ where: { id: currency.id }, data: { exchangeRate: newRate } });
+          updatedCurrencies.push({ code: currency.code, oldRate, newRate });
+        } else {
+          skippedCount++;
+        }
       }
+    });
+
+    await prisma.setting.upsert({
+      where: { key: "currency.last_rates_sync_at" },
+      create: { key: "currency.last_rates_sync_at", value: new Date().toISOString(), group: "currency", type: "string" },
+      update: { value: new Date().toISOString() }
+    });
+
+    await prisma.setting.upsert({
+      where: { key: "currency.last_sync_source" },
+      create: { key: "currency.last_sync_source", value: source, group: "currency", type: "string" },
+      update: { value: source }
+    });
+
+    await prisma.setting.upsert({
+      where: { key: "currency.last_sync_status" },
+      create: { key: "currency.last_sync_status", value: "Success", group: "currency", type: "string" },
+      update: { value: "Success" }
+    });
+
+    return {
+      provider: provider.name,
+      baseCode,
+      totalCurrencies: existingCurrencies.length,
+      updatedCount: updatedCurrencies.length,
+      skippedCount,
+      updatedCurrencies,
+      lastUpdateUtc: fetched.timeLastUpdateUtc ?? new Date().toISOString(),
+    };
+  } catch (error) {
+    try {
+      await prisma.setting.upsert({
+        where: { key: "currency.last_sync_source" },
+        create: { key: "currency.last_sync_source", value: source, group: "currency", type: "string" },
+        update: { value: source }
+      });
+
+      await prisma.setting.upsert({
+        where: { key: "currency.last_sync_status" },
+        create: { key: "currency.last_sync_status", value: "Failed", group: "currency", type: "string" },
+        update: { value: "Failed" }
+      });
+    } catch (innerError) {
+      // Don't mask original error with settings error
     }
-  });
-
-  await prisma.setting.upsert({
-    where: { key: "currency.last_rates_sync_at" },
-    create: { key: "currency.last_rates_sync_at", value: new Date().toISOString(), group: "currency", type: "string" },
-    update: { value: new Date().toISOString() }
-  });
-
-  return {
-    provider: provider.name,
-    baseCode,
-    totalCurrencies: existingCurrencies.length,
-    updatedCount: updatedCurrencies.length,
-    skippedCount,
-    updatedCurrencies,
-    lastUpdateUtc: fetched.timeLastUpdateUtc ?? new Date().toISOString(),
-  };
+    throw error;
+  }
 }

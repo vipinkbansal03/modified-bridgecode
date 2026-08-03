@@ -7,6 +7,7 @@ import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
 import { useAdminQuotes, useDeleteAdminQuote } from "@/hooks/admin/useAdminHooks";
+import { RefreshButton } from "@/components/admin/RefreshButton";
 import { getAdminErrorMessage } from "@/services/adminApi";
 import { AdminStatsGrid } from "@/components/admin/dashboard/AdminStatsGrid";
 
@@ -75,7 +76,7 @@ export default function QuotesPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
 
-  const { data, isLoading } = useAdminQuotes({
+  const { data, isLoading, refetch, isFetching } = useAdminQuotes({
     page,
     limit,
     status: status || undefined,
@@ -210,6 +211,7 @@ export default function QuotesPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <RefreshButton onRefresh={refetch} isRefreshing={isFetching} />
               <button
                 type="button"
                 onClick={() => setShowFilters((current) => !current)}

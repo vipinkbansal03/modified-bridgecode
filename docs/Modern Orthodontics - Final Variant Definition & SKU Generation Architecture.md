@@ -42,7 +42,7 @@ Each variant is defined by:
 Variant
 =
 Package
-+ 
++
 Selected Attribute Value Links
 ```
 

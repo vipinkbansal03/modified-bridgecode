@@ -1,6 +1,7 @@
 "use client";
 
 import { AdminSelect } from "@/components/admin/AdminComponents";
+import { RefreshButton } from "@/components/admin/RefreshButton";
 
 type Props = {
   search: string;
@@ -16,8 +17,8 @@ type Props = {
   onPageSizeChange: (value: number) => void;
 
   onReset: () => void;
-
   onRefresh: () => void;
+  isRefreshing: boolean;
 };
 
 export function ContactSubmissionToolbar({
@@ -31,6 +32,7 @@ export function ContactSubmissionToolbar({
   onPageSizeChange,
   onReset,
   onRefresh,
+  isRefreshing,
 }: Props) {
   return (
     <div className="mb-6 rounded-xl border border-[#E6E6E6] bg-white p-4">
@@ -79,14 +81,8 @@ export function ContactSubmissionToolbar({
         />
       </div>
 
-      <div className="mt-3 grid gap-3 xl:grid-cols-[1fr_160px]">
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
-        >
-          Refresh Filters
-        </button>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <RefreshButton onRefresh={onRefresh} isRefreshing={isRefreshing} />
 
         <button
           type="button"

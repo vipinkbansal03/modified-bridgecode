@@ -18,7 +18,7 @@ export default function ContactSubmissionsPage() {
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  const { data, isLoading, refetch } = useAdminContactSubmissions({
+  const { data, isLoading, refetch, isFetching } = useAdminContactSubmissions({
     page,
     limit,
     search,
@@ -55,6 +55,7 @@ export default function ContactSubmissionsPage() {
           setPage(1);
         }}
         onRefresh={() => refetch()}
+        isRefreshing={isFetching}
       />
 
       <DataTable

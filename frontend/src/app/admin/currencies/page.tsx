@@ -44,6 +44,9 @@ type CurrencyDashboard = {
   ratesNeedSync?: boolean;
   lastBaseChangedAt?: string | null;
   lastRatesSyncAt?: string | null;
+  lastSyncSource?: string | null;
+  lastSyncStatus?: string | null;
+  nextScheduledSyncTime?: string | null;
 };
 
 type CurrencyFormState = {
@@ -89,6 +92,14 @@ const columnDefaults = {
 function formatDate(value?: string) {
   if (!value) return "-";
   return new Date(value).toLocaleDateString();
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("en-IN", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
 }
 
 function formatRate(value: string | number) {
@@ -407,8 +418,25 @@ export default function CurrenciesPage() {
                 ⚠️ No Base Currency set!
               </div>
             )}
-            <div className="mt-1.5 text-[10px] text-[#9A9A9A]">
-              {dashboard?.baseCurrency?.updatedAt ? `Last updated: ${formatDate(dashboard.baseCurrency.updatedAt)}` : "Primary system currency"}
+            <div className="mt-1.5 text-[10px] text-[#9A9A9A] space-y-1">
+              <div>
+                {dashboard?.baseCurrency?.updatedAt ? `Last updated: ${formatDate(dashboard.baseCurrency.updatedAt)}` : "Primary system currency"}
+              </div>
+              {dashboard?.lastRatesSyncAt && (
+                <div className="border-t border-[#F3F4F6] pt-1 mt-1 text-[9.5px]">
+                  <span>Sync: {formatDateTime(dashboard.lastRatesSyncAt)} </span>
+                  <span className="font-semibold">({dashboard.lastSyncSource || "Manual"})</span>
+                  {" · "}
+                  <span className={dashboard.lastSyncStatus === "Success" ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                    {dashboard.lastSyncStatus || "Success"}
+                  </span>
+                </div>
+              )}
+              {dashboard?.nextScheduledSyncTime && (
+                <div className="text-[9.5px] text-[#9A9A9A]">
+                  Next Auto: {formatDateTime(dashboard.nextScheduledSyncTime)}
+                </div>
+              )}
             </div>
           </div>
           <StatCard title="Mapped Countries" value={dashboard?.mappedCountries ?? 0} subtitle="Countries using currencies" icon={<Filter size={18} />} color="bg-[#7A4F01]" isLoading={dashboardLoading} />

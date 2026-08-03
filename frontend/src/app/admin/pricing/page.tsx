@@ -35,8 +35,8 @@ import {
   useAdminCustomerRoles,
   useAdminPricing,
   useAdminPricingDashboard,
-  useAdminProduct,
   useAdminProducts,
+  useAdminProductsInfinite,
   useAdminTiers,
   useBulkPricing,
   useCreatePricing,
@@ -46,6 +46,7 @@ import {
   usePreviewPricing,
   usePreviewPricingImport,
   useUpdatePricing,
+  useAdminProduct,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
@@ -301,7 +302,16 @@ export default function PricingPage() {
   const { data: countries = [] } = useAdminCountries();
   const { data: tiers = [] } = useAdminTiers();
   const { data: customerRoles = [] } = useAdminCustomerRoles();
-  const { data: productsData } = useAdminProducts({ page: 1, limit: 100, search: productFilter || undefined });
+  const [productSearch, setProductSearch] = useState("");
+  const {
+    data: infiniteProductsData,
+    fetchNextPage: fetchNextProductsPage,
+    hasNextPage: hasNextProductsPage,
+    isFetchingNextPage: isFetchingNextProductsPage,
+  } = useAdminProductsInfinite({
+    search: productSearch || undefined,
+    limit: 20,
+  });
   const { data: filterProduct } = useAdminProduct(productFilter);
   const { data: selectedProduct } = useAdminProduct(form.productId);
   const { data: previewData, isFetching: previewLoading, error: previewError } = usePreviewPricing(
@@ -324,7 +334,9 @@ export default function PricingPage() {
   const deletePricing = useDeletePricing();
   const bulkPricing = useBulkPricing();
 
-  const products = (productsData?.data ?? []) as Array<{ id: string; title: string; sku?: string | null; status?: string }>;
+  const products = useMemo(() => {
+    return infiniteProductsData?.pages.flatMap((page: any) => page.data ?? []) ?? [];
+  }, [infiniteProductsData?.pages]);
   const customerRoleRows = customerRoles as CustomerRoleOption[];
   const ruleRows = (pricingResponse?.data ?? []) as PricingRuleRow[];
   const pagination = pricingResponse?.pagination ?? { page, limit, total: 0, totalPages: 1 };
@@ -405,7 +417,7 @@ export default function PricingPage() {
   const variantOptions = useMemo(() => {
     const variants = (selectedProductData?.variants ?? []) as Array<{ id: string; title: string; sku?: string | null; status?: string }>;
     return [
-      { value: "", label: "Product level" },
+      { value: "", label: "All Variants" },
       ...variants.map((variant) => ({
         value: variant.id,
         label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title,
@@ -418,7 +430,7 @@ export default function PricingPage() {
   const previewVariantOptions = useMemo(() => {
     const variants = (previewProductData?.variants ?? []) as Array<{ id: string; title: string; sku?: string | null }>;
     return [
-      { value: "", label: "Product level" },
+      { value: "", label: "All Variants" },
       ...variants.map((variant) => ({
         value: variant.id,
         label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title,
@@ -831,7 +843,19 @@ export default function PricingPage() {
                       selectAllLabel="All countries"
                     />
                     <AdminSelect label="Tier" value={tierFilter} onChange={(event) => { setTierFilter(event.target.value); setPage(1); }} options={tierOptions} />
-                    <AdminSelect label="Product" value={productFilter} onChange={(event) => { setProductFilter(event.target.value); setPage(1); }} options={productOptions} />
+                    <AdminSearchableSelect
+                      label="Product"
+                      value={productFilter}
+                      onChange={(event) => { setProductFilter(event.target.value); setPage(1); }}
+                      options={productOptions}
+                      onSearchChange={setProductSearch}
+                      onMenuScrollToBottom={() => {
+                        if (hasNextProductsPage && !isFetchingNextProductsPage) {
+                          fetchNextProductsPage();
+                        }
+                      }}
+                      isLoadingMore={isFetchingNextProductsPage}
+                    />
                     <AdminSelect label="Variant" value={variantFilter} onChange={(event) => { setVariantFilter(event.target.value); setPage(1); }} options={[{ value: "", label: "All variants" }, ...(filterProductData?.variants ?? []).map((variant: { id: string; title: string; sku?: string | null }) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]} />
                     <AdminInput label="MOQ" type="number" min="1" value={minQuantityFilter} onChange={(event) => { setMinQuantityFilter(event.target.value); setPage(1); }} placeholder="Filter MOQ" />
                   </div>
@@ -1020,7 +1044,7 @@ export default function PricingPage() {
                               <div className="text-[11.5px] text-[#9A9A9A]">{row.product.sku ?? "No SKU"}</div>
                             </td>
                           ) : null}
-                          {columnVisibility.variant ? <td className="px-3 py-3 align-top">{row.variant ? row.variant.title : "Product level"}</td> : null}
+                          {columnVisibility.variant ? <td className="px-3 py-3 align-top">{row.variant ? row.variant.title : "All Variants"}</td> : null}
                           {columnVisibility.country ? <td className="px-3 py-3 align-top">{row.country ? `${row.country.name} (${row.country.code})` : "—"}</td> : null}
                           {columnVisibility.customerRole ? <td className="px-3 py-3 align-top">{getCustomerRoleLabel(row.customerRole)}</td> : null}
                           {columnVisibility.tier ? <td className="px-3 py-3 align-top">{row.tier?.name ?? "—"}</td> : null}
@@ -1091,11 +1115,18 @@ export default function PricingPage() {
             </div>
 
             <div className="grid gap-3">
-              <AdminSelect
+              <AdminSearchableSelect
                 label="Product"
                 value={previewInput.productId}
                 onChange={(event) => setPreviewInput((current) => ({ ...current, productId: event.target.value, variantId: "" }))}
                 options={productOptions}
+                onSearchChange={setProductSearch}
+                onMenuScrollToBottom={() => {
+                  if (hasNextProductsPage && !isFetchingNextProductsPage) {
+                    fetchNextProductsPage();
+                  }
+                }}
+                isLoadingMore={isFetchingNextProductsPage}
               />
               <AdminSelect
                 label="Variant"
@@ -1332,7 +1363,19 @@ export default function PricingPage() {
                 }
                 options={Object.entries(ruleTypeLabels).map(([value, label]) => ({ value, label }))}
               />
-              <AdminSelect label="Product" value={form.productId} onChange={(event) => setForm((current) => ({ ...current, productId: event.target.value, variantId: "" }))} options={productOptions} />
+              <AdminSearchableSelect
+                label="Product"
+                value={form.productId}
+                onChange={(event) => setForm((current) => ({ ...current, productId: event.target.value, variantId: "" }))}
+                options={productOptions}
+                onSearchChange={setProductSearch}
+                onMenuScrollToBottom={() => {
+                  if (hasNextProductsPage && !isFetchingNextProductsPage) {
+                    fetchNextProductsPage();
+                  }
+                }}
+                isLoadingMore={isFetchingNextProductsPage}
+              />
               <AdminSelect label="Variant" value={form.variantId} onChange={(event) => setForm((current) => ({ ...current, variantId: event.target.value }))} options={variantOptions} />
               <AdminMultiSearchableSelect
                 label="Countries"

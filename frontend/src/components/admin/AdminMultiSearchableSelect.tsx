@@ -34,6 +34,11 @@ interface AdminMultiSearchableSelectProps extends Omit<
   allowSelectAll?: boolean;
   selectAllValue?: string;
   selectAllLabel?: string;
+  // Infinite scroll / paging props
+  onMenuScrollToBottom?: () => void;
+  isLoadingMore?: boolean;
+  onSearchChange?: (query: string) => void;
+  isInfinite?: boolean;
 }
 
 export function AdminMultiSearchableSelect({
@@ -58,10 +63,16 @@ export function AdminMultiSearchableSelect({
   disabled,
   name,
   id,
+  // Infinite scroll / paging props
+  onMenuScrollToBottom,
+  isLoadingMore = false,
+  onSearchChange,
+  isInfinite = false,
   ...props
 }: AdminMultiSearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(20);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -86,7 +97,7 @@ export function AdminMultiSearchableSelect({
       (options.length > 0 && options.every((option) => selectedValues.includes(option.value))));
 
   const filteredOptions = useMemo(() => {
-    if (!showSearch || !searchQuery.trim()) return options;
+    if (!showSearch || !searchQuery.trim() || onSearchChange) return options;
     const query = searchQuery.toLowerCase().trim();
     return options.filter((option) =>
       searchFields.some((field) => {
@@ -99,7 +110,7 @@ export function AdminMultiSearchableSelect({
         return fieldValue.toLowerCase().includes(query);
       }),
     );
-  }, [options, searchQuery, showSearch, searchFields]);
+  }, [options, searchQuery, showSearch, searchFields, onSearchChange]);
 
   const renderedOptions = useMemo(() => {
     if (!allowSelectAll) return filteredOptions;
@@ -112,6 +123,31 @@ export function AdminMultiSearchableSelect({
       ...filteredOptions,
     ];
   }, [allowSelectAll, filteredOptions, selectAllValue, selectAllLabel]);
+
+  const displayedOptions = useMemo(() => {
+    if (isInfinite && !onMenuScrollToBottom) {
+      return renderedOptions.slice(0, visibleCount);
+    }
+    return renderedOptions;
+  }, [renderedOptions, isInfinite, onMenuScrollToBottom, visibleCount]);
+
+  useEffect(() => {
+    setVisibleCount(20);
+    if (onSearchChange) {
+      onSearchChange(searchQuery);
+    }
+  }, [searchQuery, onSearchChange]);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    if (target.scrollHeight - target.scrollTop <= target.clientHeight + 25) {
+      if (onMenuScrollToBottom) {
+        onMenuScrollToBottom();
+      } else if (isInfinite && visibleCount < renderedOptions.length) {
+        setVisibleCount((prev) => prev + 20);
+      }
+    }
+  };
 
   const updateMenuPosition = useCallback(() => {
     if (!buttonRef.current) return;
@@ -281,7 +317,8 @@ export function AdminMultiSearchableSelect({
             <div
               ref={menuRef}
               role="listbox"
-              className="z-[10000] origin-top animate-admin-select-dropdown overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg"
+              onScroll={handleScroll}
+              className="z-[10000] origin-top animate-admin-select-dropdown overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg animate-in fade-in zoom-in-95 duration-100"
               style={{
                 position: "fixed",
                 top: menuStyle.top !== undefined ? menuStyle.top : "auto",
@@ -314,51 +351,58 @@ export function AdminMultiSearchableSelect({
                   />
                 </div>
               )}
-              {filteredOptions.length === 0 ? (
+              {displayedOptions.length === 0 && !isLoadingMore ? (
                 <div className="px-3.5 py-2 text-[13.5px] text-[#9A9A9A]">
                   No options found
                 </div>
               ) : (
-                renderedOptions.map((option) => {
-                  const isSelected =
-                    option.value === selectAllValue
-                      ? isAllSelected
-                      : selectedValues.includes(option.value);
+                <>
+                  {displayedOptions.map((option) => {
+                    const isSelected =
+                      option.value === selectAllValue
+                        ? isAllSelected
+                        : selectedValues.includes(option.value);
 
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="option"
-                      aria-selected={isSelected}
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => selectOption(option.value)}
-                      className={cn(
-                        "flex w-full items-center px-3.5 py-2 text-left text-[13.5px] transition hover:bg-[#F7F7F7]",
-                        isSelected
-                          ? "bg-[#F8F9FA] font-medium text-[#1A1A1A]"
-                          : "text-[#1A1A1A]",
-                      )}
-                    >
-                      <div className="flex items-start gap-2.5">
-                        <div
-                          className={cn(
-                            "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors mt-0.5",
-                            isSelected
-                              ? "border-[#E31E24] bg-[#E31E24] text-white"
-                              : "border-[#CFCFCF] bg-white",
-                          )}
-                        >
-                          {isSelected && (
-                            <span className="text-[10px] font-bold leading-none">✓</span>
-                          )}
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="option"
+                        aria-selected={isSelected}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => selectOption(option.value)}
+                        className={cn(
+                          "flex w-full items-center px-3.5 py-2 text-left text-[13.5px] transition hover:bg-[#F7F7F7]",
+                          isSelected
+                            ? "bg-[#F8F9FA] font-medium text-[#1A1A1A]"
+                            : "text-[#1A1A1A]",
+                        )}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <div
+                            className={cn(
+                              "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors mt-0.5",
+                              isSelected
+                                ? "border-[#E31E24] bg-[#E31E24] text-white"
+                                : "border-[#CFCFCF] bg-white",
+                            )}
+                          >
+                            {isSelected && (
+                              <span className="text-[10px] font-bold leading-none">✓</span>
+                            )}
+                          </div>
+
+                          <span className="break-words text-[13px] leading-snug">{option.label}</span>
                         </div>
-
-                        <span className="break-words text-[13px] leading-snug">{option.label}</span>
-                      </div>
-                    </button>
-                  );
-                })
+                      </button>
+                    );
+                  })}
+                  {isLoadingMore && (
+                    <div className="flex items-center justify-center py-2.5">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
+                    </div>
+                  )}
+                </>
               )}
             </div>,
             document.body,
