@@ -40,16 +40,16 @@ export function ProductCard({ id, image, title, slug, category, shortDescription
   }
 
   return (
-    <motion.div whileHover={{ y: -4 }} transition={{ duration: 0.2, ease: "easeOut" }}>
+    <motion.div whileHover={{ y: -4 }} transition={{ duration: 0.2, ease: "easeOut" }} className="group">
       <div className="relative h-full">
         <Link href={`/products/${slug}`} className="block h-full">
           <Card className="h-full">
-            <div className="relative h-[190px] w-full bg-offwhite sm:h-[230px]">
+            <div className="relative h-[190px] w-full overflow-hidden bg-offwhite sm:h-[230px]">
               {imageSrc ? (
                 imageSrc.startsWith("data:") ? (
-                  <img src={imageSrc} alt={title} className="h-full w-full object-cover" />
+                  <img src={imageSrc} alt={title} className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-110" />
                 ) : (
-                  <Image src={imageSrc} alt={title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />
+                  <Image src={imageSrc} alt={title} fill className="object-cover transition-transform duration-300 ease-out group-hover:scale-110" sizes="(max-width: 768px) 100vw, 33vw" />
                 )
               ) : (
                 <div className="flex h-full items-center justify-center px-4 text-center text-sm text-steel-2">
@@ -67,7 +67,7 @@ export function ProductCard({ id, image, title, slug, category, shortDescription
             </div>
             <div className="p-4 sm:p-5">
               {category && <span className="text-xs uppercase tracking-wide text-steel-2">{category}</span>}
-              <h5 className="mt-1.5 text-[15px] font-medium text-ink">{title}</h5>
+              <h5 className="mt-1.5 text-[15px] font-medium text-ink transition-colors duration-300 group-hover:text-brand">{title}</h5>
               {shortDescription && <p className="mt-1.5 text-sm text-steel">{shortDescription}</p>}
               {price ? (
                 <div className="mt-2">
