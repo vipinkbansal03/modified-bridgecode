@@ -153,8 +153,11 @@ export function ConfirmModal({ open, title, message, onConfirm, onCancel, isLoad
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-    return () => setMounted(false);
+    const timer = setTimeout(() => setMounted(true), 0);
+    return () => {
+      clearTimeout(timer);
+      setMounted(false);
+    };
   }, []);
 
   if (!open || !mounted) return null;
@@ -438,7 +441,7 @@ export function AdminMultiSelect({
     window.addEventListener("resize", handleReflow);
     window.addEventListener("scroll", handleReflow, true);
     return () => {
-      window.addEventListener("resize", handleReflow);
+      window.removeEventListener("resize", handleReflow);
       window.removeEventListener("scroll", handleReflow, true);
     };
   }, [isOpen, updateMenuPosition]);
@@ -796,7 +799,7 @@ export function AdminRichTextEditor({ label, value, onChange, placeholder, error
             1. List
           </button>
           <button type="button" title="Blockquote" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "blockquote")}>
-            "
+            {"\""}
           </button>
           <button type="button" title="Code block" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "pre")}>
             {'</>'}
@@ -926,8 +929,9 @@ export function AdminToastProvider({ children }: { children: ReactNode }) {
   const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setMounted(true);
+    const timer = setTimeout(() => setMounted(true), 0);
     return () => {
+      clearTimeout(timer);
       if (hideTimer.current) clearTimeout(hideTimer.current);
       if (exitTimer.current) clearTimeout(exitTimer.current);
     };
