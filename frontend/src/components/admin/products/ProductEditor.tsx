@@ -71,6 +71,7 @@ const ALL_TABS: TabConfig[] = [
 
 const basicSchema = Yup.object({
   title: Yup.string().required("Required"),
+  slug: Yup.string(),
   categoryId: Yup.string().required("Required"),
   status: Yup.string().required(),
   productCode: Yup.string(),
@@ -104,6 +105,7 @@ function downloadBlob(blob: Blob, filename: string) {
 
 type ProductEditorFormValues = {
   title: string;
+  slug: string;
   categoryId: string;
   status: string;
   productCode: string;
@@ -2110,6 +2112,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     enableReinitialize: true,
     initialValues: {
       title: product?.title || "",
+      slug: product?.slug || "",
       categoryId: product?.categoryId || "",
       status: product?.status || "DRAFT",
       productCode: product?.productCode || "",
@@ -3674,6 +3677,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <AdminInput label="Product Title *" {...formik.getFieldProps("title")} error={formik.touched.title ? (formik.errors.title as string) : ""} />
+              </div>
+              <div className="sm:col-span-2">
+                <AdminInput label="Slug" {...formik.getFieldProps("slug")} placeholder="Auto-generated from title" />
               </div>
               <AdminSelect label="Category *" options={catOptions} {...formik.getFieldProps("categoryId")} error={formik.touched.categoryId ? (formik.errors.categoryId as string) : ""} />
               <AdminSelect

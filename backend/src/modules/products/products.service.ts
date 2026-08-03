@@ -59,6 +59,11 @@ async function assertUniqueProductSku(sku?: string | null, excludeId?: string) {
   if (duplicate) throw new AppError("A product with this SKU already exists.", 409);
 }
 
+function generateProductSku(title: string): string {
+  const base = slugify(title).toUpperCase();
+  return base ? `MO-${base}` : "";
+}
+
 async function syncStorefrontVisibility(tx: Prisma.TransactionClient, productId: string, status: string | null | undefined, previousStatus?: string | null) {
   const nextStatus = String(status ?? previousStatus ?? "DRAFT").toUpperCase();
   if (!shouldSyncStorefrontVisibility(nextStatus, previousStatus)) return;
@@ -120,6 +125,7 @@ type ProductSpecInput = {
 
 type ProductInput = {
   title: string;
+  slug?: string;
   shortDescription?: string;
   description?: string;
   informationImage?: string;
@@ -656,10 +662,11 @@ export async function createProduct(data: ProductInput) {
   if (!data.categoryId) throw new AppError("Category is required.", 400);
   await assertActiveCategory(data.categoryId);
 
-  const slug = slugify(title);
+  const slug = data.slug?.trim() ? slugify(data.slug) : slugify(title);
   if (!slug) throw new AppError("Product slug is required.", 400);
   await assertUniqueProductSlug(slug);
-  await assertUniqueProductSku(data.sku);
+  const sku = data.sku?.trim() || generateProductSku(title);
+  await assertUniqueProductSku(sku);
   const normalizedStatus = (data.status as never) || "DRAFT";
 
   return prisma.$transaction(async (tx) => {
@@ -668,7 +675,7 @@ export async function createProduct(data: ProductInput) {
         ...data,
         title,
         slug,
-        sku: data.sku?.trim() || null,
+        sku,
         status: normalizedStatus,
         informationImage: data.informationImage || null,
         informationDescription: data.informationDescription || null,
@@ -687,8 +694,8 @@ export async function updateProduct(id: string, data: Partial<ProductInput>) {
   if (data.categoryId) await assertActiveCategory(data.categoryId);
 
   const updateData = { ...data } as Record<string, unknown>;
-  if (data && typeof data === "object" && "title" in data && data.title) {
-    const nextSlug = slugify(data.title as string);
+  if (data.slug !== undefined || (data.title !== undefined && data.title)) {
+    const nextSlug = slugify((data.slug ?? data.title) as string);
     if (!nextSlug) throw new AppError("Product slug is required.", 400);
     await assertUniqueProductSlug(nextSlug, id);
     updateData.slug = nextSlug;
