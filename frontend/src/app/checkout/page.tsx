@@ -3,7 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, HelpCircle, Lock, ShoppingCart } from "lucide-react";
+import {
+  CheckCircle2,
+  HelpCircle,
+  Lock,
+  Minus,
+  Plus,
+  ShoppingCart,
+} from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -1378,18 +1385,35 @@ export default function CheckoutPage() {
                         </button>
                       </div>
                       <div className="mt-3 flex items-center justify-between">
-                        <input
-                          type="number"
-                          min={1}
-                          value={item.quantity}
-                          onChange={(event) =>
-                            updateQuantity(
-                              item.variantId,
-                              Math.max(1, Number(event.target.value) || 1),
-                            )
-                          }
-                          className="w-20 rounded-md border border-line px-3 py-2 text-center text-[13px] outline-none"
-                        />
+                        <div className="inline-flex items-center rounded-pill border border-line bg-offwhite p-1">
+                          <button
+                            type="button"
+                            aria-label="Decrease quantity"
+                            onClick={() =>
+                              updateQuantity(
+                                item.variantId,
+                                Math.max(1, item.quantity - 1),
+                              )
+                            }
+                            disabled={item.quantity <= 1}
+                            className="flex size-8 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink transition hover:border-steel-2 disabled:opacity-40"
+                          >
+                            <Minus size={13} />
+                          </button>
+                          <span className="w-10 text-center text-[13px] font-semibold text-ink">
+                            {item.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label="Increase quantity"
+                            onClick={() =>
+                              updateQuantity(item.variantId, item.quantity + 1)
+                            }
+                            className="flex size-8 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink transition hover:border-steel-2"
+                          >
+                            <Plus size={13} />
+                          </button>
+                        </div>
                         <div className="text-right">
                           {estimatedItem?.basePrice &&
                             estimatedItem.basePrice > displayUnitPrice && (
