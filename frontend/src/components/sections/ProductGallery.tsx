@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, ImageOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, ImageOff, Maximize2, X } from "lucide-react";
 import { cn } from "@/utils/cn";
 
 interface ProductGalleryProps {
@@ -19,6 +19,20 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
   }, [images]);
 
   const [index, setIndex] = useState(0);
+  const [zoomed, setZoomed] = useState(false);
+
+  useEffect(() => {
+    if (!zoomed) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setZoomed(false);
+    };
+    window.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [zoomed]);
 
   const go = (delta: number) => {
     if (!safeImages.length) return;
@@ -36,7 +50,8 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
   }
 
   return (
-    <div className="flex flex-col gap-3.5 sm:flex-row sm:gap-4.5">
+    <>
+      <div className="flex flex-col gap-3.5 sm:flex-row sm:gap-4.5">
       {/* Thumbnail Strip (Vertical on Desktop, Horizontal on Mobile) */}
       <div className="custom-scrollbar-x order-2 flex gap-2.5 overflow-x-auto pb-2 sm:order-1 sm:flex-col sm:gap-3.5 sm:overflow-visible sm:pb-0">
         {safeImages.map((img: string, i: number) => (
@@ -59,7 +74,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
       </div>
 
       {/* Main Image Box */}
-      <div className="group relative order-1 flex min-h-[280px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-4 sm:order-2 sm:min-h-[360px] lg:min-h-[440px]">
+      <div className="relative order-1 flex min-h-[280px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-4 sm:order-2 sm:min-h-[360px] lg:min-h-[440px]">
         {/* Previous Arrow */}
         {safeImages.length > 1 && (
           <button
@@ -73,7 +88,16 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
         )}
 
         {/* Main Image Preview */}
-        <div className="relative h-[260px] w-[84%] transition-transform duration-300 ease-out group-hover:scale-[1.05] sm:h-[340px] lg:h-[400px] lg:w-[80%]">
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label={`Zoom ${title}`}
+          onClick={() => setZoomed(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") setZoomed(true);
+          }}
+          className="relative h-[260px] w-[84%] cursor-zoom-in sm:h-[340px] lg:h-[400px] lg:w-[80%]"
+        >
           {safeImages[index]?.startsWith("data:") ? (
             <img src={safeImages[index]} alt={title} className="h-full w-full object-contain transition-all duration-300" />
           ) : (
@@ -86,6 +110,9 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
               priority
             />
           )}
+          {/* <span className="pointer-events-none absolute right-3 bottom-3 flex h-8 w-8 items-center justify-center rounded-full border border-[#E5E7EB] bg-white/90 text-[#1A1A1A] shadow-2xs">
+            <Maximize2 size={14} />
+          </span> */}
         </div>
 
         {/* Next Arrow */}
@@ -100,6 +127,21 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
           </button>
         )}
       </div>
-    </div>
+      </div>
+
+      {zoomed && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 sm:p-8" onClick={() => setZoomed(false)}>
+          <button
+            type="button"
+            aria-label="Close zoom"
+            onClick={() => setZoomed(false)}
+            className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/25"
+          >
+            <X size={22} />
+          </button>
+          <img src={safeImages[index]} alt={title} onClick={(e) => e.stopPropagation()} className="max-h-full max-w-full object-contain" />
+        </div>
+      )}
+    </>
   );
 }

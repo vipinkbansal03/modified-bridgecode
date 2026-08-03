@@ -1,4 +1,16 @@
 -- CreateTable
+CREATE TABLE "shipping_boxes" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "length" DECIMAL(10,2) NOT NULL,
+    "width" DECIMAL(10,2) NOT NULL,
+    "height" DECIMAL(10,2) NOT NULL,
+    "weight" DECIMAL(10,3) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "shipping_boxes_pkey" PRIMARY KEY ("id")
+);
+-- CreateTable
 CREATE TABLE "shipping_box_countries" (
     "id" TEXT NOT NULL,
     "boxId" TEXT NOT NULL,
@@ -42,3 +54,4 @@ ALTER TABLE "order_shipping_boxes" ADD CONSTRAINT "order_shipping_boxes_orderId_
 
 -- AddForeignKey
 ALTER TABLE "order_shipping_boxes" ADD CONSTRAINT "order_shipping_boxes_boxId_fkey" FOREIGN KEY ("boxId") REFERENCES "shipping_boxes"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+

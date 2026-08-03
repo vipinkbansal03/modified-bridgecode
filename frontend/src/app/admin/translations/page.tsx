@@ -98,7 +98,7 @@ export default function TranslationsPage() {
   const [staticPageSize, setStaticPageSize] = useState<(typeof STATIC_PAGE_SIZE_OPTIONS)[number]>(25);
   const { showToast, ToastComponent } = useToast();
   const { data: languages = [], refetch: refetchLangs } = useAdminLanguages();
-  const { data: productsData } = useAdminProducts({ limit: 100 });
+  const { data: productsData } = useAdminProducts({ limit: 30 });
   const products = productsData?.data || [];
   const translationLanguages = (languages as LanguageRow[]).filter((language) => !language.isDefault);
   const { data: keywordRows = [], refetch: refetchKeywords } = useQuery({

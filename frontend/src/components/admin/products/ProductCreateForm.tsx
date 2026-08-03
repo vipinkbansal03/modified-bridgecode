@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { AdminInput, AdminSelect, AdminTextarea, useToast } from "@/components/admin/AdminComponents";
@@ -10,6 +10,7 @@ import { getAdminErrorMessage } from "@/services/adminApi";
 
 const schema = Yup.object({
   title: Yup.string().required("Title is required"),
+  slug: Yup.string(),
   categoryId: Yup.string().required("Category is required"),
   status: Yup.string().required("Status is required"),
   productCode: Yup.string(),
@@ -27,6 +28,20 @@ const schema = Yup.object({
 });
 
 const TABS = ["Basic Info", "SEO"];
+
+function toSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/[\s_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function generateSku(title: string): string {
+  const base = toSlug(title).toUpperCase();
+  return base ? `MO-${base}` : "";
+}
 
 type CreateProductResponse = {
   data?: {
@@ -50,13 +65,23 @@ export function ProductCreateForm({
   compact = false,
 }: ProductCreateFormProps) {
   const [activeTab, setActiveTab] = useState(0);
+  const slugEdited = useRef(false);
+  const skuEdited = useRef(false);
   const { showToast, ToastComponent } = useToast();
   const createProduct = useCreateProduct();
   const { data: categories = [] } = useAdminCategories();
 
+  const handleTitleChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    formik.setFieldValue("title", value);
+    if (!slugEdited.current) formik.setFieldValue("slug", toSlug(value));
+    if (!skuEdited.current) formik.setFieldValue("sku", generateSku(value));
+  };
+
   const formik = useFormik({
     initialValues: {
       title: "",
+      slug: "",
       categoryId: "",
       status: "DRAFT",
       productCode: "",
@@ -136,8 +161,25 @@ export function ProductCreateForm({
                   <AdminInput
                     label="Product Title *"
                     placeholder="e.g. Sapphire True Twin"
-                    {...formik.getFieldProps("title")}
+                    name="title"
+                    value={formik.values.title}
+                    onChange={handleTitleChange}
+                    onBlur={formik.handleBlur}
                     error={formik.touched.title || hasSubmitted ? (formik.errors.title as string) : ""}
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <AdminInput
+                    label="Slug"
+                    placeholder="Auto-generated from title"
+                    name="slug"
+                    value={formik.values.slug}
+                    onChange={(e) => {
+                      slugEdited.current = true;
+                      formik.setFieldValue("slug", e.target.value);
+                    }}
+                    onBlur={formik.handleBlur}
                   />
                 </div>
 
@@ -160,7 +202,17 @@ export function ProductCreateForm({
                 />
 
                 <AdminInput label="Product Code" placeholder="MO-MB-STT" {...formik.getFieldProps("productCode")} />
-                <AdminInput label="SKU" placeholder="MO-MB-STT-001" {...formik.getFieldProps("sku")} />
+                <AdminInput
+                  label="SKU"
+                  placeholder="MO-MB-STT-001"
+                  name="sku"
+                  value={formik.values.sku}
+                  onChange={(e) => {
+                    skuEdited.current = true;
+                    formik.setFieldValue("sku", e.target.value);
+                  }}
+                  onBlur={formik.handleBlur}
+                />
                 <AdminInput label="Brand" {...formik.getFieldProps("brand")} />
 
                 <div className="flex flex-wrap items-center gap-6 pt-2">

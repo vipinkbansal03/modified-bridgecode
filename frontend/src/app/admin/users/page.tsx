@@ -32,7 +32,7 @@ export default function UsersPage() {
   const { showToast, ToastComponent } = useToast();
   const { data: users = [], isLoading, refetch } = useAdminUsers();
   const { data: roles = [] } = useAdminRoles();
-  const { data: warehousesData } = useAdminWarehouses({ limit: 100 });
+  const { data: warehousesData } = useAdminWarehouses({ limit: 30 });
   const warehouses = warehousesData?.data || [];
   const roleOptions = [{ value: "", label: "Select role…" }, ...roles.map((r: { id: string; name: string }) => ({ value: r.id, label: r.name }))];
   const formik = useFormik({

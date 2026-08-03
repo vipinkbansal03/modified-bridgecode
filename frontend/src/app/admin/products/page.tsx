@@ -124,7 +124,7 @@ export default function AdminProductsPage() {
   const { data, isLoading, refetch, isFetching } = useAdminProducts({ page, search, status, categoryId: categoryId || undefined, warehouseId: warehouseFilterId || undefined, limit: 20, sortBy, sortDir });
   const { data: categories = [] } = useAdminCategories();
   const { data: countries = [] } = useAdminCountries();
-  const { data: warehouses = [] } = useAdminWarehouses({ limit: 100 });
+  const { data: warehouses = [] } = useAdminWarehouses({ limit: 30 });
   const { data: collectionsData } = useAdminCollections({ limit: 200 });
   const deleteMutation = useDeleteProduct();
   const duplicateMutation = useDuplicateProduct();
