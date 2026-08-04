@@ -512,7 +512,7 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-start justify-between gap-9 border-t border-white/20 py-4">
+        <div className="flex flex-wrap items-start justify-between gap-9 border-t border-white/20 pt-4">
           <div>
             <div className="mb-2.5 flex gap-5">
               {socialLinks.map(({ href, label: socialLabel }) => (
