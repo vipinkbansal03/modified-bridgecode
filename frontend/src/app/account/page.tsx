@@ -183,7 +183,8 @@ export default function AccountPage() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `invoice-${order.id}.pdf`;
+      const invNumber = order.orderNumber ? order.orderNumber : order.id.slice(-8);
+      anchor.download = `Invoice-INV-${invNumber}.pdf`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();

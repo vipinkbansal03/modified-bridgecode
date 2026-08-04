@@ -32,10 +32,10 @@ export const invoice = asyncHandler(async (req: CustomerAuthRequest, res: Respon
   if (!req.customer) throw new AppError("Customer authentication required.", 401);
   const orderId = String(req.params.id);
   await CustomerOrdersService.assertCustomerInvoiceAccess(req.customer.id, orderId);
-  const pdf = await generateInvoice(orderId);
+  const { buffer, filename } = await generateInvoice(orderId);
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="invoice-${orderId}.pdf"`);
-  res.send(pdf);
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.send(buffer);
 });
 
 export const createRazorpayOrder = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {

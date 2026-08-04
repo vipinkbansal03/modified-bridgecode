@@ -15,9 +15,9 @@ export const deliver = asyncHandler(async (req: AuthRequest, res: Response) => A
 export const analytics = asyncHandler(async (_req: AuthRequest, res: Response) => ApiResponse.success(res, "Analytics.", await S.getAnalytics()));
 export const invoice = asyncHandler(async (req: AuthRequest, res: Response) => {
   const id = String(req.params.id);
-  const buffer = await generateInvoice(id);
+  const { buffer, filename } = await generateInvoice(id);
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="invoice-${id}.pdf"`);
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.send(buffer);
 });
 export const deleteOne = asyncHandler(async (req: AuthRequest, res: Response) => {

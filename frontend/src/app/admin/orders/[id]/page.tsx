@@ -184,7 +184,8 @@ export default function OrderDetailPage() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `invoice-${order.id}.pdf`;
+      const invNumber = order.orderNumber ? order.orderNumber : order.id.slice(-8);
+      link.download = `Invoice-INV-${invNumber}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();

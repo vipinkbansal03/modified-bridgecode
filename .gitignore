@@ -8,6 +8,7 @@ Thumbs.db
 
 # Logs
 *.log
+**/logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -15,28 +16,24 @@ pnpm-debug.log*
 
 # Env files
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env.staging
-.env.production
+.env.*
+!.env.example
 
 # Dependency / build artifacts
 **/node_modules/
 **/.next/
 **/dist/
 **/out/
+**/build/
 **/*.tsbuildinfo
 
-# Runtime / cache
+# Uploaded / runtime / cache files
+**/uploads/
 coverage/
 .turbo/
 .cache/
 
-# Local helper script
+# Local helper scripts & structure dumps
 project-tree.js
-
-# Generated tree files
 structure.txt
 structure-clean.txt
