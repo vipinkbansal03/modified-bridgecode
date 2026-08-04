@@ -250,7 +250,6 @@ export default function WarehousesPage() {
                 {
                   key: "actions",
                   label: "Actions",
-                  align: "right",
                   render: (w: any) => (
                     <div className="flex items-center justify-end gap-2">
                       {canManage && (
