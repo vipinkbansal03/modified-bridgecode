@@ -317,8 +317,7 @@ export function AdminMultiSearchableSelect({
             <div
               ref={menuRef}
               role="listbox"
-              onScroll={handleScroll}
-              className="z-[10000] origin-top animate-admin-select-dropdown overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg animate-in fade-in zoom-in-95 duration-100"
+              className="z-[10000] origin-top animate-admin-select-dropdown flex flex-col overflow-hidden rounded-md border border-[#E6E6E6] bg-white shadow-lg animate-in fade-in zoom-in-95 duration-100"
               style={{
                 position: "fixed",
                 top: menuStyle.top !== undefined ? menuStyle.top : "auto",
@@ -330,7 +329,7 @@ export function AdminMultiSearchableSelect({
               }}
             >
               {showSearch && (
-                <div className="relative px-2 py-1.5 border-b border-[#E6E6E6]">
+                <div className="sticky top-0 z-10 shrink-0 bg-white px-2 py-1.5 border-b border-[#E6E6E6]">
                   <Search
                     size={14}
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]"
@@ -351,59 +350,61 @@ export function AdminMultiSearchableSelect({
                   />
                 </div>
               )}
-              {displayedOptions.length === 0 && !isLoadingMore ? (
-                <div className="px-3.5 py-2 text-[13.5px] text-[#9A9A9A]">
-                  No options found
-                </div>
-              ) : (
-                <>
-                  {displayedOptions.map((option) => {
-                    const isSelected =
-                      option.value === selectAllValue
-                        ? isAllSelected
-                        : selectedValues.includes(option.value);
+              <div className="flex-1 overflow-y-auto py-1" onScroll={handleScroll}>
+                {displayedOptions.length === 0 && !isLoadingMore ? (
+                  <div className="px-3.5 py-2 text-[13.5px] text-[#9A9A9A]">
+                    No options found
+                  </div>
+                ) : (
+                  <>
+                    {displayedOptions.map((option) => {
+                      const isSelected =
+                        option.value === selectAllValue
+                          ? isAllSelected
+                          : selectedValues.includes(option.value);
 
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        role="option"
-                        aria-selected={isSelected}
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => selectOption(option.value)}
-                        className={cn(
-                          "flex w-full items-center px-3.5 py-2 text-left text-[13.5px] transition hover:bg-[#F7F7F7]",
-                          isSelected
-                            ? "bg-[#F8F9FA] font-medium text-[#1A1A1A]"
-                            : "text-[#1A1A1A]",
-                        )}
-                      >
-                        <div className="flex items-start gap-2.5">
-                          <div
-                            className={cn(
-                              "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors mt-0.5",
-                              isSelected
-                                ? "border-[#E31E24] bg-[#E31E24] text-white"
-                                : "border-[#CFCFCF] bg-white",
-                            )}
-                          >
-                            {isSelected && (
-                              <span className="text-[10px] font-bold leading-none">✓</span>
-                            )}
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => selectOption(option.value)}
+                          className={cn(
+                            "flex w-full items-center px-3.5 py-2 text-left text-[13.5px] transition hover:bg-[#F7F7F7]",
+                            isSelected
+                              ? "bg-[#F8F9FA] font-medium text-[#1A1A1A]"
+                              : "text-[#1A1A1A]",
+                          )}
+                        >
+                          <div className="flex items-start gap-2.5">
+                            <div
+                              className={cn(
+                                "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors mt-0.5",
+                                isSelected
+                                  ? "border-[#E31E24] bg-[#E31E24] text-white"
+                                  : "border-[#CFCFCF] bg-white",
+                              )}
+                            >
+                              {isSelected && (
+                                <span className="text-[10px] font-bold leading-none">✓</span>
+                              )}
+                            </div>
+
+                            <span className="break-words text-[13px] leading-snug">{option.label}</span>
                           </div>
-
-                          <span className="break-words text-[13px] leading-snug">{option.label}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                  {isLoadingMore && (
-                    <div className="flex items-center justify-center py-2.5">
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
-                    </div>
-                  )}
-                </>
-              )}
+                        </button>
+                      );
+                    })}
+                    {isLoadingMore && (
+                      <div className="flex items-center justify-center py-2.5">
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>,
             document.body,
           )

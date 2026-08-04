@@ -114,13 +114,13 @@ export function FeaturedProductsSection({
           </motion.div>
         </AnimatePresence>
       </div>
-      <div className="bg-ink py-8 sm:py-10 text-white">
+      <div className="bg-ink py-7 lg:py-[34px] text-white">
         <Container className="flex flex-wrap items-end justify-between gap-7">
           <div>
             <span className="mb-2.5 block text-[13px] font-medium tracking-[0.03em] text-[#9A9A9A]">
               {t("ui.home.featuredProduct")}
             </span>
-            <h3 className="max-w-[600px] text-[clamp(26px,3.2vw,36px)] font-light leading-tight text-white">
+            <h3 className="max-w-[600px] text-[clamp(26px,3.2vw,36px)] font-light text-white leading-[1.2]">
               {product.title}
             </h3>
             <p className="mt-3.5 max-w-[520px] text-[15px] text-[#B9B9B9]">

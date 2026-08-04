@@ -29,10 +29,10 @@ export function CategoriesSection() {
   const [view, setView] = useState<"doctor" | "dealer">("doctor");
 
   return (
-    <section id="categories" className="pt-3 pb-6 lg:pt-4 lg:pb-8">
+    <section id="categories" className="border-t border-line py-6 lg:py-[34px]">
       <Container>
-        <div className="mb-3">
-          <h2 className="text-[clamp(28px,3.4vw,40px)] font-light text-ink">{t("ui.home.shopByCategory")}</h2>
+        <div className="mb-6">
+          <h2 className="text-[clamp(28px,3.4vw,40px)] leading-[1.2] font-light text-ink">{t("ui.home.shopByCategory")}</h2>
         </div>
         {/* <div className="mb-10 flex gap-2.5">
           {(["doctor", "dealer"] as const).map((v) => (

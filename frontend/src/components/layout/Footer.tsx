@@ -367,7 +367,7 @@ export function Footer() {
 
   return (
     <footer className="bg-brand text-white">
-      <Container className="border-t border-white/20 pt-4 md:pt-6">
+      <Container className="border-t border-white/20 py-6 lg:py-[34px]">
         <div className="mb-3 md:mb-4 flex items-center gap-2.5">
           {cmsFooter?.logo?.trim() ? (
             <img

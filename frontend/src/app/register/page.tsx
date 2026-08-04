@@ -119,7 +119,7 @@ function RadioOption({
   onChange: React.ChangeEventHandler<HTMLInputElement>;
 }) {
   return (
-    <label className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#1A1A1A]">
+    <label className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#1A1A1A] cursor-pointer">
       <input
         type="radio"
         name={name}
@@ -654,9 +654,9 @@ export default function RegisterPage() {
                 </div>
               </div>
             </div>
-            <div className="flex flex-col gap-4 pt-1">
+            <div className="flex flex-col pt-1">
               <div>
-                <label className="inline-flex items-start gap-2 text-[12px] text-[#1A1A1A]">
+                <label className="inline-flex items-start gap-2 text-[12px] text-[#1A1A1A] cursor-pointer select-none">
                   <input
                     type="checkbox"
                     name="subscribeNewsletter"
@@ -666,14 +666,14 @@ export default function RegisterPage() {
                     className="mt-0.5 h-4 w-4 accent-[#E31E24]"
                   />
                   <span>
-                    Subscribe to the Modern Orthodontics newsletter for product updates, promotions, and news.
+                    Get the latest product updates, promotions, and news.
                   </span>
                 </label>
               </div>
               
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <label className="inline-flex items-center gap-2 text-[12px] text-[#1A1A1A]">
+                  <label className="inline-flex items-center gap-2 text-[12px] text-[#1A1A1A] select-none">
                     <input
                       type="checkbox"
                       name="termsAccepted"

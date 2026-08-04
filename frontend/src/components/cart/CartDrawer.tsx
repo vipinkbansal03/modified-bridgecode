@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { Minus, Plus, ShoppingCart, Trash2, X } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
@@ -21,20 +22,48 @@ export function CartDrawer() {
     useCart();
   const { t } = useStaticTranslations();
   const hasUnavailableItems = items.some(
-    (item) => item.priceUnavailable || item.isOutOfStock || item.isInsufficientStock
+    (item) => item.priceUnavailable || item.isOutOfStock || item.isInsufficientStock || item.hasPaymentConflict,
   );
 
-  if (!isOpen) return null;
+  // Lock body scroll when Cart Drawer is open
+  useEffect(() => {
+    if (isOpen) {
+      const originalStyle = window.getComputedStyle(document.body).overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalStyle;
+      };
+    }
+  }, [isOpen]);
+
+  // Close Cart Drawer on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isOpen) {
+        closeCart();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, closeCart]);
 
   return (
     <>
-      <button
-        type="button"
-        aria-label={t("ui.cart.close")}
+      {/* Backdrop overlay with smooth fade transition */}
+      <div
+        aria-hidden="true"
         onClick={closeCart}
-        className="fixed inset-0 z-[70] bg-black/45 backdrop-blur-[2px]"
+        className={`fixed inset-0 z-[70] bg-black/45 backdrop-blur-[2px] transition-opacity duration-300 ease-in-out ${
+          isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
       />
-      <aside className="fixed right-0 top-0 z-[80] flex h-screen w-full max-w-[420px] flex-col bg-white shadow-[0_24px_80px_rgba(0,0,0,0.18)]">
+
+      {/* Slide-out Drawer Panel with smooth slide transition */}
+      <aside
+        className={`fixed right-0 top-0 z-[80] flex h-screen w-full max-w-[420px] flex-col bg-white shadow-[0_24px_80px_rgba(0,0,0,0.18)] transition-transform duration-300 ease-in-out ${
+          isOpen ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div className="flex items-center gap-2">
             <ShoppingCart size={18} className="text-brand" />
@@ -67,135 +96,149 @@ export function CartDrawer() {
                 Action required in cart
               </p>
               <p className="mt-1 text-xs text-red-600">
-                Please remove or adjust unavailable or out-of-stock items before proceeding to checkout.
+                Please remove or adjust unavailable, out-of-stock, or payment-conflicting items before proceeding to checkout.
               </p>
             </div>
           )}
           {items.length ? (
             <div className="space-y-4">
-              {items.map((item) => (
-                <div
-                  key={item.variantId}
-                  className="rounded-md border border-line bg-white p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <Link
-                        href={`/products/${item.productSlug}`}
-                        onClick={closeCart}
-                        className="text-[14px] font-semibold text-ink hover:text-brand"
-                      >
-                        {item.productTitle}
-                      </Link>
-                      <p className="mt-1 text-[12.5px] text-steel">
-                        {item.variantTitle}
-                      </p>
-                      {item.sku && (
-                        <p className="mt-1 text-[11.5px] uppercase tracking-wide text-steel-2">
-                          {t("ui.cart.sku")} {item.sku}
-                        </p>
-                      )}
-                      {item.countryCode && (
-                        <p className="mt-1 text-[11.5px] text-steel-2">
-                          {t("ui.cart.pricing")}:{" "}
-                          {item.countryName ?? item.countryCode}
-                        </p>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      aria-label={t("ui.cart.removeItem")}
-                      onClick={() => removeItem(item.variantId)}
-                      className="text-steel hover:text-brand"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+              {items.map((item) => {
+                const hasError =
+                  Boolean(item.stockErrorMessage) ||
+                  Boolean(item.paymentErrorMessage) ||
+                  Boolean(item.priceUnavailable);
 
-                  {item.stockErrorMessage && (
-                    <div className="mt-2.5 rounded-md border border-red-200 bg-red-50 p-2 text-[11.5px] font-medium text-red-700">
-                      {item.stockErrorMessage}
-                    </div>
-                  )}
-
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {Object.entries(item.selectedAttributes).map(
-                      ([key, value]) => (
-                        <span
-                          key={key}
-                          className="rounded-full bg-grey px-2.5 py-1 text-[10.5px] text-steel"
+                return (
+                  <div
+                    key={item.variantId}
+                    className={`rounded-md border p-4 transition-all ${
+                      hasError ? "border-red-300 bg-red-50/50" : "border-line bg-white"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <Link
+                          href={`/products/${item.productSlug}`}
+                          onClick={closeCart}
+                          className="text-[14px] font-semibold text-ink hover:text-brand"
                         >
-                          {key}: {value}
-                        </span>
-                      ),
-                    )}
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between gap-3">
-                    <div className="flex items-center rounded-full border border-line p-1">
+                          {item.productTitle}
+                        </Link>
+                        <p className="mt-1 text-[12.5px] text-steel">
+                          {item.variantTitle}
+                        </p>
+                        {item.sku && (
+                          <p className="mt-1 text-[11.5px] uppercase tracking-wide text-steel-2">
+                            {t("ui.cart.sku")} {item.sku}
+                          </p>
+                        )}
+                        {item.countryCode && (
+                          <p className="mt-1 text-[11.5px] text-steel-2">
+                            {t("ui.cart.pricing")}:{" "}
+                            {item.countryName ?? item.countryCode}
+                          </p>
+                        )}
+                      </div>
                       <button
                         type="button"
-                        aria-label={t("ui.cart.decreaseQuantity")}
-                        onClick={() =>
-                          updateQuantity(item.variantId, item.quantity - 1)
-                        }
-                        className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-grey"
+                        aria-label={t("ui.cart.removeItem")}
+                        onClick={() => removeItem(item.variantId)}
+                        className="text-steel hover:text-brand"
                       >
-                        <Minus size={13} />
-                      </button>
-                      <span className="w-10 text-center text-[13px] font-semibold">
-                        {item.quantity}
-                      </span>
-                      <button
-                        type="button"
-                        aria-label={t("ui.cart.increaseQuantity")}
-                        onClick={() =>
-                          updateQuantity(item.variantId, item.quantity + 1)
-                        }
-                        className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-grey"
-                      >
-                        <Plus size={13} />
+                        <Trash2 size={16} />
                       </button>
                     </div>
-                    <div className="text-right">
-                      <p className="text-[11px] uppercase tracking-wide text-steel-2">
-                        {t("ui.cart.lineTotal")}
-                      </p>
 
-                      {item.priceUnavailable ? (
-                        <>
-                          <p className="text-[15px] font-semibold leading-none text-red-600">
-                            —
-                          </p>
-                          <p className="mt-1 text-[11px] text-red-600">
-                            Price unavailable
-                          </p>
-                        </>
-                      ) : (
-                        <div>
-                          {item.basePrice && item.basePrice > item.unitPrice && (
-                            <p className="text-[11.5px] text-steel line-through">
-                              {formatMoney(
-                                item.currencySymbol,
-                                item.basePrice * item.quantity,
-                              )}
-                            </p>
-                          )}
-                          <div className="mt-0.5">
-                            <p className="text-[15px] font-semibold text-ink">
-                              {formatMoney(
-                                item.currencySymbol,
-                                item.unitPrice * item.quantity,
-                              )}
-                            </p>
-                            <p className="text-[10px] text-steel">Tax calculated at checkout</p>
-                          </div>
-                        </div>
+                    {item.stockErrorMessage && (
+                      <div className="mt-2.5 rounded-md border border-red-200 bg-red-50 p-2 text-[11.5px] font-medium text-red-700">
+                        {item.stockErrorMessage}
+                      </div>
+                    )}
+                    {item.paymentErrorMessage && !item.stockErrorMessage && (
+                      <div className="mt-2.5 rounded-md border border-red-200 bg-red-50 p-2 text-[11.5px] font-medium text-red-700">
+                        ⚠️ {item.paymentErrorMessage}
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {Object.entries(item.selectedAttributes).map(
+                        ([key, value]) => (
+                          <span
+                            key={key}
+                            className="rounded-full bg-grey px-2.5 py-1 text-[10.5px] text-steel"
+                          >
+                            {key}: {value}
+                          </span>
+                        ),
                       )}
                     </div>
+
+                    <div className="mt-4 flex items-center justify-between gap-3">
+                      <div className="flex items-center rounded-full border border-line p-1">
+                        <button
+                          type="button"
+                          aria-label={t("ui.cart.decreaseQuantity")}
+                          onClick={() =>
+                            updateQuantity(item.variantId, item.quantity - 1)
+                          }
+                          className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-grey"
+                        >
+                          <Minus size={13} />
+                        </button>
+                        <span className="w-10 text-center text-[13px] font-semibold">
+                          {item.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={t("ui.cart.increaseQuantity")}
+                          onClick={() =>
+                            updateQuantity(item.variantId, item.quantity + 1)
+                          }
+                          className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-grey"
+                        >
+                          <Plus size={13} />
+                        </button>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[11px] uppercase tracking-wide text-steel-2">
+                          {t("ui.cart.lineTotal")}
+                        </p>
+
+                        {item.priceUnavailable ? (
+                          <>
+                            <p className="text-[15px] font-semibold leading-none text-red-600">
+                              —
+                            </p>
+                            <p className="mt-1 text-[11px] text-red-600">
+                              Price unavailable
+                            </p>
+                          </>
+                        ) : (
+                          <div>
+                            {item.basePrice && item.basePrice > item.unitPrice && (
+                              <p className="text-[11.5px] text-steel line-through">
+                                {formatMoney(
+                                  item.currencySymbol,
+                                  item.basePrice * item.quantity,
+                                )}
+                              </p>
+                            )}
+                            <div className="mt-0.5">
+                              <p className="text-[15px] font-semibold text-ink">
+                                {formatMoney(
+                                  item.currencySymbol,
+                                  item.unitPrice * item.quantity,
+                                )}
+                              </p>
+                              <p className="text-[10px] text-steel">Tax calculated at checkout</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="flex h-full flex-col items-center justify-center text-center">

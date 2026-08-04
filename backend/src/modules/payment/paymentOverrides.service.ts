@@ -159,7 +159,11 @@ export async function resolveCartPaymentMethods(
   });
 
   if (!country) {
-    return [];
+    return {
+      methods: [],
+      hasConflict: false,
+      conflictingVariantIds: [],
+    };
   }
 
   // Fetch Country-level enabled methods
@@ -202,7 +206,11 @@ export async function resolveCartPaymentMethods(
 
   // If no items in cart, fallback to base country methods
   if (!cartItems || cartItems.length === 0) {
-    return baseMethods;
+    return {
+      methods: baseMethods,
+      hasConflict: false,
+      conflictingVariantIds: [],
+    };
   }
 
   // Fetch Overrides for products and variants in cart
@@ -218,16 +226,22 @@ export async function resolveCartPaymentMethods(
     }),
   ]);
 
-  // Evaluate Resolution Chain (Country -> Product -> Variant) using multi-item intersection
-  const resolvedMethods = baseMethods.filter((method) => {
-    for (const item of cartItems) {
+  // Compute allowed payment methods per item
+  const getItemAllowedMethodIds = (item: CartItemInput): Set<string> => {
+    const allowed = new Set<string>();
+    for (const method of baseMethods) {
       // 1. Check Variant Override (highest specificity)
       const vOverride = variantOverrides.find(
         (vo) => vo.variantId === item.variantId && vo.paymentMethodId === method.id
       );
       if (vOverride) {
-        if (vOverride.state === "BLOCK") return false;
-        if (vOverride.state === "ALLOW") continue;
+        if (vOverride.state === "ALLOW") {
+          allowed.add(method.id);
+          continue;
+        }
+        if (vOverride.state === "BLOCK") {
+          continue;
+        }
       }
 
       // 2. Check Product Override
@@ -235,14 +249,70 @@ export async function resolveCartPaymentMethods(
         (po) => po.productId === item.productId && po.paymentMethodId === method.id
       );
       if (pOverride) {
-        if (pOverride.state === "BLOCK") return false;
-        if (pOverride.state === "ALLOW") continue;
+        if (pOverride.state === "ALLOW") {
+          allowed.add(method.id);
+          continue;
+        }
+        if (pOverride.state === "BLOCK") {
+          continue;
+        }
       }
 
-      // 3. Inherit Country (already active in country configuration)
+      // 3. Inherit Country Default (method is active in country configuration)
+      allowed.add(method.id);
     }
-    return true;
+    return allowed;
+  };
+
+  const itemAllowedMap = new Map<string, Set<string>>();
+  cartItems.forEach((item) => {
+    if (!itemAllowedMap.has(item.variantId)) {
+      itemAllowedMap.set(item.variantId, getItemAllowedMethodIds(item));
+    }
   });
 
-  return resolvedMethods;
+  // Evaluate Resolution Chain using multi-item intersection
+  const resolvedMethods = baseMethods.filter((method) => {
+    return Array.from(itemAllowedMap.values()).every((set) => set.has(method.id));
+  });
+
+  const conflictingVariantIds: string[] = [];
+
+  if (resolvedMethods.length === 0 && cartItems.length > 0) {
+    const variantIdList = Array.from(itemAllowedMap.keys());
+
+    for (const varId of variantIdList) {
+      const itemSet = itemAllowedMap.get(varId)!;
+      if (itemSet.size === 0) {
+        conflictingVariantIds.push(varId);
+        continue;
+      }
+
+      const otherSets = variantIdList
+        .filter((id) => id !== varId)
+        .map((id) => itemAllowedMap.get(id)!);
+
+      if (otherSets.length > 0) {
+        let otherIntersection = new Set(otherSets[0]);
+        for (let i = 1; i < otherSets.length; i++) {
+          otherIntersection = new Set(
+            Array.from(otherIntersection).filter((mId) => otherSets[i].has(mId))
+          );
+        }
+
+        const hasOverlap = Array.from(itemSet).some((mId) => otherIntersection.has(mId));
+        if (!hasOverlap) {
+          conflictingVariantIds.push(varId);
+        }
+      } else {
+        conflictingVariantIds.push(varId);
+      }
+    }
+  }
+
+  return {
+    methods: resolvedMethods,
+    hasConflict: conflictingVariantIds.length > 0,
+    conflictingVariantIds,
+  };
 }

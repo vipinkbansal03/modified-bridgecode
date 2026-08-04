@@ -161,11 +161,12 @@ export async function initiatePaymentForOrder(
       productId: item.productId,
       variantId: item.variantId!,
     }));
-  const allowed = await resolveCartPaymentMethods(
+  const allowedRes = await resolveCartPaymentMethods(
     order.country.code,
     cartItems
   );
-  const isAllowed = allowed.some(
+  const allowedMethods = allowedRes.methods || [];
+  const isAllowed = allowedMethods.some(
     (m) => m.code.toUpperCase() === paymentMethodCode.toUpperCase()
   );
   if (!isAllowed) {

@@ -18,7 +18,7 @@ export function CertificationsSection({ data }: CertificationsSectionProps) {
   const scrollBy = (delta: number) => viewportRef.current?.scrollBy({ left: delta, behavior: "smooth" });
 
   return (
-    <section className="pt-1 pb-3 lg:pt-1 lg:pb-4">
+    <section className="border-t border-line py-6 lg:py-[34px]">
       <Container>
         <SectionHeading
           title="Certifications"

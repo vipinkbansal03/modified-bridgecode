@@ -378,7 +378,19 @@ export async function fetchPublicPaymentMethods(
     countryCode: countryCode || "IN",
     cartItems: cartItems || [],
   });
-  return res.data.data as AvailablePaymentMethod[];
+  const data = res.data.data;
+  if (Array.isArray(data)) {
+    return {
+      methods: data as AvailablePaymentMethod[],
+      hasConflict: false,
+      conflictingVariantIds: [] as string[],
+    };
+  }
+  return {
+    methods: (data?.methods ?? []) as AvailablePaymentMethod[],
+    hasConflict: Boolean(data?.hasConflict),
+    conflictingVariantIds: (data?.conflictingVariantIds ?? []) as string[],
+  };
 }
 
 export async function initiateCustomerPayment(orderId: string, paymentMethodCode: string) {

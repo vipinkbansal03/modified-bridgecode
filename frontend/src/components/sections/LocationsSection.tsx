@@ -58,11 +58,11 @@ export function LocationsSection({ data }: LocationsSectionProps) {
   );
 
   return (
-    <section className="border-t border-line pt-4 pb-3 lg:pt-5 lg:pb-4">
+    <section className="border-t border-line py-6 lg:py-[34px]">
       <Container>
         <Reveal>
-          <div className="mb-5 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-4">
-            <h2 className="text-[clamp(28px,3.4vw,40px)] font-light text-ink">{t("ui.home.ourLocations")}</h2>
+          <div className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-4">
+            <h2 className="leading-[1.2] text-[clamp(28px,3.4vw,40px)] font-light text-ink">{t("ui.home.ourLocations")}</h2>
             <span className="text-sm text-steel">
               {data.subtitle === "Find us around the globe" ? t("ui.home.findUsAroundGlobe") : data.subtitle}
             </span>

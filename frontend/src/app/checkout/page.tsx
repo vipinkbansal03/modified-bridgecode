@@ -347,8 +347,9 @@ export default function CheckoutPage() {
     }));
 
     fetchPublicPaymentMethods(form.countryCode, cartItemsPayload)
-      .then((methods) => {
+      .then((res) => {
         if (!active) return;
+        const methods = res.methods || [];
         setAvailablePaymentMethods(methods);
         const defaultMethod = methods.find((m) => m.isDefault) || methods[0];
         if (defaultMethod) {
@@ -1385,10 +1386,17 @@ export default function CheckoutPage() {
                     : item.unitPrice;
                   const displayCurrencySymbol =
                     estimate?.currency?.symbol ?? item.currencySymbol;
+                  const hasError =
+                    Boolean(item.stockErrorMessage) ||
+                    Boolean(item.paymentErrorMessage) ||
+                    Boolean(item.priceUnavailable);
+
                   return (
                     <div
                       key={item.variantId}
-                      className="border-b border-line pb-4 last:border-0"
+                      className={`rounded-md border p-4 transition-all ${
+                        hasError ? "border-red-300 bg-red-50/50" : "border-line bg-white"
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -1407,6 +1415,17 @@ export default function CheckoutPage() {
                           Remove
                         </button>
                       </div>
+
+                      {item.stockErrorMessage && (
+                        <div className="mt-2.5 rounded-md border border-red-200 bg-red-50 p-2 text-[11.5px] font-medium text-red-700">
+                          {item.stockErrorMessage}
+                        </div>
+                      )}
+                      {item.paymentErrorMessage && !item.stockErrorMessage && (
+                        <div className="mt-2.5 rounded-md border border-red-200 bg-red-50 p-2 text-[11.5px] font-medium text-red-700">
+                          ⚠️ {item.paymentErrorMessage}
+                        </div>
+                      )}
                       <div className="mt-3 flex items-center justify-between">
                         <div className="inline-flex items-center rounded-pill border border-line bg-offwhite p-1">
                           <button

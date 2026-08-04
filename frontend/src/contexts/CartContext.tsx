@@ -11,6 +11,7 @@ import {
 import { apiClient } from "@/lib/apiClient";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
 import { useCountries } from "@/hooks/api/useCurrencies";
+import { fetchPublicPaymentMethods } from "@/services/customerApi";
 
 export interface CartItem {
   variantId: string;
@@ -33,6 +34,8 @@ export interface CartItem {
   isOutOfStock?: boolean;
   isInsufficientStock?: boolean;
   stockErrorMessage?: string;
+  hasPaymentConflict?: boolean;
+  paymentErrorMessage?: string;
 }
 
 interface CartTotals {
@@ -78,7 +81,7 @@ function computeTotals(
   );
   const roleDiscount = Math.max(0, originalSubtotal - subtotal);
   const hasInvalidStockItems = items.some(
-    (item) => Boolean(item.isOutOfStock || item.isInsufficientStock || item.priceUnavailable)
+    (item) => item.isOutOfStock || item.isInsufficientStock || item.priceUnavailable || item.hasPaymentConflict,
   );
 
   return {
@@ -279,6 +282,30 @@ export function CartProvider({ children }: { children: ReactNode }) {
             });
           } catch (invErr) {
             console.warn("Failed to refresh cart inventory status", invErr);
+          }
+        }
+
+        if (updatedItems.length > 0 && selectedCountryCode) {
+          try {
+            const cartItemsPayload = updatedItems.map((i) => ({
+              productId: i.productId,
+              variantId: i.variantId,
+            }));
+            const pmRes = await fetchPublicPaymentMethods(selectedCountryCode, cartItemsPayload);
+            const conflictingSet = new Set(pmRes.conflictingVariantIds || []);
+
+            updatedItems = updatedItems.map((item) => {
+              const hasPaymentConflict = conflictingSet.has(item.variantId);
+              return {
+                ...item,
+                hasPaymentConflict,
+                paymentErrorMessage: hasPaymentConflict
+                  ? "Payment conflict - Requires a different payment method."
+                  : undefined,
+              };
+            });
+          } catch (pmErr) {
+            console.warn("Failed to refresh cart payment methods resolution", pmErr);
           }
         }
 

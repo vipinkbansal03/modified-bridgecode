@@ -48,8 +48,8 @@ export function ContactCTASection({ data }: ContactCTASectionProps) {
             "radial-gradient(circle at 80% 25%, rgba(227,30,36,.28), transparent 55%), linear-gradient(100deg, rgba(0,0,0,.78) 0%, rgba(0,0,0,.2) 60%)",
         }}
       />
-      <Container className="relative w-full py-10 md:py-12">
-        <h2 className="text-[clamp(34px,5vw,52px)] font-light text-white">
+      <Container className="relative w-full py-12 lg:py-14">
+        <h2 className="text-[clamp(34px,5vw,52px)] font-light text-white leading-[1.2]">
           {heading}
         </h2>
         <p className="mt-4 max-w-[380px] text-[15.5px] text-white/82">

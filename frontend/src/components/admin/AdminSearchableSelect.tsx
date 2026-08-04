@@ -211,8 +211,7 @@ export function AdminSearchableSelect({
         <div
           ref={menuRef}
           role="listbox"
-          onScroll={handleScroll}
-          className="z-[10000] origin-top animate-admin-select-dropdown overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg animate-in fade-in zoom-in-95 duration-100"
+          className="z-[10000] origin-top animate-admin-select-dropdown flex flex-col overflow-hidden rounded-md border border-[#E6E6E6] bg-white shadow-lg animate-in fade-in zoom-in-95 duration-100"
           style={{
             position: "fixed",
             top: menuStyle.top !== undefined ? menuStyle.top : "auto",
@@ -223,7 +222,7 @@ export function AdminSearchableSelect({
           }}
         >
           {showSearch && (
-            <div className="relative px-2 py-1.5 border-b border-[#E6E6E6]">
+            <div className="sticky top-0 z-10 shrink-0 bg-white px-2 py-1.5 border-b border-[#E6E6E6]">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
               <input
                 ref={inputRef}
@@ -242,33 +241,35 @@ export function AdminSearchableSelect({
               />
             </div>
           )}
-          {displayedOptions.length === 0 && !isLoadingMore ? (
-            <div className="px-3.5 py-2 text-[13.5px] text-[#9A9A9A]">No options found</div>
-          ) : (
-            <>
-              {displayedOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="option"
-                  aria-selected={option.value === selectedValue}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => selectOption(option.value)}
-                  className={cn(
-                    "w-full cursor-pointer whitespace-nowrap px-3.5 py-2 text-left text-[13.5px] transition hover:bg-[#F7F7F7]",
-                    option.value === selectedValue ? "bg-red-50 text-[#E31E24]" : "text-[#1A1A1A]",
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-              {isLoadingMore && (
-                <div className="flex items-center justify-center py-2.5">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
-                </div>
-              )}
-            </>
-          )}
+          <div className="flex-1 overflow-y-auto py-1" onScroll={handleScroll}>
+            {displayedOptions.length === 0 && !isLoadingMore ? (
+              <div className="px-3.5 py-2 text-[13.5px] text-[#9A9A9A]">No options found</div>
+            ) : (
+              <>
+                {displayedOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="option"
+                    aria-selected={option.value === selectedValue}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectOption(option.value)}
+                    className={cn(
+                      "w-full cursor-pointer whitespace-nowrap px-3.5 py-2 text-left text-[13.5px] transition hover:bg-[#F7F7F7]",
+                      option.value === selectedValue ? "bg-red-50 text-[#E31E24]" : "text-[#1A1A1A]",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+                {isLoadingMore && (
+                  <div className="flex items-center justify-center py-2.5">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>,
         document.body,
       ) : null}

@@ -293,7 +293,7 @@ export function Header() {
               >
                 <div className="relative leading-none">
                   <ShoppingCart size={24} className="stroke-[1.75]" />
-                  <span className="absolute left-[54%] top-[-4px] -translate-x-1/2 text-[11.5px] font-extrabold text-[#F08804]">
+                  <span className="absolute left-[54%] top-[-4px] -translate-x-1/2 text-[11.5px] font-extrabold text-[#E31E24]">
                     {totals.itemCount}
                   </span>
                 </div>
@@ -389,7 +389,7 @@ export function Header() {
               >
                 <ShoppingCart size={22} className="stroke-[1.75]" />
                 {totals.itemCount > 0 && (
-                  <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#F08804] text-[9px] font-bold text-white">
+                  <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#E31E24] text-[9px] font-bold text-white">
                     {totals.itemCount}
                   </span>
                 )}

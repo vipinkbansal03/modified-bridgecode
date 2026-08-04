@@ -211,7 +211,7 @@ export function MobileMenu({
               >
                 <ShoppingCart size={18} />
                 {cartCount > 0 && (
-                  <span className="absolute right-3 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-[#F08804] text-[9px] font-bold text-white">
+                  <span className="absolute right-3 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-[#E31E24] text-[9px] font-bold text-white">
                     {cartCount}
                   </span>
                 )}
