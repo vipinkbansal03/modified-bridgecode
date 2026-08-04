@@ -312,7 +312,7 @@ export default function AdminProductsPage() {
     const formData = new FormData();
     formData.append("file", file);
     try {
-      const response = await adminApi.post("/products/import/preview", formData, { headers: { "Content-Type": "multipart/form-data" } });
+      const response = await adminApi.post("/products/import/preview", formData);
       const report = response.data?.data as SpreadsheetPreview;
       setImportPreview(report);
       setImportMessage(report.invalidRows > 0 ? "Fix the validation issues before importing." : "Preview looks good. You can import now.");
@@ -328,7 +328,7 @@ export default function AdminProductsPage() {
     try {
       const formData = new FormData();
       formData.append("file", importFile);
-      const response = await adminApi.post("/products/import", formData, { headers: { "Content-Type": "multipart/form-data" } });
+      const response = await adminApi.post("/products/import", formData);
       const result = response.data?.data as { created: number; updated: number; report: SpreadsheetPreview };
       showToast(`Imported ${result.created} created and ${result.updated} updated products.`);
       setImportOpen(false);

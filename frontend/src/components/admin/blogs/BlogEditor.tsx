@@ -91,7 +91,7 @@ export function BlogEditor({ blog }: { blog?: Blog }) {
     formData.append("files", file);
     setUploading(true);
     try {
-      const response = await adminApi.post("/media", formData, { headers: { "Content-Type": "multipart/form-data" } });
+      const response = await adminApi.post("/media", formData);
       const uploaded = response.data?.data?.[0];
       if (uploaded?.url) set("featuredImage", uploaded.url);
       else throw new Error("Upload completed, but no image URL was returned.");

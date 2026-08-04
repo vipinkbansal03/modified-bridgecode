@@ -351,7 +351,7 @@ async function ensureVariantInventoryRecord(
   variantId: string,
   warehouseId?: string | null,
 ) {
-  const existing = await client.inventory.findFirst({
+  let existing = await client.inventory.findFirst({
     where: { variantId, warehouseId: warehouseId ?? null },
   });
   if (existing) return existing;
@@ -362,17 +362,27 @@ async function ensureVariantInventoryRecord(
   });
   if (!variant) return null;
 
-  return client.inventory.create({
-    data: {
-      productId: variant.productId,
-      variantId,
-      warehouseId: warehouseId ?? null,
-      stock: 0,
-      reservedStock: 0,
-      lowStockThreshold: 10,
-      status: "OUT_OF_STOCK",
-    },
-  });
+  try {
+    return await client.inventory.create({
+      data: {
+        productId: variant.productId,
+        variantId,
+        warehouseId: warehouseId ?? null,
+        stock: 0,
+        reservedStock: 0,
+        lowStockThreshold: 10,
+        status: "OUT_OF_STOCK",
+      },
+    });
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      existing = await client.inventory.findFirst({
+        where: { variantId, warehouseId: warehouseId ?? null },
+      });
+      if (existing) return existing;
+    }
+    throw error;
+  }
 }
 
 export async function upsertVariantInventory(data: {

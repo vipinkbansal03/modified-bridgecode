@@ -1100,9 +1100,7 @@ export const usePreviewPricingImport = () =>
   useMutation({
     mutationFn: (formData: FormData) =>
       adminApi
-        .post("/pricing/import/preview", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        })
+        .post("/pricing/import/preview", formData)
         .then((r) => r.data.data),
   });
 
@@ -1111,9 +1109,7 @@ export const useImportPricing = () => {
   return useMutation({
     mutationFn: (formData: FormData) =>
       adminApi
-        .post("/pricing/import", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        })
+        .post("/pricing/import", formData)
         .then((r) => r.data.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-pricing"] });
@@ -1209,9 +1205,7 @@ export const usePreviewTaxImport = () =>
   useMutation({
     mutationFn: (formData: FormData) =>
       adminApi
-        .post("/tax-rules/import/preview", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        })
+        .post("/tax-rules/import/preview", formData)
         .then((r) => r.data.data),
   });
 
@@ -1220,9 +1214,7 @@ export const useImportTaxRules = () => {
   return useMutation({
     mutationFn: (formData: FormData) =>
       adminApi
-        .post("/tax-rules/import", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        })
+        .post("/tax-rules/import", formData)
         .then((r) => r.data.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-tax-rules"] });
@@ -1324,9 +1316,7 @@ export const usePreviewCurrencyImport = () =>
   useMutation({
     mutationFn: (formData: FormData) =>
       adminApi
-        .post("/currencies/import/preview", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        })
+        .post("/currencies/import/preview", formData)
         .then((r) => r.data.data),
   });
 
@@ -1335,9 +1325,7 @@ export const useImportCurrencies = () => {
   return useMutation({
     mutationFn: (formData: FormData) =>
       adminApi
-        .post("/currencies/import", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        })
+        .post("/currencies/import", formData)
         .then((r) => r.data.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-currencies"] });
@@ -1490,9 +1478,7 @@ export const usePreviewTierImport = () =>
   useMutation({
     mutationFn: (formData: FormData) =>
       adminApi
-        .post("/tiers/import/preview", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        })
+        .post("/tiers/import/preview", formData)
         .then((r) => r.data.data),
   });
 
@@ -1501,9 +1487,7 @@ export const useImportTiers = () => {
   return useMutation({
     mutationFn: (formData: FormData) =>
       adminApi
-        .post("/tiers/import", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        })
+        .post("/tiers/import", formData)
         .then((r) => r.data.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-tiers"] });
@@ -1811,9 +1795,7 @@ export const usePreviewDiscountImport = () =>
   useMutation({
     mutationFn: (formData: FormData) =>
       adminApi
-        .post("/discounts/import/preview", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        })
+        .post("/discounts/import/preview", formData)
         .then((r) => r.data.data),
   });
 
@@ -1822,9 +1804,7 @@ export const useImportDiscounts = () => {
   return useMutation({
     mutationFn: (formData: FormData) =>
       adminApi
-        .post("/discounts/import", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        })
+        .post("/discounts/import", formData)
         .then((r) => r.data.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-discounts"] });

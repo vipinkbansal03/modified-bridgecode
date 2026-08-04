@@ -1305,6 +1305,10 @@ export async function addProductMedia(
   altTexts: string[]
 ) {
   await getProduct(productId);
+  
+  if (!files || !files.length) {
+    return [];
+  }
 
   const results = await Promise.all(
     files.map((file) => uploadFile(file.path, `modortho/products/${productId}`))

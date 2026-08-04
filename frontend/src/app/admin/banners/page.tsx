@@ -65,7 +65,7 @@ export default function BannersPage() {
     payload.append("files", file);
     setUploading(field);
     try {
-      const response = await adminApi.post("/media", payload, { headers: { "Content-Type": "multipart/form-data" } });
+      const response = await adminApi.post("/media", payload);
       const uploaded = response.data?.data?.[0];
       if (uploaded?.url) set(field, uploaded.url);
     } catch (error) { showToast(getAdminErrorMessage(error, "Upload failed."), "error"); }

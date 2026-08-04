@@ -393,9 +393,7 @@ export default function SettingsPage() {
     setUploadingKey(uploadKey);
 
     try {
-      const response = await adminApi.post("/media", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await adminApi.post("/media", formData);
       const uploaded = response.data.data?.[0] as UploadedMedia | undefined;
 
       if (!uploaded?.url) {
@@ -425,9 +423,7 @@ export default function SettingsPage() {
     formData.append("folder", "modortho/branding");
 
     try {
-      const response = await adminApi.post("/media", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await adminApi.post("/media", formData);
       const uploaded = response.data.data?.[0] as UploadedMedia | undefined;
 
       if (!uploaded?.url) {

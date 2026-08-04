@@ -647,7 +647,7 @@ export function TranslationCoverageHub({
         formData,
         {
           params: { languageId: activeLanguageId },
-          headers: { "Content-Type": "multipart/form-data" },
+          
         },
       );
 

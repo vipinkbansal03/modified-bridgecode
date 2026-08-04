@@ -291,9 +291,7 @@ export default function InventoryPage() {
     const formData = new FormData();
     formData.append("file", file);
     try {
-      const response = await adminApi.post("/inventory/import/preview", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await adminApi.post("/inventory/import/preview", formData);
       const report = response.data?.data as SpreadsheetReport;
       setImportPreview(report);
       setImportMessage(report.invalidRows > 0 ? "Fix the validation issues before importing." : "Preview looks good. You can import now.");
@@ -309,9 +307,7 @@ export default function InventoryPage() {
     try {
       const formData = new FormData();
       formData.append("file", importFile);
-      const response = await adminApi.post("/inventory/import", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await adminApi.post("/inventory/import", formData);
       const result = response.data?.data as { created: number; updated: number; report: SpreadsheetReport };
       showToast(`Imported ${result.created} created and ${result.updated} updated inventory rows.`);
       setImportOpen(false);
