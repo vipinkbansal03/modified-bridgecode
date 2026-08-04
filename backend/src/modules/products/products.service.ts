@@ -991,12 +991,23 @@ export async function bulkUpdateProducts(data: {
   countryIds?: string[];
   collectionIds?: string[];
   warehouseId?: string;
+  includeVariants?: boolean;
+  variantIds?: string[];
+  fullVariantProductIds?: string[];
+  productStock?: Record<string, number>;
+  variantStock?: Record<string, number>;
 }) {
   const ids = Array.from(new Set(data.ids ?? []));
-  if (!ids.length) throw new AppError("Select at least one product.", 400);
+  const variantIds = data.variantIds ?? [];
 
-  const products = await prisma.product.findMany({ where: { id: { in: ids }, deletedAt: null }, select: { id: true } });
-  if (products.length !== ids.length) throw new AppError("One or more selected products were not found.", 400);
+  if (!ids.length && !variantIds.length && !(data.fullVariantProductIds?.length)) {
+    throw new AppError("Select at least one product or variant.", 400);
+  }
+
+  if (ids.length > 0) {
+    const products = await prisma.product.findMany({ where: { id: { in: ids }, deletedAt: null }, select: { id: true } });
+    if (products.length !== ids.length) throw new AppError("One or more selected products were not found.", 400);
+  }
 
   if (data.action === "delete") {
     const activeOrderItemCount = await prisma.orderItem.count({
@@ -1086,24 +1097,131 @@ export async function bulkUpdateProducts(data: {
     const warehouse = await prisma.warehouse.findUnique({ where: { id: data.warehouseId } });
     if (!warehouse) throw new AppError("Warehouse not found.", 400);
 
+    // Resolve all implicated product IDs
+    const allImplicatedProductIds = new Set([
+      ...ids, 
+      ...(data.fullVariantProductIds || [])
+    ]);
+
+    if (variantIds.length > 0) {
+      const variants = await prisma.productVariant.findMany({
+        where: { id: { in: variantIds } },
+        select: { productId: true }
+      });
+      for (const v of variants) {
+        allImplicatedProductIds.add(v.productId);
+      }
+    }
+
+    const finalProductIds = Array.from(allImplicatedProductIds);
+
     await prisma.$transaction(async (tx) => {
-      for (const productId of ids) {
+      for (const productId of finalProductIds) {
+        // Base product inventory creation
         const existing = await tx.inventory.findFirst({
           where: { productId, variantId: null, warehouseId: data.warehouseId },
         });
+        const providedStock = data.productStock?.[productId];
         if (!existing) {
           await tx.inventory.create({
             data: {
               productId,
               variantId: null,
               warehouseId: data.warehouseId!,
-              stock: 0,
+              stock: providedStock ?? 0,
             },
           });
+        } else if (providedStock !== undefined) {
+          await tx.inventory.update({
+            where: { id: existing.id },
+            data: { stock: providedStock },
+          });
+        }
+        
+        let variantsToAssign: { id: string }[] = [];
+        
+        if (data.includeVariants || data.fullVariantProductIds?.includes(productId)) {
+          variantsToAssign = await tx.productVariant.findMany({
+            where: { productId },
+            select: { id: true },
+          });
+        } else if (variantIds.length) {
+          variantsToAssign = await tx.productVariant.findMany({
+            where: { productId, id: { in: variantIds } },
+            select: { id: true },
+          });
+        }
+
+        for (const variant of variantsToAssign) {
+          const existingVariantInv = await tx.inventory.findFirst({
+            where: { productId, variantId: variant.id, warehouseId: data.warehouseId },
+          });
+          const vProvidedStock = data.variantStock?.[variant.id];
+          if (!existingVariantInv) {
+            await tx.inventory.create({
+              data: {
+                productId,
+                variantId: variant.id,
+                warehouseId: data.warehouseId!,
+                stock: vProvidedStock ?? 0,
+              },
+            });
+          } else if (vProvidedStock !== undefined) {
+            await tx.inventory.update({
+              where: { id: existingVariantInv.id },
+              data: { stock: vProvidedStock },
+            });
+          }
         }
       }
     });
-    return { updated: ids.length };
+    return { updated: finalProductIds.length };
+  }
+
+  if (data.action === "unassignWarehouse") {
+    if (!data.warehouseId) throw new AppError("warehouseId is required.", 400);
+    
+    const allImplicatedProductIds = new Set([
+      ...ids, 
+      ...(data.fullVariantProductIds || [])
+    ]);
+
+    if (variantIds.length > 0) {
+      const variants = await prisma.productVariant.findMany({
+        where: { id: { in: variantIds } },
+        select: { productId: true }
+      });
+      for (const v of variants) {
+        allImplicatedProductIds.add(v.productId);
+      }
+    }
+
+    const finalProductIds = Array.from(allImplicatedProductIds);
+
+    let deletedCount = 0;
+    await prisma.$transaction(async (tx) => {
+      for (const productId of finalProductIds) {
+        if (ids.includes(productId)) {
+           const del = await tx.inventory.deleteMany({
+             where: { productId, variantId: null, warehouseId: data.warehouseId }
+           });
+           deletedCount += del.count;
+        }
+
+        if (data.fullVariantProductIds?.includes(productId) || data.includeVariants) {
+           const del = await tx.inventory.deleteMany({
+             where: { productId, variantId: { not: null }, warehouseId: data.warehouseId }
+           });
+           deletedCount += del.count;
+        } else if (variantIds.length > 0) {
+           const del = await tx.inventory.deleteMany({
+             where: { productId, variantId: { in: variantIds }, warehouseId: data.warehouseId }
+           });
+           deletedCount += del.count;
+        }
+      }
+    });
+    return { updated: deletedCount };
   }
 
   throw new AppError("Unsupported bulk action.", 400);

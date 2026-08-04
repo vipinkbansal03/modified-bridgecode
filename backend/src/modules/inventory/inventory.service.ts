@@ -21,6 +21,7 @@ type InventoryBulkUpdateInput = {
   stock?: number | string;
   lowStockThreshold?: number | string;
   adjustedBy?: string;
+  warehouseId?: string | null;
 };
 
 type InventoryImportRow = {
@@ -419,7 +420,7 @@ export async function upsertVariantInventory(data: {
 
 export async function updateInventory(
   id: string,
-  data: { stock?: number; reservedStock?: number; lowStockThreshold?: number; status?: string },
+  data: { stock?: number; reservedStock?: number; lowStockThreshold?: number; status?: string; warehouseId?: string | null },
   client: InventoryClient = prisma,
 ) {
   const existing = await client.inventory.findUnique({ where: { id } });
@@ -434,13 +435,22 @@ export async function updateInventory(
   const nextLowStockThreshold = data.lowStockThreshold ?? existing.lowStockThreshold;
   if (nextReservedStock > nextStock) throw new AppError("Reserved stock cannot exceed stock.", 400);
   const shouldRecalculateStatus = data.stock !== undefined || data.reservedStock !== undefined || data.lowStockThreshold !== undefined;
-  const updated = await client.inventory.update({
-    where: { id },
-    data: {
-      ...data,
-      ...(shouldRecalculateStatus ? { status: getInventoryStatus(nextStock - nextReservedStock, nextLowStockThreshold) } : {}),
-    } as never,
-  });
+  
+  let updated;
+  try {
+    updated = await client.inventory.update({
+      where: { id },
+      data: {
+        ...data,
+        ...(shouldRecalculateStatus ? { status: getInventoryStatus(nextStock - nextReservedStock, nextLowStockThreshold) } : {}),
+      } as never,
+    });
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      throw new AppError("Item already exists in that warehouse.", 400);
+    }
+    throw error;
+  }
 
   if (data.stock !== undefined && data.stock !== existing.stock) {
     await createAdjustment(client, existing.id, existing.variantId, existing.stock, data.stock, "manual_update");
@@ -494,8 +504,9 @@ export async function bulkUpdateInventory(input: InventoryBulkUpdateInput) {
 
   const stock = parseNonNegativeInt(input.stock, "Stock");
   const lowStockThreshold = parseNonNegativeInt(input.lowStockThreshold, "Low stock threshold");
-  if (stock === undefined && lowStockThreshold === undefined) {
-    throw new AppError("Provide stock or low stock threshold to update.", 400);
+  const warehouseId = input.warehouseId;
+  if (stock === undefined && lowStockThreshold === undefined && warehouseId === undefined) {
+    throw new AppError("Provide stock, low stock threshold, or warehouse to update.", 400);
   }
 
   const uniqueIds = Array.from(new Set(input.ids));
@@ -517,6 +528,7 @@ export async function bulkUpdateInventory(input: InventoryBulkUpdateInput) {
           {
             ...(stock !== undefined ? { stock } : {}),
             ...(lowStockThreshold !== undefined ? { lowStockThreshold } : {}),
+            ...(warehouseId !== undefined ? { warehouseId } : {}),
           },
           tx,
         );

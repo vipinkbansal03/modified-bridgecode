@@ -103,6 +103,7 @@ export default function AdminProductsPage() {
   const [importing, setImporting] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(DEFAULT_COLUMNS);
   const [columnsReady, setColumnsReady] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { showToast, ToastComponent } = useToast();
 
@@ -344,8 +345,9 @@ export default function AdminProductsPage() {
 
   return (
     <AdminLayout title="Products" breadcrumb={[{ label: "Products" }]}>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
+      <div className="mb-5 flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
             <input
@@ -358,67 +360,12 @@ export default function AdminProductsPage() {
               className="w-[220px] rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
             />
           </div>
-          <select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value);
-              setPage(1);
-            }}
-            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none"
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 rounded-md border px-3 py-2 text-[13.5px] outline-none transition-colors ${showFilters ? "bg-[#F8F8F8] border-[#D1D1D1] text-[#1A1A1A]" : "bg-white border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F8F8F8]"}`}
           >
-            <option value="">All Status</option>
-            <option value="DRAFT">Draft</option>
-            <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Inactive</option>
-            <option value="ARCHIVED">Archived</option>
-          </select>
-          <select
-            value={categoryId}
-            onChange={(e) => {
-              setCategoryId(e.target.value);
-              setPage(1);
-            }}
-            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none"
-          >
-            <option value="">All Categories</option>
-            {categories.map((category: { id: string; name: string }) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={warehouseFilterId}
-            onChange={(e) => {
-              setWarehouseFilterId(e.target.value);
-              setPage(1);
-            }}
-            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none"
-          >
-            <option value="">All Warehouses</option>
-            {(warehouses.data ?? warehouses).map((w: any) => (
-              <option key={w.id} value={w.id}>
-                {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
-              </option>
-            ))}
-          </select>
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none"
-          >
-            <option value="sortOrder">Sort order</option>
-            <option value="title">Name</option>
-            <option value="sku">SKU</option>
-            <option value="brand">Brand</option>
-            <option value="category">Category</option>
-            <option value="status">Status</option>
-            <option value="updatedAt">Updated date</option>
-          </select>
-          <select value={sortDir} onChange={(e) => setSortDir(e.target.value as "asc" | "desc")} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none">
-            <option value="asc">Ascending</option>
-            <option value="desc">Descending</option>
-          </select>
+            <Filter size={14} /> Filters
+          </button>
           <details className="relative">
             <summary className="list-none cursor-pointer rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none flex items-center gap-2">
               <SlidersHorizontal size={14} /> Columns
@@ -442,12 +389,12 @@ export default function AdminProductsPage() {
             </div>
           </details>
         </div>
-        {canCreate && (
-          <Link href="/admin/products/create" className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
-            <Plus size={15} /> New Product
-          </Link>
-        )}
         <div className="flex flex-wrap items-center gap-2">
+          {canCreate && (
+            <Link href="/admin/products/create" className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
+              <Plus size={15} /> New Product
+            </Link>
+          )}
           <button type="button" onClick={() => exportProducts(false)} className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">
             <Download size={15} /> Export Excel
           </button>
@@ -461,6 +408,73 @@ export default function AdminProductsPage() {
           </button>
           <RefreshButton onRefresh={refetch} isRefreshing={isFetching} />
         </div>
+        </div>
+        {showFilters && (
+          <div className="flex flex-wrap items-center gap-3 rounded-md border border-[#E6E6E6] bg-[#F8F8F8] p-3">
+            <select
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setPage(1);
+              }}
+              className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
+            >
+              <option value="">All Status</option>
+              <option value="DRAFT">Draft</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+              <option value="ARCHIVED">Archived</option>
+            </select>
+            <select
+              value={categoryId}
+              onChange={(e) => {
+                setCategoryId(e.target.value);
+                setPage(1);
+              }}
+              className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
+            >
+              <option value="">All Categories</option>
+              {categories.map((category: { id: string; name: string }) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={warehouseFilterId}
+              onChange={(e) => {
+                setWarehouseFilterId(e.target.value);
+                setPage(1);
+              }}
+              className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
+            >
+              <option value="">All Warehouses</option>
+              {(warehouses.data ?? warehouses).map((w: any) => (
+                <option key={w.id} value={w.id}>
+                  {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
+                </option>
+              ))}
+            </select>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
+            >
+              <option value="sortOrder">Sort order</option>
+              <option value="title">Name</option>
+              <option value="sku">SKU</option>
+              <option value="brand">Brand</option>
+              <option value="category">Category</option>
+              <option value="status">Status</option>
+              <option value="updatedAt">Updated date</option>
+            </select>
+            <select value={sortDir} onChange={(e) => setSortDir(e.target.value as "asc" | "desc")} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]">
+              <option value="asc">Ascending</option>
+              <option value="desc">Descending</option>
+            </select>
+          </div>
+        )}
+      </div>
         <input
           ref={fileInputRef}
           type="file"
@@ -471,7 +485,6 @@ export default function AdminProductsPage() {
             event.currentTarget.value = "";
           }}
         />
-      </div>
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-[12.5px] text-[#9A9A9A]">
         <span>{data?.pagination ? `${data.pagination.total} products` : ""}</span>

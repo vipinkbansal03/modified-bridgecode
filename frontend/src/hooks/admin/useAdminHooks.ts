@@ -18,6 +18,13 @@ export const useAdminProducts = (params?: {
     queryFn: () => adminApi.get("/products", { params }).then((r) => r.data),
   });
 
+export const useAdminProductVariants = (productId: string, enabled: boolean = true) =>
+  useQuery({
+    queryKey: ["admin-product-variants", productId],
+    queryFn: () => adminApi.get(`/products/${productId}/variants`).then((r) => r.data),
+    enabled: enabled && !!productId,
+  });
+
 export const useAdminProductsInfinite = (params?: {
   search?: string;
   categoryId?: string;
@@ -142,9 +149,16 @@ export const useBulkUpdateProducts = () => {
       countryIds?: string[];
       collectionIds?: string[];
       warehouseId?: string;
+      includeVariants?: boolean;
+      variantIds?: string[];
+      fullVariantProductIds?: string[];
+      productStock?: Record<string, number>;
+      variantStock?: Record<string, number>;
     }) => adminApi.post("/products/bulk", data).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-products"] });
+      qc.invalidateQueries({ queryKey: ["admin-products-infinite"] });
+      qc.invalidateQueries({ queryKey: ["admin-product-variants"] });
       qc.invalidateQueries({ queryKey: ["admin-product-countries"] });
     },
   });

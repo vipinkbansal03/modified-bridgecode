@@ -2,12 +2,12 @@
 
 import { useEffect, useLayoutEffect, useState, useMemo, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Edit2, Plus, Search, Trash2, Warehouse } from "lucide-react";
+import { ChevronDown, ChevronRight, Edit2, PackageOpen, Plus, Search, Trash2, Warehouse } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
-import { useAdminWarehouses, useCreateWarehouse, useUpdateWarehouse, useDeleteWarehouse, useAdminCountries } from "@/hooks/admin/useAdminHooks";
+import { useAdminWarehouses, useCreateWarehouse, useUpdateWarehouse, useDeleteWarehouse, useAdminCountries, useAdminProducts, useBulkUpdateProducts, useAdminProductVariants } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
 import { State } from "country-state-city";
 
@@ -54,6 +54,7 @@ const emptyForm: WarehouseFormState = {
   status: "ACTIVE",
 };
 
+// Product Row Component for the Modal
 export default function WarehousesPage() {
   const { hasPermission, isLoading: authLoading } = useAdminAuth();
   const router = useRouter();
@@ -249,28 +250,35 @@ export default function WarehousesPage() {
                 {
                   key: "actions",
                   label: "Actions",
-                  width: "100px",
+                  align: "right",
                   render: (w: any) => (
-                    <div className="flex items-center gap-1.5 justify-end">
+                    <div className="flex items-center justify-end gap-2">
                       {canManage && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleEdit(w)}
-                            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-                            title="Edit warehouse details"
-                          >
-                            <Edit2 size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleting(w)}
-                            className="flex h-7 w-7 items-center justify-center rounded border border-[#F2C9C9] text-red-500 hover:bg-red-50"
-                            title="Delete warehouse"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </>
+                        <button
+                          title="Assign Products"
+                          onClick={() => router.push(`/admin/warehouses/${w.id}/assign?name=${encodeURIComponent(w.name)}`)}
+                          className="rounded border border-[#E6E6E6] bg-white p-1.5 text-[#6B6B6B] hover:bg-[#F0F0F0] hover:text-[#1A1A1A]"
+                        >
+                          <PackageOpen size={15} />
+                        </button>
+                      )}
+                      {canManage && (
+                        <button
+                          title="Edit Warehouse"
+                          onClick={() => handleEdit(w)}
+                          className="rounded border border-[#E6E6E6] bg-white p-1.5 text-[#6B6B6B] hover:bg-[#F0F0F0] hover:text-[#1A1A1A]"
+                        >
+                          <Edit2 size={15} />
+                        </button>
+                      )}
+                      {canManage && (
+                        <button
+                          title="Delete Warehouse"
+                          onClick={() => setDeleting(w)}
+                          className="rounded border border-[#E6E6E6] bg-white p-1.5 text-[#E31E24] hover:bg-[#FCE8E8]"
+                        >
+                          <Trash2 size={15} />
+                        </button>
                       )}
                     </div>
                   ),
