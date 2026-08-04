@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import { AppShell } from "@/components/layout/AppShell";
 import { ReactQueryProvider } from "@/lib/reactQueryProvider";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
@@ -15,6 +16,13 @@ import seoData from "@/data/seo.json";
 import "react-toastify/dist/ReactToastify.css";
 import "@/styles/globals.css";
 
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800"],
+  display: "swap",
+  variable: "--font-inter",
+});
+
 export async function generateMetadata(): Promise<Metadata> {
   return buildCmsMetadata("home", seoData.home, "/");
 }
@@ -25,20 +33,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="font-sans text-ink antialiased">
+    <html lang="en" className={inter.variable}>
+      <body className={`${inter.className} font-sans text-ink antialiased`}>
         <ReactQueryProvider>
           <LanguageProvider>
             <CurrencyProvider>

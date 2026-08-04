@@ -1,11 +1,22 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
-import { QuoteCartMini } from "@/components/quote/QuoteCartMini";
-import { CartDrawer } from "@/components/cart/CartDrawer";
-import { NewsletterModal } from "@/components/newsletter/NewsletterModal";
+
+const CartDrawer = dynamic(
+  () => import("@/components/cart/CartDrawer").then((m) => m.CartDrawer),
+  { ssr: false }
+);
+const QuoteCartMini = dynamic(
+  () => import("@/components/quote/QuoteCartMini").then((m) => m.QuoteCartMini),
+  { ssr: false }
+);
+const NewsletterModal = dynamic(
+  () => import("@/components/newsletter/NewsletterModal").then((m) => m.NewsletterModal),
+  { ssr: false }
+);
 
 interface AppShellProps {
   children: React.ReactNode;

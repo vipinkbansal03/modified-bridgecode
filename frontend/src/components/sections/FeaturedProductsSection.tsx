@@ -32,7 +32,7 @@ export function FeaturedProductsSection({
 }: FeaturedProductsSectionProps) {
   const { t } = useStaticTranslations();
   const { data: featuredProducts = [], isLoading: featuredLoading } = useFeaturedProducts();
-  const { data: allProducts, isLoading: allProductsLoading } = useProducts({ limit: 200 });
+  const { data: allProducts, isLoading: allProductsLoading } = useProducts({ limit: 12 });
   const [index, setIndex] = useState(0);
 
   const products = useMemo(() => {

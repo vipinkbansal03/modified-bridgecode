@@ -46,7 +46,7 @@ export function HeroSection({ data }: HeroSectionProps) {
       <AnimatePresence mode="wait">
         <motion.div
           key={index}
-          initial={{ opacity: 0 }}
+          initial={index === 0 ? { opacity: 1 } : { opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.9, ease: "easeInOut" }}
@@ -55,9 +55,12 @@ export function HeroSection({ data }: HeroSectionProps) {
           <div className="absolute inset-0">
             <Image
               src={slide.image}
-              alt=""
+              alt={slide.title || "Modern Orthodontics Hero Banner"}
               fill
               priority={index === 0}
+              fetchPriority={index === 0 ? "high" : "auto"}
+              sizes="100vw"
+              quality={85}
               className="object-cover"
               style={{
                 filter: "grayscale(100%) contrast(1.08) brightness(0.6)",

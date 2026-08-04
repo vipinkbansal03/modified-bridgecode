@@ -1,19 +1,52 @@
-import { HeroSection } from "@/components/sections/HeroSection";
+import dynamic from "next/dynamic";
 import { cookies } from "next/headers";
+import { HeroSection } from "@/components/sections/HeroSection";
 import { AboutSection } from "@/components/sections/AboutSection";
-import { FeaturedProductsSection } from "@/components/sections/FeaturedProductsSection";
-import { CategoriesSection } from "@/components/sections/CategoriesSection";
-import { StatsSection } from "@/components/sections/StatsSection";
-import { LocationsSection } from "@/components/sections/LocationsSection";
-import { CertificationsSection } from "@/components/sections/CertificationsSection";
-import { TestimonialsSection } from "@/components/sections/TestimonialsSection";
-import { BlogSection } from "@/components/sections/BlogSection";
-import { ContactCTASection } from "@/components/sections/ContactCTASection";
 import homeContent from "@/data/home.json";
 import type { LocationPin } from "@/types/common.types";
 import type { CmsPage, CmsSection } from "@/hooks/api/useCmsContent";
-import { transformHeroSlides, transformStats, transformCertifications, transformAboutIntro, transformContactCta } from "@/utils/cmsTransform";
+import {
+  transformHeroSlides,
+  transformStats,
+  transformCertifications,
+  transformAboutIntro,
+  transformContactCta,
+} from "@/utils/cmsTransform";
 import type { HeroSlide } from "@/components/sections/HeroSection";
+
+// Code-split below-the-fold sections for instant initial JS execution & low TBT
+const FeaturedProductsSection = dynamic(
+  () => import("@/components/sections/FeaturedProductsSection").then((m) => m.FeaturedProductsSection),
+  { ssr: true }
+);
+const CategoriesSection = dynamic(
+  () => import("@/components/sections/CategoriesSection").then((m) => m.CategoriesSection),
+  { ssr: true }
+);
+const StatsSection = dynamic(
+  () => import("@/components/sections/StatsSection").then((m) => m.StatsSection),
+  { ssr: true }
+);
+const LocationsSection = dynamic(
+  () => import("@/components/sections/LocationsSection").then((m) => m.LocationsSection),
+  { ssr: true }
+);
+const CertificationsSection = dynamic(
+  () => import("@/components/sections/CertificationsSection").then((m) => m.CertificationsSection),
+  { ssr: true }
+);
+const TestimonialsSection = dynamic(
+  () => import("@/components/sections/TestimonialsSection").then((m) => m.TestimonialsSection),
+  { ssr: true }
+);
+const BlogSection = dynamic(
+  () => import("@/components/sections/BlogSection").then((m) => m.BlogSection),
+  { ssr: true }
+);
+const ContactCTASection = dynamic(
+  () => import("@/components/sections/ContactCTASection").then((m) => m.ContactCTASection),
+  { ssr: true }
+);
 
 export const revalidate = 300;
 
@@ -52,10 +85,6 @@ async function fetchHomepageHeroBanners(countryCode?: string): Promise<HeroSlide
   } catch {
     return [];
   }
-}
-
-function findSection(cms: CmsPage, key: string): CmsSection | null {
-  return cms.sections.find((s) => s.sectionKey === key) ?? null;
 }
 
 function renderCmsHomeSection(section: CmsSection, bannerSlides: HeroSlide[]) {
@@ -127,15 +156,28 @@ export default async function HomePage() {
   const cms = await fetchCmsHomePage();
   const bannerSlides = await fetchHomepageHeroBanners(cookieStore.get("country")?.value ?? "IN");
 
+  const heroSlides = bannerSlides.length > 0 ? bannerSlides : homeContent.hero.slides;
+  const heroLcpImage = heroSlides[0]?.image;
+
   if (cms?.sections?.length) {
     const renderedSections = cms.sections.flatMap((section) => renderCmsHomeSection(section, bannerSlides));
     if (renderedSections.length > 0) {
-      return <>{renderedSections}</>;
+      return (
+        <>
+          {heroLcpImage && (
+            <link rel="preload" as="image" href={heroLcpImage} fetchPriority="high" />
+          )}
+          {renderedSections}
+        </>
+      );
     }
   }
 
   return (
     <>
+      {heroLcpImage && (
+        <link rel="preload" as="image" href={heroLcpImage} fetchPriority="high" />
+      )}
       <HeroSection data={bannerSlides.length > 0 ? { slides: bannerSlides } : homeContent.hero} />
       <AboutSection data={homeContent.about} />
       <FeaturedProductsSection slugs={homeContent.featuredProductSlugs} captions={homeContent.featuredCaptions} />
