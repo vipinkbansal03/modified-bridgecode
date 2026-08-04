@@ -268,7 +268,7 @@ export default function CategoriesPage() {
     formData.append("folder", "modortho/categories");
     setUploadingImage(true);
     try {
-      const response = await adminApi.post("/media", formData, { headers: { "Content-Type": "multipart/form-data" } });
+      const response = await adminApi.post("/media", formData);
       const uploaded = response.data?.data?.[0];
       if (uploaded?.url) formik.setFieldValue("image", uploaded.url);
       else throw new Error("Upload completed, but no image URL was returned.");
@@ -348,7 +348,7 @@ export default function CategoriesPage() {
     const formData = new FormData();
     formData.append("file", file);
     try {
-      const response = await adminApi.post("/categories/import/preview", formData, { headers: { "Content-Type": "multipart/form-data" } });
+      const response = await adminApi.post("/categories/import/preview", formData);
       const report = response.data?.data as SpreadsheetPreview;
       setImportPreview(report);
       setImportMessage(report.invalidRows > 0 ? "Fix the validation issues before importing." : "Preview looks good. You can import now.");
@@ -364,7 +364,7 @@ export default function CategoriesPage() {
     try {
       const formData = new FormData();
       formData.append("file", importFile);
-      const response = await adminApi.post("/categories/import", formData, { headers: { "Content-Type": "multipart/form-data" } });
+      const response = await adminApi.post("/categories/import", formData);
       const result = response.data?.data as { created: number; updated: number; report: SpreadsheetPreview };
       showToast(`Imported ${result.created} created and ${result.updated} updated categories.`);
       setImportOpen(false);

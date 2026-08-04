@@ -35,7 +35,7 @@ export default function MediaPage() {
     setUploading(true);
     const formData = new FormData();
     Array.from(files).forEach((f) => formData.append("files", f));
-    try { await adminApi.post("/media", formData, { headers: { "Content-Type": "multipart/form-data" } }); showToast("Uploaded."); refetch(); }
+    try { await adminApi.post("/media", formData); showToast("Uploaded."); refetch(); }
     catch { showToast("Upload failed.", "error"); }
     finally { setUploading(false); e.target.value = ""; }
   };

@@ -9,6 +9,7 @@ export async function listMedia(query: { page?: string; limit?: string }) {
 }
 
 export async function uploadMedia(files: Express.Multer.File[], folder = "modortho/media") {
+  if (!files || !files.length) return [];
   const results = await Promise.all(files.map((f) => uploadFile(f.path, folder)));
   return prisma.$transaction(
     files.map((f, i) =>

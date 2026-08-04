@@ -26,7 +26,7 @@ export default function BlogAuthorsPage() {
     payload.append("files", file);
     setUploading(true);
     try {
-      const response = await adminApi.post("/media", payload, { headers: { "Content-Type": "multipart/form-data" } });
+      const response = await adminApi.post("/media", payload);
       const uploaded = response.data?.data?.[0];
       if (uploaded?.url) setForm((prev) => ({ ...prev, avatar: uploaded.url }));
     } catch (error) { showToast(getAdminErrorMessage(error, "Upload failed."), "error"); }

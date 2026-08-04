@@ -479,9 +479,7 @@ function SectionContentEditor({
   async function uploadImageFile(file: File) {
     const formData = new FormData();
     formData.append("files", file);
-    const response = await adminApi.post("/media", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+    const response = await adminApi.post("/media", formData);
     const uploaded = response.data?.data;
     if (Array.isArray(uploaded) && uploaded[0]?.url) {
       return uploaded[0].url as string;
@@ -958,9 +956,7 @@ function CmsPagesPageContent() {
     formData.append("files", file);
     try {
       setUploadingSeoAsset(field);
-      const response = await adminApi.post("/media", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await adminApi.post("/media", formData);
       const uploaded = response.data?.data;
       const url = Array.isArray(uploaded) ? uploaded[0]?.url : undefined;
       if (url) {

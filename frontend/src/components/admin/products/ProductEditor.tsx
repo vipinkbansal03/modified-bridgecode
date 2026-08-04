@@ -2546,9 +2546,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
     setVariantPriceImporting(true);
     try {
-      const response = await adminApi.post(`/products/${productId}/variants/prices/import`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await adminApi.post(`/products/${productId}/variants/prices/import`, formData);
       const summary = response.data?.data?.summary as { succeeded?: number; failed?: number } | undefined;
       showToast(
         summary?.failed
@@ -2866,7 +2864,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     formData.append("files", file);
     setUploadingPackageImage(true);
     try {
-      const response = await adminApi.post("/media", formData, { headers: { "Content-Type": "multipart/form-data" } });
+      const response = await adminApi.post("/media", formData);
       const uploaded = response.data?.data?.[0];
       if (uploaded?.url) {
         setPackageImage(uploaded.url);
@@ -2900,7 +2898,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     const formData = new FormData();
     Array.from(files).forEach((file) => formData.append("files", file));
     try {
-      await adminApi.post(`/products/${productId}/media`, formData, { headers: { "Content-Type": "multipart/form-data" } });
+      await adminApi.post(`/products/${productId}/media`, formData);
       showToast("Media uploaded.");
       refetch();
     } catch {

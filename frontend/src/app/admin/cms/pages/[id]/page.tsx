@@ -122,11 +122,7 @@ function BlockRow({
     formData.append("files", file);
     try {
       setUploadingImage(true);
-      const response = await adminApi.post("/media", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
+      const response = await adminApi.post("/media", formData);
       const uploaded = response.data?.data;
       const uploadedImage = Array.isArray(uploaded) ? uploaded.find((mediaItem: { url?: string }) => !!mediaItem?.url) : null;
       if (uploadedImage?.url) {

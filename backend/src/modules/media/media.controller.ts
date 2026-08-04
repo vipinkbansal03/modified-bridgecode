@@ -8,9 +8,10 @@ export const list = asyncHandler(async (req: AuthRequest, res: Response) => {
   return ApiResponse.paginated(res, "Media.", r.data, { page: r.page, limit: r.limit, total: r.total });
 });
 
-export const upload = asyncHandler(async (req: AuthRequest, res: Response) =>
-  ApiResponse.created(res, "Uploaded.", await S.uploadMedia(req.files as Express.Multer.File[], req.body.folder)),
-);
+export const upload = asyncHandler(async (req: AuthRequest, res: Response) => {
+  console.log("req.files:", req.files, "req.body:", req.body);
+  return ApiResponse.created(res, "Uploaded.", await S.uploadMedia(req.files as Express.Multer.File[], req.body.folder));
+});
 
 export const removeByUrl = asyncHandler(async (req: AuthRequest, res: Response) => {
   await S.deleteMediaByUrl(req.query.url as string);

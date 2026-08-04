@@ -293,7 +293,7 @@ export function BulkVariantImportWizard({
       const res = await adminApi.post(
         `/products/${productId}/variants/import-preview`,
         formData,
-        { headers: { "Content-Type": "multipart/form-data" }, timeout: 60000 }
+        {  timeout: 60000 }
       );
       const data: PreviewResult = res.data.data;
       setPreview(data);

@@ -10,7 +10,6 @@ export const adminApi = axios.create({
   baseURL: API_BASE,
   withCredentials: true,
   timeout: 15000,
-  headers: { "Content-Type": "application/json" },
 });
 
 // Attach JWT token from localStorage

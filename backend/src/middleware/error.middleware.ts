@@ -27,7 +27,7 @@ export function errorMiddleware(err: Error, req: Request, res: Response, _next: 
   // Prisma: unique constraint violation
   if ((err as { code?: string }).code === "P2002") {
     statusCode = 409;
-    const target = (err as { meta?: { target?: string[] } }).meta?.target ?? [];
+    const target = (err as { meta?: { target?: string[] } }).meta?.target ?? []; console.error('PRISMA TARGET P2002:', target, err);
     if (target.includes("attributeId") && target.includes("slug")) {
       message = "This value already exists for the selected attribute.";
     } else {

@@ -150,6 +150,7 @@ export default function InventoryPage() {
   const [importMessage, setImportMessage] = useState("");
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const { showToast, ToastComponent } = useToast();
 
   useEffect(() => {
@@ -190,13 +191,16 @@ export default function InventoryPage() {
   });
   const { data, isLoading, refetch, isFetching } = inventoryQuery;
   const dashboard = useAdminInventoryDashboard();
-  const alerts = useAdminInventoryAlerts();
+
+
   const { data: recentAdjustments, isLoading: recentLoading } = useAdminInventoryAdjustments({ page: 1, limit: 8 });
   const { data: rowAdjustments, isLoading: rowHistoryLoading } = useAdminVariantInventoryAdjustments(historyRow?.variantId ?? undefined, { page: 1, limit: 25 });
   const updateInv = useUpdateInventory();
   const bulkUpdate = useBulkUpdateInventory();
   const { data: warehousesData } = useAdminWarehouses({ limit: 30 });
   const warehouses = warehousesData?.data || [];
+
+  const alerts = useAdminInventoryAlerts();
 
   const rows = (data?.data ?? []) as InventoryRow[];
   const recentRows = (recentAdjustments?.data ?? []) as Adjustment[];
@@ -291,9 +295,7 @@ export default function InventoryPage() {
     const formData = new FormData();
     formData.append("file", file);
     try {
-      const response = await adminApi.post("/inventory/import/preview", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await adminApi.post("/inventory/import/preview", formData);
       const report = response.data?.data as SpreadsheetReport;
       setImportPreview(report);
       setImportMessage(report.invalidRows > 0 ? "Fix the validation issues before importing." : "Preview looks good. You can import now.");
@@ -309,9 +311,7 @@ export default function InventoryPage() {
     try {
       const formData = new FormData();
       formData.append("file", importFile);
-      const response = await adminApi.post("/inventory/import", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await adminApi.post("/inventory/import", formData);
       const result = response.data?.data as { created: number; updated: number; report: SpreadsheetReport };
       showToast(`Imported ${result.created} created and ${result.updated} updated inventory rows.`);
       setImportOpen(false);
@@ -357,6 +357,15 @@ export default function InventoryPage() {
         showToast("Select a warehouse.", "error");
         return;
       }
+      
+      // Stock is optional when assigning warehouse, but if provided it must be valid
+      if (bulkStock.trim() !== "") {
+        stockValue = Number(bulkStock);
+        if (!Number.isInteger(stockValue) || stockValue < 0) {
+          showToast("Stock must be a positive integer.", "error");
+          return;
+        }
+      }
     } else {
       showToast("Select a bulk action to apply.", "error");
       return;
@@ -382,89 +391,49 @@ export default function InventoryPage() {
 
   return (
     <AdminLayout title="Inventory" breadcrumb={[{ label: "Inventory" }]}>
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-            <input
-              placeholder="Search inventory..."
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-              className="w-[260px] rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
-            />
-          </div>
-          <select
-            value={status}
-            onChange={(event) => {
-              setStatus(event.target.value);
-              setPage(1);
-            }}
-            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none"
-          >
-            <option value="">All Status</option>
-            <option value="IN_STOCK">In Stock</option>
-            <option value="LOW_STOCK">Low Stock</option>
-            <option value="OUT_OF_STOCK">Out of Stock</option>
-            <option value="BACKORDER">Backorder</option>
-          </select>
-          <select
-            value={warehouseFilterId}
-            onChange={(event) => {
-              setWarehouseFilterId(event.target.value);
-              setPage(1);
-            }}
-            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none"
-          >
-            <option value="">All Warehouses</option>
-            {warehouses.map((w: any) => (
-              <option key={w.id} value={w.id}>
-                {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
-              </option>
-            ))}
-          </select>
-          <select
-            value={sortBy}
-            onChange={(event) => setSortBy(event.target.value)}
-            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none"
-          >
-            <option value="updatedAt">Updated Date</option>
-            <option value="product">Product</option>
-            <option value="variant">Variant</option>
-            <option value="sku">SKU</option>
-            <option value="stock">Stock</option>
-            <option value="reservedStock">Reserved Stock</option>
-            <option value="lowStockThreshold">Low Stock Threshold</option>
-            <option value="status">Status</option>
-          </select>
-          <select value={sortDir} onChange={(event) => setSortDir(event.target.value as "asc" | "desc")} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none">
-            <option value="desc">Descending</option>
-            <option value="asc">Ascending</option>
-          </select>
-          <details className="relative">
-            <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none">
-              <SlidersHorizontal size={14} /> Columns
-            </summary>
-            <div className="absolute left-0 z-20 mt-2 w-[240px] rounded-md border border-[#E6E6E6] bg-white p-3 shadow-lg">
-              <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wide text-[#9A9A9A]">
-                <Filter size={12} /> Visibility
-              </div>
-              <div className="grid gap-2">
-                {(Object.keys(DEFAULT_COLUMNS) as InventoryColumnKey[]).map((key) => (
-                  <label key={key} className="flex items-center justify-between gap-3 rounded border border-[#F0F0F0] px-2.5 py-1.5 text-[12.5px] text-[#1A1A1A]">
-                    <span>{key === "warehouse" ? "Warehouse" : key === "reserved" ? "Reserved Stock" : key === "threshold" ? "Low Stock At" : key === "status" ? "Status" : "Updated Date"}</span>
-                    <input
-                      type="checkbox"
-                      checked={visibleColumns[key]}
-                      onChange={(event) => setVisibleColumns((current) => ({ ...current, [key]: event.target.checked }))}
-                    />
-                  </label>
-                ))}
-              </div>
+      <div className="mb-5 flex flex-col gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
+              <input
+                placeholder="Search inventory..."
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                className="w-[260px] rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+              />
             </div>
-          </details>
-        </div>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-2 rounded-md border px-3 py-2 text-[13.5px] outline-none transition-colors ${showFilters ? "bg-[#F8F8F8] border-[#D1D1D1] text-[#1A1A1A]" : "bg-white border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F8F8F8]"}`}
+            >
+              <Filter size={14} /> Filters
+            </button>
+            <details className="relative">
+              <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none">
+                <SlidersHorizontal size={14} /> Columns
+              </summary>
+              <div className="absolute left-0 z-20 mt-2 w-[240px] rounded-md border border-[#E6E6E6] bg-white p-3 shadow-lg">
+                <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wide text-[#9A9A9A]">
+                  <Filter size={12} /> Visibility
+                </div>
+                <div className="grid gap-2">
+                  {(Object.keys(DEFAULT_COLUMNS) as InventoryColumnKey[]).map((key) => (
+                    <label key={key} className="flex items-center justify-between gap-3 rounded border border-[#F0F0F0] px-2.5 py-1.5 text-[12.5px] text-[#1A1A1A]">
+                      <span>{key === "warehouse" ? "Warehouse" : key === "reserved" ? "Reserved Stock" : key === "threshold" ? "Low Stock At" : key === "status" ? "Status" : "Updated Date"}</span>
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns[key]}
+                        onChange={(event) => setVisibleColumns((current) => ({ ...current, [key]: event.target.checked }))}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </details>
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => exportInventory(false)}
@@ -505,6 +474,59 @@ export default function InventoryPage() {
           />
         </div>
       </div>
+      </div>
+
+      {showFilters && (
+        <div className="mb-5 flex flex-wrap items-center gap-3 rounded-md border border-[#E6E6E6] bg-[#F8F8F8] p-3">
+          <select
+            value={status}
+            onChange={(event) => {
+              setStatus(event.target.value);
+              setPage(1);
+            }}
+            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
+          >
+            <option value="">All Status</option>
+            <option value="IN_STOCK">In Stock</option>
+            <option value="LOW_STOCK">Low Stock</option>
+            <option value="OUT_OF_STOCK">Out of Stock</option>
+            <option value="BACKORDER">Backorder</option>
+          </select>
+          <select
+            value={warehouseFilterId}
+            onChange={(event) => {
+              setWarehouseFilterId(event.target.value);
+              setPage(1);
+            }}
+            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
+          >
+            <option value="">All Warehouses</option>
+            {warehouses.map((w: any) => (
+              <option key={w.id} value={w.id}>
+                {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
+              </option>
+            ))}
+          </select>
+          <select
+            value={sortBy}
+            onChange={(event) => setSortBy(event.target.value)}
+            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
+          >
+            <option value="updatedAt">Updated Date</option>
+            <option value="product">Product</option>
+            <option value="variant">Variant</option>
+            <option value="sku">SKU</option>
+            <option value="stock">Stock</option>
+            <option value="reservedStock">Reserved Stock</option>
+            <option value="lowStockThreshold">Low Stock Threshold</option>
+            <option value="status">Status</option>
+          </select>
+          <select value={sortDir} onChange={(event) => setSortDir(event.target.value as "asc" | "desc")} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]">
+            <option value="desc">Descending</option>
+            <option value="asc">Ascending</option>
+          </select>
+        </div>
+      )}
 
       <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-5">
         <StatCard title="Tracked Items" value={tinyNumber(dashboard.data?.totals?.trackedItems ?? 0)} icon={<Layers size={18} />} />
@@ -625,16 +647,26 @@ export default function InventoryPage() {
                 <AdminInput placeholder="Value" type="number" min={0} value={bulkThreshold} onChange={(e) => setBulkThreshold(e.target.value)} className="w-32" />
               )}
               {bulkAction === "warehouse" && (
-                <AdminSelect
-                  value={bulkWarehouseId}
-                  onChange={(e) => setBulkWarehouseId(e.target.value)}
-                  className="w-48"
-                  options={[
-                    { value: "", label: "Select warehouse" },
-                    { value: "NONE", label: "Unassigned (Base)" },
-                    ...warehouses.map((w: any) => ({ value: w.id, label: w.name }))
-                  ]}
-                />
+                <>
+                  <AdminSelect
+                    value={bulkWarehouseId}
+                    onChange={(e) => setBulkWarehouseId(e.target.value)}
+                    className="w-48"
+                    options={[
+                      { value: "", label: "Select warehouse" },
+                      { value: "NONE", label: "Unassigned (Base)" },
+                      ...warehouses.map((w: any) => ({ value: w.id, label: w.name }))
+                    ]}
+                  />
+                  <AdminInput 
+                    placeholder="Stock (optional)" 
+                    type="number" 
+                    min={0} 
+                    value={bulkStock} 
+                    onChange={(e) => setBulkStock(e.target.value)} 
+                    className="w-32" 
+                  />
+                </>
               )}
               <AdminSelect
                 value={bulkAction}

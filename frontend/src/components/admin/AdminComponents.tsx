@@ -726,9 +726,7 @@ export function AdminRichTextEditor({ label, value, onChange, placeholder, error
     try {
       const formData = new FormData();
       formData.append("files", file);
-      const res = await adminApi.post("/media", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const res = await adminApi.post("/media", formData);
       const mediaItem = Array.isArray(res.data?.data) ? res.data.data[0] : res.data?.data || res.data;
       const url = mediaItem?.url || mediaItem?.location || (typeof mediaItem === "string" ? mediaItem : "");
       if (url) {
