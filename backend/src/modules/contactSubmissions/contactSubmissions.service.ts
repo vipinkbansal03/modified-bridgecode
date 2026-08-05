@@ -21,48 +21,62 @@ export const listContactSubmissions = async (query: Request["query"]) => {
     ? sortBy
     : "createdAt";
 
-  const where: Prisma.ContactSubmissionWhereInput = search
-    ? {
-        OR: [
-          {
-            name: {
-              contains: search,
-              mode: "insensitive" as const,
+  const type = query.type ? String(query.type).trim() : undefined;
+
+  const where: Prisma.ContactSubmissionWhereInput = {
+    ...(type
+      ? type === "general"
+        ? {
+            OR: [
+              { type: "general" },
+              { type: null },
+            ],
+          }
+        : { type }
+      : {}),
+    ...(search
+      ? {
+          OR: [
+            {
+              name: {
+                contains: search,
+                mode: "insensitive" as const,
+              },
             },
-          },
-          {
-            email: {
-              contains: search,
-              mode: "insensitive" as const,
+            {
+              email: {
+                contains: search,
+                mode: "insensitive" as const,
+              },
             },
-          },
-          {
-            company: {
-              contains: search,
-              mode: "insensitive" as const,
+            {
+              company: {
+                contains: search,
+                mode: "insensitive" as const,
+              },
             },
-          },
-          {
-            phone: {
-              contains: search,
-              mode: "insensitive" as const,
+            {
+              phone: {
+                contains: search,
+                mode: "insensitive" as const,
+              },
             },
-          },
-          {
-            subject: {
-              contains: search,
-              mode: "insensitive",
+            {
+              subject: {
+                contains: search,
+                mode: "insensitive" as const,
+              },
             },
-          },
-          {
-            message: {
-              contains: search,
-              mode: "insensitive",
+            {
+              message: {
+                contains: search,
+                mode: "insensitive" as const,
+              },
             },
-          },
-        ],
-      }
-    : {};
+          ],
+        }
+      : {}),
+  };
 
   const [submissions, total] = await Promise.all([
     prisma.contactSubmission.findMany({

@@ -42,10 +42,10 @@ function ToastContent({
     type === "error"
       ? "text-[#E31E24]"
       : type === "warning"
-      ? "text-[#D97706]"
+      ? "text-[#F08804]"
       : type === "info"
-      ? "text-[#2563EB]"
-      : "text-[#059669]";
+      ? "text-[#1A1A1A]"
+      : "text-[#00A859]";
 
   return (
     <div className="flex items-start gap-3">

@@ -17,6 +17,7 @@ export default function ContactSubmissionsPage() {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [type, setType] = useState<string | undefined>(undefined);
 
   const { data, isLoading, refetch, isFetching } = useAdminContactSubmissions({
     page,
@@ -24,7 +25,14 @@ export default function ContactSubmissionsPage() {
     search,
     sortBy,
     sortDir,
+    type,
   });
+
+  const tabs = [
+    { value: undefined, label: "All" },
+    { value: "general", label: "General Inquiries" },
+    { value: "dealer", label: "Dealer Applications" },
+  ];
 
   return (
     <AdminLayout
@@ -35,6 +43,25 @@ export default function ContactSubmissionsPage() {
         },
       ]}
     >
+      <div className="mb-5 flex flex-wrap gap-2">
+        {tabs.map((tab) => (
+          <button
+            key={tab.label}
+            onClick={() => {
+              setType(tab.value);
+              setPage(1);
+            }}
+            className={`h-9 rounded-md border px-3 text-[13px] font-semibold transition-colors ${
+              type === tab.value
+                ? "border-[#E31E24] bg-[#E31E24] text-white"
+                : "border-[#E6E6E6] bg-white text-[#555] hover:bg-[#F9F9F9]"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       <ContactSubmissionToolbar
         search={search}
         onSearchChange={setSearch}
@@ -52,6 +79,7 @@ export default function ContactSubmissionsPage() {
           setSortBy("createdAt");
           setSortDir("desc");
           setLimit(10);
+          setType(undefined);
           setPage(1);
         }}
         onRefresh={() => refetch()}

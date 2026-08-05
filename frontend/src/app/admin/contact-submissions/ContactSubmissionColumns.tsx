@@ -43,6 +43,24 @@ export const contactSubmissionColumns: Column<ContactSubmissionRow>[] = [
   },
 
   {
+    key: "type",
+    label: "Type",
+    render: (row) => {
+      const isDealer = row.type === "dealer";
+      return isDealer ? (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E31E24]/20 bg-[#E31E24]/5 px-2.5 py-0.5 text-[11.5px] font-semibold text-[#00A859]">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#E31E24]" />
+          Dealer
+        </span>
+      ) : (
+        <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[11.5px] font-semibold text-gray-600">
+          General
+        </span>
+      );
+    },
+  },
+
+  {
     key: "createdAt",
     label: "Submitted",
     render: (row) =>

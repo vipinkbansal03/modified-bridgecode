@@ -9,7 +9,7 @@ async function submitContact(data: ApiContactSubmit): Promise<{ success: boolean
     await new Promise((r) => setTimeout(r, 600));
     return { success: true, message: "Message received. We'll respond within 24 hours." };
   }
-  const res = await apiClient.post("/contact", data);
+  const res = await apiClient.post("/contact", { ...data, type: "general" });
   return res.data;
 }
 

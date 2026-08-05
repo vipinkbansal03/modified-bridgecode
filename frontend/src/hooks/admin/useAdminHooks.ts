@@ -2042,6 +2042,7 @@ export const useAdminContactSubmissions = (params?: {
   search?: string;
   sortBy?: string;
   sortDir?: string;
+  type?: string;
 }) =>
   useQuery({
     queryKey: ["admin-contact-submissions", params],
