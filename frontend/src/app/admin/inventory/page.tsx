@@ -214,7 +214,7 @@ export default function InventoryPage() {
   const groupedRows = useMemo(() => {
     const groupsMap = new Map<string, InventoryRow[]>();
     for (const row of rows) {
-      const key = row.variantId || row.productId || row.id;
+      const key = row.variantId || row.product?.id || row.id;
       if (!groupsMap.has(key)) {
         groupsMap.set(key, []);
       }
