@@ -163,6 +163,10 @@ export function QuoteCartProvider({ children }: { children: React.ReactNode }) {
       let updatedItems = [...itemsRef.current];
 
       for (const [productSlug, productItems] of Object.entries(groupedItems)) {
+        if (!productSlug || productSlug === "undefined") {
+          continue;
+        }
+
         try {
           const response = await apiClient.post(
             `/products/${productSlug}/price-preview`,

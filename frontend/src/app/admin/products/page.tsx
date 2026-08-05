@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { ConfirmModal, Pagination, StatusBadge, useToast } from "@/components/admin/AdminComponents";
@@ -75,7 +76,15 @@ const DEFAULT_COLUMNS: Record<ColumnKey, boolean> = {
 const PRODUCT_COLUMNS_STORAGE_KEY = "admin-products-columns-v2";
 
 export default function AdminProductsPage() {
-  const { hasPermission } = useAdminAuth();
+  const { hasPermission, isLoading: authLoading } = useAdminAuth();
+  const router = useRouter();
+
+  useLayoutEffect(() => {
+    if (!authLoading && !hasPermission("products.view")) {
+      router.replace("/admin/dashboard");
+    }
+  }, [authLoading, hasPermission, router]);
+
   const canUpdate = hasPermission("products.update");
   const canDelete = hasPermission("products.delete");
   const canCreate = hasPermission("products.create");
@@ -342,6 +351,10 @@ export default function AdminProductsPage() {
       setImporting(false);
     }
   };
+
+  if (authLoading || !hasPermission("products.view")) {
+    return null;
+  }
 
   return (
     <AdminLayout title="Products" breadcrumb={[{ label: "Products" }]}>

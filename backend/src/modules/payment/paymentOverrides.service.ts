@@ -214,8 +214,12 @@ export async function resolveCartPaymentMethods(
   }
 
   // Fetch Overrides for products and variants in cart
-  const productIds = Array.from(new Set(cartItems.map((item) => item.productId)));
-  const variantIds = Array.from(new Set(cartItems.map((item) => item.variantId)));
+  const productIds = Array.from(
+    new Set(cartItems.map((item) => item?.productId).filter((id): id is string => typeof id === "string" && id !== ""))
+  );
+  const variantIds = Array.from(
+    new Set(cartItems.map((item) => item?.variantId).filter((id): id is string => typeof id === "string" && id !== ""))
+  );
 
   const [productOverrides, variantOverrides] = await Promise.all([
     prisma.productPaymentMethod.findMany({
@@ -229,32 +233,38 @@ export async function resolveCartPaymentMethods(
   // Compute allowed payment methods per item
   const getItemAllowedMethodIds = (item: CartItemInput): Set<string> => {
     const allowed = new Set<string>();
+    if (!item) return allowed;
+
     for (const method of baseMethods) {
       // 1. Check Variant Override (highest specificity)
-      const vOverride = variantOverrides.find(
-        (vo) => vo.variantId === item.variantId && vo.paymentMethodId === method.id
-      );
-      if (vOverride) {
-        if (vOverride.state === "ALLOW") {
-          allowed.add(method.id);
-          continue;
-        }
-        if (vOverride.state === "BLOCK") {
-          continue;
+      if (item.variantId) {
+        const vOverride = variantOverrides.find(
+          (vo) => vo.variantId === item.variantId && vo.paymentMethodId === method.id
+        );
+        if (vOverride) {
+          if (vOverride.state === "ALLOW") {
+            allowed.add(method.id);
+            continue;
+          }
+          if (vOverride.state === "BLOCK") {
+            continue;
+          }
         }
       }
 
       // 2. Check Product Override
-      const pOverride = productOverrides.find(
-        (po) => po.productId === item.productId && po.paymentMethodId === method.id
-      );
-      if (pOverride) {
-        if (pOverride.state === "ALLOW") {
-          allowed.add(method.id);
-          continue;
-        }
-        if (pOverride.state === "BLOCK") {
-          continue;
+      if (item.productId) {
+        const pOverride = productOverrides.find(
+          (po) => po.productId === item.productId && po.paymentMethodId === method.id
+        );
+        if (pOverride) {
+          if (pOverride.state === "ALLOW") {
+            allowed.add(method.id);
+            continue;
+          }
+          if (pOverride.state === "BLOCK") {
+            continue;
+          }
         }
       }
 
@@ -266,8 +276,10 @@ export async function resolveCartPaymentMethods(
 
   const itemAllowedMap = new Map<string, Set<string>>();
   cartItems.forEach((item) => {
-    if (!itemAllowedMap.has(item.variantId)) {
-      itemAllowedMap.set(item.variantId, getItemAllowedMethodIds(item));
+    if (item && item.variantId) {
+      if (!itemAllowedMap.has(item.variantId)) {
+        itemAllowedMap.set(item.variantId, getItemAllowedMethodIds(item));
+      }
     }
   });
 
@@ -278,11 +290,12 @@ export async function resolveCartPaymentMethods(
 
   const conflictingVariantIds: string[] = [];
 
-  if (resolvedMethods.length === 0 && cartItems.length > 0) {
+  if (resolvedMethods.length === 0 && itemAllowedMap.size > 0) {
     const variantIdList = Array.from(itemAllowedMap.keys());
 
     for (const varId of variantIdList) {
-      const itemSet = itemAllowedMap.get(varId)!;
+      const itemSet = itemAllowedMap.get(varId);
+      if (!itemSet) continue;
       if (itemSet.size === 0) {
         conflictingVariantIds.push(varId);
         continue;
@@ -290,7 +303,8 @@ export async function resolveCartPaymentMethods(
 
       const otherSets = variantIdList
         .filter((id) => id !== varId)
-        .map((id) => itemAllowedMap.get(id)!);
+        .map((id) => itemAllowedMap.get(id)!)
+        .filter(Boolean);
 
       if (otherSets.length > 0) {
         let otherIntersection = new Set(otherSets[0]);

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Clock3, Eye, Filter, MessageSquareQuote, Pencil, Plus, Search, ShoppingCart, Trash2, UserCheck, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -46,7 +47,15 @@ function formatDate(value?: string) {
 }
 
 export default function QuotesPage() {
-  const { hasPermission } = useAdminAuth();
+  const { hasPermission, isLoading: authLoading } = useAdminAuth();
+  const router = useRouter();
+
+  useLayoutEffect(() => {
+    if (!authLoading && !hasPermission("quotes.view")) {
+      router.replace("/admin/dashboard");
+    }
+  }, [authLoading, hasPermission, router]);
+
   const canCreate = hasPermission("quotes.create");
   const canUpdate = hasPermission("quotes.update");
   const canDelete = hasPermission("quotes.delete");
@@ -187,6 +196,10 @@ export default function QuotesPage() {
       ),
     },
   ];
+
+  if (authLoading || !hasPermission("quotes.view")) {
+    return null;
+  }
 
   return (
     <AdminLayout title="Quotes" breadcrumb={[{ label: "Quotes" }]}>
