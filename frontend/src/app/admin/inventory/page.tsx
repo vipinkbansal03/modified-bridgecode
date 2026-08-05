@@ -830,7 +830,7 @@ export default function InventoryPage() {
                   const firstRow = group[0];
                   
                   return (
-                    <div key={firstRow.variantId || firstRow.productId || firstRow.id} className="grid w-full items-center gap-0 px-2 py-0" style={{ gridTemplateColumns }}>
+                    <div key={firstRow.variantId || firstRow.product?.id || firstRow.id} className="grid w-full items-center gap-0 px-2 py-0" style={{ gridTemplateColumns }}>
                       <div className="flex h-full items-center justify-center px-2 py-4">
                         {canUpdate && (
                           <input
