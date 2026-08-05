@@ -22,7 +22,6 @@ type WarehouseRow = {
   city?: string;
   postalCode?: string;
   gstin?: string;
-  gstin?: string;
   deliveryZones?: { countryId: string; states: string[] }[];
   status: "ACTIVE" | "INACTIVE";
   country?: { code: string; name: string };
@@ -39,7 +38,6 @@ type WarehouseFormState = {
   city: string;
   postalCode: string;
   gstin: string;
-  gstin: string;
   deliveryZones: { countryId: string; states: string[] }[];
   status: "ACTIVE" | "INACTIVE";
 };
@@ -54,7 +52,6 @@ const emptyForm: WarehouseFormState = {
   addressLine2: "",
   city: "",
   postalCode: "",
-  gstin: "",
   gstin: "",
   deliveryZones: [],
   status: "ACTIVE",
