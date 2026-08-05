@@ -134,9 +134,10 @@ export default function InventoryPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
-  const [sortBy, setSortBy] = useState("updatedAt");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortBy, setSortBy] = useState("product");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [limit, setLimit] = useState(20);
   const [warehouseFilterId, setWarehouseFilterId] = useState("");
   const [visibleColumns, setVisibleColumns] = useState<Record<InventoryColumnKey, boolean>>(DEFAULT_COLUMNS);
   const [columnsReady, setColumnsReady] = useState(false);
@@ -189,7 +190,7 @@ export default function InventoryPage() {
 
   const inventoryQuery = useAdminInventory({
     page,
-    limit: 20,
+    limit,
     search: search || undefined,
     status: status || undefined,
     sortBy,
@@ -210,6 +211,17 @@ export default function InventoryPage() {
   const alerts = useAdminInventoryAlerts();
 
   const rows = (data?.data ?? []) as InventoryRow[];
+  const groupedRows = useMemo(() => {
+    const groupsMap = new Map<string, InventoryRow[]>();
+    for (const row of rows) {
+      const key = row.variantId || row.productId || row.id;
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, []);
+      }
+      groupsMap.get(key)!.push(row);
+    }
+    return Array.from(groupsMap.values());
+  }, [rows]);
   const recentRows = (recentAdjustments?.data ?? []) as Adjustment[];
   const historyRows = (rowAdjustments?.data ?? []) as Adjustment[];
 
@@ -229,7 +241,7 @@ export default function InventoryPage() {
   );
 
   const gridTemplateColumns = useMemo(() => {
-    const widths = ["36px", "270px", "130px", "110px", "120px", ...visibleColumnEntries.map((column) => column.width), "150px"];
+    const widths = ["36px", "minmax(270px, 1fr)", "130px", "110px", "120px", ...visibleColumnEntries.map((column) => column.width), "150px"];
     return widths.join(" ");
   }, [visibleColumnEntries]);
 
@@ -694,7 +706,25 @@ export default function InventoryPage() {
       {activeTab === "levels" && (
         <>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-[12.5px] text-[#9A9A9A]">
-            <span>{data?.pagination ? `${data.pagination.total} inventory rows` : "Loading inventory..."}</span>
+            <div className="flex items-center gap-4">
+              <span>{data?.pagination ? `${data.pagination.total} inventory rows` : "Loading inventory..."}</span>
+              <div className="flex items-center gap-2">
+                <span>Rows per page:</span>
+                <select
+                  value={limit}
+                  onChange={(e) => {
+                    setLimit(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="rounded border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] outline-none"
+                >
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={500}>500</option>
+                </select>
+              </div>
+            </div>
             <label className="inline-flex items-center gap-2 text-[#555]">
               <input type="checkbox" checked={allVisibleSelected} onChange={toggleVisible} />
               Select visible
@@ -777,7 +807,7 @@ export default function InventoryPage() {
               {visibleColumns.threshold && <span className="px-2">Low Stock At</span>}
               {visibleColumns.status && <span className="px-2">Status</span>}
               {visibleColumns.updated && <span className="px-2">Updated Date</span>}
-              <span className="px-2">Actions</span>
+              <span className="px-2 text-right">Actions</span>
             </div>
 
             {isLoading ? (
@@ -796,86 +826,158 @@ export default function InventoryPage() {
               <div className="px-4 py-12 text-center text-[13.5px] text-[#9A9A9A]">No inventory records found.</div>
             ) : (
               <div className="divide-y divide-[#E6E6E6]">
-                {rows.map((row) => {
-                  const availableStock = Math.max(0, row.stock - row.reservedStock);
-                  const warehouseLabel = row.warehouse ? `${row.warehouse.name} (${row.warehouse.gstin || row.warehouse.state || 'N/A'})` : "Base";
-                  const nextStockValue = String(row.stock);
-                  const nextThresholdValue = String(row.lowStockThreshold);
-
+                {groupedRows.map((group) => {
+                  const firstRow = group[0];
+                  
                   return (
-                    <div key={row.id} className="grid w-full items-center gap-0 px-2 py-4" style={{ gridTemplateColumns }}>
-                      <div className="flex items-center justify-center px-2">
+                    <div key={firstRow.variantId || firstRow.productId || firstRow.id} className="grid w-full items-center gap-0 px-2 py-0" style={{ gridTemplateColumns }}>
+                      <div className="flex h-full items-center justify-center px-2 py-4">
                         {canUpdate && (
                           <input
                             type="checkbox"
-                            checked={selectedIds.includes(row.id)}
-                            onChange={() => toggleSelected(row.id)}
-                            aria-label={`Select ${row.product.title}`}
+                            checked={group.every(r => selectedIds.includes(r.id))}
+                            onChange={(e) => {
+                              const ids = group.map(r => r.id);
+                              if (e.target.checked) {
+                                setSelectedIds(prev => Array.from(new Set([...prev, ...ids])));
+                              } else {
+                                setSelectedIds(prev => prev.filter(id => !ids.includes(id)));
+                              }
+                            }}
+                            className="h-4 w-4 accent-[#E31E24]"
+                            aria-label={`Select ${firstRow.product.title}`}
                           />
                         )}
                       </div>
-                      <div className="min-w-0 px-2">
-                        <div className="truncate text-[13.5px] font-medium text-[#1A1A1A]">{row.product.title}</div>
-                        <div className="truncate text-[11.5px] text-[#9A9A9A]">{row.variant?.title || (row.variantId ? row.product.brand : "Product Stock")}</div>
+                      <div className="min-w-0 px-2 py-4">
+                        <div className="truncate text-[13.5px] font-medium text-[#1A1A1A]">{firstRow.product.title}</div>
+                        <div className="truncate text-[11.5px] text-[#9A9A9A]">{firstRow.variant?.title || (firstRow.variantId ? firstRow.product.brand : "Product Stock")}</div>
                       </div>
-                      <div className="space-y-1 px-2">
-                        <div className="truncate text-[13px] text-[#555]">{row.variant?.sku || row.product.sku || "—"}</div>
-                        <div className="truncate text-[11.5px] text-[#9A9A9A]">{row.product.brand || "Modern Orthodontics"}</div>
+                      <div className="space-y-1 px-2 py-4">
+                        <div className="truncate text-[13px] text-[#555]">{firstRow.variant?.sku || firstRow.product.sku || "—"}</div>
+                        <div className="truncate text-[11.5px] text-[#9A9A9A]">{firstRow.product.brand || "Modern Orthodontics"}</div>
                       </div>
-                      <div className="px-2 text-[13px] text-[#555]">{tinyNumber(row.stock)}</div>
-                      <div className="px-2 text-[13px] text-[#555]">{tinyNumber(availableStock)}</div>
-                      {visibleColumns.warehouse && <div className="px-2 text-[13px] text-[#555]">{warehouseLabel}</div>}
-                      {visibleColumns.reserved && <div className="px-2 text-[13px] text-[#555]">{tinyNumber(row.reservedStock)}</div>}
-                      {visibleColumns.threshold && (
-                        <div className="px-2">
-                          {canUpdate ? (
-                            <input
-                              type="number"
-                              min="0"
-                              defaultValue={row.lowStockThreshold}
-                              className="w-full max-w-[96px] rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13px] outline-none focus:border-[#E31E24]"
-                              onBlur={(event) => {
-                                const nextValue = Number(event.target.value);
-                                if (!Number.isInteger(nextValue) || nextValue < 0 || nextValue === row.lowStockThreshold) return;
-                                void handleInlineUpdate(row, { lowStockThreshold: nextValue });
-                              }}
-                            />
-                          ) : (
-                            <span className="text-[13px] text-[#555]">{row.lowStockThreshold}</span>
-                          )}
+
+                      <div className="flex flex-col">
+                        {group.map((row, index) => (
+                          <div key={row.id} className={`flex h-14 items-center px-2 text-[13px] text-[#555] ${index < group.length - 1 ? 'border-b border-[#F0F0F0]' : ''}`}>
+                            {tinyNumber(row.stock)}
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex flex-col">
+                        {group.map((row, index) => {
+                          const availableStock = Math.max(0, row.stock - row.reservedStock);
+                          return (
+                            <div key={row.id} className={`flex h-14 items-center px-2 text-[13px] text-[#555] ${index < group.length - 1 ? 'border-b border-[#F0F0F0]' : ''}`}>
+                              {tinyNumber(availableStock)}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {visibleColumns.warehouse && (
+                        <div className="flex flex-col">
+                          {group.map((row, index) => {
+                            const warehouseLabel = row.warehouse ? `${row.warehouse.name} (${row.warehouse.gstin || row.warehouse.state || 'N/A'})` : "Base";
+                            return (
+                              <div key={row.id} className={`flex h-14 items-center px-2 text-[13px] text-[#555] ${index < group.length - 1 ? 'border-b border-[#F0F0F0]' : ''}`}>
+                                {warehouseLabel}
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
-                      {visibleColumns.status && <div className="px-2"><StatusBadge status={row.status} /></div>}
-                      {visibleColumns.updated && <div className="px-2 text-[13px] text-[#6B6B6B]">{new Date(row.updatedAt).toLocaleDateString()}</div>}
-                      <div className="flex items-center justify-center px-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setHistoryRow(row)}
-                          disabled={!row.variantId}
-                          className="inline-flex h-9 items-center gap-1 rounded border border-[#E6E6E6] px-3 text-[12.5px] font-medium text-[#6B6B6B] hover:border-[#E31E24] hover:text-[#E31E24] hover:bg-[#FFF7F7] disabled:cursor-not-allowed disabled:text-[#CFCFCF] disabled:hover:border-[#E6E6E6] disabled:hover:bg-white"
-                        >
-                          <History size={14} />
-                          History
-                        </button>
-                        {row.warehouseId && (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              if (!window.confirm("Are you sure you want to unassign this warehouse?")) return;
-                              try {
-                                await adminApi.delete(`/inventory/${row.id}`);
-                                showToast("Warehouse unassigned.", "success");
-                                refetch();
-                              } catch (err: any) {
-                                showToast(err?.response?.data?.error || "Error unassigning warehouse.", "error");
-                              }
-                            }}
-                            className="inline-flex h-9 items-center justify-center rounded border border-[#E6E6E6] px-2.5 text-[#6B6B6B] hover:border-[#E31E24] hover:text-[#E31E24] hover:bg-[#FFF7F7]"
-                            title="Unassign Warehouse"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        )}
+
+                      {visibleColumns.reserved && (
+                        <div className="flex flex-col">
+                          {group.map((row, index) => (
+                            <div key={row.id} className={`flex h-14 items-center px-2 text-[13px] text-[#555] ${index < group.length - 1 ? 'border-b border-[#F0F0F0]' : ''}`}>
+                              {tinyNumber(row.reservedStock)}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {visibleColumns.threshold && (
+                        <div className="flex flex-col">
+                          {group.map((row, index) => (
+                            <div key={row.id} className={`flex h-14 items-center px-2 ${index < group.length - 1 ? 'border-b border-[#F0F0F0]' : ''}`}>
+                              {canUpdate ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  defaultValue={row.lowStockThreshold}
+                                  className="w-full max-w-[96px] rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13px] outline-none focus:border-[#E31E24]"
+                                  onBlur={(event) => {
+                                    const nextValue = Number(event.target.value);
+                                    if (!Number.isInteger(nextValue) || nextValue < 0 || nextValue === row.lowStockThreshold) return;
+                                    void handleInlineUpdate(row, { lowStockThreshold: nextValue });
+                                  }}
+                                />
+                              ) : (
+                                <span className="text-[13px] text-[#555]">{row.lowStockThreshold}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {visibleColumns.status && (
+                        <div className="flex flex-col">
+                          {group.map((row, index) => (
+                            <div key={row.id} className={`flex h-14 items-center px-2 ${index < group.length - 1 ? 'border-b border-[#F0F0F0]' : ''}`}>
+                              <StatusBadge status={row.status} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {visibleColumns.updated && (
+                        <div className="flex flex-col">
+                          {group.map((row, index) => (
+                            <div key={row.id} className={`flex h-14 items-center px-2 text-[13px] text-[#6B6B6B] ${index < group.length - 1 ? 'border-b border-[#F0F0F0]' : ''}`}>
+                              {new Date(row.updatedAt).toLocaleDateString()}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex flex-col">
+                        {group.map((row, index) => (
+                          <div key={row.id} className={`flex h-14 items-center justify-end gap-2 px-2 ${index < group.length - 1 ? 'border-b border-[#F0F0F0]' : ''}`}>
+                            <button
+                              type="button"
+                              onClick={() => setHistoryRow(row)}
+                              disabled={!row.variantId}
+                              className="inline-flex h-8 items-center gap-1 rounded border border-[#E6E6E6] px-2 text-[12px] font-medium text-[#6B6B6B] hover:border-[#E31E24] hover:text-[#E31E24] hover:bg-[#FFF7F7] disabled:cursor-not-allowed disabled:text-[#CFCFCF] disabled:hover:border-[#E6E6E6] disabled:hover:bg-white"
+                            >
+                              History
+                            </button>
+                            {row.warehouseId ? (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (!window.confirm("Are you sure you want to unassign this warehouse?")) return;
+                                  try {
+                                    await adminApi.delete(`/inventory/${row.id}`);
+                                    showToast("Warehouse unassigned.", "success");
+                                    refetch();
+                                  } catch (err: any) {
+                                    showToast(err?.response?.data?.error || "Error unassigning warehouse.", "error");
+                                  }
+                                }}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] px-2 text-[#6B6B6B] hover:border-[#E31E24] hover:text-[#E31E24] hover:bg-[#FFF7F7]"
+                                title="Unassign Warehouse"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                              </button>
+                            ) : (
+                              <div className="w-8" />
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   );

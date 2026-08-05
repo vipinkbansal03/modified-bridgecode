@@ -335,41 +335,43 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
         {activeTab === "reviews" && (
           <div className="space-y-6">
             {/* Summary Box */}
-            <div className="flex flex-col gap-5 rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-4">
-                <div className="flex flex-col items-center justify-center rounded-xl bg-[#E31E24] px-5 py-3 text-white shadow-2xs">
-                  <span className="text-[28px] font-extrabold leading-none">{reviewsData.averageRating.toFixed(1)}</span>
-                  <span className="mt-1 text-[11px] font-bold uppercase tracking-wider text-white/90">out of 5</span>
-                </div>
-                <div>
-                  <div className="flex items-center gap-1">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <Star
-                        key={star}
-                        size={18}
-                        className={
-                          star <= Math.round(reviewsData.averageRating)
-                            ? "fill-[#F59E0B] text-[#F59E0B]"
-                            : "text-[#D1D5DB]"
-                        }
-                      />
-                    ))}
+            {reviewsData.totalRatings > 0 && (
+              <div className="flex flex-col gap-5 rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="flex flex-col items-center justify-center rounded-xl bg-[#E31E24] px-5 py-3 text-white shadow-2xs">
+                    <span className="text-[28px] font-extrabold leading-none">{reviewsData.averageRating.toFixed(1)}</span>
+                    <span className="mt-1 text-[11px] font-bold uppercase tracking-wider text-white/90">out of 5</span>
                   </div>
-                  <p className="mt-1 text-[13.5px] font-semibold text-[#1F2937]">
-                    Based on {reviewsData.totalRatings} verified customer {reviewsData.totalRatings === 1 ? "review" : "reviews"}
-                  </p>
+                  <div>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          size={18}
+                          className={
+                            star <= Math.round(reviewsData.averageRating)
+                              ? "fill-[#F59E0B] text-[#F59E0B]"
+                              : "text-[#D1D5DB]"
+                          }
+                        />
+                      ))}
+                    </div>
+                    <p className="mt-1 text-[13.5px] font-semibold text-[#1F2937]">
+                      Based on {reviewsData.totalRatings} verified customer {reviewsData.totalRatings === 1 ? "review" : "reviews"}
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex flex-wrap items-center gap-4 text-[13px] font-semibold text-[#4B5563]">
-                <div className="rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 shadow-2xs">
-                  Product Quality: <span className="font-bold text-[#16A34A]">5.0 ★</span>
-                </div>
-                <div className="rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 shadow-2xs">
-                  Value for Money: <span className="font-bold text-[#2563EB]">5.0 ★</span>
+                <div className="flex flex-wrap items-center gap-4 text-[13px] font-semibold text-[#4B5563]">
+                  <div className="rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 shadow-2xs">
+                    Product Quality: <span className="font-bold text-[#16A34A]">5.0 ★</span>
+                  </div>
+                  <div className="rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 shadow-2xs">
+                    Value for Money: <span className="font-bold text-[#2563EB]">5.0 ★</span>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* List of Submitted Reviews */}
             {loadingReviews ? (

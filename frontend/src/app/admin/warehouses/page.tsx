@@ -22,6 +22,7 @@ type WarehouseRow = {
   city?: string;
   postalCode?: string;
   gstin?: string;
+  deliveryStates?: string[];
   status: "ACTIVE" | "INACTIVE";
   country?: { code: string; name: string };
 };
@@ -37,6 +38,7 @@ type WarehouseFormState = {
   city: string;
   postalCode: string;
   gstin: string;
+  deliveryStates: string[];
   status: "ACTIVE" | "INACTIVE";
 };
 
@@ -51,6 +53,7 @@ const emptyForm: WarehouseFormState = {
   city: "",
   postalCode: "",
   gstin: "",
+  deliveryStates: [],
   status: "ACTIVE",
 };
 
@@ -77,6 +80,7 @@ export default function WarehousesPage() {
   const [editing, setEditing] = useState<WarehouseRow | null>(null);
   const [deleting, setDeleting] = useState<WarehouseRow | null>(null);
   const [form, setForm] = useState<WarehouseFormState>(emptyForm);
+  const [showStatesDropdown, setShowStatesDropdown] = useState(false);
 
   const { data = { data: [], pagination: { total: 0, totalPages: 1 } }, isLoading } = useAdminWarehouses({ page, limit, search: debouncedSearch });
   const { data: countries = [] } = useAdminCountries();
@@ -123,6 +127,7 @@ export default function WarehousesPage() {
       city: w.city || "",
       postalCode: w.postalCode || "",
       gstin: w.gstin || "",
+      deliveryStates: w.deliveryStates || [],
       status: w.status,
     });
     setShowForm(true);
@@ -149,20 +154,21 @@ export default function WarehousesPage() {
       }
     }
 
-    try {
-      const payload = {
-        name: form.name,
-        countryId: form.countryId,
-        state: form.state,
-        address: form.address || null,
-        addressLine1: form.addressLine1 || null,
-        addressLine2: form.addressLine2 || null,
-        city: form.city || null,
-        postalCode: form.postalCode || null,
-        gstin: form.gstin || null,
-        status: form.status,
-      };
+    const payload = {
+      name: form.name,
+      countryId: form.countryId,
+      state: form.state,
+      address: form.address || null,
+      addressLine1: form.addressLine1 || null,
+      addressLine2: form.addressLine2 || null,
+      city: form.city || null,
+      postalCode: form.postalCode || null,
+      gstin: form.gstin || null,
+      deliveryStates: form.deliveryStates,
+      status: form.status,
+    };
 
+    try {
       if (editing) {
         await updateMutation.mutateAsync(payload);
         showToast("Warehouse updated successfully", "success");
@@ -381,6 +387,73 @@ export default function WarehousesPage() {
               { value: "INACTIVE", label: "Inactive" }
             ]}
           />
+
+          {statesOfSelectedCountry.length > 0 && (
+            <div className="space-y-1.5 relative">
+              <label className="block text-sm font-medium text-[#374151]">Delivery States (Optional)</label>
+              <div className="text-[12px] text-gray-500 mb-2">Select states where this warehouse will deliver. Leave empty to deliver everywhere in this country.</div>
+              
+              <button
+                type="button"
+                onClick={() => setShowStatesDropdown(!showStatesDropdown)}
+                className="w-full flex items-center justify-between rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-left text-sm shadow-sm focus:border-[#E31E24] focus:outline-none focus:ring-1 focus:ring-[#E31E24]"
+              >
+                <span className="text-[#374151]">
+                  {form.deliveryStates.length > 0
+                    ? `${form.deliveryStates.length} state(s) selected`
+                    : "Deliver everywhere (all states)"}
+                </span>
+                <ChevronDown size={16} className={`text-[#9CA3AF] transition-transform ${showStatesDropdown ? "rotate-180" : ""}`} />
+              </button>
+
+              {showStatesDropdown && (
+                <div className="mt-1 w-full rounded-md border border-[#D1D5DB] bg-white shadow-sm">
+                  <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allValues = statesOfSelectedCountry.map((st) => st.value);
+                        setForm((prev) => ({ ...prev, deliveryStates: allValues }));
+                      }}
+                      className="text-[12px] font-semibold text-[#E31E24] hover:underline"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForm((prev) => ({ ...prev, deliveryStates: [] }));
+                      }}
+                      className="text-[12px] font-semibold text-gray-500 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto p-2 space-y-1">
+                    {statesOfSelectedCountry.map((st) => (
+                      <label key={st.value} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 p-1.5 rounded">
+                        <input 
+                          type="checkbox" 
+                          className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24]"
+                          checked={form.deliveryStates.includes(st.value)}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setForm((prev) => ({
+                              ...prev,
+                              deliveryStates: checked 
+                                ? [...prev.deliveryStates, st.value] 
+                                : prev.deliveryStates.filter((s) => s !== st.value)
+                            }));
+                          }}
+                        />
+                        <span className="text-[#374151] truncate" title={st.label}>{st.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-4">
             <button type="button" onClick={() => setShowForm(false)} className="rounded-md px-4 py-2 text-sm font-medium text-[#6B6B6B] hover:text-[#1A1A1A]">

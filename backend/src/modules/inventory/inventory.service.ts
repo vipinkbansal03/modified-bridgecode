@@ -185,9 +185,9 @@ function buildInventoryOrder(query: InventoryListQuery): Prisma.InventoryOrderBy
     case "status":
       return [{ status: dir }, { updatedAt: "desc" }];
     case "product":
-      return [{ product: { title: dir } }, { updatedAt: "desc" }];
+      return [{ product: { title: dir } }, { variant: { title: "asc" } }, { updatedAt: "desc" }];
     case "variant":
-      return [{ variant: { title: dir } }, { updatedAt: "desc" }];
+      return [{ variant: { title: dir } }, { product: { title: "asc" } }, { updatedAt: "desc" }];
     case "warehouse":
       return [{ warehouse: { name: dir } }, { updatedAt: "desc" }];
     case "sku":
