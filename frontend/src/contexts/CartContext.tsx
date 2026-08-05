@@ -168,6 +168,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
         for (const [productSlug, productItems] of Object.entries(
           groupedItems,
         )) {
+          if (!productSlug || productSlug === "undefined") {
+            continue;
+          }
+
           try {
             const response = await apiClient.post(
               `/products/${productSlug}/price-preview`,

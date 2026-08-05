@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useLayoutEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 import { DataTable, Pagination } from "@/components/admin/AdminComponents";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
@@ -11,6 +13,15 @@ import { contactSubmissionColumns } from "./ContactSubmissionColumns";
 import { useAdminContactSubmissions } from "@/hooks/admin/useAdminHooks";
 
 export default function ContactSubmissionsPage() {
+  const { hasPermission, isLoading: authLoading } = useAdminAuth();
+  const router = useRouter();
+
+  useLayoutEffect(() => {
+    if (!authLoading && !hasPermission("contactSubmissions.view")) {
+      router.replace("/admin/dashboard");
+    }
+  }, [authLoading, hasPermission, router]);
+
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
 
@@ -33,6 +44,10 @@ export default function ContactSubmissionsPage() {
     { value: "general", label: "General Inquiries" },
     { value: "dealer", label: "Dealer Applications" },
   ];
+
+  if (authLoading || !hasPermission("contactSubmissions.view")) {
+    return null;
+  }
 
   return (
     <AdminLayout

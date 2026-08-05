@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Clock3, Download, Filter, History, Layers, Search, SlidersHorizontal, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -124,7 +125,15 @@ function tinyNumber(value: number) {
 }
 
 export default function InventoryPage() {
-  const { hasPermission } = useAdminAuth();
+  const { hasPermission, isLoading: authLoading } = useAdminAuth();
+  const router = useRouter();
+
+  useLayoutEffect(() => {
+    if (!authLoading && !hasPermission("inventory.view")) {
+      router.replace("/admin/dashboard");
+    }
+  }, [authLoading, hasPermission, router]);
+
   const canUpdate = hasPermission("inventory.update");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -388,6 +397,10 @@ export default function InventoryPage() {
       showToast(getAdminErrorMessage(error, "Bulk inventory update failed."), "error");
     }
   };
+
+  if (authLoading || !hasPermission("inventory.view")) {
+    return null;
+  }
 
   return (
     <AdminLayout title="Inventory" breadcrumb={[{ label: "Inventory" }]}>
