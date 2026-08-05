@@ -25,25 +25,7 @@ const ProductRow = ({ warehouseId, p, selectedProductIds, setSelectedProductIds,
   const isAssigned = !!warehouseInventory;
   const warehouseStock = warehouseInventory?.stock || 0;
 
-  // Initialize selected state if already assigned
-  useEffect(() => {
-    if (isAssigned && !isProductSelected) {
-      setSelectedProductIds((prev: any) => [...prev, p.id]);
-      setProductStockMap((prev: any) => ({ ...prev, [p.id]: warehouseStock }));
-    }
-  }, [isAssigned, p.id]);
-
-  useEffect(() => {
-    if (variantsData?.data) {
-      const assignedVariants = variantsData.data.filter((v: any) => v.inventories?.some((inv: any) => inv.warehouseId === warehouseId));
-      if (assignedVariants.length > 0) {
-        setSelectedVariantIds((prev: any) => {
-          const newIds = assignedVariants.map((v: any) => v.id).filter((id: string) => !prev.includes(id));
-          return [...prev, ...newIds];
-        });
-      }
-    }
-  }, [variantsData, warehouseId]);
+  // Auto-selection of assigned items has been removed to avoid forcing checkboxes to be checked by default.
 
   const toggleProduct = (checked: boolean) => {
     if (checked) setSelectedProductIds([...selectedProductIds, p.id]);
@@ -100,8 +82,8 @@ const ProductRow = ({ warehouseId, p, selectedProductIds, setSelectedProductIds,
              {!hasVariants && (
                <>
                  <span className="text-[#D1D1D1]">•</span>
-                 <span className={`text-[12px] font-medium ${totalProductStock > 0 ? "text-green-600" : "text-[#9A9A9A]"}`}>
-                   {totalProductStock} in stock
+                 <span className={`text-[12px] font-medium ${isAssigned && warehouseStock > 0 ? "text-green-600" : "text-[#9A9A9A]"}`}>
+                   {isAssigned ? warehouseStock : 0} in stock
                  </span>
                </>
              )}
@@ -213,7 +195,7 @@ const ProductRow = ({ warehouseId, p, selectedProductIds, setSelectedProductIds,
                         <td className="py-2 px-4">
                           <input 
                             type="checkbox"
-                            checked={isChecked || isVAssigned}
+                            checked={isChecked}
                             onChange={(e) => {
                               toggleVariant(v.id, e.target.checked);
                             }}
@@ -230,8 +212,8 @@ const ProductRow = ({ warehouseId, p, selectedProductIds, setSelectedProductIds,
                           <span className="text-[12px] text-[#7A7A7A]">{v.sku || '—'}</span>
                         </td>
                         <td className="py-2 px-4">
-                          <span className={`text-[12px] font-medium ${totalVariantStock > 0 ? "text-green-600" : "text-[#9A9A9A]"}`}>
-                            {totalVariantStock > 0 ? `${totalVariantStock} in total` : "0 in total"}
+                          <span className={`text-[12px] font-medium ${isVAssigned && vWarehouseStock > 0 ? "text-green-600" : "text-[#9A9A9A]"}`}>
+                            {isVAssigned ? `${vWarehouseStock} in stock` : "0 in stock"}
                           </span>
                         </td>
                         <td className="py-2 px-4 text-right">
@@ -247,6 +229,7 @@ const ProductRow = ({ warehouseId, p, selectedProductIds, setSelectedProductIds,
                                   ...prev,
                                   [v.id]: isNaN(val) ? 0 : val
                                 }));
+                                if (!isChecked) toggleVariant(v.id, true);
                               }}
                               className="w-[80px] text-right px-2 py-1 text-[13px] border border-[#D1D1D1] rounded focus:outline-none focus:border-[#E31E24] focus:ring-1 focus:ring-[#E31E24]"
                             />

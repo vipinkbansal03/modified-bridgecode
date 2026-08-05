@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Clock3, Download, Filter, History, Layers, Search, SlidersHorizontal, Upload, X } from "lucide-react";
+import { Clock3, Download, Filter, History, Layers, Search, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { RefreshButton } from "@/components/admin/RefreshButton";
+import { Modal } from "@/components/ui/Modal";
 import {
   useAdminInventory,
   useAdminInventoryAdjustments,
@@ -151,6 +152,12 @@ export default function InventoryPage() {
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  
+  const [warehouseAssignModalOpen, setWarehouseAssignModalOpen] = useState(false);
+  const [warehouseAssignSelections, setWarehouseAssignSelections] = useState<Record<string, boolean>>({});
+  const [warehouseAssignStocks, setWarehouseAssignStocks] = useState<Record<string, string>>({});
+  const [bulkSaving, setBulkSaving] = useState(false);
+
   const { showToast, ToastComponent } = useToast();
 
   useEffect(() => {
@@ -351,20 +358,21 @@ export default function InventoryPage() {
         showToast("Threshold must be a positive integer.", "error");
         return;
       }
-    } else if (bulkAction === "warehouse") {
-      warehouseId = bulkWarehouseId === "" ? undefined : (bulkWarehouseId === "NONE" ? null : bulkWarehouseId);
-      if (warehouseId === undefined) {
-        showToast("Select a warehouse.", "error");
+    } else if (bulkAction === "delete") {
+      // Deleting assignments
+      if (!window.confirm(`Delete ${selectedIds.length} selected warehouse assignment(s)?`)) {
         return;
       }
-      
-      // Stock is optional when assigning warehouse, but if provided it must be valid
-      if (bulkStock.trim() !== "") {
-        stockValue = Number(bulkStock);
-        if (!Number.isInteger(stockValue) || stockValue < 0) {
-          showToast("Stock must be a positive integer.", "error");
-          return;
-        }
+      try {
+        await Promise.all(selectedIds.map(id => adminApi.delete(`/inventory/${id}`)));
+        setSelectedIds([]);
+        setBulkAction("");
+        showToast(`Successfully deleted ${selectedIds.length} warehouse assignment(s).`, "success");
+        refetch();
+        return;
+      } catch (error) {
+        showToast(getAdminErrorMessage(error, "Failed to delete warehouse assignments."), "error");
+        return;
       }
     } else {
       showToast("Select a bulk action to apply.", "error");
@@ -386,6 +394,67 @@ export default function InventoryPage() {
       showToast("Selected inventory rows updated.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Bulk inventory update failed."), "error");
+    }
+  };
+
+  const handleWarehouseAssignSubmit = async () => {
+    const selectedWarehouseIds = Object.keys(warehouseAssignSelections).filter((id) => warehouseAssignSelections[id]);
+    if (selectedWarehouseIds.length === 0) {
+      showToast("Please select at least one warehouse.", "error");
+      return;
+    }
+
+    for (const wId of selectedWarehouseIds) {
+      const stockStr = warehouseAssignStocks[wId]?.trim();
+      const stockVal = stockStr ? parseInt(stockStr) : null;
+      if (stockStr && (isNaN(stockVal as number) || (stockVal as number) < 0)) {
+        showToast("Please enter a valid stock level.", "error");
+        return;
+      }
+    }
+
+    setBulkSaving(true);
+    try {
+      const uniqueVariantIds = Array.from(
+        new Set(
+          rows
+            .filter((inv) => selectedIds.includes(inv.id))
+            .map((inv) => inv.variantId)
+            .filter(Boolean)
+        )
+      ) as string[];
+
+      for (const wId of selectedWarehouseIds) {
+        const stockStr = warehouseAssignStocks[wId]?.trim();
+        const stockVal = stockStr ? parseInt(stockStr) : null;
+
+        await Promise.all(
+          uniqueVariantIds.map((vId) => {
+            let finalStock = 0;
+            if (stockVal !== null) {
+              finalStock = stockVal;
+            } else {
+              const row = rows.find((r) => r.variantId === vId && (r.warehouse === null || r.warehouse === undefined));
+              finalStock = row?.stock ?? 0;
+            }
+            return adminApi.post("/inventory/upsert", {
+              variantId: vId,
+              warehouseId: wId,
+              stock: finalStock,
+            });
+          })
+        );
+      }
+
+      showToast(`Successfully assigned selected variants to warehouses.`, "success");
+      setWarehouseAssignModalOpen(false);
+      setSelectedIds([]);
+      setBulkAction("");
+      await refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to assign warehouses."), "error");
+    } finally {
+      setBulkSaving(false);
     }
   };
 
@@ -632,68 +701,67 @@ export default function InventoryPage() {
             </label>
           </div>
 
-      {selectedCount > 0 ? (
-        <div className="mb-4 rounded-lg border border-[#E6E6E6] bg-white p-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-4">
+      {selectedCount > 0 && (
+        <div className="mb-4 rounded-md border border-[#E6E6E6] bg-[#F9F9F9] px-4 py-2.5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
               <span className="text-[13px] font-semibold text-[#1A1A1A]">{selectedCount} selected</span>
+              <button type="button" onClick={() => setSelectedIds([])} className="text-[12.5px] font-medium text-[#6B6B6B] hover:text-[#1A1A1A] underline decoration-transparent hover:decoration-current transition-all">
+                Clear selection
+              </button>
             </div>
-            
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {bulkAction === "stock" && (
-                <AdminInput placeholder="Value" type="number" min={0} value={bulkStock} onChange={(e) => setBulkStock(e.target.value)} className="w-32" />
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Stock"
+                  value={bulkStock}
+                  onChange={(e) => setBulkStock(e.target.value)}
+                  className="h-9 w-24 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] outline-none focus:border-[#E31E24]"
+                />
               )}
               {bulkAction === "threshold" && (
-                <AdminInput placeholder="Value" type="number" min={0} value={bulkThreshold} onChange={(e) => setBulkThreshold(e.target.value)} className="w-32" />
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Threshold"
+                  value={bulkThreshold}
+                  onChange={(e) => setBulkThreshold(e.target.value)}
+                  className="h-9 w-28 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] outline-none focus:border-[#E31E24]"
+                />
               )}
-              {bulkAction === "warehouse" && (
-                <>
-                  <AdminSelect
-                    value={bulkWarehouseId}
-                    onChange={(e) => setBulkWarehouseId(e.target.value)}
-                    className="w-48"
-                    options={[
-                      { value: "", label: "Select warehouse" },
-                      { value: "NONE", label: "Unassigned (Base)" },
-                      ...warehouses.map((w: any) => ({ value: w.id, label: w.name }))
-                    ]}
-                  />
-                  <AdminInput 
-                    placeholder="Stock (optional)" 
-                    type="number" 
-                    min={0} 
-                    value={bulkStock} 
-                    onChange={(e) => setBulkStock(e.target.value)} 
-                    className="w-32" 
-                  />
-                </>
-              )}
-              <AdminSelect
+              <select
                 value={bulkAction}
-                onChange={(e) => setBulkAction(e.target.value)}
-                className="w-56"
-                options={[
-                  { value: "", label: "Bulk Action" },
-                  { value: "stock", label: "Update stock" },
-                  { value: "threshold", label: "Update low stock threshold" },
-                  { value: "warehouse", label: "Assign warehouse" },
-                ]}
-              />
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setBulkAction(val);
+                  if (val === "warehouse") {
+                    setWarehouseAssignSelections({});
+                    setWarehouseAssignStocks({});
+                    setWarehouseAssignModalOpen(true);
+                  }
+                }}
+                className="h-9 w-52 rounded-md border border-[#E6E6E6] bg-white px-3 text-[12.5px] outline-none focus:border-[#E31E24]"
+              >
+                <option value="">Bulk Action</option>
+                <option value="stock">Update stock</option>
+                <option value="threshold">Update low stock threshold</option>
+                <option value="warehouse">Assign warehouse</option>
+                <option value="delete">Unassign warehouse</option>
+              </select>
               <button
                 type="button"
                 onClick={() => void applyBulkUpdate()}
-                disabled={bulkUpdate.isPending}
-                className="h-9 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#C91A20] disabled:opacity-60"
+                disabled={bulkUpdate.isPending || bulkAction === ""}
+                className="h-9 rounded-md bg-[#808080] px-4 text-[12.5px] font-semibold text-white hover:bg-[#6B6B6B] disabled:opacity-50"
               >
                 Apply
-              </button>
-              <button type="button" onClick={() => setSelectedIds([])} className="h-9 rounded-md border border-[#E6E6E6] px-4 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]">
-                Clear Filters
               </button>
             </div>
           </div>
         </div>
-      ) : null}
+      )}
 
       <div className="rounded-lg border border-[#E6E6E6] bg-white">
         <div className="overflow-x-auto">
@@ -779,7 +847,7 @@ export default function InventoryPage() {
                       )}
                       {visibleColumns.status && <div className="px-2"><StatusBadge status={row.status} /></div>}
                       {visibleColumns.updated && <div className="px-2 text-[13px] text-[#6B6B6B]">{new Date(row.updatedAt).toLocaleDateString()}</div>}
-                      <div className="flex items-center justify-center px-2">
+                      <div className="flex items-center justify-center px-2 gap-2">
                         <button
                           type="button"
                           onClick={() => setHistoryRow(row)}
@@ -789,6 +857,25 @@ export default function InventoryPage() {
                           <History size={14} />
                           History
                         </button>
+                        {row.warehouseId && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!window.confirm("Are you sure you want to unassign this warehouse?")) return;
+                              try {
+                                await adminApi.delete(`/inventory/${row.id}`);
+                                showToast("Warehouse unassigned.", "success");
+                                refetch();
+                              } catch (err: any) {
+                                showToast(err?.response?.data?.error || "Error unassigning warehouse.", "error");
+                              }
+                            }}
+                            className="inline-flex h-9 items-center justify-center rounded border border-[#E6E6E6] px-2.5 text-[#6B6B6B] hover:border-[#E31E24] hover:text-[#E31E24] hover:bg-[#FFF7F7]"
+                            title="Unassign Warehouse"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -802,6 +889,62 @@ export default function InventoryPage() {
       <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </>
       )}
+
+      <Modal
+        open={warehouseAssignModalOpen}
+        onClose={() => { setWarehouseAssignModalOpen(false); setBulkAction(""); }}
+        title="Assign Selected Variants to Warehouses"
+        panelClassName="max-w-md"
+      >
+        <div className="space-y-4 p-6">
+          <p className="text-[13px] text-[#6B6B6B]">
+            Select which warehouses you want to assign the selected variants to, and optionally specify their initial stock levels.
+          </p>
+          <div className="max-h-[300px] overflow-y-auto border border-[#E6E6E6] rounded-md divide-y divide-[#E6E6E6] px-4 bg-white">
+            {(warehousesData?.data ?? []).map((w: any) => (
+              <div key={w.id} className="flex items-center justify-between py-3 gap-3">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none text-[13px] text-[#1A1A1A] font-medium min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={warehouseAssignSelections[w.id] || false}
+                    onChange={(e) => setWarehouseAssignSelections(prev => ({ ...prev, [w.id]: e.target.checked }))}
+                    className="rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
+                  />
+                  <span className="truncate">
+                    {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
+                  </span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Stock"
+                  disabled={!warehouseAssignSelections[w.id]}
+                  value={warehouseAssignStocks[w.id] ?? ""}
+                  onChange={(event) => setWarehouseAssignStocks(prev => ({ ...prev, [w.id]: event.target.value }))}
+                  className="w-24 h-8 px-2 rounded-md border border-[#E6E6E6] text-[12.5px] outline-none disabled:bg-[#FAFAFA] text-center focus:border-[#E31E24]"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => { setWarehouseAssignModalOpen(false); setBulkAction(""); }}
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleWarehouseAssignSubmit}
+              disabled={bulkSaving}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
+            >
+              {bulkSaving ? "Assigning..." : "Assign"}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {activeTab === "activity" && (
         <section className="mt-6 rounded-lg border border-[#E6E6E6] bg-white p-5">

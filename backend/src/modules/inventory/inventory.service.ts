@@ -869,9 +869,7 @@ export async function deleteInventory(id: string) {
   const existing = await prisma.inventory.findUnique({ where: { id } });
   if (!existing) throw new AppError("Inventory record not found.", 404);
 
-  if (existing.stock > 0 || (existing.reservedStock && existing.reservedStock > 0)) {
-    throw new AppError("Cannot remove warehouse assignment while stock or reserved stock is greater than zero.", 400);
-  }
+  // Safety check removed per user request: allow deletion even if stock exists
 
   await prisma.inventory.delete({ where: { id } });
 }
