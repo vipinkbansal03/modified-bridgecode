@@ -49,11 +49,7 @@ export function ProductHeaderRating({
   }, [slug, liveRating, liveCount]);
 
   if (count === 0) {
-    return (
-      <div className="flex items-center gap-1.5 rounded-lg border border-[#F3F4F6] bg-[#FAFAFA] px-2.5 py-1 text-[13px]">
-        <span className="text-[#6B7280] font-medium text-[12px]">No ratings yet</span>
-      </div>
-    );
+    return null;
   }
 
   return (
