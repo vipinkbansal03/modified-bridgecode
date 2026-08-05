@@ -44,8 +44,9 @@ model Warehouse {
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   
-  country     Country         @relation(fields: [countryId], references: [id])
-  inventories Inventory[]
+  country       Country         @relation("WarehousePhysicalCountry", fields: [countryId], references: [id])
+  deliveryZones Json            @default("[]")
+  inventories   Inventory[]
   orders      Order[]
   users       UserWarehouse[]
 
@@ -366,7 +367,7 @@ model Country {
   Quote               Quote[]
   variantCountries    VariantCountry[]
   paymentMethods      PaymentMethodCountry[]
-  warehouses          Warehouse[]
+  warehouses          Warehouse[]            @relation("WarehousePhysicalCountry")
 
   @@map("countries")
 }

@@ -47,7 +47,7 @@ export function Modal({ open, onClose, title, children, panelClassName }: ModalP
           onClick={onClose}
         >
           <motion.div
-            className={cn("w-full max-w-lg rounded-xl bg-white shadow-2xl flex flex-col overflow-hidden", panelClassName)}
+            className={cn("w-full max-w-lg rounded-xl bg-white shadow-2xl flex flex-col overflow-hidden max-h-[90vh]", panelClassName)}
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
@@ -58,6 +58,7 @@ export function Modal({ open, onClose, title, children, panelClassName }: ModalP
               <div className="flex items-center justify-between border-b border-[#E5E7EB] bg-white px-6 py-4 shrink-0">
                 <h3 className="text-base font-bold text-[#111827]">{title}</h3>
                 <button
+                  type="button"
                   onClick={onClose}
                   aria-label="Close"
                   className="p-1 rounded-md text-[#9CA3AF] hover:text-[#111827] hover:bg-[#F3F4F6] transition-colors"
@@ -66,7 +67,9 @@ export function Modal({ open, onClose, title, children, panelClassName }: ModalP
                 </button>
               </div>
             )}
-            {children}
+            <div className="overflow-y-auto overflow-x-hidden relative flex-1">
+              {children}
+            </div>
           </motion.div>
         </motion.div>
       )}

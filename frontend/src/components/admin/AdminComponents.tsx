@@ -486,7 +486,7 @@ export function AdminMultiSelect({
         ? createPortal(
             <div
               ref={menuRef}
-              className="z-[10000] origin-top overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg flex flex-col space-y-0.5"
+              className="z-[10000] origin-top overflow-y-auto rounded-md border border-[#E6E6E6] bg-white shadow-lg flex flex-col"
               style={{
                 position: "fixed",
                 top: menuStyle.top !== undefined ? menuStyle.top : "auto",
@@ -513,25 +513,33 @@ export function AdminMultiSelect({
                   </button>
                 </div>
               )}
-              {options.map((option) => {
-                const isSelected = currentValues.includes(option.value);
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => toggleOption(option.value)}
-                    className="flex w-full cursor-pointer items-center gap-2 px-3.5 py-2 text-left text-[13.5px] text-[#333] hover:bg-[#FAF9F9] transition focus:outline-none"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      readOnly
-                      className="h-4 w-4 accent-[#E31E24] pointer-events-none"
-                    />
-                    <span className="truncate">{option.label}</span>
-                  </button>
-                );
-              })}
+              <div className="py-1 flex flex-col space-y-0.5">
+                {options.map((option) => {
+                  const isSelected = currentValues.includes(option.value);
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => toggleOption(option.value)}
+                      className={cn(
+                        "w-full cursor-pointer px-3.5 py-2 text-left text-[13.5px] transition flex items-center gap-2.5",
+                        isSelected ? "bg-red-50" : "hover:bg-[#F7F7F7]"
+                      )}
+                    >
+                      <div className={cn(
+                        "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
+                        isSelected ? "border-[#E31E24] bg-[#E31E24]" : "border-[#D1D5DB] bg-white"
+                      )}>
+                        {isSelected && <svg width="10" height="8" viewBox="0 0 10 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </div>
+                      <span className={cn("truncate", isSelected ? "text-[#E31E24] font-medium" : "text-[#1A1A1A]")}>
+                        {option.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
               {options.length === 0 && (
                 <div className="px-3.5 py-2 text-xs text-[#9A9A9A] text-center">
                   No options available.

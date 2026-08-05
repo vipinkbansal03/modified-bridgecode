@@ -70,7 +70,7 @@ export async function createWarehouse(data: {
   city?: string;
   postalCode?: string;
   gstin?: string;
-  deliveryStates?: string[];
+  deliveryZones?: { countryId: string; states: string[] }[];
   status: any;
 }) {
   const country = await prisma.country.findUnique({ where: { id: data.countryId } });
@@ -98,7 +98,7 @@ export async function createWarehouse(data: {
     city: data.city ?? null,
     postalCode: data.postalCode ?? null,
     gstin: data.gstin ?? "",
-    deliveryStates: data.deliveryStates ?? []
+    deliveryZones: data.deliveryZones ? JSON.parse(JSON.stringify(data.deliveryZones)) : []
   } });
 }
 
@@ -111,7 +111,7 @@ export async function updateWarehouse(id: string, data: {
   city?: string;
   postalCode?: string;
   gstin?: string;
-  deliveryStates?: string[];
+  deliveryZones?: { countryId: string; states: string[] }[];
   status?: any;
 }) {
   const existing = await prisma.warehouse.findUnique({
@@ -152,7 +152,7 @@ export async function updateWarehouse(id: string, data: {
       ...(data.city !== undefined && { city: data.city }),
       ...(data.postalCode !== undefined && { postalCode: data.postalCode }),
       ...(data.gstin !== undefined && { gstin: data.gstin }),
-      ...(data.deliveryStates !== undefined && { deliveryStates: data.deliveryStates }),
+      ...(data.deliveryZones !== undefined && { deliveryZones: data.deliveryZones ? JSON.parse(JSON.stringify(data.deliveryZones)) : [] }),
       ...(data.status && { status: data.status }),
       address: formattedAddress,
     }

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight, Edit2, PackageOpen, Plus, Search, Trash2, Warehouse } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminMultiSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { useAdminWarehouses, useCreateWarehouse, useUpdateWarehouse, useDeleteWarehouse, useAdminCountries, useAdminProducts, useBulkUpdateProducts, useAdminProductVariants } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
@@ -22,7 +22,8 @@ type WarehouseRow = {
   city?: string;
   postalCode?: string;
   gstin?: string;
-  deliveryStates?: string[];
+  gstin?: string;
+  deliveryZones?: { countryId: string; states: string[] }[];
   status: "ACTIVE" | "INACTIVE";
   country?: { code: string; name: string };
 };
@@ -38,7 +39,8 @@ type WarehouseFormState = {
   city: string;
   postalCode: string;
   gstin: string;
-  deliveryStates: string[];
+  gstin: string;
+  deliveryZones: { countryId: string; states: string[] }[];
   status: "ACTIVE" | "INACTIVE";
 };
 
@@ -53,7 +55,8 @@ const emptyForm: WarehouseFormState = {
   city: "",
   postalCode: "",
   gstin: "",
-  deliveryStates: [],
+  gstin: "",
+  deliveryZones: [],
   status: "ACTIVE",
 };
 
@@ -80,7 +83,6 @@ export default function WarehousesPage() {
   const [editing, setEditing] = useState<WarehouseRow | null>(null);
   const [deleting, setDeleting] = useState<WarehouseRow | null>(null);
   const [form, setForm] = useState<WarehouseFormState>(emptyForm);
-  const [showStatesDropdown, setShowStatesDropdown] = useState(false);
 
   const { data = { data: [], pagination: { total: 0, totalPages: 1 } }, isLoading } = useAdminWarehouses({ page, limit, search: debouncedSearch });
   const { data: countries = [] } = useAdminCountries();
@@ -88,7 +90,6 @@ export default function WarehousesPage() {
   const createMutation = useCreateWarehouse();
   const updateMutation = useUpdateWarehouse(editing?.id || "");
   const deleteMutation = useDeleteWarehouse();
-
   const selectedCountry = countries.find((c: any) => c.id === form.countryId);
   const countryCode = selectedCountry?.code || "";
 
@@ -127,7 +128,7 @@ export default function WarehousesPage() {
       city: w.city || "",
       postalCode: w.postalCode || "",
       gstin: w.gstin || "",
-      deliveryStates: w.deliveryStates || [],
+      deliveryZones: w.deliveryZones || [],
       status: w.status,
     });
     setShowForm(true);
@@ -147,11 +148,9 @@ export default function WarehousesPage() {
     }
     
     const country = countries.find((c: any) => c.id === form.countryId);
-    if (country?.code === "IN" && form.status === "ACTIVE") {
-      if (!form.gstin || form.gstin.length !== 15) {
-        showToast("Indian warehouses must have a valid 15-character GSTIN to be ACTIVE", "error");
-        return;
-      }
+    if (form.gstin && country?.code === "IN" && form.gstin.length !== 15) {
+      showToast("If provided, Indian GSTIN must be exactly 15 characters", "error");
+      return;
     }
 
     const payload = {
@@ -164,7 +163,7 @@ export default function WarehousesPage() {
       city: form.city || null,
       postalCode: form.postalCode || null,
       gstin: form.gstin || null,
-      deliveryStates: form.deliveryStates,
+      deliveryZones: form.deliveryZones,
       status: form.status,
     };
 
@@ -372,10 +371,10 @@ export default function WarehousesPage() {
           </div>
 
           <AdminInput 
-            label="GSTIN / Tax ID" 
+            label="GSTIN / Tax ID (Optional)" 
             value={form.gstin} 
             onChange={(e) => setForm({ ...form, gstin: e.target.value })} 
-            placeholder="15-character GSTIN for India"
+            placeholder="Tax ID (15-char GSTIN for India)"
           />
 
           <AdminSelect 
@@ -388,72 +387,100 @@ export default function WarehousesPage() {
             ]}
           />
 
-          {statesOfSelectedCountry.length > 0 && (
-            <div className="space-y-1.5 relative">
-              <label className="block text-sm font-medium text-[#374151]">Delivery States (Optional)</label>
-              <div className="text-[12px] text-gray-500 mb-2">Select states where this warehouse will deliver. Leave empty to deliver everywhere in this country.</div>
-              
+          <div className="pt-4 mt-2 border-t border-gray-100">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-sm font-semibold text-[#111827]">Delivery Zones</h4>
               <button
                 type="button"
-                onClick={() => setShowStatesDropdown(!showStatesDropdown)}
-                className="w-full flex items-center justify-between rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-left text-sm shadow-sm focus:border-[#E31E24] focus:outline-none focus:ring-1 focus:ring-[#E31E24]"
+                onClick={() => setForm({ ...form, deliveryZones: [...form.deliveryZones, { countryId: "", states: [] }] })}
+                className="text-[12px] font-semibold text-[#E31E24] hover:underline flex items-center gap-1"
               >
-                <span className="text-[#374151]">
-                  {form.deliveryStates.length > 0
-                    ? `${form.deliveryStates.length} state(s) selected`
-                    : "Deliver everywhere (all states)"}
-                </span>
-                <ChevronDown size={16} className={`text-[#9CA3AF] transition-transform ${showStatesDropdown ? "rotate-180" : ""}`} />
+                <Plus size={14} /> Add Delivery Country
               </button>
-
-              {showStatesDropdown && (
-                <div className="mt-1 w-full rounded-md border border-[#D1D5DB] bg-white shadow-sm">
-                  <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const allValues = statesOfSelectedCountry.map((st) => st.value);
-                        setForm((prev) => ({ ...prev, deliveryStates: allValues }));
-                      }}
-                      className="text-[12px] font-semibold text-[#E31E24] hover:underline"
-                    >
-                      Select All
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setForm((prev) => ({ ...prev, deliveryStates: [] }));
-                      }}
-                      className="text-[12px] font-semibold text-gray-500 hover:underline"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  <div className="max-h-48 overflow-y-auto p-2 space-y-1">
-                    {statesOfSelectedCountry.map((st) => (
-                      <label key={st.value} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 p-1.5 rounded">
-                        <input 
-                          type="checkbox" 
-                          className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24]"
-                          checked={form.deliveryStates.includes(st.value)}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setForm((prev) => ({
-                              ...prev,
-                              deliveryStates: checked 
-                                ? [...prev.deliveryStates, st.value] 
-                                : prev.deliveryStates.filter((s) => s !== st.value)
-                            }));
-                          }}
-                        />
-                        <span className="text-[#374151] truncate" title={st.label}>{st.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
-          )}
+
+            {form.deliveryZones.length === 0 && (
+              <div className="text-[13px] text-gray-500 italic p-4 text-center bg-gray-50 rounded-md border border-gray-200">
+                No delivery zones configured. Click "Add Delivery Country" to start.
+              </div>
+            )}
+            
+            <div className="space-y-4">
+              {form.deliveryZones.map((zone, index) => {
+                const zCountry = countries.find((c: any) => c.id === zone.countryId);
+                const zCountryCode = zCountry?.code || "";
+                let zStates: any[] = [];
+                if (zCountryCode) {
+                  try {
+                    zStates = State.getStatesOfCountry(zCountryCode.toUpperCase()).map((s: any) => ({
+                      value: s.name,
+                      label: s.name,
+                    }));
+                  } catch (e) {
+                    console.error("Failed to load states", e);
+                  }
+                }
+
+                return (
+                  <div key={index} className="p-3 border border-gray-200 rounded-md relative bg-gray-50">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newZones = [...form.deliveryZones];
+                        newZones.splice(index, 1);
+                        setForm({ ...form, deliveryZones: newZones });
+                      }}
+                      className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-600 rounded-md hover:bg-gray-200 transition-colors"
+                      title="Remove Zone"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                    
+                    <div className="pr-8 space-y-4">
+                      <AdminSelect 
+                        label={`Delivery Country ${index + 1}`} 
+                        value={zone.countryId} 
+                        onChange={(e) => {
+                          const newZones = [...form.deliveryZones];
+                          newZones[index] = { ...newZones[index], countryId: e.target.value, states: [] };
+                          setForm({ ...form, deliveryZones: newZones });
+                        }} 
+                        options={[
+                          { value: "", label: "Select delivery country..." },
+                          ...countries.map((c: any) => ({ value: c.id, label: `${c.name} (${c.code})` }))
+                        ]}
+                      />
+
+                      {zone.countryId && zStates.length > 0 && (
+                        <div className="space-y-1.5 relative">
+                          <div className="text-[11px] text-gray-500 mb-2">Leave empty to deliver everywhere in {zCountry?.name}.</div>
+                          
+                          <AdminMultiSelect
+                            label="Delivery States (Optional)"
+                            options={zStates}
+                            value={zone.states}
+                            onChange={(nextValues) => {
+                              const newZones = [...form.deliveryZones];
+                              newZones[index].states = nextValues;
+                              setForm({ ...form, deliveryZones: newZones });
+                            }}
+                            placeholder="Deliver everywhere (all states)"
+                            selectAllLabel="Select All"
+                          />
+                        </div>
+                      )}
+                      
+                      {zone.countryId && zStates.length === 0 && (
+                        <div className="text-[12px] text-gray-500 italic p-2 bg-white rounded-md border border-gray-200">
+                          No states configured for {zCountry?.name}. The warehouse will deliver everywhere in this country.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
           <div className="flex justify-end gap-3 pt-4">
             <button type="button" onClick={() => setShowForm(false)} className="rounded-md px-4 py-2 text-sm font-medium text-[#6B6B6B] hover:text-[#1A1A1A]">
