@@ -1389,13 +1389,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           return;
         }
 
-        // Safety Check: Check if any assignment has stock
-        const hasStock = assignmentsToDelete.some((inv: any) => inv.stock > 0 || (inv.reservedStock && inv.reservedStock > 0));
-        if (hasStock) {
-          alert("Cannot remove warehouse assignment while stock or reserved stock is greater than zero. Please update stock to 0 first.");
-          setBulkSaving(false);
-          return;
-        }
+        // Safety Check removed per user request: allow deletion even if stock exists.
 
         if (!window.confirm(`Delete ${assignmentsToDelete.length} selected warehouse assignment(s)?`)) {
           setBulkSaving(false);
@@ -5839,10 +5833,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                         <button
                                           type="button"
                                           onClick={async () => {
-                                            if (stockLevel > 0 || reserved > 0) {
-                                              alert("Cannot remove warehouse assignment while stock or reserved stock is greater than zero.");
-                                              return;
-                                            }
+                                            // Safety Check removed per user request: allow deletion even if stock exists.
                                             if (!window.confirm(`Delete assignment for ${inventory.warehouseName}?`)) return;
                                             try {
                                               await adminApi.delete(`/inventory/${inventory.id}`);

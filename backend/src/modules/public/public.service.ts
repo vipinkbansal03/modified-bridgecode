@@ -1570,7 +1570,7 @@ export async function getProductReviews(slug: string) {
   });
 
   if (!product) {
-    return { reviews: [], averageRating: 5.0, totalRatings: 1 };
+    return { reviews: [], averageRating: 0, totalRatings: 0 };
   }
 
   const reviews = await (prisma as any).productReview.findMany({
@@ -1579,7 +1579,7 @@ export async function getProductReviews(slug: string) {
   });
 
   if (!reviews.length) {
-    return { reviews: [], averageRating: 5.0, totalRatings: 1 };
+    return { reviews: [], averageRating: 0, totalRatings: 0 };
   }
 
   const sumOverall = reviews.reduce((acc: number, r: any) => acc + (r.ratingOverall || 5), 0);

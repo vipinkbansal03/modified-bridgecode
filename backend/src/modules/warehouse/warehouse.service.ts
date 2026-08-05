@@ -70,6 +70,7 @@ export async function createWarehouse(data: {
   city?: string;
   postalCode?: string;
   gstin?: string;
+  deliveryStates?: string[];
   status: any;
 }) {
   const country = await prisma.country.findUnique({ where: { id: data.countryId } });
@@ -96,7 +97,8 @@ export async function createWarehouse(data: {
     addressLine2: data.addressLine2 ?? null,
     city: data.city ?? null,
     postalCode: data.postalCode ?? null,
-    gstin: data.gstin ?? ""
+    gstin: data.gstin ?? "",
+    deliveryStates: data.deliveryStates ?? []
   } });
 }
 
@@ -104,52 +106,57 @@ export async function updateWarehouse(id: string, data: {
   name?: string;
   countryId?: string;
   state?: string;
-  address?: string;
   addressLine1?: string;
   addressLine2?: string;
   city?: string;
   postalCode?: string;
   gstin?: string;
+  deliveryStates?: string[];
   status?: any;
 }) {
-  const existing = await prisma.warehouse.findUnique({ where: { id }, include: { country: true } });
+  const existing = await prisma.warehouse.findUnique({
+    where: { id },
+    include: { country: true }
+  });
   if (!existing) throw new AppError("Warehouse not found.", 404);
 
-  const finalCountryId = data.countryId || existing.countryId;
-  const country = await prisma.country.findUnique({ where: { id: finalCountryId } });
-  if (!country) throw new AppError("Country not found.", 404);
+  let targetCountry = existing.country;
+  if (data.countryId && data.countryId !== existing.countryId) {
+    const c = await prisma.country.findUnique({ where: { id: data.countryId } });
+    if (!c) throw new AppError("Country not found.", 404);
+    targetCountry = c;
+  }
 
-  const finalStatus = data.status ?? existing.status;
-  const finalGstin = data.gstin !== undefined ? data.gstin : existing.gstin;
+  const nextStatus = data.status ?? existing.status;
+  const nextGstin = data.gstin ?? existing.gstin;
 
-  if (finalStatus === "ACTIVE" && country.code === "IN" && !validateGstin(country.code, finalGstin)) {
+  if (nextStatus === "ACTIVE" && targetCountry.code === "IN" && !validateGstin(targetCountry.code, nextGstin)) {
     throw new AppError("A valid GSTIN is required to activate an India warehouse.", 400);
   }
 
-  const finalAddressLine1 = data.addressLine1 !== undefined ? data.addressLine1 : existing.addressLine1;
-  const finalAddressLine2 = data.addressLine2 !== undefined ? data.addressLine2 : existing.addressLine2;
-  const finalCity = data.city !== undefined ? data.city : existing.city;
-  const finalPostalCode = data.postalCode !== undefined ? data.postalCode : existing.postalCode;
+  const nextLine1 = data.addressLine1 !== undefined ? data.addressLine1 : existing.addressLine1;
+  const nextLine2 = data.addressLine2 !== undefined ? data.addressLine2 : existing.addressLine2;
+  const nextCity = data.city !== undefined ? data.city : existing.city;
+  const nextPostalCode = data.postalCode !== undefined ? data.postalCode : existing.postalCode;
+  
+  const formattedAddress = [nextLine1, nextLine2, nextCity, nextPostalCode].filter(Boolean).join(", ");
 
-  const formattedAddress = data.address || [
-    finalAddressLine1,
-    finalAddressLine2,
-    finalCity,
-    finalPostalCode
-  ].filter(Boolean).join(", ");
-
-  return prisma.warehouse.update({ where: { id }, data: {
-    name: data.name,
-    countryId: data.countryId,
-    status: data.status,
-    state: data.state,
-    address: formattedAddress,
-    addressLine1: data.addressLine1,
-    addressLine2: data.addressLine2,
-    city: data.city,
-    postalCode: data.postalCode,
-    gstin: data.gstin
-  } });
+  return prisma.warehouse.update({
+    where: { id },
+    data: {
+      ...(data.name && { name: data.name }),
+      ...(data.countryId && { countryId: data.countryId }),
+      ...(data.state !== undefined && { state: data.state }),
+      ...(data.addressLine1 !== undefined && { addressLine1: data.addressLine1 }),
+      ...(data.addressLine2 !== undefined && { addressLine2: data.addressLine2 }),
+      ...(data.city !== undefined && { city: data.city }),
+      ...(data.postalCode !== undefined && { postalCode: data.postalCode }),
+      ...(data.gstin !== undefined && { gstin: data.gstin }),
+      ...(data.deliveryStates !== undefined && { deliveryStates: data.deliveryStates }),
+      ...(data.status && { status: data.status }),
+      address: formattedAddress,
+    }
+  });
 }
 
 export async function deleteWarehouse(id: string) {
