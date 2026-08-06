@@ -164,9 +164,6 @@ export default async function HomePage() {
     if (renderedSections.length > 0) {
       return (
         <>
-          {heroLcpImage && (
-            <link rel="preload" as="image" href={heroLcpImage} fetchPriority="high" />
-          )}
           {renderedSections}
         </>
       );
@@ -175,9 +172,6 @@ export default async function HomePage() {
 
   return (
     <>
-      {heroLcpImage && (
-        <link rel="preload" as="image" href={heroLcpImage} fetchPriority="high" />
-      )}
       <HeroSection data={bannerSlides.length > 0 ? { slides: bannerSlides } : homeContent.hero} />
       <AboutSection data={homeContent.about} />
       <FeaturedProductsSection slugs={homeContent.featuredProductSlugs} captions={homeContent.featuredCaptions} />
