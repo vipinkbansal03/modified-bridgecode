@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback, type ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useFormik } from "formik";
+import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import * as Yup from "yup";
 import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
@@ -1324,39 +1324,56 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
     setBulkSaving(true);
     try {
-      const uniqueVariantIds = Array.from(
-        new Set(
-          paginatedVariantInventories
-            .filter((inv: any) => selectedInvIds.includes(inv.id))
-            .map((inv: any) => inv.variantId)
-        )
-      );
+      const selectedInventories = paginatedVariantInventories.filter((inv: any) => selectedInvIds.includes(inv.id));
+      
+      const variantIds = Array.from(
+        new Set(selectedInventories.filter((inv: any) => inv.variantId).map((inv: any) => inv.variantId))
+      ) as string[];
+      const hasBaseProductSelected = selectedInventories.some((inv: any) => !inv.variantId);
 
       // Perform updates
       for (const wId of selectedWarehouseIds) {
         const stockStr = warehouseAssignStocks[wId]?.trim();
         const stockVal = stockStr ? parseInt(stockStr) : null;
 
-        await Promise.all(
-          uniqueVariantIds.map((vId) => {
-            let finalStock = 0;
-            if (stockVal !== null) {
-              finalStock = stockVal;
-            } else {
-              const variant = (product?.variants ?? []).find((v: any) => v.id === vId);
-              const baseInv = getBaseInventory(variant?.inventories) as any;
-              finalStock = baseInv ? (baseInv.stock ?? 0) : 0;
-            }
-            return adminApi.post("/inventory/upsert", {
-              variantId: vId,
-              warehouseId: wId,
-              stock: finalStock,
-            });
-          })
-        );
+        if (variantIds.length > 0) {
+          await Promise.all(
+            variantIds.map((vId) => {
+              let finalStock = 0;
+              if (stockVal !== null) {
+                finalStock = stockVal;
+              } else {
+                const variant = (product?.variants ?? []).find((v: any) => v.id === vId);
+                const baseInv = getBaseInventory(variant?.inventories) as any;
+                finalStock = baseInv ? (baseInv.stock ?? 0) : 0;
+              }
+              return adminApi.post("/inventory/upsert", {
+                variantId: vId,
+                warehouseId: wId,
+                stock: finalStock,
+              });
+            })
+          );
+        }
+
+        if (hasBaseProductSelected) {
+          let finalStock = 0;
+          if (stockVal !== null) {
+            finalStock = stockVal;
+          } else {
+            const productLevelInventories = ((product?.inventories ?? []) as any[]).filter((inv) => !inv.variantId);
+            const baseInv = productLevelInventories.find((inv) => !inv.warehouseId);
+            finalStock = baseInv ? (baseInv.stock ?? 0) : 0;
+          }
+          await adminApi.put(`/inventory/product/${productId}`, {
+            warehouseId: wId,
+            stock: finalStock,
+            lowStockThreshold: 10,
+          });
+        }
       }
 
-      showToast(`Successfully assigned selected variants to warehouses.`, "success");
+      showToast(`Successfully assigned selected items to warehouses.`, "success");
       setWarehouseAssignModalOpen(false);
       setSelectedInvIds([]);
       setInvBulkActionType("Bulk Action");
@@ -1748,6 +1765,53 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
   const allVariantInventories = useMemo(() => {
     const list: any[] = [];
+
+    const productLevelInventories = ((product?.inventories ?? []) as any[]).filter((inv) => !inv.variantId);
+    
+    const baseBase = productLevelInventories.find((inv) => !inv.warehouseId);
+    if (baseBase) {
+      list.push({
+        ...baseBase,
+        id: baseBase.id,
+        variantId: null,
+        variantTitle: product?.title ?? "Product Base",
+        variantSku: product?.sku ?? "",
+        type: "Base",
+        countryName: "Base Inventory",
+        countryCode: "",
+        isOverride: false,
+      });
+    } else if (variantRows.length === 0) {
+      list.push({
+        id: "dummy-base-product",
+        variantId: null,
+        variantTitle: product?.title ?? "Product Base",
+        variantSku: product?.sku ?? "",
+        type: "Base",
+        countryName: "Base Inventory (Not Created)",
+        countryCode: "",
+        isOverride: false,
+        stock: 0,
+        reservedStock: 0,
+      });
+    }
+
+    const productWarehouseAssignments = productLevelInventories.filter((inv) => inv.warehouseId);
+    productWarehouseAssignments.forEach((inv) => {
+      list.push({
+        ...inv,
+        id: inv.id,
+        variantId: null,
+        variantTitle: product?.title ?? "Product Base",
+        variantSku: product?.sku ?? "",
+        type: "Warehouse Assignment",
+        warehouseName: inv.warehouse?.name ?? "Unknown Warehouse",
+        warehouseState: inv.warehouse?.state ?? "",
+        warehouseCountryCode: inv.warehouse?.country?.code ?? "",
+        isOverride: true,
+      });
+    });
+
     variantRows.forEach((variant) => {
       const base = getBaseInventory(variant.inventories);
       if (base) {
@@ -1761,6 +1825,19 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           countryName: "Base Inventory",
           countryCode: "",
           isOverride: false,
+        });
+      } else {
+        list.push({
+          id: `dummy-var-${variant.id}`,
+          variantId: variant.id,
+          variantTitle: variant.title,
+          variantSku: variant.sku ?? "",
+          type: "Base",
+          countryName: "Base Inventory (Not Created)",
+          countryCode: "",
+          isOverride: false,
+          stock: 0,
+          reservedStock: 0,
         });
       }
       
@@ -1781,7 +1858,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       });
     });
     return list;
-  }, [variantRows]);
+  }, [variantRows, product]);
 
   const filteredVariantInventories = useMemo(() => {
     let rows = allVariantInventories;
@@ -1877,19 +1954,20 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   ]);
 
   const variantGroups = useMemo(() => {
-    const groups: { variantId: string; variantTitle: string; variantSku: string; inventories: any[] }[] = [];
-    const groupMap = new Map<string, typeof groups[number]>();
+    const groups: { variantId: string | null; variantTitle: string; variantSku: string; inventories: any[] }[] = [];
+    const groupMap = new Map<string | null, typeof groups[number]>();
 
     filteredVariantInventories.forEach((inv) => {
-      let group = groupMap.get(inv.variantId);
+      const key = inv.variantId ?? "base";
+      let group = groupMap.get(key);
       if (!group) {
         group = {
-          variantId: inv.variantId,
+          variantId: inv.variantId ?? null,
           variantTitle: inv.variantTitle,
           variantSku: inv.variantSku,
           inventories: [],
         };
-        groupMap.set(inv.variantId, group);
+        groupMap.set(key, group);
         groups.push(group);
       }
       group.inventories.push(inv);
@@ -2104,7 +2182,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const tierPricingRows = useMemo(() => tierPricingRules as PricingRuleRow[], [tierPricingRules]);
   const moqPricingRows = useMemo(() => moqPricingRules as PricingRuleRow[], [moqPricingRules]);
 
-  const formik = useFormik<ProductEditorFormValues>({
+  const form = useAdminForm<ProductEditorFormValues>({
     enableReinitialize: true,
     initialValues: {
       title: product?.title || "",
@@ -2129,7 +2207,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       primaryFeatures: Array.isArray(product?.primaryFeatures) ? product.primaryFeatures : [],
     },
     validationSchema: basicSchema,
-    onSubmit: async (values, { setSubmitting }) => {
+    onSubmit: async (values) => {
       try {
         // Build a sanitized payload to avoid sending unexpected types to the API
         const payload = {
@@ -2160,7 +2238,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         const serverMessage = (error as any)?.response?.data?.message;
         showToast(serverMessage || getAdminErrorMessage(error, "Save failed."), "error");
       } finally {
-        setSubmitting(false);
+        
       }
     },
   });
@@ -3645,11 +3723,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           {!isReadOnly && (activeTab === 0 || activeTab === 1 || activeTab === 10) ? (
             <button
               type="button"
-              onClick={() => formik.handleSubmit()}
-              disabled={formik.isSubmitting}
+              onClick={() => form.handleSubmit()}
+              disabled={form.isSubmitting}
               className="rounded-md bg-[#E31E24] px-5 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
             >
-              {formik.isSubmitting ? "Saving…" : "Save Changes"}
+              {form.isSubmitting ? "Saving…" : "Save Changes"}
             </button>
           ) : null}
           <button
@@ -3670,27 +3748,27 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           <div className="p-6 space-y-5">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <AdminInput label="Product Title *" {...formik.getFieldProps("title")} error={formik.touched.title ? (formik.errors.title as string) : ""} />
+                <AdminInput label="Product Title" {...form.getFieldProps("title")} error={form.errors.title as string} />
               </div>
               <div className="sm:col-span-2">
-                <AdminInput label="Slug" {...formik.getFieldProps("slug")} placeholder="Auto-generated from title" />
+                <AdminInput label="Slug" {...form.getFieldProps("slug")} placeholder="Auto-generated from title" />
               </div>
-              <AdminSelect label="Category *" options={catOptions} {...formik.getFieldProps("categoryId")} error={formik.touched.categoryId ? (formik.errors.categoryId as string) : ""} />
+              <AdminSelect label="Category" options={catOptions} {...form.getFieldProps("categoryId")} error={form.errors.categoryId as string} />
               <AdminSelect
                 label="Status"
                 options={[{ value: "DRAFT", label: "Draft" }, { value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }, { value: "ARCHIVED", label: "Archived" }]}
-                {...formik.getFieldProps("status")}
+                {...form.getFieldProps("status")}
               />
-              <AdminInput label="Product Code" {...formik.getFieldProps("productCode")} />
-              <AdminInput label="SKU" {...formik.getFieldProps("sku")} />
-              <AdminInput label="Brand" {...formik.getFieldProps("brand")} />
+              <AdminInput label="Product Code" {...form.getFieldProps("productCode")} />
+              <AdminInput label="SKU" {...form.getFieldProps("sku")} />
+              <AdminInput label="Brand" {...form.getFieldProps("brand")} />
               <div className="flex items-center gap-6 pt-2">
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={formik.values.isFeatured} onChange={(e) => formik.setFieldValue("isFeatured", e.target.checked)} className="rounded" />
+                  <input type="checkbox" checked={form.values.isFeatured} onChange={(e) => form.setFieldValue("isFeatured", e.target.checked)} className="rounded" />
                   <span className="text-[13.5px]">Featured Product</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={formik.values.hasVariants} onChange={(e) => formik.setFieldValue("hasVariants", e.target.checked)} className="rounded" />
+                  <input type="checkbox" checked={form.values.hasVariants} onChange={(e) => form.setFieldValue("hasVariants", e.target.checked)} className="rounded" />
                   <span className="text-[13.5px]">Has Variants</span>
                 </label>
               </div>
@@ -3708,7 +3786,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                         const reader = new FileReader();
                         reader.onload = (event) => {
                           const result = event.target?.result as string;
-                          formik.setFieldValue("informationImage", result);
+                          form.setFieldValue("informationImage", result);
                         };
                         reader.readAsDataURL(file);
                       }
@@ -3722,12 +3800,12 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   >
                     Upload Image
                   </label>
-                  {formik.values.informationImage && (
+                  {form.values.informationImage && (
                     <div className="relative h-12 w-12">
-                      <img src={formik.values.informationImage} alt="Information preview" className="h-full w-full rounded-md object-cover" />
+                      <img src={form.values.informationImage} alt="Information preview" className="h-full w-full rounded-md object-cover" />
                       <button
                         type="button"
-                        onClick={() => formik.setFieldValue("informationImage", "")}
+                        onClick={() => form.setFieldValue("informationImage", "")}
                         className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white hover:bg-[#B5151B]"
                       >
                         ×
@@ -3743,11 +3821,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 rows={3}
                 maxLength={200}
                 placeholder="Brief description related to the information image..."
-                {...formik.getFieldProps("informationDescription")}
+                {...form.getFieldProps("informationDescription")}
               />
             </div>
-            <AdminTextarea label="Short Description (max 300)" rows={2} maxLength={300} {...formik.getFieldProps("shortDescription")} />
-            <AdminTextarea label="Full Description" rows={7} {...formik.getFieldProps("description")} />
+            <AdminTextarea label="Short Description (max 300)" rows={2} maxLength={300} {...form.getFieldProps("shortDescription")} />
+            <AdminTextarea label="Full Description" rows={7} {...form.getFieldProps("description")} />
           </div>
         )}
 
@@ -3761,23 +3839,23 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => formik.setFieldValue("highlights", [...(formik.values.highlights || []), { title: "", description: "" }])}
+                  onClick={() => form.setFieldValue("highlights", [...(form.values.highlights || []), { title: "", description: "" }])}
                   className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
                 >
                   Add highlight
                 </button>
               </div>
               <div className="space-y-4">
-                {(formik.values.highlights || []).map((item: { title: string; description: string; image?: string }, index: number) => (
+                {(form.values.highlights || []).map((item: { title: string; description: string; image?: string }, index: number) => (
                   <div key={index} className="grid gap-3 lg:grid-cols-[1fr_2.5fr_auto] items-stretch">
                     <div>
                       <AdminInput
                         label="Title"
                         value={item.title}
                         onChange={(event) => {
-                          const next = [...(formik.values.highlights || [])];
+                          const next = [...(form.values.highlights || [])];
                           next[index] = { ...next[index], title: event.target.value };
-                          formik.setFieldValue("highlights", next);
+                          form.setFieldValue("highlights", next);
                         }}
                       />
                     </div>
@@ -3787,9 +3865,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                         value={item.description}
                         placeholder="Enter highlight description (use Image button in toolbar to insert photos)"
                         onChange={(value) => {
-                          const next = [...(formik.values.highlights || [])];
+                          const next = [...(form.values.highlights || [])];
                           next[index] = { ...next[index], description: value };
-                          formik.setFieldValue("highlights", next);
+                          form.setFieldValue("highlights", next);
                         }}
                         className="min-h-[120px]"
                       />
@@ -3798,9 +3876,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       <button
                         type="button"
                         onClick={() => {
-                          const next = [...(formik.values.highlights || [])];
+                          const next = [...(form.values.highlights || [])];
                           next.splice(index, 1);
-                          formik.setFieldValue("highlights", next);
+                          form.setFieldValue("highlights", next);
                         }}
                         className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]"
                       >
@@ -3809,7 +3887,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     </div>
                   </div>
                 ))}
-                {!formik.values.highlights?.length && <p className="text-[13px] text-[#6B6B6B]">No highlights added yet.</p>}
+                {!form.values.highlights?.length && <p className="text-[13px] text-[#6B6B6B]">No highlights added yet.</p>}
               </div>
             </div>
 
@@ -3821,39 +3899,39 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => formik.setFieldValue("technicalSpecs", [...(formik.values.technicalSpecs || []), { label: "", value: "" }])}
+                  onClick={() => form.setFieldValue("technicalSpecs", [...(form.values.technicalSpecs || []), { label: "", value: "" }])}
                   className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
                 >
                   Add spec
                 </button>
               </div>
               <div className="space-y-4">
-                {(formik.values.technicalSpecs || []).map((item: { label: string; value: string }, index: number) => (
+                {(form.values.technicalSpecs || []).map((item: { label: string; value: string }, index: number) => (
                   <div key={index} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] items-end">
                     <AdminInput
                       label="Label"
                       value={item.label}
                       onChange={(event) => {
-                        const next = [...(formik.values.technicalSpecs || [])];
+                        const next = [...(form.values.technicalSpecs || [])];
                         next[index] = { ...next[index], label: event.target.value };
-                        formik.setFieldValue("technicalSpecs", next);
+                        form.setFieldValue("technicalSpecs", next);
                       }}
                     />
                     <AdminInput
                       label="Value"
                       value={item.value}
                       onChange={(event) => {
-                        const next = [...(formik.values.technicalSpecs || [])];
+                        const next = [...(form.values.technicalSpecs || [])];
                         next[index] = { ...next[index], value: event.target.value };
-                        formik.setFieldValue("technicalSpecs", next);
+                        form.setFieldValue("technicalSpecs", next);
                       }}
                     />
                     <button
                       type="button"
                       onClick={() => {
-                        const next = [...(formik.values.technicalSpecs || [])];
+                        const next = [...(form.values.technicalSpecs || [])];
                         next.splice(index, 1);
-                        formik.setFieldValue("technicalSpecs", next);
+                        form.setFieldValue("technicalSpecs", next);
                       }}
                       className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]"
                     >
@@ -3861,7 +3939,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     </button>
                   </div>
                 ))}
-                {!formik.values.technicalSpecs?.length && <p className="text-[13px] text-[#6B6B6B]">No technical specifications added yet.</p>}
+                {!form.values.technicalSpecs?.length && <p className="text-[13px] text-[#6B6B6B]">No technical specifications added yet.</p>}
               </div>
             </div>
 
@@ -3873,14 +3951,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => formik.setFieldValue("warranty", [...(formik.values.warranty || []), ""])}
+                  onClick={() => form.setFieldValue("warranty", [...(form.values.warranty || []), ""])}
                   className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
                 >
                   Add warranty line
                 </button>
               </div>
               <div className="space-y-4">
-                {(formik.values.warranty || []).map((line: string, index: number) => (
+                {(form.values.warranty || []).map((line: string, index: number) => (
                   <div key={index} className="grid gap-3 sm:grid-cols-[1fr_auto] items-stretch">
                     <div>
                       <AdminRichTextEditor
@@ -3888,9 +3966,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                         value={line}
                         placeholder="Enter warranty text"
                         onChange={(value) => {
-                          const next = [...(formik.values.warranty || [])];
+                          const next = [...(form.values.warranty || [])];
                           next[index] = value;
-                          formik.setFieldValue("warranty", next);
+                          form.setFieldValue("warranty", next);
                         }}
                         className="min-h-[80px]"
                       />
@@ -3899,9 +3977,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       <button
                         type="button"
                         onClick={() => {
-                          const next = [...(formik.values.warranty || [])];
+                          const next = [...(form.values.warranty || [])];
                           next.splice(index, 1);
-                          formik.setFieldValue("warranty", next);
+                          form.setFieldValue("warranty", next);
                         }}
                         className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]"
                       >
@@ -3910,7 +3988,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     </div>
                   </div>
                 ))}
-                {!formik.values.warranty?.length && <p className="text-[13px] text-[#6B6B6B]">No warranty lines added yet.</p>}
+                {!form.values.warranty?.length && <p className="text-[13px] text-[#6B6B6B]">No warranty lines added yet.</p>}
               </div>
             </div>
 
@@ -3922,23 +4000,23 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => formik.setFieldValue("primaryFeatures", [...(formik.values.primaryFeatures || []), { title: "", description: "" }])}
+                  onClick={() => form.setFieldValue("primaryFeatures", [...(form.values.primaryFeatures || []), { title: "", description: "" }])}
                   className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
                 >
                   Add feature
                 </button>
               </div>
               <div className="space-y-4">
-                {(formik.values.primaryFeatures || []).map((item: { title: string; description: string }, index: number) => (
+                {(form.values.primaryFeatures || []).map((item: { title: string; description: string }, index: number) => (
                   <div key={index} className="grid gap-3 lg:grid-cols-[1fr_1.5fr_auto] items-stretch">
                     <div>
                       <AdminInput
                         label="Title"
                         value={item.title}
                         onChange={(event) => {
-                          const next = [...(formik.values.primaryFeatures || [])];
+                          const next = [...(form.values.primaryFeatures || [])];
                           next[index] = { ...next[index], title: event.target.value };
-                          formik.setFieldValue("primaryFeatures", next);
+                          form.setFieldValue("primaryFeatures", next);
                         }}
                       />
                     </div>
@@ -3948,9 +4026,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                         value={item.description}
                         placeholder="Enter feature description"
                         onChange={(value) => {
-                          const next = [...(formik.values.primaryFeatures || [])];
+                          const next = [...(form.values.primaryFeatures || [])];
                           next[index] = { ...next[index], description: value };
-                          formik.setFieldValue("primaryFeatures", next);
+                          form.setFieldValue("primaryFeatures", next);
                         }}
                         className="min-h-[120px]"
                       />
@@ -3959,9 +4037,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       <button
                         type="button"
                         onClick={() => {
-                          const next = [...(formik.values.primaryFeatures || [])];
+                          const next = [...(form.values.primaryFeatures || [])];
                           next.splice(index, 1);
-                          formik.setFieldValue("primaryFeatures", next);
+                          form.setFieldValue("primaryFeatures", next);
                         }}
                         className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]"
                       >
@@ -3970,7 +4048,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     </div>
                   </div>
                 ))}
-                {!formik.values.primaryFeatures?.length && <p className="text-[13px] text-[#6B6B6B]">No primary features added yet.</p>}
+                {!form.values.primaryFeatures?.length && <p className="text-[13px] text-[#6B6B6B]">No primary features added yet.</p>}
               </div>
             </div>
           </div>
@@ -5526,10 +5604,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               })()}
             </div>
 
-            {variantRows.length > 0 && (
-              <section className="mt-8">
-                <div className="mb-4">
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Warehouse Availability</h3>
+            <section className="mt-8">
+              <div className="mb-4">
+                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Warehouse Availability</h3>
                   <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Manage stock level and assignments for specific variants & warehouses.</p>
                 </div>
 
@@ -5863,7 +5940,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   </table>
                 </div>
               </section>
-            )}
           </div>
         )}
 
@@ -6464,16 +6540,16 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
         {activeTab === 10 && (
           <div className="p-6 space-y-4">
-            <AdminInput label="SEO Title (max 60 chars)" maxLength={60} {...formik.getFieldProps("seoTitle")} error={formik.touched.seoTitle ? (formik.errors.seoTitle as string) : ""} />
-            <div className="text-[12px] text-[#9A9A9A]">{formik.values.seoTitle.length}/60 characters</div>
-            <AdminTextarea label="SEO Description (max 160 chars)" rows={3} maxLength={160} {...formik.getFieldProps("seoDescription")} />
-            <div className="text-[12px] text-[#9A9A9A]">{formik.values.seoDescription.length}/160 characters</div>
-            <AdminInput label="SEO Keywords" placeholder="Comma-separated" {...formik.getFieldProps("seoKeywords")} />
+            <AdminInput label="SEO Title (max 60 chars)" maxLength={60} {...form.getFieldProps("seoTitle")} error={form.errors.seoTitle as string} />
+            <div className="text-[12px] text-[#9A9A9A]">{form.values.seoTitle.length}/60 characters</div>
+            <AdminTextarea label="SEO Description (max 160 chars)" rows={3} maxLength={160} {...form.getFieldProps("seoDescription")} />
+            <div className="text-[12px] text-[#9A9A9A]">{form.values.seoDescription.length}/160 characters</div>
+            <AdminInput label="SEO Keywords" placeholder="Comma-separated" {...form.getFieldProps("seoKeywords")} />
             <div className="mt-4 rounded-lg border border-[#E6E6E6] bg-[#F8F8F8] p-4">
               <p className="mb-2 text-[11.5px] font-medium uppercase text-[#9A9A9A]">Google Preview</p>
-              <p className="cursor-pointer text-[16px] font-medium text-[#1A0DAB] hover:underline">{formik.values.seoTitle || product.title}</p>
+              <p className="cursor-pointer text-[16px] font-medium text-[#1A0DAB] hover:underline">{form.values.seoTitle || product.title}</p>
               <p className="text-[13px] text-[#006621]">modortho.com › products › {product.slug}</p>
-              <p className="mt-1 line-clamp-2 text-[13.5px] text-[#545454]">{formik.values.seoDescription || product.shortDescription || "No meta description."}</p>
+              <p className="mt-1 line-clamp-2 text-[13.5px] text-[#545454]">{form.values.seoDescription || product.shortDescription || "No meta description."}</p>
             </div>
           </div>
         )}
@@ -7622,7 +7698,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <AdminInput
-              label="Base MRP *"
+              label="Base MRP"
               type="number"
               min="0"
               step="0.01"

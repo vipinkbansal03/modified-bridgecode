@@ -20,8 +20,7 @@ import {
   useUpdateCurrency,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
-
-type CurrencyRow = {
+import { useAdminForm } from "@/hooks/admin/useAdminForm";type CurrencyRow = {
   id: string;
   name: string;
   code: string;
@@ -145,7 +144,6 @@ export default function CurrenciesPage() {
   const [showColumns, setShowColumns] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState({ ...columnDefaults });
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<CurrencyFormState>(emptyForm);
   const [deleting, setDeleting] = useState<CurrencyRow | null>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
@@ -195,19 +193,76 @@ export default function CurrenciesPage() {
   }, [page, limit, debouncedSearch, statusFilter, sortBy, sortDir]);
 
   const showSyncReminder = !!dashboard?.ratesNeedSync && dashboard?.lastBaseChangedAt !== dismissedSyncAt;
+  const form = useAdminForm<CurrencyFormState>({
+    initialValues: emptyForm,
+    validate: (values) => {
+      const errors: any = {};
+      if (!values.name?.trim()) errors.name = "Name is required.";
+      if (!values.code?.trim()) errors.code = "Code is required.";
+      else if (values.code.trim().length !== 3) errors.code = "Currency code must be 3 letters.";
+      if (!values.symbol?.trim()) errors.symbol = "Symbol is required.";
+      
+      const rate = Number(values.exchangeRate);
+      if (!Number.isFinite(rate) || rate < 0) errors.exchangeRate = "Exchange rate must be a non-negative number.";
+      
+      return errors;
+    },
+    onSubmit: async (values, { setSubmitting, resetForm }) => {
+      const payload = {
+        name: values.name.trim(),
+        code: values.code.trim().toUpperCase(),
+        symbol: values.symbol.trim(),
+        exchangeRate: Number(values.exchangeRate),
+        isBase: values.isBase,
+        status: values.status,
+      };
+
+      try {
+        const baseCurrencyChanged = payload.isBase && (!dashboard?.baseCurrency || dashboard.baseCurrency.id !== values.id);
+
+        if (values.id) {
+          await updateCurrency.mutateAsync({ id: values.id, ...payload });
+          if (baseCurrencyChanged) {
+            showToast(
+              "Base currency updated successfully. The selected currency has been set to an exchange rate of 1.000000. Other exchange rates are still based on the previous base currency. Please click 'Sync Rates' to refresh.",
+              "success"
+            );
+            setDismissedSyncAt(null);
+          } else {
+            showToast("Currency updated.");
+          }
+        } else {
+          await createCurrency.mutateAsync(payload);
+          if (baseCurrencyChanged) {
+            showToast(
+              "Base currency created successfully. The selected currency has been set to an exchange rate of 1.000000. Other exchange rates are still based on the previous base currency. Please click 'Sync Rates' to refresh.",
+              "success"
+            );
+            setDismissedSyncAt(null);
+          } else {
+            showToast("Currency created.");
+          }
+        }
+        resetForm();
+        setShowForm(false);
+      } catch (error) {
+        showToast(getAdminErrorMessage(error, "Failed to save currency."), "error");
+      }
+    }
+  });
 
   function resetForm() {
-    setForm(emptyForm);
+    form.reset();
     setShowForm(false);
   }
 
   function openCreate() {
-    setForm(emptyForm);
+    form.reset();
     setShowForm(true);
   }
 
   function openEdit(currency: CurrencyRow) {
-    setForm({
+    form.setValues({
       id: currency.id,
       name: currency.name,
       code: currency.code,
@@ -220,7 +275,7 @@ export default function CurrenciesPage() {
   }
 
   function openDuplicate(currency: CurrencyRow) {
-    setForm({
+    form.setValues({
       id: "",
       name: `${currency.name} Copy`,
       code: currency.code,
@@ -230,63 +285,6 @@ export default function CurrenciesPage() {
       status: currency.status,
     });
     setShowForm(true);
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const payload = {
-      name: form.name.trim(),
-      code: form.code.trim().toUpperCase(),
-      symbol: form.symbol.trim(),
-      exchangeRate: Number(form.exchangeRate),
-      isBase: form.isBase,
-      status: form.status,
-    };
-
-    if (!payload.name || !payload.code || !payload.symbol) {
-      showToast("Name, code, and symbol are required.", "error");
-      return;
-    }
-    if (payload.code.length !== 3) {
-      showToast("Currency code must be 3 letters.", "error");
-      return;
-    }
-    if (!Number.isFinite(payload.exchangeRate) || payload.exchangeRate < 0) {
-      showToast("Exchange rate must be a non-negative number.", "error");
-      return;
-    }
-
-    try {
-      const baseCurrencyChanged = payload.isBase && (!dashboard?.baseCurrency || dashboard.baseCurrency.id !== form.id);
-
-      if (form.id) {
-        await updateCurrency.mutateAsync({ id: form.id, ...payload });
-        if (baseCurrencyChanged) {
-          showToast(
-            "Base currency updated successfully. The selected currency has been set to an exchange rate of 1.000000. Other exchange rates are still based on the previous base currency. Please click 'Sync Rates' to refresh.",
-            "success"
-          );
-          setDismissedSyncAt(null);
-        } else {
-          showToast("Currency updated.");
-        }
-      } else {
-        await createCurrency.mutateAsync(payload);
-        if (baseCurrencyChanged) {
-          showToast(
-            "Base currency created successfully. The selected currency has been set to an exchange rate of 1.000000. Other exchange rates are still based on the previous base currency. Please click 'Sync Rates' to refresh.",
-            "success"
-          );
-          setDismissedSyncAt(null);
-        } else {
-          showToast("Currency created.");
-        }
-      }
-      resetForm();
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to save currency."), "error");
-    }
   }
 
   async function handleDelete() {
@@ -923,10 +921,10 @@ export default function CurrenciesPage() {
           </div>
         </div>
 
-        <Modal open={showForm} onClose={resetForm} title={form.id ? "Edit currency" : "Add currency"} panelClassName="max-w-3xl">
-          <form onSubmit={handleSubmit} className="space-y-6 p-6">
+        <Modal open={showForm} onClose={() => { form.reset(); setShowForm(false); }} title={form.values.id ? "Edit currency" : "Add currency"} panelClassName="max-w-3xl">
+          <form onSubmit={form.handleSubmit} className="space-y-6 p-6">
             <div className="grid gap-x-6 gap-y-5 md:grid-cols-2">
-              {form.id ? (
+              {form.values.id ? (
                 <>
                   <div className="space-y-1.5">
                     <label className="block text-[13px] font-medium text-[#1A1A1A]">Currency Name (Auto-fetched)</label>
@@ -934,7 +932,7 @@ export default function CurrenciesPage() {
                       type="text"
                       readOnly
                       disabled
-                      value={form.name}
+                      value={form.values.name}
                       className="h-10 w-full rounded-md border border-[#E6E6E6] bg-[#F7F7F7] px-3.5 text-[14px] text-[#6B6B6B] cursor-not-allowed"
                     />
                   </div>
@@ -944,36 +942,37 @@ export default function CurrenciesPage() {
                       type="text"
                       readOnly
                       disabled
-                      value={form.code}
+                      value={form.values.code}
                       className="h-10 w-full rounded-md border border-[#E6E6E6] bg-[#F7F7F7] px-3.5 text-[14px] text-[#6B6B6B] cursor-not-allowed font-mono uppercase"
                     />
                   </div>
                 </>
               ) : (
                 <>
-                  <AdminInput label="Currency Name *" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="US Dollar" />
-                  <AdminInput label="ISO Code *" value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))} placeholder="USD" maxLength={3} />
+                  <AdminInput label="Currency Name" {...form.getFieldProps("name")} error={form.errors.name as string} placeholder="US Dollar" />
+                  <AdminInput label="ISO Code" {...form.getFieldProps("code")} error={form.errors.code as string} placeholder="USD" maxLength={3} onChange={(e) => form.setFieldValue("code", e.target.value.toUpperCase())} />
                 </>
               )}
-              <AdminInput label="Symbol *" value={form.symbol} onChange={(event) => setForm((current) => ({ ...current, symbol: event.target.value }))} placeholder="$" />
+              <AdminInput label="Symbol" {...form.getFieldProps("symbol")} error={form.errors.symbol as string} placeholder="$" />
               <div className="space-y-1">
                 <AdminInput
-                  label="Exchange Rate *"
+                  label="Exchange Rate"
                   type="number"
                   min="0"
                   step="0.000001"
-                  disabled={form.isBase}
-                  value={form.isBase ? "1" : form.exchangeRate}
-                  onChange={(event) => setForm((current) => ({ ...current, exchangeRate: event.target.value }))}
+                  disabled={form.values.isBase}
+                  {...form.getFieldProps("exchangeRate")}
+                  value={form.values.isBase ? "1" : form.values.exchangeRate}
+                  error={form.errors.exchangeRate as string}
                 />
-                {form.isBase && (
+                {form.values.isBase && (
                   <p className="text-[11px] font-medium text-[#0F6CBD]">Base currency exchange rate is fixed at 1.000000</p>
                 )}
               </div>
               <AdminSelect
-                label="Status *"
-                value={form.status}
-                onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as CurrencyFormState["status"] }))}
+                label="Status"
+                {...form.getFieldProps("status")}
+                error={form.errors.status as string}
                 options={[
                   { value: "ACTIVE", label: "Active" },
                   { value: "INACTIVE", label: "Inactive" },
@@ -983,14 +982,11 @@ export default function CurrenciesPage() {
                 <label className="inline-flex items-center gap-2.5 text-[13.5px] font-medium text-[#1A1A1A] cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={form.isBase}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        isBase: event.target.checked,
-                        exchangeRate: event.target.checked ? "1" : current.exchangeRate,
-                      }))
-                    }
+                    checked={form.values.isBase}
+                    onChange={(event) => {
+                      form.setFieldValue("isBase", event.target.checked);
+                      if (event.target.checked) form.setFieldValue("exchangeRate", "1");
+                    }}
                     className="h-4 w-4 rounded border-[#D1D5DB] accent-[#E31E24]"
                   />
                   Base currency
@@ -1001,11 +997,11 @@ export default function CurrenciesPage() {
             <div className="flex items-center justify-between gap-3 border-t border-[#E6E6E6] pt-4">
               <p className="text-[12.5px] text-[#6B6B6B]">Currency data feeds pricing, quotes, and orders. Keep only one active base currency.</p>
               <div className="flex gap-2">
-                <button type="button" onClick={resetForm} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
+                <button type="button" onClick={() => resetForm()} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
                   Cancel
                 </button>
-                <button type="submit" disabled={createCurrency.isPending || updateCurrency.isPending} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
-                  {form.id ? "Save currency" : "Create currency"}
+                <button type="submit" disabled={form.isSubmitting || createCurrency.isPending || updateCurrency.isPending} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
+                  {form.isSubmitting ? "Processing..." : form.values.id ? "Save currency" : "Create currency"}
                 </button>
               </div>
             </div>

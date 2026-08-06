@@ -5,6 +5,7 @@ import { useQueries } from "@tanstack/react-query";
 import { Download, Eye, Filter, Plus, RefreshCw, Search, SquareCheckBig, Trash2, Upload, X, SlidersHorizontal, Pencil } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import {
   AdminInput,
   AdminSelect,
@@ -212,7 +213,6 @@ export default function AdminTaxPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<TaxFormState>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<TaxRule | null>(null);
   const [bulkAction, setBulkAction] = useState<"ENABLE" | "DISABLE" | "DELETE" | "">("");
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -250,6 +250,48 @@ export default function AdminTaxPage() {
   const exportTaxRules = useExportTaxRules();
   const previewTaxImport = usePreviewTaxImport();
   const importTaxRules = useImportTaxRules();
+
+  const form = useAdminForm<TaxFormState>({
+    initialValues: emptyForm,
+    validate: (values) => {
+      const errors: any = {};
+      if (!values.name?.trim()) errors.name = "Rule Name is required.";
+      if (!values.percentage || isNaN(Number(values.percentage))) errors.percentage = "Valid percentage is required.";
+      return errors;
+    },
+    onSubmit: async (values, { setSubmitting, resetForm }) => {
+      try {
+        const selectedCountries = values.countryIds ?? [];
+        const payload = {
+          name: values.name,
+          type: values.type,
+          taxMode: values.taxMode,
+          percentage: values.percentage,
+          countryIds: selectedCountries,
+          countryId: selectedCountries[0] || null,
+          status: values.status,
+          sortOrder: values.sortOrder,
+          productIds: values.productIds,
+          categoryIds: values.categoryIds,
+          variantIds: values.variantIds,
+        };
+
+        if (values.id) {
+          await updateRule.mutateAsync({ id: values.id, ...payload });
+          showToast("Tax rule updated.");
+        } else {
+          await createRule.mutateAsync(payload);
+          showToast("Tax rule created.");
+        }
+
+        setShowForm(false);
+        resetForm();
+        await refetch();
+      } catch (error) {
+        showToast(getAdminErrorMessage(error, "Could not save tax rule."), "error");
+      }
+    }
+  });
 
   const previewCountryId = previewForm.countryId || countries[0]?.id || "";
   const previewQuery = previewCountryId && previewForm.subtotal ? { countryId: previewCountryId, subtotal: Number(previewForm.subtotal) } : undefined;
@@ -417,13 +459,13 @@ export default function AdminTaxPage() {
   ];
 
   function openCreate() {
-    setForm(emptyForm);
+    form.reset();
     setProductSearch("");
     setShowForm(true);
   }
 
   function openEdit(row: TaxRule) {
-    setForm({
+    form.setValues({
       id: row.id,
       name: row.name,
       type: row.type,
@@ -449,40 +491,6 @@ export default function AdminTaxPage() {
       showToast(row.status === "ACTIVE" ? "Tax rule disabled." : "Tax rule enabled.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to update tax rule."), "error");
-    }
-  }
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    try {
-      const selectedCountries = form.countryIds ?? [];
-      const payload = {
-        name: form.name,
-        type: form.type,
-        taxMode: form.taxMode,
-        percentage: form.percentage,
-        countryIds: selectedCountries,
-        countryId: selectedCountries[0] || null,
-        status: form.status,
-        sortOrder: form.sortOrder,
-        productIds: form.productIds,
-        categoryIds: form.categoryIds,
-        variantIds: form.variantIds,
-      };
-
-      if (form.id) {
-        await updateRule.mutateAsync({ id: form.id, ...payload });
-        showToast("Tax rule updated.");
-      } else {
-        await createRule.mutateAsync(payload);
-        showToast("Tax rule created.");
-      }
-
-      setShowForm(false);
-      setForm(emptyForm);
-      await refetch();
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Could not save tax rule."), "error");
     }
   }
 
@@ -992,21 +1000,22 @@ export default function AdminTaxPage() {
         </div>
       </div>
 
-      <Modal open={showForm} onClose={() => setShowForm(false)} title={form.id ? "Edit Tax Rule" : "Add Tax Rule"} panelClassName="max-w-3xl flex flex-col max-h-[90vh]">
-        <form onSubmit={handleSubmit} className="flex flex-col min-h-0 overflow-hidden">
+      <Modal open={showForm} onClose={() => setShowForm(false)} title={form.values.id ? "Edit Tax Rule" : "Add Tax Rule"} panelClassName="max-w-3xl flex flex-col max-h-[90vh]">
+        <form onSubmit={form.handleSubmit} className="flex flex-col min-h-0 overflow-hidden">
           <div className="p-6 overflow-y-auto space-y-5 flex-1">
             {/* Rule Details Grid */}
             <div className="grid gap-x-5 gap-y-4 md:grid-cols-2">
               <AdminInput
                 label="Rule Name"
-                value={form.name}
-                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                required
+                {...form.getFieldProps("name")}
+                error={form.errors.name as string}
                 placeholder="GST / VAT / Sales Tax"
               />
               <AdminSelect
                 label="Rule Type"
-                value={form.type}
-                onChange={(event) => setForm((current) => ({ ...current, type: event.target.value as TaxRule["type"] }))}
+                {...form.getFieldProps("type")}
+                error={form.errors.type as string}
                 options={[
                   { value: "CGST", label: "CGST" },
                   { value: "SGST", label: "SGST" },
@@ -1016,8 +1025,8 @@ export default function AdminTaxPage() {
               />
               <AdminSelect
                 label="Tax Mode (Calculation)"
-                value={form.taxMode}
-                onChange={(event) => setForm((current) => ({ ...current, taxMode: event.target.value as TaxRule["taxMode"] }))}
+                {...form.getFieldProps("taxMode")}
+                error={form.errors.taxMode as string}
                 options={[
                   { value: "EXCLUSIVE", label: "Exclusive (Added on top of subtotal)" },
                   { value: "INCLUSIVE", label: "Inclusive (Included in product price)" },
@@ -1026,8 +1035,8 @@ export default function AdminTaxPage() {
               />
               <AdminMultiSearchableSelect
                 label="Countries"
-                values={form.countryIds ?? []}
-                onValuesChange={(values) => setForm((current) => ({ ...current, countryIds: values }))}
+                values={form.values.countryIds ?? []}
+                onValuesChange={(values) => form.setFieldValue("countryIds", values)}
                 options={(countries as any[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
                 placeholder="Select countries"
                 allowSelectAll
@@ -1035,18 +1044,19 @@ export default function AdminTaxPage() {
               />
               <AdminInput
                 label="Tax Percentage (%)"
+                required
                 type="number"
                 min="0"
                 max="100"
                 step="0.01"
-                value={form.percentage}
-                onChange={(event) => setForm((current) => ({ ...current, percentage: event.target.value }))}
+                {...form.getFieldProps("percentage")}
+                error={form.errors.percentage as string}
                 placeholder="e.g. 18.00"
               />
               <AdminSelect
                 label="Status"
-                value={form.status}
-                onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as TaxRule["status"] }))}
+                {...form.getFieldProps("status")}
+                error={form.errors.status as string}
                 options={[
                   { value: "ACTIVE", label: "Active" },
                   { value: "INACTIVE", label: "Inactive" },
@@ -1057,8 +1067,8 @@ export default function AdminTaxPage() {
                 type="number"
                 min="0"
                 step="1"
-                value={form.sortOrder}
-                onChange={(event) => setForm((current) => ({ ...current, sortOrder: event.target.value }))}
+                {...form.getFieldProps("sortOrder")}
+                error={form.errors.sortOrder as string}
                 placeholder="0"
               />
             </div>
@@ -1075,13 +1085,8 @@ export default function AdminTaxPage() {
                     value: cat.id,
                     label: cat.name
                   }))}
-                  selectedValues={form.categoryIds ?? []}
-                  onChange={(nextIds) => {
-                    setForm((current) => ({
-                      ...current,
-                      categoryIds: nextIds,
-                    }));
-                  }}
+                  selectedValues={form.values.categoryIds ?? []}
+                  onChange={(nextIds) => form.setFieldValue("categoryIds", nextIds)}
                 />
               </div>
               <p className="text-[11.5px] text-[#6B7280] leading-normal">
@@ -1101,25 +1106,15 @@ export default function AdminTaxPage() {
                     value: p.id,
                     label: `${p.title} ${p.productCode ? `[${p.productCode}]` : ""}`
                   }))}
-                  selectedValues={form.productIds ?? []}
-                  onChange={(nextIds) => {
-                    setForm((current) => ({
-                      ...current,
-                      productIds: nextIds,
-                    }));
-                  }}
+                  selectedValues={form.values.productIds ?? []}
+                  onChange={(nextIds) => form.setFieldValue("productIds", nextIds)}
                 />
 
-                {form.productIds && form.productIds.length > 0 && (
+                {form.values.productIds && form.values.productIds.length > 0 && (
                   <TaxVariantsDropdown
-                    selectedProductIds={form.productIds}
-                    selectedVariantIds={form.variantIds ?? []}
-                    onChange={(nextVariantIds) => {
-                      setForm((current) => ({
-                        ...current,
-                        variantIds: nextVariantIds,
-                      }));
-                    }}
+                    selectedProductIds={form.values.productIds}
+                    selectedVariantIds={form.values.variantIds ?? []}
+                    onChange={(nextVariantIds) => form.setFieldValue("variantIds", nextVariantIds)}
                   />
                 )}
               </div>
@@ -1144,10 +1139,10 @@ export default function AdminTaxPage() {
               </button>
               <button
                 type="submit"
-                disabled={createRule.isPending || updateRule.isPending}
+                disabled={form.isSubmitting || createRule.isPending || updateRule.isPending}
                 className="px-5 py-2 rounded-lg bg-[#E31E24] text-xs font-bold text-white hover:bg-[#B5151B] transition-colors shadow-2xs disabled:opacity-60"
               >
-                {form.id ? "Save Rule" : "Create Rule"}
+                {form.isSubmitting ? "Processing..." : form.values.id ? "Save Rule" : "Create Rule"}
               </button>
             </div>
           </div>

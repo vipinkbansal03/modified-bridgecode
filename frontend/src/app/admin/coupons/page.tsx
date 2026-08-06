@@ -11,6 +11,7 @@ import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearcha
 import { useAdminCountries, useAdminCoupons, useCreateCoupon, useDeleteCoupon, useUpdateCoupon } from "@/hooks/admin/useAdminHooks";
 import { RefreshButton } from "@/components/admin/RefreshButton";
 import { getAdminErrorMessage } from "@/services/adminApi";
+import { useAdminForm } from "@/hooks/admin/useAdminForm";
 
 type Related = { id: string; name?: string; code?: string };
 
@@ -124,7 +125,6 @@ export default function CouponsPage() {
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [showFilters, setShowFilters] = useState(false);
-  const [form, setForm] = useState<FormState>(blankForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [deleting, setDeleting] = useState<CouponRow | null>(null);
 
@@ -176,68 +176,58 @@ export default function CouponsPage() {
     [countries],
   );
 
+  const form = useAdminForm<FormState>({
+    initialValues: blankForm,
+    validate: (values) => {
+      const errors: any = {};
+      if (!values.code.trim()) errors.code = "Coupon code is required.";
+      if (!values.discountValue) errors.discountValue = "Discount value is required.";
+      if (!values.startDate) errors.startDate = "Start date is required.";
+      if (!values.endDate) errors.endDate = "End date is required.";
+      if (values.startDate && values.endDate && new Date(values.endDate) < new Date(values.startDate)) errors.endDate = "End date must be after start date.";
+      if (values.discountType === "PERCENTAGE" && Number(values.discountValue) > 100) errors.discountValue = "Percentage discount cannot exceed 100.";
+      return errors;
+    },
+    onSubmit: async (values, { setSubmitting, resetForm }) => {
+      const payload = {
+        code: values.code.trim().toUpperCase(),
+        description: values.description.trim() || null,
+        discountType: values.discountType,
+        discountValue: values.discountValue,
+        minOrderValue: values.minOrderValue || null,
+        maxDiscount: values.discountType === "PERCENTAGE" ? values.maxDiscount || null : null,
+        startDate: values.startDate,
+        endDate: values.endDate,
+        usageLimit: values.usageLimit || null,
+        countryIds: values.countryIds,
+        countryId: values.countryIds.length > 0 ? values.countryIds[0] : null,
+        status: values.status,
+      };
+
+      try {
+        if (values.id) {
+          await updateCoupon.mutateAsync({ id: values.id, ...payload });
+          showToast("Coupon updated.");
+        } else {
+          await createCoupon.mutateAsync(payload);
+          showToast("Coupon created.");
+        }
+        resetForm();
+        setIsFormOpen(false);
+      } catch (err) {
+        showToast(getAdminErrorMessage(err, "Failed to save coupon."), "error");
+      }
+    }
+  });
+
   const resetForm = () => {
-    setForm(blankForm);
+    form.reset();
     setIsFormOpen(false);
   };
 
   const openCreate = () => {
-    setForm(blankForm);
+    form.reset();
     setIsFormOpen(true);
-  };
-
-  const setField = (key: keyof FormState, value: string) => {
-    setForm((current) => {
-      const next = { ...current, [key]: key === "code" ? value.toUpperCase() : value };
-      if (key === "discountType" && value === "FIXED") next.maxDiscount = "";
-      return next;
-    });
-  };
-
-  const validateForm = () => {
-    if (!form.code.trim()) return "Coupon code is required.";
-    if (!form.discountValue) return "Discount value is required.";
-    if (!form.startDate || !form.endDate) return "Start date and end date are required.";
-    if (new Date(form.endDate) < new Date(form.startDate)) return "End date must be after start date.";
-    if (form.discountType === "PERCENTAGE" && Number(form.discountValue) > 100) return "Percentage discount cannot exceed 100.";
-    return "";
-  };
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const error = validateForm();
-    if (error) {
-      showToast(error, "error");
-      return;
-    }
-
-    const payload = {
-      code: form.code.trim(),
-      description: form.description.trim() || null,
-      discountType: form.discountType,
-      discountValue: form.discountValue,
-      minOrderValue: form.minOrderValue || null,
-      maxDiscount: form.discountType === "PERCENTAGE" ? form.maxDiscount || null : null,
-      startDate: form.startDate,
-      endDate: form.endDate,
-      usageLimit: form.usageLimit || null,
-      countryIds: form.countryIds,
-      countryId: form.countryIds.length > 0 ? form.countryIds[0] : null,
-      status: form.status,
-    };
-
-    try {
-      if (form.id) {
-        await updateCoupon.mutateAsync({ id: form.id, ...payload });
-        showToast("Coupon updated.");
-      } else {
-        await createCoupon.mutateAsync(payload);
-        showToast("Coupon created.");
-      }
-      resetForm();
-    } catch (err) {
-      showToast(getAdminErrorMessage(err, "Failed to save coupon."), "error");
-    }
   };
 
   const toggleStatus = async (coupon: CouponRow) => {
@@ -313,7 +303,7 @@ export default function CouponsPage() {
             <button
               type="button"
               onClick={() => {
-                setForm(toForm(row));
+                form.setValues(toForm(row));
                 setIsFormOpen(true);
               }}
               className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
@@ -463,42 +453,41 @@ export default function CouponsPage() {
         </div>
       </div>
 
-      <Modal open={isFormOpen} onClose={resetForm} title={form.id ? "Edit coupon" : "New coupon"} panelClassName="max-w-4xl">
-        <form onSubmit={submit} className="space-y-6 p-6">
+      <Modal open={isFormOpen} onClose={resetForm} title={form.values.id ? "Edit coupon" : "New coupon"} panelClassName="max-w-4xl">
+        <form onSubmit={form.handleSubmit} className="space-y-6 p-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <AdminInput label="Coupon Code *" placeholder="SAVE20" value={form.code} onChange={(event) => setField("code", event.target.value)} />
+            <AdminInput label="Coupon Code" placeholder="SAVE20" {...form.getFieldProps("code")} error={form.errors.code as string} onChange={(e) => form.setFieldValue("code", e.target.value.toUpperCase())} />
             <AdminSelect
               label="Discount Type"
-              value={form.discountType}
-              onChange={(event) => setField("discountType", event.target.value)}
+              {...form.getFieldProps("discountType")}
+              error={form.errors.discountType as string}
+              onChange={(e) => {
+                form.setFieldValue("discountType", e.target.value);
+                if (e.target.value === "FIXED") form.setFieldValue("maxDiscount", "");
+              }}
               options={[
                 { value: "PERCENTAGE", label: "Percentage %" },
                 { value: "FIXED", label: "Fixed amount" },
               ]}
             />
-            <AdminInput label="Discount Value *" type="number" min="0" step="0.01" value={form.discountValue} onChange={(event) => setField("discountValue", event.target.value)} />
+            <AdminInput label="Discount Value" type="number" min="0" step="0.01" {...form.getFieldProps("discountValue")} error={form.errors.discountValue as string} />
 
-            <AdminInput label="Minimum Order Value" type="number" min="0" step="0.01" placeholder="No minimum" value={form.minOrderValue} onChange={(event) => setField("minOrderValue", event.target.value)} />
-            {form.discountType === "PERCENTAGE" ? (
-              <AdminInput label="Max Discount Cap" type="number" min="0" step="0.01" placeholder="No cap" value={form.maxDiscount} onChange={(event) => setField("maxDiscount", event.target.value)} />
+            <AdminInput label="Minimum Order Value" type="number" min="0" step="0.01" placeholder="No minimum" {...form.getFieldProps("minOrderValue")} error={form.errors.minOrderValue as string} />
+            {form.values.discountType === "PERCENTAGE" ? (
+              <AdminInput label="Max Discount Cap" type="number" min="0" step="0.01" placeholder="No cap" {...form.getFieldProps("maxDiscount")} error={form.errors.maxDiscount as string} />
             ) : (
               <div className="rounded-md border border-dashed border-[#E6E6E6] bg-[#FAFAFA] px-3.5 py-2.5 text-[12.5px] text-[#6B6B6B]">
                 Max cap is only used for percentage coupons.
               </div>
             )}
-            <AdminInput label="Usage Limit" type="number" min="1" placeholder="Unlimited" value={form.usageLimit} onChange={(event) => setField("usageLimit", event.target.value)} />
+            <AdminInput label="Usage Limit" type="number" min="1" placeholder="Unlimited" {...form.getFieldProps("usageLimit")} error={form.errors.usageLimit as string} />
 
-            <AdminInput label="Start Date *" type="date" value={form.startDate} onChange={(event) => setField("startDate", event.target.value)} />
-            <AdminInput label="End Date *" type="date" value={form.endDate} onChange={(event) => setField("endDate", event.target.value)} />
+            <AdminInput label="Start Date" type="date" {...form.getFieldProps("startDate")} error={form.errors.startDate as string} />
+            <AdminInput label="End Date" type="date" {...form.getFieldProps("endDate")} error={form.errors.endDate as string} />
             <AdminMultiSearchableSelect
               label="Country Restriction"
-              values={form.countryIds}
-              onValuesChange={(values) =>
-                setForm((prev) => ({
-                  ...prev,
-                  countryIds: values,
-                }))
-              }
+              values={form.values.countryIds}
+              onValuesChange={(values) => form.setFieldValue("countryIds", values)}
               options={countryOptions}
               placeholder="Select countries"
               allowSelectAll
@@ -508,15 +497,15 @@ export default function CouponsPage() {
 
             <AdminSelect
               label="Status"
-              value={form.status}
-              onChange={(event) => setField("status", event.target.value)}
+              {...form.getFieldProps("status")}
+              error={form.errors.status as string}
               options={[
                 { value: "ACTIVE", label: "Active" },
                 { value: "INACTIVE", label: "Inactive" },
               ]}
             />
             <div className="md:col-span-2">
-              <AdminInput label="Description" placeholder="Short admin/customer note" value={form.description} onChange={(event) => setField("description", event.target.value)} />
+              <AdminInput label="Description" placeholder="Short admin/customer note" {...form.getFieldProps("description")} error={form.errors.description as string} />
             </div>
           </div>
 
@@ -530,10 +519,10 @@ export default function CouponsPage() {
             </button>
             <button
               type="submit"
-              disabled={createCoupon.isPending || updateCoupon.isPending}
+              disabled={form.isSubmitting}
               className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
             >
-              {form.id ? "Update Coupon" : "Create Coupon"}
+              {form.isSubmitting ? "Processing..." : form.values.id ? "Update Coupon" : "Create Coupon"}
             </button>
           </div>
         </form>

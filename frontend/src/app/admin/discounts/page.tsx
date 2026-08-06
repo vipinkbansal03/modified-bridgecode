@@ -29,6 +29,7 @@ import {
 import { Modal } from "@/components/ui/Modal";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { RefreshButton } from "@/components/admin/RefreshButton";
+import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import {
   useAdminCategories,
   useAdminCountries,
@@ -238,7 +239,6 @@ export default function DiscountsPage() {
   );
   const [importMessage, setImportMessage] = useState("");
   const [importing, setImporting] = useState(false);
-  const [form, setForm] = useState<FormState>(blankForm);
   const [showForm, setShowForm] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -278,6 +278,57 @@ export default function DiscountsPage() {
   const exportDiscounts = useExportDiscounts();
   const previewDiscountImport = usePreviewDiscountImport();
   const importDiscounts = useImportDiscounts();
+
+  const form = useAdminForm({
+    initialValues: blankForm,
+    validate: (values) => {
+      const errors: any = {};
+      if (!values.name?.trim()) errors.name = "Discount name is required.";
+      if (!values.type) errors.type = "Type is required.";
+      if (values.type === "TIER" && !values.tierId) errors.tierId = "Tier is required.";
+      if (values.type === "MOQ" && !values.minQuantity) errors.minQuantity = "Minimum quantity is required.";
+      if (values.valueType === "PERCENT" && !values.discountPercent) errors.discountPercent = "Percentage is required.";
+      if (values.valueType === "FIXED" && !values.fixedAmount) errors.fixedAmount = "Fixed amount is required.";
+      if (values.scope === "PRODUCT" && values.productIds.length === 0) errors.productIds = "Select at least one product.";
+      if (values.scope === "COLLECTION" && values.collectionIds.length === 0) errors.collectionIds = "Select at least one collection.";
+      if (values.scope === "CATEGORY" && values.categoryIds.length === 0) errors.categoryIds = "Select at least one category.";
+      return errors;
+    },
+    onSubmit: async (values, { setSubmitting, resetForm }) => {
+      const payload = {
+        name: values.name,
+        type: values.type,
+        status: values.status,
+        tierId: values.type === "TIER" ? values.tierId || null : null,
+        minQuantity: values.type === "MOQ" ? values.minQuantity : null,
+        discountPercent: values.valueType === "PERCENT" ? values.discountPercent : null,
+        fixedAmount: values.valueType === "FIXED" ? values.fixedAmount : null,
+        countryIds: values.countryIds,
+        productIds: values.scope === "PRODUCT" ? values.productIds : [],
+        collectionIds: values.scope === "COLLECTION" ? values.collectionIds : [],
+        categoryIds: values.scope === "CATEGORY" ? values.categoryIds : [],
+        startDate: values.startDate || null,
+        endDate: values.endDate || null,
+      };
+
+      try {
+        if (values.id) {
+          await updateDiscount.mutateAsync({ id: values.id, ...payload });
+          showToast("Discount updated.");
+        } else {
+          await createDiscount.mutateAsync(payload);
+          showToast("Discount created.");
+        }
+        resetForm();
+        setShowForm(false);
+      } catch (error) {
+        showToast(
+          getAdminErrorMessage(error, "Failed to save discount."),
+          "error",
+        );
+      }
+    }
+  });
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -357,7 +408,7 @@ export default function DiscountsPage() {
   );
 
   const resetForm = () => {
-    setForm(blankForm);
+    form.reset(blankForm);
     setShowForm(false);
   };
 
@@ -367,72 +418,36 @@ export default function DiscountsPage() {
   };
 
   const setField = (key: keyof FormState, value: string) => {
-    setForm((current) => {
-      const next = { ...current, [key]: value };
-      if (key === "type" && value === "TIER") next.minQuantity = "";
-      if (key === "type" && value === "MOQ") next.tierId = "";
-      if (key === "type" && value === "PROMOTIONAL") {
-        next.tierId = "";
-        next.minQuantity = "";
-      }
-      if (key === "valueType" && value === "PERCENT") next.fixedAmount = "";
-      if (key === "valueType" && value === "FIXED") next.discountPercent = "";
-      if (key === "scope" && value === "PLATFORM") {
-        next.productIds = [];
-        next.collectionIds = [];
-        next.categoryIds = [];
-      }
-      if (key === "scope" && value === "PRODUCT") {
-        next.collectionIds = [];
-        next.categoryIds = [];
-      }
-      if (key === "scope" && value === "COLLECTION") {
-        next.productIds = [];
-        next.categoryIds = [];
-      }
-      if (key === "scope" && value === "CATEGORY") {
-        next.productIds = [];
-        next.collectionIds = [];
-      }
-      return next;
-    });
-  };
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const payload = {
-      name: form.name,
-      type: form.type,
-      status: form.status,
-      tierId: form.type === "TIER" ? form.tierId || null : null,
-      minQuantity: form.type === "MOQ" ? form.minQuantity : null,
-      discountPercent:
-        form.valueType === "PERCENT" ? form.discountPercent : null,
-      fixedAmount: form.valueType === "FIXED" ? form.fixedAmount : null,
-      countryIds: form.countryIds,
-      productIds: form.scope === "PRODUCT" ? form.productIds : [],
-      collectionIds: form.scope === "COLLECTION" ? form.collectionIds : [],
-      categoryIds: form.scope === "CATEGORY" ? form.categoryIds : [],
-      startDate: form.startDate || null,
-      endDate: form.endDate || null,
-    };
-
-    try {
-      if (form.id) {
-        await updateDiscount.mutateAsync({ id: form.id, ...payload });
-        showToast("Discount updated.");
-      } else {
-        await createDiscount.mutateAsync(payload);
-        showToast("Discount created.");
-      }
-      resetForm();
-    } catch (error) {
-      showToast(
-        getAdminErrorMessage(error, "Failed to save discount."),
-        "error",
-      );
+    const next = { ...form.values, [key]: value };
+    if (key === "type" && value === "TIER") next.minQuantity = "";
+    if (key === "type" && value === "MOQ") next.tierId = "";
+    if (key === "type" && value === "PROMOTIONAL") {
+      next.tierId = "";
+      next.minQuantity = "";
     }
+    if (key === "valueType" && value === "PERCENT") next.fixedAmount = "";
+    if (key === "valueType" && value === "FIXED") next.discountPercent = "";
+    if (key === "scope" && value === "PLATFORM") {
+      next.productIds = [];
+      next.collectionIds = [];
+      next.categoryIds = [];
+    }
+    if (key === "scope" && value === "PRODUCT") {
+      next.collectionIds = [];
+      next.categoryIds = [];
+    }
+    if (key === "scope" && value === "COLLECTION") {
+      next.productIds = [];
+      next.categoryIds = [];
+    }
+    if (key === "scope" && value === "CATEGORY") {
+      next.productIds = [];
+      next.collectionIds = [];
+    }
+    form.setValues(next);
   };
+
+
 
   const confirmDelete = async () => {
     if (!deleting) return;
@@ -708,7 +723,7 @@ export default function DiscountsPage() {
           {canUpdate && (
             <button
               onClick={() => {
-                setForm(toForm(row));
+                form.reset(toForm(row));
                 setShowForm(true);
               }}
               className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
@@ -743,19 +758,20 @@ export default function DiscountsPage() {
   });
 
   const discountForm = (
-    <form onSubmit={submit} className="flex flex-col min-h-0 overflow-hidden">
+    <form onSubmit={form.handleSubmit} className="flex flex-col min-h-0 overflow-hidden">
       <div className="p-6 overflow-y-auto flex-1">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <AdminInput
-            label="Rule Name *"
-            value={form.name}
-            onChange={(event) => setField("name", event.target.value)}
+            label="Rule Name"
+            {...form.getFieldProps("name")}
+            error={form.errors.name as string}
             placeholder="Gold launch promo"
           />
           <AdminSelect
-            label="Discount Type *"
-            value={form.type}
-            onChange={(event) => setField("type", event.target.value as FormState["type"])}
+            label="Discount Type"
+            {...form.getFieldProps("type")}
+            error={form.errors.type as string}
+            onChange={(event) => setField("type", event.target.value)}
             options={[
               { value: "TIER", label: "Tier Discount" },
               { value: "MOQ", label: "MOQ Discount" },
@@ -764,12 +780,9 @@ export default function DiscountsPage() {
           />
           <AdminMultiSearchableSelect
             label="Countries"
-            values={form.countryIds}
+            values={form.values.countryIds}
             onValuesChange={(values) =>
-              setForm((prev) => ({
-                ...prev,
-                countryIds: values,
-              }))
+              form.setFieldValue("countryIds", values)
             }
             options={options.countries}
             placeholder="Select countries"
@@ -779,28 +792,28 @@ export default function DiscountsPage() {
           />
           <AdminSelect
             label="Status"
-            value={form.status}
-            onChange={(event) => setField("status", event.target.value)}
+            {...form.getFieldProps("status")}
+            error={form.errors.status as string}
             options={[
               { value: "ACTIVE", label: "Active" },
               { value: "INACTIVE", label: "Inactive" },
             ]}
           />
 
-          {form.type === "TIER" ? (
+          {form.values.type === "TIER" ? (
             <AdminSelect
-              label="Tier *"
-              value={form.tierId}
-              onChange={(event) => setField("tierId", event.target.value)}
+              label="Tier"
+              {...form.getFieldProps("tierId")}
+              error={form.errors.tierId as string}
               options={options.tiers}
             />
-          ) : form.type === "MOQ" ? (
+          ) : form.values.type === "MOQ" ? (
             <AdminInput
-              label="Minimum Quantity *"
+              label="Minimum Quantity"
               type="text"
               inputMode="numeric"
-              value={form.minQuantity}
-              onChange={(event) => setField("minQuantity", event.target.value)}
+              {...form.getFieldProps("minQuantity")}
+              error={form.errors.minQuantity as string}
             />
           ) : (
             <div className="rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3.5 py-2.5 text-[13px] text-[#6B6B6B]">
@@ -810,35 +823,35 @@ export default function DiscountsPage() {
 
           <AdminSelect
             label="Value Type"
-            value={form.valueType}
+            {...form.getFieldProps("valueType")}
+            error={form.errors.valueType as string}
             onChange={(event) => setField("valueType", event.target.value)}
             options={[
               { value: "PERCENT", label: "Percentage" },
               { value: "FIXED", label: "Fixed amount off" },
             ]}
           />
-          {form.valueType === "PERCENT" ? (
+          {form.values.valueType === "PERCENT" ? (
             <AdminInput
-              label="Discount Percent *"
+              label="Discount Percent"
               type="text"
               inputMode="decimal"
-              value={form.discountPercent}
-              onChange={(event) =>
-                setField("discountPercent", event.target.value)
-              }
+              {...form.getFieldProps("discountPercent")}
+              error={form.errors.discountPercent as string}
             />
           ) : (
             <AdminInput
-              label="Fixed Amount *"
+              label="Fixed Amount"
               type="text"
               inputMode="decimal"
-              value={form.fixedAmount}
-              onChange={(event) => setField("fixedAmount", event.target.value)}
+              {...form.getFieldProps("fixedAmount")}
+              error={form.errors.fixedAmount as string}
             />
           )}
           <AdminSelect
             label="Scope"
-            value={form.scope}
+            {...form.getFieldProps("scope")}
+            error={form.errors.scope as string}
             onChange={(event) => setField("scope", event.target.value)}
             options={[
               { value: "PLATFORM", label: "Platform-wide" },
@@ -847,15 +860,13 @@ export default function DiscountsPage() {
               { value: "CATEGORY", label: "Category" },
             ]}
           />
-          {form.scope === "PRODUCT" && (
+          {form.values.scope === "PRODUCT" && (
+            <div className="flex flex-col">
             <AdminMultiSearchableSelect
-              label="Products *"
-              values={form.productIds}
+              label="Products"
+              values={form.values.productIds}
               onValuesChange={(values) =>
-                setForm((prev) => ({
-                  ...prev,
-                  productIds: values,
-                }))
+                form.setFieldValue("productIds", values)
               }
               options={options.products}
               placeholder="Select products"
@@ -870,16 +881,16 @@ export default function DiscountsPage() {
               isLoadingMore={isFetchingNextProductsPage}
               onSearchChange={setProductSearch}
             />
+            {form.errors.productIds && <span className="text-red-500 text-[11.5px] mt-1">{form.errors.productIds as string}</span>}
+            </div>
           )}
-          {form.scope === "COLLECTION" && (
+          {form.values.scope === "COLLECTION" && (
+            <div className="flex flex-col">
             <AdminMultiSearchableSelect
-              label="Collections *"
-              values={form.collectionIds}
+              label="Collections"
+              values={form.values.collectionIds}
               onValuesChange={(values) =>
-                setForm((prev) => ({
-                  ...prev,
-                  collectionIds: values,
-                }))
+                form.setFieldValue("collectionIds", values)
               }
               options={options.collections}
               placeholder="Select collections"
@@ -887,16 +898,16 @@ export default function DiscountsPage() {
               selectAllLabel="All collections"
               selectionSummaryFormatter={(selected) => `${selected.length} Collections Selected`}
             />
+            {form.errors.collectionIds && <span className="text-red-500 text-[11.5px] mt-1">{form.errors.collectionIds as string}</span>}
+            </div>
           )}
-          {form.scope === "CATEGORY" && (
+          {form.values.scope === "CATEGORY" && (
+            <div className="flex flex-col">
             <AdminMultiSearchableSelect
-              label="Categories *"
-              values={form.categoryIds}
+              label="Categories"
+              values={form.values.categoryIds}
               onValuesChange={(values) =>
-                setForm((prev) => ({
-                  ...prev,
-                  categoryIds: values,
-                }))
+                form.setFieldValue("categoryIds", values)
               }
               options={options.categories}
               placeholder="Select categories"
@@ -904,19 +915,21 @@ export default function DiscountsPage() {
               selectAllLabel="All categories"
               selectionSummaryFormatter={(selected) => `${selected.length} Categories Selected`}
             />
+            {form.errors.categoryIds && <span className="text-red-500 text-[11.5px] mt-1">{form.errors.categoryIds as string}</span>}
+            </div>
           )}
 
           <AdminInput
             label="Start Date"
             type="date"
-            value={form.startDate}
-            onChange={(event) => setField("startDate", event.target.value)}
+            {...form.getFieldProps("startDate")}
+            error={form.errors.startDate as string}
           />
           <AdminInput
             label="End Date"
             type="date"
-            value={form.endDate}
-            onChange={(event) => setField("endDate", event.target.value)}
+            {...form.getFieldProps("endDate")}
+            error={form.errors.endDate as string}
           />
         </div>
       </div>
@@ -930,10 +943,10 @@ export default function DiscountsPage() {
         </button>
         <button
           type="submit"
-          disabled={createDiscount.isPending || updateDiscount.isPending}
+          disabled={form.isSubmitting || createDiscount.isPending || updateDiscount.isPending}
           className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
         >
-          {form.id ? "Update Discount" : "Create Discount"}
+          {form.isSubmitting ? "Processing..." : (form.values.id ? "Update Discount" : "Create Discount")}
         </button>
       </div>
     </form>
@@ -1156,7 +1169,7 @@ export default function DiscountsPage() {
       <Modal
         open={showForm}
         onClose={resetForm}
-        title={form.id ? "Edit discount" : "New discount"}
+        title={form.values.id ? "Edit discount" : "New discount"}
         panelClassName="max-w-5xl flex flex-col max-h-[90vh] overflow-hidden z-[9999]"
       >
         {showForm ? discountForm : null}

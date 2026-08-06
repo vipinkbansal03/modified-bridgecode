@@ -16,6 +16,7 @@ import {
   useGetShippingDefaultRate,
 } from "@/hooks/admin/useAdminHooks";
 import { useAdminCountries } from "@/hooks/admin/useAdminHooks";
+import { useAdminForm } from "@/hooks/admin/useAdminForm";
 
 interface Provider {
   id: string;
@@ -74,7 +75,6 @@ export default function ShippingZonesPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingZone, setEditingZone] = useState<ShippingZone | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ShippingZone | null>(null);
-  const [form, setForm] = useState<ZoneForm>(emptyForm);
   const [rateLoading, setRateLoading] = useState(false);
   const [rateCurrency, setRateCurrency] = useState("");
 
@@ -85,6 +85,43 @@ export default function ShippingZonesPage() {
   const updateMutation = useUpdateShippingZone();
   const deleteMutation = useDeleteShippingZone();
   const rateMutation = useGetShippingDefaultRate();
+
+  const form = useAdminForm<ZoneForm>({
+    initialValues: emptyForm,
+    validate: (values) => {
+      const errors: Partial<Record<keyof ZoneForm, string>> = {};
+      if (!values.providerId) errors.providerId = "Provider is required";
+      if (!values.countryIds || values.countryIds.length === 0) errors.countryIds = "At least one country is required";
+      if (!values.charge) errors.charge = "Charge is required";
+      return errors;
+    },
+    onSubmit: async (values) => {
+      if (!values.providerId || values.countryIds.length === 0 || !values.charge) {
+        showToast("Select a provider and at least one country to fetch the default rate.", "error");
+        return;
+      }
+      const payload = {
+        providerId: values.providerId,
+        countryIds: values.countryIds,
+        charge: Number(values.charge),
+        freeAbove: values.freeAbove ? Number(values.freeAbove) : null,
+        estimatedDays: values.estimatedDays.trim() || null,
+        status: values.status,
+      };
+      try {
+        if (editingZone) {
+          await updateMutation.mutateAsync({ id: editingZone.id, ...payload });
+          showToast("Shipping zone updated.");
+        } else {
+          await createMutation.mutateAsync(payload);
+          showToast("Shipping zone created.");
+        }
+        setFormOpen(false);
+      } catch (error) {
+        showToast(getAdminErrorMessage(error, "Could not save shipping zone."), "error");
+      }
+    },
+  });
 
   const zoneList: ShippingZone[] = zones ?? [];
   const providerList: Provider[] = providers ?? [];
@@ -101,42 +138,42 @@ export default function ShippingZonesPage() {
   );
 
   useEffect(() => {
-    if (!form.providerId || form.countryIds.length === 0) return;
-    const firstCountry = countryList.find((c) => c.id === form.countryIds[0]);
+    if (!form.values.providerId || form.values.countryIds.length === 0) return;
+    const firstCountry = countryList.find((c) => c.id === form.values.countryIds[0]);
     if (!firstCountry) return;
 
     const timer = setTimeout(() => {
       setRateLoading(true);
       rateMutation
-        .mutateAsync({ id: form.providerId, countryCode: firstCountry.code })
+        .mutateAsync({ id: form.values.providerId, countryCode: firstCountry.code })
         .then((result) => {
           setRateCurrency(result.currency ?? "");
-          setForm((current) => ({
-            ...current,
+          form.setValues({
+            ...form.values,
             charge: result.charge != null ? String(result.charge) : "",
             estimatedDays: result.estimatedDays ?? "",
-          }));
+          });
         })
         .catch(() => {
           setRateCurrency("");
-          setForm((current) => ({ ...current, charge: "", estimatedDays: "" }));
+          form.setValues({ ...form.values, charge: "", estimatedDays: "" });
         })
         .finally(() => setRateLoading(false));
     }, 300);
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.providerId, form.countryIds]);
+  }, [form.values.providerId, form.values.countryIds]);
 
   function openCreate() {
     setEditingZone(null);
-    setForm(emptyForm);
+    form.reset();
     setFormOpen(true);
   }
 
   function openEdit(zone: ShippingZone) {
     setEditingZone(zone);
-    setForm({
+    form.setValues({
       providerId: zone.providerId,
       countryIds: (zone.countries ?? []).map((entry) => entry.country.id),
       charge: String(zone.charge ?? ""),
@@ -145,34 +182,6 @@ export default function ShippingZonesPage() {
       status: zone.status === "ACTIVE" ? "ACTIVE" : "INACTIVE",
     });
     setFormOpen(true);
-  }
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!form.providerId || form.countryIds.length === 0 || !form.charge) {
-      showToast("Select a provider and at least one country to fetch the default rate.", "error");
-      return;
-    }
-    const payload = {
-      providerId: form.providerId,
-      countryIds: form.countryIds,
-      charge: Number(form.charge),
-      freeAbove: form.freeAbove ? Number(form.freeAbove) : null,
-      estimatedDays: form.estimatedDays.trim() || null,
-      status: form.status,
-    };
-    try {
-      if (editingZone) {
-        await updateMutation.mutateAsync({ id: editingZone.id, ...payload });
-        showToast("Shipping zone updated.");
-      } else {
-        await createMutation.mutateAsync(payload);
-        showToast("Shipping zone created.");
-      }
-      setFormOpen(false);
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Could not save shipping zone."), "error");
-    }
   }
 
   async function handleDelete() {
@@ -246,38 +255,42 @@ export default function ShippingZonesPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={form.handleSubmit} className="space-y-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <AdminSelect
                   label="Provider"
+                  required
                   options={providerOptions}
-                  value={form.providerId}
+                  {...form.getFieldProps("providerId")}
                   onChange={(event) => {
                     setRateCurrency("");
-                    setForm((current) => ({ ...current, providerId: event.target.value, charge: "", estimatedDays: "" }));
+                    form.setValues({ ...form.values, providerId: event.target.value, charge: "", estimatedDays: "" });
                   }}
+                  error={form.errors.providerId as string}
                 />
                 <AdminMultiSelect
                   label="Countries"
+                  required
                   options={countryMultiOptions}
-                  value={form.countryIds}
+                  value={form.values.countryIds}
                   onChange={(values) => {
                     if (values.length === 0) setRateCurrency("");
-                    setForm((current) => ({ ...current, countryIds: values, charge: values.length ? current.charge : "", estimatedDays: values.length ? current.estimatedDays : "" }));
+                    form.setValues({ ...form.values, countryIds: values, charge: values.length ? form.values.charge : "", estimatedDays: values.length ? form.values.estimatedDays : "" });
                   }}
                   selectAllLabel="Select All"
+                  error={form.errors.countryIds as string}
                 />
-                <AdminInput label={rateCurrency ? `Charge (${rateCurrency})` : "Charge"} type="number" min="0" step="0.01" value={form.charge} disabled className="cursor-not-allowed bg-[#F5F5F5] text-[#6B6B6B]" />
-                <AdminInput label={rateCurrency ? `Free Above (${rateCurrency})` : "Free Above"} type="number" min="0" step="0.01" value={form.freeAbove} onChange={(event) => setForm((current) => ({ ...current, freeAbove: event.target.value }))} placeholder="Optional" />
-                <AdminInput label="Estimated Days" value={form.estimatedDays} disabled className="cursor-not-allowed bg-[#F5F5F5] text-[#6B6B6B]" />
+                <AdminInput label={rateCurrency ? `Charge (${rateCurrency})` : "Charge"} required type="number" min="0" step="0.01" {...form.getFieldProps("charge")} error={form.errors.charge as string} disabled className="cursor-not-allowed bg-[#F5F5F5] text-[#6B6B6B]" />
+                <AdminInput label={rateCurrency ? `Free Above (${rateCurrency})` : "Free Above"} type="number" min="0" step="0.01" {...form.getFieldProps("freeAbove")} error={form.errors.freeAbove as string} placeholder="Optional" />
+                <AdminInput label="Estimated Days" required {...form.getFieldProps("estimatedDays")} error={form.errors.estimatedDays as string} disabled className="cursor-not-allowed bg-[#F5F5F5] text-[#6B6B6B]" />
                 <AdminSelect
                   label="Status"
                   options={[
                     { value: "ACTIVE", label: "Active" },
                     { value: "INACTIVE", label: "Inactive" },
                   ]}
-                  value={form.status}
-                  onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as ZoneForm["status"] }))}
+                  {...form.getFieldProps("status")}
+                  error={form.errors.status as string}
                 />
               </div>
               <p className="text-[12px] text-[#6B6B6B]">
@@ -287,8 +300,8 @@ export default function ShippingZonesPage() {
                 <button type="button" onClick={() => setFormOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2]">
                   Cancel
                 </button>
-                <button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
-                  {createMutation.isPending || updateMutation.isPending ? "Saving..." : editingZone ? "Save Changes" : "Create Zone"}
+                <button type="submit" disabled={form.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
+                  {form.isSubmitting ? "Saving..." : editingZone ? "Save Changes" : "Create Zone"}
                 </button>
               </div>
             </form>

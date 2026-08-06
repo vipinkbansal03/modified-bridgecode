@@ -10,6 +10,30 @@ import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { ApiShippingBox } from "@/types/api.types";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAdminProducts, useAdminCountries } from "@/hooks/admin/useAdminHooks";
+import { useAdminForm } from "@/hooks/admin/useAdminForm";
+import { Modal } from "@/components/ui/Modal";
+
+type BoxFormState = {
+  id: string;
+  name: string;
+  length: string;
+  width: string;
+  height: string;
+  maxWeight: string;
+  isActive: boolean;
+  countryIds: string[];
+};
+
+const emptyForm: BoxFormState = {
+  id: "",
+  name: "",
+  length: "",
+  width: "",
+  height: "",
+  maxWeight: "",
+  isActive: true,
+  countryIds: [],
+};
 
 export default function ShippingBoxesPage() {
   const { hasPermission } = useAdminAuth();
@@ -45,14 +69,6 @@ export default function ShippingBoxesPage() {
   });
 
   const [formOpen, setFormOpen] = useState(false);
-  const [editingBox, setEditingBox] = useState<ApiShippingBox | null>(null);
-  const [formName, setFormName] = useState("");
-  const [formLength, setFormLength] = useState("");
-  const [formWidth, setFormWidth] = useState("");
-  const [formHeight, setFormHeight] = useState("");
-  const [formMaxWeight, setFormMaxWeight] = useState("");
-  const [formIsActive, setFormIsActive] = useState(true);
-  const [formCountryIds, setFormCountryIds] = useState<string[]>([]);
   const [deletingBox, setDeletingBox] = useState<ApiShippingBox | null>(null);
 
   const [activeSubTab, setActiveSubTab] = useState<"boxes" | "preview">("boxes");
@@ -69,49 +85,56 @@ export default function ShippingBoxesPage() {
   const [previewResult, setPreviewResult] = useState<any>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
+  const form = useAdminForm<BoxFormState>({
+    initialValues: emptyForm,
+    validate: (values) => {
+      const errors: any = {};
+      if (!values.name.trim()) errors.name = "Box name is required.";
+      if (!values.length || Number(values.length) <= 0) errors.length = "Length is required.";
+      if (!values.width || Number(values.width) <= 0) errors.width = "Width is required.";
+      if (!values.height || Number(values.height) <= 0) errors.height = "Height is required.";
+      if (!values.maxWeight || Number(values.maxWeight) <= 0) errors.maxWeight = "Max weight is required.";
+      if (!values.countryIds.length) errors.countryIds = "At least one country is required.";
+      return errors;
+    },
+    onSubmit: async (values, { setSubmitting, resetForm }) => {
+      const payload = {
+        name: values.name.trim(),
+        length: Number(values.length),
+        width: Number(values.width),
+        height: Number(values.height),
+        maxWeight: Number(values.maxWeight),
+        isActive: values.isActive,
+        countryIds: values.countryIds,
+      };
+      try {
+        await upsertMutation.mutateAsync({ id: values.id || undefined, data: payload });
+        showToast(values.id ? "Box updated." : "Box created.");
+        setFormOpen(false);
+        resetForm();
+      } catch (error) {
+        showToast(getAdminErrorMessage(error, "Failed to save box."), "error");
+      }
+    }
+  });
+
   const openCreate = () => {
-    setEditingBox(null);
-    setFormName("");
-    setFormLength("");
-    setFormWidth("");
-    setFormHeight("");
-    setFormMaxWeight("");
-    setFormIsActive(true);
-    setFormCountryIds([]);
+    form.reset(emptyForm);
     setFormOpen(true);
   };
 
   const openEdit = (box: ApiShippingBox) => {
-    setEditingBox(box);
-    setFormName(box.name);
-    setFormLength(String(box.length));
-    setFormWidth(String(box.width));
-    setFormHeight(String(box.height));
-    setFormMaxWeight(String(box.maxWeight));
-    setFormIsActive(box.isActive);
-    setFormCountryIds(box.countries?.map((c) => c.countryId) ?? []);
+    form.reset({
+      id: box.id,
+      name: box.name,
+      length: String(box.length),
+      width: String(box.width),
+      height: String(box.height),
+      maxWeight: String(box.maxWeight),
+      isActive: box.isActive,
+      countryIds: box.countries?.map((c) => c.countryId) ?? [],
+    });
     setFormOpen(true);
-  };
-
-  const handleSave = async () => {
-    if (!formName.trim()) { showToast("Box name is required.", "error"); return; }
-    if (!formCountryIds.length) { showToast("At least one country is required.", "error"); return; }
-    const payload = {
-      name: formName.trim(),
-      length: Number(formLength),
-      width: Number(formWidth),
-      height: Number(formHeight),
-      maxWeight: Number(formMaxWeight),
-      isActive: formIsActive,
-      countryIds: formCountryIds,
-    };
-    try {
-      await upsertMutation.mutateAsync({ id: editingBox?.id, data: payload });
-      showToast(editingBox ? "Box updated." : "Box created.");
-      setFormOpen(false);
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to save box."), "error");
-    }
   };
 
   const columns: Column<ApiShippingBox>[] = useMemo(() => [
@@ -217,7 +240,7 @@ export default function ShippingBoxesPage() {
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <AdminSelect
-                  label="Product *"
+                  label="Product"
                   value={previewProductId}
                   onChange={(e) => setPreviewProductId(e.target.value)}
                   options={[{ value: "", label: "Select product..." }, ...products.map((p) => ({ value: p.id, label: p.title }))]}
@@ -363,55 +386,48 @@ export default function ShippingBoxesPage() {
         )}
       </div>
 
-      {formOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-[16px] font-semibold text-[#111]">{editingBox ? "Edit Box" : "Add Box"}</h2>
-              <button onClick={() => setFormOpen(false)} className="rounded-md p-1 text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#111]">
-                <X size={18} />
-              </button>
+      <Modal open={formOpen} onClose={() => setFormOpen(false)} title={form.values.id ? "Edit Box" : "Add Box"} panelClassName="max-w-2xl">
+        <form onSubmit={form.handleSubmit} className="p-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <AdminInput required label="Box Name" placeholder="e.g. Small Box, Medium Box" {...form.getFieldProps("name")} error={form.errors.name as string} />
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <AdminInput label="Box Name *" placeholder="e.g. Small Box, Medium Box" value={formName} onChange={(e) => setFormName(e.target.value)} />
-              </div>
-              <AdminInput label="Length (cm) *" type="text" placeholder="e.g. 30" value={formLength} onChange={(e) => setFormLength(e.target.value)} />
-              <AdminInput label="Width (cm) *" type="text" placeholder="e.g. 20" value={formWidth} onChange={(e) => setFormWidth(e.target.value)} />
-              <AdminInput label="Height (cm) *" type="text" placeholder="e.g. 15" value={formHeight} onChange={(e) => setFormHeight(e.target.value)} />
-              <AdminInput label="Max Weight (kg) *" type="text" placeholder="e.g. 5" value={formMaxWeight} onChange={(e) => setFormMaxWeight(e.target.value)} />
-              <div className="sm:col-span-2">
-                <AdminMultiSelect
-                  label="Countries *"
-                  options={(countries as { id: string; name: string; code: string }[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
-                  value={formCountryIds}
-                  onChange={setFormCountryIds}
-                  selectAllLabel="Select All"
-                  placeholder="Select countries..."
-                />
-              </div>
-              <div className="flex items-end pb-2">
-                <label className="flex cursor-pointer items-center gap-2">
-                  <input type="checkbox" checked={formIsActive} onChange={(e) => setFormIsActive(e.target.checked)} className="rounded" />
-                  <span className="text-[13.5px] text-[#1A1A1A]">Active</span>
-                </label>
-              </div>
+            <AdminInput required label="Length (cm)" type="number" placeholder="e.g. 30" {...form.getFieldProps("length")} error={form.errors.length as string} />
+            <AdminInput required label="Width (cm)" type="number" placeholder="e.g. 20" {...form.getFieldProps("width")} error={form.errors.width as string} />
+            <AdminInput required label="Height (cm)" type="number" placeholder="e.g. 15" {...form.getFieldProps("height")} error={form.errors.height as string} />
+            <AdminInput required label="Max Weight (kg)" type="number" placeholder="e.g. 5" {...form.getFieldProps("maxWeight")} error={form.errors.maxWeight as string} />
+            <div className="sm:col-span-2 flex flex-col">
+              <AdminMultiSelect
+                label="Countries"
+                options={(countries as { id: string; name: string; code: string }[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+                value={form.values.countryIds}
+                onChange={(vals) => form.setFieldValue("countryIds", vals)}
+                selectAllLabel="Select All"
+                placeholder="Select countries..."
+              />
+              {form.errors.countryIds && <span className="text-red-500 text-[11.5px] mt-1">{form.errors.countryIds as string}</span>}
             </div>
-            <div className="mt-6 flex justify-end gap-3">
-              <button onClick={() => setFormOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2.5 text-[13.5px] font-medium text-[#555] hover:bg-[#F2F2F2]">
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={upsertMutation.isPending}
-                className="rounded-md bg-[#E31E24] px-5 py-2.5 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
-              >
-                {upsertMutation.isPending ? "Saving..." : editingBox ? "Update Box" : "Create Box"}
-              </button>
+            <div className="flex items-end pb-2">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input type="checkbox" checked={form.values.isActive} onChange={(e) => form.setFieldValue("isActive", e.target.checked)} className="rounded" />
+                <span className="text-[13.5px] text-[#1A1A1A]">Active</span>
+              </label>
             </div>
           </div>
-        </div>
-      )}
+          <div className="mt-6 flex justify-end gap-3">
+            <button type="button" onClick={() => setFormOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2.5 text-[13.5px] font-medium text-[#555] hover:bg-[#F2F2F2]">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={form.isSubmitting}
+              className="rounded-md bg-[#E31E24] px-5 py-2.5 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
+            >
+              {form.isSubmitting ? "Saving..." : form.values.id ? "Update Box" : "Create Box"}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {deletingBox && (
         <ConfirmModal

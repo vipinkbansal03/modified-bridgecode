@@ -179,12 +179,12 @@ export default function CreateOrderPage() {
             ) : (
               <>
                 <AdminInput
-                  label="Name *"
+                  label="Name"
                   value={customerName}
                   onChange={(event) => setCustomerName(event.target.value)}
                 />
                 <AdminInput
-                  label="Email *"
+                  label="Email"
                   type="email"
                   value={customerEmail}
                   onChange={(event) => setCustomerEmail(event.target.value)}
