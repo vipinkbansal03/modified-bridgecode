@@ -20,8 +20,11 @@ import { useProduct } from "@/hooks/api/useProducts";
 import { useQuoteCart, type QuoteCartItem } from "@/contexts/QuoteCartContext";
 import { useCart } from "@/contexts/CartContext";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
+import { useDeliveryAddress } from "@/contexts/DeliveryAddressContext";
 import { apiClient } from "@/lib/apiClient";
 import { applyDiscount, nextDiscountTier } from "@/utils/discountRules";
+import { useProductWarehouses } from "@/hooks/api/useProducts";
+import { WarehouseSelectorModal } from "./WarehouseSelectorModal";
 import { DynamicVariantMatrixConfigurator } from "./DynamicVariantMatrixConfigurator";
 import { StockBadge } from "./StockBadge";
 import type {
@@ -307,6 +310,34 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
       ),
     ) ?? null;
 
+  const { selectedAddress } = useDeliveryAddress();
+
+  const { data: warehouses, isLoading: isWarehousesLoading } = useProductWarehouses(
+    apiProduct.slug,
+    currentVariant?.id,
+    selectedAddress?.state
+  );
+  
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string | null>(null);
+  const [userSelected, setUserSelected] = useState(false);
+  const [isWarehouseModalOpen, setIsWarehouseModalOpen] = useState(false);
+
+  useEffect(() => {
+    setUserSelected(false);
+  }, [selectedAddress?.state]);
+
+  useEffect(() => {
+    if (warehouses && warehouses.length > 0) {
+      if (!userSelected || !selectedWarehouseId || !warehouses.find(w => w.id === selectedWarehouseId)) {
+        setSelectedWarehouseId(warehouses[0].id);
+      }
+    } else {
+      setSelectedWarehouseId(null);
+    }
+  }, [warehouses, selectedWarehouseId, userSelected]);
+
+  const selectedWarehouse = warehouses?.find(w => w.id === selectedWarehouseId) || warehouses?.[0];
+
   const currentPrice = currentVariant
     ? getPriceForCurrency(
         currentVariant,
@@ -542,6 +573,10 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
       countryCode: currentPrice.countryCode,
       countryName: currentPrice.countryName,
       selectedAttributes: currentVariant.attributeCombination,
+      warehouseId: selectedWarehouse?.id,
+      warehouseName: selectedWarehouse?.name,
+      estimatedDeliveryDays: selectedWarehouse?.estimatedDeliveryDays,
+      isLocalWarehouse: selectedWarehouse?.isLocal,
     });
     setAdded(false);
     setError(null);
@@ -845,12 +880,57 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                 </div>
               )}
 
+              {currentVariant && selectedWarehouse && (
+                <div className="mt-3 flex items-center justify-between rounded-lg border border-[#E0E0E0] bg-[#F9F9F9] p-3">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[12px] text-steel">Sold by / Ships from</span>
+                    <span className="text-[13px] font-semibold text-ink">{selectedWarehouse.name}</span>
+                    <span className="text-[12px] text-emerald-600 font-medium">Estimated Delivery: {selectedWarehouse.estimatedDeliveryDays} days</span>
+                  </div>
+                  {warehouses && warehouses.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setIsWarehouseModalOpen(true)}
+                      className="text-[13px] font-medium text-brand hover:underline"
+                    >
+                      Change Seller
+                    </button>
+                  )}
+                </div>
+              )}
+              
+              <WarehouseSelectorModal
+                open={isWarehouseModalOpen}
+                onClose={() => setIsWarehouseModalOpen(false)}
+                onSelect={(id) => {
+                  setSelectedWarehouseId(id);
+                  setUserSelected(true);
+                  setIsWarehouseModalOpen(false);
+                }}
+                warehouses={warehouses || []}
+                selectedWarehouseId={selectedWarehouseId}
+                isLoading={isWarehousesLoading}
+              />
+
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3">
                 {(() => {
-                  const isSelectedOutOfStock =
-                    !currentVariant ||
-                    currentVariant.inventory?.status === "OUT_OF_STOCK" ||
-                    (currentVariant.inventory?.available ?? 0) <= 0;
+                  const isGloballyInStock = Boolean(
+                    currentVariant &&
+                    currentVariant.inventory?.status !== "OUT_OF_STOCK" &&
+                    (currentVariant.inventory?.available ?? 0) > 0
+                  );
+
+                  const isWarehouseUnavailable = Boolean(
+                    isGloballyInStock && (!selectedWarehouse || selectedWarehouse.stock <= 0)
+                  );
+                  
+                  const isSelectedOutOfStock = !isGloballyInStock || isWarehouseUnavailable;
+
+                  const getButtonLabel = (defaultLabel: string) => {
+                    if (!isGloballyInStock) return "Out of Stock";
+                    if (isWarehouseUnavailable) return "Not Deliverable to Location";
+                    return defaultLabel;
+                  };
 
                   if (currentPrice) {
                     return (
@@ -874,7 +954,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                           }`}
                         >
                           <ShoppingBag size={15} />
-                          {isSelectedOutOfStock ? "Out of Stock" : "Add to Cart"}
+                          {getButtonLabel("Add to Cart")}
                         </button>
                       </>
                     );
@@ -898,16 +978,21 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                             unitPrice: 0,
                             currencyCode: selectedCurrency,
                             currencySymbol: "$",
-                            selectedAttributes: currentVariant.attributeCombination,
+                            selectedAttributes: selectedOptions,
+                            priceUnavailable: true,
+                            warehouseId: selectedWarehouse?.id,
+                            warehouseName: selectedWarehouse?.name,
+                            estimatedDeliveryDays: selectedWarehouse?.estimatedDeliveryDays,
+                            isLocalWarehouse: selectedWarehouse?.isLocal,
                           },
                         ]);
-                        open();
+                        openCart();
                       }}
-                      className={`col-span-full inline-flex items-center justify-center gap-2 rounded-pill bg-brand px-6 py-3.5 text-[14px] font-semibold text-white transition hover:bg-brand/90 ${
+                      className={`inline-flex items-center justify-center gap-2 rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90 ${
                         isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
                       }`}
                     >
-                      {isSelectedOutOfStock ? "Out of Stock" : "Request Quote (RFQ)"}
+                      {getButtonLabel("Request Quote (RFQ)")}
                     </button>
                   );
                 })()}

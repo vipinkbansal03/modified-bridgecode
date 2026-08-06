@@ -127,6 +127,16 @@ export function CartDrawer() {
                         <p className="mt-1 text-[12.5px] text-steel">
                           {item.variantTitle}
                         </p>
+                        {item.warehouseName && (
+                          <div className="mt-1.5 flex flex-col gap-0.5">
+                            <span className="text-[11.5px] font-medium text-ink">
+                              Sold by {item.warehouseName} {item.isLocalWarehouse ? "(Local)" : ""}
+                            </span>
+                            <span className="text-[11px] text-steel">
+                              Estimated Delivery: {item.estimatedDeliveryDays} days
+                            </span>
+                          </div>
+                        )}
                         {item.sku && (
                           <p className="mt-1 text-[11.5px] uppercase tracking-wide text-steel-2">
                             {t("ui.cart.sku")} {item.sku}

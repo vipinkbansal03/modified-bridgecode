@@ -28,6 +28,10 @@ export interface QuoteCartItem {
   selectedAttributes: Record<string, string>;
   priceUnavailable?: boolean;
   priceUnavailableMessage?: string;
+  warehouseId?: string;
+  warehouseName?: string;
+  estimatedDeliveryDays?: number | string;
+  isLocalWarehouse?: boolean;
 }
 
 export interface QuoteCartTotals {

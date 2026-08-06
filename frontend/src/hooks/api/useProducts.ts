@@ -198,3 +198,39 @@ export function useRecentlySeenProducts(slugs: string[]) {
     })),
   });
 }
+
+export interface ProductWarehouse {
+  id: string;
+  name: string;
+  countryId: string;
+  countryName: string;
+  stock: number;
+  estimatedDeliveryDays: string;
+  isLocal: boolean;
+}
+
+export async function fetchProductWarehouses(
+  slug: string,
+  variantId?: string,
+  countryCode?: string,
+  state?: string
+): Promise<ProductWarehouse[]> {
+  if (!HAS_LIVE_API || !countryCode) return [];
+  const res = await apiClient.post(`/products/${slug}/warehouses`, {
+    variantId,
+    countryCode,
+    state
+  });
+  return unwrapData<ProductWarehouse[]>(res);
+}
+
+export function useProductWarehouses(slug: string, variantId?: string, state?: string) {
+  const { selectedCountryCode } = useCurrencyContext(); 
+  
+  return useQuery({
+    queryKey: ["products", "warehouses", slug, variantId, selectedCountryCode, state],
+    queryFn: () => fetchProductWarehouses(slug, variantId, selectedCountryCode, state),
+    enabled: Boolean(slug && selectedCountryCode),
+    staleTime: STALE.short,
+  });
+}

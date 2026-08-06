@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, Fragment, type ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import * as Yup from "yup";
-import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search } from "lucide-react";
+import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search, ChevronRight, ChevronDown } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column, toastMessages } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
@@ -681,6 +681,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [vpBulkActionType, setVpBulkActionType] = useState("Bulk Action");
   const [vpBulkActionValue, setVpBulkActionValue] = useState("");
   const [selectedVPIds, setSelectedVPIds] = useState<string[]>([]);
+  const [expandedVPVariantIds, setExpandedVPVariantIds] = useState<string[]>([]);
   const [filterInvVariant, setFilterInvVariant] = useState("");
   const [filterInvType, setFilterInvType] = useState("");
   const [filterInvStock, setFilterInvStock] = useState("");
@@ -1596,14 +1597,17 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
   const productVariantPrices = useMemo(() => {
     const rawPrices = (product?.prices || []).filter((p: any) => p.variantId != null);
-    return rawPrices.map((price: any) => {
-      const variant = variantRows.find((v) => v.id === price.variantId);
-      return {
-        ...price,
-        variantTitle: variant?.title ?? "Unknown Variant",
-        variantSku: variant?.sku ?? "",
-      };
-    });
+    return rawPrices
+      .map((price: any) => {
+        const variant = variantRows.find((v) => v.id === price.variantId);
+        if (!variant) return null; // Variant was deleted or not found
+        return {
+          ...price,
+          variantTitle: variant.title ?? "Unknown Variant",
+          variantSku: variant.sku ?? "",
+        };
+      })
+      .filter(Boolean);
   }, [product?.prices, variantRows]);
 
   const filteredVariantPrices = useMemo(() => {
@@ -1748,7 +1752,24 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     vpSortDirection,
   ]);
 
-  const totalVPItems = filteredVariantPrices.length;
+  const groupedVariantPrices = useMemo(() => {
+    const groups: Record<string, { variantTitle: string; variantSku: string; prices: any[] }> = {};
+    filteredVariantPrices.forEach((p: any) => {
+      if (!groups[p.variantId]) {
+        groups[p.variantId] = {
+          variantTitle: p.variantTitle,
+          variantSku: p.variantSku,
+          prices: []
+        };
+      }
+      groups[p.variantId].prices.push(p);
+    });
+    return groups;
+  }, [filteredVariantPrices]);
+
+  const groupedVariantIds = useMemo(() => Object.keys(groupedVariantPrices), [groupedVariantPrices]);
+
+  const totalVPItems = groupedVariantIds.length;
   const totalVPPages = Math.ceil(totalVPItems / vpPageSize) || 1;
 
   useEffect(() => {
@@ -1757,11 +1778,19 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   }, [totalVPPages, vpCurrentPage]);
 
-  const paginatedVariantPrices = useMemo(() => {
+  const paginatedGroupedVariantIds = useMemo(() => {
     const start = (vpCurrentPage - 1) * vpPageSize;
     const end = start + vpPageSize;
-    return filteredVariantPrices.slice(start, end);
-  }, [filteredVariantPrices, vpCurrentPage, vpPageSize]);
+    return groupedVariantIds.slice(start, end);
+  }, [groupedVariantIds, vpCurrentPage, vpPageSize]);
+
+  const paginatedVariantPrices = useMemo(() => {
+    const prices: any[] = [];
+    paginatedGroupedVariantIds.forEach(id => {
+      prices.push(...groupedVariantPrices[id].prices);
+    });
+    return prices;
+  }, [paginatedGroupedVariantIds, groupedVariantPrices]);
 
   const allVariantInventories = useMemo(() => {
     const list: any[] = [];
@@ -5266,6 +5295,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                             className="h-4 w-4 accent-[#E31E24]"
                           />
                         </th>
+                        <th className="border-b border-[#E6E6E6] px-4 py-3 w-12 text-center"></th>
                         <th
                           onClick={() => {
                             setVpSortField("variant");
@@ -5332,6 +5362,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                         <th className="border-b border-[#E6E6E6] px-4 py-3">ACTIONS</th>
                       </tr>
                       <tr className="bg-[#FCFCFC]">
+                        <th className="border-b border-[#E6E6E6] px-4 py-2"></th>
                         <th className="border-b border-[#E6E6E6] px-4 py-2"></th>
                         <th className="border-b border-[#E6E6E6] px-4 py-2">
                           <input
@@ -5402,83 +5433,129 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E6E6E6]">
-                      {paginatedVariantPrices.length === 0 ? (
+                      {paginatedGroupedVariantIds.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="px-4 py-8 text-center text-[#9A9A9A]">
+                          <td colSpan={10} className="px-4 py-8 text-center text-[#9A9A9A]">
                             No variant price overrides found.
                           </td>
                         </tr>
                       ) : (
-                        paginatedVariantPrices.map((price: any) => {
-                          const currencySymbol = price.currency?.symbol ?? price.country?.currency?.symbol ?? "$";
+                        paginatedGroupedVariantIds.map((variantId) => {
+                          const group = groupedVariantPrices[variantId];
+                          const isExpanded = expandedVPVariantIds.includes(variantId);
+                          const toggleExpand = () => {
+                            if (isExpanded) {
+                              setExpandedVPVariantIds(prev => prev.filter(id => id !== variantId));
+                            } else {
+                              setExpandedVPVariantIds(prev => [...prev, variantId]);
+                            }
+                          };
+
                           return (
-                            <tr key={price.id} className="hover:bg-[#FAFAFA]">
-                              <td className="px-4 py-3 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedVPIds.includes(price.id)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setSelectedVPIds((prev) => [...prev, price.id]);
-                                    } else {
-                                      setSelectedVPIds((prev) => prev.filter((id) => id !== price.id));
-                                    }
-                                  }}
-                                  className="h-4 w-4 accent-[#E31E24]"
-                                />
-                              </td>
-                              <td className="px-4 py-3 font-medium text-[#1A1A1A]">
-                                {price.variantTitle} {price.variantSku ? `(${price.variantSku})` : ""}
-                              </td>
-                              <td className="px-4 py-3 text-[#6B6B6B]">
-                                {price.country?.name} ({price.country?.code})
-                              </td>
-                              <td className="px-4 py-3 font-medium text-[#1A1A1A]">
-                                {currencySymbol}
-                                {price.mrp}
-                              </td>
-                              <td className="px-4 py-3 font-semibold text-[#16A34A]">
-                                {currencySymbol}
-                                {price.sellingPrice}
-                              </td>
-                              <td className="px-4 py-3 text-[#1A1A1A]">
-                                {price.dealerPrice != null ? `${currencySymbol}${price.dealerPrice}` : "—"}
-                              </td>
-                              <td className="px-4 py-3 text-[#1A1A1A]">
-                                {price.distributorPrice != null ? `${currencySymbol}${price.distributorPrice}` : "—"}
-                              </td>
-                              <td className="px-4 py-3">
-                                <span
-                                  className={cn(
-                                    "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                                    price.status === "ACTIVE" ? "bg-[#E6F4EA] text-[#137333]" : "bg-[#FCE8E6] text-[#C5221F]"
-                                  )}
-                                >
-                                  {price.status}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const variant = variantRows.find((v) => v.id === price.variantId);
-                                      if (variant) openEditVariantModal(variant);
+                            <Fragment key={variantId}>
+                              <tr className="bg-[#F8F9FA] hover:bg-[#F2F2F2] cursor-pointer" onClick={toggleExpand}>
+                                <td className="px-4 py-3 text-center border-b border-[#E6E6E6]" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={group.prices.length > 0 && group.prices.every((p) => selectedVPIds.includes(p.id))}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        const groupIds = group.prices.map((p) => p.id);
+                                        setSelectedVPIds((prev) => Array.from(new Set([...prev, ...groupIds])));
+                                      } else {
+                                        const groupIds = new Set(group.prices.map((p) => p.id));
+                                        setSelectedVPIds((prev) => prev.filter((id) => !groupIds.has(id)));
+                                      }
                                     }}
-                                    className="rounded border border-[#E6E6E6] p-1 text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#1A1A1A]"
-                                  >
-                                    <Pencil size={13} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteProductPrice(price.id)}
-                                    className="rounded border border-[#F2C9C9] p-1 text-red-600 hover:bg-red-50"
-                                  >
-                                    <Trash2 size={13} />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
+                                    className="h-4 w-4 accent-[#E31E24]"
+                                  />
+                                </td>
+                                <td className="px-4 py-3 text-center border-b border-[#E6E6E6] text-[#9A9A9A]">
+                                  {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                </td>
+                                <td className="px-4 py-3 font-medium text-[#1A1A1A] border-b border-[#E6E6E6]" colSpan={8}>
+                                  {group.variantTitle} {group.variantSku ? `(${group.variantSku})` : ""}
+                                  <span className="ml-3 text-[12px] text-[#6B6B6B] font-normal px-2 py-0.5 rounded bg-white border border-[#E6E6E6]">
+                                    {group.prices.length} Pricing Override{group.prices.length !== 1 ? 's' : ''}
+                                  </span>
+                                </td>
+                              </tr>
+                              {isExpanded && group.prices.map((price: any) => {
+                                const currencySymbol = price.currency?.symbol ?? price.country?.currency?.symbol ?? "$";
+                                return (
+                                  <tr key={price.id} className="hover:bg-[#FAFAFA]">
+                                    <td className="px-4 py-3 text-center">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedVPIds.includes(price.id)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setSelectedVPIds((prev) => [...prev, price.id]);
+                                          } else {
+                                            setSelectedVPIds((prev) => prev.filter((id) => id !== price.id));
+                                          }
+                                        }}
+                                        className="h-4 w-4 accent-[#E31E24]"
+                                      />
+                                    </td>
+                                    <td className="px-4 py-3 text-center text-[#9A9A9A] border-r border-[#E6E6E6]">
+                                      ↳
+                                    </td>
+                                    <td className="px-4 py-3 text-[#9A9A9A] text-[12px]">
+                                      <span className="sr-only">{group.variantTitle}</span>
+                                    </td>
+                                    <td className="px-4 py-3 text-[#6B6B6B]">
+                                      {price.country?.name} ({price.country?.code})
+                                    </td>
+                                    <td className="px-4 py-3 font-medium text-[#1A1A1A]">
+                                      {currencySymbol}
+                                      {price.mrp}
+                                    </td>
+                                    <td className="px-4 py-3 font-semibold text-[#16A34A]">
+                                      {currencySymbol}
+                                      {price.sellingPrice}
+                                    </td>
+                                    <td className="px-4 py-3 text-[#1A1A1A]">
+                                      {price.dealerPrice != null ? `${currencySymbol}${price.dealerPrice}` : "—"}
+                                    </td>
+                                    <td className="px-4 py-3 text-[#1A1A1A]">
+                                      {price.distributorPrice != null ? `${currencySymbol}${price.distributorPrice}` : "—"}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <span
+                                        className={cn(
+                                          "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                                          price.status === "ACTIVE" ? "bg-[#E6F4EA] text-[#137333]" : "bg-[#FCE8E6] text-[#C5221F]"
+                                        )}
+                                      >
+                                        {price.status}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <div className="flex items-center gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const variant = variantRows.find((v) => v.id === price.variantId);
+                                            if (variant) openEditVariantModal(variant);
+                                          }}
+                                          className="rounded border border-[#E6E6E6] p-1 text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#1A1A1A]"
+                                        >
+                                          <Pencil size={13} />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteProductPrice(price.id)}
+                                          className="rounded border border-[#F2C9C9] p-1 text-red-600 hover:bg-red-50"
+                                        >
+                                          <Trash2 size={13} />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </Fragment>
                           );
                         })
                       )}

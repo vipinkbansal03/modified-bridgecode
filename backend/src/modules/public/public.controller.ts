@@ -119,3 +119,11 @@ function getOptionalCustomerId(req: Request) {
     return undefined;
   }
 }
+
+export const getProductWarehouses = asyncHandler(async (req: Request, res: Response) => {
+  const { countryCode, state, variantId } = req.body;
+  if (!countryCode) throw new Error("countryCode is required.");
+  
+  const data = await S.getProductWarehouses(String(req.params.slug), variantId, countryCode, state);
+  return AR.success(res, "Eligible warehouses.", data);
+});

@@ -76,8 +76,8 @@ export async function createWarehouse(data: {
   const country = await prisma.country.findUnique({ where: { id: data.countryId } });
   if (!country) throw new AppError("Country not found.", 404);
 
-  if (data.status === "ACTIVE" && country.code === "IN" && !validateGstin(country.code, data.gstin)) {
-    throw new AppError("A valid GSTIN is required to activate an India warehouse.", 400);
+  if (data.status === "ACTIVE" && country.code === "IN" && data.gstin && !validateGstin(country.code, data.gstin)) {
+    throw new AppError("The provided GSTIN format is invalid.", 400);
   }
 
   const formattedAddress = data.address || [
@@ -130,8 +130,8 @@ export async function updateWarehouse(id: string, data: {
   const nextStatus = data.status ?? existing.status;
   const nextGstin = data.gstin ?? existing.gstin;
 
-  if (nextStatus === "ACTIVE" && targetCountry.code === "IN" && !validateGstin(targetCountry.code, nextGstin)) {
-    throw new AppError("A valid GSTIN is required to activate an India warehouse.", 400);
+  if (nextStatus === "ACTIVE" && targetCountry.code === "IN" && nextGstin && !validateGstin(targetCountry.code, nextGstin)) {
+    throw new AppError("The provided GSTIN format is invalid.", 400);
   }
 
   const nextLine1 = data.addressLine1 !== undefined ? data.addressLine1 : existing.addressLine1;

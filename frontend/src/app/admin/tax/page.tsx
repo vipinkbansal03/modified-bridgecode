@@ -261,7 +261,12 @@ export default function AdminTaxPage() {
     },
     onSubmit: async (values, { setSubmitting, resetForm }) => {
       try {
-        const selectedCountries = values.countryIds ?? [];
+        // When using AdminMultiSearchableSelect with allowSelectAll, an empty array implies "All selected".
+        // Therefore, if it's empty, we send all available country IDs to the backend.
+        const selectedCountries = (values.countryIds && values.countryIds.length > 0)
+          ? values.countryIds
+          : countries.map((c: any) => c.id);
+          
         const payload = {
           name: values.name,
           type: values.type,
@@ -378,37 +383,59 @@ export default function AdminTaxPage() {
           }
 
           return (
-            <div className="flex flex-col gap-1 py-0.5">
+            <div className="flex flex-col gap-1.5 py-1">
               {hasCategories && (
                 <div className="flex flex-wrap gap-1 items-center">
                   <span className="text-[10px] uppercase font-bold text-[#6B7280]">Categories:</span>
-                  {row.categories?.map((cat) => (
-                    <span key={cat.id} className="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
-                      {cat.name}
+                  {row.categories?.slice(0, 2).map((cat) => (
+                    <span key={cat.id} className="inline-flex max-w-[180px] items-center rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                      <span className="truncate">{cat.name}</span>
                     </span>
                   ))}
+                  {row.categories && row.categories.length > 2 && (
+                    <span className="inline-flex items-center rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                      +{row.categories.length - 2} more
+                    </span>
+                  )}
                 </div>
               )}
               {hasProducts && (
                 <div className="flex flex-wrap gap-1 items-center">
                   <span className="text-[10px] uppercase font-bold text-[#6B7280]">Products:</span>
-                  {row.products?.map((prod) => (
-                    <span key={prod.id} className="inline-flex items-center rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700">
-                      {prod.title}
+                  {row.products?.slice(0, 2).map((prod) => (
+                    <span key={prod.id} className="inline-flex max-w-[180px] items-center rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700">
+                      <span className="truncate">{prod.title}</span>
                     </span>
                   ))}
+                  {row.products && row.products.length > 2 && (
+                    <span className="inline-flex items-center rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                      +{row.products.length - 2} more
+                    </span>
+                  )}
                 </div>
               )}
-              {hasVariants && (
+              {hasVariants ? (
                 <div className="flex flex-wrap gap-1 items-center">
                   <span className="text-[10px] uppercase font-bold text-[#6B7280]">Variants:</span>
-                  {row.variants?.map((v) => (
-                    <span key={v.id} className="inline-flex items-center rounded bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
-                      {v.title}
+                  {row.variants?.slice(0, 2).map((v) => (
+                    <span key={v.id} className="inline-flex max-w-[180px] items-center rounded bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
+                      <span className="truncate">{v.title}</span>
                     </span>
                   ))}
+                  {row.variants && row.variants.length > 2 && (
+                    <span className="inline-flex items-center rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                      +{row.variants.length - 2} more
+                    </span>
+                  )}
                 </div>
-              )}
+              ) : hasProducts ? (
+                <div className="flex flex-wrap gap-1 items-center">
+                  <span className="text-[10px] uppercase font-bold text-[#6B7280]">Variants:</span>
+                  <span className="inline-flex items-center rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                    All variants
+                  </span>
+                </div>
+              ) : null}
             </div>
           );
         }

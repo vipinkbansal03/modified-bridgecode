@@ -15,7 +15,10 @@ import { useCart, type CartItem } from "@/contexts/CartContext";
 import { useQuoteCart, type QuoteCartItem } from "@/contexts/QuoteCartContext";
 import { useQuoteCartUI } from "@/contexts/QuoteCartUIContext";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
+import { useDeliveryAddress } from "@/contexts/DeliveryAddressContext";
 import { apiClient } from "@/lib/apiClient";
+import { useProductWarehouses } from "@/hooks/api/useProducts";
+import { WarehouseSelectorModal } from "./WarehouseSelectorModal";
 import { QuantityInput } from "./QuantityInput";
 import { StockBadge } from "./StockBadge";
 import type {
@@ -149,6 +152,10 @@ function buildCartItems(
   quantityMap: Record<string, number>,
   priceMap: Record<string, ApiProductPrice | null>,
   previewPriceMap?: Record<string, number>,
+  warehouseId?: string,
+  warehouseName?: string,
+  estimatedDeliveryDays?: number | string,
+  isLocal?: boolean,
 ) {
   const items: Array<{ cart: CartItem; quote: QuoteCartItem }> = [];
 
@@ -183,8 +190,18 @@ function buildCartItems(
         productSlug: apiProduct.slug,
         countryCode: price.countryCode,
         countryName: price.countryName,
+        warehouseId,
+        warehouseName,
+        estimatedDeliveryDays,
+        isLocalWarehouse: isLocal,
       },
-      quote: base,
+      quote: {
+        ...base,
+        warehouseId,
+        warehouseName,
+        estimatedDeliveryDays,
+        isLocalWarehouse: isLocal,
+      },
     });
   });
 
@@ -202,6 +219,34 @@ export function DynamicVariantMatrixConfigurator({
   const { currentCustomer, isLoading } = useCustomerAuth();
   const { showToast } = useToast();
   const router = useRouter();
+
+  const { selectedAddress } = useDeliveryAddress();
+
+  const { data: warehouses, isLoading: isWarehousesLoading } = useProductWarehouses(
+    apiProduct.slug,
+    undefined,
+    selectedAddress?.state
+  );
+  
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string | null>(null);
+  const [userSelected, setUserSelected] = useState(false);
+  const [isWarehouseModalOpen, setIsWarehouseModalOpen] = useState(false);
+
+  useEffect(() => {
+    setUserSelected(false);
+  }, [selectedAddress?.state]);
+
+  useEffect(() => {
+    if (warehouses && warehouses.length > 0) {
+      if (!userSelected || !selectedWarehouseId || !warehouses.find(w => w.id === selectedWarehouseId)) {
+        setSelectedWarehouseId(warehouses[0].id);
+      }
+    } else {
+      setSelectedWarehouseId(null);
+    }
+  }, [warehouses, selectedWarehouseId, userSelected]);
+
+  const selectedWarehouse = warehouses?.find(w => w.id === selectedWarehouseId) || warehouses?.[0];
 
   const attributes = useMemo<ProductOptionAttribute[]>(
     () =>
@@ -399,6 +444,10 @@ export function DynamicVariantMatrixConfigurator({
       quantityMap,
       variantPriceMap,
       previewPriceMap,
+      selectedWarehouse?.id,
+      selectedWarehouse?.name,
+      selectedWarehouse?.estimatedDeliveryDays,
+      selectedWarehouse?.isLocal,
     );
     if (!items.length) {
       setFeedback({
@@ -424,6 +473,10 @@ export function DynamicVariantMatrixConfigurator({
       quantityMap,
       variantPriceMap,
       previewPriceMap,
+      selectedWarehouse?.id,
+      selectedWarehouse?.name,
+      selectedWarehouse?.estimatedDeliveryDays,
+      selectedWarehouse?.isLocal,
     );
     if (!items.length) {
       setFeedback({
@@ -818,23 +871,55 @@ export function DynamicVariantMatrixConfigurator({
                 </div>
               </div>
 
+              {selectedWarehouse && (
+                <div className="mt-4 flex items-center justify-between rounded-lg border border-[#E0E0E0] bg-[#F9F9F9] p-3">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[12px] text-steel">Sold by / Ships from</span>
+                    <span className="text-[13px] font-semibold text-ink">{selectedWarehouse.name}</span>
+                    <span className="text-[12px] text-emerald-600 font-medium">Estimated Delivery: {selectedWarehouse.estimatedDeliveryDays} days</span>
+                  </div>
+                  {warehouses && warehouses.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setIsWarehouseModalOpen(true)}
+                      className="text-[13px] font-medium text-brand hover:underline"
+                    >
+                      Change Seller
+                    </button>
+                  )}
+                </div>
+              )}
+              
+              <WarehouseSelectorModal
+                open={isWarehouseModalOpen}
+                onClose={() => setIsWarehouseModalOpen(false)}
+                warehouses={warehouses || []}
+                selectedWarehouseId={selectedWarehouseId}
+                onSelect={(id) => {
+                  setSelectedWarehouseId(id);
+                  setUserSelected(true);
+                  setIsWarehouseModalOpen(false);
+                }}
+                isLoading={isWarehousesLoading}
+              />
+
               <div className="mt-5 space-y-3">
                 <button
                   type="button"
                   onClick={handleAddSelectedToCart}
-                  disabled={selectedEntries.length === 0}
+                  disabled={selectedEntries.length === 0 || (!selectedWarehouse && warehouses && warehouses.length === 0)}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A]"
                 >
                   <ShoppingBag size={15} />
-                  Add Selected To Cart
+                  {(!selectedWarehouse && warehouses && warehouses.length === 0) ? "Not Deliverable to Location" : "Add Selected To Cart"}
                 </button>
                 <button
                   type="button"
                   onClick={handleAddSelectedToQuote}
-                  disabled={selectedEntries.length === 0}
+                  disabled={selectedEntries.length === 0 || (!selectedWarehouse && warehouses && warehouses.length === 0)}
                   className="inline-flex w-full items-center justify-center rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand disabled:cursor-not-allowed disabled:border-line disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A]"
                 >
-                  Add Selected To Quote
+                  {(!selectedWarehouse && warehouses && warehouses.length === 0) ? "Not Deliverable to Location" : "Add Selected To Quote"}
                 </button>
               </div>
 

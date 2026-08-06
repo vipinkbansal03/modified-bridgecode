@@ -105,6 +105,18 @@ export default function WarehousesPage() {
           errs.gstin = "Indian GSTIN must be exactly 15 characters";
         }
       }
+      
+      if (!values.deliveryZones || values.deliveryZones.length === 0) {
+        // We'll attach this error to the first zone or general if we had a generic error field
+        // Since we don't have a generic error field, we'll assign it to deliveryZones but we might need to display it in the UI.
+        errs.deliveryZones = "At least one delivery country must be added" as any;
+      } else {
+        const hasEmptyStates = values.deliveryZones.some(z => !z.states || z.states.length === 0);
+        if (hasEmptyStates) {
+          errs.deliveryZones = "Every delivery country must have at least one state selected" as any;
+        }
+      }
+
       return errs;
     },
     onSubmit: async (values) => {
@@ -428,7 +440,9 @@ export default function WarehousesPage() {
 
           <div className="pt-4 mt-2 border-t border-gray-100">
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-sm font-semibold text-[#111827]">Delivery Zones</h4>
+              <h4 className="text-sm font-semibold text-[#111827]">
+                Delivery Zones <span className="text-[#E31E24] ml-1">*</span>
+              </h4>
               <button
                 type="button"
                 onClick={() => form.handleChange("deliveryZones", [...form.values.deliveryZones, { countryId: "", states: [] }])}
@@ -437,6 +451,12 @@ export default function WarehousesPage() {
                 <Plus size={14} /> Add Delivery Country
               </button>
             </div>
+            
+            {form.errors.deliveryZones && (
+              <p className="mb-4 text-[12px] text-red-500">
+                {form.errors.deliveryZones}
+              </p>
+            )}
 
             {form.values.deliveryZones.length === 0 && (
               <div className="text-[13px] text-gray-500 italic p-4 text-center bg-gray-50 rounded-md border border-gray-200">
@@ -492,10 +512,10 @@ export default function WarehousesPage() {
 
                       {zone.countryId && zStates.length > 0 && (
                         <div className="space-y-1.5 relative">
-                          <div className="text-[11px] text-gray-500 mb-2">Leave empty to deliver everywhere in {zCountry?.name}.</div>
+                          <div className="text-[11px] text-gray-500 mb-2">Select the states in {zCountry?.name} that this warehouse can ship to.</div>
                           
                           <AdminMultiSelect
-                            label="Delivery States (Optional)"
+                            label="Delivery States (Required)"
                             options={zStates}
                             value={zone.states}
                             onChange={(nextValues) => {
@@ -503,7 +523,7 @@ export default function WarehousesPage() {
                               newZones[index].states = nextValues;
                               form.handleChange("deliveryZones", newZones);
                             }}
-                            placeholder="Deliver everywhere (all states)"
+                            placeholder="Select states..."
                             selectAllLabel="Select All"
                           />
                         </div>
@@ -511,7 +531,7 @@ export default function WarehousesPage() {
                       
                       {zone.countryId && zStates.length === 0 && (
                         <div className="text-[12px] text-gray-500 italic p-2 bg-white rounded-md border border-gray-200">
-                          No states configured for {zCountry?.name}. The warehouse will deliver everywhere in this country.
+                          No states configured for {zCountry?.name}. Wait for states to load, or change the country.
                         </div>
                       )}
                     </div>
