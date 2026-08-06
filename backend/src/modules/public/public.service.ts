@@ -1652,3 +1652,96 @@ export async function submitProductReview(
     totalRatings: aggregate.totalRatings,
   };
 }
+
+export async function getProductWarehouses(
+  slug: string,
+  variantId: string | undefined,
+  countryCode: string,
+  state: string | undefined
+) {
+  const product = await prisma.product.findUnique({
+    where: { slug },
+    select: { id: true },
+  });
+  if (!product) throw new AppError("Product not found", 404);
+
+  const requestCountry = await prisma.country.findUnique({
+    where: { code: countryCode }
+  });
+
+  const inventories = await prisma.inventory.findMany({
+    where: {
+      productId: product.id,
+      ...(variantId ? { variantId } : {}),
+      stock: { gt: 0 },
+      warehouseId: { not: null },
+    },
+    include: {
+      warehouse: {
+        include: {
+          country: true
+        }
+      }
+    },
+  });
+
+  const validWarehousesMap = new Map<string, any>();
+
+  for (const inv of inventories) {
+    if (!inv.warehouse || inv.warehouse.status !== "ACTIVE") continue;
+    const w = inv.warehouse;
+
+    let isEligible = false;
+    
+    if (!w.deliveryZones || !Array.isArray(w.deliveryZones) || w.deliveryZones.length === 0) {
+      isEligible = true; // No zones defined means delivers everywhere
+    } else if (requestCountry) {
+      const zone = (w.deliveryZones as any[]).find((z: any) => z.countryId === requestCountry.id);
+      if (zone) {
+        if (!zone.states || zone.states.length === 0) {
+           isEligible = true; // Delivers everywhere in this country
+        } else if (state && zone.states.includes(state)) {
+           isEligible = true; // Delivers to this specific state
+        }
+      }
+    }
+
+    if (isEligible) {
+      if (validWarehousesMap.has(w.id)) {
+        // Aggregate stock if we're dealing with multiple variants
+        const existing = validWarehousesMap.get(w.id);
+        existing.stock += inv.stock;
+      } else {
+        validWarehousesMap.set(w.id, {
+          id: w.id,
+          name: w.name,
+          countryId: w.countryId,
+          countryCode: w.country?.code || "",
+          countryName: w.country?.name || "",
+          state: w.state,
+          stock: inv.stock,
+          estimatedDeliveryDays: w.country?.code === countryCode ? "2-4" : "7-14",
+          isLocal: w.country?.code === countryCode,
+          isStateMatch: Boolean(state && w.state && w.state.toLowerCase() === state.toLowerCase())
+        });
+      }
+    }
+  }
+
+  const validWarehouses = Array.from(validWarehousesMap.values());
+
+  validWarehouses.sort((a, b) => {
+    // 1. Prioritize state match (same state)
+    if (a.isStateMatch && !b.isStateMatch) return -1;
+    if (!a.isStateMatch && b.isStateMatch) return 1;
+    
+    // 2. Prioritize country match (same country)
+    if (a.isLocal && !b.isLocal) return -1;
+    if (!a.isLocal && b.isLocal) return 1;
+    
+    // 3. Tie-breaker: Highest stock
+    return b.stock - a.stock;
+  });
+
+  return validWarehouses;
+}

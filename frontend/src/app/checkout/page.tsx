@@ -206,7 +206,7 @@ function CustomSelect({
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, totals, updateQuantity, removeItem, clearCart } = useCart();
+  const { items, totals, updateQuantity, removeItem, clearCart, revalidateCart } = useCart();
   const { currentCustomer, isLoading } = useCustomerAuth();
   const { selectedCountryCode, setSelectedCountryCode } = useCurrencyContext();
   const { selectedAddress: sessionAddress, setSelectedAddress } = useDeliveryAddress();
@@ -307,9 +307,10 @@ export default function CheckoutPage() {
         setVatStatus(null);
         setVatMessage("");
         initialCountryRef.current = form.countryCode;
+        revalidateCart(form.countryCode);
       }
     }
-  }, [form.countryCode]);
+  }, [form.countryCode, revalidateCart]);
 
   const taxIdConfig = useMemo(() => {
     const countryUpper = form.countryCode.trim().toUpperCase();
@@ -1406,6 +1407,16 @@ export default function CheckoutPage() {
                           <p className="mt-1 text-[12.5px] text-steel">
                             {item.variantTitle}
                           </p>
+                          {item.warehouseName && (
+                            <div className="mt-1.5 flex flex-col gap-0.5">
+                              <span className="text-[11.5px] font-medium text-[#1A1A1A]">
+                                Sold by {item.warehouseName} {item.isLocalWarehouse ? "(Local)" : ""}
+                              </span>
+                              <span className="text-[11px] text-[#6B6B6B]">
+                                Estimated Delivery: {item.estimatedDeliveryDays} days
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <button
                           type="button"

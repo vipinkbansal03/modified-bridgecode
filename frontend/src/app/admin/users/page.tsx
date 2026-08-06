@@ -2,7 +2,7 @@
 import { useState, useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useFormik } from "formik";
+import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import * as Yup from "yup";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -35,7 +35,7 @@ export default function UsersPage() {
   const { data: warehousesData } = useAdminWarehouses({ limit: 30 });
   const warehouses = warehousesData?.data || [];
   const roleOptions = [{ value: "", label: "Select role…" }, ...roles.map((r: { id: string; name: string }) => ({ value: r.id, label: r.name }))];
-  const formik = useFormik({
+  const form = useAdminForm({
     enableReinitialize: true,
     initialValues: {
       name: editingUser?.name || "",
@@ -54,7 +54,7 @@ export default function UsersPage() {
       roleId: Yup.string().required("Role is required"),
       status: Yup.string().required("Status is required"),
     }),
-    onSubmit: async (values, { setSubmitting, resetForm }) => {
+    onSubmit: async (values) => {
       try {
         if (editingUser) {
           const payload: any = { ...values };
@@ -68,18 +68,18 @@ export default function UsersPage() {
         refetch();
         setShowForm(false);
         setEditingUser(null);
-        resetForm();
+        form.reset();
       } catch (err) {
         showToast("Failed to save user.", "error");
       } finally {
-        setSubmitting(false);
+        
       }
     },
   });
   const handleCloseForm = () => {
     setShowForm(false);
     setEditingUser(null);
-    formik.resetForm();
+    form.reset();
   };
   const handleDelete = async () => {
     if (!deleting) return;
@@ -187,7 +187,7 @@ export default function UsersPage() {
         )}
 
         <Modal open={showForm} onClose={handleCloseForm}>
-          <form onSubmit={formik.handleSubmit} className="flex flex-col max-h-[90vh] w-full max-w-2xl bg-white rounded-xl shadow-xl overflow-hidden">
+          <form onSubmit={form.handleSubmit} className="flex flex-col max-h-[90vh] w-full max-w-2xl bg-white rounded-xl shadow-xl overflow-hidden">
             <div className="border-b border-[#E6E6E6] px-5 py-4 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-semibold text-[#1A1A1A]">
@@ -208,18 +208,18 @@ export default function UsersPage() {
 
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <AdminInput label="Full Name *" {...formik.getFieldProps("name")} error={formik.touched.name ? (formik.errors.name as string) : ""} />
-                <AdminInput label="Email *" type="email" {...formik.getFieldProps("email")} error={formik.touched.email ? (formik.errors.email as string) : ""} />
-                <AdminInput label={editingUser ? "Password" : "Password *"} type="password" placeholder={editingUser ? "Leave blank to keep current" : "Min 8 characters"} {...formik.getFieldProps("password")} error={formik.touched.password ? (formik.errors.password as string) : ""} />
-                <AdminSelect label="Role *" options={roleOptions} {...formik.getFieldProps("roleId")} error={formik.touched.roleId ? (formik.errors.roleId as string) : ""} />
+                <AdminInput label="Full Name" {...form.getFieldProps("name")} error={form.errors.name as string} />
+                <AdminInput label="Email" type="email" {...form.getFieldProps("email")} error={form.errors.email as string} />
+                <AdminInput label={editingUser ? "Password" : "Password *"} type="password" placeholder={editingUser ? "Leave blank to keep current" : "Min 8 characters"} {...form.getFieldProps("password")} error={form.errors.password as string} />
+                <AdminSelect label="Role" options={roleOptions} {...form.getFieldProps("roleId")} error={form.errors.roleId as string} />
                 <AdminSelect
-                  label="Status *"
+                  label="Status"
                   options={[
                     { value: "ACTIVE", label: "Active" },
                     { value: "INACTIVE", label: "Inactive" },
                   ]}
-                  {...formik.getFieldProps("status")}
-                  error={formik.touched.status ? (formik.errors.status as string) : ""}
+                  {...form.getFieldProps("status")}
+                  error={form.errors.status as string}
                 />
                 <div className="md:col-span-2 border-t border-[#E6E6E6] pt-4 mt-2">
                   <AdminMultiSelect
@@ -229,9 +229,9 @@ export default function UsersPage() {
                       value: w.id,
                       label: `${w.name} ${w.state ? `(${w.state})` : ""}`
                     }))}
-                    selectedValues={formik.values.warehouseIds}
-                    onChange={(nextIds) => formik.setFieldValue("warehouseIds", nextIds)}
-                    error={formik.touched.warehouseIds ? (formik.errors.warehouseIds as string) : ""}
+                    selectedValues={form.values.warehouseIds}
+                    onChange={(nextIds) => form.setFieldValue("warehouseIds", nextIds)}
+                    error={form.errors.warehouseIds as string}
                   />
                   <p className="mt-1.5 text-[11px] text-[#9A9A9A]">
                     Leave all unchecked if this staff member should have access to all warehouses.
@@ -251,7 +251,7 @@ export default function UsersPage() {
               <button
                 type="submit"
                 className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-                disabled={formik.isSubmitting}
+                disabled={form.isSubmitting}
               >
                 {editingUser ? "Update User" : "Create User"}
               </button>

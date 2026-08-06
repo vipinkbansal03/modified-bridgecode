@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { useFormik } from "formik";
+import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import * as Yup from "yup";
 import { Archive, Copy, Download, Image as ImageIcon, Pencil, Plus, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
@@ -188,7 +188,7 @@ export default function CategoriesPage() {
       .map((category) => ({ value: category.id, label: `${"  ".repeat(category.depth)}${category.depth ? "- " : ""}${category.name}` })),
   ], [categories, editing?.id, excludedParentIds]);
 
-  const formik = useFormik({
+  const form = useAdminForm({
     enableReinitialize: true,
     initialValues: {
       name: editing?.name || "",
@@ -228,13 +228,13 @@ export default function CategoriesPage() {
           setShowCreate(false);
         }
         setSlugEdited(false);
-        resetForm();
+        form.reset();
       } catch (error) {
         const message = getAdminErrorMessage(error, "Failed to save category.");
         setStatus(message);
         showToast(message, "error");
       } finally {
-        setSubmitting(false);
+        
       }
     },
   });
@@ -253,12 +253,12 @@ export default function CategoriesPage() {
     setCategoryEditorTab("content");
     setSlugEdited(false);
     setCountryOverrides({});
-    formik.resetForm();
+    form.reset();
   };
 
   const handleNameChange = (value: string) => {
-    formik.setFieldValue("name", value);
-    if (!slugEdited) formik.setFieldValue("slug", slugify(value));
+    form.setFieldValue("name", value);
+    if (!slugEdited) form.setFieldValue("slug", slugify(value));
   };
 
   const handleImageUpload = async (file: File | undefined) => {
@@ -270,7 +270,7 @@ export default function CategoriesPage() {
     try {
       const response = await adminApi.post("/media", formData);
       const uploaded = response.data?.data?.[0];
-      if (uploaded?.url) formik.setFieldValue("image", uploaded.url);
+      if (uploaded?.url) form.setFieldValue("image", uploaded.url);
       else throw new Error("Upload completed, but no image URL was returned.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Image upload failed."), "error");
@@ -413,7 +413,7 @@ export default function CategoriesPage() {
     setSlugEdited(false);
     setCountryOverrides({});
     setCountrySearch("");
-    formik.resetForm();
+    form.reset();
   };
 
   const closeCreateModal = () => {
@@ -423,7 +423,7 @@ export default function CategoriesPage() {
     setSlugEdited(false);
     setCountryOverrides({});
     setCountrySearch("");
-    formik.resetForm();
+    form.reset();
   };
 
   return (
@@ -486,7 +486,7 @@ export default function CategoriesPage() {
         title={editing ? `Edit Category: ${editing.name}` : "Category Editor"}
         panelClassName="max-w-5xl max-h-[calc(100vh-2rem)] overflow-y-auto"
       >
-        <form onSubmit={formik.handleSubmit} className="space-y-6 p-6">
+        <form onSubmit={form.handleSubmit} className="space-y-6 p-6">
           {editing && (
             <div className="flex justify-start">
               <TranslationModeBar
@@ -499,36 +499,36 @@ export default function CategoriesPage() {
             </div>
           )}
 
-          {formik.status && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">{formik.status}</div>}
+          {form.status && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">{form.status}</div>}
 
           {(!editing || categoryEditorTab === "content") && (
             <div className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <AdminInput label="Name *" placeholder="e.g. Metal Brackets" value={formik.values.name} onChange={(e) => handleNameChange(e.target.value)} onBlur={formik.handleBlur} name="name" error={formik.touched.name ? (formik.errors.name as string) : ""} />
-                <AdminInput label="Slug *" placeholder="metal-brackets" value={formik.values.slug} onChange={(e) => { setSlugEdited(true); formik.setFieldValue("slug", slugify(e.target.value)); }} onBlur={formik.handleBlur} name="slug" error={formik.touched.slug ? (formik.errors.slug as string) : ""} />
+                <AdminInput label="Name" placeholder="e.g. Metal Brackets" value={form.values.name} onChange={(e) => handleNameChange(e.target.value)} onBlur={form.handleBlur} name="name" error={form.errors.name as string} />
+                <AdminInput label="Slug" placeholder="metal-brackets" value={form.values.slug} onChange={(e) => { setSlugEdited(true); form.setFieldValue("slug", slugify(e.target.value)); }} onBlur={form.handleBlur} name="slug" error={form.errors.slug as string} />
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                <AdminSelect label="Parent category" options={parentOptions} {...formik.getFieldProps("parentId")} />
+                <AdminSelect label="Parent category" options={parentOptions} {...form.getFieldProps("parentId")} />
                 <AdminSelect
                   label="Status"
                   options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]}
-                  {...formik.getFieldProps("status")}
+                  {...form.getFieldProps("status")}
                 />
               </div>
-              <AdminTextarea label="Description" rows={3} {...formik.getFieldProps("description")} />
+              <AdminTextarea label="Description" rows={3} {...form.getFieldProps("description")} />
               <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
                 <h4 className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">SEO</h4>
                 <div className="grid gap-4 md:grid-cols-2">
-                  <AdminInput label="Meta Title" placeholder="Browser/search title" {...formik.getFieldProps("seoTitle")} />
-                  <AdminTextarea label="Meta Description" rows={2} placeholder="Short search description" {...formik.getFieldProps("seoDescription")} />
+                  <AdminInput label="Meta Title" placeholder="Browser/search title" {...form.getFieldProps("seoTitle")} />
+                  <AdminTextarea label="Meta Description" rows={2} placeholder="Short search description" {...form.getFieldProps("seoDescription")} />
                 </div>
               </div>
               <div className="grid gap-4 md:grid-cols-[120px_1fr]">
                 <div className="flex h-[92px] w-[120px] items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
-                  {formik.values.image ? <img src={formik.values.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={22} className="text-[#9A9A9A]" />}
+                  {form.values.image ? <img src={form.values.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={22} className="text-[#9A9A9A]" />}
                 </div>
                 <div className="space-y-2">
-                  <AdminInput label="Image URL" placeholder="/uploads/category.jpg" {...formik.getFieldProps("image")} />
+                  <AdminInput label="Image URL" placeholder="/uploads/category.jpg" {...form.getFieldProps("image")} />
                   <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]">
                     <Upload size={14} /> {uploadingImage ? "Uploading..." : "Upload image"}
                     <input type="file" accept="image/*" className="hidden" disabled={uploadingImage} onChange={(e) => handleImageUpload(e.target.files?.[0])} />
@@ -661,8 +661,8 @@ export default function CategoriesPage() {
 
           <div className="flex gap-2.5 justify-end">
             {(!editing || categoryEditorTab === "content") && (
-              <button type="submit" disabled={formik.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
-                {formik.isSubmitting ? "Saving..." : editing ? "Update category" : "Create category"}
+              <button type="submit" disabled={form.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
+                {form.isSubmitting ? "Saving..." : editing ? "Update category" : "Create category"}
               </button>
             )}
             <button type="button" onClick={closeEditor} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] hover:bg-[#F2F2F2]">Cancel</button>
@@ -676,63 +676,63 @@ export default function CategoriesPage() {
         title="Add Category"
         panelClassName="max-w-4xl max-h-[calc(100vh-2.5rem)] overflow-y-auto"
       >
-        <form onSubmit={formik.handleSubmit} className="space-y-5 p-6">
+        <form onSubmit={form.handleSubmit} className="space-y-5 p-6">
           <p className="text-[13px] leading-5 text-[#6B6B6B]">
             Create the category now. Country availability and translation work can be refined after saving.
           </p>
 
-          {formik.status && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">{formik.status}</div>}
+          {form.status && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">{form.status}</div>}
 
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <AdminInput
-                label="Name *"
+                label="Name"
                 placeholder="e.g. Metal Brackets"
-                value={formik.values.name}
+                value={form.values.name}
                 onChange={(e) => handleNameChange(e.target.value)}
-                onBlur={formik.handleBlur}
+                onBlur={form.handleBlur}
                 name="name"
-                error={formik.touched.name ? (formik.errors.name as string) : ""}
+                error={form.errors.name as string}
               />
               <AdminInput
-                label="Slug *"
+                label="Slug"
                 placeholder="metal-brackets"
-                value={formik.values.slug}
+                value={form.values.slug}
                 onChange={(e) => {
                   setSlugEdited(true);
-                  formik.setFieldValue("slug", slugify(e.target.value));
+                  form.setFieldValue("slug", slugify(e.target.value));
                 }}
-                onBlur={formik.handleBlur}
+                onBlur={form.handleBlur}
                 name="slug"
-                error={formik.touched.slug ? (formik.errors.slug as string) : ""}
+                error={form.errors.slug as string}
               />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <AdminSelect label="Parent category" options={parentOptions} {...formik.getFieldProps("parentId")} />
+              <AdminSelect label="Parent category" options={parentOptions} {...form.getFieldProps("parentId")} />
               <AdminSelect
                 label="Status"
                 options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]}
-                {...formik.getFieldProps("status")}
+                {...form.getFieldProps("status")}
               />
             </div>
 
-            <AdminTextarea label="Description" rows={3} {...formik.getFieldProps("description")} />
+            <AdminTextarea label="Description" rows={3} {...form.getFieldProps("description")} />
 
             <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
               <h4 className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">SEO</h4>
               <div className="grid gap-4 md:grid-cols-2">
-                <AdminInput label="Meta Title" placeholder="Browser/search title" {...formik.getFieldProps("seoTitle")} />
-                <AdminTextarea label="Meta Description" rows={2} placeholder="Short search description" {...formik.getFieldProps("seoDescription")} />
+                <AdminInput label="Meta Title" placeholder="Browser/search title" {...form.getFieldProps("seoTitle")} />
+                <AdminTextarea label="Meta Description" rows={2} placeholder="Short search description" {...form.getFieldProps("seoDescription")} />
               </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-[120px_1fr]">
               <div className="flex h-[92px] w-[120px] items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
-                {formik.values.image ? <img src={formik.values.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={22} className="text-[#9A9A9A]" />}
+                {form.values.image ? <img src={form.values.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={22} className="text-[#9A9A9A]" />}
               </div>
               <div className="space-y-2">
-                <AdminInput label="Image URL" placeholder="/uploads/category.jpg" {...formik.getFieldProps("image")} />
+                <AdminInput label="Image URL" placeholder="/uploads/category.jpg" {...form.getFieldProps("image")} />
                 <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]">
                   <Upload size={14} /> {uploadingImage ? "Uploading..." : "Upload image"}
                   <input type="file" accept="image/*" className="hidden" disabled={uploadingImage} onChange={(e) => handleImageUpload(e.target.files?.[0])} />
@@ -745,8 +745,8 @@ export default function CategoriesPage() {
             <button type="button" onClick={closeCreateModal} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] hover:bg-[#F2F2F2]">
               Cancel
             </button>
-            <button type="submit" disabled={formik.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
-              {formik.isSubmitting ? "Creating..." : "Create category"}
+            <button type="submit" disabled={form.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
+              {form.isSubmitting ? "Creating..." : "Create category"}
             </button>
           </div>
         </form>

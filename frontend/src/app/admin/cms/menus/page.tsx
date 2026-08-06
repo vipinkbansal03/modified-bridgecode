@@ -454,8 +454,8 @@ function MenuCard({
             </div>
 
             <div className="space-y-3">
-              <AdminInput label="Item Label *" value={addLabel} onChange={(e) => setAddLabel(e.target.value)} placeholder="e.g. Metal Brackets" />
-              <AdminInput label="URL / Slug Target *" value={addUrl} onChange={(e) => setAddUrl(e.target.value)} placeholder="/products?category=metal-brackets" />
+              <AdminInput label="Item Label" value={addLabel} onChange={(e) => setAddLabel(e.target.value)} placeholder="e.g. Metal Brackets" />
+              <AdminInput label="URL / Slug Target" value={addUrl} onChange={(e) => setAddUrl(e.target.value)} placeholder="/products?category=metal-brackets" />
               <AdminSelect label="Parent Menu (Column Group)" value={addParentId} onChange={(e) => setAddParentId(e.target.value)} options={parentOptions} />
               <div className="grid grid-cols-2 gap-3">
                 <AdminInput label="Sort Order" type="number" value={String(addSortOrder)} onChange={(e) => setAddSortOrder(Number(e.target.value || 0))} />
@@ -504,12 +504,12 @@ function MenuCard({
 
             <div className="space-y-3">
               <AdminInput
-                label="Item Label *"
+                label="Item Label"
                 value={editingItem.label}
                 onChange={(e) => setEditingItem({ ...editingItem, label: e.target.value })}
               />
               <AdminInput
-                label="URL / Slug Target *"
+                label="URL / Slug Target"
                 value={editingItem.url}
                 onChange={(e) => setEditingItem({ ...editingItem, url: e.target.value })}
               />

@@ -9,6 +9,7 @@ import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard,
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
 import { useAdminCountries, useAdminCurrencies, useBulkCountries } from "@/hooks/admin/useAdminHooks";
+import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { worldCountries, type WorldCountry } from "@/data/world-countries";
 
@@ -81,7 +82,49 @@ export default function CountriesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Country | null>(null);
   const [deleting, setDeleting] = useState<Country | null>(null);
-  const [form, setForm] = useState<CountryFormState>(emptyForm);
+  
+  const form = useAdminForm({
+    initialValues: emptyForm,
+    validate: (values) => {
+      const errors: any = {};
+      if (!values.name?.trim()) errors.name = "Country name is required.";
+      if (!values.code?.trim()) errors.code = "Country code is required.";
+      else if (values.code.trim().length !== 2) errors.code = "Country code must be 2 letters.";
+      if (!values.currencyId) errors.currencyId = "Currency is required.";
+      if (values.isDefault && values.status === "INACTIVE") {
+        errors.status = "Default country must remain active.";
+      }
+      return errors;
+    },
+    onSubmit: async (values, { setSubmitting, resetForm }) => {
+      const dutyPercentage = Number(values.dutyPercentage);
+  
+      const payload = {
+        name: values.name.trim(),
+        code: values.code.trim().toUpperCase(),
+        currencyId: values.currencyId,
+        status: values.status,
+        isDefault: values.isDefault,
+        dutyPercentage: Number.isFinite(dutyPercentage) && dutyPercentage > 0 ? dutyPercentage : 0,
+      };
+  
+      try {
+        if (editing) {
+          await adminApi.put(`/countries/${editing.id}`, payload);
+          showToast("Country updated.");
+        } else {
+          await adminApi.post("/countries", payload);
+          showToast("Country added.");
+        }
+        await refetch();
+        resetEditor();
+        resetForm();
+      } catch (error) {
+        showToast(getAdminErrorMessage(error, "Failed to save country."), "error");
+      }
+    }
+  });
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
 
@@ -125,7 +168,7 @@ export default function CountriesPage() {
   const handleWorldCountrySelect = useCallback(
     (countryCode: string) => {
       if (!countryCode) {
-        setForm((current) => ({ ...current, name: "", code: "", currencyId: "", currencyCode: "", currencyName: "", currencySymbol: "" }));
+        form.setValues({ ...form.values, name: "", code: "", currencyId: "", currencyCode: "", currencyName: "", currencySymbol: "" });
         return;
       }
       const worldCountry = worldCountries.find((c) => c.code === countryCode);
@@ -140,15 +183,15 @@ export default function CountriesPage() {
       const baseCurrency = currencies.find((c: { id: string; code: string; isBase?: boolean }) => c.isBase === true || c.code === "USD");
       const finalCurrency = matchingCurrency ?? baseCurrency ?? currencies[0];
 
-      setForm((current) => ({
-        ...current,
+      form.setValues({
+        ...form.values,
         name: worldCountry.name,
         code: worldCountry.code,
         currencyId: finalCurrency?.id ?? "",
         currencyCode: finalCurrency?.code ?? worldCountry.currencyCode,
         currencyName: finalCurrency?.name ?? worldCountry.currencyName,
         currencySymbol: finalCurrency?.symbol ?? worldCountry.currencySymbol,
-      }));
+      });
     },
     [currencies]
   );
@@ -267,7 +310,7 @@ export default function CountriesPage() {
   function resetEditor() {
     setShowForm(false);
     setEditing(null);
-    setForm(emptyForm);
+    form.reset();
   }
 
   function openCreate() {
@@ -275,20 +318,20 @@ export default function CountriesPage() {
     // Set base currency (USD or first active) as default
     const baseCurrency = currencies.find((c: { code: string; isBase?: boolean }) => c.code === "USD" || c.isBase) || currencies[0];
     if (baseCurrency) {
-      setForm((current) => ({
-        ...current,
+      form.setValues({
+        ...form.values,
         currencyId: baseCurrency.id,
         currencyCode: baseCurrency.code,
         currencyName: baseCurrency.name,
         currencySymbol: baseCurrency.symbol,
-      }));
+      });
     }
     setShowForm(true);
   }
 
   function openEdit(country: Country) {
     setEditing(country);
-    setForm({
+    form.setValues({
       id: country.id,
       name: country.name,
       code: country.code,
@@ -301,48 +344,6 @@ export default function CountriesPage() {
       dutyPercentage: country.dutyPercentage != null ? String(country.dutyPercentage) : "0",
     });
     setShowForm(true);
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const dutyPercentage = Number(form.dutyPercentage);
-
-    const payload = {
-      name: form.name.trim(),
-      code: form.code.trim().toUpperCase(),
-      currencyId: form.currencyId,
-      status: form.status,
-      isDefault: form.isDefault,
-      dutyPercentage: Number.isFinite(dutyPercentage) && dutyPercentage > 0 ? dutyPercentage : 0,
-    };
-
-    if (!payload.name || !payload.code || !payload.currencyId) {
-      showToast("Country name, code, and currency are required.", "error");
-      return;
-    }
-    if (payload.code.length !== 2) {
-      showToast("Country code must be 2 letters.", "error");
-      return;
-    }
-    if (payload.isDefault && payload.status === "INACTIVE") {
-      showToast("Default country must remain active.", "error");
-      return;
-    }
-
-    try {
-      if (editing) {
-        await adminApi.put(`/countries/${editing.id}`, payload);
-        showToast("Country updated.");
-      } else {
-        await adminApi.post("/countries", payload);
-        showToast("Country added.");
-      }
-      await refetch();
-      resetEditor();
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to save country."), "error");
-    }
   }
 
   async function handleDelete() {
@@ -647,7 +648,7 @@ export default function CountriesPage() {
       </div>
 
       <Modal open={showForm} onClose={resetEditor} title={editing ? `Manage ${editing.name}` : "Configure country"} panelClassName="max-w-3xl">
-        <form onSubmit={handleSubmit} className="space-y-6 p-6">
+        <form onSubmit={form.handleSubmit} className="space-y-6 p-6">
           <div className="grid gap-x-6 gap-y-5 md:grid-cols-2">
             {editing ? (
               <>
@@ -657,7 +658,7 @@ export default function CountriesPage() {
                     type="text"
                     readOnly
                     disabled
-                    value={form.name}
+                    value={form.values.name}
                     className="h-10 w-full rounded-md border border-[#E6E6E6] bg-[#F7F7F7] px-3.5 text-[14px] text-[#6B6B6B] cursor-not-allowed"
                   />
                 </div>
@@ -667,7 +668,7 @@ export default function CountriesPage() {
                     type="text"
                     readOnly
                     disabled
-                    value={form.code}
+                    value={form.values.code}
                     className="h-10 w-full rounded-md border border-[#E6E6E6] bg-[#F7F7F7] px-3.5 text-[14px] text-[#6B6B6B] cursor-not-allowed font-mono uppercase"
                   />
                 </div>
@@ -675,19 +676,24 @@ export default function CountriesPage() {
             ) : (
               <>
                 <AdminSearchableSelect
-                  label="Country Name (Pre-fetched) *"
+                  label="Country Name (Pre-fetched)"
                   placeholder="Search for a country..."
                   searchPlaceholder="Search by name or code..."
                   options={worldCountryOptions}
-                  value={form.code}
-                  onChange={(event) => handleWorldCountrySelect(event.target.value)}
+                  {...form.getFieldProps("code")}
+                  onChange={(event) => {
+                    form.handleChange(event);
+                    handleWorldCountrySelect(event.target.value);
+                  }}
+                  error={form.errors.code as string}
                   showSearch
                 />
                 <AdminInput
-                  label="ISO Code (2 letters) *"
+                  label="ISO Code (2 letters)"
                   placeholder="DE"
                   maxLength={2}
-                  value={form.code}
+                  {...form.getFieldProps("code")}
+                  error={form.errors.code as string}
                   readOnly
                   disabled
                   className="bg-[#F7F7F7] cursor-not-allowed font-mono"
@@ -696,34 +702,36 @@ export default function CountriesPage() {
             )}
 
             <AdminSearchableSelect
-              label="Currency *"
+              label="Currency"
               placeholder="Select currency..."
               searchPlaceholder="Search by name or code..."
               options={currencyOptions}
-              value={form.currencyId}
+              {...form.getFieldProps("currencyId")}
+              error={form.errors.currencyId as string}
               onChange={(event) => {
+                form.handleChange(event);
                 const selectedCurrency = currencies.find(
                   (c: { id: string; code: string; name: string; symbol: string }) => c.id === event.target.value
                 );
-                setForm((current) => ({
-                  ...current,
+                form.setValues({
+                  ...form.values,
                   currencyId: event.target.value,
                   currencyCode: selectedCurrency?.code ?? "",
                   currencyName: selectedCurrency?.name ?? "",
                   currencySymbol: selectedCurrency?.symbol ?? "",
-                }));
+                });
               }}
               showSearch
             />
 
             <AdminSelect
-              label="Status *"
+              label="Status"
               options={[
                 { value: "ACTIVE", label: "Active" },
                 { value: "INACTIVE", label: "Inactive" },
               ]}
-              value={form.status}
-              onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as CountryFormState["status"] }))}
+              {...form.getFieldProps("status")}
+              error={form.errors.status as string}
             />
             <AdminInput
               label="Customs Duty %"
@@ -731,17 +739,17 @@ export default function CountriesPage() {
               min="0"
               step="0.01"
               placeholder="e.g. 18"
-              value={form.dutyPercentage}
-              onChange={(event) => setForm((current) => ({ ...current, dutyPercentage: event.target.value }))}
+              {...form.getFieldProps("dutyPercentage")}
+              error={form.errors.dutyPercentage as string}
             />
-
             
             <div className="md:col-span-2 pt-1">
               <label className="inline-flex items-center gap-2.5 text-[13.5px] font-medium text-[#1A1A1A] cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={form.isDefault}
-                  onChange={(event) => setForm((current) => ({ ...current, isDefault: event.target.checked }))}
+                  name="isDefault"
+                  checked={form.values.isDefault}
+                  onChange={form.handleChange}
                   className="h-4 w-4 rounded border-[#D1D5DB] accent-[#E31E24]"
                 />
                 Set as default country
@@ -755,8 +763,8 @@ export default function CountriesPage() {
               <button type="button" onClick={resetEditor} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
                 Cancel
               </button>
-              <button type="submit" className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-                {editing ? "Save country" : "Create country"}
+              <button type="submit" disabled={form.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
+                {form.isSubmitting ? "Processing..." : editing ? "Save country" : "Create country"}
               </button>
             </div>
           </div>

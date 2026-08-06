@@ -330,7 +330,7 @@ export default function NewsletterAdminPage() {
       >
         <form onSubmit={handleAddSubscriber} className="space-y-4 p-5">
           <AdminInput
-            label="Email Address *"
+            label="Email Address"
             required
             type="email"
             placeholder="subscriber@example.com"

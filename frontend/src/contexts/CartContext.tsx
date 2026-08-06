@@ -28,6 +28,10 @@ export interface CartItem {
   countryCode?: string;
   countryName?: string;
   selectedAttributes: Record<string, string>;
+  warehouseId?: string;
+  warehouseName?: string;
+  estimatedDeliveryDays?: number | string;
+  isLocalWarehouse?: boolean;
   priceUnavailable?: boolean;
   priceUnavailableMessage?: string;
   availableStock?: number;
@@ -60,6 +64,7 @@ interface CartContextValue {
   clearCart: () => void;
   openCart: () => void;
   closeCart: () => void;
+  revalidateCart: (countryCode: string) => Promise<void>;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -426,6 +431,33 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
   const openCart = () => setIsOpen(true);
   const closeCart = () => setIsOpen(false);
+  const revalidateCart = async (countryCode: string) => {
+    // Triggered by checkout when address changes
+    // Update each item's warehouse if it's no longer eligible
+    const updatedItems = await Promise.all(items.map(async (item) => {
+      try {
+        const res = await apiClient.post(`/products/${item.productSlug}/warehouses`, {
+          variantId: item.variantId,
+          countryCode
+        });
+        const warehouses = res.data?.data || [];
+        if (warehouses.length > 0) {
+          const best = warehouses[0];
+          return {
+            ...item,
+            warehouseId: best.id,
+            warehouseName: best.name,
+            estimatedDeliveryDays: best.estimatedDeliveryDays,
+            isLocalWarehouse: best.isLocal
+          };
+        }
+      } catch {
+        // ignore
+      }
+      return item;
+    }));
+    setItems(updatedItems);
+  };
 
   return (
     <CartContext.Provider
@@ -441,6 +473,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         clearCart,
         openCart,
         closeCart,
+        revalidateCart,
       }}
     >
       {children}

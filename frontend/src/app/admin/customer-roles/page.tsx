@@ -8,6 +8,7 @@ import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { Modal } from "@/components/ui/Modal";
 import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import {
   useAdminCustomerRoles,
   useCreateCustomerRole,
@@ -74,10 +75,41 @@ export default function AdminCustomerRolesPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [sortBy, setSortBy] = useState<"sortOrder" | "name" | "key" | "customers">("sortOrder");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [form, setForm] = useState<RoleFormState>(emptyForm);
   const [showFilters, setShowFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [deleting, setDeleting] = useState<CustomerRoleRow | null>(null);
+
+  const form = useAdminForm<RoleFormState>({
+    initialValues: emptyForm,
+    validate: (values) => {
+      const errors: any = {};
+      if (!values.name?.trim()) errors.name = "Customer role name is required.";
+      return errors;
+    },
+    onSubmit: async (values, { setSubmitting, resetForm }) => {
+      const payload = {
+        key: values.key.trim(),
+        name: values.name.trim(),
+        description: values.description.trim(),
+        status: values.status,
+        sortOrder: Number(values.sortOrder || 0),
+      };
+
+      try {
+        if (values.id) {
+          await updateRole.mutateAsync({ id: values.id, ...payload });
+          showToast("Customer role updated.");
+        } else {
+          await createRole.mutateAsync(payload);
+          showToast("Customer role created.");
+        }
+        resetForm();
+        setShowForm(false);
+      } catch (error) {
+        showToast(getAdminErrorMessage(error, "Failed to save customer role."), "error");
+      }
+    }
+  });
 
   const rows = useMemo(() => {
     const value = debouncedSearch.trim().toLowerCase();
@@ -132,17 +164,17 @@ export default function AdminCustomerRolesPage() {
   }, [search]);
 
   const resetForm = () => {
-    setForm(emptyForm);
+    form.reset();
     setShowForm(false);
   };
 
   const startCreate = () => {
-    setForm(emptyForm);
+    form.reset();
     setShowForm(true);
   };
 
   const startEdit = (role: CustomerRoleRow) => {
-    setForm({
+    form.setValues({
       id: role.id,
       key: role.key,
       name: role.name,
@@ -152,36 +184,6 @@ export default function AdminCustomerRolesPage() {
     });
     setShowForm(true);
   };
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const payload = {
-      key: form.key.trim(),
-      name: form.name.trim(),
-      description: form.description.trim(),
-      status: form.status,
-      sortOrder: Number(form.sortOrder || 0),
-    };
-
-    if (!payload.name) {
-      showToast("Customer role name is required.", "error");
-      return;
-    }
-
-    try {
-      if (form.id) {
-        await updateRole.mutateAsync({ id: form.id, ...payload });
-        showToast("Customer role updated.");
-      } else {
-        await createRole.mutateAsync(payload);
-        showToast("Customer role created.");
-      }
-      resetForm();
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to save customer role."), "error");
-    }
-  }
 
   async function confirmDelete() {
     if (!deleting) return;
@@ -366,11 +368,11 @@ export default function AdminCustomerRolesPage() {
         </div>
 
         <Modal open={showForm} onClose={resetForm}>
-          <form onSubmit={handleSubmit} className="flex flex-col max-h-[90vh] w-full max-w-2xl bg-white rounded-xl shadow-xl overflow-hidden">
+          <form onSubmit={form.handleSubmit} className="flex flex-col max-h-[90vh] w-full max-w-2xl bg-white rounded-xl shadow-xl overflow-hidden">
             <div className="border-b border-[#E6E6E6] px-5 py-4 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-semibold text-[#1A1A1A]">
-                  {form.id ? "Edit Customer Role" : "Create Customer Role"}
+                  {form.values.id ? "Edit Customer Role" : "Create Customer Role"}
                 </h3>
                 <p className="mt-0.5 text-xs text-[#6B6B6B]">
                   System roles stay protected. New roles should use short keys.
@@ -388,29 +390,20 @@ export default function AdminCustomerRolesPage() {
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <AdminInput
-                  label="Name *"
-                  value={form.name}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, name: event.target.value }))
-                  }
+                  label="Name"
+                  {...form.getFieldProps("name")}
+                  error={form.errors.name as string}
                 />
                 <AdminInput
                   label="Key"
-                  value={form.key}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, key: event.target.value }))
-                  }
-                  disabled={rows.find((role) => role.id === form.id)?.isSystem}
+                  {...form.getFieldProps("key")}
+                  error={form.errors.key as string}
+                  disabled={rows.find((role) => role.id === form.values.id)?.isSystem}
                 />
                 <AdminSelect
                   label="Status"
-                  value={form.status}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      status: event.target.value as RoleFormState["status"],
-                    }))
-                  }
+                  {...form.getFieldProps("status")}
+                  error={form.errors.status as string}
                   options={[
                     { value: "ACTIVE", label: "Active" },
                     { value: "INACTIVE", label: "Inactive" },
@@ -419,19 +412,15 @@ export default function AdminCustomerRolesPage() {
                 <AdminInput
                   label="Sort Order"
                   type="number"
-                  value={form.sortOrder}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, sortOrder: event.target.value }))
-                  }
+                  {...form.getFieldProps("sortOrder")}
+                  error={form.errors.sortOrder as string}
                 />
               </div>
 
               <AdminInput
                 label="Description"
-                value={form.description}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, description: event.target.value }))
-                }
+                {...form.getFieldProps("description")}
+                error={form.errors.description as string}
               />
             </div>
 
@@ -445,10 +434,10 @@ export default function AdminCustomerRolesPage() {
               </button>
               <button
                 type="submit"
-                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-                disabled={createRole.isPending || updateRole.isPending}
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
+                disabled={form.isSubmitting}
               >
-                {form.id ? "Update Role" : "Create Role"}
+                {form.isSubmitting ? "Processing..." : form.values.id ? "Update Role" : "Create Role"}
               </button>
             </div>
           </form>

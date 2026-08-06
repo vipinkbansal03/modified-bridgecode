@@ -29,6 +29,7 @@ router.get("/products/:slug", C.getProduct);
 router.get("/products/:slug/reviews", C.getProductReviews);
 router.post("/products/:slug/reviews", formLimiter, C.submitProductReview);
 router.post("/products/:slug/price-preview", C.previewProductPrices);
+router.post("/products/:slug/warehouses", C.getProductWarehouses);
 router.get("/categories", C.listCategories);
 router.get("/categories/:slug", C.getCategory);
 router.get("/languages", C.getLanguages);

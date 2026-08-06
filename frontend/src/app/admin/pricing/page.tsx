@@ -30,6 +30,7 @@ import {
 import { Modal } from "@/components/ui/Modal";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
+import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import {
   useAdminCountries,
   useAdminCustomerRoles,
@@ -275,7 +276,6 @@ export default function PricingPage() {
   const [showFilters, setShowFilters] = useState(true);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<PricingFormState>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<PricingRuleRow | null>(null);
   const [bulkCountryId, setBulkCountryId] = useState("");
   const [bulkTierId, setBulkTierId] = useState("");
@@ -313,7 +313,121 @@ export default function PricingPage() {
     limit: 20,
   });
   const { data: filterProduct } = useAdminProduct(productFilter);
-  const { data: selectedProduct } = useAdminProduct(form.productId);
+
+  const previewImport = usePreviewPricingImport();
+  const importPricing = useImportPricing();
+  const exportPricing = useExportPricing();
+  const createPricing = useCreatePricing();
+  const updatePricing = useUpdatePricing();
+  const deletePricing = useDeletePricing();
+  const bulkPricing = useBulkPricing();
+
+  const form = useAdminForm({
+    initialValues: emptyForm,
+    validate: (values) => {
+      const errors: any = {};
+      if (!values.productId) errors.productId = "Product is required.";
+      if (!values.countryId) errors.countryId = "Country is required.";
+
+      if (values.ruleType === "BASE_PRICE" || values.ruleType === "VARIANT_PRICE" || values.ruleType === "CUSTOMER_ROLE_PRICE") {
+        if (values.ruleType === "CUSTOMER_ROLE_PRICE" && !values.customerRoleKey) errors.customerRoleKey = "Customer role is required.";
+        if (values.mrp === "" || values.sellingPrice === "") errors.mrp = "MRP and selling price are required.";
+        if (Number(values.mrp) < 0 || Number(values.sellingPrice) < 0) errors.mrp = "Prices cannot be negative.";
+        if (values.dealerPrice && Number(values.dealerPrice) < 0) errors.dealerPrice = "Prices cannot be negative.";
+        if (values.distributorPrice && Number(values.distributorPrice) < 0) errors.distributorPrice = "Prices cannot be negative.";
+      } else if (values.ruleType === "TIER_PRICE") {
+        if (!values.tierId) errors.tierId = "Tier is required.";
+        if (values.discountPercent === "" && values.fixedPrice === "") errors.discountPercent = "Provide either a discount percent or a fixed price.";
+        if (values.discountPercent !== "" && Number(values.discountPercent) < 0) errors.discountPercent = "Discount cannot be negative.";
+        if (values.fixedPrice !== "" && Number(values.fixedPrice) < 0) errors.fixedPrice = "Fixed price cannot be negative.";
+      } else if (values.ruleType === "MOQ_PRICE") {
+        if (values.minQuantity === "" || Number(values.minQuantity) < 1) errors.minQuantity = "MOQ must be at least 1.";
+        if (values.discountPercent === "" && values.fixedPrice === "") errors.discountPercent = "Provide either a discount percent or a fixed price.";
+        if (values.discountPercent !== "" && Number(values.discountPercent) < 0) errors.discountPercent = "Discount cannot be negative.";
+        if (values.fixedPrice !== "" && Number(values.fixedPrice) < 0) errors.fixedPrice = "Fixed price cannot be negative.";
+      }
+      return errors;
+    },
+    onSubmit: async (values, { setSubmitting, resetForm }) => {
+      const productId = values.productId;
+      const variantId = values.variantId || null;
+      const countryId = values.countryId;
+      const status = values.status;
+
+      try {
+        if (values.ruleType === "BASE_PRICE" || values.ruleType === "VARIANT_PRICE" || values.ruleType === "CUSTOMER_ROLE_PRICE") {
+          const selectedCountry = countries.find((country: { id: string; currencyId?: string }) => country.id === countryId);
+          if (!selectedCountry?.currencyId) {
+            showToast("The selected country does not have a currency assigned.", "error");
+            return;
+          }
+
+          const payload = {
+            productId,
+            variantId,
+            countryId,
+            customerRoleKey: values.ruleType === "CUSTOMER_ROLE_PRICE" ? values.customerRoleKey : null,
+            currencyId: selectedCountry.currencyId,
+            mrp: Number(values.mrp),
+            sellingPrice: Number(values.sellingPrice),
+            dealerPrice: values.dealerPrice === "" ? null : Number(values.dealerPrice),
+            distributorPrice: values.distributorPrice === "" ? null : Number(values.distributorPrice),
+            status,
+          };
+
+          if (values.id) {
+            await updatePricing.mutateAsync({ id: values.id, ...payload });
+            showToast("Pricing rule updated.", "success");
+          } else {
+            await createPricing.mutateAsync(payload);
+            showToast("Pricing rule created.", "success");
+          }
+        } else if (values.ruleType === "TIER_PRICE") {
+          const payload = {
+            productId,
+            variantId,
+            countryId,
+            tierId: values.tierId,
+            discountPercent: values.discountPercent === "" ? null : Number(values.discountPercent),
+            fixedPrice: values.fixedPrice === "" ? null : Number(values.fixedPrice),
+            status,
+          };
+          if (values.id) {
+            await adminApi.put(`/pricing/${productId}/tier-pricing/${values.id}`, payload);
+            showToast("Tier pricing rule updated.", "success");
+          } else {
+            await adminApi.post(`/pricing/${productId}/tier-pricing`, payload);
+            showToast("Tier pricing rule created.", "success");
+          }
+        } else if (values.ruleType === "MOQ_PRICE") {
+          const payload = {
+            productId,
+            variantId,
+            countryId,
+            minQuantity: Number(values.minQuantity),
+            discountPercent: values.discountPercent === "" ? null : Number(values.discountPercent),
+            fixedPrice: values.fixedPrice === "" ? null : Number(values.fixedPrice),
+            status,
+          };
+          if (values.id) {
+            await adminApi.put(`/pricing/${productId}/moq-pricing/${values.id}`, payload);
+            showToast("MOQ pricing rule updated.", "success");
+          } else {
+            await adminApi.post(`/pricing/${productId}/moq-pricing`, payload);
+            showToast("MOQ pricing rule created.", "success");
+          }
+        }
+
+        await refetch();
+        resetForm();
+        setShowForm(false);
+      } catch (error) {
+        showToast(getAdminErrorMessage(error, "Failed to save pricing rule."), "error");
+      }
+    }
+  });
+
+  const { data: selectedProduct } = useAdminProduct(form.values.productId);
   const { data: previewData, isFetching: previewLoading, error: previewError } = usePreviewPricing(
     previewInput.productId && previewInput.countryId
       ? {
@@ -326,13 +440,7 @@ export default function PricingPage() {
         }
       : undefined,
   );
-  const previewImport = usePreviewPricingImport();
-  const importPricing = useImportPricing();
-  const exportPricing = useExportPricing();
-  const createPricing = useCreatePricing();
-  const updatePricing = useUpdatePricing();
-  const deletePricing = useDeletePricing();
-  const bulkPricing = useBulkPricing();
+
 
   const products = useMemo(() => {
     return infiniteProductsData?.pages.flatMap((page: any) => page.data ?? []) ?? [];
@@ -378,13 +486,13 @@ export default function PricingPage() {
   }, [page, limit, search, statusFilter, ruleTypeFilter, countryFilter, tierFilter, productFilter, variantFilter, minQuantityFilter, sortBy, sortDir]);
 
   useEffect(() => {
-    if (!form.productId) return;
+    if (!form.values.productId) return;
     const product = selectedProduct?.data ?? selectedProduct;
     const variants = (product?.variants ?? []) as Array<{ id: string }>;
-    if (form.variantId && !variants.some((variant) => variant.id === form.variantId)) {
-      setForm((current) => ({ ...current, variantId: "" }));
+    if (form.values.variantId && !variants.some((variant) => variant.id === form.values.variantId)) {
+      form.setFieldValue("variantId", "");
     }
-  }, [form.productId, form.variantId, selectedProduct]);
+  }, [form.values.productId, form.values.variantId, selectedProduct]);
 
   const countryOptions = [
     { value: "", label: "All countries" },
@@ -439,17 +547,17 @@ export default function PricingPage() {
   }, [previewProductData]);
 
   const resetForm = () => {
-    setForm(emptyForm);
+    form.reset(emptyForm);
     setShowForm(false);
   };
 
   const openCreateForm = (ruleType: Exclude<PricingRuleType, "ALL"> = "BASE_PRICE") => {
-    setForm({ ...emptyForm, ruleType });
+    form.reset({ ...emptyForm, ruleType });
     setShowForm(true);
   };
 
   const openEditForm = (row: PricingRuleRow) => {
-    setForm({
+    form.reset({
       id: row.id,
       ruleType: row.ruleType,
       productId: row.productId,
@@ -474,120 +582,7 @@ export default function PricingPage() {
     showToast("Rule copied into the editor. Adjust any conflicting fields before saving.", "info");
   };
 
-  const validateForm = () => {
-    if (!form.productId) return "Product is required.";
-    if (!form.countryId) return "Country is required.";
 
-    if (form.ruleType === "BASE_PRICE" || form.ruleType === "VARIANT_PRICE" || form.ruleType === "CUSTOMER_ROLE_PRICE") {
-      if (form.ruleType === "CUSTOMER_ROLE_PRICE" && !form.customerRoleKey) return "Customer role is required.";
-      if (form.mrp === "" || form.sellingPrice === "") return "MRP and selling price are required.";
-      if (Number(form.mrp) < 0 || Number(form.sellingPrice) < 0) return "Prices cannot be negative.";
-      if (form.dealerPrice && Number(form.dealerPrice) < 0) return "Prices cannot be negative.";
-      if (form.distributorPrice && Number(form.distributorPrice) < 0) return "Prices cannot be negative.";
-      return null;
-    }
-
-    if (form.ruleType === "TIER_PRICE") {
-      if (!form.tierId) return "Tier is required.";
-      if (form.discountPercent === "" && form.fixedPrice === "") return "Provide either a discount percent or a fixed price.";
-      if (form.discountPercent !== "" && Number(form.discountPercent) < 0) return "Discount cannot be negative.";
-      if (form.fixedPrice !== "" && Number(form.fixedPrice) < 0) return "Fixed price cannot be negative.";
-      return null;
-    }
-
-    if (form.ruleType === "MOQ_PRICE") {
-      if (form.minQuantity === "" || Number(form.minQuantity) < 1) return "MOQ must be at least 1.";
-      if (form.discountPercent === "" && form.fixedPrice === "") return "Provide either a discount percent or a fixed price.";
-      if (form.discountPercent !== "" && Number(form.discountPercent) < 0) return "Discount cannot be negative.";
-      if (form.fixedPrice !== "" && Number(form.fixedPrice) < 0) return "Fixed price cannot be negative.";
-      return null;
-    }
-
-    return null;
-  };
-
-  const saveRule = async () => {
-    const validationMessage = validateForm();
-    if (validationMessage) {
-      showToast(validationMessage, "error");
-      return;
-    }
-
-    const productId = form.productId;
-    const variantId = form.variantId || null;
-    const countryId = form.countryId;
-    const status = form.status;
-
-    try {
-      if (form.ruleType === "BASE_PRICE" || form.ruleType === "VARIANT_PRICE" || form.ruleType === "CUSTOMER_ROLE_PRICE") {
-        const selectedCountry = countries.find((country: { id: string; currencyId?: string }) => country.id === countryId);
-        if (!selectedCountry?.currencyId) {
-          showToast("The selected country does not have a currency assigned.", "error");
-          return;
-        }
-
-        const payload = {
-          productId,
-          variantId,
-          countryId,
-          customerRoleKey: form.ruleType === "CUSTOMER_ROLE_PRICE" ? form.customerRoleKey : null,
-          currencyId: selectedCountry.currencyId,
-          mrp: Number(form.mrp),
-          sellingPrice: Number(form.sellingPrice),
-          dealerPrice: form.dealerPrice === "" ? null : Number(form.dealerPrice),
-          distributorPrice: form.distributorPrice === "" ? null : Number(form.distributorPrice),
-          status,
-        };
-
-        if (form.id) {
-          await updatePricing.mutateAsync({ id: form.id, ...payload });
-          showToast("Pricing rule updated.", "success");
-        } else {
-          await createPricing.mutateAsync(payload);
-          showToast("Pricing rule created.", "success");
-        }
-      } else if (form.ruleType === "TIER_PRICE") {
-        const payload = {
-          productId,
-          variantId,
-          countryId,
-          tierId: form.tierId,
-          discountPercent: form.discountPercent === "" ? null : Number(form.discountPercent),
-          fixedPrice: form.fixedPrice === "" ? null : Number(form.fixedPrice),
-          status,
-        };
-        if (form.id) {
-          await adminApi.put(`/pricing/${productId}/tier-pricing/${form.id}`, payload);
-          showToast("Tier pricing rule updated.", "success");
-        } else {
-          await adminApi.post(`/pricing/${productId}/tier-pricing`, payload);
-          showToast("Tier pricing rule created.", "success");
-        }
-      } else if (form.ruleType === "MOQ_PRICE") {
-        const payload = {
-          productId,
-          variantId,
-          countryId,
-          minQuantity: Number(form.minQuantity),
-          discountPercent: form.discountPercent === "" ? null : Number(form.discountPercent),
-          fixedPrice: form.fixedPrice === "" ? null : Number(form.fixedPrice),
-          status,
-        };
-        if (form.id) {
-          await adminApi.put(`/pricing/${productId}/moq-pricing/${form.id}`, payload);
-          showToast("MOQ pricing rule updated.", "success");
-        } else {
-          await adminApi.post(`/pricing/${productId}/moq-pricing`, payload);
-          showToast("MOQ pricing rule created.", "success");
-        }
-      }
-
-      await refetch();
-      resetForm();
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to save pricing rule."), "error");
-    }
-  };
 
   const handleDelete = async (row: PricingRuleRow) => {
     try {
@@ -1345,28 +1340,22 @@ export default function PricingPage() {
         </div>
       </div>
 
-      <Modal open={showForm} onClose={resetForm} title={form.id ? "Edit pricing rule" : "New pricing rule"} panelClassName="max-w-5xl">
+      <Modal open={showForm} onClose={resetForm} title={form.values.id ? "Edit pricing rule" : "New pricing rule"} panelClassName="max-w-5xl">
         {showForm ? (
-          <div className="space-y-6 p-6">
+          <form onSubmit={form.handleSubmit} className="space-y-6 p-6">
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <AdminSelect
                 label="Rule Type"
-                value={form.ruleType}
-                onChange={(event) =>
-                  setForm((current) => {
-                    const nextRuleType = event.target.value as Exclude<PricingRuleType, "ALL">;
-                    return {
-                      ...current,
-                      ruleType: nextRuleType,
-                    };
-                  })
-                }
+                {...form.getFieldProps("ruleType")}
+                error={form.errors.ruleType as string}
                 options={Object.entries(ruleTypeLabels).map(([value, label]) => ({ value, label }))}
               />
+              <div className="flex flex-col">
               <AdminSearchableSelect
                 label="Product"
-                value={form.productId}
-                onChange={(event) => setForm((current) => ({ ...current, productId: event.target.value, variantId: "" }))}
+                required
+                value={form.values.productId}
+                onChange={(event) => form.setValues((current) => ({ ...current, productId: event.target.value, variantId: "" }))}
                 options={productOptions}
                 onSearchChange={setProductSearch}
                 onMenuScrollToBottom={() => {
@@ -1376,48 +1365,54 @@ export default function PricingPage() {
                 }}
                 isLoadingMore={isFetchingNextProductsPage}
               />
-              <AdminSelect label="Variant" value={form.variantId} onChange={(event) => setForm((current) => ({ ...current, variantId: event.target.value }))} options={variantOptions} />
+              {form.errors.productId && <span className="text-red-500 text-[11.5px] mt-1">{form.errors.productId as string}</span>}
+              </div>
+              <AdminSelect label="Variant" {...form.getFieldProps("variantId")} error={form.errors.variantId as string} options={variantOptions} />
+              <div className="flex flex-col">
               <AdminMultiSearchableSelect
                 label="Countries"
-                values={(form as any).countryIds ?? (form.countryId ? [form.countryId] : [])}
-                onValuesChange={(values) => setForm((current) => ({ ...current, countryIds: values, countryId: values[0] ?? "" } as any))}
+                required
+                values={(form.values as any).countryIds ?? (form.values.countryId ? [form.values.countryId] : [])}
+                onValuesChange={(values) => form.setValues((current) => ({ ...current, countryIds: values, countryId: values[0] ?? "" } as any))}
                 options={(countries as any[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
                 placeholder="Select countries"
                 allowSelectAll
                 selectAllLabel="All countries"
               />
-              <AdminSelect label="Status" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as "ACTIVE" | "INACTIVE" }))} options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
+              {form.errors.countryId && <span className="text-red-500 text-[11.5px] mt-1">{form.errors.countryId as string}</span>}
+              </div>
+              <AdminSelect label="Status" {...form.getFieldProps("status")} error={form.errors.status as string} options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
               <AdminSelect
                 label="Customer Role"
-                value={form.customerRoleKey}
-                onChange={(event) => setForm((current) => ({ ...current, customerRoleKey: event.target.value }))}
+                {...form.getFieldProps("customerRoleKey")}
+                error={form.errors.customerRoleKey as string}
                 options={customerRoleOptions}
               />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {form.ruleType === "TIER_PRICE" ? (
+              {form.values.ruleType === "TIER_PRICE" ? (
                 <>
-                  <AdminSelect label="Tier" value={form.tierId} onChange={(event) => setForm((current) => ({ ...current, tierId: event.target.value }))} options={tierOptions} />
-                  <AdminInput label="Discount %" type="number" min="0" step="0.01" value={form.discountPercent} onChange={(event) => setForm((current) => ({ ...current, discountPercent: event.target.value }))} />
-                  <AdminInput label="Fixed Price" type="number" min="0" step="0.01" value={form.fixedPrice} onChange={(event) => setForm((current) => ({ ...current, fixedPrice: event.target.value }))} />
+                  <AdminSelect label="Tier" {...form.getFieldProps("tierId")} error={form.errors.tierId as string} options={tierOptions} />
+                  <AdminInput label="Discount %" type="number" min="0" step="0.01" {...form.getFieldProps("discountPercent")} error={form.errors.discountPercent as string} />
+                  <AdminInput label="Fixed Price" type="number" min="0" step="0.01" {...form.getFieldProps("fixedPrice")} error={form.errors.fixedPrice as string} />
                 </>
               ) : null}
 
-              {form.ruleType === "MOQ_PRICE" ? (
+              {form.values.ruleType === "MOQ_PRICE" ? (
                 <>
-                  <AdminInput label="Minimum Quantity" type="number" min="1" step="1" value={form.minQuantity} onChange={(event) => setForm((current) => ({ ...current, minQuantity: event.target.value }))} />
-                  <AdminInput label="Discount %" type="number" min="0" step="0.01" value={form.discountPercent} onChange={(event) => setForm((current) => ({ ...current, discountPercent: event.target.value }))} />
-                  <AdminInput label="Fixed Price" type="number" min="0" step="0.01" value={form.fixedPrice} onChange={(event) => setForm((current) => ({ ...current, fixedPrice: event.target.value }))} />
+                  <AdminInput label="Minimum Quantity" type="number" min="1" step="1" {...form.getFieldProps("minQuantity")} error={form.errors.minQuantity as string} />
+                  <AdminInput label="Discount %" type="number" min="0" step="0.01" {...form.getFieldProps("discountPercent")} error={form.errors.discountPercent as string} />
+                  <AdminInput label="Fixed Price" type="number" min="0" step="0.01" {...form.getFieldProps("fixedPrice")} error={form.errors.fixedPrice as string} />
                 </>
               ) : null}
 
-              {form.ruleType === "BASE_PRICE" || form.ruleType === "VARIANT_PRICE" || form.ruleType === "CUSTOMER_ROLE_PRICE" ? (
+              {form.values.ruleType === "BASE_PRICE" || form.values.ruleType === "VARIANT_PRICE" || form.values.ruleType === "CUSTOMER_ROLE_PRICE" ? (
                 <>
-                  <AdminInput label="MRP" type="number" min="0" step="0.01" value={form.mrp} onChange={(event) => setForm((current) => ({ ...current, mrp: event.target.value }))} />
-                  <AdminInput label="Selling Price" type="number" min="0" step="0.01" value={form.sellingPrice} onChange={(event) => setForm((current) => ({ ...current, sellingPrice: event.target.value }))} />
-                  <AdminInput label="Dealer Price" type="number" min="0" step="0.01" value={form.dealerPrice} onChange={(event) => setForm((current) => ({ ...current, dealerPrice: event.target.value }))} />
-                  <AdminInput label="Doctor / Retailer Price" type="number" min="0" step="0.01" value={form.distributorPrice} onChange={(event) => setForm((current) => ({ ...current, distributorPrice: event.target.value }))} />
+                  <AdminInput label="MRP" required type="number" min="0" step="0.01" {...form.getFieldProps("mrp")} error={form.errors.mrp as string} />
+                  <AdminInput label="Selling Price" required type="number" min="0" step="0.01" {...form.getFieldProps("sellingPrice")} error={form.errors.sellingPrice as string} />
+                  <AdminInput label="Dealer Price" type="number" min="0" step="0.01" {...form.getFieldProps("dealerPrice")} error={form.errors.dealerPrice as string} />
+                  <AdminInput label="Doctor / Retailer Price" type="number" min="0" step="0.01" {...form.getFieldProps("distributorPrice")} error={form.errors.distributorPrice as string} />
                 </>
               ) : null}
             </div>
@@ -1430,12 +1425,12 @@ export default function PricingPage() {
                 <button type="button" onClick={resetForm} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
                   Cancel
                 </button>
-                <button type="button" onClick={saveRule} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-                  {form.id ? "Save rule" : "Create rule"}
+                <button type="submit" disabled={form.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
+                  {form.isSubmitting ? "Processing..." : (form.values.id ? "Save rule" : "Create rule")}
                 </button>
               </div>
             </div>
-          </div>
+          </form>
         ) : null}
       </Modal>
 

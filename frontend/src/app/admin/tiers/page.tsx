@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import { AdminInput, AdminSelect, ConfirmModal, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
@@ -131,7 +132,30 @@ export default function AdminTiersPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<"ENABLE" | "DISABLE" | "DELETE" | "">("");
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<TierFormState>(emptyForm);
+  const form = useAdminForm({
+    initialValues: emptyForm,
+    validate: (values) => {
+      const errors: any = {};
+      if (!values.name?.trim()) errors.name = "Tier name is required.";
+      return errors;
+    },
+    onSubmit: async (values, { resetForm: formReset }) => {
+      try {
+        const payload = { name: values.name.trim(), status: values.status, sortOrder: Number(values.sortOrder || 0) };
+        if (values.id) {
+          await updateTier.mutateAsync({ id: values.id, ...payload });
+          showToast("Tier updated.");
+        } else {
+          await createTier.mutateAsync(payload);
+          showToast("Tier created.");
+        }
+        formReset();
+        setShowForm(false);
+      } catch (error) {
+        showToast(getAdminErrorMessage(error, "Failed to save tier."), "error");
+      }
+    }
+  });
   const [deleteTarget, setDeleteTarget] = useState<TierRow | null>(null);
   const [selectedTierId, setSelectedTierId] = useState("");
   const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
@@ -227,17 +251,17 @@ export default function AdminTiersPage() {
     selectedTierCountries.some((country) => countryOverrides[country.id] ?? country.enabled);
 
   const resetForm = () => {
-    setForm(emptyForm);
+    form.reset();
     setShowForm(false);
   };
 
   const startCreate = () => {
-    setForm(emptyForm);
+    form.setValues(emptyForm);
     setShowForm(true);
   };
 
   const startEdit = (tier: TierRow) => {
-    setForm({
+    form.setValues({
       id: tier.id,
       name: tier.name,
       status: tier.status,
@@ -247,36 +271,13 @@ export default function AdminTiersPage() {
   };
 
   const startClone = (tier: TierRow) => {
-    setForm({
+    form.setValues({
       id: "",
       name: `${tier.name} Copy`,
       status: "ACTIVE",
       sortOrder: String(tier.sortOrder ?? 0),
     });
     setShowForm(true);
-  };
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const name = form.name.trim();
-    if (!name) {
-      showToast("Tier name is required.", "error");
-      return;
-    }
-
-    try {
-      const payload = { name, status: form.status, sortOrder: Number(form.sortOrder || 0) };
-      if (form.id) {
-        await updateTier.mutateAsync({ id: form.id, ...payload });
-        showToast("Tier updated.");
-      } else {
-        await createTier.mutateAsync(payload);
-        showToast("Tier created.");
-      }
-      resetForm();
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to save tier."), "error");
-    }
   };
 
   const handleDelete = async () => {
@@ -991,14 +992,14 @@ export default function AdminTiersPage() {
           </div>
         </div>
 
-        <Modal open={showForm} onClose={resetForm} title={form.id ? "Edit tier" : "Add tier"} panelClassName="max-w-xl">
-          <form onSubmit={handleSubmit} className="space-y-6 p-6">
+        <Modal open={showForm} onClose={resetForm} title={form.values.id ? "Edit tier" : "Add tier"} panelClassName="max-w-xl">
+          <form onSubmit={form.handleSubmit} className="space-y-6 p-6">
             <div className="grid gap-4 md:grid-cols-2">
-              <AdminInput label="Tier Name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Diamond, Gold, Silver..." />
+              <AdminInput required label="Tier Name" {...form.getFieldProps("name")} error={form.errors.name as string} placeholder="Diamond, Gold, Silver..." />
               <AdminSelect
                 label="Status"
-                value={form.status}
-                onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as TierFormState["status"] }))}
+                {...form.getFieldProps("status")}
+                error={form.errors.status as string}
                 options={[
                   { value: "ACTIVE", label: "Active" },
                   { value: "INACTIVE", label: "Inactive" },
@@ -1009,8 +1010,8 @@ export default function AdminTiersPage() {
                 type="number"
                 min="0"
                 step="1"
-                value={form.sortOrder}
-                onChange={(event) => setForm((current) => ({ ...current, sortOrder: event.target.value }))}
+                {...form.getFieldProps("sortOrder")}
+                error={form.errors.sortOrder as string}
               />
             </div>
 
@@ -1020,8 +1021,8 @@ export default function AdminTiersPage() {
                 <button type="button" onClick={resetForm} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
                   Cancel
                 </button>
-                <button type="submit" disabled={createTier.isPending || updateTier.isPending} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
-                  {form.id ? "Save tier" : "Create tier"}
+                <button type="submit" disabled={form.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
+                  {form.isSubmitting ? "Processing..." : form.values.id ? "Save tier" : "Create tier"}
                 </button>
               </div>
             </div>

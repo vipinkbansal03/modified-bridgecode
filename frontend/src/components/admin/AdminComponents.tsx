@@ -199,7 +199,12 @@ interface AdminInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 export function AdminInput({ label, error, className, ...props }: AdminInputProps) {
   return (
     <div className="space-y-1.5">
-      {label && <label className="block text-[13px] font-medium text-[#1A1A1A]">{label}</label>}
+      {label && (
+        <label className="block text-[13px] font-medium text-[#1A1A1A]">
+          {label}
+          {props.required && <span className="text-[#E31E24] ml-1">*</span>}
+        </label>
+      )}
       <input
         {...props}
         className={cn(
@@ -298,7 +303,12 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
 
   return (
     <div ref={rootRef} className="relative w-full min-w-[10rem] space-y-1.5">
-      {label && <label className="block text-[13px] font-medium text-[#1A1A1A]">{label}</label>}
+      {label && (
+        <label className="block text-[13px] font-medium text-[#1A1A1A]">
+          {label}
+          {props.required && <span className="text-[#E31E24] ml-1">*</span>}
+        </label>
+      )}
       <input type="hidden" name={name} value={selectedValue} />
       <button
         ref={buttonRef}
@@ -370,8 +380,11 @@ interface AdminMultiSelectProps {
   value?: string[];
   onChange: (nextValues: string[]) => void;
   placeholder?: string;
-  className?: string;
   selectAllLabel?: string;
+  className?: string;
+  required?: boolean;
+  id?: string;
+  onBlur?: () => void;
 }
 
 export function AdminMultiSelect({
@@ -381,9 +394,12 @@ export function AdminMultiSelect({
   selectedValues,
   value,
   onChange,
-  placeholder = "Select...",
+  placeholder = "Select options...",
   className,
-  selectAllLabel,
+  selectAllLabel = "Select All",
+  required,
+  id,
+  onBlur
 }: AdminMultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -465,8 +481,15 @@ export function AdminMultiSelect({
 
   return (
     <div ref={rootRef} className="relative w-full min-w-[10rem] space-y-1.5">
-      {label && <label className="block text-[13px] font-medium text-[#1A1A1A]">{label}</label>}
+      {label && (
+        <label className="block text-[13px] font-medium text-[#1A1A1A]">
+          {label}
+          {required && <span className="text-[#E31E24] ml-1">*</span>}
+        </label>
+      )}
       <button
+        id={id}
+        onBlur={onBlur}
         ref={buttonRef}
         type="button"
         onClick={() => setIsOpen((c) => !c)}
@@ -509,7 +532,7 @@ export function AdminMultiSelect({
                     }}
                     className="text-xs font-semibold text-[#E31E24] hover:text-[#B5151B] transition cursor-pointer select-none"
                   >
-                    {selectAllLabel || (allSelected ? "Deselect All" : "Select All")}
+                    {selectAllLabel}
                   </button>
                 </div>
               )}

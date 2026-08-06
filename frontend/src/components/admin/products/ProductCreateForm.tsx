@@ -1,12 +1,12 @@
 "use client";
 
 import { useRef, useState, type ChangeEvent } from "react";
-import { useFormik } from "formik";
 import * as Yup from "yup";
 import { AdminInput, AdminSelect, AdminTextarea, useToast } from "@/components/admin/AdminComponents";
 import { useAdminCategories, useCreateProduct } from "@/hooks/admin/useAdminHooks";
 import { cn } from "@/utils/cn";
 import { getAdminErrorMessage } from "@/services/adminApi";
+import { useAdminForm } from "@/hooks/admin/useAdminForm";
 
 const schema = Yup.object({
   title: Yup.string().required("Title is required"),
@@ -73,12 +73,12 @@ export function ProductCreateForm({
 
   const handleTitleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    formik.setFieldValue("title", value);
-    if (!slugEdited.current) formik.setFieldValue("slug", toSlug(value));
-    if (!skuEdited.current) formik.setFieldValue("sku", generateSku(value));
+    form.setFieldValue("title", value);
+    if (!slugEdited.current) form.setFieldValue("slug", toSlug(value));
+    if (!skuEdited.current) form.setFieldValue("sku", generateSku(value));
   };
 
-  const formik = useFormik({
+  const form = useAdminForm({
     initialValues: {
       title: "",
       slug: "",
@@ -98,7 +98,7 @@ export function ProductCreateForm({
       hasVariants: false,
     },
     validationSchema: schema,
-    onSubmit: async (values, { setSubmitting, resetForm }) => {
+    onSubmit: async (values) => {
       try {
         const product = (await createProduct.mutateAsync(values)) as CreateProductResponse;
         const productId = product.data?.id;
@@ -108,24 +108,21 @@ export function ProductCreateForm({
         }
 
         showToast("Product created successfully.");
-        resetForm();
+        form.reset();
         onCreated(productId);
       } catch (error) {
         showToast(getAdminErrorMessage(error, "Failed to create product."), "error");
-      } finally {
-        setSubmitting(false);
       }
     },
+    onClose: onCancel
   });
-
-  const hasSubmitted = formik.submitCount > 0;
 
   const categoryOptions = [{ value: "", label: "Select category..." }, ...categories.map((category: { id: string; name: string }) => ({ value: category.id, label: category.name }))];
   const wrapperClassName = compact ? "space-y-5" : "space-y-6";
 
   return (
     <>
-      <form onSubmit={formik.handleSubmit} className={wrapperClassName}>
+      <form onSubmit={form.handleSubmit} className={wrapperClassName}>
         <div
           className={cn(
             compact
@@ -159,68 +156,73 @@ export function ProductCreateForm({
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <AdminInput
-                    label="Product Title *"
-                    placeholder="e.g. Sapphire True Twin"
+                    id="field-title"
+                    label="Product Title"
+                    required
                     name="title"
-                    value={formik.values.title}
+                    value={form.values.title}
                     onChange={handleTitleChange}
-                    onBlur={formik.handleBlur}
-                    error={formik.touched.title || hasSubmitted ? (formik.errors.title as string) : ""}
+                    onBlur={() => form.handleBlur("title")}
+                    error={form.errors.title as string}
                   />
                 </div>
 
                 <div className="sm:col-span-2">
                   <AdminInput
-                    label="Slug"
-                    placeholder="Auto-generated from title"
+                    id="field-slug"
+                    label="URL Slug"
+                    required
                     name="slug"
-                    value={formik.values.slug}
+                    value={form.values.slug}
                     onChange={(e) => {
                       slugEdited.current = true;
-                      formik.setFieldValue("slug", e.target.value);
+                      form.handleChange("slug", e.target.value);
                     }}
-                    onBlur={formik.handleBlur}
+                    onBlur={() => form.handleBlur("slug")}
+                    error={form.errors.slug as string}
+                    className="bg-gray-50 font-mono text-sm"
                   />
                 </div>
 
                 <AdminSelect
-                  label="Category *"
+                  label="Category"
                   options={categoryOptions}
-                  {...formik.getFieldProps("categoryId")}
-                  error={formik.touched.categoryId || hasSubmitted ? (formik.errors.categoryId as string) : ""}
+                  value={form.values.categoryId}
+                  onChange={(e) => form.setFieldValue("categoryId", e.target.value)}
+                  error={form.errors.categoryId as string}
                 />
 
                 <AdminSelect
-                  label="Status *"
+                  label="Status"
                   options={[
                     { value: "DRAFT", label: "Draft" },
                     { value: "ACTIVE", label: "Active" },
                     { value: "INACTIVE", label: "Inactive" },
                   ]}
-                  {...formik.getFieldProps("status")}
-                  error={formik.touched.status || hasSubmitted ? (formik.errors.status as string) : ""}
+                  value={form.values.status}
+                  onChange={(e) => form.setFieldValue("status", e.target.value)}
+                  error={form.errors.status as string}
                 />
 
-                <AdminInput label="Product Code" placeholder="MO-MB-STT" {...formik.getFieldProps("productCode")} />
+                <AdminInput label="Product Code" value={form.values.productCode} onChange={(e) => form.setFieldValue("productCode", e.target.value)} />
                 <AdminInput
                   label="SKU"
-                  placeholder="MO-MB-STT-001"
                   name="sku"
-                  value={formik.values.sku}
+                  value={form.values.sku}
                   onChange={(e) => {
                     skuEdited.current = true;
-                    formik.setFieldValue("sku", e.target.value);
+                    form.setFieldValue("sku", e.target.value);
                   }}
-                  onBlur={formik.handleBlur}
+                  onBlur={() => form.handleBlur("sku")}
                 />
-                <AdminInput label="Brand" {...formik.getFieldProps("brand")} />
+                <AdminInput label="Brand" value={form.values.brand} onChange={(e) => form.setFieldValue("brand", e.target.value)} />
 
                 <div className="flex flex-wrap items-center gap-6 pt-2">
                   <label className="flex cursor-pointer items-center gap-2">
                     <input
                       type="checkbox"
-                      checked={formik.values.isFeatured}
-                      onChange={(event) => formik.setFieldValue("isFeatured", event.target.checked)}
+                      checked={form.values.isFeatured}
+                      onChange={(event) => form.setFieldValue("isFeatured", event.target.checked)}
                       className="rounded"
                     />
                     <span className="text-[13.5px] text-[#1A1A1A]">Featured Product</span>
@@ -228,8 +230,8 @@ export function ProductCreateForm({
                   <label className="flex cursor-pointer items-center gap-2">
                     <input
                       type="checkbox"
-                      checked={formik.values.hasVariants}
-                      onChange={(event) => formik.setFieldValue("hasVariants", event.target.checked)}
+                      checked={form.values.hasVariants}
+                      onChange={(event) => form.setFieldValue("hasVariants", event.target.checked)}
                       className="rounded"
                     />
                     <span className="text-[13.5px] text-[#1A1A1A]">Has Variants</span>
@@ -250,7 +252,7 @@ export function ProductCreateForm({
                           const reader = new FileReader();
                           reader.onload = (event) => {
                             const result = event.target?.result as string;
-                            formik.setFieldValue("informationImage", result);
+                            form.setFieldValue("informationImage", result);
                           };
                           reader.readAsDataURL(file);
                         }
@@ -264,16 +266,16 @@ export function ProductCreateForm({
                     >
                       Upload Image
                     </label>
-                    {formik.values.informationImage && (
+                    {form.values.informationImage && (
                       <div className="relative h-12 w-12">
                         <img
-                          src={formik.values.informationImage}
+                          src={form.values.informationImage}
                           alt="Information preview"
                           className="h-full w-full rounded-md object-cover"
                         />
                         <button
                           type="button"
-                          onClick={() => formik.setFieldValue("informationImage", "")}
+                          onClick={() => form.setFieldValue("informationImage", "")}
                           className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white hover:bg-[#B5151B]"
                         >
                           ×
@@ -289,7 +291,8 @@ export function ProductCreateForm({
                   rows={3}
                   maxLength={200}
                   placeholder="Brief description related to the information image..."
-                  {...formik.getFieldProps("informationDescription")}
+                  value={form.values.informationDescription}
+                  onChange={(e) => form.setFieldValue("informationDescription", e.target.value)}
                 />
               </div>
 
@@ -298,13 +301,15 @@ export function ProductCreateForm({
                 rows={2}
                 maxLength={300}
                 placeholder="Brief summary shown in listings and internal views..."
-                {...formik.getFieldProps("shortDescription")}
+                value={form.values.shortDescription}
+                onChange={(e) => form.setFieldValue("shortDescription", e.target.value)}
               />
               <AdminTextarea
                 label="Full Description"
                 rows={7}
                 placeholder="Detailed product description..."
-                {...formik.getFieldProps("description")}
+                value={form.values.description}
+                onChange={(e) => form.setFieldValue("description", e.target.value)}
               />
             </div>
           )}
@@ -318,29 +323,25 @@ export function ProductCreateForm({
                 </p>
               </div>
 
-              <AdminInput label="SEO Title" placeholder="Max 60 characters" maxLength={60} {...formik.getFieldProps("seoTitle")} />
-              <AdminTextarea label="SEO Description" rows={3} placeholder="Max 160 characters" maxLength={160} {...formik.getFieldProps("seoDescription")} />
-              <AdminInput label="SEO Keywords" placeholder="Comma-separated keywords" {...formik.getFieldProps("seoKeywords")} />
+              <AdminInput label="SEO Title" placeholder="Max 60 characters" maxLength={60} value={form.values.seoTitle} onChange={(e) => form.setFieldValue("seoTitle", e.target.value)} />
+              <AdminTextarea label="SEO Description" rows={3} placeholder="Max 160 characters" maxLength={160} value={form.values.seoDescription} onChange={(e) => form.setFieldValue("seoDescription", e.target.value)} />
+              <AdminInput label="SEO Keywords" placeholder="Comma-separated keywords" value={form.values.seoKeywords} onChange={(e) => form.setFieldValue("seoKeywords", e.target.value)} />
             </div>
           )}
 
           <div className={compact ? "mt-6 flex flex-wrap items-center justify-end gap-3" : "mt-5 flex flex-wrap items-center justify-end gap-3"}>
             {onCancel ? (
-              <button
-                type="button"
-                onClick={onCancel}
-                className="rounded-md border border-[#E6E6E6] px-4 py-2.5 text-[13.5px] font-medium text-[#555] hover:bg-[#F2F2F2]"
-              >
+              <button type="button" onClick={form.handleClose} className="rounded-md px-4 py-2 text-sm font-medium text-[#6B6B6B] hover:text-[#1A1A1A]">
                 {cancelLabel}
               </button>
             ) : null}
 
             <button
               type="submit"
-              disabled={formik.isSubmitting || createProduct.isPending}
-              className="rounded-md bg-[#E31E24] px-5 py-2.5 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={form.isSubmitting}
+              className="rounded-md bg-[#E31E24] px-5 py-2 text-sm font-medium text-white transition hover:bg-[#C91A20] disabled:opacity-50"
             >
-              {formik.isSubmitting || createProduct.isPending ? "Creating..." : submitLabel}
+              {form.isSubmitting ? "Creating..." : submitLabel}
             </button>
           </div>
         </div>

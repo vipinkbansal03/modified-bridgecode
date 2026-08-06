@@ -532,7 +532,7 @@ export default function AdminCustomerDetailPage() {
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <AdminInput
-                label="Full Name *"
+                label="Full Name"
                 value={addressForm.fullName}
                 onChange={(e) => setAddressForm(prev => ({ ...prev, fullName: e.target.value }))}
                 required
@@ -544,7 +544,7 @@ export default function AdminCustomerDetailPage() {
               />
               <div className="md:col-span-2">
                 <AdminInput
-                  label="Address Line 1 *"
+                  label="Address Line 1"
                   value={addressForm.addressLine1}
                   onChange={(e) => setAddressForm(prev => ({ ...prev, addressLine1: e.target.value }))}
                   required
@@ -558,7 +558,7 @@ export default function AdminCustomerDetailPage() {
                 />
               </div>
               <AdminInput
-                label="City *"
+                label="City"
                 value={addressForm.city}
                 onChange={(e) => setAddressForm(prev => ({ ...prev, city: e.target.value }))}
                 required
@@ -569,13 +569,13 @@ export default function AdminCustomerDetailPage() {
                 onChange={(e) => setAddressForm(prev => ({ ...prev, state: e.target.value }))}
               />
               <AdminInput
-                label="Postal / ZIP Code *"
+                label="Postal / ZIP Code"
                 value={addressForm.postalCode}
                 onChange={(e) => setAddressForm(prev => ({ ...prev, postalCode: e.target.value }))}
                 required
               />
               <AdminSearchableSelect
-                label="Country *"
+                label="Country"
                 value={addressForm.countryId}
                 onChange={(e) => setAddressForm(prev => ({ ...prev, countryId: e.target.value }))}
                 options={[

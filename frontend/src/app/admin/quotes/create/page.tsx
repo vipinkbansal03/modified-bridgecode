@@ -286,13 +286,13 @@ export default function CreateQuotePage() {
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <AdminInput
-              label="Customer Name *"
+              label="Customer Name"
               value={customerName}
               onChange={(event) => setCustomerName(event.target.value)}
               placeholder="Full Name"
             />
             <AdminInput
-              label="Customer Email *"
+              label="Customer Email"
               type="email"
               value={customerEmail}
               onChange={(event) => setCustomerEmail(event.target.value)}
@@ -311,7 +311,7 @@ export default function CreateQuotePage() {
               placeholder="Clinic / Company Name"
             />
             <AdminSearchableSelect
-              label="Country *"
+              label="Country"
               value={countryId}
               onChange={(event) => setCountryId(event.target.value)}
               options={[
