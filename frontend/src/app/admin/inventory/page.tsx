@@ -478,7 +478,6 @@ export default function InventoryPage() {
       setBulkSaving(false);
     }
   };
-
   if (authLoading || !hasPermission("inventory.view")) {
     return null;
   }

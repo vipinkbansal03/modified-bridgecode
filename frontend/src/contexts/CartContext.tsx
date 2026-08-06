@@ -221,21 +221,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
               continue;
             }
 
-            if (message.includes("No active price is configured")) {
-              updatedItems.forEach((item, index) => {
-                if (item.productSlug === productSlug) {
-                  updatedItems[index] = {
-                    ...item,
-                    priceUnavailable: true,
-                    priceUnavailableMessage: message,
-                  };
-                }
-              });
-
-              continue;
-            }
-
-            console.warn(`Failed to refresh prices for ${productSlug}`, error);
+            updatedItems.forEach((item, index) => {
+              if (item.productSlug === productSlug) {
+                updatedItems[index] = {
+                  ...item,
+                  priceUnavailable: true,
+                  priceUnavailableMessage: message || "Item unavailable in selected country.",
+                };
+              }
+            });
           }
         }
 

@@ -7,6 +7,7 @@ import {
 import type { Prisma } from "@prisma/client";
 import { TranslationStatus } from "@prisma/client";
 import { resolvePrice } from "../pricing/priceResolver.service";
+import { assertSellableInCountry } from "../countries/countryAvailability.service";
 
 function approvedProductTranslationInclude(languageCode: string) {
   return {
@@ -392,9 +393,15 @@ export async function previewPublicProductPrices(
       const variant = variantById.get(item.variantId);
       if (!variant)
         throw new AppError(
-          "One or more requested variants are unavailable.",
+          "One or more requested variants are not available for this product or country.",
           400,
         );
+
+      await assertSellableInCountry({
+        countryId: country.id,
+        productId: variant.productId,
+        variantId: variant.id,
+      });
 
       const resolved = await resolvePrice({
         productId: variant.productId,
@@ -403,6 +410,13 @@ export async function previewPublicProductPrices(
         customerId: customerId ?? undefined,
         quantity: item.quantity,
       });
+
+      if (resolved.finalPrice <= 0 || resolved.basePrice <= 0) {
+        throw new AppError(
+          "Price Upon Request items cannot be purchased via standard checkout.",
+          400,
+        );
+      }
 
       return {
         variantId: variant.id,

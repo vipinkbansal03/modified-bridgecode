@@ -339,6 +339,7 @@ export function Footer() {
   function renderFooterItem(item: FooterLink, key: string) {
     const href = item.href.trim();
     const isExternal = href.startsWith("http") || href.startsWith("mailto:");
+    const isStaticFile = /\.(zip|pdf|png|jpe?g|gif|svg|csv|xlsx?)$/i.test(href);
 
     if (!href) {
       return (
@@ -351,11 +352,26 @@ export function Footer() {
       );
     }
 
+    if (isExternal || isStaticFile) {
+      return (
+        <a
+          key={key}
+          href={href}
+          {...(item.openInNewTab || isExternal || isStaticFile
+            ? { target: "_blank", rel: "noopener noreferrer" }
+            : {})}
+          className="block break-words pb-0.5 text-[13px] text-white/80 hover:text-white"
+        >
+          {label(item.label)}
+        </a>
+      );
+    }
+
     return (
       <Link
         key={key}
         href={href}
-        {...(item.openInNewTab || isExternal
+        {...(item.openInNewTab
           ? { target: "_blank", rel: "noopener noreferrer" }
           : {})}
         className="block break-words pb-0.5 text-[13px] text-white/80 hover:text-white"

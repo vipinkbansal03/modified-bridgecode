@@ -140,6 +140,13 @@ async function calculateCustomerOrder(
         sellerState: stockRecord?.warehouse?.state ?? null,
       });
 
+      if (resolvedPrice.finalPrice <= 0 || resolvedPrice.basePrice <= 0) {
+        throw new AppError(
+          `The item "${displayName}" is Price Upon Request for ${orderCountry.name} and cannot be purchased via standard checkout. Please submit a quote request instead.`,
+          400,
+        );
+      }
+
       const unitPrice = resolvedPrice.finalPrice;
       const unitPriceBeforeTax = resolvedPrice.priceBeforeTax;
       const unitTax = resolvedPrice.taxAmount;

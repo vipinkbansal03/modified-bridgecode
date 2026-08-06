@@ -156,7 +156,7 @@ function buildCartItems(
     if (quantity <= 0) return;
     const variant = variants.find((entry) => entry.id === variantId);
     const price = priceMap[variantId];
-    if (!variant || !price) return;
+    if (!variant || !price || price.sellingPrice <= 0) return;
 
     const availableStock = variant.inventory?.available ?? 0;
     const isOutOfStock =
@@ -462,11 +462,7 @@ export function DynamicVariantMatrixConfigurator({
   };
 
   useEffect(() => {
-    const previewItems = currentCustomer
-      ? apiProduct.variants.map((v) => ({ variantId: v.id, quantity: quantityMap[v.id] || 1 }))
-      : Object.entries(quantityMap)
-          .filter(([, quantity]) => quantity > 0)
-          .map(([variantId, quantity]) => ({ variantId, quantity }));
+    const previewItems = apiProduct.variants.map((v) => ({ variantId: v.id, quantity: 1 }));
 
     if (!previewItems.length) {
       setPreviewPriceMap({});
@@ -660,6 +656,7 @@ export function DynamicVariantMatrixConfigurator({
                             variant && price
                               ? (previewPriceMap[variant.id] ?? price.sellingPrice)
                               : null;
+                          const isPor = !price || price.sellingPrice <= 0;
 
                           return (
                             <td
@@ -672,7 +669,7 @@ export function DynamicVariantMatrixConfigurator({
                                     quantity > 0
                                       ? "bg-red-50/70 ring-1 ring-brand/30"
                                       : "bg-white"
-                                  } ${outOfStock ? "opacity-45" : ""}`}
+                                  } ${outOfStock || isPor ? "opacity-60" : ""}`}
                                 >
                                   <QuantityInput
                                     value={quantity}
@@ -685,16 +682,22 @@ export function DynamicVariantMatrixConfigurator({
                                     min={0}
                                     max={availableStock}
                                     minPositive={minPositive}
-                                    disabled={outOfStock || !price}
+                                    disabled={outOfStock || isPor}
                                   />
                                   <div className="mt-1.5 text-center">
                                     <p className="text-[12px] font-bold text-ink">
-                                      {price && displayUnitPrice != null
-                                        ? formatMoney(
-                                            price.currencySymbol,
-                                            displayUnitPrice,
-                                          )
-                                        : "N/A"}
+                                      {isPor ? (
+                                        <span className="text-[10.5px] font-semibold text-brand">
+                                          Price Upon Request
+                                        </span>
+                                      ) : price && displayUnitPrice != null ? (
+                                        formatMoney(
+                                          price.currencySymbol,
+                                          displayUnitPrice,
+                                        )
+                                      ) : (
+                                        "N/A"
+                                      )}
                                     </p>
                                     {outOfStock ? (
                                       <span className="text-[10px] font-semibold text-red-500">
