@@ -56,7 +56,6 @@ export async function ensureAllWorldCountriesSeeded() {
         status: "INACTIVE" as const,
         isDefault: false,
         dutyPercentage: 0,
-        shippingCharge: 0,
       });
     } else if (existing.currencyId !== matchedCurrencyId) {
       // Update existing country to its real official currency
@@ -111,7 +110,6 @@ export const updateCountry = async (id: string, data: object) => {
     status?: "ACTIVE" | "INACTIVE";
     currencyId?: string;
     dutyPercentage?: number | string;
-    shippingCharge?: number | string;
   };
 
   return prisma.$transaction(async (tx) => {
@@ -131,7 +129,6 @@ export const updateCountry = async (id: string, data: object) => {
     if (payload.status !== undefined) updateData.status = payload.status;
     if (payload.isDefault !== undefined) updateData.isDefault = payload.isDefault;
     if (payload.dutyPercentage !== undefined) updateData.dutyPercentage = payload.dutyPercentage;
-    if (payload.shippingCharge !== undefined) updateData.shippingCharge = payload.shippingCharge;
 
     return tx.country.update({
       where: { id },

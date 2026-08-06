@@ -246,13 +246,13 @@ async function main() {
   // ─── Default countries ──────────────────────────────────
   await prisma.country.upsert({
     where: { code: "IN" },
-    update: { dutyPercentage: 18, shippingCharge: 250 },
-    create: { name: "India", code: "IN", currencyId: inr.id, isDefault: true, dutyPercentage: 18, shippingCharge: 250 },
+    update: { dutyPercentage: 18 },
+    create: { name: "India", code: "IN", currencyId: inr.id, isDefault: true, dutyPercentage: 18 },
   });
-  await prisma.country.upsert({ where: { code: "US" }, update: { dutyPercentage: 0, shippingCharge: 0 }, create: { name: "United States", code: "US", currencyId: usd.id, dutyPercentage: 0, shippingCharge: 0 } });
-  await prisma.country.upsert({ where: { code: "GB" }, update: { dutyPercentage: 5, shippingCharge: 12 }, create: { name: "United Kingdom", code: "GB", currencyId: gbp.id, dutyPercentage: 5, shippingCharge: 12 } });
-  await prisma.country.upsert({ where: { code: "DE" }, update: { dutyPercentage: 5, shippingCharge: 14 }, create: { name: "Germany", code: "DE", currencyId: eur.id, dutyPercentage: 5, shippingCharge: 14 } });
-  await prisma.country.upsert({ where: { code: "AU" }, update: { dutyPercentage: 10, shippingCharge: 20 }, create: { name: "Australia", code: "AU", currencyId: usd.id, dutyPercentage: 10, shippingCharge: 20 } });
+  await prisma.country.upsert({ where: { code: "US" }, update: { dutyPercentage: 0 }, create: { name: "United States", code: "US", currencyId: usd.id, dutyPercentage: 0 } });
+  await prisma.country.upsert({ where: { code: "GB" }, update: { dutyPercentage: 5 }, create: { name: "United Kingdom", code: "GB", currencyId: gbp.id, dutyPercentage: 5 } });
+  await prisma.country.upsert({ where: { code: "DE" }, update: { dutyPercentage: 5 }, create: { name: "Germany", code: "DE", currencyId: eur.id, dutyPercentage: 5 } });
+  await prisma.country.upsert({ where: { code: "AU" }, update: { dutyPercentage: 10 }, create: { name: "Australia", code: "AU", currencyId: usd.id, dutyPercentage: 10 } });
   
   await ensureAllWorldCountriesSeeded();
 
@@ -355,16 +355,10 @@ async function main() {
   }
 
   // ─── Shipping providers & zones ─────────────────────────
-  const standardProvider = await prisma.shippingProvider.upsert({
-    where: { name: "STANDARD_EXPRESS" },
-    update: { isEnabled: true, displayName: "Standard Delivery" },
-    create: { name: "STANDARD_EXPRESS", displayName: "Standard Delivery", isEnabled: true },
-  });
-
-  await prisma.shippingProvider.upsert({
+  const dhlProvider = await prisma.shippingProvider.upsert({
     where: { name: "DHL" },
-    update: { displayName: "DHL Express", baseUrl: "https://api.dhl.com/mydhlapi", trackingUrl: "https://track.dhl.com/{tracking}" },
-    create: { name: "DHL", displayName: "DHL Express", baseUrl: "https://api.dhl.com/mydhlapi", trackingUrl: "https://track.dhl.com/{tracking}", isEnabled: false },
+    update: { displayName: "DHL Express", baseUrl: "https://api.dhl.com/mydhlapi", trackingUrl: "https://track.dhl.com/{tracking}", isEnabled: true },
+    create: { name: "DHL", displayName: "DHL Express", baseUrl: "https://api.dhl.com/mydhlapi", trackingUrl: "https://track.dhl.com/{tracking}", isEnabled: true },
   });
 
   await prisma.shippingProvider.upsert({
@@ -376,7 +370,7 @@ async function main() {
   const indiaCountry = allCountriesForPayment.find((c) => c.code.toUpperCase() === "IN");
   if (indiaCountry) {
     const existingIndiaZone = await prisma.shippingZone.findFirst({
-      where: { providerId: standardProvider.id, countries: { some: { countryId: indiaCountry.id } } },
+      where: { providerId: dhlProvider.id, countries: { some: { countryId: indiaCountry.id } } },
       select: { id: true },
     });
     if (existingIndiaZone) {
@@ -387,7 +381,7 @@ async function main() {
     } else {
       await prisma.shippingZone.create({
         data: {
-          providerId: standardProvider.id,
+          providerId: dhlProvider.id,
           charge: 0,
           freeAbove: 0,
           estimatedDays: "3-5 business days",
@@ -401,7 +395,7 @@ async function main() {
   const usCountry = allCountriesForPayment.find((c) => c.code.toUpperCase() === "US");
   if (usCountry) {
     const existingUsZone = await prisma.shippingZone.findFirst({
-      where: { providerId: standardProvider.id, countries: { some: { countryId: usCountry.id } } },
+      where: { providerId: dhlProvider.id, countries: { some: { countryId: usCountry.id } } },
       select: { id: true },
     });
     if (existingUsZone) {
@@ -412,7 +406,7 @@ async function main() {
     } else {
       await prisma.shippingZone.create({
         data: {
-          providerId: standardProvider.id,
+          providerId: dhlProvider.id,
           charge: 15,
           freeAbove: 200,
           estimatedDays: "5-7 business days",

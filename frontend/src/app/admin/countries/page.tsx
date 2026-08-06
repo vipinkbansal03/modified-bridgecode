@@ -20,7 +20,6 @@ type Country = {
   isDefault: boolean;
   status: "ACTIVE" | "INACTIVE";
   dutyPercentage?: number;
-  shippingCharge?: number;
 };
 
 type CountryFormState = {
@@ -34,7 +33,6 @@ type CountryFormState = {
   status: "ACTIVE" | "INACTIVE";
   isDefault: boolean;
   dutyPercentage: string;
-  shippingCharge: string;
 };
 
 const emptyForm: CountryFormState = {
@@ -48,7 +46,6 @@ const emptyForm: CountryFormState = {
   status: "ACTIVE",
   isDefault: false,
   dutyPercentage: "0",
-  shippingCharge: "0",
 };
 
 function matchesSearch(country: Country, search: string) {
@@ -198,10 +195,15 @@ export default function CountriesPage() {
       total: countries.length,
       active: countries.filter((country: Country) => country.status === "ACTIVE").length,
       inactive: countries.filter((country: Country) => country.status === "INACTIVE").length,
-      defaultCount: countries.filter((country: Country) => country.isDefault).length,
     }),
     [countries],
   );
+
+  const defaultCountry = useMemo(() => countries.find((c: Country) => c.isDefault) ?? null, [countries]);
+  const defaultCountryValue = useMemo(() => {
+    if (!defaultCountry) return "Not Set";
+    return `${defaultCountry.name} | ${defaultCountry.code.toUpperCase()} | ${defaultCountry.status}`;
+  }, [defaultCountry]);
 
   // Handle select all on current page
   useEffect(() => {
@@ -297,7 +299,6 @@ export default function CountriesPage() {
       status: country.status,
       isDefault: country.isDefault,
       dutyPercentage: country.dutyPercentage != null ? String(country.dutyPercentage) : "0",
-      shippingCharge: country.shippingCharge != null ? String(country.shippingCharge) : "0",
     });
     setShowForm(true);
   }
@@ -306,7 +307,6 @@ export default function CountriesPage() {
     event.preventDefault();
 
     const dutyPercentage = Number(form.dutyPercentage);
-    const shippingCharge = Number(form.shippingCharge);
 
     const payload = {
       name: form.name.trim(),
@@ -315,7 +315,6 @@ export default function CountriesPage() {
       status: form.status,
       isDefault: form.isDefault,
       dutyPercentage: Number.isFinite(dutyPercentage) && dutyPercentage > 0 ? dutyPercentage : 0,
-      shippingCharge: Number.isFinite(shippingCharge) && shippingCharge > 0 ? shippingCharge : 0,
     };
 
     if (!payload.name || !payload.code || !payload.currencyId) {
@@ -484,7 +483,13 @@ export default function CountriesPage() {
           <StatCard title="Total Countries" value={stats.total} subtitle="All configured countries" icon={<SlidersHorizontal size={18} />} />
           <StatCard title="Active Countries" value={stats.active} subtitle="Currently available" icon={<Plus size={18} />} color="bg-green-600" />
           <StatCard title="Inactive Countries" value={stats.inactive} subtitle="Hidden from active use" icon={<X size={18} />} color="bg-gray-600" />
-          <StatCard title="Default Country" value={stats.defaultCount} subtitle="Should be exactly one" icon={<Search size={18} />} color="bg-[#0F6CBD]" />
+          <StatCard
+            title="Default Country"
+            value={defaultCountryValue}
+            subtitle={defaultCountry ? `Market currency: ${defaultCountry.currency?.code ?? ""}` : "Please configure a default country"}
+            icon={<Search size={18} />}
+            color="bg-[#0F6CBD]"
+          />
         </div>
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
@@ -729,15 +734,7 @@ export default function CountriesPage() {
               value={form.dutyPercentage}
               onChange={(event) => setForm((current) => ({ ...current, dutyPercentage: event.target.value }))}
             />
-            <AdminInput
-              label={`Shipping Charge (${form.currencySymbol || ""})`}
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="e.g. 250"
-              value={form.shippingCharge}
-              onChange={(event) => setForm((current) => ({ ...current, shippingCharge: event.target.value }))}
-            />
+
             
             <div className="md:col-span-2 pt-1">
               <label className="inline-flex items-center gap-2.5 text-[13.5px] font-medium text-[#1A1A1A] cursor-pointer">

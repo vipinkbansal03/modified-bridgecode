@@ -23,7 +23,7 @@ async function runCurrencyVerification() {
   // Set duty/shipping to 0 for pure rate test predictability
   await prisma.country.updateMany({
     where: { code: { in: ["US", "IN", "DE", "GB"] } },
-    data: { dutyPercentage: 0, shippingCharge: 0 },
+    data: { dutyPercentage: 0 },
   });
 
   // Ensure Base is USD for Test 1

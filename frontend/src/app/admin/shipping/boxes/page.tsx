@@ -5,7 +5,9 @@ import { useMemo, useState } from "react";
 import { Calculator, Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminMultiSelect, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
+import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { ApiShippingBox } from "@/types/api.types";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -223,11 +225,13 @@ export default function ShippingBoxesPage() {
                   options={[{ value: "", label: "Select product..." }, ...products.map((p) => ({ value: p.id, label: p.title }))]}
                 />
                 <AdminInput label="Quantity" type="text" value={previewQuantity} onChange={(e) => setPreviewQuantity(e.target.value)} />
-                <AdminSelect
+                <AdminSearchableSelect
                   label="Country (for charge)"
                   value={previewCountryId}
                   onChange={(e) => setPreviewCountryId(e.target.value)}
                   options={[{ value: "", label: "Optional..." }, ...(countries as { id: string; name: string; code: string }[]).map((c) => ({ value: c.code, label: `${c.name} (${c.code})` }))]}
+                  placeholder="Optional..."
+                  showSearch
                 />
                 <AdminInput label="Order Total (for free-shipping threshold)" type="text" value={previewOrderTotal} onChange={(e) => setPreviewOrderTotal(e.target.value)} />
               </div>
@@ -381,11 +385,12 @@ export default function ShippingBoxesPage() {
               <AdminInput label="Height (cm) *" type="text" placeholder="e.g. 15" value={formHeight} onChange={(e) => setFormHeight(e.target.value)} />
               <AdminInput label="Max Weight (kg) *" type="text" placeholder="e.g. 5" value={formMaxWeight} onChange={(e) => setFormMaxWeight(e.target.value)} />
               <div className="sm:col-span-2">
-                <AdminMultiSelect
+                <AdminMultiSearchableSelect
                   label="Countries *"
                   options={(countries as { id: string; name: string; code: string }[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
-                  value={formCountryIds}
-                  onChange={setFormCountryIds}
+                  values={formCountryIds}
+                  onValuesChange={setFormCountryIds}
+                  allowSelectAll
                   selectAllLabel="Select All"
                   placeholder="Select countries..."
                 />

@@ -872,7 +872,7 @@ export function AdminRichTextEditor({ label, value, onChange, placeholder, error
 
 interface StatCardProps {
   title: string;
-  value: string | number;
+  value: React.ReactNode;
   subtitle?: string;
   icon: ReactNode;
   color?: string;
@@ -880,6 +880,7 @@ interface StatCardProps {
 }
 
 export function StatCard({ title, value, subtitle, icon, color = "bg-[#E31E24]", isLoading }: StatCardProps) {
+  const isLongString = typeof value === "string" && value.length > 12;
   return (
     <div className="rounded-xl bg-white border border-[#E6E6E6] p-5">
       <div className="flex items-start justify-between">
@@ -888,7 +889,7 @@ export function StatCard({ title, value, subtitle, icon, color = "bg-[#E31E24]",
           {isLoading ? (
             <div className="mt-2 h-7 w-20 animate-pulse rounded bg-[#E6E6E6]" />
           ) : (
-            <div className="mt-1.5 text-[26px] font-bold text-[#1A1A1A]">{value}</div>
+            <div className={cn("mt-1.5 font-bold text-[#1A1A1A]", isLongString ? "text-[18px]" : "text-[26px]")}>{value}</div>
           )}
           {subtitle && <div className="mt-1 text-[12px] text-[#9A9A9A]">{subtitle}</div>}
         </div>

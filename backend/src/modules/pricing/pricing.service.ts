@@ -1213,7 +1213,7 @@ export type GenerateCountryPricesInput = {
  */
 function computeLandedPrice(
   basePriceInBaseCurrency: number,
-  country: { currency?: { exchangeRate: Prisma.Decimal | number } | null; dutyPercentage?: Prisma.Decimal | number | null; shippingCharge?: Prisma.Decimal | number | null },
+  country: { currency?: { exchangeRate: Prisma.Decimal | number } | null; dutyPercentage?: Prisma.Decimal | number | null },
   baseCurrencyRate: number,
 ) {
   const currencyRate = country.currency ? Number(country.currency.exchangeRate) || 1 : 1;
@@ -1221,8 +1221,7 @@ function computeLandedPrice(
   // targetAmount = baseAmount * (targetCurrency.exchangeRate / baseCurrency.exchangeRate)
   const localBase = convertPrice(basePriceInBaseCurrency, currencyRate / safeBaseRate);
   const dutyPercent = Number(country.dutyPercentage) || 0;
-  const shipping = Number(country.shippingCharge) || 0;
-  const landed = localBase + (localBase * dutyPercent) / 100 + shipping;
+  const landed = localBase + (localBase * dutyPercent) / 100;
   const mrp = Math.round((landed + Number.EPSILON) * 100) / 100;
   const sellingPrice = Math.round((landed + Number.EPSILON) * 100) / 100;
   return { mrp, sellingPrice };

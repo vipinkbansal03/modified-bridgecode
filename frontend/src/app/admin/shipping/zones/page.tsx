@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminMultiSelect, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { getAdminErrorMessage } from "@/services/adminApi";
 import {
   useAdminShippingProviders,
@@ -257,14 +258,15 @@ export default function ShippingZonesPage() {
                     setForm((current) => ({ ...current, providerId: event.target.value, charge: "", estimatedDays: "" }));
                   }}
                 />
-                <AdminMultiSelect
+                <AdminMultiSearchableSelect
                   label="Countries"
                   options={countryMultiOptions}
-                  value={form.countryIds}
-                  onChange={(values) => {
+                  values={form.countryIds}
+                  onValuesChange={(values) => {
                     if (values.length === 0) setRateCurrency("");
                     setForm((current) => ({ ...current, countryIds: values, charge: values.length ? current.charge : "", estimatedDays: values.length ? current.estimatedDays : "" }));
                   }}
+                  allowSelectAll
                   selectAllLabel="Select All"
                 />
                 <AdminInput label={rateCurrency ? `Charge (${rateCurrency})` : "Charge"} type="number" min="0" step="0.01" value={form.charge} disabled className="cursor-not-allowed bg-[#F5F5F5] text-[#6B6B6B]" />

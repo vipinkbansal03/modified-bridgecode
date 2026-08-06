@@ -17,7 +17,7 @@ export function LocaleSwitcher() {
   const [countrySearch, setCountrySearch] = useState("");
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const { data: countries = [] } = useCountries();
+  const { data: countries = [], refetch: refetchCountries } = useCountries();
   const { data: currencies = [] } = useCurrencies();
   const { data: languages = [] } = useLanguages();
 
@@ -96,7 +96,12 @@ export function LocaleSwitcher() {
     <div ref={wrapperRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          setOpen((value) => {
+            if (!value) refetchCountries();
+            return !value;
+          });
+        }}
         className="group flex w-full items-center justify-between gap-3 rounded-lg border border-line bg-white px-3 py-2 transition-all duration-200 hover:border-brand hover:shadow-sm"
       >
         <Globe size={18} className="shrink-0 text-brand" />
