@@ -42,6 +42,17 @@ export function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileOpen]);
   const { totals, openCart } = useCart();
   const { currentCustomer, logout } = useCustomerAuth();
   const { data: wishlistCount = 0 } = useWishlistCount();
@@ -370,7 +381,7 @@ export function Header() {
                 href="/wishlist"
                 aria-label="Wishlist"
                 title="Wishlist"
-                className="relative flex h-10 w-10 items-center justify-center rounded-md text-ink transition-colors hover:bg-grey"
+                className="relative flex h-10 w-10 items-center justify-center rounded-md text-ink transition-colors outline-none focus:outline-none [-webkit-tap-highlight-color:transparent]"
                 onClick={() => setMobileOpen(false)}
               >
                 <Heart size={22} className="stroke-[1.75]" />
@@ -385,7 +396,7 @@ export function Header() {
                 type="button"
                 aria-label="Cart"
                 onClick={openCart}
-                className="relative flex h-10 w-10 items-center justify-center rounded-md text-ink transition-colors hover:bg-grey"
+                className="relative flex h-10 w-10 items-center justify-center rounded-md text-ink transition-colors outline-none focus:outline-none [-webkit-tap-highlight-color:transparent]"
               >
                 <ShoppingCart size={22} className="stroke-[1.75]" />
                 {totals.itemCount > 0 && (
@@ -399,7 +410,7 @@ export function Header() {
                 type="button"
                 aria-label={mobileOpen ? "Close menu" : t("ui.nav.menu")}
                 onClick={() => setMobileOpen((v) => !v)}
-                className="flex h-10 w-10 items-center justify-center rounded-md transition-colors hover:bg-grey"
+                className="flex h-10 w-10 items-center justify-center rounded-md text-ink transition-colors outline-none focus:outline-none [-webkit-tap-highlight-color:transparent]"
               >
                 {mobileOpen ? <X size={22} /> : <Menu size={22} />}
               </button>
@@ -424,6 +435,9 @@ export function Header() {
         ctaLabel={ctaLabel}
         ctaHref={ctaHref}
         isLoggedIn={Boolean(currentCustomer)}
+        customerName={currentCustomer ? `${currentCustomer.firstName ?? ""} ${currentCustomer.lastName ?? ""}`.trim() || currentCustomer.email : undefined}
+        customerEmail={currentCustomer?.email}
+        onLogout={logout}
         cartCount={totals.itemCount}
         wishlistCount={wishlistCount}
         onLinkClick={() => setMobileOpen(false)}

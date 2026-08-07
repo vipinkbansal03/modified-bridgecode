@@ -210,7 +210,7 @@ export default function AccountPage() {
 
   return (
     <Container>
-      <section className="py-12">
+      <section className="py-6 lg:py-[34px]">
         <div className="mb-8 flex flex-col gap-3 border-b border-line pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="mb-2 inline-flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wide text-steel-2">

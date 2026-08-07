@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import * as Yup from "yup";
-import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search, ChevronRight, ChevronDown } from "lucide-react";
+import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search, ChevronRight, ChevronLeft, ChevronDown, Eye, ZoomIn, CheckSquare, Square, Check, FolderUp, Image as ImageIcon, Loader2 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, AdminMultiSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column, toastMessages } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
@@ -574,7 +574,13 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [activeTab, setActiveTab] = useState(0);
   const [pricingSubTab, setPricingSubTab] = useState<"base" | "variant_prices" | "tier" | "moq">("base");
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [uploadingMediaCount, setUploadingMediaCount] = useState(0);
   const [deletingMedia, setDeletingMedia] = useState<string | null>(null);
+  const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set());
+  const [previewMediaIndex, setPreviewMediaIndex] = useState<number | null>(null);
+  const [isDragOverMedia, setIsDragOverMedia] = useState(false);
+  const [deletingBulkMedia, setDeletingBulkMedia] = useState(false);
+  const [deletingAllMedia, setDeletingAllMedia] = useState(false);
   const [deletingPackage, setDeletingPackage] = useState<PackageRow | null>(null);
   const [deletingVariant, setDeletingVariant] = useState<VariantRow | null>(null);
   const [packageModalOpen, setPackageModalOpen] = useState(false);
@@ -777,6 +783,23 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const { showToast, ToastComponent } = useToast();
 
   const { data: product, isLoading, refetch } = useAdminProduct(productId);
+
+  useEffect(() => {
+    if (previewMediaIndex === null) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const mediaList = (product?.media ?? []) as any[];
+      if (!mediaList.length) return;
+      if (e.key === "ArrowLeft") {
+        setPreviewMediaIndex((prev) => (prev === null ? null : (prev - 1 + mediaList.length) % mediaList.length));
+      } else if (e.key === "ArrowRight") {
+        setPreviewMediaIndex((prev) => (prev === null ? null : (prev + 1) % mediaList.length));
+      } else if (e.key === "Escape") {
+        setPreviewMediaIndex(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [previewMediaIndex, product]);
 
   const productBasePrices = useMemo(() => {
     return (product?.prices || []).filter((p: any) => !p.variantId);
@@ -3095,33 +3118,113 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   };
 
+  const handleMediaFilesUpload = async (fileList: File[]) => {
+    if (!fileList || fileList.length === 0) return;
+
+    // Filter image files
+    const validImageFiles = fileList.filter((file) => file.type.startsWith("image/"));
+    if (validImageFiles.length < fileList.length) {
+      showToast("Only image files (JPG, PNG, WEBP, GIF, SVG) are supported.", "error");
+    }
+    if (validImageFiles.length === 0) return;
+
+    setUploadingMedia(true);
+    setUploadingMediaCount(validImageFiles.length);
+    let totalUploadedCount = 0;
+    let hasError = false;
+
+    // Backend multer route accepts up to 10 files per request (upload.array("files", 10))
+    const BATCH_SIZE = 10;
+    const fileBatches: File[][] = [];
+    for (let i = 0; i < validImageFiles.length; i += BATCH_SIZE) {
+      fileBatches.push(validImageFiles.slice(i, i + BATCH_SIZE));
+    }
+
+    try {
+      for (const batch of fileBatches) {
+        try {
+          const results = await uploadMediaFiles(batch, {
+            entityType: "PRODUCT",
+            entityId: productId && productId !== "new" ? productId : undefined
+          });
+          const mediaIds = results.map(r => r.mediaId).filter(Boolean);
+          if (mediaIds.length > 0) {
+            await adminApi.post(`/products/${productId}/media`, { mediaIds });
+          } else if (results.length > 0) {
+            // Fallback for purely local that didn't return mediaIds (though uploadMediaFiles should)
+            const formData = new FormData();
+            batch.forEach((file) => formData.append("files", file));
+            await adminApi.post(`/products/${productId}/media`, formData);
+          }
+          totalUploadedCount += batch.length;
+        } catch (err) {
+          hasError = true;
+        } finally {
+          setUploadingMediaCount((prev) => Math.max(0, prev - batch.length));
+        }
+      }
+
+      if (totalUploadedCount > 0) {
+        if (hasError) {
+          showToast(`Uploaded ${totalUploadedCount} image(s). Some files failed to upload.`, "error");
+        } else {
+          showToast(totalUploadedCount === 1 ? "Product image uploaded." : `${totalUploadedCount} product images uploaded.`);
+        }
+        refetch();
+      } else if (hasError) {
+        showToast("Failed to upload image(s).", "error");
+      }
+    } finally {
+      setUploadingMedia(false);
+      setUploadingMediaCount(0);
+    }
+  };
+
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files?.length) return;
-    setUploadingMedia(true);
-    try {
-      // 1. Upload via dual-mode utility
-      const results = await uploadMediaFiles(Array.from(files), {
-        entityType: "PRODUCT",
-        entityId: productId && productId !== "new" ? productId : undefined
-      });
+    const filesArray = Array.from(files);
+    e.target.value = "";
+    await handleMediaFilesUpload(filesArray);
+  };
 
-      // 2. We need to pass the S3 media IDs to the product endpoint to create ProductMedia records
-      const mediaIds = results.map(r => r.mediaId).filter(Boolean);
-      
-      // If no mediaIds were returned (e.g. legacy fallback or local), we can just re-upload via formdata? 
-      // Actually, uploadMediaFiles might have fallen back to LOCAL. If it did, it still returns mediaId if it's the generic Media.
-      // But wait! If we pass it back as mediaIds, the products backend will link them.
-      // What if it's new files for Local? We'll just pass mediaIds.
-      await adminApi.post(`/products/${productId}/media`, { mediaIds });
+  const handleMediaDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverMedia(false);
+    if (uploadingMedia) return;
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length > 0) {
+      handleMediaFilesUpload(droppedFiles);
+    }
+  };
 
-      showToast("Media uploaded.");
-      refetch();
-    } catch {
-      showToast("Upload failed.", "error");
-    } finally {
-      setUploadingMedia(false);
-      e.target.value = "";
+  const handleMediaDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOverMedia) setIsDragOverMedia(true);
+  };
+
+  const handleMediaDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isDragOverMedia) setIsDragOverMedia(false);
+  };
+
+  const handleToggleSelectMedia = (mediaId: string) => {
+    setSelectedMediaIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(mediaId)) next.delete(mediaId);
+      else next.add(mediaId);
+      return next;
+    });
+  };
+
+  const handleToggleSelectAllMedia = (allIds: string[]) => {
+    if (selectedMediaIds.size === allIds.length) {
+      setSelectedMediaIds(new Set());
+    } else {
+      setSelectedMediaIds(new Set(allIds));
     }
   };
 
@@ -3129,11 +3232,45 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     try {
       await adminApi.delete(`/products/${productId}/media/${mediaId}`);
       showToast("Media deleted.");
+      setSelectedMediaIds((prev) => {
+        const next = new Set(prev);
+        next.delete(mediaId);
+        return next;
+      });
       refetch();
     } catch {
       showToast("Delete failed.", "error");
     } finally {
       setDeletingMedia(null);
+    }
+  };
+
+  const handleBulkDeleteMedia = async () => {
+    const idsToDelete = Array.from(selectedMediaIds);
+    if (idsToDelete.length === 0) return;
+    try {
+      await Promise.all(idsToDelete.map((id) => adminApi.delete(`/products/${productId}/media/${id}`)));
+      showToast(`${idsToDelete.length} image(s) deleted.`);
+      setSelectedMediaIds(new Set());
+      refetch();
+    } catch {
+      showToast("Failed to delete selected images.", "error");
+    } finally {
+      setDeletingBulkMedia(false);
+    }
+  };
+
+  const handleDeleteAllMedia = async (allIds: string[]) => {
+    if (allIds.length === 0) return;
+    try {
+      await Promise.all(allIds.map((id) => adminApi.delete(`/products/${productId}/media/${id}`)));
+      showToast("All product media deleted.");
+      setSelectedMediaIds(new Set());
+      refetch();
+    } catch {
+      showToast("Failed to delete product media.", "error");
+    } finally {
+      setDeletingAllMedia(false);
     }
   };
 
@@ -4211,43 +4348,230 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
         {activeTab === 2 && (
           <div className="p-6">
+            {/* Header & Bulk Action Bar */}
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Media</h3>
-                <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Upload product images used in listings and detail pages.</p>
+                <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">
+                  Upload and manage product images used in listings and detail pages.
+                </p>
               </div>
-              <label className="flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-                <Upload size={14} />
-                {uploadingMedia ? "Uploading..." : "Upload Media"}
-                <input type="file" accept="image/*" className="hidden" onChange={handleMediaUpload} disabled={uploadingMedia} />
-              </label>
-            </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {(product.media ?? []).length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSelectAllMedia((product.media ?? []).map((m: any) => m.id).filter(Boolean))}
+                      className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]"
+                    >
+                      {selectedMediaIds.size === (product.media ?? []).length ? (
+                        <>
+                          <CheckSquare size={14} className="text-[#E31E24]" />
+                          Deselect All
+                        </>
+                      ) : (
+                        <>
+                          <Square size={14} className="text-[#9A9A9A]" />
+                          Select All ({selectedMediaIds.size > 0 ? `${selectedMediaIds.size}/${(product.media ?? []).length}` : "All"})
+                        </>
+                      )}
+                    </button>
 
-            {(product.media ?? []).length ? (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                {(product.media ?? []).map((media: { id?: string; url: string; altText?: string | null }) => (
-                  <div key={media.id ?? media.url} className="overflow-hidden rounded-lg border border-[#E6E6E6] bg-white">
-                    <div className="aspect-square w-full bg-[#F7F7F7]">
-                      <img src={media.url} alt={media.altText ?? product.title} className="h-full w-full object-cover" />
-                    </div>
-                    <div className="flex items-center justify-end border-t border-[#E6E6E6] p-2">
+                    {selectedMediaIds.size > 0 && (
                       <button
                         type="button"
-                        disabled={!media.id}
-                        onClick={() => media.id && setDeletingMedia(media.id)}
-                        className="rounded border border-[#F2C9C9] px-2 py-1 text-[12px] text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
-                        title={media.id ? "Delete image" : "Image cannot be deleted because media id is missing"}
+                        onClick={() => setDeletingBulkMedia(true)}
+                        className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
                       >
-                        <Trash2 size={12} />
+                        <Trash2 size={14} />
+                        Delete Selected ({selectedMediaIds.size})
                       </button>
-                    </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setDeletingAllMedia(true)}
+                      className="flex items-center gap-1.5 rounded-md border border-[#F2C9C9] bg-white px-3.5 py-2 text-[13px] font-medium text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 size={14} />
+                      Delete All
+                    </button>
+                  </>
+                )}
+
+                <label className="flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
+                  {uploadingMedia ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin text-white" />
+                      <span>Uploading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={14} />
+                      <span>Upload Media</span>
+                    </>
+                  )}
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={handleMediaUpload} disabled={uploadingMedia} />
+                </label>
+              </div>
+            </div>
+
+            {/* Drag & Drop Area */}
+            <div
+              onDragOver={handleMediaDragOver}
+              onDragLeave={handleMediaDragLeave}
+              onDrop={handleMediaDrop}
+              className={`mb-6 flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition-all ${
+                uploadingMedia
+                  ? "border-[#E31E24] bg-red-50/30"
+                  : isDragOverMedia
+                  ? "border-[#E31E24] bg-red-50/50 scale-[1.005]"
+                  : "border-[#E6E6E6] bg-[#FAFAFA] hover:border-[#CCCCCC] hover:bg-[#F5F5F5]"
+              }`}
+            >
+              {uploadingMedia ? (
+                <div className="flex flex-col items-center py-1">
+                  <Loader2 size={24} className="animate-spin text-[#E31E24] mb-2" />
+                  <p className="text-[13.5px] font-semibold text-[#1A1A1A]">
+                    Uploading {uploadingMediaCount > 0 ? `${uploadingMediaCount} image(s)...` : "images..."}
+                  </p>
+                  <p className="mt-0.5 text-[12px] text-[#6B6B6B]">Please wait while files are being uploaded to the server.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm border border-[#E6E6E6]">
+                    <FolderUp size={20} className={isDragOverMedia ? "text-[#E31E24]" : "text-[#6B6B6B]"} />
                   </div>
-                ))}
+                  <p className="text-[13.5px] font-medium text-[#1A1A1A]">
+                    Drag & drop product images here, or{" "}
+                    <label className="cursor-pointer font-semibold text-[#E31E24] underline hover:text-[#B5151B]">
+                      browse files
+                      <input type="file" accept="image/*" multiple className="hidden" onChange={handleMediaUpload} disabled={uploadingMedia} />
+                    </label>
+                  </p>
+                  <p className="mt-1 text-[12px] text-[#9A9A9A]">
+                    Supports JPG, PNG, WEBP, GIF, SVG. Select or drag single or multiple images.
+                  </p>
+                </>
+              )}
+            </div>
+
+            {/* Product Media Grid */}
+            {(product.media ?? []).length > 0 || uploadingMedia ? (
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                {(product.media ?? []).map((media: { id?: string; url: string; altText?: string | null }, index: number) => {
+                  const isSelected = media.id ? selectedMediaIds.has(media.id) : false;
+                  const isCover = index === 0;
+
+                  return (
+                    <div
+                      key={media.id ?? media.url}
+                      className={`group relative flex flex-col overflow-hidden rounded-xl border transition-all ${
+                        isSelected
+                          ? "border-[#E31E24] ring-2 ring-[#E31E24]/20 shadow-md"
+                          : "border-[#E6E6E6] bg-white hover:border-[#D1D5DB] hover:shadow-sm"
+                      }`}
+                    >
+                      {/* Selection Checkbox */}
+                      {media.id && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleSelectMedia(media.id!);
+                          }}
+                          className={`absolute left-2.5 top-2.5 z-10 flex h-6 w-6 items-center justify-center rounded-md border transition-all ${
+                            isSelected
+                              ? "border-[#E31E24] bg-[#E31E24] text-white shadow-sm"
+                              : "border-[#D1D5DB] bg-white/90 text-transparent opacity-90 group-hover:opacity-100 hover:border-[#E31E24]"
+                          }`}
+                          title={isSelected ? "Deselect image" : "Select image"}
+                        >
+                          <Check size={14} className={isSelected ? "opacity-100" : "opacity-0"} />
+                        </button>
+                      )}
+
+                      {/* Primary / Cover Badge */}
+                      {isCover && (
+                        <span className="absolute right-2.5 top-2.5 z-10 rounded-full bg-[#1A1A1A]/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-sm shadow-sm">
+                          Cover
+                        </span>
+                      )}
+
+                      {/* Image Thumbnail Container */}
+                      <div
+                        onClick={() => setPreviewMediaIndex(index)}
+                        className="relative aspect-square w-full cursor-pointer overflow-hidden bg-[#F7F7F7]"
+                      >
+                        <img
+                          src={media.url}
+                          alt={media.altText ?? product.title}
+                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        />
+                        {/* Hover Overlay with Preview Icon */}
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
+                          <span className="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-[12px] font-medium text-[#1A1A1A] shadow-md backdrop-blur-sm">
+                            <ZoomIn size={14} /> View
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Card Footer Actions */}
+                      <div className="flex items-center justify-between border-t border-[#E6E6E6] bg-white px-3 py-2">
+                        <span className="truncate text-[11.5px] font-medium text-[#6B6B6B]" title={media.altText ?? `Image ${index + 1}`}>
+                          {index + 1}. {media.altText || `Image ${index + 1}`}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewMediaIndex(index)}
+                            className="rounded p-1 text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#1A1A1A]"
+                            title="Inspect image"
+                          >
+                            <Eye size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!media.id}
+                            onClick={() => media.id && setDeletingMedia(media.id)}
+                            className="rounded p-1 text-[#6B6B6B] hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                            title={media.id ? "Delete image" : "Media ID missing"}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Render Skeleton Cards for images currently being uploaded */}
+                {uploadingMedia &&
+                  Array.from({ length: Math.max(1, uploadingMediaCount) }).map((_, idx) => (
+                    <div
+                      key={`media-skeleton-${idx}`}
+                      className="relative flex flex-col overflow-hidden rounded-xl border border-[#E6E6E6] bg-white shadow-xs"
+                    >
+                      {/* Image Thumbnail Skeleton Box matching project skeleton theme */}
+                      <div className="relative aspect-square w-full bg-[#F0F0F0] animate-pulse flex flex-col items-center justify-center p-4">
+                        <Loader2 size={24} className="animate-spin text-[#E31E24] mb-2" />
+                        <span className="text-[12px] font-medium text-[#6B6B6B]">Uploading...</span>
+                      </div>
+
+                      {/* Footer Skeleton */}
+                      <div className="flex items-center justify-between border-t border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2">
+                        <div className="h-3.5 w-20 rounded bg-[#E0E0E0] animate-pulse" />
+                        <div className="h-3.5 w-4 rounded bg-[#E0E0E0] animate-pulse" />
+                      </div>
+                    </div>
+                  ))}
               </div>
             ) : (
-              <p className="rounded-lg border border-dashed border-[#E6E6E6] px-4 py-8 text-center text-[13px] text-[#9A9A9A]">
-                No media uploaded yet.
-              </p>
+              <div className="rounded-xl border border-dashed border-[#E6E6E6] p-8 text-center">
+                <ImageIcon size={32} className="mx-auto mb-2 text-[#D1D5DB]" />
+                <p className="text-[13.5px] font-medium text-[#6B6B6B]">No media uploaded yet.</p>
+                <p className="mt-0.5 text-[12px] text-[#9A9A9A]">Upload images using the button or drag and drop area above.</p>
+              </div>
             )}
           </div>
         )}
@@ -7833,6 +8157,108 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         onConfirm={() => deletingMedia && handleDeleteMedia(deletingMedia)}
         onCancel={() => setDeletingMedia(null)}
       />
+
+      <ConfirmModal
+        open={deletingBulkMedia}
+        title={`Delete ${selectedMediaIds.size} selected image(s)?`}
+        message="This will permanently remove all selected product images from storage. This action cannot be undone."
+        onConfirm={handleBulkDeleteMedia}
+        onCancel={() => setDeletingBulkMedia(false)}
+      />
+
+      <ConfirmModal
+        open={deletingAllMedia}
+        title="Delete all product images?"
+        message={`This will permanently remove all ${(product?.media ?? []).length} images for this product from storage. This action cannot be undone.`}
+        onConfirm={() => handleDeleteAllMedia((product?.media ?? []).map((m: any) => m.id).filter(Boolean))}
+        onCancel={() => setDeletingAllMedia(false)}
+      />
+
+      {previewMediaIndex !== null && (product?.media ?? [])[previewMediaIndex] && (
+        <Modal
+          open={previewMediaIndex !== null}
+          onClose={() => setPreviewMediaIndex(null)}
+          title={`Product Image ${previewMediaIndex + 1} of ${(product?.media ?? []).length}`}
+          panelClassName="max-w-4xl"
+        >
+          <div className="flex flex-col items-center p-6">
+            {/* Image viewer container with Nav Arrows */}
+            <div className="relative flex min-h-[350px] max-h-[60vh] w-full items-center justify-center rounded-xl bg-[#F7F7F7] p-4">
+              <img
+                src={(product?.media ?? [])[previewMediaIndex].url}
+                alt={(product?.media ?? [])[previewMediaIndex].altText ?? product.title}
+                className="max-h-[55vh] max-w-full rounded-lg object-contain shadow-sm"
+              />
+
+              {/* Prev Button */}
+              {(product?.media ?? []).length > 1 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPreviewMediaIndex((prev) =>
+                      prev === null ? null : (prev - 1 + (product?.media ?? []).length) % (product?.media ?? []).length
+                    )
+                  }
+                  className="absolute left-3 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-[#1A1A1A] shadow-md hover:bg-white transition-transform active:scale-95"
+                  title="Previous image (Left Arrow)"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+              )}
+
+              {/* Next Button */}
+              {(product?.media ?? []).length > 1 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPreviewMediaIndex((prev) =>
+                      prev === null ? null : (prev + 1) % (product?.media ?? []).length
+                    )
+                  }
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-[#1A1A1A] shadow-md hover:bg-white transition-transform active:scale-95"
+                  title="Next image (Right Arrow)"
+                >
+                  <ChevronRight size={20} />
+                </button>
+              )}
+            </div>
+
+            {/* Image Info & Actions Footer */}
+            <div className="mt-4 flex w-full flex-wrap items-center justify-between gap-4 border-t border-[#E6E6E6] pt-4">
+              <div className="truncate">
+                <p className="truncate text-[13.5px] font-semibold text-[#1A1A1A]">
+                  {(product?.media ?? [])[previewMediaIndex].altText || `Image ${previewMediaIndex + 1}`}
+                </p>
+                <p className="text-[12px] text-[#9A9A9A]">
+                  {previewMediaIndex === 0 ? "Cover / Primary Image" : `Gallery Position #${previewMediaIndex + 1}`}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentId = (product?.media ?? [])[previewMediaIndex!]?.id;
+                    setPreviewMediaIndex(null);
+                    if (currentId) setDeletingMedia(currentId);
+                  }}
+                  className="flex items-center gap-1.5 rounded-md border border-[#F2C9C9] bg-white px-3.5 py-2 text-[13px] font-medium text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 size={14} />
+                  Delete Image
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewMediaIndex(null)}
+                  className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       <ConfirmModal
         open={!!deletingPackage}

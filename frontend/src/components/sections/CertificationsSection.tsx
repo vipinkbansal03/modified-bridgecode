@@ -49,7 +49,7 @@ export function CertificationsSection({ data }: CertificationsSectionProps) {
                 <Link
                   key={cert.title}
                   href={cert.href ?? "#"}
-                  className="group flex w-full sm:w-[320px] flex-none flex-row items-center gap-4 rounded-md border border-line bg-white p-4 transition snap-start hover:border-brand hover:shadow-2xs"
+                  className="group flex w-[280px] sm:w-[320px] flex-none flex-row items-center gap-4 rounded-md border border-line bg-white p-4 transition snap-start hover:border-brand hover:shadow-2xs"
                 >
                   <div className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-grey transition-colors group-hover:bg-red-50">
                     <Icon size={24} className="text-brand" />

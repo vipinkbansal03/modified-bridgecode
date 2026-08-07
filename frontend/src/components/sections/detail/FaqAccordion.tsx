@@ -16,10 +16,10 @@ export function FaqAccordion({ items }: FaqAccordionProps) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
-    <section id="faqs" className="py-16">
+    <section id="faqs" className="py-6 lg:py-[34px]">
       <Container>
         <Reveal>
-          <h2 className="mb-2 text-[clamp(24px,2.6vw,32px)] font-normal text-ink">{t("ui.common.faqsTitle")}</h2>
+          <h2 className="mb-2 text-[clamp(24px,2.6vw,32px)] font-normal text-ink leading-none">{t("ui.common.faqsTitle")}</h2>
           <div className="mt-2">
             {items.map((item, i) => {
               const open = openIndex === i;
@@ -27,9 +27,9 @@ export function FaqAccordion({ items }: FaqAccordionProps) {
                 <div key={item.question} className="border-b border-line">
                   <button
                     onClick={() => setOpenIndex(open ? null : i)}
-                    className="flex w-full items-center justify-between gap-5 py-6 text-left text-base font-medium text-ink"
+                    className="flex w-full items-center justify-between gap-5 py-3 text-left text-base font-medium text-ink"
                   >
-                    <span>{item.question}</span>
+                    <span className="text-sm md:text-base">{item.question}</span>
                     <ChevronDown
                       size={18}
                       className={`flex-none text-steel transition-transform duration-200 ${open ? "rotate-180 text-brand" : ""}`}

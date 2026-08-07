@@ -652,7 +652,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   if (!variants.length) return null;
 
   return (
-    <section className="pt-8 sm:pt-12 lg:pt-16">
+    <section className="pt-8 sm:pt-8.5 ">
       <div className="mb-8 rounded-lg border border-line bg-white p-3 sm:p-5 lg:p-7">
         <div className="mb-5 flex flex-col gap-4 border-b border-line pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-[720px]">

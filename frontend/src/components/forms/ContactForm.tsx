@@ -34,6 +34,7 @@ export function ContactForm() {
           onBlur={formik.handleBlur}
           error={formik.errors.name}
           touched={formik.touched.name}
+          className=""
         />
         <Input
           id="email"
@@ -82,7 +83,7 @@ export function ContactForm() {
         touched={formik.touched.message}
       />
 
-      <Button type="submit" variant="primary" size="lg" disabled={isPending} className="self-start">
+      <Button type="submit" variant="primary" size="lg" disabled={isPending} className="w-full sm:w-auto sm:self-start">
         {isPending ? "Sending…" : "Send message"}
       </Button>
 

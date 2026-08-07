@@ -13,21 +13,21 @@ function Icon({ name, ...props }: { name: string; size?: number; className?: str
 
 export function DetailSection({ section }: { section: Section }) {
   return (
-    <section id={section.id} className="border-b border-line py-16">
+    <section id={section.id} className="border-b border-line py-6 lg:py-[34px]">
       <Container>
         <Reveal>
-          <h2 className="mb-5 text-[clamp(24px,2.6vw,32px)] font-normal text-ink">{section.heading}</h2>
+          <h2 className="mb-2 md:mb-4 text-[clamp(24px,2.6vw,32px)] font-normal text-ink leading-none">{section.heading}</h2>
 
           {section.paragraphs?.map((p, i) => (
-            <p key={i} className="mt-4 max-w-[760px] text-[15.5px] leading-[1.8] text-steel first:mt-0">
+            <p key={i} className="mt-3.5 md:mt-4 max-w-[760px] text-[15.5px] leading-[1.8] text-steel first:mt-0">
               {p}
             </p>
           ))}
 
           {section.capabilityGrid && (
-            <div className="mt-9 grid grid-cols-1 border-l border-t border-line sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-6 grid grid-cols-1 border-l border-t border-line sm:grid-cols-2 lg:grid-cols-3">
               {section.capabilityGrid.map((box) => (
-                <div key={box.title} className="border-b border-r border-line p-8.5">
+                <div key={box.title} className="border-b border-r border-line p-5 sm:p-8.5">
                   <Icon name={box.icon} size={26} className="mb-4.5 text-brand" />
                   <h4 className="mb-2.5 text-[17.5px] font-semibold leading-snug text-ink">{box.title}</h4>
                   <p className="text-sm leading-relaxed text-steel">{box.description}</p>

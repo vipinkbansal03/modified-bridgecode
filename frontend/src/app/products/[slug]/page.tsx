@@ -186,10 +186,10 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
   return (
     <>
-      <section className="pt-6 pb-4">
+      <section className="pt-6 lg:pt-8.5 pb-4">
         <Container>
           {/* Breadcrumbs */}
-          <nav className="mb-4 text-[13px] text-steel-2">
+          <nav className="mb-3 text-[13px] text-steel-2">
             <Link href="/" className="hover:text-brand">
               Home
             </Link>{" "}

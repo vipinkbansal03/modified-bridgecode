@@ -33,7 +33,7 @@ export default function WishlistPage() {
   const isLoading = authLoading || (Boolean(currentCustomer) && wishlistLoading);
 
   return (
-    <div className="py-8 sm:py-12 bg-[#FAFAFA] min-h-[70vh]">
+    <div className="py-6 lg:py-[34px] bg-[#FAFAFA] min-h-[70vh]">
       <Container>
         {/* Breadcrumbs */}
         <nav className="mb-6 text-[13px] text-steel">

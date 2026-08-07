@@ -129,7 +129,7 @@ export function DealerInquiryForm() {
         touched={formik.touched.message}
       />
 
-      <Button type="submit" variant="primary" size="lg" disabled={isPending} className="self-start">
+      <Button type="submit" variant="primary" size="lg" disabled={isPending} className="w-full sm:w-auto sm:self-start">
         {isPending ? "Submitting…" : "Submit dealer inquiry"}
       </Button>
 

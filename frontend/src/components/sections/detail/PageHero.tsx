@@ -12,7 +12,7 @@ interface PageHeroProps {
 
 export function PageHero({ kicker, title, lede, heroImage, breadcrumb }: PageHeroProps) {
   return (
-    <section className="pt-9">
+    <section className="pt-6 lg:pt-[34px]">
       <Container>
         <nav className="text-[13px] text-steel-2">
           {breadcrumb.map((b, i) => (
@@ -29,7 +29,7 @@ export function PageHero({ kicker, title, lede, heroImage, breadcrumb }: PageHer
           ))}
         </nav>
 
-        <div className="pt-8.5">
+        <div className="pt-5">
           <span className="mb-4 block text-[12.5px] font-semibold uppercase tracking-wide text-brand">{kicker}</span>
           <h1 className="max-w-[760px] text-[clamp(32px,4.4vw,50px)] font-light leading-[1.18] tracking-tight text-ink">
             {title}
@@ -37,7 +37,7 @@ export function PageHero({ kicker, title, lede, heroImage, breadcrumb }: PageHer
           <p className="mt-4.5 max-w-[640px] text-base leading-relaxed text-steel">{lede}</p>
         </div>
 
-        <div className="relative mt-10.5 h-[240px] w-full overflow-hidden sm:h-[420px]">
+        <div className="relative mt-5.5 h-[240px] w-full overflow-hidden sm:h-[420px]">
           <Image src={heroImage} alt={title} fill className="object-cover" sizes="100vw" />
         </div>
       </Container>

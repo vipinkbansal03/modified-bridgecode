@@ -1,21 +1,49 @@
 "use client";
 
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, CalendarDays, Search } from "lucide-react";
+import { ArrowRight, CalendarDays, Search, X } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { SkeletonGrid } from "@/components/ui/Skeleton";
 import { useBlogs } from "@/hooks/api/useBlogs";
+import { BlogSearchModal } from "@/components/blog/BlogSearchModal";
 
-export default function BlogPage() {
+function BlogContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialQuery = searchParams.get("q") || searchParams.get("search") || "";
+
+  const [search, setSearch] = useState(initialQuery);
+  const [isModalOpen, setIsModalOpen] = useState(Boolean(initialQuery));
+
   const { data: blogs = [], isLoading } = useBlogs();
   const featuredBlog = blogs[0];
   const otherBlogs = blogs.slice(1);
 
+  useEffect(() => {
+    setSearch(initialQuery);
+    if (initialQuery) {
+      setIsModalOpen(true);
+    }
+  }, [initialQuery]);
+
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    const trimmed = value.trim();
+    const newUrl = trimmed ? `/blog?q=${encodeURIComponent(trimmed)}` : "/blog";
+    router.replace(newUrl, { scroll: false });
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+  };
+
   return (
     <main className="bg-white">
       <section className="border-b border-line bg-white">
-        <Container className="py-16 lg:py-20">
+        <Container className="py-6 lg:py-[34px]">
           <span className="mb-4 block text-[12.5px] font-semibold uppercase tracking-wide text-brand">
             Resources
           </span>
@@ -32,7 +60,7 @@ export default function BlogPage() {
         </Container>
       </section>
 
-      <section className="py-14 lg:py-20">
+      <section className="py-14">
         <Container>
           <div className="mb-8 flex flex-col gap-4 border-b border-line pb-6 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -43,23 +71,71 @@ export default function BlogPage() {
                 From the blog
               </h2>
             </div>
-            <div className="flex h-11 w-full items-center gap-2 rounded-full border border-line bg-white px-4 text-steel sm:w-[320px]">
-              <Search size={15} />
-              <span className="text-[13px]">Search coming soon</span>
-            </div>
+
+            {/* Interactive Search Bar Trigger button opening Modal */}
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              className="flex h-11 w-full items-center justify-between gap-3 rounded-full border border-line bg-white px-4 text-steel transition-all hover:border-[#E31E24] hover:shadow-sm sm:w-[320px]"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Search size={15} className="flex-none text-steel" />
+                <span className="text-[13.5px] text-steel truncate">
+                  {search ? search : "Search articles..."}
+                </span>
+              </div>
+              {search ? (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSearchChange("");
+                  }}
+                  className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-grey hover:bg-line text-steel hover:text-ink transition-colors"
+                  aria-label="Clear search"
+                >
+                  <X size={12} />
+                </span>
+              ) : (
+                <span className="rounded-md bg-grey px-2 py-0.5 text-[11px] font-medium text-steel">
+                  Search
+                </span>
+              )}
+            </button>
           </div>
+
+          <BlogSearchModal
+            open={isModalOpen}
+            onClose={handleCloseModal}
+            search={search}
+            onSearchChange={handleSearchChange}
+          />
 
           {isLoading ? (
             <SkeletonGrid count={6} columns={3} />
           ) : blogs.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-line bg-[#FAFAFA] px-6 py-14 text-center">
-              <h3 className="text-[22px] font-semibold text-ink">
-                No blog posts yet
+              <h3 className="text-[20px] font-semibold text-ink">
+                {search ? "No articles found" : "No blog posts yet"}
               </h3>
               <p className="mt-2 text-[14px] text-steel">
-                Published blog posts will appear here once added from the admin
-                panel.
+                {search ? (
+                  <>
+                    No blog posts matched your search for &quot;
+                    <strong className="text-ink">{search}</strong>&quot;.
+                  </>
+                ) : (
+                  "Published blog posts will appear here once added from the admin panel."
+                )}
               </p>
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#E31E24] px-5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#B5151B]"
+                >
+                  Clear Search
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-10">
@@ -148,5 +224,13 @@ export default function BlogPage() {
         </Container>
       </section>
     </main>
+  );
+}
+
+export default function BlogPage() {
+  return (
+    <Suspense fallback={null}>
+      <BlogContent />
+    </Suspense>
   );
 }

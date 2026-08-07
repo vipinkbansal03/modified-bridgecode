@@ -94,7 +94,7 @@ export function HeroSection({ data }: HeroSectionProps) {
               }}
             />
           </div>
-          <Container className="relative flex h-full flex-col justify-center items-start text-left py-12">
+          <Container className="relative flex h-full flex-col justify-end md:justify-center items-start py-12">
             <div className="flex min-h-[200px] w-full max-w-[820px] flex-col justify-center text-left">
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
