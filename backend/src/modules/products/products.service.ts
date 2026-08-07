@@ -1420,44 +1420,83 @@ export async function deletePackage(productId: string, packageId: string) {
 export async function addProductMedia(
   productId: string,
   files: Express.Multer.File[],
-  altTexts: string[]
+  altTexts: string[],
+  mediaIds: string[] = []
 ) {
   await getProduct(productId);
   
-  if (!files || !files.length) {
+  if ((!files || !files.length) && (!mediaIds || !mediaIds.length)) {
     return [];
   }
 
-  const results = await Promise.all(
-    files.map((file) => uploadFile(file.path, `modortho/products/${productId}`))
-  );
+  const results: any[] = [];
+  const genericMediaRecords: any[] = [];
+  
+  // 1. Handle multer files (Legacy / Local)
+  if (files && files.length > 0) {
+    const uploadedFiles = await Promise.all(
+      files.map((file) => uploadFile(file.path, `modortho/products/${productId}`))
+    );
+    uploadedFiles.forEach((r, i) => {
+      results.push({
+        url: r.url,
+        publicId: r.publicId,
+        storageProvider: r.storageProvider,
+        mimeType: files[i].mimetype,
+        altText: altTexts[i] || "",
+        sortOrder: i,
+      });
+      genericMediaRecords.push({
+        entityType: "PRODUCT",
+        entityId: productId,
+        filename: files[i].originalname,
+        originalName: files[i].originalname,
+        url: r.url,
+        publicId: r.publicId,
+        mimeType: files[i].mimetype,
+        size: files[i].size,
+        type: files[i].mimetype.startsWith("image") ? ("IMAGE" as const) : ("DOCUMENT" as const),
+        storageProvider: r.storageProvider,
+        folder: `modortho/products/${productId}`,
+      });
+    });
+  }
 
-  const mediaRecords = results.map((r, i) => ({
-    productId,
-    url: r.url,
-    publicId: r.publicId,
-    storageProvider: r.storageProvider,
-    altText: altTexts[i] || "",
-    type: files[i].mimetype.startsWith("image") ? ("IMAGE" as const) : ("PDF" as const),
-    sortOrder: i,
-  }));
+  // 2. Handle pre-uploaded generic media (S3 Dual-mode)
+  if (mediaIds && mediaIds.length > 0) {
+    const existingMedia = await prisma.media.findMany({ where: { id: { in: mediaIds } } });
+    existingMedia.forEach((media, i) => {
+      results.push({
+        url: media.url,
+        publicId: media.publicId,
+        storageProvider: media.storageProvider,
+        mimeType: media.mimeType,
+        altText: altTexts[files.length + i] || "",
+        sortOrder: files.length + i,
+      });
+    });
+  }
+
+  const mediaRecords = results.map((r, i) => {
+    // If it's a file, we can check mimetype. If it's from mediaIds, we mapped mimeType in results.
+    const mime = files && files[i] ? files[i].mimetype : (r.mimeType || "");
+    return {
+      productId,
+      url: r.url,
+      publicId: r.publicId,
+      storageProvider: r.storageProvider,
+      altText: r.altText || "",
+      type: mime.startsWith("image") ? ("IMAGE" as const) : ("PDF" as const),
+      sortOrder: r.sortOrder || i,
+    };
+  });
 
   await prisma.productMedia.createMany({ data: mediaRecords });
 
-  const genericMediaRecords = results.map((r, i) => ({
-    entityType: "PRODUCT",
-    entityId: productId,
-    filename: files[i].originalname,
-    originalName: files[i].originalname,
-    url: r.url,
-    publicId: r.publicId,
-    mimeType: files[i].mimetype,
-    size: files[i].size,
-    type: files[i].mimetype.startsWith("image") ? ("IMAGE" as const) : ("DOCUMENT" as const),
-    storageProvider: r.storageProvider,
-    folder: `modortho/products/${productId}`,
-  }));
-  await prisma.media.createMany({ data: genericMediaRecords });
+  if (genericMediaRecords.length > 0) {
+    await prisma.media.createMany({ data: genericMediaRecords });
+  }
+  
   return prisma.productMedia.findMany({ where: { productId } });
 }
 

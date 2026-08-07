@@ -125,9 +125,11 @@ export const deletePackage = asyncHandler(async (req: AuthRequest, res: Response
 });
 
 export const uploadMedia = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const files = req.files as Express.Multer.File[];
+  const files = (req.files || []) as Express.Multer.File[];
   const altTexts = (req.body.altTexts || []) as string[];
-  await ProductService.addProductMedia(req.params.id as string, files, altTexts);
+  const mediaIds = req.body.mediaIds ? (Array.isArray(req.body.mediaIds) ? req.body.mediaIds : [req.body.mediaIds]) : [];
+  
+  await ProductService.addProductMedia(req.params.id as string, files, altTexts, mediaIds);
   return ApiResponse.success(res, "Media uploaded.");
 });
 

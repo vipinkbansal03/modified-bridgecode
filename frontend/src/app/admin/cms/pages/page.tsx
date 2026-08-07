@@ -22,6 +22,7 @@ import {
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi } from "@/services/adminApi";
 import { cn } from "@/utils/cn";
+import { uploadMediaFiles } from "@/utils/uploadMedia";
 
 type CmsPageRow = {
   id: string;
@@ -954,15 +955,13 @@ function CmsPagesPageContent() {
   }
 
   async function uploadSeoImage(field: "favicon" | "ogImage" | "twitterImage", file: File) {
-    const formData = new FormData();
-    formData.append("entityType", "CMS");
-    if (selectedPage?.id) formData.append("entityId", selectedPage.id);
-    formData.append("files", file);
     try {
       setUploadingSeoAsset(field);
-      const response = await adminApi.post("/media", formData);
-      const uploaded = response.data?.data;
-      const url = Array.isArray(uploaded) ? uploaded[0]?.url : undefined;
+      const results = await uploadMediaFiles([file], {
+        entityType: "CMS",
+        entityId: selectedPage?.id || undefined
+      });
+      const url = results[0]?.url;
       if (url) {
         setSeoForm((prev) => ({ ...prev, [field]: url }));
         showToast("Image uploaded.", "success");
@@ -970,7 +969,7 @@ function CmsPagesPageContent() {
         showToast("Upload finished, but image URL was not found.", "error");
       }
     } catch {
-      showToast("Image upload failed.", "error");
+      showToast("Failed to upload image.", "error");
     } finally {
       setUploadingSeoAsset(null);
     }

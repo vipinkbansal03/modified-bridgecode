@@ -7,6 +7,7 @@ import { AdminInput, AdminRichTextEditor, AdminSelect, AdminTextarea, useToast }
 import { useAdminBlogAuthors, useAdminBlogCategories, useCreateBlog, useUpdateBlog } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { slugify } from "@/utils/slugify";
+import { uploadMediaFiles } from "@/utils/uploadMedia";
 
 type Blog = {
   id: string;
@@ -87,14 +88,13 @@ export function BlogEditor({ blog }: { blog?: Blog }) {
 
   const upload = async (file?: File) => {
     if (!file) return;
-    const formData = new FormData();
-    formData.append("entityType", "BLOG");
-    if (blog?.id) formData.append("entityId", blog.id);
-    formData.append("files", file);
     setUploading(true);
     try {
-      const response = await adminApi.post("/media", formData);
-      const uploaded = response.data?.data?.[0];
+      const results = await uploadMediaFiles([file], {
+        entityType: "BLOG",
+        entityId: blog?.id || undefined
+      });
+      const uploaded = results[0];
       if (uploaded?.url) set("featuredImage", uploaded.url);
       else throw new Error("Upload completed, but no image URL was returned.");
     } catch (error) {

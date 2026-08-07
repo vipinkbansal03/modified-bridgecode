@@ -32,6 +32,7 @@ import {
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { slugify } from "@/utils/slugify";
+import { uploadMediaFiles } from "@/utils/uploadMedia";
 
 interface CategoryTranslation {
   id: string;
@@ -263,15 +264,13 @@ export default function CategoriesPage() {
 
   const handleImageUpload = async (file: File | undefined) => {
     if (!file) return;
-    const formData = new FormData();
-    formData.append("entityType", "CATEGORY");
-    if (editing?.id) formData.append("entityId", editing.id);
-    formData.append("files", file);
-    formData.append("folder", "modortho/categories");
     setUploadingImage(true);
     try {
-      const response = await adminApi.post("/media", formData);
-      const uploaded = response.data?.data?.[0];
+      const results = await uploadMediaFiles([file], {
+        entityType: "CATEGORY",
+        entityId: editing?.id || undefined
+      });
+      const uploaded = results[0];
       if (uploaded?.url) form.setFieldValue("image", uploaded.url);
       else throw new Error("Upload completed, but no image URL was returned.");
     } catch (error) {

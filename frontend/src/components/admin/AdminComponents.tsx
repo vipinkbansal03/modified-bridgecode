@@ -148,9 +148,21 @@ interface ConfirmModalProps {
   onCancel: () => void;
   isLoading?: boolean;
   danger?: boolean;
+  confirmText?: string;
+  loadingText?: string;
 }
 
-export function ConfirmModal({ open, title, message, onConfirm, onCancel, isLoading, danger = true }: ConfirmModalProps) {
+export function ConfirmModal({ 
+  open, 
+  title, 
+  message, 
+  onConfirm, 
+  onCancel, 
+  isLoading, 
+  danger = true,
+  confirmText = "Confirm",
+  loadingText
+}: ConfirmModalProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -162,6 +174,9 @@ export function ConfirmModal({ open, title, message, onConfirm, onCancel, isLoad
   }, []);
 
   if (!open || !mounted) return null;
+
+  const defaultLoadingText = danger ? "Deleting…" : "Confirming…";
+  const finalLoadingText = loadingText || defaultLoadingText;
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 px-4">
@@ -180,7 +195,7 @@ export function ConfirmModal({ open, title, message, onConfirm, onCancel, isLoad
             disabled={isLoading}
             className={cn("rounded-md px-4 py-2 text-[13.5px] font-medium text-white disabled:opacity-50", danger ? "bg-red-600 hover:bg-red-700" : "bg-[#E31E24] hover:bg-[#B5151B]")}
           >
-            {isLoading ? "Deleting…" : "Confirm"}
+            {isLoading ? finalLoadingText : confirmText}
           </button>
         </div>
       </div>

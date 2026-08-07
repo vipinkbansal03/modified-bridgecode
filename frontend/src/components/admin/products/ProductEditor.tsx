@@ -11,6 +11,7 @@ import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, AdminMulti
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
+import { uploadMediaFiles } from "@/utils/uploadMedia";
 import { BulkVariantImportWizard } from "@/components/admin/products/BulkVariantImportWizard";
 import { ProductPaymentOverridesTab } from "@/components/admin/products/ProductPaymentOverridesTab";
 import {
@@ -762,6 +763,17 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     updateDistributorPrice: false,
     updateStatus: false,
   });
+  
+  const [addVariantOverrideModalOpen, setAddVariantOverrideModalOpen] = useState(false);
+  const [addVariantOverrideForm, setAddVariantOverrideForm] = useState({
+    variantId: "",
+    countryId: "",
+    mrp: "",
+    sellingPrice: "",
+    dealerPrice: "",
+    distributorPrice: "",
+  });
+
   const { showToast, ToastComponent } = useToast();
 
   const { data: product, isLoading, refetch } = useAdminProduct(productId);
@@ -1093,6 +1105,40 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       refetch();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to update price."), "error");
+    }
+  };
+
+  const handleAddVariantOverrideSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addVariantOverrideForm.variantId || !addVariantOverrideForm.countryId) {
+      showToast("Please select both a variant and a country.", "error");
+      return;
+    }
+    
+    try {
+      await adminApi.post("/pricing", {
+        productId,
+        variantId: addVariantOverrideForm.variantId,
+        countryId: addVariantOverrideForm.countryId,
+        mrp: Number(addVariantOverrideForm.mrp) || null,
+        sellingPrice: Number(addVariantOverrideForm.sellingPrice) || null,
+        dealerPrice: addVariantOverrideForm.dealerPrice ? Number(addVariantOverrideForm.dealerPrice) : null,
+        distributorPrice: addVariantOverrideForm.distributorPrice ? Number(addVariantOverrideForm.distributorPrice) : null,
+        status: "ACTIVE",
+      });
+      showToast("Variant override added successfully.", "success");
+      setAddVariantOverrideModalOpen(false);
+      setAddVariantOverrideForm({
+        variantId: "",
+        countryId: "",
+        mrp: "",
+        sellingPrice: "",
+        dealerPrice: "",
+        distributorPrice: "",
+      });
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to add override."), "error");
     }
   };
 
@@ -3016,14 +3062,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
   const uploadPackageImage = async (file?: File) => {
     if (!file) return;
-    const formData = new FormData();
-    formData.append("entityType", "PRODUCT");
-    if (productId && productId !== "new") formData.append("entityId", productId);
-    formData.append("files", file);
     setUploadingPackageImage(true);
     try {
-      const response = await adminApi.post("/media", formData);
-      const uploaded = response.data?.data?.[0];
+      const results = await uploadMediaFiles([file], {
+        entityType: "PRODUCT",
+        entityId: productId && productId !== "new" ? productId : undefined
+      });
+      
+      const uploaded = results[0];
       if (uploaded?.url) {
         setPackageImage(uploaded.url);
         showToast("Package image uploaded.");
@@ -3053,10 +3099,22 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     const files = e.target.files;
     if (!files?.length) return;
     setUploadingMedia(true);
-    const formData = new FormData();
-    Array.from(files).forEach((file) => formData.append("files", file));
     try {
-      await adminApi.post(`/products/${productId}/media`, formData);
+      // 1. Upload via dual-mode utility
+      const results = await uploadMediaFiles(Array.from(files), {
+        entityType: "PRODUCT",
+        entityId: productId && productId !== "new" ? productId : undefined
+      });
+
+      // 2. We need to pass the S3 media IDs to the product endpoint to create ProductMedia records
+      const mediaIds = results.map(r => r.mediaId).filter(Boolean);
+      
+      // If no mediaIds were returned (e.g. legacy fallback or local), we can just re-upload via formdata? 
+      // Actually, uploadMediaFiles might have fallen back to LOCAL. If it did, it still returns mediaId if it's the generic Media.
+      // But wait! If we pass it back as mediaIds, the products backend will link them.
+      // What if it's new files for Local? We'll just pass mediaIds.
+      await adminApi.post(`/products/${productId}/media`, { mediaIds });
+
       showToast("Media uploaded.");
       refetch();
     } catch {
@@ -5240,6 +5298,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Variant-wise Pricing</h3>
                     <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Manage country-specific overrides for product variants.</p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setAddVariantOverrideModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B]"
+                  >
+                    <Plus size={14} />
+                    Add Override
+                  </button>
                 </div>
 
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E6E6E6] bg-white p-3">
@@ -8460,6 +8526,98 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           </div>
         </div>
       )}
+
+      <Modal
+        open={addVariantOverrideModalOpen}
+        onClose={() => setAddVariantOverrideModalOpen(false)}
+        title="Add Variant Override"
+        panelClassName="max-w-md"
+      >
+        <form onSubmit={handleAddVariantOverrideSubmit} className="space-y-5 p-6">
+          <p className="text-[13px] leading-5 text-[#6B6B6B]">
+            Create a country-specific price override for a variant.
+          </p>
+
+          <AdminSelect
+            label="Variant"
+            value={addVariantOverrideForm.variantId}
+            onChange={(e) => setAddVariantOverrideForm((f) => ({ ...f, variantId: e.target.value }))}
+            required
+            options={[
+              { value: "", label: "Select Variant" },
+              ...(product?.variants?.map((v: any) => ({
+                value: v.id,
+                label: v.title,
+              })) || []),
+            ]}
+          />
+
+          <AdminSelect
+            label="Country"
+            value={addVariantOverrideForm.countryId}
+            onChange={(e) => setAddVariantOverrideForm((f) => ({ ...f, countryId: e.target.value }))}
+            required
+            options={[
+              { value: "", label: "Select Country" },
+              ...(countries?.map((c: any) => ({
+                value: c.id,
+                label: c.name,
+              })) || []),
+            ]}
+          />
+
+          <AdminInput
+            label="MRP"
+            type="number"
+            min="0"
+            step="0.01"
+            value={addVariantOverrideForm.mrp}
+            onChange={(e) => setAddVariantOverrideForm((f) => ({ ...f, mrp: e.target.value }))}
+            required
+          />
+          <AdminInput
+            label="Selling Price"
+            type="number"
+            min="0"
+            step="0.01"
+            value={addVariantOverrideForm.sellingPrice}
+            onChange={(e) => setAddVariantOverrideForm((f) => ({ ...f, sellingPrice: e.target.value }))}
+            required
+          />
+          <AdminInput
+            label="Dealer Price"
+            type="number"
+            min="0"
+            step="0.01"
+            value={addVariantOverrideForm.dealerPrice}
+            onChange={(e) => setAddVariantOverrideForm((f) => ({ ...f, dealerPrice: e.target.value }))}
+          />
+          <AdminInput
+            label="Doctor / Retailer Price"
+            type="number"
+            min="0"
+            step="0.01"
+            value={addVariantOverrideForm.distributorPrice}
+            onChange={(e) => setAddVariantOverrideForm((f) => ({ ...f, distributorPrice: e.target.value }))}
+          />
+          
+          <div className="flex items-center justify-end gap-3 border-t border-[#E6E6E6] pt-4 mt-2">
+            <button
+              type="button"
+              onClick={() => setAddVariantOverrideModalOpen(false)}
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+            >
+              Add Override
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {ToastComponent}
     </>

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import * as Yup from "yup";
+import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import {
   Search,
   Mail,
@@ -101,34 +103,36 @@ export default function NewsletterAdminPage() {
     };
   }, [subscribers, pagination.total]);
 
-  // Handlers
-  const handleAddSubscriber = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newEmail.trim()) return;
-
-    createMutation.mutate(
-      { email: newEmail.trim() },
-      {
-        onSuccess: () => {
-          showToast({
-            title: "Subscriber added",
-            message: `${newEmail.trim()} has been registered successfully.`,
-            type: "success",
-          });
-          setNewEmail("");
-          setIsAddOpen(false);
-          refetch();
-        },
-        onError: (err) => {
-          showToast({
-            title: "Error adding subscriber",
-            message: getAdminErrorMessage(err, "Failed to register email."),
-            type: "error",
-          });
-        },
-      },
-    );
-  };
+  const form = useAdminForm({
+    initialValues: { email: "" },
+    validationSchema: Yup.object({
+      email: Yup.string().email("Invalid email").required("Email is required"),
+    }),
+    onSubmit: async (values, { setSubmitting, resetForm, setStatus }) => {
+      setStatus("");
+      try {
+        await createMutation.mutateAsync({ email: values.email.trim() });
+        showToast({
+          title: "Subscriber added",
+          message: `${values.email.trim()} has been registered successfully.`,
+          type: "success",
+        });
+        setIsAddOpen(false);
+        resetForm();
+        refetch();
+      } catch (err) {
+        const msg = getAdminErrorMessage(err, "Failed to register email.");
+        setStatus(msg);
+        showToast({
+          title: "Error adding subscriber",
+          message: msg,
+          type: "error",
+        });
+      } finally {
+        setSubmitting(false);
+      }
+    },
+  });
 
   const handleToggleClick = (row: SubscriberRow) => {
     setToggleTarget(row);
@@ -328,31 +332,34 @@ export default function NewsletterAdminPage() {
         onClose={() => setIsAddOpen(false)}
         title="Manually Add Subscriber"
       >
-        <form onSubmit={handleAddSubscriber} className="space-y-4 p-5">
+        <form onSubmit={form.handleSubmit} className="space-y-4 p-5">
           <AdminInput
             label="Email Address"
             required
             type="email"
             placeholder="subscriber@example.com"
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-            disabled={createMutation.isPending}
+            {...form.getFieldProps("email")}
+            error={form.touched.email && typeof form.errors.email === "string" ? form.errors.email : undefined}
+            disabled={form.isSubmitting}
           />
+          {form.status && (
+            <p className="text-[13px] text-[#E31E24]">{form.status}</p>
+          )}
           <div className="flex justify-end gap-2.5 pt-2">
             <button
               type="button"
               onClick={() => setIsAddOpen(false)}
               className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2]"
-              disabled={createMutation.isPending}
+              disabled={form.isSubmitting}
             >
               Cancel
             </button>
             <button
               type="submit"
               className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-              disabled={createMutation.isPending}
+              disabled={form.isSubmitting}
             >
-              {createMutation.isPending ? "Adding..." : "Add Subscriber"}
+              {form.isSubmitting ? "Adding..." : "Add Subscriber"}
             </button>
           </div>
         </form>

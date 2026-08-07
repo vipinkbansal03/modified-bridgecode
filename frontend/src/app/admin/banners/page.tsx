@@ -8,7 +8,7 @@ import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { SortableList } from "@/components/admin/SortableList";
 import { useAdminBanners, useAdminCountries, useBulkBanners, useCreateBanner, useDeleteBanner, useReorderBanners, useUpdateBanner } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
-
+import { uploadMediaFiles } from "@/utils/uploadMedia";
 type Banner = { id: string; title: string; image: string; mobileImage?: string | null; linkUrl?: string | null; linkText?: string | null; placement: string; countryId?: string | null; country?: { code: string; name: string } | null; sortOrder: number; status: boolean; startDate?: string | null; endDate?: string | null };
 const placements = ["", "HOMEPAGE_HERO", "HOMEPAGE_PROMO", "CATEGORY_TOP", "PRODUCT_TOP", "SIDEBAR"];
 const empty = { id: "", title: "", image: "", mobileImage: "", linkUrl: "", linkText: "", placement: "HOMEPAGE_HERO", countryId: "", countryIds: [] as string[], status: true, startDate: "", endDate: "" };
@@ -61,14 +61,13 @@ export default function BannersPage() {
   };
   const upload = async (field: "image" | "mobileImage", file?: File) => {
     if (!file) return;
-    const payload = new FormData();
-    payload.append("entityType", "BANNER");
-    if (form.id) payload.append("entityId", form.id);
-    payload.append("files", file);
     setUploading(field);
     try {
-      const response = await adminApi.post("/media", payload);
-      const uploaded = response.data?.data?.[0];
+      const results = await uploadMediaFiles([file], {
+        entityType: "BANNER",
+        entityId: form.id || undefined
+      });
+      const uploaded = results[0];
       if (uploaded?.url) set(field, uploaded.url);
     } catch (error) { showToast(getAdminErrorMessage(error, "Upload failed."), "error"); }
     finally { setUploading(null); }

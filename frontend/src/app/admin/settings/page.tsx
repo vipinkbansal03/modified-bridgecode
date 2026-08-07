@@ -13,6 +13,7 @@ import { AdminInput, AdminTextarea, AdminSelect, useToast } from "@/components/a
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { Logo } from "@/components/ui/Logo";
 import { cn } from "@/utils/cn";
+import { uploadMediaFiles } from "@/utils/uploadMedia";
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
@@ -381,28 +382,26 @@ export default function SettingsPage() {
 
   const handleSlideImageUpload = async (
     index: number,
-    event: React.ChangeEvent<HTMLInputElement>,
+    event: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
+
     const uploadKey = `auth.login_slide_${index}_image`;
 
-    const formData = new FormData();
-    formData.append("entityType", "SYSTEM");
-    formData.append("purpose", "LOGIN_SLIDE");
-    formData.append("files", file);
-    formData.append("folder", "modortho/auth");
-    setUploadingKey(uploadKey);
-
     try {
-      const response = await adminApi.post("/media", formData);
-      const uploaded = response.data.data?.[0] as UploadedMedia | undefined;
+      setUploadingKey(uploadKey);
+      const results = await uploadMediaFiles([file], {
+        entityType: "SYSTEM",
+        purpose: "LOGIN_SLIDE"
+      });
+      const url = results[0]?.url;
 
-      if (!uploaded?.url) {
+      if (!url) {
         throw new Error("Upload response did not include an image URL.");
       }
 
-      updateLoginSlide(index, "image", uploaded.url);
+      updateLoginSlide(index, "image", url);
       showToast("Image uploaded.", "success");
     } catch {
       showToast("Image upload failed.", "error");
@@ -419,22 +418,19 @@ export default function SettingsPage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    setUploadingKey(key);
-    const formData = new FormData();
-    formData.append("entityType", "SYSTEM");
-    formData.append("purpose", "BRANDING");
-    formData.append("files", file);
-    formData.append("folder", "modortho/branding");
-
     try {
-      const response = await adminApi.post("/media", formData);
-      const uploaded = response.data.data?.[0] as UploadedMedia | undefined;
+      setUploadingKey(key);
+      const results = await uploadMediaFiles([file], {
+        entityType: "SYSTEM",
+        purpose: "BRANDING"
+      });
+      const url = results[0]?.url;
 
-      if (!uploaded?.url) {
+      if (!url) {
         throw new Error("Upload response did not include an image URL.");
       }
 
-      set(key, uploaded.url);
+      set(key, url);
       showToast("Image uploaded. Click 'Save Settings' to apply changes.", "success");
     } catch (err) {
       showToast(getAdminErrorMessage(err, "Image upload failed."), "error");
