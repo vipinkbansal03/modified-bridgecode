@@ -11,4 +11,9 @@ router.post("/", requirePermission("media.manage"), upload.array("files", 20), C
 router.delete("/by-url", requirePermission("media.manage"), C.removeByUrl);
 router.delete("/:id", requirePermission("media.manage"), C.remove);
 
+router.get("/config", requirePermission("media.manage"), C.config);
+router.get("/folders", requirePermission("media.manage"), C.folders);
+router.post("/presign", requirePermission("media.manage"), C.presign);
+router.post("/confirm", requirePermission("media.manage"), C.confirm);
+
 export default router;

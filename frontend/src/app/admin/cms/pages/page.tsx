@@ -478,6 +478,8 @@ function SectionContentEditor({
 
   async function uploadImageFile(file: File) {
     const formData = new FormData();
+    formData.append("entityType", "CMS");
+    if (section?.id) formData.append("entityId", section.id);
     formData.append("files", file);
     const response = await adminApi.post("/media", formData);
     const uploaded = response.data?.data;
@@ -953,6 +955,8 @@ function CmsPagesPageContent() {
 
   async function uploadSeoImage(field: "favicon" | "ogImage" | "twitterImage", file: File) {
     const formData = new FormData();
+    formData.append("entityType", "CMS");
+    if (selectedPage?.id) formData.append("entityId", selectedPage.id);
     formData.append("files", file);
     try {
       setUploadingSeoAsset(field);

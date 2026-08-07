@@ -9,8 +9,13 @@ export const list = asyncHandler(async (req: AuthRequest, res: Response) => {
 });
 
 export const upload = asyncHandler(async (req: AuthRequest, res: Response) => {
-  console.log("req.files:", req.files, "req.body:", req.body);
-  return ApiResponse.created(res, "Uploaded.", await S.uploadMedia(req.files as Express.Multer.File[], req.body.folder));
+  return ApiResponse.created(res, "Uploaded.", await S.uploadMedia(
+    req.files as Express.Multer.File[], 
+    req.body.folder,
+    req.body.entityType,
+    req.body.entityId,
+    req.body.purpose
+  ));
 });
 
 export const removeByUrl = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -21,4 +26,31 @@ export const removeByUrl = asyncHandler(async (req: AuthRequest, res: Response) 
 export const remove = asyncHandler(async (req: AuthRequest, res: Response) => {
   await S.deleteMedia(String(req.params.id));
   return ApiResponse.success(res, "Deleted.");
+});
+
+export const presign = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const data = req.body;
+  if (!data.filename || !data.mimeType || !data.size) {
+    return ApiResponse.error(res, "Filename, mimeType, and size are required.");
+  }
+  const result = await S.presignUpload(data);
+  return ApiResponse.success(res, "Presigned URL generated.", result);
+});
+
+export const confirm = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { mediaId } = req.body;
+  if (!mediaId) return ApiResponse.error(res, "mediaId is required.");
+  const media = await S.confirmUpload(mediaId);
+  return ApiResponse.success(res, "Upload confirmed.", media);
+});
+
+export const config = asyncHandler(async (req: AuthRequest, res: Response) => {
+  // If we have AWS credentials, we can use S3. Otherwise use LOCAL.
+  const storageProvider = process.env.AWS_ACCESS_KEY_ID ? "S3" : "LOCAL";
+  return ApiResponse.success(res, "Media config.", { storageProvider });
+});
+
+export const folders = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await S.getMediaFolders(req.query);
+  return ApiResponse.success(res, "Folders.", result);
 });

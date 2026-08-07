@@ -88,6 +88,8 @@ export function BlogEditor({ blog }: { blog?: Blog }) {
   const upload = async (file?: File) => {
     if (!file) return;
     const formData = new FormData();
+    formData.append("entityType", "BLOG");
+    if (blog?.id) formData.append("entityId", blog.id);
     formData.append("files", file);
     setUploading(true);
     try {
@@ -115,7 +117,11 @@ export function BlogEditor({ blog }: { blog?: Blog }) {
         <AdminInput label="Title" value={form.title} onChange={(event) => { set("title", event.target.value); if (!slugEdited) set("slug", slugify(event.target.value)); }} className="text-[20px]" />
         <AdminInput label="Slug" value={form.slug} onChange={(event) => { setSlugEdited(true); set("slug", slugify(event.target.value)); }} />
         <p className="-mt-2 text-[12px] text-[#9A9A9A]">/blog/{form.slug || "your-slug"}</p>
-        <AdminRichTextEditor label="Content" value={form.content} onChange={(value) => set("content", value)} />
+        <AdminRichTextEditor
+          value={form.content || ""}
+          onChange={(v) => set("content", v)}
+          mediaContext={{ entityType: "BLOG", entityId: blog?.id }}
+        />
         <AdminTextarea label="Excerpt" rows={3} value={form.excerpt} onChange={(event) => set("excerpt", event.target.value)} />
       </section>
 

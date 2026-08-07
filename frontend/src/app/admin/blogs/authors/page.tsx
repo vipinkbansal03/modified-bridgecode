@@ -23,6 +23,8 @@ export default function BlogAuthorsPage() {
   const upload = async (file?: File) => {
     if (!file) return;
     const payload = new FormData();
+    payload.append("entityType", "AUTHOR");
+    if (form.id) payload.append("entityId", form.id);
     payload.append("files", file);
     setUploading(true);
     try {

@@ -62,6 +62,8 @@ export default function BannersPage() {
   const upload = async (field: "image" | "mobileImage", file?: File) => {
     if (!file) return;
     const payload = new FormData();
+    payload.append("entityType", "BANNER");
+    if (form.id) payload.append("entityId", form.id);
     payload.append("files", file);
     setUploading(field);
     try {

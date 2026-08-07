@@ -637,15 +637,24 @@ function sanitizeRichText(html: string) {
 }
 
 interface AdminRichTextEditorProps {
-  label?: string;
   value: string;
-  onChange: (val: string) => void;
+  onChange: (value: string) => void;
   placeholder?: string;
-  error?: string;
   className?: string;
+  error?: string;
+  label?: string;
+  mediaContext?: { entityType: string; entityId?: string };
 }
 
-export function AdminRichTextEditor({ label, value, onChange, placeholder, error, className }: AdminRichTextEditorProps) {
+export function AdminRichTextEditor({
+  value,
+  onChange,
+  placeholder,
+  className,
+  error,
+  label,
+  mediaContext,
+}: AdminRichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const savedRangeRef = useRef<Range | null>(null);
@@ -756,6 +765,8 @@ export function AdminRichTextEditor({ label, value, onChange, placeholder, error
     setUploadingImg(true);
     try {
       const formData = new FormData();
+      if (mediaContext?.entityType) formData.append("entityType", mediaContext.entityType);
+      if (mediaContext?.entityId) formData.append("entityId", mediaContext.entityId);
       formData.append("files", file);
       const res = await adminApi.post("/media", formData);
       const mediaItem = Array.isArray(res.data?.data) ? res.data.data[0] : res.data?.data || res.data;

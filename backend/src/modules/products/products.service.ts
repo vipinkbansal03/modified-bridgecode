@@ -1442,7 +1442,23 @@ export async function addProductMedia(
     sortOrder: i,
   }));
 
-  return prisma.productMedia.createMany({ data: mediaRecords });
+  await prisma.productMedia.createMany({ data: mediaRecords });
+
+  const genericMediaRecords = results.map((r, i) => ({
+    entityType: "PRODUCT",
+    entityId: productId,
+    filename: files[i].originalname,
+    originalName: files[i].originalname,
+    url: r.url,
+    publicId: r.publicId,
+    mimeType: files[i].mimetype,
+    size: files[i].size,
+    type: files[i].mimetype.startsWith("image") ? ("IMAGE" as const) : ("DOCUMENT" as const),
+    storageProvider: r.storageProvider,
+    folder: `modortho/products/${productId}`,
+  }));
+  await prisma.media.createMany({ data: genericMediaRecords });
+  return prisma.productMedia.findMany({ where: { productId } });
 }
 
 // ─── Delete product media ─────────────────────────────────
@@ -1451,6 +1467,7 @@ export async function deleteProductMedia(mediaId: string) {
   const media = await prisma.productMedia.findUnique({ where: { id: mediaId } });
   if (!media) throw new AppError("Media not found.", 404);
   await deleteFile(media.publicId || media.url, media.storageProvider);
+  await prisma.media.deleteMany({ where: { url: media.url } });
   return prisma.productMedia.delete({ where: { id: mediaId } });
 }
 
@@ -1648,6 +1665,25 @@ export async function generateVariants(
 
   if (!attributeGroups.length) throw new AppError("Select attribute values before generating variants.", 400);
 
+  if (!hasProductAttributeMappings) {
+    await prisma.$transaction(
+      attributeGroups.map((group) =>
+        prisma.productAttribute.create({
+          data: {
+            productId,
+            attributeId: group.attributeId,
+            required: true,
+            allowedValues: {
+              create: group.attributeValueIds.map((attributeValueId) => ({
+                attributeValueId,
+              })),
+            },
+          },
+        })
+      )
+    );
+  }
+
   const attrValueSets = await Promise.all(
     attributeGroups.map(async (group) => {
       const values = await loadActiveAttributeValuesForGeneration(group.attributeValueIds);
@@ -1672,6 +1708,9 @@ export async function generateVariants(
         const existing = await prisma.productVariant.findFirst({ where: { productId, variantKey } });
         if (existing) {
           const wasInactive = existing.status === "INACTIVE";
+          if (wasInactive) {
+            await prisma.productPrice.deleteMany({ where: { variantId: existing.id } });
+          }
           const restored = wasInactive
             ? await prisma.productVariant.update({ where: { id: existing.id }, data: { status: "ACTIVE" } })
             : existing;
@@ -1973,7 +2012,7 @@ export async function bulkUpdateVariants(
         countryId = update.countryId || product.defaultCountryId || undefined;
         if (!countryId) throw new Error("countryId is required because this product has no default country.");
         const country = countryById.get(countryId);
-        if (!country) throw new Error("Selected country was not found.");
+        if (!country) throw new Error(`Selected country (${countryId}) was not found.`);
         currencyId = country.currencyId;
         existingPrice = priceByVariantCountry.get(`${update.variantId}:${countryId}`);
         if (!existingPrice && price.mrp === undefined && price.sellingPrice === undefined) {
@@ -2043,6 +2082,8 @@ export async function bulkUpdateVariants(
 
       results[row.index].success = true;
     }
+  }, {
+    timeout: 60000 // 60s timeout for large bulk updates
   });
 
   return {

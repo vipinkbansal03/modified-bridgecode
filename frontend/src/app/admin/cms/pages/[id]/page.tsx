@@ -119,6 +119,8 @@ function BlockRow({
     const file = e.target.files?.[0];
     if (!file) return;
     const formData = new FormData();
+    formData.append("entityType", "CMS");
+    if (pageId) formData.append("entityId", pageId);
     formData.append("files", file);
     try {
       setUploadingImage(true);

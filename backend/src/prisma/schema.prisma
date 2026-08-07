@@ -911,16 +911,25 @@ model PaymentGateway {
 
 model Media {
   id              String          @id @default(cuid())
+  entityType      String?
+  entityId        String?
+  purpose         String?
   filename        String
   originalName    String
   url             String
   publicId        String?
   mimeType        String
   size            Int
+  width           Int?
+  height          Int?
+  duration        Float?
+  status          MediaStatus     @default(READY)
+  checksum        String?
   type            MediaType       @default(IMAGE)
   storageProvider StorageProvider @default(LOCAL)
   folder          String?
   createdAt       DateTime        @default(now())
+  deletedAt       DateTime?
 
   @@map("media")
 }
@@ -1648,11 +1657,19 @@ enum TranslationStatus {
 
 enum MediaType {
   IMAGE
-  PDF
   VIDEO
   DOCUMENT
+  PDF
 }
 
+enum MediaStatus {
+  PENDING_UPLOAD
+  UPLOADED
+  PROCESSING
+  READY
+  FAILED
+  DELETED
+}
 enum StorageProvider {
   LOCAL
   CLOUDINARY

@@ -6,7 +6,7 @@ import * as Yup from "yup";
 import { Archive, Copy, Download, Image as ImageIcon, Pencil, Plus, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, AdminTextarea, ConfirmModal, StatusBadge, toastMessages, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminTextarea, AdminRichTextEditor, ConfirmModal, StatusBadge, toastMessages, useToast } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import {
   filterTranslationLanguages,
@@ -264,6 +264,8 @@ export default function CategoriesPage() {
   const handleImageUpload = async (file: File | undefined) => {
     if (!file) return;
     const formData = new FormData();
+    formData.append("entityType", "CATEGORY");
+    if (editing?.id) formData.append("entityId", editing.id);
     formData.append("files", file);
     formData.append("folder", "modortho/categories");
     setUploadingImage(true);
@@ -515,7 +517,12 @@ export default function CategoriesPage() {
                   {...form.getFieldProps("status")}
                 />
               </div>
-              <AdminTextarea label="Description" rows={3} {...form.getFieldProps("description")} />
+              <AdminRichTextEditor
+                label="Description"
+                value={form.values.description}
+                onChange={(val) => form.setFieldValue("description", val)}
+                mediaContext={{ entityType: "CATEGORY", entityId: editing?.id ? String(editing.id) : undefined }}
+              />
               <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
                 <h4 className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">SEO</h4>
                 <div className="grid gap-4 md:grid-cols-2">

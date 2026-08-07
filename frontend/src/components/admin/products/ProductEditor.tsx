@@ -7,7 +7,7 @@ import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import * as Yup from "yup";
 import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search, ChevronRight, ChevronLeft, ChevronDown, Eye, ZoomIn, CheckSquare, Square, Check, FolderUp, Image as ImageIcon, Loader2 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column, toastMessages } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, AdminMultiSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column, toastMessages } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
@@ -346,10 +346,11 @@ type CountryAvailability = {
   code: string;
   status: string;
   enabled: boolean;
-  currency?: { symbol?: string | null; code?: string | null } | null;
+  currency?: { symbol?: string | null; code?: string | null; exchangeRate?: number | string | null } | null;
 };
 
 type BulkVariantDraft = {
+  mrp?: string;
   price?: string;
   dealerPrice?: string;
   doctorRetailerPrice?: string;
@@ -398,15 +399,19 @@ const emptyRuleDraft: RuleDraft = {
   fixedPrice: "",
 };
 
-const formatVariantPrice = (variant: VariantRow) => {
-  const price = variant.prices?.[0];
-  const amount = price?.sellingPrice ?? price?.mrp;
-  if (amount === null || amount === undefined || amount === "") return "No price";
-  return `${price?.currency?.symbol ?? ""}${amount}`;
+const getVariantPriceForCountry = (variant: VariantRow, countryId?: string, productBasePrices?: any[]) => {
+  const specific = countryId ? variant.prices?.find((price) => price.countryId === countryId || price.country?.id === countryId) : variant.prices?.[0];
+  if (specific) return specific;
+  const base = countryId ? productBasePrices?.find((price) => price.countryId === countryId || price.country?.id === countryId) : productBasePrices?.[0];
+  return base ?? null;
 };
 
-const getVariantPriceForCountry = (variant: VariantRow, countryId?: string) =>
-  countryId ? variant.prices?.find((price) => price.countryId === countryId || price.country?.id === countryId) ?? null : variant.prices?.[0] ?? null;
+const formatVariantPrice = (variant: VariantRow, productBasePrices?: any[]) => {
+  const price = getVariantPriceForCountry(variant, undefined, productBasePrices);
+  const amount = price?.sellingPrice ?? price?.mrp;
+  if (amount === null || amount === undefined || amount === "") return "—";
+  return `${price?.currency?.symbol ?? ""}${amount}`;
+};
 
 function VariantGridMatrix({
   gridState,
@@ -417,6 +422,7 @@ function VariantGridMatrix({
   rowErrors,
   getDraft,
   onDraftChange,
+  productBasePrices,
 }: {
   gridState: Extract<VariantGridState, { mode: "grid" }>;
   onEditVariant: (variant: VariantRow) => void;
@@ -426,6 +432,7 @@ function VariantGridMatrix({
   rowErrors?: Record<string, string>;
   getDraft?: (variant: VariantRow) => Required<BulkVariantDraft>;
   onDraftChange?: (variantId: string, patch: BulkVariantDraft) => void;
+  productBasePrices?: any[];
 }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-[#E6E6E6]">
@@ -508,7 +515,7 @@ function VariantGridMatrix({
                       ) : (
                         <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#555]">
                           <span>Stock: {getBaseInventory(cell.variant.inventories)?.stock ?? "No stock"}</span>
-                          <span>Price: {bulkCountryId ? `${getVariantPriceForCountry(cell.variant, bulkCountryId)?.currency?.symbol ?? ""}${getVariantPriceForCountry(cell.variant, bulkCountryId)?.sellingPrice ?? "No price"}` : formatVariantPrice(cell.variant)}</span>
+                          <span>Price: {bulkCountryId ? `${getVariantPriceForCountry(cell.variant, bulkCountryId, productBasePrices)?.currency?.symbol ?? ""}${getVariantPriceForCountry(cell.variant, bulkCountryId, productBasePrices)?.sellingPrice ?? "No price"}` : formatVariantPrice(cell.variant, productBasePrices)}</span>
                         </div>
                       )}
                       <div className="flex items-center justify-between gap-3">
@@ -600,6 +607,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     mode: "discount" as "discount" | "fixed",
     discountPercent: "",
     fixedPrice: "",
+  });
+  const [bulkPriceUpdateModalOpen, setBulkPriceUpdateModalOpen] = useState(false);
+  const [modalCountryIds, setModalCountryIds] = useState<string[]>(["ALL_COUNTRIES"]);
+  const [bulkPriceUpdateDraft, setBulkPriceUpdateDraft] = useState({
+    mrp: "",
+    sellingPrice: "",
+    dealerPrice: "",
+    doctorRetailerPrice: "",
   });
   const [generatingVariants, setGeneratingVariants] = useState(false);
   const [generateVariantOpen, setGenerateVariantOpen] = useState(false);
@@ -708,7 +723,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [newMappingGridAxis, setNewMappingGridAxis] = useState<GridAxis | null>(null);
   const [newMappingValueIds, setNewMappingValueIds] = useState<string[]>([]);
   const [bulkEditMode, setBulkEditMode] = useState(false);
-  const [bulkCountryId, setBulkCountryId] = useState("");
+  const [bulkCountryIds, setBulkCountryIds] = useState<string[]>(["ALL"]);
+  const [variantTableDisplayCountryId, setVariantTableDisplayCountryId] = useState("");
   const [bulkDrafts, setBulkDrafts] = useState<Record<string, BulkVariantDraft>>({});
   const [bulkRowErrors, setBulkRowErrors] = useState<Record<string, string>>({});
   const [bulkSaving, setBulkSaving] = useState(false);
@@ -2138,8 +2154,13 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           valA = getDisplayStock(a);
           valB = getDisplayStock(b);
         } else if (sortField === "price") {
-          valA = getVariantPriceForCountry(a)?.sellingPrice ?? getVariantPriceForCountry(a)?.mrp ?? 0;
-          valB = getVariantPriceForCountry(b)?.sellingPrice ?? getVariantPriceForCountry(b)?.mrp ?? 0;
+          const aPrice = getVariantPriceForCountry(a, variantTableDisplayCountryId || undefined, productBasePrices);
+          const bPrice = getVariantPriceForCountry(b, variantTableDisplayCountryId || undefined, productBasePrices);
+          if (aPrice && !bPrice) return sortDirection === "asc" ? -1 : 1;
+          if (!aPrice && bPrice) return sortDirection === "asc" ? 1 : -1;
+          if (!aPrice && !bPrice) return 0;
+          valA = aPrice?.sellingPrice ?? aPrice?.mrp ?? 0;
+          valB = bPrice?.sellingPrice ?? bPrice?.mrp ?? 0;
         } else if (sortField === "status") {
           valA = a.status || "";
           valB = b.status || "";
@@ -2167,6 +2188,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     filterStatus,
     sortField,
     sortDirection,
+    productBasePrices,
+    variantTableDisplayCountryId
   ]);
 
   const totalItems = filteredVariantRows.length;
@@ -2228,11 +2251,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     });
     return Array.from(countries.values());
   }, [product?.prices, productCountries, variantRows]);
-  const selectedBulkCountryId = bulkCountryId || product?.defaultCountryId || bulkCountryOptions[0]?.id || "";
+  const primarySelectedBulkCountryId = bulkCountryIds.includes("ALL") ? "" : (bulkCountryIds[0] || product?.defaultCountryId || bulkCountryOptions[0]?.id || "");
   const tierRows = useMemo(() => tiers as TierRow[], [tiers]);
   const countryRows = useMemo(() => countries as { id: string; name: string; code: string }[], [countries]);
   const tierPricingRows = useMemo(() => tierPricingRules as PricingRuleRow[], [tierPricingRules]);
-  const moqPricingRows = useMemo(() => moqPricingRules as PricingRuleRow[], [moqPricingRules]);
+  const moqPricingRows = useMemo(() => moqPricingRules as PricingRuleRow[], [tierPricingRules]);
 
   const form = useAdminForm<ProductEditorFormValues>({
     enableReinitialize: true,
@@ -2543,8 +2566,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   };
 
   const getBulkVariantDraft = (variant: VariantRow): Required<BulkVariantDraft> => {
-    const price = getVariantPriceForCountry(variant, selectedBulkCountryId);
+    const price = getVariantPriceForCountry(variant, primarySelectedBulkCountryId, productBasePrices);
     return {
+      mrp: bulkDrafts[variant.id]?.mrp ?? (price?.mrp !== undefined && price?.mrp !== null ? `${price.mrp}` : ""),
       price: bulkDrafts[variant.id]?.price ?? (price?.sellingPrice !== undefined && price?.sellingPrice !== null ? `${price.sellingPrice}` : ""),
       dealerPrice: bulkDrafts[variant.id]?.dealerPrice ?? (price?.dealerPrice !== undefined && price?.dealerPrice !== null ? `${price.dealerPrice}` : ""),
       doctorRetailerPrice:
@@ -2571,12 +2595,31 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     });
   };
 
+  const applyToAllBulkDraft = (field: keyof BulkVariantDraft) => {
+    if (!filteredVariantRows.length) return;
+    const firstRowDraft = getBulkVariantDraft(filteredVariantRows[0]);
+    const valueToApply = firstRowDraft[field];
+
+    setBulkDrafts((prev) => {
+      const next = { ...prev };
+      filteredVariantRows.forEach((row) => {
+        next[row.id] = {
+          ...next[row.id],
+          [field]: valueToApply
+        };
+      });
+      return next;
+    });
+    showToast(`Applied value to all ${filteredVariantRows.length} variants.`);
+  };
+
   const saveBulkVariantEdits = async () => {
     const updates = variantRows
-      .map((variant) => {
+      .flatMap((variant) => {
         const draft = bulkDrafts[variant.id];
-        if (!draft) return null;
-        const currentPrice = getVariantPriceForCountry(variant, selectedBulkCountryId);
+        if (!draft) return [];
+        const currentPrice = getVariantPriceForCountry(variant, primarySelectedBulkCountryId, productBasePrices);
+        const currentMrpValue = currentPrice?.mrp !== undefined && currentPrice?.mrp !== null ? `${currentPrice.mrp}` : "";
         const currentPriceValue = currentPrice?.sellingPrice !== undefined && currentPrice?.sellingPrice !== null ? `${currentPrice.sellingPrice}` : "";
         const currentDealerPriceValue = currentPrice?.dealerPrice !== undefined && currentPrice?.dealerPrice !== null ? `${currentPrice.dealerPrice}` : "";
         const currentDoctorRetailerPriceValue =
@@ -2585,28 +2628,39 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           getBaseInventory(variant.inventories)?.stock !== undefined && getBaseInventory(variant.inventories)?.stock !== null
             ? `${getBaseInventory(variant.inventories)?.stock}`
             : "";
+        const mrpChanged = draft.mrp !== undefined && draft.mrp !== currentMrpValue;
         const priceChanged = draft.price !== undefined && draft.price !== currentPriceValue;
         const dealerPriceChanged = draft.dealerPrice !== undefined && draft.dealerPrice !== currentDealerPriceValue;
         const doctorRetailerPriceChanged =
           draft.doctorRetailerPrice !== undefined && draft.doctorRetailerPrice !== currentDoctorRetailerPriceValue;
         const stockChanged = draft.stock !== undefined && draft.stock !== currentStockValue;
-        if (!priceChanged && !dealerPriceChanged && !doctorRetailerPriceChanged && !stockChanged) return null;
-        return {
-          variantId: variant.id,
-          ...(priceChanged || dealerPriceChanged || doctorRetailerPriceChanged
-            ? {
-                countryId: selectedBulkCountryId || undefined,
-                price: {
-                  ...(priceChanged ? { sellingPrice: draft.price } : {}),
-                  ...(dealerPriceChanged ? { dealerPrice: draft.dealerPrice } : {}),
-                  ...(doctorRetailerPriceChanged ? { distributorPrice: draft.doctorRetailerPrice } : {}),
-                },
-              }
-            : {}),
-          ...(stockChanged ? { stock: draft.stock } : {}),
-        };
-      })
-      .filter(Boolean);
+        if (!mrpChanged && !priceChanged && !dealerPriceChanged && !doctorRetailerPriceChanged && !stockChanged) return [];
+        
+        const updates: any[] = [];
+        if (stockChanged) {
+          updates.push({
+            variantId: variant.id,
+            stock: draft.stock
+          });
+        }
+        
+        if (mrpChanged || priceChanged || dealerPriceChanged || doctorRetailerPriceChanged) {
+          const countriesToUpdate = bulkCountryIds.length > 0 ? bulkCountryIds : ["ALL"];
+          countriesToUpdate.forEach(cid => {
+            updates.push({
+              variantId: variant.id,
+              countryId: cid === "ALL" ? undefined : cid,
+              price: {
+                ...(mrpChanged ? { mrp: draft.mrp } : {}),
+                ...(priceChanged ? { sellingPrice: draft.price } : {}),
+                ...(dealerPriceChanged ? { dealerPrice: draft.dealerPrice } : {}),
+                ...(doctorRetailerPriceChanged ? { distributorPrice: draft.doctorRetailerPrice } : {}),
+              },
+            });
+          });
+        }
+        return updates;
+      });
 
     if (!updates.length) {
       showToast("No bulk changes to save.");
@@ -2635,15 +2689,16 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   };
 
   const exportSelectedCountryVariantPrices = async () => {
-    if (!selectedBulkCountryId) {
-      showToast("Select a country before exporting variant prices.", "error");
+    if (!bulkCountryIds.length) {
+      showToast("Select at least one country before exporting variant prices.", "error");
       return;
     }
-    const country = bulkCountryOptions.find((option) => option.id === selectedBulkCountryId);
+    const cid = primarySelectedBulkCountryId;
+    const country = bulkCountryOptions.find((option) => option.id === cid);
     setVariantPriceExporting(true);
     try {
       const response = await adminApi.get(`/products/${productId}/variants/prices/export`, {
-        params: { countryId: selectedBulkCountryId },
+        params: { countryId: cid },
         responseType: "blob",
       });
       const countryCode = country?.code || "country";
@@ -2659,14 +2714,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (!selectedBulkCountryId) {
+    if (!bulkCountryIds.length) {
       showToast("Select a country before importing variant prices.", "error");
       return;
     }
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("countryId", selectedBulkCountryId);
+    formData.append("countryId", primarySelectedBulkCountryId);
 
     setVariantPriceImporting(true);
     try {
@@ -2985,6 +3040,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const uploadPackageImage = async (file?: File) => {
     if (!file) return;
     const formData = new FormData();
+    formData.append("entityType", "PRODUCT");
+    if (productId && productId !== "new") formData.append("entityId", productId);
     formData.append("files", file);
     setUploadingPackageImage(true);
     try {
@@ -3780,12 +3837,13 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             <th className="border-b border-[#E6E6E6] px-4 py-3">Variant</th>
             <th className="border-b border-[#E6E6E6] px-4 py-3">Package</th>
             <th className="border-b border-[#E6E6E6] px-4 py-3">SKU</th>
-            <th className="border-b border-[#E6E6E6] px-4 py-3">Selling</th>
-            <th className="border-b border-[#E6E6E6] px-4 py-3">Dealer</th>
-            <th className="border-b border-[#E6E6E6] px-4 py-3">Doctor / Retailer</th>
-            <th className="border-b border-[#E6E6E6] px-4 py-3">Stock</th>
-            <th className="border-b border-[#E6E6E6] px-4 py-3">Status</th>
-            <th className="border-b border-[#E6E6E6] px-4 py-3">Actions</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3 align-top">MRP</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3 align-top">Selling</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3 align-top">Dealer</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3 align-top">Doctor / Retailer</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3 align-top">Stock</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3 align-top">Status</th>
+            <th className="border-b border-[#E6E6E6] px-4 py-3 align-top">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -3804,9 +3862,19 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     type="number"
                     min="0"
                     step="0.01"
+                    value={draft.mrp}
+                    onChange={(e) => updateBulkDraft(variant.id, { mrp: e.target.value })}
+                    className="w-24 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
+                  />
+                </td>
+                <td className="px-4 py-3">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
                     value={draft.price}
                     onChange={(e) => updateBulkDraft(variant.id, { price: e.target.value })}
-                    className="w-28 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
+                    className="w-24 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
                   />
                 </td>
                 <td className="px-4 py-3">
@@ -4520,14 +4588,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Variants are created from package + selected attribute values.</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedVariantIds(selectedVariantIds.length === filteredVariantRows.length ? [] : filteredVariantRows.map((variant) => variant.id))}
-                  disabled={!filteredVariantRows.length}
-                  className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] disabled:opacity-40"
-                >
-                  {selectedVariantIds.length === filteredVariantRows.length && filteredVariantRows.length ? "Clear Selection" : "Select All"}
-                </button>
+
                 <button
                   type="button"
                   onClick={handleBulkDeleteVariants}
@@ -4536,27 +4597,13 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 >
                   <Trash2 size={14} /> Delete Selected ({selectedVariantIds.length})
                 </button>
-                {bulkEditMode && bulkCountryOptions.length > 0 && (
-                  <select
-                    value={selectedBulkCountryId}
-                    onChange={(e) => {
-                      setBulkCountryId(e.target.value);
-                      setBulkDrafts({});
-                      setBulkRowErrors({});
-                    }}
-                    className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
-                  >
-                    {bulkCountryOptions.map((country) => (
-                      <option key={country.id} value={country.id}>{country.label}</option>
-                    ))}
-                  </select>
-                )}
+
                 {bulkEditMode && (
                   <>
                     <button
                       type="button"
                       onClick={exportSelectedCountryVariantPrices}
-                      disabled={!selectedBulkCountryId || variantPriceExporting}
+                      disabled={!bulkCountryIds.length || variantPriceExporting}
                       className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] disabled:opacity-40"
                     >
                       <Download size={14} />
@@ -4565,7 +4612,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     <button
                       type="button"
                       onClick={() => variantPriceImportInputRef.current?.click()}
-                      disabled={!selectedBulkCountryId || variantPriceImporting}
+                      disabled={!bulkCountryIds.length || variantPriceImporting}
                       className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] disabled:opacity-40"
                     >
                       <Upload size={14} />
@@ -4664,6 +4711,18 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     <option value={50}>50</option>
                     <option value={100}>100</option>
                   </select>
+                  {!bulkEditMode && (
+                    <select
+                      value={variantTableDisplayCountryId}
+                      onChange={(e) => setVariantTableDisplayCountryId(e.target.value)}
+                      className="ml-2 rounded-md border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] text-[#1A1A1A] outline-none"
+                    >
+                      <option value="">Default Country Price</option>
+                      {(productCountries as CountryAvailability[]).map((c) => (
+                        <option key={c.id} value={c.id}>{c.code} Price</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div className="flex items-center gap-1.5 ml-2">
                   <button
@@ -4690,8 +4749,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 <input
                   type="text"
                   placeholder={
-                    bulkActionType === "Standard price update"
-                      ? "Price"
+                    bulkActionType === "Price update"
+                      ? "Use popup"
                       : bulkActionType === "Stock update filtered"
                       ? "Stock quantity"
                       : "Value"
@@ -4702,19 +4761,33 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     bulkActionType === "Bulk Action" ||
                     bulkActionType === "Mark active" ||
                     bulkActionType === "Mark inactive" ||
-                    bulkActionType === "Delete selected"
+                    bulkActionType === "Delete selected" ||
+                    bulkActionType === "Price update"
                   }
                   className="w-[130px] rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] outline-none focus:border-[#E31E24] disabled:opacity-50"
                 />
                 <select
                   value={bulkActionType}
-                  onChange={(e) => setBulkActionType(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setBulkActionType(val);
+                    if (val === "Price update") {
+                      if (selectedVariantIds.length === 0) {
+                        showToast("Please select at least one variant first.", "error");
+                        setTimeout(() => setBulkActionType("Bulk Action"), 0);
+                        return;
+                      }
+                      setModalCountryIds(["ALL_COUNTRIES"]);
+                      setBulkPriceUpdateModalOpen(true);
+                      setTimeout(() => setBulkActionType("Bulk Action"), 0);
+                    }
+                  }}
                   className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
                 >
                   <option value="Bulk Action">Bulk Action</option>
                   <option value="Mark active">Mark active</option>
                   <option value="Mark inactive">Mark inactive</option>
-                  <option value="Standard price update">Standard price update</option>
+                  <option value="Price update">Price update</option>
                   <option value="Stock update filtered">Stock update filtered</option>
                   <option value="Delete selected">Delete selected</option>
                 </select>
@@ -4736,17 +4809,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                         updates = selectedVariantIds.map((id) => ({ variantId: id, action: "restore" }));
                       } else if (bulkActionType === "Mark inactive") {
                         updates = selectedVariantIds.map((id) => ({ variantId: id, action: "delete" }));
-                      } else if (bulkActionType === "Standard price update") {
-                        if (!bulkActionValue.trim() || isNaN(parseFloat(bulkActionValue))) {
-                          showToast("Please enter a valid price.", "error");
-                          setBulkSaving(false);
-                          return;
-                        }
-                        updates = selectedVariantIds.map((id) => ({
-                          variantId: id,
-                          price: { sellingPrice: parseFloat(bulkActionValue) },
-                          countryId: product?.defaultCountryId || undefined,
-                        }));
                       } else if (bulkActionType === "Stock update filtered") {
                         if (!bulkActionValue.trim() || isNaN(parseInt(bulkActionValue, 10))) {
                           showToast("Please enter a valid stock quantity.", "error");
@@ -4815,10 +4877,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 onEditVariant={openEditVariantModal}
                 onManageCountries={openVariantCountriesModal}
                 bulkEditMode={bulkEditMode}
-                bulkCountryId={selectedBulkCountryId}
+                bulkCountryId={primarySelectedBulkCountryId}
                 rowErrors={bulkRowErrors}
                 getDraft={getBulkVariantDraft}
                 onDraftChange={updateBulkDraft}
+                productBasePrices={productBasePrices}
               />
             ) : bulkEditMode ? (
               renderBulkFlatVariantTable()
@@ -4830,14 +4893,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       <th className="border-b border-[#E6E6E6] px-4 py-3 w-12 text-center">
                         <input
                           type="checkbox"
-                          checked={paginatedVariantRows.length > 0 && paginatedVariantRows.every((r) => selectedVariantIds.includes(r.id))}
+                          checked={filteredVariantRows.length > 0 && filteredVariantRows.every((r) => selectedVariantIds.includes(r.id))}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              const pageIds = paginatedVariantRows.map((r) => r.id);
-                              setSelectedVariantIds((prev) => Array.from(new Set([...prev, ...pageIds])));
+                              const allIds = filteredVariantRows.map((r) => r.id);
+                              setSelectedVariantIds((prev) => Array.from(new Set([...prev, ...allIds])));
                             } else {
-                              const pageIds = new Set(paginatedVariantRows.map((r) => r.id));
-                              setSelectedVariantIds((prev) => prev.filter((id) => !pageIds.has(id)));
+                              const allIds = new Set(filteredVariantRows.map((r) => r.id));
+                              setSelectedVariantIds((prev) => prev.filter((id) => !allIds.has(id)));
                             }
                           }}
                           className="h-4 w-4 accent-[#E31E24]"
@@ -5003,7 +5066,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                         const baseStock = variantTabWarehouseFilter
                           ? (warehouseInv ? warehouseInv.stock ?? 0 : "—")
                           : (getBaseInventory(variant.inventories)?.stock ?? "—");
-                        const priceObj = getVariantPriceForCountry(variant);
+                        const priceObj = getVariantPriceForCountry(variant, variantTableDisplayCountryId || undefined, productBasePrices);
                         const formattedPrice = priceObj
                           ? `${priceObj.currency?.symbol ?? "₹"}${priceObj.sellingPrice ?? priceObj.mrp ?? "0.00"}`
                           : "—";
@@ -7190,26 +7253,28 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               />
             </div>
 
-            {/* <div className="mb-4 rounded-lg border border-[#E6E6E6] p-4">
-              <div className="mb-3 text-[13px] font-medium text-[#1A1A1A]">Add Attributes To Generation</div>
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <div className="flex-1">
-                  <AdminSelect
-                    value={generateAttributePicker}
-                    onChange={(e) => setGenerateAttributePicker(e.target.value)}
-                    options={[
-                      { value: "", label: "Select attribute…" },
-                      ...variantGenerationCatalog
-                        .filter((attribute) => !generateAttributeIds.includes(attribute.id))
-                        .map((attribute) => ({ value: attribute.id, label: attribute.name })),
-                    ]}
-                  />
+            {/* {!hasMappedProductAttributes && (
+              <div className="mb-4 rounded-lg border border-[#E6E6E6] p-4">
+                <div className="mb-3 text-[13px] font-medium text-[#1A1A1A]">Add Attributes To Generation</div>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <div className="flex-1">
+                    <AdminSelect
+                      value={generateAttributePicker}
+                      onChange={(e) => setGenerateAttributePicker(e.target.value)}
+                      options={[
+                        { value: "", label: "Select attribute…" },
+                        ...variantGenerationCatalog
+                          .filter((attribute) => !generateAttributeIds.includes(attribute.id))
+                          .map((attribute) => ({ value: attribute.id, label: attribute.name })),
+                      ]}
+                    />
+                  </div>
+                  <button onClick={addGenerateAttribute} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5]">
+                    Add Attribute
+                  </button>
                 </div>
-                <button onClick={addGenerateAttribute} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5]">
-                  Add Attribute
-                </button>
               </div>
-            </div> */}
+            )} */}
 
             <div className="space-y-4">
               {generateAttributeIds.map((attributeId) => {
@@ -7229,6 +7294,18 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
+                        {!hasMappedProductAttributes && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => removeGenerateAttribute(attribute.id)}
+                              className="text-[11px] font-semibold text-[#6B6B6B] hover:text-[#E31E24] transition-colors underline underline-offset-2"
+                            >
+                              Remove
+                            </button>
+                            <span className="text-[#D1D5DB] text-[10px]">|</span>
+                          </>
+                        )}
                         <button
                           type="button"
                           onClick={() => selectAllGenerateValues(attribute.id)}
@@ -8626,6 +8703,191 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           showToast("Variants imported successfully!", "success");
         }}
       />
+
+      {bulkPriceUpdateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-[480px] rounded-xl bg-white p-6 shadow-2xl">
+            <h2 className="mb-4 text-lg font-semibold text-[#1A1A1A]">Bulk Update Prices</h2>
+            <p className="mb-6 text-[13px] text-[#6B6B6B]">
+              Enter the base prices for the selected {selectedVariantIds.length} variant(s).<br/>
+              They will be automatically converted for your selected countries. Leave fields blank to keep current values.
+            </p>
+
+            <div className="z-[99999] relative mb-6">
+              <AdminMultiSelect
+                label="Target Countries"
+                options={[
+                  { value: "ALL_COUNTRIES", label: "All Enabled Countries" },
+                  ...bulkCountryOptions.map((c) => ({ value: c.id, label: c.label }))
+                ]}
+                value={modalCountryIds}
+                onChange={(next) => setModalCountryIds(next)}
+                placeholder="Select Countries"
+              />
+            </div>
+
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (!selectedVariantIds.length) {
+                showToast("Please select at least one variant.", "error");
+                return;
+              }
+              const hasValues = 
+                bulkPriceUpdateDraft.mrp.trim() || 
+                bulkPriceUpdateDraft.sellingPrice.trim() || 
+                bulkPriceUpdateDraft.dealerPrice.trim() || 
+                bulkPriceUpdateDraft.doctorRetailerPrice.trim();
+          
+              if (!hasValues) {
+                showToast("Please enter at least one price to update.", "error");
+                return;
+              }
+          
+              setBulkSaving(true);
+              try {
+                let countriesToUpdate = modalCountryIds.length > 0 ? modalCountryIds : ["ALL_COUNTRIES"];
+                
+                // If "ALL_COUNTRIES" is selected, expand it to all enabled country IDs for this product
+                if (countriesToUpdate.includes("ALL_COUNTRIES")) {
+                  const allIds = (productCountries as CountryAvailability[]).filter(c => c.enabled).map(c => c.id);
+                  countriesToUpdate = Array.from(new Set([...countriesToUpdate.filter(id => id !== "ALL_COUNTRIES"), ...allIds]));
+                }
+                
+                const updates = selectedVariantIds.flatMap((id) => {
+                  const basePrice = productVariantPrices.find((p: any) => p.variantId === id && p.countryId === product?.defaultCountryId);
+                  
+                  return countriesToUpdate.map(cid => {
+                    let mrpRate: number | null = parseFloat(bulkPriceUpdateDraft.mrp);
+                    if (isNaN(mrpRate)) mrpRate = basePrice?.mrp ? parseFloat(basePrice.mrp) : null;
+                    
+                    let sellingRate: number | null = parseFloat(bulkPriceUpdateDraft.sellingPrice);
+                    if (isNaN(sellingRate)) sellingRate = basePrice?.sellingPrice ? parseFloat(basePrice.sellingPrice) : null;
+                    
+                    let dealerRate: number | null = parseFloat(bulkPriceUpdateDraft.dealerPrice);
+                    if (isNaN(dealerRate)) dealerRate = basePrice?.dealerPrice ? parseFloat(basePrice.dealerPrice) : null;
+                    
+                    let docRate: number | null = parseFloat(bulkPriceUpdateDraft.doctorRetailerPrice);
+                    if (isNaN(docRate)) docRate = basePrice?.distributorPrice ? parseFloat(basePrice.distributorPrice) : null;
+          
+                    const countryObj = (productCountries as CountryAvailability[]).find(c => c.id === cid);
+                    if (countryObj?.currency?.exchangeRate) {
+                      const exRate = parseFloat(String(countryObj.currency.exchangeRate));
+                      if (!isNaN(exRate)) {
+                        if (mrpRate !== null) mrpRate = parseFloat((mrpRate * exRate).toFixed(2));
+                        if (sellingRate !== null) sellingRate = parseFloat((sellingRate * exRate).toFixed(2));
+                        if (dealerRate !== null) dealerRate = parseFloat((dealerRate * exRate).toFixed(2));
+                        if (docRate !== null) docRate = parseFloat((docRate * exRate).toFixed(2));
+                      }
+                    }
+          
+                    const priceObj: any = {};
+                    if (mrpRate !== null) priceObj.mrp = mrpRate;
+                    if (sellingRate !== null) priceObj.sellingPrice = sellingRate;
+                    if (dealerRate !== null) priceObj.dealerPrice = dealerRate;
+                    if (docRate !== null) priceObj.distributorPrice = docRate;
+                    
+                    return {
+                      variantId: id,
+                      price: priceObj,
+                      countryId: cid,
+                    };
+                  });
+                });
+          
+                const response = await adminApi.put(`/products/${productId}/variants/bulk`, { updates });
+                
+                const results = response.data?.data?.results || [];
+                const failedRows = results.filter((r: any) => !r.success);
+                
+                if (failedRows.length > 0) {
+                  const errorMsg = failedRows[0].error || "Some prices could not be updated.";
+                  showToast(`Completed with errors: ${errorMsg} (${failedRows.length} failed)`, "error");
+                } else {
+                  showToast("Prices updated successfully.", "success");
+                }
+
+                setBulkPriceUpdateModalOpen(false);
+                setBulkPriceUpdateDraft({ mrp: "", sellingPrice: "", dealerPrice: "", doctorRetailerPrice: "" });
+                setModalCountryIds(["ALL_COUNTRIES"]);
+                setSelectedVariantIds([]);
+                setBulkActionValue("");
+                refetch();
+              } catch (error) {
+                showToast(getAdminErrorMessage(error, "Failed to perform bulk price action."), "error");
+              } finally {
+                setBulkSaving(false);
+              }
+            }}>
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div>
+                  <label className="mb-1.5 block text-[12px] font-medium text-[#1A1A1A]">MRP</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="e.g. 150.00"
+                    value={bulkPriceUpdateDraft.mrp}
+                    onChange={(e) => setBulkPriceUpdateDraft({ ...bulkPriceUpdateDraft, mrp: e.target.value })}
+                    className="w-full rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2 text-[13.5px] outline-none focus:border-[#E31E24]"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[12px] font-medium text-[#1A1A1A]">Selling Price</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="e.g. 130.00"
+                    value={bulkPriceUpdateDraft.sellingPrice}
+                    onChange={(e) => setBulkPriceUpdateDraft({ ...bulkPriceUpdateDraft, sellingPrice: e.target.value })}
+                    className="w-full rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2 text-[13.5px] outline-none focus:border-[#E31E24]"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[12px] font-medium text-[#1A1A1A]">Dealer Price</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="e.g. 110.00"
+                    value={bulkPriceUpdateDraft.dealerPrice}
+                    onChange={(e) => setBulkPriceUpdateDraft({ ...bulkPriceUpdateDraft, dealerPrice: e.target.value })}
+                    className="w-full rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2 text-[13.5px] outline-none focus:border-[#E31E24]"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[12px] font-medium text-[#1A1A1A]">Doctor / Retailer Price</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="e.g. 100.00"
+                    value={bulkPriceUpdateDraft.doctorRetailerPrice}
+                    onChange={(e) => setBulkPriceUpdateDraft({ ...bulkPriceUpdateDraft, doctorRetailerPrice: e.target.value })}
+                    className="w-full rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2 text-[13.5px] outline-none focus:border-[#E31E24]"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setBulkPriceUpdateModalOpen(false)}
+                  className="rounded-md px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#1A1A1A]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={bulkSaving}
+                  className="rounded-md bg-[#E31E24] px-5 py-2 text-[13px] font-medium text-white hover:bg-[#C81A1F] disabled:opacity-50"
+                >
+                  {bulkSaving ? "Updating..." : "Update Prices"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {ToastComponent}
     </>
