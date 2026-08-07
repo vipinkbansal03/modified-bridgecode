@@ -69,7 +69,7 @@ export function ProductsListingClient() {
 
   return (
     <div className="pb-20">
-      <Container className="pt-12 pb-7">
+      <Container className="py-6 lg:py-[34px]">
         <nav className="mb-1.5 text-[13px] text-steel-2">
           <Link href="/" className="hover:text-brand">
             {t("ui.products.breadcrumbHome")}
@@ -89,7 +89,7 @@ export function ProductsListingClient() {
       </Container>
 
       <div className="border-y border-line">
-        <Container className="flex flex-wrap items-center justify-between gap-5 py-5.5">
+        <Container className="flex flex-wrap items-center justify-between gap-5 py-4 lg:py-5">
           <button
             onClick={() => setShowFilters((v) => !v)}
             className="inline-flex items-center gap-2.5 rounded-pill bg-grey px-6 py-3 text-[13.5px] font-semibold tracking-wide text-ink"
@@ -114,7 +114,7 @@ export function ProductsListingClient() {
 
       <Container
         className={cn(
-          "grid grid-cols-1 gap-12.5 pt-8.5",
+          "grid grid-cols-1 gap-8 pt-6 lg:pt-[34px]",
           showFilters ? "sm:grid-cols-[250px_1fr]" : "sm:grid-cols-1",
         )}
       >

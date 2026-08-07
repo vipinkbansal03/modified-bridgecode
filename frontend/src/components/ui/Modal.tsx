@@ -26,13 +26,20 @@ export function Modal({ open, onClose, title, children, panelClassName }: ModalP
   useEffect(() => {
     if (open) {
       document.body.style.overflow = "hidden";
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+          onClose();
+        }
+      };
+      window.addEventListener("keydown", handleKeyDown);
+      return () => {
+        document.body.style.overflow = "";
+        window.removeEventListener("keydown", handleKeyDown);
+      };
     } else {
       document.body.style.overflow = "";
     }
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [open]);
+  }, [open, onClose]);
 
   if (!mounted) return null;
 

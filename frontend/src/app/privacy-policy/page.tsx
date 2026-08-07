@@ -75,7 +75,7 @@ export default function PrivacyPolicyPage() {
   return (
     <main className="bg-white">
       <section className="border-b border-line bg-white">
-        <Container className="py-16 lg:py-20 px-4 sm:px-6 lg:px-10">
+        <Container className="py-6 lg:py-[34px]">
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-end">
             <div>
               <span className="mb-4 block text-[12.5px] font-semibold uppercase tracking-wide text-brand">
@@ -117,8 +117,8 @@ export default function PrivacyPolicyPage() {
         </Container>
       </section>
 
-      <section className="py-16 lg:py-20">
-        <Container className="px-4 sm:px-6 lg:px-10">
+      <section className="py-6 lg:py-[34px]">
+        <Container>
           <PrivacyAccordion sections={sections} />
 
           <div className="grid gap-10 lg:grid-cols-[280px_minmax(0,1fr)]">

@@ -40,26 +40,53 @@ function toBlogItem(blog: ApiBlog, index: number): BlogItem {
   };
 }
 
-async function fetchBlogs(): Promise<BlogItem[]> {
+export type BlogQueryParams = {
+  search?: string;
+  categoryId?: string;
+  limit?: number;
+  page?: number;
+};
+
+async function fetchBlogs(params?: BlogQueryParams): Promise<BlogItem[]> {
   const { default: raw } = await import("@/data/blogs.json");
-  const fallbackBlogs = (raw as BlogItem[]).map((blog, index) => ({
+  let fallbackBlogs = (raw as BlogItem[]).map((blog, index) => ({
     ...blog,
     url: `/blog/${blog.slug}`,
     primary: index === 0,
   }));
 
+  if (params?.search?.trim()) {
+    const q = params.search.trim().toLowerCase();
+    fallbackBlogs = fallbackBlogs.filter(
+      (b) => b.title.toLowerCase().includes(q) || b.excerpt.toLowerCase().includes(q)
+    );
+  }
+
   if (!HAS_LIVE_API) return fallbackBlogs;
 
   try {
-    const response = await apiClient.get("/blogs", { params: { limit: 12 } });
+    const apiParams: Record<string, string | number> = { limit: params?.limit ?? 12 };
+    if (params?.search?.trim()) apiParams.search = params.search.trim();
+    if (params?.categoryId) apiParams.categoryId = params.categoryId;
+    if (params?.page) apiParams.page = params.page;
+
+    const response = await apiClient.get("/blogs", { params: apiParams });
     const blogs = (response.data.data ?? []) as ApiBlog[];
-    if (!blogs.length) return fallbackBlogs;
-    return blogs.map(toBlogItem);
+
+    if (blogs.length > 0) {
+      return blogs.map(toBlogItem);
+    }
+
+    return fallbackBlogs;
   } catch {
     return fallbackBlogs;
   }
 }
 
-export function useBlogs() {
-  return useQuery({ queryKey: ["blogs"], queryFn: fetchBlogs, staleTime: STALE.long });
+export function useBlogs(params?: BlogQueryParams) {
+  return useQuery({
+    queryKey: ["blogs", params],
+    queryFn: () => fetchBlogs(params),
+    staleTime: STALE.short,
+  });
 }

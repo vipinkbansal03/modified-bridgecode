@@ -15,18 +15,18 @@ export function StatsSection({ data }: StatsSectionProps) {
             {data.map((stat, i) => (
               <div
                 key={stat.label}
-                className={`pl-5 sm:pl-8 ${
-                  i % 2 === 0 ? "border-l-0 pl-0" : "border-l border-white/28"
+                className={`${
+                  i % 2 === 0 ? "pl-0 pr-3 sm:pr-0" : "border-l border-white/28 pl-4 sm:pl-8"
                 } ${
                   i === 0
                     ? "sm:border-l-0 sm:pl-0"
-                    : "sm:border-l sm:border-white/28"
+                    : "sm:border-l sm:border-white/28 sm:pl-8"
                 }`}
               >
                 <span className="text-[11.5px] font-semibold uppercase tracking-wide text-white/72">
                   {stat.label}
                 </span>
-                <p className="my-2.5 max-w-[200px] text-[14.5px] text-white/85">
+                <p className="my-2.5 max-w-[170px] sm:max-w-[200px] text-[14.5px] text-white/85">
                   {stat.description}
                 </p>
                 <p className="text-[clamp(38px,5vw,64px)] font-light text-white">

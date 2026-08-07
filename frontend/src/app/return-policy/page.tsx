@@ -88,8 +88,8 @@ const quickLinks = sections.map((section) => ({
 export default function ReturnPolicyPage() {
   return (
     <main className="bg-white">
-      <section className="border-b border-line bg-[#FAFAFA] py-16 sm:py-20 lg:py-24">
-        <Container className="px-4 sm:px-6 lg:px-10">
+      <section className="border-b border-line bg-[#FAFAFA]">
+        <Container className="py-6 lg:py-[34px]">
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-end">
             <div>
               <span className="mb-4 block text-[12.5px] font-semibold uppercase tracking-wide text-brand">
@@ -130,8 +130,8 @@ export default function ReturnPolicyPage() {
         </Container>
       </section>
 
-      <section className="py-16 lg:py-20">
-        <Container className="px-4 sm:px-6 lg:px-10">
+      <section className="py-6 lg:py-[34px]">
+        <Container>
           <ReturnAccordion sections={sections} />
 
           <div className="grid gap-10 lg:grid-cols-[280px_minmax(0,1fr)]">

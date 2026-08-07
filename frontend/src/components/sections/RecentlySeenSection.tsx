@@ -41,7 +41,7 @@ export function RecentlySeenSection({ currentSlug }: RecentlySeenSectionProps) {
   if (!slugs.length || !products.length) return null;
 
   return (
-    <section className="py-15 sm:py-17.5">
+    <section className="pb-15 pt-8">
       <Container>
         <div className="mb-6 flex items-end justify-between">
           <h3 className="text-[22px] font-light text-ink">Recently seen</h3>

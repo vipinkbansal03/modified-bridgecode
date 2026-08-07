@@ -176,9 +176,29 @@ export async function deleteBlogAuthor(id: string) {
   await prisma.blogAuthor.delete({ where: { id } });
 }
 
-export async function listPublicBlogs(query: { page?: string; limit?: string }) {
+export async function listPublicBlogs(query: { page?: string; limit?: string; search?: string; categoryId?: string; authorId?: string }) {
   const { page, limit, skip } = getPagination(query);
-  const where: Prisma.BlogWhereInput = { status: "PUBLISHED", OR: [{ publishedAt: null }, { publishedAt: { lte: new Date() } }] };
+  const searchTrim = query.search?.trim();
+
+  const where: Prisma.BlogWhereInput = {
+    status: "PUBLISHED",
+    OR: [{ publishedAt: null }, { publishedAt: { lte: new Date() } }],
+    ...(query.categoryId ? { categoryId: query.categoryId } : {}),
+    ...(query.authorId ? { authorId: query.authorId } : {}),
+    ...(searchTrim
+      ? {
+          AND: [
+            {
+              OR: [
+                { title: { contains: searchTrim, mode: "insensitive" } },
+                { excerpt: { contains: searchTrim, mode: "insensitive" } },
+                { content: { contains: searchTrim, mode: "insensitive" } },
+              ],
+            },
+          ],
+        }
+      : {}),
+  };
   const [data, total] = await Promise.all([
     prisma.blog.findMany({ where, skip, take: limit, orderBy: { publishedAt: "desc" }, include: blogInclude }),
     prisma.blog.count({ where }),

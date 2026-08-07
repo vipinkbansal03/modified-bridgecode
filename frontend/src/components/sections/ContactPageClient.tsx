@@ -11,7 +11,7 @@ export function ContactPageClient() {
   const [tab, setTab] = useState<"general" | "dealer">("general");
 
   return (
-    <Container className="py-16 lg:py-20">
+    <Container className="py-6 lg:py-[34px]">
       <span className="mb-4 block text-[12.5px] font-semibold uppercase tracking-wide text-brand">Contact</span>
       <h1 className="max-w-[640px] text-[clamp(30px,4vw,44px)] font-light leading-tight text-ink">
         Get in touch with our team
@@ -21,13 +21,13 @@ export function ContactPageClient() {
         directly.
       </p>
 
-      <div className="mt-11 grid grid-cols-1 gap-14 sm:grid-cols-[1fr_320px]">
+      <div className="mt-11 grid grid-cols-1 gap-6 lg:gap-14 sm:grid-cols-[1fr_320px]">
         <div>
-          <div className="mb-7 flex gap-2.5">
+          <div className="mb-7 flex items-center gap-2 sm:gap-2.5">
             <button
               onClick={() => setTab("general")}
               className={cn(
-                "rounded-pill px-5 py-2.5 text-[14.5px] font-medium transition-colors",
+                "rounded-pill px-3.5 py-2 text-[13px] sm:px-5 sm:py-2.5 sm:text-[14.5px] font-medium transition-colors whitespace-nowrap",
                 tab === "general" ? "bg-ink text-white" : "bg-grey text-steel"
               )}
             >
@@ -36,17 +36,17 @@ export function ContactPageClient() {
             <button
               onClick={() => setTab("dealer")}
               className={cn(
-                "rounded-pill px-5 py-2.5 text-[14.5px] font-medium transition-colors",
+                "rounded-pill px-3.5 py-2 text-[13px] sm:px-5 sm:py-2.5 sm:text-[14.5px] font-medium transition-colors whitespace-nowrap",
                 tab === "dealer" ? "bg-ink text-white" : "bg-grey text-steel"
               )}
             >
-              Become a Dealer 
+              Become a Dealer
             </button>
           </div>
           {tab === "general" ? <ContactForm /> : <DealerInquiryForm />}
         </div>
 
-        <div className="border-t border-line pt-7 text-[14.5px] text-steel sm:border-t-0 sm:border-l sm:pt-0 sm:pl-9">
+        <div className="border-t border-line pt-7 text-[14.5px] text-steel sm:border-t-0 sm:border-l sm:pt-0 sm:pl-6">
           <h3 className="mb-3 text-base font-medium text-ink">India Office</h3>
           <p className="mb-1.5">
             <a href={`mailto:${ORDERS_EMAIL}`} className="text-brand">

@@ -114,8 +114,8 @@ function UnsubscribeContent() {
 
 export default function UnsubscribePage() {
   return (
-    <main className="bg-gray-50/50 py-16 lg:py-24 min-h-[60vh] flex items-center">
-      <Container className="px-4 sm:px-6 lg:px-10 w-full">
+    <main className="bg-gray-50/50 py-6 lg:py-[34px] min-h-[60vh] flex items-center">
+      <Container className="w-full">
         <Suspense fallback={
           <div className="text-center text-steel py-8 text-[15px] font-medium">
             Loading...
