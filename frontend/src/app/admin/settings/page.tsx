@@ -388,6 +388,8 @@ export default function SettingsPage() {
     const uploadKey = `auth.login_slide_${index}_image`;
 
     const formData = new FormData();
+    formData.append("entityType", "SYSTEM");
+    formData.append("purpose", "LOGIN_SLIDE");
     formData.append("files", file);
     formData.append("folder", "modortho/auth");
     setUploadingKey(uploadKey);
@@ -419,6 +421,8 @@ export default function SettingsPage() {
 
     setUploadingKey(key);
     const formData = new FormData();
+    formData.append("entityType", "SYSTEM");
+    formData.append("purpose", "BRANDING");
     formData.append("files", file);
     formData.append("folder", "modortho/branding");
 
