@@ -38,7 +38,6 @@ function sanitizeProvider(provider: ProviderRow) {
 // ─── Provider CRUD ──────────────────────────────────────
 
 const DEFAULT_PROVIDERS = [
-  { name: "STANDARD_EXPRESS", displayName: "Standard Delivery", isEnabled: true },
   { name: "DHL", displayName: "DHL Express", isEnabled: false, baseUrl: "https://api.dhl.com/mydhlapi", trackingUrl: "https://track.dhl.com/{tracking}" },
   { name: "DTDC", displayName: "DTDC Courier", isEnabled: false, baseUrl: "https://api.dtdc.in", trackingUrl: "https://www.dtdc.in/tracking/{tracking}" },
 ];
@@ -162,13 +161,12 @@ export async function testConnection(id: string, override?: { apiKey?: string; a
 // ─── Default Rate (zone auto-fill) ──────────────────────
 
 const DUMMY_RATES: Record<string, { base: number; days: string }> = {
-  STANDARD_EXPRESS: { base: 12, days: "3-5 business days" },
   DHL: { base: 25, days: "2-4 business days" },
   DTDC: { base: 15, days: "3-6 business days" },
 };
 
 function dummyDefaultRate(providerName: string, countryCode: string, currency: string) {
-  const preset = DUMMY_RATES[providerName.toUpperCase()] ?? DUMMY_RATES.STANDARD_EXPRESS;
+  const preset = DUMMY_RATES[providerName.toUpperCase()] ?? DUMMY_RATES.DHL;
   let hash = 0;
   for (const ch of `${providerName}:${countryCode}`) hash = (hash * 31 + ch.charCodeAt(0)) | 0;
   const charge = preset.base + (Math.abs(hash) % 40);

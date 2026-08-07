@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminMultiSelect, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { getAdminErrorMessage } from "@/services/adminApi";
 import {
   useAdminShippingProviders,
@@ -268,15 +269,16 @@ export default function ShippingZonesPage() {
                   }}
                   error={form.errors.providerId as string}
                 />
-                <AdminMultiSelect
+                <AdminMultiSearchableSelect
                   label="Countries"
                   required
                   options={countryMultiOptions}
-                  value={form.values.countryIds}
-                  onChange={(values) => {
+                  values={form.values.countryIds}
+                  onValuesChange={(values) => {
                     if (values.length === 0) setRateCurrency("");
                     form.setValues({ ...form.values, countryIds: values, charge: values.length ? form.values.charge : "", estimatedDays: values.length ? form.values.estimatedDays : "" });
                   }}
+                  allowSelectAll
                   selectAllLabel="Select All"
                   error={form.errors.countryIds as string}
                 />

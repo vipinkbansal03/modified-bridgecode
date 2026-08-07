@@ -1050,7 +1050,7 @@ type PriceRecord = {
   sellingPrice: Prisma.Decimal | number;
   dealerPrice?: Prisma.Decimal | number | null;
   distributorPrice?: Prisma.Decimal | number | null;
-  country: { code: string; name: string; dutyPercentage?: Prisma.Decimal | number; shippingCharge?: Prisma.Decimal | number };
+  country: { code: string; name: string; dutyPercentage?: Prisma.Decimal | number };
   currency: { code: string; symbol: string };
   taxMode?: string;
 };
@@ -1231,7 +1231,7 @@ type PublicProductDetailRecord = {
       attributeValue: { id: string; value: string };
     }>;
     prices: Array<{
-    country: { code: string; name: string; dutyPercentage?: Prisma.Decimal | number; shippingCharge?: Prisma.Decimal | number };
+    country: { code: string; name: string; dutyPercentage?: Prisma.Decimal | number };
       currency: { code: string; symbol: string };
       mrp: Prisma.Decimal | number;
       sellingPrice: Prisma.Decimal | number;
@@ -1262,17 +1262,15 @@ type PublicProductDetailRecord = {
 };
 
 function buildPublicPriceBreakdown(pr: {
-  country: { code: string; dutyPercentage?: Prisma.Decimal | number; shippingCharge?: Prisma.Decimal | number };
+  country: { code: string; dutyPercentage?: Prisma.Decimal | number };
   mrp: Prisma.Decimal | number;
 }) {
   const dutyPercentage = Number(pr.country.dutyPercentage) || 0;
-  const shippingCharge = Number(pr.country.shippingCharge) || 0;
-  if (dutyPercentage <= 0 && shippingCharge <= 0) return undefined;
+  if (dutyPercentage <= 0) return undefined;
   const mrp = Number(pr.mrp);
   return {
     dutyPercentage,
     dutyAmount: Math.round((mrp * dutyPercentage) / (100 + dutyPercentage) * 100) / 100,
-    shippingCharge,
   };
 }
 

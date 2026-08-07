@@ -72,7 +72,6 @@ export type ResolvedPrice = {
   landedCost?: {
     dutyPercentage: number;
     dutyAmount: number;
-    shippingCharge: number;
     countryId: string;
     countryCode: string;
   };
@@ -726,13 +725,12 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
 
   currentPrice = primaryTaxMode === "INCLUSIVE" ? priceBeforeTax : roundMoney(priceBeforeTax + totalTaxAmount);
 
-  const countryRecord = (basePrice as { country?: { id: string; code: string; dutyPercentage: Prisma.Decimal | number; shippingCharge: Prisma.Decimal | number } }).country;
+  const countryRecord = (basePrice as { country?: { id: string; code: string; dutyPercentage: Prisma.Decimal | number } }).country;
   const landedCost =
-    countryRecord && (Number(countryRecord.dutyPercentage) > 0 || Number(countryRecord.shippingCharge) > 0)
+    countryRecord && Number(countryRecord.dutyPercentage) > 0
       ? {
           dutyPercentage: Number(countryRecord.dutyPercentage),
           dutyAmount: roundMoney(currentPrice * (Number(countryRecord.dutyPercentage) / 100)),
-          shippingCharge: Number(countryRecord.shippingCharge),
           countryId: countryRecord.id,
           countryCode: countryRecord.code,
         }
