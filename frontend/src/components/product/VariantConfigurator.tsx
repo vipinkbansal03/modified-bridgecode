@@ -326,17 +326,10 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     setUserSelected(false);
   }, [selectedAddress?.state]);
 
-  useEffect(() => {
-    if (warehouses && warehouses.length > 0) {
-      if (!userSelected || !selectedWarehouseId || !warehouses.find(w => w.id === selectedWarehouseId)) {
-        setSelectedWarehouseId(warehouses[0].id);
-      }
-    } else {
-      setSelectedWarehouseId(null);
-    }
-  }, [warehouses, selectedWarehouseId, userSelected]);
+  // Allow selectedWarehouseId to remain null by default (Base Inventory).
+  // If user wants a specific warehouse, they can select it via the UI.
 
-  const selectedWarehouse = warehouses?.find(w => w.id === selectedWarehouseId) || warehouses?.[0];
+  const selectedWarehouse = warehouses?.find(w => w.id === selectedWarehouseId);
 
   const currentPrice = currentVariant
     ? getPriceForCurrency(
@@ -880,14 +873,14 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                 </div>
               )}
 
-              {currentVariant && selectedWarehouse && (
-                <div className="mt-3 flex items-center justify-between rounded-lg border border-[#E0E0E0] bg-[#F9F9F9] p-3">
+              {currentVariant && (
+                <div className="mt-4 flex items-center justify-between rounded-lg border border-[#E0E0E0] bg-[#F9F9F9] p-3">
                   <div className="flex flex-col gap-1">
                     <span className="text-[12px] text-steel">Sold by / Ships from</span>
-                    <span className="text-[13px] font-semibold text-ink">{selectedWarehouse.name}</span>
-                    <span className="text-[12px] text-emerald-600 font-medium">Estimated Delivery: {selectedWarehouse.estimatedDeliveryDays} days</span>
+                    <span className="text-[13px] font-semibold text-ink">{selectedWarehouse ? selectedWarehouse.name : "Default Seller"}</span>
+                    <span className="text-[12px] text-emerald-600 font-medium">Estimated Delivery: {selectedWarehouse ? selectedWarehouse.estimatedDeliveryDays : "3-5"} days</span>
                   </div>
-                  {warehouses && warehouses.length > 1 && (
+                  {warehouses && warehouses.length > 0 && (
                     <button
                       type="button"
                       onClick={() => setIsWarehouseModalOpen(true)}

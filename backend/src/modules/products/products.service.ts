@@ -1642,6 +1642,7 @@ export async function generateVariants(
     .filter((inventory) => !inventory.variantId)
     .map((inventory) => ({
       countryId: inventory.countryId,
+      warehouseId: inventory.warehouseId,
       stock: inventory.stock,
       reservedStock: inventory.reservedStock,
       lowStockThreshold: inventory.lowStockThreshold,
@@ -1649,7 +1650,7 @@ export async function generateVariants(
     }));
   const inventoryTemplates = productInventoryTemplates.length
     ? productInventoryTemplates
-    : [{ countryId: null, stock: 0, reservedStock: 0, lowStockThreshold: 10, status: "OUT_OF_STOCK" as const }];
+    : [{ countryId: null, warehouseId: null, stock: 0, reservedStock: 0, lowStockThreshold: 10, status: "OUT_OF_STOCK" as const }];
 
   if (!product.hasVariants) throw new AppError("Product does not use variants.", 400);
 

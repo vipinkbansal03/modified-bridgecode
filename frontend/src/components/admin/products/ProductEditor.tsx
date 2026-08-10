@@ -3996,14 +3996,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const content = (
     <>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1 rounded-lg border border-[#E6E6E6] bg-white p-1">
+        <div className="flex w-full overflow-x-auto gap-1 rounded-lg border border-[#E6E6E6] bg-white p-1 lg:w-auto">
           {visibleTabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "rounded-md px-3.5 py-1.5 text-[12.5px] font-medium transition-colors",
+                "whitespace-nowrap rounded-md px-3.5 py-1.5 text-[12.5px] font-medium transition-colors flex-shrink-0",
                 activeTab === tab.id ? "bg-[#E31E24] text-white" : "text-[#6B6B6B] hover:bg-[#F2F2F2]"
               )}
             >
@@ -4594,6 +4594,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
         {activeTab === 4 && (
           <div className="p-6">
+            <div className="mb-4">
+              <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Product Variants</h3>
+              <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Variants are created from package + selected attribute values.</p>
+            </div>
+
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <div className="relative">
@@ -4637,14 +4642,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   ))}
                 </select>
               </div>
-            </div>
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Product Variants</h3>
-                <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Variants are created from package + selected attribute values.</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
 
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={handleBulkDeleteVariants}
@@ -4694,22 +4693,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     {bulkSaving ? "Saving..." : "Save All"}
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBulkEditMode((current) => !current);
-                    setBulkDrafts({});
-                    setBulkRowErrors({});
-                  }}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-md border px-4 py-2 text-[13px] font-medium",
-                    bulkEditMode
-                      ? "border-[#F2C9C9] bg-red-50 text-[#B5151B] hover:bg-red-100"
-                      : "border-[#E6E6E6] bg-white text-[#1A1A1A] hover:bg-[#F5F5F5]"
-                  )}
-                >
-                  {bulkEditMode ? "Exit Bulk Edit" : "Bulk Edit"}
-                </button>
+
                 <button
                   onClick={openGenerateVariantModal}
                   disabled={generatingVariants || !product.hasVariants}
@@ -5705,7 +5689,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       type="button"
                       onClick={handleVPBulkApplyAction}
                       disabled={bulkSaving || selectedVPIds.length === 0 || vpBulkActionType === "Bulk Action"}
-                      className="h-8.5 rounded-md bg-[#808080] px-4 text-[12.5px] font-semibold text-white hover:bg-[#6B6B6B] disabled:opacity-50"
+                      className="h-8.5 rounded-md bg-[#1A1A1A] px-4 text-[12.5px] font-semibold text-white hover:bg-[#333] disabled:opacity-50"
                     >
                       {bulkSaving ? "Applying..." : "Apply"}
                     </button>
@@ -6222,7 +6206,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       type="button"
                       onClick={handleInvBulkApplyAction}
                       disabled={bulkSaving || selectedInvIds.length === 0 || invBulkActionType === "Bulk Action"}
-                      className="h-8.5 rounded-md bg-[#808080] px-4 text-[12.5px] font-semibold text-white hover:bg-[#6B6B6B] disabled:opacity-50"
+                      className="h-8.5 rounded-md bg-[#1A1A1A] px-4 text-[12.5px] font-semibold text-white hover:bg-[#333] disabled:opacity-50"
                     >
                       {bulkSaving ? "Applying..." : "Apply"}
                     </button>

@@ -228,7 +228,16 @@ export async function duplicateCollection(id: string) {
       });
     }
 
-    return getCollection(collection.id);
+    const finalCollection = await tx.collection.findUnique({
+      where: { id: collection.id },
+      include: {
+        products: { include: { product: true }, orderBy: { sortOrder: "asc" } },
+        countries: { include: { country: true }, orderBy: { country: { name: "asc" } } },
+        _count: { select: { products: true } },
+      },
+    });
+    if (!finalCollection) throw new AppError("Failed to fetch duplicated collection.", 500);
+    return finalCollection;
   });
 }
 

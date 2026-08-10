@@ -1675,6 +1675,10 @@ export async function getProductWarehouses(
       ...(variantId ? { variantId } : {}),
       stock: { gt: 0 },
       warehouseId: { not: null },
+      OR: [
+        { variantId: null },
+        { variant: { status: "ACTIVE" } }
+      ]
     },
     include: {
       warehouse: {
