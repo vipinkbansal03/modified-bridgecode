@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { Minus, Plus, ShoppingCart, Trash2, X } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
+import { CartItemWarehouseSelector } from "./CartItemWarehouseSelector";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 
 function formatMoney(symbol: string, amount: number) {
@@ -18,7 +19,7 @@ function formatMoney(symbol: string, amount: number) {
 }
 
 export function CartDrawer() {
-  const { items, totals, isOpen, closeCart, updateQuantity, removeItem } =
+  const { items, totals, isOpen, closeCart, updateQuantity, removeItem, updateWarehouse } =
     useCart();
   const { t } = useStaticTranslations();
   const hasUnavailableItems = items.some(
@@ -128,13 +129,11 @@ export function CartDrawer() {
                           {item.variantTitle}
                         </p>
                         {item.warehouseName && (
-                          <div className="mt-1.5 flex flex-col gap-0.5">
-                            <span className="text-[11.5px] font-medium text-ink">
-                              Sold by {item.warehouseName} {item.isLocalWarehouse ? "(Local)" : ""}
-                            </span>
-                            <span className="text-[11px] text-steel">
-                              Estimated Delivery: {item.estimatedDeliveryDays} days
-                            </span>
+                          <div className="mt-2">
+                            <CartItemWarehouseSelector 
+                              item={item} 
+                              updateWarehouse={updateWarehouse} 
+                            />
                           </div>
                         )}
                         {item.sku && (

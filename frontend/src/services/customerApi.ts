@@ -134,6 +134,7 @@ export interface CustomerOrderSummary {
   shippingCharge?: string | number;
   shippingProvider?: string | null;
   shippingZoneId?: string | null;
+  shipmentsCount?: number;
   shippingBox?: ShippingBoxSummary | null;
   shippingBoxName?: string | null;
   packageWeight?: string | number;

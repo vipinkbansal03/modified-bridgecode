@@ -74,6 +74,7 @@ export interface ApiVariant {
   attributeCombination: Record<string, string>; // { "Prescription": "MBT", "Slot Size": ".022\"" }
   prices: ApiProductPrice[];
   inventory: ApiVariantInventory | null;
+  warehouseInventories?: { warehouseId: string | null; available: number; status: string }[];
 }
 
 export interface ApiProductPackage {

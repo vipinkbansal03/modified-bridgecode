@@ -124,7 +124,7 @@ export async function listOrders(query: {
 }
 
 export async function getOrder(id: string) {
-  const o = await prisma.order.findUnique({ where: { id }, include: { items: { include: { product: true, variant: true } }, country: true, currency: true, coupon: true, shippingZone: { include: { provider: true, countries: { include: { country: true } } } }, shippingBox: true, orderBoxes: true } });
+  const o = await prisma.order.findUnique({ where: { id }, include: { items: { include: { product: true, variant: true, warehouse: true } }, country: true, currency: true, coupon: true, shippingZone: { include: { provider: true, countries: { include: { country: true } } } }, shippingBox: true, orderBoxes: true } });
   if (!o) throw new AppError("Order not found.", 404);
   return o;
 }

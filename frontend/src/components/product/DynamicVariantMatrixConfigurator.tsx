@@ -151,9 +151,10 @@ function buildCartItems(
   variants: NormalizedVariant[],
   quantityMap: Record<string, number>,
   priceMap: Record<string, ApiProductPrice | null>,
+  warehouses: any[], // pass the loaded warehouses list
   previewPriceMap?: Record<string, number>,
-  warehouseId?: string,
-  warehouseName?: string,
+  selectedWarehouseId?: string,
+  selectedWarehouseName?: string,
   estimatedDeliveryDays?: number | string,
   isLocal?: boolean,
 ) {
@@ -165,9 +166,10 @@ function buildCartItems(
     const price = priceMap[variantId];
     if (!variant || !price || price.sellingPrice <= 0) return;
 
-    const availableStock = variant.inventory?.available ?? 0;
-    const isOutOfStock =
-      variant.inventory?.status === "OUT_OF_STOCK" || availableStock <= 0;
+    const availableStock = variant.warehouseInventories
+      ? variant.warehouseInventories.reduce((sum, inv) => sum + inv.available, 0)
+      : (variant.inventory?.available ?? 0);
+    const isOutOfStock = availableStock <= 0;
     if (isOutOfStock) return;
 
     const base = {
@@ -184,23 +186,69 @@ function buildCartItems(
       selectedAttributes: variant.attributeCombination,
     };
 
+    let finalWarehouseId = selectedWarehouseId;
+    let finalWarehouseName = selectedWarehouseName;
+    let finalIsLocal = isLocal;
+    let finalEstimatedDeliveryDays = estimatedDeliveryDays;
+
+    if (variant.warehouseInventories && variant.warehouseInventories.length > 0) {
+      const inSelected = variant.warehouseInventories.find(
+        (inv) => inv.warehouseId === (selectedWarehouseId || null) && inv.available >= quantity
+      );
+      if (inSelected) {
+        finalWarehouseId = inSelected.warehouseId ?? undefined;
+      } else {
+        const inDefault = variant.warehouseInventories.find((inv) => inv.warehouseId === null && inv.available >= quantity);
+        if (inDefault) {
+          finalWarehouseId = undefined;
+          finalWarehouseName = "Default Seller";
+        } else {
+          const anyOther = variant.warehouseInventories.find((inv) => inv.available >= quantity);
+          if (anyOther) {
+            finalWarehouseId = anyOther.warehouseId ?? undefined;
+            if (finalWarehouseId) {
+              const wh = warehouses.find((w) => w.id === finalWarehouseId);
+              finalWarehouseName = wh ? wh.name : "Unknown Warehouse";
+              finalIsLocal = wh ? wh.isLocal : isLocal;
+              finalEstimatedDeliveryDays = wh?.estimatedDeliveryDays ?? estimatedDeliveryDays;
+            } else {
+              finalWarehouseName = "Default Seller";
+            }
+          } else {
+             const fallback = variant.warehouseInventories.find((inv) => inv.available > 0);
+             if (fallback) {
+                finalWarehouseId = fallback.warehouseId ?? undefined;
+                if (finalWarehouseId) {
+                  const wh = warehouses.find((w) => w.id === finalWarehouseId);
+                  finalWarehouseName = wh ? wh.name : "Unknown Warehouse";
+                  finalIsLocal = wh ? wh.isLocal : isLocal;
+                  finalEstimatedDeliveryDays = wh?.estimatedDeliveryDays ?? estimatedDeliveryDays;
+                } else {
+                  finalWarehouseName = "Default Seller";
+                }
+             }
+          }
+        }
+      }
+    }
+
     items.push({
       cart: {
         ...base,
         productSlug: apiProduct.slug,
         countryCode: price.countryCode,
         countryName: price.countryName,
-        warehouseId,
-        warehouseName,
-        estimatedDeliveryDays,
-        isLocalWarehouse: isLocal,
+        warehouseId: finalWarehouseId,
+        warehouseName: finalWarehouseName,
+        estimatedDeliveryDays: finalEstimatedDeliveryDays,
+        isLocalWarehouse: finalIsLocal,
       },
       quote: {
         ...base,
-        warehouseId,
-        warehouseName,
-        estimatedDeliveryDays,
-        isLocalWarehouse: isLocal,
+        warehouseId: finalWarehouseId,
+        warehouseName: finalWarehouseName,
+        estimatedDeliveryDays: finalEstimatedDeliveryDays,
+        isLocalWarehouse: finalIsLocal,
       },
     });
   });
@@ -362,6 +410,38 @@ export function DynamicVariantMatrixConfigurator({
       }),
   );
 
+  const activeRowCombinations = useMemo(() => {
+    return rowCombinations.filter((rc) => {
+      return columnCombinations.some((cc) => {
+        const key = buildVariantLookupKey(
+          {
+            ...dropdownSelections,
+            ...rc.selection,
+            ...cc.selection,
+          },
+          selectedPackageId,
+        );
+        return variantLookup.has(key) && variantLookup.get(key) !== null;
+      });
+    });
+  }, [rowCombinations, columnCombinations, dropdownSelections, selectedPackageId, variantLookup]);
+
+  const activeColumnCombinations = useMemo(() => {
+    return columnCombinations.filter((cc) => {
+      return activeRowCombinations.some((rc) => {
+        const key = buildVariantLookupKey(
+          {
+            ...dropdownSelections,
+            ...rc.selection,
+            ...cc.selection,
+          },
+          selectedPackageId,
+        );
+        return variantLookup.has(key) && variantLookup.get(key) !== null;
+      });
+    });
+  }, [columnCombinations, activeRowCombinations, dropdownSelections, selectedPackageId, variantLookup]);
+
   const selectedEntries = useMemo(
     () =>
       Object.entries(quantityMap)
@@ -387,6 +467,31 @@ export function DynamicVariantMatrixConfigurator({
         .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
     [normalizedVariants, previewPriceMap, quantityMap, variantPriceMap],
   );
+
+  useEffect(() => {
+    if (userSelected || selectedEntries.length === 0 || !warehouses) return;
+
+    let allCurrentCanFulfill = true;
+    let fallbackWarehouseId: string | undefined = undefined;
+
+    for (const entry of selectedEntries) {
+      const v = entry.variant;
+      const invs = v.warehouseInventories || [];
+      const currentInv = invs.find((inv) => inv.warehouseId === (selectedWarehouseId || null));
+      if (!currentInv || currentInv.available < entry.quantity) {
+        allCurrentCanFulfill = false;
+        const alternative = invs.find((inv) => inv.available >= entry.quantity);
+        if (alternative && alternative.warehouseId) {
+          fallbackWarehouseId = alternative.warehouseId;
+        }
+        break;
+      }
+    }
+
+    if (!allCurrentCanFulfill && fallbackWarehouseId && fallbackWarehouseId !== selectedWarehouseId) {
+      setSelectedWarehouseId(fallbackWarehouseId);
+    }
+  }, [selectedEntries, userSelected, selectedWarehouseId, warehouses]);
 
   const totals = useMemo(() => {
     const totalUnits = selectedEntries.reduce(
@@ -436,6 +541,7 @@ export function DynamicVariantMatrixConfigurator({
       normalizedVariants,
       quantityMap,
       variantPriceMap,
+      warehouses || [],
       previewPriceMap,
       selectedWarehouse?.id,
       selectedWarehouse?.name,
@@ -465,6 +571,7 @@ export function DynamicVariantMatrixConfigurator({
       normalizedVariants,
       quantityMap,
       variantPriceMap,
+      warehouses || [],
       previewPriceMap,
       selectedWarehouse?.id,
       selectedWarehouse?.name,
@@ -571,7 +678,7 @@ export function DynamicVariantMatrixConfigurator({
           </p>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-6">
           <div className="min-w-0 space-y-5">
             {packageOptions.length > 1 && (
               <div className="rounded-lg border border-line bg-offwhite p-2">
@@ -638,7 +745,7 @@ export function DynamicVariantMatrixConfigurator({
                 <table className="w-full border-collapse text-left">
                   <thead>
                     <tr className="border-b border-line bg-[#F8F9FA]">
-                      <th className="sticky left-0 z-20 border-r border-line bg-[#F1F3F5] px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-[0.12em] text-ink">
+                      <th className="sticky left-0 z-20 border-r border-line bg-[#F1F3F5] px-1.5 py-1 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-ink">
                         <span className="text-brand">
                           {rowAxisAttributes.map((a) => a.name).join(" + ") || "Size"}
                         </span>
@@ -647,17 +754,17 @@ export function DynamicVariantMatrixConfigurator({
                           {xAxisAttributes.map((a) => a.name).join(" + ")}
                         </span>
                       </th>
-                      {columnCombinations.map((columnCombination) => {
+                      {activeColumnCombinations.map((columnCombination) => {
                         const headerText = columnCombination.labels
                           .map((l) => l.value.value)
                           .join(" • ");
                         return (
                           <th
                             key={columnCombination.key}
-                            className="min-w-[120px] border-r border-line bg-[#F8F9FA] px-2 py-2 text-center text-[11.5px] font-bold text-ink last:border-r-0"
+                            className="min-w-[65px] border-r border-line bg-[#F8F9FA] px-1 py-1 text-center text-[10px] font-bold text-ink last:border-r-0"
                           >
                             <div className="inline-flex flex-col items-center">
-                              <span className="rounded-md bg-red-50 px-2 py-1 text-[11.5px] font-bold text-brand border border-red-100/60 leading-tight">
+                              <span className="rounded-md bg-red-50 px-1 py-0.5 text-[9.5px] font-bold text-brand border border-red-100/60 leading-tight">
                                 {headerText}
                               </span>
                             </div>
@@ -667,15 +774,15 @@ export function DynamicVariantMatrixConfigurator({
                     </tr>
                   </thead>
                   <tbody>
-                    {rowCombinations.map((rowCombination) => (
+                    {activeRowCombinations.map((rowCombination) => (
                       <tr
                         key={rowCombination.key}
                         className="border-b border-line hover:bg-slate-50/50 transition-colors last:border-b-0"
                       >
-                        <th className="sticky left-0 z-10 border-r border-line bg-[#F8F9FA] px-3 py-2.5 text-left font-bold text-ink text-[12.5px] whitespace-nowrap shadow-xs">
+                        <th className="sticky left-0 z-10 border-r border-line bg-[#F8F9FA] px-1.5 py-1.5 text-left font-bold text-ink text-[10.5px] whitespace-nowrap shadow-xs">
                           {rowCombination.labels.map((l) => l.value.value).join(" • ") || "All"}
                         </th>
-                        {columnCombinations.map((columnCombination) => {
+                        {activeColumnCombinations.map((columnCombination) => {
                           const variant = variantLookup.get(
                             buildVariantLookupKey(
                               {
@@ -689,11 +796,11 @@ export function DynamicVariantMatrixConfigurator({
                           const price = variant
                             ? variantPriceMap[variant.id]
                             : null;
-                          const availableStock = variant?.inventory?.available;
+                          const availableStock = variant?.warehouseInventories
+                            ? variant.warehouseInventories.reduce((sum, inv) => sum + inv.available, 0)
+                            : (variant?.inventory?.available ?? 0);
                           const outOfStock =
-                            !variant ||
-                            variant.inventory?.status === "OUT_OF_STOCK" ||
-                            availableStock === 0;
+                            !variant || availableStock === 0;
                           const quantity = variant
                             ? (quantityMap[variant.id] ?? 0)
                             : 0;
@@ -707,17 +814,18 @@ export function DynamicVariantMatrixConfigurator({
                           return (
                             <td
                               key={columnCombination.key}
-                              className="align-middle border-r border-line px-2.5 py-3 text-center last:border-r-0"
+                              className="align-middle border-r border-line px-1 py-1 text-center last:border-r-0"
                             >
                               {variant ? (
                                 <div
-                                  className={`mx-auto flex flex-col items-center justify-center rounded-md p-1.5 transition-all ${
+                                  className={`mx-auto flex flex-col items-center justify-center rounded-md p-0.5 transition-all ${
                                     quantity > 0
                                       ? "bg-red-50/70 ring-1 ring-brand/30"
                                       : "bg-white"
                                   } ${outOfStock || isPor ? "opacity-60" : ""}`}
                                 >
                                   <QuantityInput
+                                    size="xs"
                                     value={quantity}
                                     onChange={(nextQuantity) =>
                                       handleQuantityChange(
@@ -731,7 +839,7 @@ export function DynamicVariantMatrixConfigurator({
                                     disabled={outOfStock || isPor}
                                   />
                                   <div className="mt-1.5 text-center">
-                                    <p className="text-[12px] font-bold text-ink">
+                                    <p className="text-[10px] font-bold text-ink">
                                       {isPor ? (
                                         <span className="text-[10.5px] font-semibold text-brand">
                                           Price Upon Request
@@ -754,7 +862,7 @@ export function DynamicVariantMatrixConfigurator({
                                 </div>
                               ) : (
                                 <div className="py-2 text-center text-[11px] font-medium text-steel-2">
-                                  —
+                                  
                                 </div>
                               )}
                             </td>
@@ -778,7 +886,7 @@ export function DynamicVariantMatrixConfigurator({
             )}
           </div>
 
-          <aside className="space-y-5">
+          <div className="grid gap-6 md:grid-cols-2 items-start">
             <div className="rounded-lg border border-line bg-offwhite p-5">
               <div className="mb-4 flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-white text-brand">
@@ -797,7 +905,7 @@ export function DynamicVariantMatrixConfigurator({
               </div>
 
               {selectedEntries.length ? (
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-[360px] overflow-y-auto pr-2 custom-scrollbar">
                   {selectedEntries.map((entry) => (
                     <div
                       key={entry.variant.id}
@@ -864,36 +972,6 @@ export function DynamicVariantMatrixConfigurator({
                 </div>
               </div>
 
-              <div className="mt-4 flex items-center justify-between rounded-lg border border-[#E0E0E0] bg-[#F9F9F9] p-3">
-                <div className="flex flex-col gap-1">
-                  <span className="text-[12px] text-steel">Sold by / Ships from</span>
-                  <span className="text-[13px] font-semibold text-ink">{selectedWarehouse ? selectedWarehouse.name : "Default Seller"}</span>
-                  <span className="text-[12px] text-emerald-600 font-medium">Estimated Delivery: {selectedWarehouse ? selectedWarehouse.estimatedDeliveryDays : "3-5"} days</span>
-                </div>
-                {warehouses && warehouses.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setIsWarehouseModalOpen(true)}
-                    className="text-[13px] font-medium text-brand hover:underline"
-                  >
-                    Change Seller
-                  </button>
-                )}
-              </div>
-              
-              <WarehouseSelectorModal
-                open={isWarehouseModalOpen}
-                onClose={() => setIsWarehouseModalOpen(false)}
-                warehouses={warehouses || []}
-                selectedWarehouseId={selectedWarehouseId}
-                onSelect={(id) => {
-                  setSelectedWarehouseId(id);
-                  setUserSelected(true);
-                  setIsWarehouseModalOpen(false);
-                }}
-                isLoading={isWarehousesLoading}
-              />
-
               <div className="mt-5 space-y-3">
                 <button
                   type="button"
@@ -931,7 +1009,7 @@ export function DynamicVariantMatrixConfigurator({
                 </div>
               )}
             </div>
-          </aside>
+          </div>
         </div>
       </div>
     </section>

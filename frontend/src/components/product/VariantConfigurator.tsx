@@ -331,6 +331,52 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
 
   const selectedWarehouse = warehouses?.find(w => w.id === selectedWarehouseId);
 
+  const resolveWarehouseForCart = (variant: ApiVariant, qty: number) => {
+    let finalWarehouseId = selectedWarehouse?.id;
+    let finalWarehouseName = selectedWarehouse?.name;
+    let finalIsLocal = selectedWarehouse?.isLocal;
+
+    if (variant.warehouseInventories && variant.warehouseInventories.length > 0) {
+      const inSelected = variant.warehouseInventories.find(
+        (inv) => inv.warehouseId === (selectedWarehouse?.id || null) && inv.available >= qty
+      );
+      if (inSelected) {
+        finalWarehouseId = inSelected.warehouseId ?? undefined;
+      } else {
+        const inDefault = variant.warehouseInventories.find((inv) => inv.warehouseId === null && inv.available >= qty);
+        if (inDefault) {
+          finalWarehouseId = undefined;
+          finalWarehouseName = "Default Seller";
+        } else {
+          const anyOther = variant.warehouseInventories.find((inv) => inv.available >= qty);
+          if (anyOther) {
+            finalWarehouseId = anyOther.warehouseId ?? undefined;
+            if (finalWarehouseId) {
+              const wh = warehouses?.find((w) => w.id === finalWarehouseId);
+              finalWarehouseName = wh ? wh.name : "Unknown Warehouse";
+              finalIsLocal = wh ? wh.isLocal : undefined;
+            } else {
+              finalWarehouseName = "Default Seller";
+            }
+          } else {
+            const fallback = variant.warehouseInventories.find((inv) => inv.available > 0);
+            if (fallback) {
+              finalWarehouseId = fallback.warehouseId ?? undefined;
+              if (finalWarehouseId) {
+                const wh = warehouses?.find((w) => w.id === finalWarehouseId);
+                finalWarehouseName = wh ? wh.name : "Unknown Warehouse";
+                finalIsLocal = wh ? wh.isLocal : undefined;
+              } else {
+                finalWarehouseName = "Default Seller";
+              }
+            }
+          }
+        }
+      }
+    }
+    return { finalWarehouseId, finalWarehouseName, finalIsLocal };
+  };
+
   const currentPrice = currentVariant
     ? getPriceForCurrency(
         currentVariant,
@@ -552,6 +598,8 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
       return;
     }
 
+    const resolvedWh = resolveWarehouseForCart(currentVariant, quantity);
+
     addItem({
       productId: apiProduct.id,
       productSlug: apiProduct.slug,
@@ -566,10 +614,10 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
       countryCode: currentPrice.countryCode,
       countryName: currentPrice.countryName,
       selectedAttributes: currentVariant.attributeCombination,
-      warehouseId: selectedWarehouse?.id,
-      warehouseName: selectedWarehouse?.name,
+      warehouseId: resolvedWh.finalWarehouseId,
+      warehouseName: resolvedWh.finalWarehouseName,
       estimatedDeliveryDays: selectedWarehouse?.estimatedDeliveryDays,
-      isLocalWarehouse: selectedWarehouse?.isLocal,
+      isLocalWarehouse: resolvedWh.finalIsLocal,
     });
     setAdded(false);
     setError(null);
@@ -907,21 +955,21 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3">
                 {(() => {
+                  const totalAvailableStock = currentVariant?.warehouseInventories
+                    ? currentVariant.warehouseInventories.reduce((sum, inv) => sum + inv.available, 0)
+                    : (currentVariant?.inventory?.available ?? 0);
+
                   const isGloballyInStock = Boolean(
                     currentVariant &&
-                    currentVariant.inventory?.status !== "OUT_OF_STOCK" &&
-                    (currentVariant.inventory?.available ?? 0) > 0
+                    totalAvailableStock > 0
                   );
 
-                  const isWarehouseUnavailable = Boolean(
-                    isGloballyInStock && (!selectedWarehouse || selectedWarehouse.stock <= 0)
-                  );
+                  const isWarehouseUnavailable = false; // Disabled because Smart Cart Splitting handles cross-warehouse fulfillment
                   
-                  const isSelectedOutOfStock = !isGloballyInStock || isWarehouseUnavailable;
+                  const isSelectedOutOfStock = !isGloballyInStock;
 
                   const getButtonLabel = (defaultLabel: string) => {
                     if (!isGloballyInStock) return "Out of Stock";
-                    if (isWarehouseUnavailable) return "Not Deliverable to Location";
                     return defaultLabel;
                   };
 
@@ -959,6 +1007,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                       disabled={isSelectedOutOfStock}
                       onClick={() => {
                         if (!currentVariant || isSelectedOutOfStock) return;
+                        const resolvedWh = resolveWarehouseForCart(currentVariant, quantity);
                         addItems([
                           {
                             productId: apiProduct.id,
@@ -973,10 +1022,10 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                             currencySymbol: "$",
                             selectedAttributes: selectedOptions,
                             priceUnavailable: true,
-                            warehouseId: selectedWarehouse?.id,
-                            warehouseName: selectedWarehouse?.name,
+                            warehouseId: resolvedWh.finalWarehouseId,
+                            warehouseName: resolvedWh.finalWarehouseName,
                             estimatedDeliveryDays: selectedWarehouse?.estimatedDeliveryDays,
-                            isLocalWarehouse: selectedWarehouse?.isLocal,
+                            isLocalWarehouse: resolvedWh.finalIsLocal,
                           },
                         ]);
                         openCart();
@@ -1220,6 +1269,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                   if (drafts.length > 0) {
                     handleAddToQuote();
                   } else if (currentVariant) {
+                    const resolvedWh = resolveWarehouseForCart(currentVariant, quantity);
                     addItems([
                       {
                         productId: apiProduct.id,
@@ -1233,6 +1283,10 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                         currencyCode: selectedCurrency,
                         currencySymbol: "$",
                         selectedAttributes: currentVariant.attributeCombination,
+                        warehouseId: resolvedWh.finalWarehouseId,
+                        warehouseName: resolvedWh.finalWarehouseName,
+                        estimatedDeliveryDays: selectedWarehouse?.estimatedDeliveryDays,
+                        isLocalWarehouse: resolvedWh.finalIsLocal,
                       },
                     ]);
                     open();
