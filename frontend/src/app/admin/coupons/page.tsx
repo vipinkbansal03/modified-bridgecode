@@ -350,7 +350,7 @@ export default function CouponsPage() {
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-start gap-2">
               <RefreshButton onRefresh={refetch} isRefreshing={isFetching} />
               <button
                 type="button"

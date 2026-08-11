@@ -1,13 +1,17 @@
-"use client";
-
+import { useState, useEffect } from "react";
 import { Languages } from "lucide-react";
-import { AdminInput, AdminSelect, AdminTextarea, useToast, toastMessages } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminTextarea, AdminRichTextEditor, useToast, toastMessages } from "@/components/admin/AdminComponents";
 import { cn } from "@/utils/cn";
 
 export type AdminLanguage = { id: string; name: string; code: string; isDefault?: boolean };
 
 export function filterTranslationLanguages(languages: AdminLanguage[]) {
   return languages.filter((lang) => !lang.isDefault);
+}
+
+function stripHtml(html?: string | null): string {
+  if (!html) return "";
+  return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").trim();
 }
 
 type EditorTab = "content" | "translations";
@@ -72,7 +76,7 @@ export function TranslationEditorBanner({ language }: { language: AdminLanguage 
     <div className="mb-5 rounded-xl border border-[#E6E6E6] bg-[#FFFBFB] px-4 py-3">
       <div className="flex items-center gap-2 text-[13px] text-[#6B6B6B]">
         <Languages size={15} className="text-[#E31E24]" />
-        Editing <span className="font-semibold text-[#1A1A1A]">{language.name} ({language.code.toUpperCase()})</span> — click outside a field to save.
+        Editing <span className="font-semibold text-[#1A1A1A]">{language.name} ({language.code.toUpperCase()})</span> — click outside a field or save button to save.
       </div>
     </div>
   );
@@ -92,13 +96,14 @@ export function TranslationBlurInput({
   disabled?: boolean;
 }) {
   const { showToast } = useToast();
+  const cleanEnglish = stripHtml(englishReference);
 
   return (
     <div className="space-y-1">
       <AdminInput
         label={label}
         defaultValue={defaultValue}
-        placeholder={englishReference ?? ""}
+        placeholder={cleanEnglish}
         disabled={disabled}
         onBlur={async (e) => {
           const value = e.currentTarget.value.trim();
@@ -110,9 +115,9 @@ export function TranslationBlurInput({
           await onSave(value);
         }}
       />
-      {englishReference && (
+      {cleanEnglish && (
         <p className="text-[11.5px] text-[#9A9A9A]">
-          English: <span className="text-[#6B6B6B]">{englishReference}</span>
+          English: <span className="text-[#6B6B6B]">{cleanEnglish}</span>
         </p>
       )}
     </div>
@@ -135,6 +140,7 @@ export function TranslationBlurField({
   disabled?: boolean;
 }) {
   const { showToast } = useToast();
+  const cleanEnglish = stripHtml(englishReference);
 
   return (
     <div className="space-y-1">
@@ -142,7 +148,7 @@ export function TranslationBlurField({
         label={label}
         rows={rows}
         defaultValue={defaultValue}
-        placeholder={englishReference ?? ""}
+        placeholder={cleanEnglish}
         disabled={disabled}
         onBlur={async (e) => {
           const value = e.currentTarget.value.trim();
@@ -154,9 +160,75 @@ export function TranslationBlurField({
           await onSave(value);
         }}
       />
-      {englishReference && (
-        <p className="text-[11.5px] text-[#9A9A9A]">
-          English: <span className="text-[#6B6B6B]">{englishReference}</span>
+      {cleanEnglish && (
+        <p className="text-[11.5px] text-[#9A9A9A] line-clamp-2">
+          English: <span className="text-[#6B6B6B]">{cleanEnglish}</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function TranslationRichTextField({
+  label,
+  defaultValue,
+  englishReference,
+  onSave,
+  disabled = false,
+}: {
+  label: string;
+  defaultValue: string;
+  englishReference?: string | null;
+  onSave: (value: string) => Promise<void>;
+  disabled?: boolean;
+}) {
+  const { showToast } = useToast();
+  const [value, setValue] = useState(defaultValue || "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setValue(defaultValue || "");
+  }, [defaultValue]);
+
+  const cleanEnglish = stripHtml(englishReference);
+
+  const handleSave = async () => {
+    const trimmed = value.trim();
+    if (trimmed === (defaultValue || "").trim()) {
+      showToast(toastMessages.noChanges, "info");
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(trimmed);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2 rounded-xl border border-[#E6E6E6] bg-white p-4">
+      <div className="flex items-center justify-between gap-4">
+        <label className="text-[13.5px] font-semibold text-[#1A1A1A]">{label}</label>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={disabled || saving}
+          className="rounded-md bg-[#E31E24] px-3.5 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save Translation"}
+        </button>
+      </div>
+      <AdminRichTextEditor
+        label=""
+        value={value}
+        onChange={setValue}
+        placeholder="Enter translated description..."
+        className="min-h-[220px]"
+      />
+      {cleanEnglish && (
+        <p className="text-[11.5px] text-[#9A9A9A] line-clamp-3">
+          English Reference: <span className="text-[#4B5563]">{cleanEnglish}</span>
         </p>
       )}
     </div>

@@ -1,12 +1,12 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Edit2, Eye, Plus, RotateCcw, Save, Trash2, Upload, X } from "lucide-react";
+import { Edit2, Eye, FileEdit, FileText, Globe, LayoutList, Plus, RotateCcw, Save, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, AdminTextarea, ConfirmModal, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminTextarea, ConfirmModal, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import {
   useAdminCmsPage,
   useAdminCmsPages,
@@ -897,6 +897,14 @@ function CmsPagesPageContent() {
 
   const { data: pagesData, isLoading: isPagesLoading, refetch: refetchPages } = useAdminCmsPages({ page: 1 });
   const pages: CmsPageRow[] = pagesData?.data ?? [];
+
+  const pageStats = useMemo(() => {
+    const total = pages.length;
+    const published = pages.filter((p) => p.status === "PUBLISHED" || p.status === "ACTIVE").length;
+    const draft = pages.filter((p) => p.status !== "PUBLISHED" && p.status !== "ACTIVE").length;
+    const totalSections = pages.reduce((acc, p) => acc + (p._count?.sections ?? 0), 0);
+    return { total, published, draft, totalSections };
+  }, [pages]);
   const selectedPageId = searchParams.get("pageId") || pages[0]?.id || "";
 
   const { data: pageData, isLoading: isPageLoading, refetch: refetchPage } = useAdminCmsPage(selectedPageId);
@@ -1079,6 +1087,41 @@ function CmsPagesPageContent() {
 
   return (
     <AdminLayout title="CMS Pages" breadcrumb={[{ label: "Content" }, { label: "Pages" }]}>
+      {/* StatCards Row */}
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Total Pages"
+          value={pageStats.total}
+          subtitle="Site content & landing pages"
+          icon={<FileText size={18} />}
+          isLoading={isPagesLoading}
+        />
+        <StatCard
+          title="Published Pages"
+          value={pageStats.published}
+          subtitle="Live on storefront"
+          icon={<Globe size={18} />}
+          color="bg-green-600"
+          isLoading={isPagesLoading}
+        />
+        <StatCard
+          title="Draft Pages"
+          value={pageStats.draft}
+          subtitle="Unpublished or in draft"
+          icon={<FileEdit size={18} />}
+          color="bg-amber-600"
+          isLoading={isPagesLoading}
+        />
+        <StatCard
+          title="Content Sections"
+          value={pageStats.totalSections}
+          subtitle="Configured CMS layout blocks"
+          icon={<LayoutList size={18} />}
+          color="bg-[#0F6CBD]"
+          isLoading={isPagesLoading}
+        />
+      </div>
+
       <div className="mb-5 flex items-center justify-between">
         <p className="text-sm text-gray-500">{pages.length} page{pages.length !== 1 ? "s" : ""}</p>
         {canCreate && (

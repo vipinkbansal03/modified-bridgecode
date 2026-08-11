@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Pencil, Trash2, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, AlertTriangle, CheckCircle2, Sliders, Tag, Zap } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   AdminInput,
   AdminSelect,
   ConfirmModal,
+  StatCard,
   StatusBadge,
   useToast,
 } from "@/components/admin/AdminComponents";
@@ -58,6 +59,14 @@ export default function AttributesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const { data: editingAttribute, isLoading: editLoading } = useAdminAttribute(editingId ?? "");
+
+  const attributeStats = useMemo(() => {
+    const total = attributes.length;
+    const active = attributes.filter((a: ApiAttribute) => a.status === "ACTIVE").length;
+    const grid = attributes.filter((a: ApiAttribute) => a.role === "X_GRID" || a.role === "Y_GRID").length;
+    const totalValues = attributes.reduce((acc: number, a: ApiAttribute) => acc + (a.values?.length ?? 0), 0);
+    return { total, active, grid, totalValues };
+  }, [attributes]);
 
   const sorted = useMemo(
     () => [...attributes].sort((a: ApiAttribute, b: ApiAttribute) => a.sortOrder - b.sortOrder),
@@ -177,6 +186,41 @@ export default function AttributesPage() {
 
   return (
     <AdminLayout title="Attributes & Options" breadcrumb={[{ label: "Attributes" }]}>
+      {/* StatCards Row */}
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Total Attributes"
+          value={attributeStats.total}
+          subtitle="Product specifications & options"
+          icon={<Sliders size={18} />}
+          isLoading={isLoading}
+        />
+        <StatCard
+          title="Active Attributes"
+          value={attributeStats.active}
+          subtitle="Enabled for products"
+          icon={<CheckCircle2 size={18} />}
+          color="bg-green-600"
+          isLoading={isLoading}
+        />
+        <StatCard
+          title="Grid Attributes"
+          value={attributeStats.grid}
+          subtitle="Generates variant matrices"
+          icon={<Zap size={18} />}
+          color="bg-indigo-600"
+          isLoading={isLoading}
+        />
+        <StatCard
+          title="Attribute Values"
+          value={attributeStats.totalValues}
+          subtitle="Configured value choices"
+          icon={<Tag size={18} />}
+          color="bg-blue-600"
+          isLoading={isLoading}
+        />
+      </div>
+
       <div className="mb-5 flex items-center justify-between gap-3">
         <p className="text-[13.5px] text-[#6B6B6B]">
           Manage global attribute definitions. Drag rows to reorder.

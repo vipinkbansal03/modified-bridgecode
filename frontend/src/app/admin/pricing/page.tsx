@@ -299,6 +299,24 @@ export default function PricingPage() {
     sortDir,
     ids: selectedIds.length ? selectedIds : undefined,
   });
+
+  const dashboard = useMemo(() => {
+    const raw = (dashboardData ?? pricingResponse?.counts) as Record<string, any> | undefined;
+    if (!raw) return undefined;
+    return {
+      totalRules: raw.totalRules ?? 0,
+      activeRules: raw.activeRules ?? 0,
+      inactiveRules: raw.inactiveRules ?? 0,
+      countryPricingRules: raw.countryPricingRules ?? 0,
+      tierPricingRules: raw.tierPricingRules ?? 0,
+      moqPricingRules: raw.moqPricingRules ?? 0,
+      variantPricingRules: raw.variantPricingRules ?? 0,
+      customerSpecificPricing: raw.customerSpecificPricing ?? 0,
+      recentlyUpdatedRules: raw.recentlyUpdatedRules ?? [],
+    };
+  }, [dashboardData, pricingResponse?.counts]);
+
+  const isStatsLoading = dashboardLoading && pricingLoading && !dashboard;
   const { data: countries = [] } = useAdminCountries();
   const { data: tiers = [] } = useAdminTiers();
   const { data: customerRoles = [] } = useAdminCustomerRoles();
@@ -448,7 +466,6 @@ export default function PricingPage() {
   const customerRoleRows = customerRoles as CustomerRoleOption[];
   const ruleRows = (pricingResponse?.data ?? []) as PricingRuleRow[];
   const pagination = pricingResponse?.pagination ?? { page, limit, total: 0, totalPages: 1 };
-  const dashboard = dashboardData?.data as PricingDashboard | undefined;
   const selectedRuleType = selectedIds.length
     ? ruleRows.find((row) => selectedIds.includes(row.id))?.ruleType ?? null
     : null;
@@ -731,18 +748,18 @@ export default function PricingPage() {
   return (
     <AdminLayout title="Pricing" breadcrumb={[{ label: "Pricing" }]}>
       <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Total Pricing Rules" value={dashboard?.totalRules ?? 0} subtitle="All active pricing records" icon={<SquareCheckBig size={18} />} isLoading={dashboardLoading} />
-        <StatCard title="Active Rules" value={dashboard?.activeRules ?? 0} subtitle="Ready to resolve in checkout" icon={<CheckCircle2 size={18} />} color="bg-emerald-500" isLoading={dashboardLoading} />
-        <StatCard title="Inactive Rules" value={dashboard?.inactiveRules ?? 0} subtitle="Disabled or archived" icon={<Trash2 size={18} />} color="bg-slate-500" isLoading={dashboardLoading} />
-        <StatCard title="Recently Updated" value={dashboard?.recentlyUpdatedRules?.length ?? 0} subtitle="Latest touched rules" icon={<RefreshCw size={18} />} color="bg-[#E31E24]" isLoading={dashboardLoading} />
+        <StatCard title="Total Pricing Rules" value={dashboard?.totalRules ?? 0} subtitle="All active pricing records" icon={<SquareCheckBig size={18} />} isLoading={isStatsLoading} />
+        <StatCard title="Active Rules" value={dashboard?.activeRules ?? 0} subtitle="Ready to resolve in checkout" icon={<CheckCircle2 size={18} />} color="bg-emerald-500" isLoading={isStatsLoading} />
+        <StatCard title="Inactive Rules" value={dashboard?.inactiveRules ?? 0} subtitle="Disabled or archived" icon={<Trash2 size={18} />} color="bg-slate-500" isLoading={isStatsLoading} />
+        <StatCard title="Recently Updated" value={dashboard?.recentlyUpdatedRules?.length ?? 0} subtitle="Latest touched rules" icon={<RefreshCw size={18} />} color="bg-[#E31E24]" isLoading={isStatsLoading} />
       </div>
 
       <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <StatCard title="Country Pricing" value={dashboard?.countryPricingRules ?? 0} icon={<FolderSymlink size={18} />} isLoading={dashboardLoading} />
-        <StatCard title="Tier Pricing" value={dashboard?.tierPricingRules ?? 0} icon={<Filter size={18} />} color="bg-[#0F766E]" isLoading={dashboardLoading} />
-        <StatCard title="MOQ Pricing" value={dashboard?.moqPricingRules ?? 0} icon={<SlidersHorizontal size={18} />} color="bg-[#2563EB]" isLoading={dashboardLoading} />
-        <StatCard title="Variant Pricing" value={dashboard?.variantPricingRules ?? 0} icon={<Eye size={18} />} color="bg-[#7C3AED]" isLoading={dashboardLoading} />
-        <StatCard title="Customer Specific" value={dashboard?.customerSpecificPricing ?? 0} icon={<CheckCircle2 size={18} />} color="bg-[#0EA5E9]" isLoading={dashboardLoading} />
+        <StatCard title="Country Pricing" value={dashboard?.countryPricingRules ?? 0} icon={<FolderSymlink size={18} />} isLoading={isStatsLoading} />
+        <StatCard title="Tier Pricing" value={dashboard?.tierPricingRules ?? 0} icon={<Filter size={18} />} color="bg-[#0F766E]" isLoading={isStatsLoading} />
+        <StatCard title="MOQ Pricing" value={dashboard?.moqPricingRules ?? 0} icon={<SlidersHorizontal size={18} />} color="bg-[#2563EB]" isLoading={isStatsLoading} />
+        <StatCard title="Variant Pricing" value={dashboard?.variantPricingRules ?? 0} icon={<Eye size={18} />} color="bg-[#7C3AED]" isLoading={isStatsLoading} />
+        <StatCard title="Customer Specific" value={dashboard?.customerSpecificPricing ?? 0} icon={<CheckCircle2 size={18} />} color="bg-[#0EA5E9]" isLoading={isStatsLoading} />
       </div>
 
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#E6E6E6] bg-white p-4">
@@ -1323,12 +1340,12 @@ export default function PricingPage() {
             <div className="rounded-xl border border-[#E6E6E6] bg-white p-4 shadow-sm">
               <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Recent Updates</h3>
               <div className="mt-3 space-y-2">
-                {dashboard.recentlyUpdatedRules.slice(0, 4).map((row) => (
+                {dashboard.recentlyUpdatedRules.slice(0, 4).map((row: PricingRuleRow) => (
                   <div key={row.id} className="rounded-lg border border-[#E6E6E6] px-3 py-2">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="truncate text-[13px] font-medium text-[#1A1A1A]">{row.ruleName}</div>
-                        <div className="text-[11.5px] text-[#9A9A9A]">{ruleTypeLabels[row.ruleType]} · {row.product.title}</div>
+                        <div className="text-[11.5px] text-[#9A9A9A]">{ruleTypeLabels[row.ruleType as Exclude<PricingRuleType, "ALL">]} · {row.product?.title}</div>
                       </div>
                       <StatusBadge status={row.status} />
                     </div>

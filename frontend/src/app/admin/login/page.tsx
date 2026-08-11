@@ -6,7 +6,7 @@ import { useFormik } from "formik";
 import * as Yup from "yup";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput } from "@/components/admin/AdminComponents";
-import { Eye, EyeOff, Lock } from "lucide-react";
+import { Eye, EyeOff, Lock, AlertTriangle } from "lucide-react";
 
 const schema = Yup.object({
   email: Yup.string().email("Invalid email").required("Email is required"),
@@ -19,6 +19,17 @@ function AdminLoginForm() {
   const { user, login, isLoading } = useAdminAuth();
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
+
+  const reasonParam = searchParams.get("reason");
+  const [expiredBanner, setExpiredBanner] = useState<string | null>(
+    reasonParam === "expired" ? "Your session has expired. Please log in again." : null
+  );
+
+  useEffect(() => {
+    if (reasonParam === "expired") {
+      setExpiredBanner("Your session has expired. Please log in again.");
+    }
+  }, [reasonParam]);
 
   const returnToParam = searchParams.get("returnTo");
   const targetRedirect = returnToParam && returnToParam.startsWith("/admin") ? returnToParam : "/admin/dashboard";
@@ -34,6 +45,7 @@ function AdminLoginForm() {
     validationSchema: schema,
     onSubmit: async (values, { setSubmitting }) => {
       setError("");
+      setExpiredBanner(null);
       try {
         await login(values.email, values.password);
         router.push(targetRedirect);
@@ -70,6 +82,13 @@ function AdminLoginForm() {
         </div>
 
         <form onSubmit={formik.handleSubmit} className="rounded-xl bg-white border border-[#E6E6E6] p-6 space-y-4 shadow-sm">
+          {expiredBanner && !error && (
+            <div className="flex items-center gap-2.5 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-[13px] font-medium text-amber-800 shadow-2xs">
+              <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+              <span>{expiredBanner}</span>
+            </div>
+          )}
+
           {error && (
             <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-[13.5px] text-red-700">
               {error}

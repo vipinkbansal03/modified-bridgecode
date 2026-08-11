@@ -18,7 +18,16 @@ export function AdminLayout({ children, title, breadcrumb }: AdminLayoutProps) {
   const router = useRouter();
 
   useEffect(() => {
-    if (isReady && !isLoading && !user) router.replace("/admin/login");
+    if (isReady && !isLoading && !user) {
+      if (typeof window !== "undefined") {
+        const currentPath = window.location.pathname + window.location.search;
+        const returnToParam =
+          currentPath !== "/admin/dashboard" && currentPath !== "/admin" && currentPath !== "/admin/login"
+            ? `&returnTo=${encodeURIComponent(currentPath)}`
+            : "";
+        router.replace(`/admin/login?reason=expired${returnToParam}`);
+      }
+    }
   }, [user, isLoading, isReady, router]);
 
   if (!isReady || isLoading) {

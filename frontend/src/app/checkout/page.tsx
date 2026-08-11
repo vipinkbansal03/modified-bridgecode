@@ -287,6 +287,12 @@ export default function CheckoutPage() {
   }, []);
 
   const initialCountryRef = useRef<string | null>(null);
+  // Tracks whether a real saved address has already initialised the form,
+  // so the selectedCountryCode effect does not overwrite it afterward.
+  const addressInitialisedRef = useRef(false);
+  const lastSyncedAddressIdRef = useRef<string | null>(null);
+  const [selectedSavedAddressId, setSelectedSavedAddressId] = useState<string>("");
+
   const [form, setForm] = useState({
     fullName: "",
     phone: "",
@@ -373,54 +379,114 @@ export default function CheckoutPage() {
     }
   }, [currentCustomer, isLoading, router]);
 
+  function applyLocationSelection(locationAddress: CustomerAddress) {
+    addressInitialisedRef.current = true;
+    lastSyncedAddressIdRef.current = locationAddress.id;
+    setSelectedSavedAddressId("");
+
+    const fallbackName = currentCustomer
+      ? `${currentCustomer.firstName || ""} ${currentCustomer.lastName || ""}`.trim()
+      : "";
+    const fallbackPhone = currentCustomer?.phone || "";
+
+    const targetCountryCode = locationAddress.country?.code
+      ? locationAddress.country.code.toUpperCase()
+      : selectedCountryCode
+        ? selectedCountryCode.toUpperCase()
+        : "IN";
+
+    setForm((current) => ({
+      ...current,
+      fullName: current.fullName.trim() || fallbackName,
+      phone: current.phone.trim() || fallbackPhone,
+      // Clear street lines to prevent hybrid addresses
+      addressLine1: "",
+      addressLine2: "",
+      city: locationAddress.city || "",
+      state: locationAddress.state || "",
+      postalCode: locationAddress.postalCode || "",
+      countryCode: targetCountryCode,
+    }));
+
+    if (locationAddress.country?.code) {
+      setSelectedCountryCode(locationAddress.country.code.toUpperCase());
+    }
+  }
+
+  useEffect(() => {
+    if (!sessionAddress) return;
+    if (lastSyncedAddressIdRef.current === sessionAddress.id) return;
+
+    if (sessionAddress.id.startsWith("geo-") || sessionAddress.id.startsWith("pin-")) {
+      applyLocationSelection(sessionAddress);
+    } else {
+      applySavedAddress(sessionAddress, false);
+    }
+  }, [sessionAddress]);
+
   useEffect(() => {
     if (currentCustomer) {
-      const defaultName = `${currentCustomer.firstName} ${currentCustomer.lastName}`.trim();
+      const defaultName = `${currentCustomer.firstName || ""} ${currentCustomer.lastName || ""}`.trim();
       const defaultPhone = currentCustomer.phone || "";
-      
-      Promise.resolve().then(() => {
-        setForm((current) => {
-          if (current.fullName && current.phone) return current;
-          return {
-            ...current,
-            fullName: current.fullName || defaultName,
-            phone: current.phone || defaultPhone,
-          };
-        });
-      });
+
       listCustomerAddresses()
         .then((saved) => {
           setAddresses(saved);
 
-          const activeCountryCode = selectedCountryCode
-            ? selectedCountryCode.toUpperCase()
-            : "IN";
-          const matchingCountryAddress = saved.find(
-            (addr) => addr.country?.code?.toUpperCase() === activeCountryCode,
-          );
-          const preselected =
-            sessionAddress ||
-            matchingCountryAddress ||
-            (saved.find((address) => address.isDefault) ?? saved[0]);
-          if (preselected) {
-            applySavedAddress(preselected, true);
+          if (sessionAddress) {
+            if (sessionAddress.id.startsWith("geo-") || sessionAddress.id.startsWith("pin-")) {
+              applyLocationSelection(sessionAddress);
+            } else {
+              applySavedAddress(sessionAddress, false);
+            }
+          } else {
+            const preselected =
+              saved.find((address) => address.isDefault) ?? saved[0];
+
+            if (preselected) {
+              addressInitialisedRef.current = true;
+              applySavedAddress(preselected, false);
+            } else {
+              // No saved addresses at all — fall back to customer profile.
+              setForm((current) => ({
+                ...current,
+                fullName: current.fullName || defaultName,
+                phone: current.phone || defaultPhone,
+              }));
+            }
           }
         })
         .catch(() => {
           setAddresses([]);
-          if (sessionAddress) applySavedAddress(sessionAddress, true);
+          if (sessionAddress) {
+            if (sessionAddress.id.startsWith("geo-") || sessionAddress.id.startsWith("pin-")) {
+              applyLocationSelection(sessionAddress);
+            } else {
+              applySavedAddress(sessionAddress, false);
+            }
+          } else {
+            // On API failure, fall back to customer profile only.
+            setForm((current) => ({
+              ...current,
+              fullName: current.fullName || defaultName,
+              phone: current.phone || defaultPhone,
+            }));
+          }
         });
-    } else if (sessionAddress) {
-      applySavedAddress(sessionAddress, true);
     }
-  }, [currentCustomer, sessionAddress]);
+  }, [currentCustomer]);
 
   useEffect(() => {
-    if (selectedCountryCode) {
+    // Only update countryCode from the global currency/country context if
+    // a saved address has NOT already initialised the form. Once a saved
+    // address is applied it owns the countryCode; the navbar country switcher
+    // should not silently overwrite it.
+    if (selectedCountryCode && !addressInitialisedRef.current) {
       setForm((current) => ({ ...current, countryCode: selectedCountryCode }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCountryCode]);
+
 
   useEffect(() => {
     if (currentCustomer) {
@@ -888,15 +954,34 @@ export default function CheckoutPage() {
         ? address.country.code.toUpperCase()
         : activeCountry;
 
+    const fallbackName = currentCustomer
+      ? `${currentCustomer.firstName || ""} ${currentCustomer.lastName || ""}`.trim()
+      : "";
+    const fallbackPhone = currentCustomer?.phone || "";
+
+    // Mark as initialised so the selectedCountryCode effect stops overwriting.
+    addressInitialisedRef.current = true;
+    lastSyncedAddressIdRef.current = address.id;
+
+    if (!address.id.startsWith("geo-") && !address.id.startsWith("pin-")) {
+      setSelectedSavedAddressId(address.id);
+    } else {
+      setSelectedSavedAddressId("");
+    }
+
     setForm((current) => ({
       ...current,
-      fullName: address.fullName,
-      phone: address.phone,
-      addressLine1: address.addressLine1,
+      fullName: (address.fullName && address.fullName.trim())
+        ? address.fullName.trim()
+        : (current.fullName.trim() || fallbackName),
+      phone: (address.phone && address.phone.trim())
+        ? address.phone.trim()
+        : (current.phone.trim() || fallbackPhone),
+      addressLine1: address.addressLine1 || "",
       addressLine2: address.addressLine2 ?? "",
-      city: address.city,
-      state: address.state,
-      postalCode: address.postalCode,
+      city: address.city || "",
+      state: address.state || "",
+      postalCode: address.postalCode || "",
       countryCode: targetCountryCode,
     }));
 
@@ -907,6 +992,7 @@ export default function CheckoutPage() {
       setSelectedAddress(address as any);
     }
   }
+
 
   if (isLoading || (!currentCustomer && !order)) {
     return (
@@ -1062,14 +1148,21 @@ export default function CheckoutPage() {
                     </label>
                     <select
                       id="savedAddress"
+                      value={selectedSavedAddressId}
                       onChange={(event) => {
+                        const val = event.target.value;
+                        if (!val) {
+                          setSelectedSavedAddressId("");
+                          return;
+                        }
                         const address = addresses.find(
-                          (entry) => entry.id === event.target.value,
+                          (entry) => entry.id === val,
                         );
                         if (address) applySavedAddress(address, false);
                       }}
                       className="w-full rounded-md border border-line bg-white px-4 py-3 text-[14.5px] text-ink outline-none transition-colors focus:border-steel-2"
                     >
+                      <option value="">-- Custom / Enter New Address --</option>
                       {addresses.map((address) => (
                         <option key={address.id} value={address.id}>
                           {address.label ??
@@ -1110,12 +1203,13 @@ export default function CheckoutPage() {
                     className="sm:col-span-2"
                     label="Address line 1"
                     value={form.addressLine1}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      setSelectedSavedAddressId("");
                       setForm((current) => ({
                         ...current,
                         addressLine1: event.target.value,
-                      }))
-                    }
+                      }));
+                    }}
                   />
                   <Input
                     className="sm:col-span-2"
@@ -1804,20 +1898,28 @@ export default function CheckoutPage() {
                   />
                 </div>
               ) : (
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="lg"
-                  fullWidth
-                  className="mt-5"
-                  disabled={isSubmitting || !canPlaceOrder}
-                >
-                  {isSubmitting
-                    ? "Processing..."
-                    : selectedPaymentCode === "RAZORPAY"
-                      ? "Proceed to Pay with Razorpay"
-                      : "Place Order"}
-                </Button>
+                <div className="mt-5 space-y-2">
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="lg"
+                    fullWidth
+                    disabled={isSubmitting || !canPlaceOrder}
+                  >
+                    {isSubmitting
+                      ? "Processing..."
+                      : selectedPaymentCode === "RAZORPAY"
+                        ? "Proceed to Pay with Razorpay"
+                        : "Place Order"}
+                  </Button>
+                  <div className="min-h-[20px] flex items-center justify-center text-center">
+                    {!canSubmit && !isSubmitting && (
+                      <p className="text-[12px] text-[#6B7280] font-medium transition-opacity duration-200">
+                        Please complete all required delivery details to continue.
+                      </p>
+                    )}
+                  </div>
+                </div>
               )}
             </aside>
           </form>

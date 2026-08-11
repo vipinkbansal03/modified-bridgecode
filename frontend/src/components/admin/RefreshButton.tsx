@@ -12,7 +12,7 @@ interface RefreshButtonProps {
 
 export function RefreshButton({ onRefresh, isRefreshing, className }: RefreshButtonProps) {
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date());
-  const [timeAgo, setTimeAgo] = useState("Updated just now");
+  const [timeAgo, setTimeAgo] = useState("Just now");
   const [prevRefreshing, setPrevRefreshing] = useState(isRefreshing);
 
   // Update lastRefreshedAt when isRefreshing transitions from true to false
@@ -31,15 +31,15 @@ export function RefreshButton({ onRefresh, isRefreshing, className }: RefreshBut
       const diffMins = Math.floor(diffSecs / 60);
 
       if (diffSecs < 60) {
-        setTimeAgo("Updated just now");
+        setTimeAgo("Just now");
       } else if (diffMins <= 5) {
-        setTimeAgo(`Updated ${diffMins} min${diffMins > 1 ? "s" : ""} ago`);
+        setTimeAgo(`${diffMins}m ago`);
       } else {
         const timeStr = lastRefreshedAt.toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
         });
-        setTimeAgo(`Last refreshed: ${timeStr}`);
+        setTimeAgo(timeStr);
       }
     };
 
@@ -49,17 +49,25 @@ export function RefreshButton({ onRefresh, isRefreshing, className }: RefreshBut
   }, [lastRefreshedAt]);
 
   return (
-    <div className={cn("flex items-center gap-2.5 text-[13px] text-[#6B6B6B]", className)}>
+    <div className={cn("inline-flex flex-col items-center justify-center gap-0.5 min-w-[54px]", className)}>
       <button
         type="button"
         onClick={onRefresh}
         disabled={isRefreshing}
-        title="Refresh List"
-        className="flex h-9 w-9 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#1A1A1A] hover:bg-[#F2F2F2] disabled:cursor-not-allowed disabled:opacity-50 transition-colors outline-none"
+        title={`Refresh List (Last updated: ${timeAgo})`}
+        className="flex h-9 w-9 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#1A1A1A] hover:bg-[#F2F2F2] hover:border-[#D1D1D1] disabled:cursor-not-allowed disabled:opacity-50 transition-all outline-none shadow-xs"
       >
-        <RotateCw size={14} className={cn(isRefreshing && "animate-spin text-[#E31E24]")} />
+        <RotateCw size={14} className={cn("transition-transform", isRefreshing && "animate-spin text-[#E31E24]")} />
       </button>
-      <span className="select-none font-medium leading-none">{timeAgo}</span>
+      <span
+        className={cn(
+          "select-none text-[10px] font-medium leading-tight whitespace-nowrap transition-colors",
+          isRefreshing ? "text-[#E31E24] font-semibold animate-pulse" : "text-[#059669]"
+        )}
+      >
+        {isRefreshing ? "Updating…" : timeAgo}
+      </span>
     </div>
   );
 }
+

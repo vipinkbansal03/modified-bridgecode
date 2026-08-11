@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { CheckCircle2, ShieldCheck, Box, FileText, Layers, Stethoscope, Info, Star, MessageSquareCheck, UserCheck } from "lucide-react";
 import type { ProductDetail } from "@/types/product.types";
 import type { ApiProductDetail } from "@/types/api.types";
@@ -30,6 +30,23 @@ function cleanPublicHtml(html: string) {
     .replace(/Remove/gi, "");
 }
 
+function isNonEmptyText(text?: string | null): boolean {
+  if (!text) return false;
+  return text.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, "").trim().length > 0;
+}
+
+function formatRichText(content: string | null | undefined): string {
+  if (!content) return "";
+  const cleaned = cleanPublicHtml(content);
+  if (!cleaned.includes("<p>") && !cleaned.includes("<div") && cleaned.includes("\n")) {
+    return cleaned
+      .split(/\n\s*\n/)
+      .map((para) => `<p>${para.replace(/\n/g, "<br/>")}</p>`)
+      .join("");
+  }
+  return cleaned;
+}
+
 export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
   const [activeTab, setActiveTab] = useState<
     "features" | "description" | "packaging" | "specs" | "usage" | "additional" | "warranty" | "reviews"
@@ -52,6 +69,40 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
 
   const highlightsList = useMemoHighlights(product, apiProduct);
   const specsMap = useMemoSpecs(product, apiProduct);
+
+  const validHighlights = useMemo(
+    () => highlightsList.filter((item: { title?: string; description?: string; image?: string }) => isNonEmptyText(item.title) || isNonEmptyText(item.description) || Boolean(item.image)),
+    [highlightsList]
+  );
+
+  const validPrimaryFeatures = useMemo(
+    () => (product.primaryFeatures || []).filter((item: { title?: string; description?: string }) => isNonEmptyText(item.title) || isNonEmptyText(item.description)),
+    [product.primaryFeatures]
+  );
+
+  const displayedPackages = useMemo(() => {
+    const dbPkgs = apiProduct?.packages || [];
+    const defaultPkgs = [
+      { id: "default-pack-standard", title: "Pack Standard", description: "Sealed Medical Packaging" },
+      { id: "default-quality-control", title: "Quality Control", description: "ISO 13485 Certified" },
+      { id: "default-storage", title: "Storage", description: "Clean, Dry & Dust-Free" },
+    ];
+    const activeDefaults = defaultPkgs.filter(
+      (def) => !dbPkgs.some((pkg) => pkg.title.toLowerCase().trim() === def.title.toLowerCase().trim())
+    );
+    return [...activeDefaults, ...dbPkgs];
+  }, [apiProduct?.packages]);
+
+  const customInfoList = useMemo(() => {
+    const defaultInfo = [
+      { label: "Manufacturer", value: "Modern Orthodontics" },
+      { label: "Country of Origin", value: "India" },
+      { label: "Regulatory Compliance", value: "ISO 13485 & CE Certified" },
+      { label: "Shelf Life", value: "5 Years from manufacturing date" },
+    ];
+    const raw = (apiProduct?.additionalInfo || product.additionalInfo) as Array<{ label: string; value: string }> | undefined;
+    return Array.isArray(raw) && raw.length > 0 ? raw : defaultInfo;
+  }, [apiProduct?.additionalInfo, product.additionalInfo]);
 
   useEffect(() => {
     async function fetchReviews() {
@@ -86,7 +137,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
     { id: "specs", label: "Key Specifications", icon: Layers },
     { id: "usage", label: "Direction To Use", icon: Stethoscope },
     { id: "additional", label: "Additional Info", icon: Info },
-    { id: "warranty", label: "Service & Warranty", icon: ShieldCheck },
+    // { id: "warranty", label: "Service & Warranty", icon: ShieldCheck },
     { id: "reviews", label: `Reviews & Feedback (${reviewsData.totalRatings})`, icon: Star },
   ] as const;
 
@@ -124,9 +175,9 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
         {activeTab === "features" && (
           <div className="space-y-4">
             <h3 className="text-[16px] font-bold text-[#1A1A1A]">Key Features & Advantages</h3>
-            {highlightsList.length > 0 ? (
+            {validHighlights.length > 0 ? (
               <div className="columns-1 sm:columns-2 gap-3 space-y-3">
-                {highlightsList.map((item, idx) => (
+                {validHighlights.map((item, idx) => (
                   <div key={idx} className="break-inside-avoid flex items-start gap-3 rounded-lg border border-[#F3F4F6] bg-[#F9FAFB] p-3.5">
                     {item.image ? (
                       <img src={item.image} alt={item.title} className="h-16 w-16 md:h-20 md:w-20 rounded-lg border border-[#E5E7EB] bg-white p-1 object-contain shrink-0 shadow-2xs" />
@@ -145,19 +196,21 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                   </div>
                 ))}
               </div>
+            ) : apiProduct?.shortDescription ? (
+              <div className="rounded-lg border border-[#F3F4F6] bg-[#F9FAFB] p-4 text-[13.5px] text-[#374151] leading-relaxed">
+                <p className="font-semibold text-[#1A1A1A] mb-1">{product.title}</p>
+                <div dangerouslySetInnerHTML={{ __html: cleanPublicHtml(apiProduct.shortDescription) }} />
+              </div>
             ) : (
               <ul className="space-y-2 text-[13.5px] text-[#374151]">
                 <li className="flex items-center gap-2">
-                  <CheckCircle2 size={15} className="text-[#E31E24]" /> High-precision medical grade stainless steel construction.
+                  <CheckCircle2 size={15} className="text-[#E31E24]" /> High-precision medical grade orthodontic material construction.
                 </li>
                 <li className="flex items-center gap-2">
-                  <CheckCircle2 size={15} className="text-[#E31E24]" /> Anatomically contoured 80-mesh base for superior bond strength.
+                  <CheckCircle2 size={15} className="text-[#E31E24]" /> Engineered for high clinical accuracy and patient comfort.
                 </li>
                 <li className="flex items-center gap-2">
-                  <CheckCircle2 size={15} className="text-[#E31E24]" /> Ultra-low profile design to minimize occlusal interference.
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle2 size={15} className="text-[#E31E24]" /> Laser-etched quadrant identification markings for quick placement.
+                  <CheckCircle2 size={15} className="text-[#E31E24]" /> Rigorous ISO 13485 quality control and performance standards.
                 </li>
               </ul>
             )}
@@ -169,9 +222,9 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
           <div className="space-y-3 max-w-4xl">
             <h3 className="text-[16px] font-bold text-[#1A1A1A]">Clinical Product Description</h3>
             <div
-              className="text-[14px] leading-relaxed text-[#4B5563] [&_img]:my-2.5 [&_img]:inline-block [&_img]:max-h-56 [&_img]:max-w-full [&_img]:w-auto [&_img]:rounded-lg [&_img]:border [&_img]:border-[#E5E7EB] [&_img]:bg-white [&_img]:p-1 [&_img]:shadow-xs [&_img]:align-middle"
+              className="text-[14px] leading-relaxed text-[#4B5563] [&_p]:mb-3.5 [&_p:last-child]:mb-0 [&_img]:my-2.5 [&_img]:inline-block [&_img]:max-h-56 [&_img]:max-w-full [&_img]:w-auto [&_img]:rounded-lg [&_img]:border [&_img]:border-[#E5E7EB] [&_img]:bg-white [&_img]:p-1 [&_img]:shadow-xs [&_img]:align-middle"
               dangerouslySetInnerHTML={{
-                __html: cleanPublicHtml(apiProduct?.description || product.information || "Detailed orthodontic system engineered for high clinical accuracy and patient comfort during active treatment.")
+                __html: formatRichText(apiProduct?.description || product.information || "Detailed orthodontic system engineered for high clinical accuracy and patient comfort during active treatment.")
               }}
             />
           </div>
@@ -181,14 +234,14 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
         {activeTab === "packaging" && (
           <div className="space-y-4">
             <h3 className="text-[16px] font-bold text-[#1A1A1A]">Commercial Packages & Packaging Details</h3>
-            {apiProduct?.packages && apiProduct.packages.length > 0 ? (
+            {displayedPackages.length > 0 ? (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {apiProduct.packages.map((pkg) => (
+                {displayedPackages.map((pkg) => (
                   <div key={pkg.id} className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-2xs flex items-start gap-3">
-                    {pkg.image ? (
-                      <img src={pkg.image} alt={pkg.title} className="h-12 w-12 rounded border border-[#EEEEEE] object-contain p-1 shrink-0" />
+                    {"image" in pkg && pkg.image ? (
+                      <img src={pkg.image} alt={pkg.title} className="h-12 w-12 rounded-lg object-cover shrink-0" />
                     ) : (
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#E31E24]/10 text-[#E31E24]">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#E31E24]/10 text-[#E31E24]">
                         <Box size={20} />
                       </div>
                     )}
@@ -204,20 +257,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                 ))}
               </div>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-lg border border-[#E5E7EB] bg-white p-3.5">
-                  <span className="text-[11px] font-semibold text-[#9CA3AF] uppercase">Pack Size</span>
-                  <p className="mt-0.5 text-[14px] font-bold text-[#1A1A1A]">10 Units / Pack or Loose Singles</p>
-                </div>
-                <div className="rounded-lg border border-[#E5E7EB] bg-white p-3.5">
-                  <span className="text-[11px] font-semibold text-[#9CA3AF] uppercase">Sterilization</span>
-                  <p className="mt-0.5 text-[14px] font-bold text-[#1A1A1A]">Autoclavable Sealed Tray</p>
-                </div>
-                <div className="rounded-lg border border-[#E5E7EB] bg-white p-3.5">
-                  <span className="text-[11px] font-semibold text-[#9CA3AF] uppercase">Storage</span>
-                  <p className="mt-0.5 text-[14px] font-bold text-[#1A1A1A]">Clean, Dry & Dust-Free</p>
-                </div>
-              </div>
+              <p className="text-[13.5px] text-[#6B7280]">No packaging details available.</p>
             )}
           </div>
         )}
@@ -225,7 +265,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
         {/* 4. KEY SPECIFICATIONS TAB */}
         {activeTab === "specs" && (
           <div className="space-y-3">
-            <h3 className="text-[16px] font-bold text-[#1A1A1A]">Technical Specifications</h3>
+            <h3 className="text-[16px] font-bold text-[#1A1A1A]">Key Specifications</h3>
             <div className="overflow-hidden rounded-lg border border-[#E5E7EB]">
               <table className="w-full text-left text-[13px]">
                 <tbody className="divide-y divide-[#E5E7EB]">
@@ -245,16 +285,21 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
         {activeTab === "usage" && (
           <div className="space-y-3 max-w-4xl">
             <h3 className="text-[16px] font-bold text-[#1A1A1A]">Direction To Use & Clinical Guidelines</h3>
-            {product.primaryFeatures && product.primaryFeatures.length > 0 ? (
+            {validPrimaryFeatures.length > 0 ? (
               <ol className="space-y-2.5 text-[13.5px] text-[#374151]">
-                {product.primaryFeatures.map((item, idx) => (
+                {validPrimaryFeatures.map((item, idx) => (
                   <li key={idx} className="flex items-start gap-2.5">
                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#E31E24] text-[11px] font-bold text-white">
                       {idx + 1}
                     </span>
                     <div>
                       <strong className="font-bold text-[#1A1A1A]">{item.title}</strong>
-                      {item.description && <p className="mt-0.5 text-[13px] text-[#6B7280]">{item.description}</p>}
+                      {item.description && (
+                        <div
+                          className="mt-0.5 text-[13px] leading-relaxed text-[#6B7280] [&_p]:m-0 [&_p]:my-0.5 [&_img]:inline-block [&_img]:my-2 [&_img]:max-h-44 [&_img]:max-w-full [&_img]:rounded-lg"
+                          dangerouslySetInnerHTML={{ __html: cleanPublicHtml(item.description) }}
+                        />
+                      )}
                     </div>
                   </li>
                 ))}
@@ -263,15 +308,15 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
               <ol className="space-y-2.5 text-[13.5px] text-[#374151]">
                 <li className="flex items-start gap-2.5">
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#E31E24] text-[11px] font-bold text-white">1</span>
-                  <span>Prepare tooth surface thoroughly by etching and applying bonding primer according to standard orthodontic protocol.</span>
+                  <span>Inspect product packaging and verify specification suitability before clinical use.</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#E31E24] text-[11px] font-bold text-white">2</span>
-                  <span>Apply adhesive resin to the 80-mesh contoured base and position using quadrant laser marks.</span>
+                  <span>Prepare treatment site following standard clinical orthodontic protocols.</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#E31E24] text-[11px] font-bold text-white">3</span>
-                  <span>Light cure for designated duration ensuring firm marginal adaptation and clean excess flash.</span>
+                  <span>Apply product according to clinical technique and manufacturer instructions.</span>
                 </li>
               </ol>
             )}
@@ -282,22 +327,24 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
         {activeTab === "additional" && (
           <div className="space-y-3">
             <h3 className="text-[16px] font-bold text-[#1A1A1A]">Additional Information</h3>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5 text-[13px] text-[#374151]">
-                <p><strong>Manufacturer:</strong> Modern Orthodontics</p>
-                <p><strong>Country of Origin:</strong> India</p>
-                <p><strong>Product Code:</strong> {product.productCode || "MO-ORTHO"}</p>
+            <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
+              <div className="space-y-2 text-[13px] text-[#374151]">
+                <p><strong>Product Code:</strong> {product.productCode || apiProduct?.productCode || "MO-ORTHO"}</p>
+                {customInfoList.slice(0, Math.ceil(customInfoList.length / 2)).map((item, idx) => (
+                  <p key={idx}><strong>{item.label}:</strong> {item.value}</p>
+                ))}
               </div>
-              <div className="space-y-1.5 text-[13px] text-[#374151]">
-                <p><strong>Regulatory Compliance:</strong> ISO 13485 & CE Certified</p>
-                <p><strong>Shelf Life:</strong> 5 Years from manufacturing date</p>
+              <div className="space-y-2 text-[13px] text-[#374151]">
+                {customInfoList.slice(Math.ceil(customInfoList.length / 2)).map((item, idx) => (
+                  <p key={idx}><strong>{item.label}:</strong> {item.value}</p>
+                ))}
               </div>
             </div>
           </div>
         )}
 
-        {/* 7. SERVICE & WARRANTY TAB */}
-        {activeTab === "warranty" && (
+        {/* 7. SERVICE & WARRANTY TAB (COMMENTED OUT FOR FUTURE USE) */}
+        {/* {activeTab === "warranty" && (
           <div className="space-y-3">
             <h3 className="text-[16px] font-bold text-[#1A1A1A]">Service & Warranty Guarantee</h3>
             {product.warranty && product.warranty.length > 0 ? (
@@ -329,7 +376,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
               </div>
             )}
           </div>
-        )}
+        )} */}
 
         {/* 8. REVIEWS & FEEDBACK TAB */}
         {activeTab === "reviews" && (

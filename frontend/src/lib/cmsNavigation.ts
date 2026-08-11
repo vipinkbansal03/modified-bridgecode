@@ -1,20 +1,94 @@
 import type { CmsFooter, CmsMenu, CmsMenuItem } from "@/hooks/api/useCmsContent";
 import type { NavLink, NavMegaGroup } from "@/types/common.types";
 
-export const CMS_MENU_LOCATIONS = [
-  { value: "header-primary", label: "Header Primary" },
-  { value: "header-capabilities", label: "Header Capabilities" },
-  { value: "header-products-mega", label: "Header Products Mega Menu" },
-  { value: "header-cta", label: "Header CTA" },
-  { value: "footer-about", label: "Footer About Column" },
-  { value: "footer-products", label: "Footer Products Column" },
-  { value: "footer-capabilities", label: "Footer Capabilities Column" },
-  { value: "footer-dealers", label: "Footer Dealers Column" },
-  { value: "footer-resources", label: "Footer Resources Column" },
-  { value: "footer-export", label: "Footer Export Column" },
-  { value: "footer-india-office", label: "Footer India Office Column" },
-  { value: "footer-usa-office", label: "Footer USA Office Column" },
-  { value: "footer-legal", label: "Footer Legal Links" },
+export type CmsMenuCategoryGroup = "header" | "footer" | "offices_legal";
+
+export interface CmsMenuLocationMeta {
+  value: string;
+  label: string;
+  group: CmsMenuCategoryGroup;
+  description: string;
+}
+
+export const CMS_MENU_LOCATIONS: readonly CmsMenuLocationMeta[] = [
+  {
+    value: "header-primary",
+    label: "Header Primary Links",
+    group: "header",
+    description: "Appears in the main top header navigation bar (e.g. Products, Capabilities, About).",
+  },
+  {
+    value: "header-capabilities",
+    label: "Header Capabilities Menu",
+    group: "header",
+    description: "Appears under the Capabilities dropdown in the top header bar.",
+  },
+  {
+    value: "header-products-mega",
+    label: "Header Products Mega Menu",
+    group: "header",
+    description: "Multi-column category breakdown inside the Products mega dropdown.",
+  },
+  {
+    value: "header-cta",
+    label: "Header CTA Button Links",
+    group: "header",
+    description: "Quick action links/buttons displayed in the right side of the header.",
+  },
+  {
+    value: "footer-about",
+    label: "Footer About Column",
+    group: "footer",
+    description: "First main link column in the Storefront Footer under About Us.",
+  },
+  {
+    value: "footer-products",
+    label: "Footer Products Column",
+    group: "footer",
+    description: "Featured product category links column in the Storefront Footer.",
+  },
+  {
+    value: "footer-capabilities",
+    label: "Footer Capabilities Column",
+    group: "footer",
+    description: "Manufacturing & technology capability links in the Storefront Footer.",
+  },
+  {
+    value: "footer-dealers",
+    label: "Footer Dealers Column",
+    group: "footer",
+    description: "Distributor & partnership links column in the Storefront Footer.",
+  },
+  {
+    value: "footer-resources",
+    label: "Footer Resources Column",
+    group: "footer",
+    description: "Catalog downloads, guides, and policy links column in the Storefront Footer.",
+  },
+  {
+    value: "footer-export",
+    label: "Footer Export Column",
+    group: "offices_legal",
+    description: "Global export region information links in the Storefront Footer.",
+  },
+  {
+    value: "footer-india-office",
+    label: "Footer India Office Column",
+    group: "offices_legal",
+    description: "India headquarters contact & address links in the Storefront Footer.",
+  },
+  {
+    value: "footer-usa-office",
+    label: "Footer USA Office Column",
+    group: "offices_legal",
+    description: "USA corporate office contact & address links in the Storefront Footer.",
+  },
+  {
+    value: "footer-legal",
+    label: "Footer Legal Links",
+    group: "offices_legal",
+    description: "Copyright bottom bar legal policy links (Terms, Privacy, Disclaimers).",
+  },
 ] as const;
 
 export const CMS_MENU_LOCATION_VALUES = CMS_MENU_LOCATIONS.map((item) => item.value);

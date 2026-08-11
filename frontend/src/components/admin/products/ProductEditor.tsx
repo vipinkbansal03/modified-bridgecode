@@ -5,9 +5,9 @@ import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import * as Yup from "yup";
-import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search, ChevronRight, ChevronLeft, ChevronDown, Eye, ZoomIn, CheckSquare, Square, Check, FolderUp, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search, ChevronRight, ChevronLeft, ChevronDown, Eye, ZoomIn, CheckSquare, Square, Check, FolderUp, Image as ImageIcon, Loader2, Box, Package, Info } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, AdminMultiSelect, StatusBadge, useToast, ConfirmModal, DataTable, Column, toastMessages } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, AdminMultiSelect, StatusBadge, useToast, ConfirmModal, DataTable, AdminSectionTable, Column, toastMessages } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
@@ -46,9 +46,15 @@ import {
   filterTranslationLanguages,
   TranslationBlurField,
   TranslationBlurInput,
+  TranslationRichTextField,
   TranslationEditorBanner,
   NoTranslationLanguagesMessage,
 } from "@/components/admin/TranslationEditorUi";
+
+function stripHtml(html?: string | null): string {
+  if (!html) return "";
+  return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").trim();
+}
 
 interface TabConfig {
   id: number;
@@ -61,6 +67,7 @@ const ALL_TABS: TabConfig[] = [
   { id: 1, label: "Product Info" },
   { id: 2, label: "Media" },
   { id: 3, label: "Packages" },
+  { id: 13, label: "Additional Info" },
   { id: 4, label: "Variants", permission: "variants.view" },
   { id: 5, label: "Pricing", permission: "pricing.view" },
   { id: 6, label: "Inventory", permission: "inventory.view" },
@@ -127,7 +134,53 @@ type ProductEditorFormValues = {
   technicalSpecs: Array<{ label: string; value: string }>;
   warranty: string[];
   primaryFeatures: Array<{ title: string; description: string }>;
+  additionalInfo: Array<{ label: string; value: string }>;
 };
+
+const DEFAULT_ADDITIONAL_INFO = [
+  { label: "Manufacturer", value: "Modern Orthodontics" },
+  { label: "Country of Origin", value: "India" },
+  { label: "Regulatory Compliance", value: "ISO 13485 & CE Certified" },
+  { label: "Shelf Life", value: "5 Years from manufacturing date" },
+];
+
+const DEFAULT_PRODUCT_HIGHLIGHTS = [
+  {
+    title: "High-Precision Orthodontic Design",
+    description: "<p>Engineered for high clinical accuracy, optimal force delivery, and patient comfort during active treatment.</p>",
+  },
+  {
+    title: "Medical-Grade Quality Construction",
+    description: "<p>Manufactured from premium orthodontic-grade materials adhering to strict ISO 13485 quality standards.</p>",
+  },
+  {
+    title: "Reliable Performance & Durability",
+    description: "<p>Provides consistent force control, reliable shape memory, and long-lasting structural integrity.</p>",
+  },
+];
+
+const DEFAULT_PRIMARY_FEATURES = [
+  {
+    title: "Clinical Inspection & Verification",
+    description: "<p>Inspect product packaging and verify specification suitability before clinical use.</p>",
+  },
+  {
+    title: "Treatment Site Preparation",
+    description: "<p>Prepare treatment site following standard clinical orthodontic protocols.</p>",
+  },
+  {
+    title: "Placement & Engagement",
+    description: "<p>Apply product according to clinical technique and manufacturer instructions.</p>",
+  },
+];
+
+const DEFAULT_TECHNICAL_SPECS = [
+  { label: "Brand", value: "Modern Orthodontics" },
+  { label: "Material", value: "Medical Grade Stainless Steel" },
+  { label: "Base Type", value: "80-Mesh Contoured Base" },
+  { label: "System", value: "Roth / MBT Compatible" },
+  { label: "Slot Size", value: '.018" / .022"' },
+];
 
 type PackageRow = {
   id: string;
@@ -138,6 +191,33 @@ type PackageRow = {
   sortOrder?: number;
   status?: string;
 };
+
+const DEFAULT_PRODUCT_PACKAGES: PackageRow[] = [
+  {
+    id: "default-pack-standard",
+    title: "Pack Standard",
+    slug: "pack-standard",
+    description: "Sealed Medical Packaging",
+    sortOrder: 1,
+    status: "ACTIVE",
+  },
+  {
+    id: "default-quality-control",
+    title: "Quality Control",
+    slug: "quality-control",
+    description: "ISO 13485 Certified",
+    sortOrder: 2,
+    status: "ACTIVE",
+  },
+  {
+    id: "default-storage",
+    title: "Storage",
+    slug: "storage",
+    description: "Clean, Dry & Dust-Free",
+    sortOrder: 3,
+    status: "ACTIVE",
+  },
+];
 
 type VariantRow = {
   id: string;
@@ -582,6 +662,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [deletingBulkMedia, setDeletingBulkMedia] = useState(false);
   const [deletingAllMedia, setDeletingAllMedia] = useState(false);
   const [deletingPackage, setDeletingPackage] = useState<PackageRow | null>(null);
+  const [deletedDefaultPackageIds, setDeletedDefaultPackageIds] = useState<string[]>([]);
   const [deletingVariant, setDeletingVariant] = useState<VariantRow | null>(null);
   const [packageModalOpen, setPackageModalOpen] = useState(false);
   const [editingPackage, setEditingPackage] = useState<PackageRow | null>(null);
@@ -591,6 +672,210 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [uploadingPackageImage, setUploadingPackageImage] = useState(false);
   const [packageSortOrder, setPackageSortOrder] = useState(0);
   const [packageStatus, setPackageStatus] = useState("ACTIVE");
+
+  // Modals state for Product Info tab sections
+  const [featureModalOpen, setFeatureModalOpen] = useState(false);
+  const [editingFeatureIndex, setEditingFeatureIndex] = useState<number | null>(null);
+  const [featureTitleState, setFeatureTitleState] = useState("");
+  const [featureDescriptionState, setFeatureDescriptionState] = useState("");
+
+  const [specModalOpen, setSpecModalOpen] = useState(false);
+  const [editingSpecIndex, setEditingSpecIndex] = useState<number | null>(null);
+  const [specLabelState, setSpecLabelState] = useState("");
+  const [specValueState, setSpecValueState] = useState("");
+
+  const [directionModalOpen, setDirectionModalOpen] = useState(false);
+  const [editingDirectionIndex, setEditingDirectionIndex] = useState<number | null>(null);
+  const [directionTitleState, setDirectionTitleState] = useState("");
+  const [directionDescriptionState, setDirectionDescriptionState] = useState("");
+
+  const [warrantyModalOpen, setWarrantyModalOpen] = useState(false);
+  const [editingWarrantyIndex, setEditingWarrantyIndex] = useState<number | null>(null);
+  const [warrantyTextState, setWarrantyTextState] = useState("");
+
+  const [additionalInfoModalOpen, setAdditionalInfoModalOpen] = useState(false);
+  const [editingAdditionalInfoIndex, setEditingAdditionalInfoIndex] = useState<number | null>(null);
+  const [additionalInfoLabelState, setAdditionalInfoLabelState] = useState("");
+  const [additionalInfoValueState, setAdditionalInfoValueState] = useState("");
+
+  const [highlightProductCode, setHighlightProductCode] = useState(false);
+
+  const goToBasicInfoAndFocusProductCode = () => {
+    setActiveTab(0);
+    setHighlightProductCode(true);
+    setTimeout(() => {
+      const el = document.getElementById("product-code-input") as HTMLInputElement | null;
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    }, 120);
+    setTimeout(() => {
+      setHighlightProductCode(false);
+    }, 3000);
+  };
+
+  // Additional Info Modal Handlers
+  const openAdditionalInfoModal = (index?: number) => {
+    const list = form.values.additionalInfo || [];
+    if (index !== undefined && list[index]) {
+      setEditingAdditionalInfoIndex(index);
+      setAdditionalInfoLabelState(list[index].label || "");
+      setAdditionalInfoValueState(list[index].value || "");
+    } else {
+      setEditingAdditionalInfoIndex(null);
+      setAdditionalInfoLabelState("");
+      setAdditionalInfoValueState("");
+    }
+    setAdditionalInfoModalOpen(true);
+  };
+
+  const handleSaveAdditionalInfoModal = () => {
+    const list = [...(form.values.additionalInfo || [])];
+    const newItem = { label: additionalInfoLabelState.trim(), value: additionalInfoValueState.trim() };
+    if (editingAdditionalInfoIndex !== null) {
+      list[editingAdditionalInfoIndex] = newItem;
+    } else {
+      list.push(newItem);
+    }
+    form.setFieldValue("additionalInfo", list);
+    setAdditionalInfoModalOpen(false);
+  };
+
+  const handleDeleteAdditionalInfoItem = (index: number) => {
+    const list = [...(form.values.additionalInfo || [])];
+    list.splice(index, 1);
+    form.setFieldValue("additionalInfo", list);
+  };
+
+  // Feature Modal Handlers
+  const openFeatureModal = (index?: number) => {
+    const list = form.values.highlights || [];
+    if (index !== undefined && list[index]) {
+      setEditingFeatureIndex(index);
+      setFeatureTitleState(list[index].title || "");
+      setFeatureDescriptionState(list[index].description || "");
+    } else {
+      setEditingFeatureIndex(null);
+      setFeatureTitleState("");
+      setFeatureDescriptionState("");
+    }
+    setFeatureModalOpen(true);
+  };
+
+  const handleSaveFeatureModal = () => {
+    const list = [...(form.values.highlights || [])];
+    const newItem = { title: featureTitleState.trim(), description: featureDescriptionState.trim() };
+    if (editingFeatureIndex !== null) {
+      list[editingFeatureIndex] = newItem;
+    } else {
+      list.push(newItem);
+    }
+    form.setFieldValue("highlights", list);
+    setFeatureModalOpen(false);
+  };
+
+  const handleDeleteFeatureItem = (index: number) => {
+    const list = [...(form.values.highlights || [])];
+    list.splice(index, 1);
+    form.setFieldValue("highlights", list);
+  };
+
+  // Key Spec Modal Handlers
+  const openSpecModal = (index?: number) => {
+    const list = form.values.technicalSpecs || [];
+    if (index !== undefined && list[index]) {
+      setEditingSpecIndex(index);
+      setSpecLabelState(list[index].label || "");
+      setSpecValueState(list[index].value || "");
+    } else {
+      setEditingSpecIndex(null);
+      setSpecLabelState("");
+      setSpecValueState("");
+    }
+    setSpecModalOpen(true);
+  };
+
+  const handleSaveSpecModal = () => {
+    const list = [...(form.values.technicalSpecs || [])];
+    const newItem = { label: specLabelState.trim(), value: specValueState.trim() };
+    if (editingSpecIndex !== null) {
+      list[editingSpecIndex] = newItem;
+    } else {
+      list.push(newItem);
+    }
+    form.setFieldValue("technicalSpecs", list);
+    setSpecModalOpen(false);
+  };
+
+  const handleDeleteSpecItem = (index: number) => {
+    const list = [...(form.values.technicalSpecs || [])];
+    list.splice(index, 1);
+    form.setFieldValue("technicalSpecs", list);
+  };
+
+  // Direction To Use Modal Handlers
+  const openDirectionModal = (index?: number) => {
+    const list = form.values.primaryFeatures || [];
+    if (index !== undefined && list[index]) {
+      setEditingDirectionIndex(index);
+      setDirectionTitleState(list[index].title || "");
+      setDirectionDescriptionState(list[index].description || "");
+    } else {
+      setEditingDirectionIndex(null);
+      setDirectionTitleState("");
+      setDirectionDescriptionState("");
+    }
+    setDirectionModalOpen(true);
+  };
+
+  const handleSaveDirectionModal = () => {
+    const list = [...(form.values.primaryFeatures || [])];
+    const newItem = { title: directionTitleState.trim(), description: directionDescriptionState.trim() };
+    if (editingDirectionIndex !== null) {
+      list[editingDirectionIndex] = newItem;
+    } else {
+      list.push(newItem);
+    }
+    form.setFieldValue("primaryFeatures", list);
+    setDirectionModalOpen(false);
+  };
+
+  const handleDeleteDirectionItem = (index: number) => {
+    const list = [...(form.values.primaryFeatures || [])];
+    list.splice(index, 1);
+    form.setFieldValue("primaryFeatures", list);
+  };
+
+  // Warranty Modal Handlers
+  const openWarrantyModal = (index?: number) => {
+    const list = form.values.warranty || [];
+    if (index !== undefined && list[index] !== undefined) {
+      setEditingWarrantyIndex(index);
+      setWarrantyTextState(list[index] || "");
+    } else {
+      setEditingWarrantyIndex(null);
+      setWarrantyTextState("");
+    }
+    setWarrantyModalOpen(true);
+  };
+
+  const handleSaveWarrantyModal = () => {
+    const list = [...(form.values.warranty || [])];
+    if (editingWarrantyIndex !== null) {
+      list[editingWarrantyIndex] = warrantyTextState.trim();
+    } else {
+      list.push(warrantyTextState.trim());
+    }
+    form.setFieldValue("warranty", list);
+    setWarrantyModalOpen(false);
+  };
+
+  const handleDeleteWarrantyItem = (index: number) => {
+    const list = [...(form.values.warranty || [])];
+    list.splice(index, 1);
+    form.setFieldValue("warranty", list);
+  };
   const [manualVariantOpen, setManualVariantOpen] = useState(false);
   const [editingVariant, setEditingVariant] = useState<VariantRow | null>(null);
   const [editVariantSubTab, setEditVariantSubTab] = useState<"general" | "prices" | "tiers" | "moqs">("general");
@@ -1677,7 +1962,44 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
     return catalog;
   }, [attributeCatalog, editingVariant, variantGenerationCatalog]);
-  const packageRows = useMemo(() => (product?.packages ?? []) as PackageRow[], [product?.packages]);
+  const packageRows = useMemo(() => {
+    const dbPackages = (product?.packages ?? []) as PackageRow[];
+    const activeDefaults = DEFAULT_PRODUCT_PACKAGES.filter((def) => {
+      if (deletedDefaultPackageIds.includes(def.id)) return false;
+      const isOverridden = dbPackages.some(
+        (dbPkg) =>
+          dbPkg.slug === def.slug ||
+          dbPkg.title.toLowerCase().trim() === def.title.toLowerCase().trim()
+      );
+      return !isOverridden;
+    });
+
+    const combined = [...activeDefaults, ...dbPackages];
+
+    // Sort by sortOrder ascending; when tied, custom DB packages take priority over defaults
+    combined.sort((a, b) => {
+      const orderA = a.sortOrder ?? 0;
+      const orderB = b.sortOrder ?? 0;
+      if (orderA !== orderB) return orderA - orderB;
+      const isDefaultA = a.id.startsWith("default-");
+      const isDefaultB = b.id.startsWith("default-");
+      if (isDefaultA !== isDefaultB) {
+        return isDefaultA ? 1 : -1;
+      }
+      return a.title.localeCompare(b.title);
+    });
+
+    // Auto-reindex any duplicate sort orders dynamically
+    const occupied = new Set<number>();
+    return combined.map((pkg) => {
+      let order = pkg.sortOrder ?? 1;
+      while (occupied.has(order)) {
+        order++;
+      }
+      occupied.add(order);
+      return { ...pkg, sortOrder: order };
+    });
+  }, [product?.packages, deletedDefaultPackageIds]);
   const variantRows = useMemo(() => (product?.variants ?? []) as VariantRow[], [product?.variants]);
 
   const productVariantPrices = useMemo(() => {
@@ -2322,26 +2644,57 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       seoTitle: product?.seoTitle || "",
       seoDescription: product?.seoDescription || "",
       seoKeywords: product?.seoKeywords || "",
-      highlights: Array.isArray(product?.highlights) ? product.highlights : [],
-      technicalSpecs: Array.isArray(product?.technicalSpecs) ? product.technicalSpecs : [],
+      highlights:
+        Array.isArray(product?.highlights) && product.highlights.length > 0
+          ? product.highlights
+          : DEFAULT_PRODUCT_HIGHLIGHTS,
+      technicalSpecs:
+        Array.isArray(product?.technicalSpecs) && product.technicalSpecs.length > 0
+          ? product.technicalSpecs
+          : DEFAULT_TECHNICAL_SPECS,
       warranty: Array.isArray(product?.warranty) ? product.warranty : [],
-      primaryFeatures: Array.isArray(product?.primaryFeatures) ? product.primaryFeatures : [],
+      primaryFeatures:
+        Array.isArray(product?.primaryFeatures) && product.primaryFeatures.length > 0
+          ? product.primaryFeatures
+          : DEFAULT_PRIMARY_FEATURES,
+      additionalInfo:
+        Array.isArray(product?.additionalInfo) && product.additionalInfo.length > 0
+          ? product.additionalInfo
+          : DEFAULT_ADDITIONAL_INFO,
     },
     validationSchema: basicSchema,
     onSubmit: async (values) => {
       try {
-        // Build a sanitized payload to avoid sending unexpected types to the API
+        const hasContent = (text?: string | null) =>
+          Boolean(text && text.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, "").trim().length > 0);
+
+        // Build a sanitized payload to avoid sending unexpected types or empty array items to the API
         const payload = {
           ...values,
           highlights: Array.isArray(values.highlights)
-            ? values.highlights.map((h) => ({ title: String(h?.title ?? ""), description: String(h?.description ?? "") }))
+            ? values.highlights
+                .map((h) => ({ title: String(h?.title ?? "").trim(), description: String(h?.description ?? "").trim() }))
+                .filter((h) => hasContent(h.title) || hasContent(h.description))
             : [],
           technicalSpecs: Array.isArray(values.technicalSpecs)
-            ? values.technicalSpecs.map((s) => ({ label: String(s?.label ?? ""), value: String(s?.value ?? "") }))
+            ? values.technicalSpecs
+                .map((s) => ({ label: String(s?.label ?? "").trim(), value: String(s?.value ?? "").trim() }))
+                .filter((s) => hasContent(s.label) || hasContent(s.value))
             : [],
-          warranty: Array.isArray(values.warranty) ? values.warranty.map((w) => String(w ?? "")) : [],
+          warranty: Array.isArray(values.warranty)
+            ? values.warranty
+                .map((w) => String(w ?? "").trim())
+                .filter((w) => hasContent(w))
+            : [],
           primaryFeatures: Array.isArray(values.primaryFeatures)
-            ? values.primaryFeatures.map((p) => ({ title: String(p?.title ?? ""), description: String(p?.description ?? "") }))
+            ? values.primaryFeatures
+                .map((p) => ({ title: String(p?.title ?? "").trim(), description: String(p?.description ?? "").trim() }))
+                .filter((p) => hasContent(p.title) || hasContent(p.description))
+            : [],
+          additionalInfo: Array.isArray(values.additionalInfo)
+            ? values.additionalInfo
+                .map((a) => ({ label: String(a?.label ?? "").trim(), value: String(a?.value ?? "").trim() }))
+                .filter((a) => hasContent(a.label) || hasContent(a.value))
             : [],
         } as typeof values;
 
@@ -2374,6 +2727,202 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     ...categories.map((c: { id: string; name: string }) => ({ value: c.id, label: c.name })),
   ];
 
+  const featureCols: Column<{ title: string; description: string; index: number }>[] = [
+    { key: "title", label: "Feature", render: (row) => <span className="font-semibold text-[#1A1A1A]">{row.title || "—"}</span> },
+    {
+      key: "description",
+      label: "Description",
+      render: (row) => <span className="line-clamp-2 text-[#4B5563] text-[13px]">{stripHtml(row.description) || "—"}</span>,
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            title="Edit feature"
+            onClick={(e) => { e.stopPropagation(); openFeatureModal(row.index); }}
+            className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]"
+          >
+            <Pencil size={12} />
+          </button>
+          <button
+            type="button"
+            title="Delete feature"
+            onClick={(e) => { e.stopPropagation(); handleDeleteFeatureItem(row.index); }}
+            className="rounded border border-[#F2C9C9] px-2 py-1 text-[12px] text-red-600 hover:bg-red-50"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      ),
+    },
+  ];
+
+  const specCols: Column<{ label: string; value: string; index: number }>[] = [
+    { key: "label", label: "Label", render: (row) => <span className="font-semibold text-[#1A1A1A]">{row.label || "—"}</span> },
+    { key: "value", label: "Value", render: (row) => <span className="text-[#374151] text-[13px]">{row.value || "—"}</span> },
+    {
+      key: "actions",
+      label: "Actions",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            title="Edit key specification"
+            onClick={(e) => { e.stopPropagation(); openSpecModal(row.index); }}
+            className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]"
+          >
+            <Pencil size={12} />
+          </button>
+          <button
+            type="button"
+            title="Delete key specification"
+            onClick={(e) => { e.stopPropagation(); handleDeleteSpecItem(row.index); }}
+            className="rounded border border-[#F2C9C9] px-2 py-1 text-[12px] text-red-600 hover:bg-red-50"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      ),
+    },
+  ];
+
+  const additionalInfoCols: Column<{ label: string; value: string; index: number; isProductCode?: boolean }>[] = [
+    {
+      key: "label",
+      label: "Label",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-[#1A1A1A]">{row.label || "—"}</span>
+          {row.isProductCode && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10.5px] font-semibold text-blue-700">
+              Basic Info Synced
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "value",
+      label: "Value",
+      render: (row) => (
+        <span className={row.isProductCode ? "font-mono font-semibold text-blue-900 bg-blue-50/70 px-2 py-0.5 rounded border border-blue-100 text-[12.5px]" : "text-[#374151] text-[13px]"}>
+          {row.value || "—"}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      render: (row) => {
+        if (row.isProductCode) {
+          return (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                goToBasicInfoAndFocusProductCode();
+              }}
+              className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-[12px] font-semibold text-blue-700 hover:bg-blue-100 hover:text-blue-800 transition-colors shadow-2xs"
+              title="Click to edit Product Code in Basic Info tab"
+            >
+              <Pencil size={12} />
+              Edit in Basic Info
+            </button>
+          );
+        }
+        return (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              title="Edit additional info"
+              onClick={(e) => { e.stopPropagation(); openAdditionalInfoModal(row.index); }}
+              className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]"
+            >
+              <Pencil size={12} />
+            </button>
+            <button
+              type="button"
+              title="Delete additional info"
+              onClick={(e) => { e.stopPropagation(); handleDeleteAdditionalInfoItem(row.index); }}
+              className="rounded border border-[#F2C9C9] px-2 py-1 text-[12px] text-red-600 hover:bg-red-50"
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
+        );
+      },
+    },
+  ];
+
+  const directionCols: Column<{ title: string; description: string; index: number }>[] = [
+    { key: "title", label: "Title", render: (row) => <span className="font-semibold text-[#1A1A1A]">{row.title || "—"}</span> },
+    {
+      key: "description",
+      label: "Instruction / Guideline",
+      render: (row) => <span className="line-clamp-2 text-[#4B5563] text-[13px]">{stripHtml(row.description) || "—"}</span>,
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            title="Edit guideline"
+            onClick={(e) => { e.stopPropagation(); openDirectionModal(row.index); }}
+            className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]"
+          >
+            <Pencil size={12} />
+          </button>
+          <button
+            type="button"
+            title="Delete guideline"
+            onClick={(e) => { e.stopPropagation(); handleDeleteDirectionItem(row.index); }}
+            className="rounded border border-[#F2C9C9] px-2 py-1 text-[12px] text-red-600 hover:bg-red-50"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      ),
+    },
+  ];
+
+  const warrantyCols: Column<{ line: string; index: number }>[] = [
+    { key: "index", label: "#", render: (row) => <span className="font-semibold text-[#6B7280]">{row.index + 1}</span> },
+    {
+      key: "line",
+      label: "Warranty Clause / Term",
+      render: (row) => <span className="line-clamp-2 text-[#374151] text-[13px]">{stripHtml(row.line) || "—"}</span>,
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            title="Edit warranty clause"
+            onClick={(e) => { e.stopPropagation(); openWarrantyModal(row.index); }}
+            className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]"
+          >
+            <Pencil size={12} />
+          </button>
+          <button
+            type="button"
+            title="Delete warranty clause"
+            onClick={(e) => { e.stopPropagation(); handleDeleteWarrantyItem(row.index); }}
+            className="rounded border border-[#F2C9C9] px-2 py-1 text-[12px] text-red-600 hover:bg-red-50"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   const packageCols: Column<PackageRow>[] = [
     { key: "title", label: "Package" },
     { key: "slug", label: "Slug" },
@@ -2384,10 +2933,20 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       label: "Actions",
       render: (row) => (
         <div className="flex items-center gap-2">
-          <button onClick={() => openPackageModal(row)} className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]">
+          <button
+            type="button"
+            title="Edit package"
+            onClick={(e) => { e.stopPropagation(); openPackageModal(row); }}
+            className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]"
+          >
             <Pencil size={12} />
           </button>
-          <button onClick={() => setDeletingPackage(row)} className="rounded border border-[#F2C9C9] px-2 py-1 text-[12px] text-red-600 hover:bg-red-50">
+          <button
+            type="button"
+            title="Delete package"
+            onClick={(e) => { e.stopPropagation(); setDeletingPackage(row); }}
+            className="rounded border border-[#F2C9C9] px-2 py-1 text-[12px] text-red-600 hover:bg-red-50"
+          >
             <Trash2 size={12} />
           </button>
         </div>
@@ -3050,6 +3609,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       setPackageStatus(pkg.status || "ACTIVE");
     } else {
       resetPackageForm();
+      setPackageSortOrder(packageRows.length + 1);
     }
     setPackageModalOpen(true);
   };
@@ -3061,25 +3621,40 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
 
     try {
+      const targetSortOrder = Number(packageSortOrder) || 1;
       const payload = {
         title: packageTitle.trim(),
         description: packageDescription.trim() || null,
         image: packageImage.trim() || null,
-        sortOrder: packageSortOrder,
+        sortOrder: targetSortOrder,
         status: packageStatus,
       };
-      if (editingPackage) {
+
+      // Auto-adjust existing DB packages that conflict with targetSortOrder
+      const dbPackages = (product?.packages ?? []) as PackageRow[];
+      const conflictingDbPackages = dbPackages.filter((pkg) => {
+        if (editingPackage && pkg.id === editingPackage.id) return false;
+        return (pkg.sortOrder ?? 0) >= targetSortOrder;
+      });
+
+      for (const confPkg of conflictingDbPackages) {
+        await adminApi.put(`/products/${productId}/packages/${confPkg.id}`, {
+          sortOrder: (confPkg.sortOrder ?? 0) + 1,
+        });
+      }
+
+      if (editingPackage && !editingPackage.id.startsWith("default-")) {
         await adminApi.put(`/products/${productId}/packages/${editingPackage.id}`, payload);
         showToast("Package updated.");
       } else {
         await adminApi.post(`/products/${productId}/packages`, payload);
-        showToast("Package created.");
+        showToast(editingPackage ? "Package updated." : "Package created.");
       }
       setPackageModalOpen(false);
       resetPackageForm();
       refetch();
-    } catch {
-      showToast("Failed to save package.", "error");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to save package."), "error");
     }
   };
 
@@ -3107,6 +3682,12 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   };
 
   const handleDeletePackage = async (packageId: string) => {
+    if (packageId.startsWith("default-")) {
+      setDeletedDefaultPackageIds((prev) => [...prev, packageId]);
+      showToast("Package deleted.");
+      setDeletingPackage(null);
+      return;
+    }
     try {
       await adminApi.delete(`/products/${productId}/packages/${packageId}`);
       showToast("Package deleted.");
@@ -4012,7 +4593,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           ))}
         </div>
         <div className="flex items-center gap-2">
-          {!isReadOnly && (activeTab === 0 || activeTab === 1 || activeTab === 10) ? (
+          {!isReadOnly && (activeTab === 0 || activeTab === 1 || activeTab === 10 || activeTab === 13) ? (
             <button
               type="button"
               onClick={() => form.handleSubmit()}
@@ -4025,11 +4606,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           <button
             type="button"
             onClick={() => router.push("/admin/products")}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A]"
-            aria-label="Close"
-            title="Close"
+            className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3.5 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] transition-colors"
+            title="Back to products list"
           >
-            <X size={16} />
+            <ChevronLeft size={16} />
+            Back
           </button>
         </div>
       </div>
@@ -4051,7 +4632,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 options={[{ value: "DRAFT", label: "Draft" }, { value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }, { value: "ARCHIVED", label: "Archived" }]}
                 {...form.getFieldProps("status")}
               />
-              <AdminInput label="Product Code" {...form.getFieldProps("productCode")} />
+              <AdminInput
+                id="product-code-input"
+                label="Product Code"
+                {...form.getFieldProps("productCode")}
+                className={cn(
+                  highlightProductCode && "!border-[#E31E24] !ring-2 !ring-[#E31E24]/25 !bg-[#FFF8F8] font-semibold transition-all duration-300"
+                )}
+              />
               <AdminInput label="SKU" {...form.getFieldProps("sku")} />
               <AdminInput label="Brand" {...form.getFieldProps("brand")} />
               <div className="flex items-center gap-6 pt-2">
@@ -4117,232 +4705,69 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               />
             </div>
             <AdminTextarea label="Short Description (max 300)" rows={2} maxLength={300} {...form.getFieldProps("shortDescription")} />
-            <AdminTextarea label="Full Description" rows={7} {...form.getFieldProps("description")} />
+            <AdminRichTextEditor
+              label="Full Description"
+              value={form.values.description}
+              placeholder="Enter detailed clinical product description..."
+              onChange={(value) => form.setFieldValue("description", value)}
+              className="min-h-[220px]"
+            />
           </div>
         )}
 
         {activeTab === 1 && (
           <div className="p-6 space-y-8">
-            <div className="rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5">
-              <div className="mb-4 flex items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Highlights</h3>
-                  <p className="mt-1 text-[12.5px] text-[#6B6B6B]">Add title/description pairs to display in the product highlights section.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => form.setFieldValue("highlights", [...(form.values.highlights || []), { title: "", description: "" }])}
-                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-                >
-                  Add highlight
-                </button>
-              </div>
-              <div className="space-y-4">
-                {(form.values.highlights || []).map((item: { title: string; description: string; image?: string }, index: number) => (
-                  <div key={index} className="grid gap-3 lg:grid-cols-[1fr_2.5fr_auto] items-stretch">
-                    <div>
-                      <AdminInput
-                        label="Title"
-                        value={item.title}
-                        onChange={(event) => {
-                          const next = [...(form.values.highlights || [])];
-                          next[index] = { ...next[index], title: event.target.value };
-                          form.setFieldValue("highlights", next);
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <AdminRichTextEditor
-                        label="Description"
-                        value={item.description}
-                        placeholder="Enter highlight description (use Image button in toolbar to insert photos)"
-                        onChange={(value) => {
-                          const next = [...(form.values.highlights || [])];
-                          next[index] = { ...next[index], description: value };
-                          form.setFieldValue("highlights", next);
-                        }}
-                        className="min-h-[120px]"
-                      />
-                    </div>
-                    <div className="flex items-end">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = [...(form.values.highlights || [])];
-                          next.splice(index, 1);
-                          form.setFieldValue("highlights", next);
-                        }}
-                        className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {!form.values.highlights?.length && <p className="text-[13px] text-[#6B6B6B]">No highlights added yet.</p>}
-              </div>
-            </div>
+            <AdminSectionTable
+              title="Features"
+              description="Add title/description pairs to display in the product Features tab on the frontend."
+              addButtonLabel="Add feature"
+              onAdd={() => openFeatureModal()}
+              columns={featureCols}
+              data={(form.values.highlights || []).map((item: any, index: number) => ({ ...item, index }))}
+              rowKey="index"
+              onRowClick={(row) => openFeatureModal(row.index)}
+              rowTooltip="Click row or edit icon to edit feature"
+              emptyMessage="No features added yet."
+            />
 
-            <div className="rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5">
-              <div className="mb-4 flex items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Technical Specifications</h3>
-                  <p className="mt-1 text-[12.5px] text-[#6B6B6B]">Add spec rows that will appear as a table on the product page.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => form.setFieldValue("technicalSpecs", [...(form.values.technicalSpecs || []), { label: "", value: "" }])}
-                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-                >
-                  Add spec
-                </button>
-              </div>
-              <div className="space-y-4">
-                {(form.values.technicalSpecs || []).map((item: { label: string; value: string }, index: number) => (
-                  <div key={index} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] items-end">
-                    <AdminInput
-                      label="Label"
-                      value={item.label}
-                      onChange={(event) => {
-                        const next = [...(form.values.technicalSpecs || [])];
-                        next[index] = { ...next[index], label: event.target.value };
-                        form.setFieldValue("technicalSpecs", next);
-                      }}
-                    />
-                    <AdminInput
-                      label="Value"
-                      value={item.value}
-                      onChange={(event) => {
-                        const next = [...(form.values.technicalSpecs || [])];
-                        next[index] = { ...next[index], value: event.target.value };
-                        form.setFieldValue("technicalSpecs", next);
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = [...(form.values.technicalSpecs || [])];
-                        next.splice(index, 1);
-                        form.setFieldValue("technicalSpecs", next);
-                      }}
-                      className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-                {!form.values.technicalSpecs?.length && <p className="text-[13px] text-[#6B6B6B]">No technical specifications added yet.</p>}
-              </div>
-            </div>
+            <AdminSectionTable
+              title="Key Specifications"
+              description='Add spec rows that will appear in the "Key Specifications" tab on the product page.'
+              addButtonLabel="Add spec"
+              onAdd={() => openSpecModal()}
+              columns={specCols}
+              data={(form.values.technicalSpecs || []).map((item: any, index: number) => ({ ...item, index }))}
+              rowKey="index"
+              onRowClick={(row) => openSpecModal(row.index)}
+              rowTooltip="Click row or edit icon to edit specification"
+              emptyMessage="No key specifications added yet."
+            />
 
-            <div className="rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5">
-              <div className="mb-4 flex items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Warranty</h3>
-                  <p className="mt-1 text-[12.5px] text-[#6B6B6B]">Add warranty text lines for the product details accordion.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => form.setFieldValue("warranty", [...(form.values.warranty || []), ""])}
-                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-                >
-                  Add warranty line
-                </button>
-              </div>
-              <div className="space-y-4">
-                {(form.values.warranty || []).map((line: string, index: number) => (
-                  <div key={index} className="grid gap-3 sm:grid-cols-[1fr_auto] items-stretch">
-                    <div>
-                      <AdminRichTextEditor
-                        label={`Warranty line ${index + 1}`}
-                        value={line}
-                        placeholder="Enter warranty text"
-                        onChange={(value) => {
-                          const next = [...(form.values.warranty || [])];
-                          next[index] = value;
-                          form.setFieldValue("warranty", next);
-                        }}
-                        className="min-h-[80px]"
-                      />
-                    </div>
-                    <div className="flex items-end">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = [...(form.values.warranty || [])];
-                          next.splice(index, 1);
-                          form.setFieldValue("warranty", next);
-                        }}
-                        className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {!form.values.warranty?.length && <p className="text-[13px] text-[#6B6B6B]">No warranty lines added yet.</p>}
-              </div>
-            </div>
+            <AdminSectionTable
+              title="Direction To Use"
+              description='Add clinical guidelines and instructions to display in the "Direction To Use" tab on the product page.'
+              addButtonLabel="Add instruction"
+              onAdd={() => openDirectionModal()}
+              columns={directionCols}
+              data={(form.values.primaryFeatures || []).map((item: any, index: number) => ({ ...item, index }))}
+              rowKey="index"
+              onRowClick={(row) => openDirectionModal(row.index)}
+              rowTooltip="Click row or edit icon to edit clinical guideline"
+              emptyMessage="No clinical guidelines added yet."
+            />
 
-            <div className="rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5">
-              <div className="mb-4 flex items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Primary Features</h3>
-                  <p className="mt-1 text-[12.5px] text-[#6B6B6B]">Add product features that highlight the product’s main benefits.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => form.setFieldValue("primaryFeatures", [...(form.values.primaryFeatures || []), { title: "", description: "" }])}
-                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-                >
-                  Add feature
-                </button>
-              </div>
-              <div className="space-y-4">
-                {(form.values.primaryFeatures || []).map((item: { title: string; description: string }, index: number) => (
-                  <div key={index} className="grid gap-3 lg:grid-cols-[1fr_1.5fr_auto] items-stretch">
-                    <div>
-                      <AdminInput
-                        label="Title"
-                        value={item.title}
-                        onChange={(event) => {
-                          const next = [...(form.values.primaryFeatures || [])];
-                          next[index] = { ...next[index], title: event.target.value };
-                          form.setFieldValue("primaryFeatures", next);
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <AdminRichTextEditor
-                        label="Description"
-                        value={item.description}
-                        placeholder="Enter feature description"
-                        onChange={(value) => {
-                          const next = [...(form.values.primaryFeatures || [])];
-                          next[index] = { ...next[index], description: value };
-                          form.setFieldValue("primaryFeatures", next);
-                        }}
-                        className="min-h-[120px]"
-                      />
-                    </div>
-                    <div className="flex items-end">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = [...(form.values.primaryFeatures || [])];
-                          next.splice(index, 1);
-                          form.setFieldValue("primaryFeatures", next);
-                        }}
-                        className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {!form.values.primaryFeatures?.length && <p className="text-[13px] text-[#6B6B6B]">No primary features added yet.</p>}
-              </div>
-            </div>
+            <AdminSectionTable
+              title="Warranty"
+              description="Add warranty text lines for the product details accordion."
+              addButtonLabel="Add warranty line"
+              onAdd={() => openWarrantyModal()}
+              columns={warrantyCols}
+              data={(form.values.warranty || []).map((line: string, index: number) => ({ line, index }))}
+              rowKey="index"
+              onRowClick={(row) => openWarrantyModal(row.index)}
+              rowTooltip="Click row or edit icon to edit warranty clause"
+              emptyMessage="No warranty lines added yet."
+            />
           </div>
         )}
 
@@ -4417,18 +4842,20 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             </div>
 
             {/* Drag & Drop Area */}
-            <div
+            <label
               onDragOver={handleMediaDragOver}
               onDragLeave={handleMediaDragLeave}
               onDrop={handleMediaDrop}
-              className={`mb-6 flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition-all ${
+              title="Click anywhere or drag and drop files to upload product images"
+              className={`group mb-6 flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition-all cursor-pointer select-none ${
                 uploadingMedia
-                  ? "border-[#E31E24] bg-red-50/30"
+                  ? "border-[#E31E24] bg-red-50/30 cursor-not-allowed opacity-75"
                   : isDragOverMedia
                   ? "border-[#E31E24] bg-red-50/50 scale-[1.005]"
-                  : "border-[#E6E6E6] bg-[#FAFAFA] hover:border-[#CCCCCC] hover:bg-[#F5F5F5]"
+                  : "border-[#E6E6E6] bg-[#FAFAFA] hover:border-[#E31E24] hover:bg-[#FFF8F8] hover:shadow-xs"
               }`}
             >
+              <input type="file" accept="image/*" multiple className="hidden" onChange={handleMediaUpload} disabled={uploadingMedia} />
               {uploadingMedia ? (
                 <div className="flex flex-col items-center py-1">
                   <Loader2 size={24} className="animate-spin text-[#E31E24] mb-2" />
@@ -4439,22 +4866,21 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 </div>
               ) : (
                 <>
-                  <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm border border-[#E6E6E6]">
-                    <FolderUp size={20} className={isDragOverMedia ? "text-[#E31E24]" : "text-[#6B6B6B]"} />
+                  <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-xs border border-[#E6E6E6] group-hover:border-[#E31E24]/40 group-hover:bg-[#FFF5F5] transition-colors">
+                    <FolderUp size={20} className={isDragOverMedia ? "text-[#E31E24]" : "text-[#6B6B6B] group-hover:text-[#E31E24] transition-colors"} />
                   </div>
                   <p className="text-[13.5px] font-medium text-[#1A1A1A]">
-                    Drag & drop product images here, or{" "}
-                    <label className="cursor-pointer font-semibold text-[#E31E24] underline hover:text-[#B5151B]">
+                    Drag &amp; drop product images here, or{" "}
+                    <span className="font-semibold text-[#E31E24] underline group-hover:text-[#B5151B]">
                       browse files
-                      <input type="file" accept="image/*" multiple className="hidden" onChange={handleMediaUpload} disabled={uploadingMedia} />
-                    </label>
+                    </span>
                   </p>
                   <p className="mt-1 text-[12px] text-[#9A9A9A]">
-                    Supports JPG, PNG, WEBP, GIF, SVG. Select or drag single or multiple images.
+                    Supports JPG, PNG, WEBP, GIF, SVG. Click anywhere or drag single or multiple images.
                   </p>
                 </>
               )}
-            </div>
+            </label>
 
             {/* Product Media Grid */}
             {(product.media ?? []).length > 0 || uploadingMedia ? (
@@ -4577,18 +5003,89 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         )}
 
         {activeTab === 3 && (
-          <div className="p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Packages</h3>
-                <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Packages are separate commercial offerings of the same product.</p>
+          <div className="p-6 space-y-4">
+            <AdminSectionTable
+              title="Packages"
+              description="Packages are separate commercial offerings of the same product."
+              addButtonLabel="Add Package"
+              onAdd={() => openPackageModal()}
+              columns={packageCols}
+              data={packageRows}
+              rowKey="id"
+              onRowClick={(row) => openPackageModal(row)}
+              rowTooltip="Click row or edit icon to edit package"
+              emptyMessage="No packages added yet."
+            />
+          </div>
+        )}
+
+        {activeTab === 13 && (
+          <div className="p-6 space-y-5">
+            {/* Synced Info Notice */}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/70 p-4 text-[13px] text-blue-900">
+              <div className="flex items-center gap-3">
+                <Info className="text-blue-600 shrink-0" size={18} />
+                <div>
+                  <span className="font-semibold">Product Code Sync:</span> Product Code (
+                  <button
+                    type="button"
+                    onClick={goToBasicInfoAndFocusProductCode}
+                    className="mx-1 rounded bg-blue-100 px-2 py-0.5 font-mono text-[12px] font-bold text-blue-800 hover:bg-blue-200 hover:text-blue-900 transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                    title="Click to edit Product Code in Basic Info tab"
+                  >
+                    {form.values.productCode || "Not set in Basic Info"}
+                    <Pencil size={11} className="text-blue-600" />
+                  </button>
+                  ) is automatically synchronized from{" "}
+                  <button
+                    type="button"
+                    onClick={goToBasicInfoAndFocusProductCode}
+                    className="font-bold underline decoration-blue-400 hover:text-blue-950 cursor-pointer"
+                  >
+                    Basic Info
+                  </button>{" "}
+                  and rendered at the top of Additional Info on the product page.
+                </div>
               </div>
-              <button onClick={() => openPackageModal()} className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-                <Plus size={14} />
-                Add Package
+              <button
+                type="button"
+                onClick={goToBasicInfoAndFocusProductCode}
+                className="shrink-0 rounded-md border border-blue-300 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-blue-700 hover:bg-blue-50 hover:text-blue-900 shadow-2xs transition-colors"
+              >
+                Go to Basic Info →
               </button>
             </div>
-            <DataTable columns={packageCols} data={packageRows} rowKey="id" emptyMessage="No packages added yet." />
+
+            <AdminSectionTable
+              title="Additional Information"
+              description="Manage key-value pairs displayed under the Additional Info tab on the product page."
+              addButtonLabel="Add Info Row"
+              onAdd={() => openAdditionalInfoModal()}
+              columns={additionalInfoCols}
+              data={[
+                {
+                  isProductCode: true,
+                  label: "Product Code",
+                  value: form.values.productCode || "Not set in Basic Info",
+                  index: -1,
+                },
+                ...(form.values.additionalInfo || []).map((item: any, index: number) => ({
+                  isProductCode: false,
+                  ...item,
+                  index,
+                })),
+              ]}
+              rowKey="index"
+              onRowClick={(row) => {
+                if (row.isProductCode) {
+                  goToBasicInfoAndFocusProductCode();
+                } else {
+                  openAdditionalInfoModal(row.index);
+                }
+              }}
+              rowTooltip={(row) => (row.isProductCode ? "Click to edit Product Code in Basic Info tab" : "Click row or edit icon to edit additional info")}
+              emptyMessage="No additional information rows added yet."
+            />
           </div>
         )}
 
@@ -6625,10 +7122,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                         englishReference={product.shortDescription || ""}
                         onSave={(value) => saveProductTranslation(activeTranslationLang.id, "shortDescription", value)}
                       />
-                      <TranslationBlurField
+                      <TranslationRichTextField
                         key={`description-${activeTranslationLang.id}-${t?.description ?? ""}`}
-                        label="Description"
-                        rows={5}
+                        label="Full Description"
                         defaultValue={t?.description || ""}
                         englishReference={product.description || ""}
                         onSave={(value) => saveProductTranslation(activeTranslationLang.id, "description", value)}
@@ -6658,8 +7154,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       <div className="rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5 space-y-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div>
-                            <h4 className="text-[14px] font-semibold text-[#1A1A1A]">Highlights</h4>
-                            <p className="text-[12.5px] text-[#6B6B6B]">Add title and description for each highlight.</p>
+                            <h4 className="text-[14px] font-semibold text-[#1A1A1A]">Features</h4>
+                            <p className="text-[12.5px] text-[#6B6B6B]">Add title and description for each feature.</p>
                           </div>
                           <div className="flex items-center gap-2">
                             <button type="button" onClick={() => setDraft("highlights", [...draft.highlights, { title: "", description: "" }])} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[12.5px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5]">
@@ -6697,8 +7193,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       <div className="rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5 space-y-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div>
-                            <h4 className="text-[14px] font-semibold text-[#1A1A1A]">Technical Specifications</h4>
-                            <p className="text-[12.5px] text-[#6B6B6B]">Add label and value rows for the translated table.</p>
+                            <h4 className="text-[14px] font-semibold text-[#1A1A1A]">Key Specifications</h4>
+                            <p className="text-[12.5px] text-[#6B6B6B]">Add label and value rows for the translated Key Specifications table.</p>
                           </div>
                           <div className="flex items-center gap-2">
                             <button type="button" onClick={() => setDraft("technicalSpecs", [...draft.technicalSpecs, { label: "", value: "" }])} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[12.5px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5]">
@@ -6768,8 +7264,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       <div className="rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5 space-y-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div>
-                            <h4 className="text-[14px] font-semibold text-[#1A1A1A]">Primary Features</h4>
-                            <p className="text-[12.5px] text-[#6B6B6B]">Add translated feature title and description pairs.</p>
+                            <h4 className="text-[14px] font-semibold text-[#1A1A1A]">Direction To Use</h4>
+                            <p className="text-[12.5px] text-[#6B6B6B]">Add translated Direction To Use instructions and guidelines.</p>
                           </div>
                           <div className="flex items-center gap-2">
                             <button type="button" onClick={() => setDraft("primaryFeatures", [...draft.primaryFeatures, { title: "", description: "" }])} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[12.5px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5]">
@@ -9043,6 +9539,198 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* 1. Feature Modal */}
+      <Modal
+        open={featureModalOpen}
+        onClose={() => setFeatureModalOpen(false)}
+        title={editingFeatureIndex !== null ? "Edit Feature" : "Add Feature"}
+        panelClassName="max-w-2xl"
+      >
+        <div className="space-y-4 p-6">
+          <AdminInput
+            label="Feature Title"
+            value={featureTitleState}
+            onChange={(e) => setFeatureTitleState(e.target.value)}
+            placeholder="Enter feature title (e.g. High-Precision Orthodontic Design)"
+          />
+          <AdminRichTextEditor
+            label="Feature Description"
+            value={featureDescriptionState}
+            placeholder="Enter feature description..."
+            onChange={(val) => setFeatureDescriptionState(val)}
+            className="min-h-[160px]"
+          />
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E6E6E6]">
+            <button
+              type="button"
+              onClick={() => setFeatureModalOpen(false)}
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveFeatureModal}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+            >
+              {editingFeatureIndex !== null ? "Save Feature" : "Add Feature"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* 2. Key Specification Modal */}
+      <Modal
+        open={specModalOpen}
+        onClose={() => setSpecModalOpen(false)}
+        title={editingSpecIndex !== null ? "Edit Key Specification" : "Add Key Specification"}
+        panelClassName="max-w-lg"
+      >
+        <div className="space-y-4 p-6">
+          <AdminInput
+            label="Specification Label"
+            value={specLabelState}
+            onChange={(e) => setSpecLabelState(e.target.value)}
+            placeholder="e.g. Material"
+          />
+          <AdminInput
+            label="Specification Value"
+            value={specValueState}
+            onChange={(e) => setSpecValueState(e.target.value)}
+            placeholder="e.g. Medical Grade Stainless Steel"
+          />
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E6E6E6]">
+            <button
+              type="button"
+              onClick={() => setSpecModalOpen(false)}
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveSpecModal}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+            >
+              {editingSpecIndex !== null ? "Save Spec" : "Add Spec"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* 3. Direction To Use Modal */}
+      <Modal
+        open={directionModalOpen}
+        onClose={() => setDirectionModalOpen(false)}
+        title={editingDirectionIndex !== null ? "Edit Guideline" : "Add Guideline"}
+        panelClassName="max-w-2xl"
+      >
+        <div className="space-y-4 p-6">
+          <AdminInput
+            label="Instruction Title"
+            value={directionTitleState}
+            onChange={(e) => setDirectionTitleState(e.target.value)}
+            placeholder="e.g. Clinical Inspection & Verification"
+          />
+          <AdminRichTextEditor
+            label="Instruction Details"
+            value={directionDescriptionState}
+            placeholder="Enter clinical guideline details..."
+            onChange={(val) => setDirectionDescriptionState(val)}
+            className="min-h-[160px]"
+          />
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E6E6E6]">
+            <button
+              type="button"
+              onClick={() => setDirectionModalOpen(false)}
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveDirectionModal}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+            >
+              {editingDirectionIndex !== null ? "Save Guideline" : "Add Guideline"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* 4. Warranty Modal */}
+      <Modal
+        open={warrantyModalOpen}
+        onClose={() => setWarrantyModalOpen(false)}
+        title={editingWarrantyIndex !== null ? "Edit Warranty Clause" : "Add Warranty Clause"}
+        panelClassName="max-w-xl"
+      >
+        <div className="space-y-4 p-6">
+          <AdminRichTextEditor
+            label="Warranty Clause / Term"
+            value={warrantyTextState}
+            placeholder="Enter warranty term..."
+            onChange={(val) => setWarrantyTextState(val)}
+            className="min-h-[140px]"
+          />
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E6E6E6]">
+            <button
+              type="button"
+              onClick={() => setWarrantyModalOpen(false)}
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveWarrantyModal}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+            >
+              {editingWarrantyIndex !== null ? "Save Clause" : "Add Clause"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* 5. Additional Info Modal */}
+      <Modal
+        open={additionalInfoModalOpen}
+        onClose={() => setAdditionalInfoModalOpen(false)}
+        title={editingAdditionalInfoIndex !== null ? "Edit Additional Info Row" : "Add Info Row"}
+        panelClassName="max-w-lg"
+      >
+        <div className="space-y-4 p-6">
+          <AdminInput
+            label="Field Label"
+            value={additionalInfoLabelState}
+            onChange={(e) => setAdditionalInfoLabelState(e.target.value)}
+            placeholder="e.g. Manufacturer"
+          />
+          <AdminInput
+            label="Field Value"
+            value={additionalInfoValueState}
+            onChange={(e) => setAdditionalInfoValueState(e.target.value)}
+            placeholder="e.g. Modern Orthodontics"
+          />
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E6E6E6]">
+            <button
+              type="button"
+              onClick={() => setAdditionalInfoModalOpen(false)}
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveAdditionalInfoModal}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+            >
+              {editingAdditionalInfoIndex !== null ? "Save Info Row" : "Add Info Row"}
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {ToastComponent}

@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Plus, Edit2, Trash2, Search, ArrowUpDown, Globe, Link2, FolderTree, ExternalLink, X } from "lucide-react";
+import { Plus, Edit2, Trash2, Search, ArrowUp, ArrowDown, Globe, Link2, FolderTree, ExternalLink, X, Settings, ChevronRight } from "lucide-react";
 import { AdminInput, AdminSelect, AdminTextarea, ConfirmModal, DataTable, type Column, useToast } from "@/components/admin/AdminComponents";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminCategories, useAdminCmsMenus, useAdminCmsPages, useAdminLanguages } from "@/hooks/admin/useAdminHooks";
-import { CMS_MENU_LOCATIONS } from "@/lib/cmsNavigation";
+import { CMS_MENU_LOCATIONS, type CmsMenuCategoryGroup } from "@/lib/cmsNavigation";
 import { adminApi } from "@/services/adminApi";
+import { cn } from "@/utils/cn";
 
 type CmsTranslations = Record<string, Array<{ languageId: string; value: string }>>;
 type Language = { id: string; name: string; code: string };
@@ -36,31 +37,25 @@ function normalizeItem(item: MenuItem): MenuItem {
   };
 }
 
-function MenuCard({
-  menu,
-  languages,
-  categories = [],
-  cmsPages = [],
-  onDeleted,
-  onUpdated,
-}: {
-  menu: Menu;
-  languages: Language[];
-  categories?: any[];
-  cmsPages?: any[];
-  onDeleted: () => void;
-  onUpdated: () => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
-  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+export default function CmsMenusPage() {
+  const { data: menus, isLoading, refetch } = useAdminCmsMenus();
+  const { data: languages = [] } = useAdminLanguages();
+  const { data: categories = [] } = useAdminCategories();
+  const { data: cmsPagesResponse } = useAdminCmsPages();
+  const cmsPages = cmsPagesResponse?.data ?? [];
 
-  const [menuName, setMenuName] = useState(menu.name);
-  const [menuLocation, setMenuLocation] = useState(menu.location);
-  const [menuStatus, setMenuStatus] = useState(menu.status ?? "ACTIVE");
-  const [items, setItems] = useState<MenuItem[]>(menu.items.map(normalizeItem));
-  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedMenuId, setSelectedMenuId] = useState<string | null>(null);
+  const [activeGroupFilter, setActiveGroupFilter] = useState<string>("ALL");
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newLocation, setNewLocation] = useState<string>(CMS_MENU_LOCATIONS[0].value);
+
+  // Active Menu Item Management State
+  const [itemsSearchQuery, setItemsSearchQuery] = useState("");
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
+  const [editingMenuSettings, setEditingMenuSettings] = useState(false);
 
   // Add Item State
   const [addLabel, setAddLabel] = useState("");
@@ -71,16 +66,42 @@ function MenuCard({
 
   const { showToast } = useToast();
 
+  const menuList: Menu[] = useMemo(() => (menus as Menu[]) ?? [], [menus]);
+
+  // Set default selected menu on load
   useEffect(() => {
-    setMenuName(menu.name);
-    setMenuLocation(menu.location);
-    setMenuStatus(menu.status ?? "ACTIVE");
-    setItems(menu.items.map(normalizeItem));
-  }, [menu]);
+    if (menuList.length > 0 && (!selectedMenuId || !menuList.some((m) => m.id === selectedMenuId))) {
+      setSelectedMenuId(menuList[0].id);
+    }
+  }, [menuList, selectedMenuId]);
+
+  const activeMenu = useMemo(
+    () => menuList.find((m) => m.id === selectedMenuId) || menuList[0] || null,
+    [menuList, selectedMenuId]
+  );
+
+  const [menuName, setMenuName] = useState("");
+  const [menuLocation, setMenuLocation] = useState("");
+  const [menuStatus, setMenuStatus] = useState("ACTIVE");
+  const [items, setItems] = useState<MenuItem[]>([]);
+
+  useEffect(() => {
+    if (activeMenu) {
+      setMenuName(activeMenu.name);
+      setMenuLocation(activeMenu.location);
+      setMenuStatus(activeMenu.status ?? "ACTIVE");
+      setItems(activeMenu.items.map(normalizeItem));
+    }
+  }, [activeMenu]);
+
+  const activeLocationMeta = useMemo(
+    () => (activeMenu ? CMS_MENU_LOCATIONS.find((loc) => loc.value === activeMenu.location) : null),
+    [activeMenu]
+  );
 
   const sortedItems = useMemo(
     () => items.slice().sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label)),
-    [items],
+    [items]
   );
 
   const parentMap = useMemo(() => {
@@ -90,26 +111,91 @@ function MenuCard({
   }, [items]);
 
   const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return sortedItems;
-    const q = searchQuery.toLowerCase().trim();
+    if (!itemsSearchQuery.trim()) return sortedItems;
+    const q = itemsSearchQuery.toLowerCase().trim();
     return sortedItems.filter(
-      (item) => item.label.toLowerCase().includes(q) || item.url.toLowerCase().includes(q),
+      (item) => item.label.toLowerCase().includes(q) || item.url.toLowerCase().includes(q)
     );
-  }, [sortedItems, searchQuery]);
+  }, [sortedItems, itemsSearchQuery]);
 
-  const parentOptions = [
-    { value: "", label: "No Parent (Top-Level Column)" },
-    ...sortedItems.map((item) => ({ value: item.id, label: item.label })),
-  ];
+  const parentOptions = useMemo(
+    () => [
+      { value: "", label: "No Parent (Top-Level Link / Column)" },
+      ...sortedItems.map((item) => ({ value: item.id, label: item.label })),
+    ],
+    [sortedItems]
+  );
+
+  // Grouped Menu Tabs for Sidebar
+  const filteredLocationTabs = useMemo(() => {
+    if (activeGroupFilter === "ALL") return menuList;
+    return menuList.filter((m) => {
+      const g = CMS_MENU_LOCATIONS.find((loc) => loc.value === m.location)?.group;
+      return g === activeGroupFilter;
+    });
+  }, [menuList, activeGroupFilter]);
+
+  // Keep selected tab in view when filter changes
+  useEffect(() => {
+    if (filteredLocationTabs.length > 0 && !filteredLocationTabs.some((m) => m.id === selectedMenuId)) {
+      setSelectedMenuId(filteredLocationTabs[0].id);
+    }
+  }, [filteredLocationTabs, selectedMenuId]);
+
+  const groupCounts = useMemo(() => {
+    const header = menuList.filter((m) => CMS_MENU_LOCATIONS.find((l) => l.value === m.location)?.group === "header").length;
+    const footer = menuList.filter((m) => CMS_MENU_LOCATIONS.find((l) => l.value === m.location)?.group === "footer").length;
+    const offices = menuList.filter((m) => CMS_MENU_LOCATIONS.find((l) => l.value === m.location)?.group === "offices_legal").length;
+    return { all: menuList.length, header, footer, offices };
+  }, [menuList]);
+
+  async function createMenu() {
+    if (!newName.trim()) {
+      showToast("Name is required.", "error");
+      return;
+    }
+
+    try {
+      const response = await adminApi.post("/cms/menus", { name: newName.trim(), location: newLocation, status: "ACTIVE" });
+      showToast("Menu created.", "success");
+      setCreating(false);
+      setNewName("");
+      setNewLocation(CMS_MENU_LOCATIONS[0].value);
+      if (response.data.data?.id) setSelectedMenuId(response.data.data.id);
+      refetch();
+    } catch {
+      showToast("Failed to create menu.", "error");
+    }
+  }
+
+  async function saveMenuSettings() {
+    if (!activeMenu || !menuName.trim() || !menuLocation.trim()) {
+      showToast("Name and location key are required.", "error");
+      return;
+    }
+
+    try {
+      await adminApi.put(`/cms/menus/${activeMenu.id}`, {
+        name: menuName.trim(),
+        location: menuLocation.trim(),
+        status: menuStatus,
+      });
+      showToast("Menu settings saved.", "success");
+      setEditingMenuSettings(false);
+      refetch();
+    } catch {
+      showToast("Failed to save menu settings.", "error");
+    }
+  }
 
   async function addItem() {
-    if (!addLabel.trim()) {
+    if (!activeMenu || !addLabel.trim()) {
       showToast("Label is required.", "error");
       return;
     }
 
     try {
-      const response = await adminApi.post(`/cms/menus/${menu.id}/items`, {
+      const response = await adminApi.post(`/cms/menus/${activeMenu.id}/items`, {
         label: addLabel.trim(),
         url: addUrl.trim(),
         parentId: addParentId || undefined,
@@ -124,29 +210,10 @@ function MenuCard({
       setAddParentId("");
       setAddOpenInNewTab("false");
       setIsAddModalOpen(false);
-      showToast("Item added successfully.", "success");
-      onUpdated();
+      showToast("Menu item added.", "success");
+      refetch();
     } catch {
-      showToast("Failed to add item.", "error");
-    }
-  }
-
-  async function saveMenu() {
-    if (!menuName.trim() || !menuLocation.trim()) {
-      showToast("Name and location are required.", "error");
-      return;
-    }
-
-    try {
-      await adminApi.put(`/cms/menus/${menu.id}`, {
-        name: menuName.trim(),
-        location: menuLocation.trim(),
-        status: menuStatus,
-      });
-      showToast("Menu settings saved.", "success");
-      onUpdated();
-    } catch {
-      showToast("Failed to save menu.", "error");
+      showToast("Failed to add menu item.", "error");
     }
   }
 
@@ -163,10 +230,49 @@ function MenuCard({
       const saved = normalizeItem(response.data.data);
       setItems((prev) => prev.map((item) => (item.id === nextItem.id ? saved : item)));
       setEditingItem(null);
-      showToast("Item updated successfully.", "success");
-      onUpdated();
+      showToast("Menu item updated.", "success");
+      refetch();
     } catch {
-      showToast("Failed to update item.", "error");
+      showToast("Failed to update menu item.", "error");
+    }
+  }
+
+  async function moveItem(index: number, direction: "up" | "down") {
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= sortedItems.length) return;
+
+    const currentItem = sortedItems[index];
+    const targetItem = sortedItems[targetIndex];
+
+    const currentSort = currentItem.sortOrder;
+    const targetSort = targetItem.sortOrder;
+
+    const newCurrentSort = targetSort === currentSort ? currentSort + (direction === "up" ? -1 : 1) : targetSort;
+    const newTargetSort = currentSort;
+
+    try {
+      await Promise.all([
+        adminApi.put(`/cms/menu-items/${currentItem.id}`, {
+          label: currentItem.label,
+          url: currentItem.url,
+          parentId: currentItem.parentId || null,
+          sortOrder: newCurrentSort,
+          openInNewTab: Boolean(currentItem.openInNewTab),
+          status: currentItem.status ?? "ACTIVE",
+        }),
+        adminApi.put(`/cms/menu-items/${targetItem.id}`, {
+          label: targetItem.label,
+          url: targetItem.url,
+          parentId: targetItem.parentId || null,
+          sortOrder: newTargetSort,
+          openInNewTab: Boolean(targetItem.openInNewTab),
+          status: targetItem.status ?? "ACTIVE",
+        }),
+      ]);
+      showToast("Item order updated.", "success");
+      refetch();
+    } catch {
+      showToast("Failed to update item order.", "error");
     }
   }
 
@@ -176,7 +282,7 @@ function MenuCard({
         label: value,
       });
       showToast("Translation saved.", "success");
-      onUpdated();
+      refetch();
     } catch {
       showToast("Failed to save translation.", "error");
     }
@@ -188,8 +294,8 @@ function MenuCard({
     try {
       await adminApi.delete(`/cms/menu-items/${deleteItemId}`);
       setItems((prev) => prev.filter((item) => item.id !== deleteItemId));
-      showToast("Item removed.", "success");
-      onUpdated();
+      showToast("Menu item removed.", "success");
+      refetch();
     } catch {
       showToast("Failed to remove item.", "error");
     } finally {
@@ -207,7 +313,7 @@ function MenuCard({
         return (
           <div className="flex items-center gap-2">
             {isChild ? (
-              <span className="text-[#9A9A9A] font-mono text-xs pl-3">└─</span>
+              <span className="font-mono text-xs text-[#9A9A9A] pl-3">└─</span>
             ) : (
               <FolderTree size={14} className="text-[#E31E24] shrink-0" />
             )}
@@ -225,11 +331,11 @@ function MenuCard({
     },
     {
       key: "url",
-      label: "URL / Target Link",
+      label: "Target Link / URL",
       render: (row) => (
         <div className="flex items-center gap-1.5 font-mono text-[12px] text-[#555]">
           <Link2 size={12} className="text-[#9A9A9A] shrink-0" />
-          <span className="truncate max-w-[240px]">{row.url || "—"}</span>
+          <span className="truncate max-w-[280px]">{row.url || "—"}</span>
           {row.openInNewTab && <ExternalLink size={11} className="text-[#9A9A9A] shrink-0" />}
         </div>
       ),
@@ -237,12 +343,37 @@ function MenuCard({
     {
       key: "sortOrder",
       label: "Order",
-      width: "90px",
-      render: (row) => (
-        <span className="inline-flex rounded border border-[#E6E6E6] bg-[#F8F8F8] px-2 py-0.5 font-mono text-[11.5px] font-semibold text-[#1A1A1A]">
-          #{row.sortOrder}
-        </span>
-      ),
+      width: "130px",
+      render: (row) => {
+        const itemIdx = sortedItems.findIndex((i) => i.id === row.id);
+        return (
+          <div className="flex items-center gap-1.5">
+            <span className="inline-flex rounded border border-[#E6E6E6] bg-[#F8F8F8] px-2 py-0.5 font-mono text-[11.5px] font-semibold text-[#1A1A1A]">
+              #{row.sortOrder}
+            </span>
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                disabled={itemIdx === 0}
+                onClick={() => moveItem(itemIdx, "up")}
+                className="flex h-6 w-6 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] disabled:opacity-30 disabled:hover:bg-white transition-colors"
+                title="Move item up"
+              >
+                <ArrowUp size={11} />
+              </button>
+              <button
+                type="button"
+                disabled={itemIdx === sortedItems.length - 1}
+                onClick={() => moveItem(itemIdx, "down")}
+                className="flex h-6 w-6 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] disabled:opacity-30 disabled:hover:bg-white transition-colors"
+                title="Move item down"
+              >
+                <ArrowDown size={11} />
+              </button>
+            </div>
+          </div>
+        );
+      },
     },
     {
       key: "status",
@@ -263,7 +394,7 @@ function MenuCard({
     {
       key: "actions",
       label: "Actions",
-      width: "120px",
+      width: "110px",
       render: (row) => (
         <div className="flex items-center gap-1.5">
           <button
@@ -288,159 +419,305 @@ function MenuCard({
   ];
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[#E6E6E6] bg-white shadow-sm transition-all">
-      {/* Menu Header Card */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6E6E6] bg-[#FAFAFA] px-5 py-4">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setExpanded((prev) => !prev)}
-            className="flex items-center gap-2 text-left hover:opacity-80"
-          >
-            {expanded ? <ChevronUp size={18} className="text-[#6B6B6B]" /> : <ChevronDown size={18} className="text-[#6B6B6B]" />}
-            <div>
-              <h3 className="text-[15px] font-bold text-[#1A1A1A]">{menu.name}</h3>
-              <div className="mt-0.5 flex items-center gap-2 text-xs text-[#9A9A9A]">
-                <span className="rounded bg-[#EFEFEF] px-1.5 py-0.5 font-mono text-[10.5px] text-[#6B6B6B]">
-                  {menu.location}
-                </span>
-                <span>•</span>
-                <span className="font-semibold text-[#1A1A1A]">{items.length} items</span>
-              </div>
-            </div>
-          </button>
+    <AdminLayout title="Menus" breadcrumb={[{ label: "Content" }, { label: "Menus" }]}>
+      {/* Header */}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-[17px] font-bold text-[#1A1A1A]">Header & Footer Navigation Menus</h2>
+          <p className="text-xs text-[#6B6B6B]">Select a menu location tab from the left sidebar to view and manage its items.</p>
         </div>
-
-        <div className="flex items-center gap-2">
-          <span
-            className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
-              menu.status === "ACTIVE"
-                ? "border border-green-200 bg-green-50 text-green-700"
-                : "border border-gray-200 bg-gray-50 text-gray-500"
-            }`}
-          >
-            {menu.status ?? "ACTIVE"}
-          </span>
-
-          <button
-            type="button"
-            onClick={() => setExpanded((prev) => !prev)}
-            className="rounded-lg border border-[#E6E6E6] bg-white px-3 py-1.5 text-xs font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
-          >
-            {expanded ? "Collapse Table" : "Manage Menu Items"}
-          </button>
-        </div>
+        <button
+          onClick={() => setCreating((value) => !value)}
+          className="flex items-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2 text-xs font-semibold text-white hover:bg-[#B5151B] transition-all shadow-xs"
+        >
+          <Plus size={14} />
+          New Menu Location
+        </button>
       </div>
 
-      {/* Expanded Table & Management Section */}
-      {expanded && (
-        <div className="space-y-4 p-5">
-          {/* Menu Settings */}
-          <div className="grid gap-3 rounded-lg border border-[#E6E6E6] bg-[#FDFDFD] p-3.5 md:grid-cols-[1fr_1fr_120px_auto]">
-            <AdminInput label="Menu Display Name" value={menuName} onChange={(e) => setMenuName(e.target.value)} />
-            <AdminSelect
-              label="Location Key"
-              value={menuLocation}
-              onChange={(e) => setMenuLocation(e.target.value)}
-              options={CMS_MENU_LOCATIONS.map((option) => ({ value: option.value, label: option.label }))}
-            />
-            <AdminSelect
-              label="Status"
-              value={menuStatus}
-              onChange={(e) => setMenuStatus(e.target.value)}
-              options={[
-                { value: "ACTIVE", label: "Active" },
-                { value: "INACTIVE", label: "Inactive" },
-              ]}
-            />
-            <div className="flex items-end">
-              <button
-                type="button"
-                onClick={saveMenu}
-                className="w-full rounded-md border border-[#E6E6E6] bg-white py-2 px-3 text-xs font-semibold text-[#1A1A1A] hover:bg-[#F5F5F5] transition-all"
-              >
-                Save Settings
-              </button>
-            </div>
-          </div>
+      {/* Social Media Quick-Access Notice Banner */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200/80 bg-blue-50/60 px-4 py-2.5 text-[12.5px] text-blue-900">
+        <div className="flex items-center gap-2">
+          <Globe size={15} className="text-blue-600 shrink-0" />
+          <span>
+            <strong>Social Media Links:</strong> Footer social links are managed under{" "}
+            <a href="/admin/cms/footer" className="font-semibold text-blue-800 underline hover:text-blue-950">
+              CMS → Footer
+            </a>
+            .
+          </span>
+        </div>
+        <a
+          href="/admin/cms/footer"
+          className="shrink-0 font-semibold text-blue-700 hover:text-blue-900 text-xs hover:underline"
+        >
+          Manage Social Links →
+        </a>
+      </div>
 
-          {/* Action Toolbar */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="relative max-w-xs flex-1">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-              <input
-                type="text"
-                placeholder="Search menu items..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-lg border border-[#E6E6E6] bg-white py-1.5 pl-8 pr-3 text-xs text-[#1A1A1A] outline-none focus:border-[#E31E24]"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {categories.length > 0 && (
-                <div className="w-52">
-                  <AdminSelect
-                    label=""
-                    value=""
-                    onChange={(e) => {
-                      const cat = categories.find((c: { id: string }) => c.id === e.target.value);
-                      if (cat) {
-                        setAddLabel(cat.name);
-                        setAddUrl(`/products?category=${cat.slug}`);
-                        setAddSortOrder(items.length);
-                        setIsAddModalOpen(true);
-                      }
-                    }}
-                    options={[
-                      { value: "", label: "⚡ Quick Link Category..." },
-                      ...categories.map((c: { id: string; name: string }) => ({ value: c.id, label: c.name })),
-                    ]}
-                  />
-                </div>
-              )}
-              {cmsPages.length > 0 && (
-                <div className="w-52">
-                  <AdminSelect
-                    label=""
-                    value=""
-                    onChange={(e) => {
-                      const page = cmsPages.find((p: { id: string }) => p.id === e.target.value);
-                      if (page) {
-                        setAddLabel(page.title);
-                        setAddUrl(`/${page.slug}`);
-                        setAddSortOrder(items.length);
-                        setIsAddModalOpen(true);
-                      }
-                    }}
-                    options={[
-                      { value: "", label: "⚡ Quick Link CMS Page..." },
-                      ...cmsPages.map((p: { id: string; title: string; slug: string }) => ({ value: p.id, label: `${p.title} (/${p.slug})` })),
-                    ]}
-                  />
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  setAddLabel("");
-                  setAddUrl("");
-                  setAddParentId("");
-                  setAddSortOrder(items.length);
-                  setIsAddModalOpen(true);
-                }}
-                className="flex items-center gap-1.5 rounded-lg bg-[#E31E24] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#B5151B] transition-all shadow-sm"
-              >
-                <Plus size={14} /> Add Menu Item
-              </button>
-            </div>
-          </div>
-
-          {/* Tabular Menu Items */}
-          <DataTable columns={columns} data={filteredItems} rowKey="id" emptyMessage="No menu items found for this menu." />
+      {creating && (
+        <div className="mb-5 grid items-end gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 md:grid-cols-[1fr_1fr_auto_auto]">
+          <AdminInput label="Name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Footer About Column" />
+          <AdminSelect
+            label="Location"
+            value={newLocation}
+            onChange={(e) => setNewLocation(e.target.value)}
+            options={CMS_MENU_LOCATIONS.map((option) => ({ value: option.value, label: `${option.label} (${option.value})` }))}
+          />
+          <button onClick={createMenu} className="mb-0.5 rounded-lg bg-[#E31E24] px-4 py-2 text-xs font-semibold text-white hover:bg-[#B5151B]">
+            Create
+          </button>
+          <button onClick={() => setCreating(false)} className="mb-0.5 rounded-lg border border-gray-200 px-4 py-2 text-xs hover:bg-white">
+            Cancel
+          </button>
         </div>
       )}
+
+      {/* Vertical Sidebar Sub-Tabs Layout */}
+      <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)] items-start">
+        {/* Sidebar Sub-Tabs Panel */}
+        <div className="rounded-xl border border-[#E6E6E6] bg-white p-3 space-y-3 shadow-2xs">
+          {/* Top Group Category Filter Pills */}
+          <div className="flex flex-wrap items-center gap-1 border-b border-[#E6E6E6] pb-2.5">
+            <button
+              type="button"
+              onClick={() => setActiveGroupFilter("ALL")}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors flex items-center gap-1",
+                activeGroupFilter === "ALL" ? "bg-[#1A1A1A] text-white" : "bg-[#F2F2F2] text-[#6B6B6B] hover:bg-[#E6E6E6]"
+              )}
+            >
+              All ({groupCounts.all})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveGroupFilter("header")}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors flex items-center gap-1",
+                activeGroupFilter === "header" ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+              )}
+            >
+              Header ({groupCounts.header})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveGroupFilter("footer")}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors flex items-center gap-1",
+                activeGroupFilter === "footer" ? "bg-rose-600 text-white" : "bg-rose-50 text-rose-700 hover:bg-rose-100"
+              )}
+            >
+              Footer ({groupCounts.footer})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveGroupFilter("offices_legal")}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors flex items-center gap-1",
+                activeGroupFilter === "offices_legal" ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-800 hover:bg-amber-100"
+              )}
+            >
+              Offices ({groupCounts.offices})
+            </button>
+          </div>
+
+          {/* Vertical Menu Location Sub-Tabs List */}
+          {isLoading ? (
+            <div className="py-6 text-center text-xs text-[#9A9A9A]">Loading tabs...</div>
+          ) : (
+            <div className="space-y-1 max-h-[70vh] overflow-y-auto pr-0.5">
+              {filteredLocationTabs.map((tabMenu) => {
+                const isSelected = tabMenu.id === selectedMenuId;
+                return (
+                  <button
+                    key={tabMenu.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedMenuId(tabMenu.id);
+                      setEditingMenuSettings(false);
+                    }}
+                    className={cn(
+                      "w-full text-left rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all flex items-center justify-between gap-2 border",
+                      isSelected
+                        ? "bg-[#E31E24] text-white border-[#E31E24] font-semibold shadow-2xs"
+                        : "bg-transparent text-[#1A1A1A] border-transparent hover:bg-[#F5F5F5]"
+                    )}
+                  >
+                    <span className="truncate">{tabMenu.name}</span>
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 font-mono text-[10.5px] font-bold shrink-0",
+                        isSelected ? "bg-white/25 text-white" : "bg-[#EFEFEF] text-[#6B6B6B]"
+                      )}
+                    >
+                      {tabMenu.items.length}
+                    </span>
+                  </button>
+                );
+              })}
+
+              {filteredLocationTabs.length === 0 && (
+                <div className="py-6 text-center text-xs text-[#9A9A9A]">No tabs found.</div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Main View Area: Full Width Selected Menu Workspace */}
+        {activeMenu ? (
+          <div className="space-y-5">
+            <div className="rounded-xl border border-[#E6E6E6] bg-white p-6 shadow-xs">
+              {/* Header Details */}
+              <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#E6E6E6] pb-4">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-[18px] font-bold text-[#1A1A1A]">{activeMenu.name}</h3>
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
+                        activeMenu.status === "ACTIVE"
+                          ? "border border-green-200 bg-green-50 text-green-700"
+                          : "border border-gray-200 bg-gray-50 text-gray-500"
+                      }`}
+                    >
+                      {activeMenu.status ?? "ACTIVE"}
+                    </span>
+                  </div>
+                  {activeLocationMeta?.description && (
+                    <p className="mt-1 text-[13px] text-[#6B6B6B]">{activeLocationMeta.description}</p>
+                  )}
+                  <div className="mt-2 flex items-center gap-2 text-xs text-[#9A9A9A]">
+                    <span className="font-mono text-[11px] text-[#9A9A9A]">Key: {activeMenu.location}</span>
+                    <span>•</span>
+                    <span className="font-semibold text-[#1A1A1A]">{items.length} item{items.length === 1 ? "" : "s"} configured</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setEditingMenuSettings((prev) => !prev)}
+                  className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3.5 py-1.5 text-xs font-semibold text-[#1A1A1A] hover:bg-[#F5F5F5] transition-colors"
+                >
+                  <Settings size={13} />
+                  {editingMenuSettings ? "Hide Settings" : "Edit Menu Settings"}
+                </button>
+              </div>
+
+              {/* Inline Menu Settings Editor */}
+              {editingMenuSettings && (
+                <div className="mt-4 grid gap-3 rounded-lg border border-[#E6E6E6] bg-[#FDFDFD] p-4 md:grid-cols-[1fr_1fr_120px_auto]">
+                  <AdminInput label="Menu Display Name" value={menuName} onChange={(e) => setMenuName(e.target.value)} />
+                  <AdminSelect
+                    label="Location Key"
+                    value={menuLocation}
+                    onChange={(e) => setMenuLocation(e.target.value)}
+                    options={CMS_MENU_LOCATIONS.map((option) => ({ value: option.value, label: `${option.label} (${option.value})` }))}
+                  />
+                  <AdminSelect
+                    label="Status"
+                    value={menuStatus}
+                    onChange={(e) => setMenuStatus(e.target.value)}
+                    options={[
+                      { value: "ACTIVE", label: "Active" },
+                      { value: "INACTIVE", label: "Inactive" },
+                    ]}
+                  />
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={saveMenuSettings}
+                      className="w-full rounded-md bg-[#E31E24] py-2 px-4 text-xs font-semibold text-white hover:bg-[#B5151B] transition-all"
+                    >
+                      Save Settings
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Toolbar */}
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="relative max-w-xs flex-1">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
+                  <input
+                    type="text"
+                    placeholder="Search menu items..."
+                    value={itemsSearchQuery}
+                    onChange={(e) => setItemsSearchQuery(e.target.value)}
+                    className="w-full rounded-lg border border-[#E6E6E6] bg-white py-1.5 pl-8 pr-3 text-xs text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {categories.length > 0 && (
+                    <div className="w-48">
+                      <AdminSelect
+                        label=""
+                        value=""
+                        onChange={(e) => {
+                          const cat = categories.find((c: { id: string }) => c.id === e.target.value);
+                          if (cat) {
+                            setAddLabel(cat.name);
+                            setAddUrl(`/products?category=${cat.slug}`);
+                            setAddSortOrder(items.length);
+                            setIsAddModalOpen(true);
+                          }
+                        }}
+                        options={[
+                          { value: "", label: "⚡ Pick Category..." },
+                          ...categories.map((c: { id: string; name: string }) => ({ value: c.id, label: c.name })),
+                        ]}
+                      />
+                    </div>
+                  )}
+                  {cmsPages.length > 0 && (
+                    <div className="w-48">
+                      <AdminSelect
+                        label=""
+                        value=""
+                        onChange={(e) => {
+                          const page = cmsPages.find((p: { id: string }) => p.id === e.target.value);
+                          if (page) {
+                            setAddLabel(page.title);
+                            setAddUrl(`/${page.slug}`);
+                            setAddSortOrder(items.length);
+                            setIsAddModalOpen(true);
+                          }
+                        }}
+                        options={[
+                          { value: "", label: "⚡ Pick CMS Page..." },
+                          ...cmsPages.map((p: { id: string; title: string; slug: string }) => ({ value: p.id, label: p.title })),
+                        ]}
+                      />
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddLabel("");
+                      setAddUrl("");
+                      setAddParentId("");
+                      setAddSortOrder(items.length);
+                      setIsAddModalOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 rounded-lg bg-[#E31E24] px-4 py-2 text-xs font-semibold text-white hover:bg-[#B5151B] transition-all shadow-xs"
+                  >
+                    <Plus size={14} /> Add Menu Item
+                  </button>
+                </div>
+              </div>
+
+              {/* Menu Items Table */}
+              <div className="mt-4">
+                <DataTable columns={columns} data={filteredItems} rowKey="id" emptyMessage="No menu items configured for this location." />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-[#E6E6E6] bg-white p-12 text-center text-sm text-[#6B6B6B]">
+            No menu location selected.
+          </div>
+        )}
+      </div>
 
       {/* Add Item Modal */}
       {isAddModalOpen && (
@@ -455,7 +732,7 @@ function MenuCard({
 
             <div className="space-y-3">
               <AdminInput label="Item Label" value={addLabel} onChange={(e) => setAddLabel(e.target.value)} placeholder="e.g. Metal Brackets" />
-              <AdminInput label="URL / Slug Target" value={addUrl} onChange={(e) => setAddUrl(e.target.value)} placeholder="/products?category=metal-brackets" />
+              <AdminInput label="URL / Target Link" value={addUrl} onChange={(e) => setAddUrl(e.target.value)} placeholder="/products?category=metal-brackets" />
               <AdminSelect label="Parent Menu (Column Group)" value={addParentId} onChange={(e) => setAddParentId(e.target.value)} options={parentOptions} />
               <div className="grid grid-cols-2 gap-3">
                 <AdminInput label="Sort Order" type="number" value={String(addSortOrder)} onChange={(e) => setAddSortOrder(Number(e.target.value || 0))} />
@@ -509,7 +786,7 @@ function MenuCard({
                 onChange={(e) => setEditingItem({ ...editingItem, label: e.target.value })}
               />
               <AdminInput
-                label="URL / Slug Target"
+                label="URL / Target Link"
                 value={editingItem.url}
                 onChange={(e) => setEditingItem({ ...editingItem, url: e.target.value })}
               />
@@ -554,7 +831,7 @@ function MenuCard({
                 <div className="pt-3 border-t border-[#E6E6E6] space-y-2">
                   <p className="text-xs font-bold uppercase tracking-wider text-[#9A9A9A]">Multi-Language Translations</p>
                   <div className="grid gap-2 md:grid-cols-2">
-                    {languages.map((language) => (
+                    {languages.map((language: Language) => (
                       <AdminTextarea
                         key={language.id}
                         label={`${language.name} (${language.code})`}
@@ -589,87 +866,6 @@ function MenuCard({
       )}
 
       <ConfirmModal open={!!deleteItemId} title="Remove item" message="Are you sure you want to remove this menu item?" onConfirm={removeItem} onCancel={() => setDeleteItemId(null)} danger />
-    </div>
-  );
-}
-
-export default function CmsMenusPage() {
-  const { data: menus, isLoading, refetch } = useAdminCmsMenus();
-  const { data: languages = [] } = useAdminLanguages();
-  const { data: categories = [] } = useAdminCategories();
-  const { data: cmsPagesResponse } = useAdminCmsPages();
-  const cmsPages = cmsPagesResponse?.data ?? [];
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newLocation, setNewLocation] = useState<string>(CMS_MENU_LOCATIONS[0].value);
-  const { showToast } = useToast();
-
-  async function createMenu() {
-    if (!newName.trim()) {
-      showToast("Name is required.", "error");
-      return;
-    }
-
-    try {
-      await adminApi.post("/cms/menus", { name: newName.trim(), location: newLocation, status: "ACTIVE" });
-      showToast("Menu created.", "success");
-      setCreating(false);
-      setNewName("");
-      setNewLocation(CMS_MENU_LOCATIONS[0].value);
-      refetch();
-    } catch {
-      showToast("Failed to create menu.", "error");
-    }
-  }
-
-  const menuList: Menu[] = (menus as Menu[]) ?? [];
-
-  return (
-    <AdminLayout title="Menus" breadcrumb={[{ label: "Content" }, { label: "Menus" }]}>
-      <div className="mb-5 flex items-center justify-between">
-        <div>
-          <h2 className="text-[17px] font-bold text-[#1A1A1A]">Header & Navigation Menus</h2>
-          <p className="text-xs text-[#6B6B6B]">Manage storefront header mega menus, capabilities, primary links, and footer columns in a clean tabular view.</p>
-        </div>
-        <button onClick={() => setCreating((value) => !value)} className="flex items-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2 text-xs font-semibold text-white hover:bg-[#B5151B] transition-all shadow-sm">
-          <Plus size={14} />
-          New Menu Location
-        </button>
-      </div>
-
-      {creating && (
-        <div className="mb-5 grid items-end gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 md:grid-cols-[1fr_1fr_auto_auto]">
-          <AdminInput label="Name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Footer About Column" />
-          <AdminSelect
-            label="Location"
-            value={newLocation}
-            onChange={(e) => setNewLocation(e.target.value)}
-            options={CMS_MENU_LOCATIONS.map((option) => ({ value: option.value, label: option.label }))}
-          />
-          <button onClick={createMenu} className="mb-0.5 rounded-lg bg-[#E31E24] px-4 py-2 text-xs font-semibold text-white hover:bg-[#B5151B]">
-            Create
-          </button>
-          <button onClick={() => setCreating(false)} className="mb-0.5 rounded-lg border border-gray-200 px-4 py-2 text-xs hover:bg-white">
-            Cancel
-          </button>
-        </div>
-      )}
-
-      {isLoading && <div className="py-12 text-center text-sm text-gray-500">Loading menu configurations...</div>}
-
-      <div className="space-y-4">
-        {menuList.map((menu) => (
-          <MenuCard
-            key={menu.id}
-            menu={menu}
-            languages={languages as Language[]}
-            categories={categories}
-            cmsPages={cmsPages}
-            onDeleted={refetch}
-            onUpdated={refetch}
-          />
-        ))}
-      </div>
     </AdminLayout>
   );
 }

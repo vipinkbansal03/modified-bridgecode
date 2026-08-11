@@ -144,6 +144,7 @@ model Product {
   technicalSpecs    Json?
   warranty          Json?
   primaryFeatures   Json?
+  additionalInfo    Json?
   packageWeight     Decimal?             @db.Decimal(10, 3)
   packageLength     Decimal?             @db.Decimal(10, 2)
   packageWidth      Decimal?             @db.Decimal(10, 2)
@@ -963,6 +964,7 @@ model ProductTranslation {
   technicalSpecs   Json?
   warranty         Json?
   primaryFeatures  Json?
+  additionalInfo   Json?
   isAiGenerated    Boolean           @default(false)
   reviewedAt       DateTime?
   createdAt        DateTime          @default(now())

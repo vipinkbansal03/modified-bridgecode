@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Archive, Copy, Edit2, Globe, Image as ImageIcon, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
+import { Archive, CheckCircle2, Copy, Edit2, Globe, Image as ImageIcon, Layers, Package, Plus, RotateCcw, Search, Trash2, XCircle } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import { Modal } from "@/components/ui/Modal";
@@ -136,6 +136,17 @@ export default function CollectionsPage() {
     sortBy,
     sortDir,
   });
+  const { data: collectionsAllData, isLoading: collectionsAllLoading } = useAdminCollections({ limit: 500 });
+  const collectionsAll: Collection[] = (collectionsAllData?.data ?? []) as Collection[];
+
+  const collectionStats = useMemo(() => {
+    const total = collectionsAll.length;
+    const active = collectionsAll.filter((c) => c.status === "ACTIVE").length;
+    const inactive = collectionsAll.filter((c) => c.status === "INACTIVE").length;
+    const totalProducts = collectionsAll.reduce((acc, c) => acc + (c._count?.products ?? c.products?.length ?? 0), 0);
+    return { total, active, inactive, totalProducts };
+  }, [collectionsAll]);
+
   const { data: productsData } = useAdminProducts({ limit: 200 });
   const { data: countries, isLoading: countriesLoading } = useAdminCollectionCountries(selectedCollectionId);
   const { data: allCountries = [] } = useAdminCountries();
@@ -434,6 +445,41 @@ export default function CollectionsPage() {
 
   return (
     <AdminLayout title="Collections" breadcrumb={[{ label: "Collections" }]}>
+      {/* StatCards Row */}
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Total Collections"
+          value={collectionStats.total}
+          subtitle="Curated product groupings"
+          icon={<Layers size={18} />}
+          isLoading={collectionsAllLoading}
+        />
+        <StatCard
+          title="Active Collections"
+          value={collectionStats.active}
+          subtitle="Visible on storefront"
+          icon={<CheckCircle2 size={18} />}
+          color="bg-green-600"
+          isLoading={collectionsAllLoading}
+        />
+        <StatCard
+          title="Inactive Collections"
+          value={collectionStats.inactive}
+          subtitle="Hidden collections"
+          icon={<XCircle size={18} />}
+          color="bg-gray-600"
+          isLoading={collectionsAllLoading}
+        />
+        <StatCard
+          title="Assigned Products"
+          value={collectionStats.totalProducts}
+          subtitle="Total product assignments"
+          icon={<Package size={18} />}
+          color="bg-blue-600"
+          isLoading={collectionsAllLoading}
+        />
+      </div>
+
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative">

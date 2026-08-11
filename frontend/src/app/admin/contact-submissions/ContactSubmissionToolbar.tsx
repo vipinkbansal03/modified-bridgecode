@@ -81,7 +81,7 @@ export function ContactSubmissionToolbar({
         />
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-3">
+      <div className="mt-3 flex items-start justify-between gap-3">
         <RefreshButton onRefresh={onRefresh} isRefreshing={isRefreshing} />
 
         <button

@@ -190,7 +190,7 @@ export default function OrdersPage() {
           </Link>
           {canUpdate && (
             <Link
-              href={`/admin/orders/${row.id}`}
+              href={`/admin/orders/${row.id}?mode=edit`}
               className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
               title="Edit order"
             >
@@ -208,7 +208,7 @@ export default function OrdersPage() {
             </button>
           )}
           <Link
-            href={`/admin/orders/${row.id}`}
+            href={`/admin/orders/${row.id}?mode=edit`}
             className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
             title="Shipping"
           >
@@ -245,7 +245,7 @@ export default function OrdersPage() {
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-start gap-2">
               <RefreshButton onRefresh={refetch} isRefreshing={isFetching} />
               <button
                 type="button"

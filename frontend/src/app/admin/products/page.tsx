@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { ConfirmModal, Pagination, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { ConfirmModal, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { RefreshButton } from "@/components/admin/RefreshButton";
 import { SortableList, toSortOrderPayload } from "@/components/admin/SortableList";
 import { Modal } from "@/components/ui/Modal";
@@ -23,7 +23,7 @@ import {
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { Archive, Copy, Download, Eye, ExternalLink, Filter, Layers, Pencil, Plus, RotateCcw, Search, SlidersHorizontal, Trash2, Upload } from "lucide-react";
+import { Archive, CheckCircle2, Copy, Download, Eye, ExternalLink, FileText, Filter, Layers, Package, Pencil, Plus, RotateCcw, Search, SlidersHorizontal, Trash2, Upload, XCircle } from "lucide-react";
 
 interface ProductRow {
   id: string;
@@ -132,6 +132,19 @@ export default function AdminProductsPage() {
   }, [columnsReady, visibleColumns]);
 
   const { data, isLoading, refetch, isFetching } = useAdminProducts({ page, search, status, categoryId: categoryId || undefined, warehouseId: warehouseFilterId || undefined, limit: 20, sortBy, sortDir });
+  const { data: totalStats, isLoading: totalLoading } = useAdminProducts({ limit: 1 });
+  const { data: activeStats, isLoading: activeLoading } = useAdminProducts({ status: "ACTIVE", limit: 1 });
+  const { data: draftStats, isLoading: draftLoading } = useAdminProducts({ status: "DRAFT", limit: 1 });
+  const { data: inactiveStats, isLoading: inactiveLoading } = useAdminProducts({ status: "INACTIVE", limit: 1 });
+
+  const productStats = useMemo(() => {
+    return {
+      total: totalStats?.pagination?.total ?? 0,
+      active: activeStats?.pagination?.total ?? 0,
+      draft: draftStats?.pagination?.total ?? 0,
+      inactive: inactiveStats?.pagination?.total ?? 0,
+    };
+  }, [totalStats, activeStats, draftStats, inactiveStats]);
   const { data: categories = [] } = useAdminCategories();
   const { data: countries = [] } = useAdminCountries();
   const { data: warehouses = [] } = useAdminWarehouses({ limit: 30 });
@@ -358,6 +371,41 @@ export default function AdminProductsPage() {
 
   return (
     <AdminLayout title="Products" breadcrumb={[{ label: "Products" }]}>
+      {/* StatCards Row */}
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Total Products"
+          value={productStats.total}
+          subtitle="All catalog items"
+          icon={<Package size={18} />}
+          isLoading={totalLoading}
+        />
+        <StatCard
+          title="Active Products"
+          value={productStats.active}
+          subtitle="Currently live on storefront"
+          icon={<CheckCircle2 size={18} />}
+          color="bg-green-600"
+          isLoading={activeLoading}
+        />
+        <StatCard
+          title="Draft Products"
+          value={productStats.draft}
+          subtitle="Unpublished drafts"
+          icon={<FileText size={18} />}
+          color="bg-amber-600"
+          isLoading={draftLoading}
+        />
+        <StatCard
+          title="Inactive Products"
+          value={productStats.inactive}
+          subtitle="Disabled / hidden"
+          icon={<XCircle size={18} />}
+          color="bg-gray-600"
+          isLoading={inactiveLoading}
+        />
+      </div>
+
       <div className="mb-5 flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
@@ -402,7 +450,7 @@ export default function AdminProductsPage() {
             </div>
           </details>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-start gap-2">
           {canCreate && (
             <Link href="/admin/products/create" className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
               <Plus size={15} /> New Product

@@ -121,6 +121,7 @@ export interface ApiProductDetail extends Omit<ApiProductSummary, "images"> {
   technicalSpecs?: any;
   warranty?: any;
   primaryFeatures?: any;
+  additionalInfo?: any;
   packageWeight?: number | null;
   packageLength?: number | null;
   packageWidth?: number | null;

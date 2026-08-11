@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { adminApi } from "@/services/adminApi";
 import { Star, CheckCircle2, XCircle, Trash2, Search, Filter, MessageSquare, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { StatCard } from "@/components/admin/AdminComponents";
 
 interface ReviewItem {
   id: string;
@@ -56,6 +57,14 @@ export default function AdminReviewsPage() {
     fetchReviews();
   }, [statusFilter]);
 
+  const reviewStats = useMemo(() => {
+    const total = reviews.length;
+    const approved = reviews.filter((r) => r.status === "APPROVED").length;
+    const pending = reviews.filter((r) => r.status === "PENDING").length;
+    const avgScore = total > 0 ? (reviews.reduce((sum, r) => sum + r.ratingOverall, 0) / total).toFixed(1) : "0.0";
+    return { total, approved, pending, avgScore };
+  }, [reviews]);
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     fetchReviews();
@@ -96,7 +105,41 @@ export default function AdminReviewsPage() {
 
   return (
     <AdminLayout title="Product Reviews & Feedback" breadcrumb={[{ label: "Reviews" }]}>
-      <div className="space-y-6 p-4 md:p-6">
+      <div className="space-y-5">
+        {/* StatCards Row */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title="Total Reviews"
+            value={reviewStats.total}
+            subtitle="Customer feedback entries"
+            icon={<MessageSquare size={18} />}
+            isLoading={loading}
+          />
+          <StatCard
+            title="Approved Reviews"
+            value={reviewStats.approved}
+            subtitle="Published on product pages"
+            icon={<CheckCircle2 size={18} />}
+            color="bg-green-600"
+            isLoading={loading}
+          />
+          <StatCard
+            title="Pending Reviews"
+            value={reviewStats.pending}
+            subtitle="Awaiting moderation"
+            icon={<Star size={18} />}
+            color="bg-amber-600"
+            isLoading={loading}
+          />
+          <StatCard
+            title="Average Score"
+            value={`${reviewStats.avgScore} ★`}
+            subtitle="Overall average rating"
+            icon={<Star size={18} />}
+            color="bg-indigo-600"
+            isLoading={loading}
+          />
+        </div>
         {/* Header Summary */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-xl border border-[#E5E7EB] shadow-2xs">
           <div>

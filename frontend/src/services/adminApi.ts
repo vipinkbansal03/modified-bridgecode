@@ -21,13 +21,28 @@ adminApi.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle 401 globally
+let isRedirectingToAdminLogin = false;
+
+// Handle 401 globally (Centralized session expiry handling)
 adminApi.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401 && typeof window !== "undefined") {
+    const status = err.response?.status;
+    const isLoginEndpoint = err.config?.url?.includes("/auth/login");
+
+    if (status === 401 && !isLoginEndpoint && typeof window !== "undefined") {
       localStorage.removeItem("admin_token");
-      window.location.href = "/admin/login";
+
+      if (!isRedirectingToAdminLogin && !window.location.pathname.startsWith("/admin/login")) {
+        isRedirectingToAdminLogin = true;
+        const currentPath = window.location.pathname + window.location.search;
+        const returnToParam =
+          currentPath !== "/admin/dashboard" && currentPath !== "/admin" && currentPath !== "/admin/login"
+            ? `&returnTo=${encodeURIComponent(currentPath)}`
+            : "";
+
+        window.location.href = `/admin/login?reason=expired${returnToParam}`;
+      }
     }
     return Promise.reject(err);
   }

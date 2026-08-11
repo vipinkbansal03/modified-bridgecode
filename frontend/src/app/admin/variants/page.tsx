@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useState, Suspense } from "react";
+import { useState, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Archive, Copy, Edit2, Eye, Image as ImageIcon, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, CheckCircle2, Copy, Edit2, Eye, FileText, Image as ImageIcon, Layers, RotateCcw, Trash2, XCircle } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { ProductEditor } from "@/components/admin/products/ProductEditor";
 import {
@@ -79,6 +79,20 @@ function VariantsList() {
     sortBy,
     sortDir,
   });
+
+  const { data: totalVariantData, isLoading: totalLoading } = useAdminVariants({ limit: 1 });
+  const { data: activeVariantData, isLoading: activeLoading } = useAdminVariants({ status: "ACTIVE", limit: 1 });
+  const { data: draftVariantData, isLoading: draftLoading } = useAdminVariants({ status: "DRAFT", limit: 1 });
+  const { data: inactiveVariantData, isLoading: inactiveLoading } = useAdminVariants({ status: "INACTIVE", limit: 1 });
+
+  const variantStats = useMemo(() => {
+    return {
+      total: totalVariantData?.pagination?.total ?? 0,
+      active: activeVariantData?.pagination?.total ?? 0,
+      draft: draftVariantData?.pagination?.total ?? 0,
+      inactive: inactiveVariantData?.pagination?.total ?? 0,
+    };
+  }, [totalVariantData, activeVariantData, draftVariantData, inactiveVariantData]);
 
   const archiveVariant = useArchiveVariant();
   const restoreVariant = useRestoreVariant();
@@ -258,6 +272,41 @@ function VariantsList() {
 
   return (
     <AdminLayout title="Variants" breadcrumb={[{ label: "Variants" }]}>
+      {/* StatCards Row */}
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Total Variants"
+          value={variantStats.total}
+          subtitle="Configured SKU combinations"
+          icon={<Layers size={18} />}
+          isLoading={totalLoading}
+        />
+        <StatCard
+          title="Active Variants"
+          value={variantStats.active}
+          subtitle="Purchasable & active"
+          icon={<CheckCircle2 size={18} />}
+          color="bg-green-600"
+          isLoading={activeLoading}
+        />
+        <StatCard
+          title="Draft Variants"
+          value={variantStats.draft}
+          subtitle="Unpublished variants"
+          icon={<FileText size={18} />}
+          color="bg-amber-600"
+          isLoading={draftLoading}
+        />
+        <StatCard
+          title="Inactive Variants"
+          value={variantStats.inactive}
+          subtitle="Disabled / hidden"
+          icon={<XCircle size={18} />}
+          color="bg-gray-600"
+          isLoading={inactiveLoading}
+        />
+      </div>
+
       <div className="space-y-5">
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
           <div className="mb-4 rounded-md border border-dashed border-[#E6E6E6] bg-[#FAFAFA] px-4 py-3 text-[13px] leading-5 text-[#6B6B6B]">

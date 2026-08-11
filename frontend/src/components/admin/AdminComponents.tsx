@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, createContext, useContext, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, XCircle, Info, Check } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, XCircle, Info, Check, Plus } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { adminApi } from "@/services/adminApi";
 import { ToastProvider, useToast as useSharedToast } from "@/components/ui/ToastProvider";
@@ -22,9 +22,11 @@ interface DataTableProps<T> {
   isLoading?: boolean;
   emptyMessage?: string;
   rowKey: keyof T;
+  onRowClick?: (row: T) => void;
+  rowTooltip?: string | ((row: T) => string);
 }
 
-export function DataTable<T>({ columns, data, isLoading, emptyMessage = "No records found.", rowKey }: DataTableProps<T>) {
+export function DataTable<T>({ columns, data, isLoading, emptyMessage = "No records found.", rowKey, onRowClick, rowTooltip }: DataTableProps<T>) {
   if (isLoading) {
     return (
       <div className="rounded-lg border border-[#E6E6E6] bg-white overflow-hidden">
@@ -62,19 +64,97 @@ export function DataTable<T>({ columns, data, isLoading, emptyMessage = "No reco
                 </td>
               </tr>
             ) : (
-              data.map((row) => (
-                <tr key={String(row[rowKey])} className="hover:bg-[#FAFAFA] transition-colors">
-                  {columns.map((col) => (
-                    <td key={String(col.key)} className="px-4 py-3 text-[13.5px] text-[#1A1A1A]">
-                      {col.render ? col.render(row) : String((row as Record<string, unknown>)[String(col.key)] ?? "")}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              data.map((row) => {
+                const tooltip = typeof rowTooltip === "function" ? rowTooltip(row) : rowTooltip;
+                return (
+                  <tr
+                    key={String(row[rowKey])}
+                    onClick={() => onRowClick?.(row)}
+                    title={tooltip}
+                    className={cn(
+                      "transition-colors",
+                      onRowClick ? "cursor-pointer hover:bg-[#FFF8F8]" : "hover:bg-[#FAFAFA]"
+                    )}
+                  >
+                    {columns.map((col) => (
+                      <td key={String(col.key)} className="px-4 py-3 text-[13.5px] text-[#1A1A1A]">
+                        {col.render ? col.render(row) : String((row as Record<string, unknown>)[String(col.key)] ?? "")}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ─── AdminSectionTable ────────────────────────────────────
+
+export interface AdminSectionTableProps<T> {
+  title: string;
+  description?: string;
+  addButtonLabel?: string;
+  onAdd?: () => void;
+  actionButtons?: ReactNode;
+  columns: Column<T>[];
+  data: T[];
+  rowKey: keyof T;
+  isLoading?: boolean;
+  emptyMessage?: string;
+  onRowClick?: (row: T) => void;
+  rowTooltip?: string | ((row: T) => string);
+  className?: string;
+}
+
+export function AdminSectionTable<T>({
+  title,
+  description,
+  addButtonLabel,
+  onAdd,
+  actionButtons,
+  columns,
+  data,
+  rowKey,
+  isLoading,
+  emptyMessage,
+  onRowClick,
+  rowTooltip,
+  className,
+}: AdminSectionTableProps<T>) {
+  return (
+    <div className={cn("rounded-xl border border-[#E6E6E6] bg-white p-5 space-y-4", className)}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-[14px] font-semibold text-[#1A1A1A]">{title}</h3>
+          {description && <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">{description}</p>}
+        </div>
+        <div className="flex items-center gap-2">
+          {actionButtons}
+          {addButtonLabel && onAdd && (
+            <button
+              type="button"
+              onClick={onAdd}
+              className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+            >
+              <Plus size={14} />
+              {addButtonLabel}
+            </button>
+          )}
+        </div>
+      </div>
+      <DataTable
+        columns={columns}
+        data={data}
+        rowKey={rowKey}
+        isLoading={isLoading}
+        emptyMessage={emptyMessage}
+        onRowClick={onRowClick}
+        rowTooltip={rowTooltip}
+      />
     </div>
   );
 }

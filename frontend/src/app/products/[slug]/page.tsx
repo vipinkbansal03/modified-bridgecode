@@ -222,7 +222,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               <h1 className="mb-2 text-[28px] font-normal tracking-tight text-ink sm:text-[32px]">{product.title}</h1>
 
               {product.informationImage || product.informationDescription ? (
-                <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
+                <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
                   {product.informationImage ? (
                     <img
                       src={product.informationImage}

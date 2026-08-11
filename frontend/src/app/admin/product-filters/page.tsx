@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ChevronDown, Filter, SlidersHorizontal, ToggleLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronDown, Filter, Layers, SlidersHorizontal, Tag, ToggleLeft, Trash2, XCircle } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import {
   AdminInput,
   AdminSelect,
   ConfirmModal,
+  StatCard,
   StatusBadge,
   useToast,
 } from "@/components/admin/AdminComponents";
@@ -120,6 +121,14 @@ export default function ProductFiltersPage() {
   const hasInitialized = useRef(false);
   const isLoadingAll = isLoading || attrsLoading || catsLoading;
 
+  const filterStats = useMemo(() => {
+    const total = localFilters.length;
+    const active = localFilters.filter((f: AttributeFilterConfig) => f.enabled).length;
+    const disabled = localFilters.filter((f: AttributeFilterConfig) => !f.enabled).length;
+    const totalValues = localFilters.reduce((acc: number, f: AttributeFilterConfig) => acc + (f.allowedValueIds?.length ?? 0), 0);
+    return { total, active, disabled, totalValues };
+  }, [localFilters]);
+
   useEffect(() => {
     if (!isLoadingAll && !hasInitialized.current) {
       setLocalFilters(computedConfigs);
@@ -226,6 +235,41 @@ export default function ProductFiltersPage() {
 
   return (
     <AdminLayout title="Product Filters" breadcrumb={[{ label: "Product Filters" }]}>
+      {/* StatCards Row */}
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Total Filter Facets"
+          value={filterStats.total}
+          subtitle="Storefront filter facets"
+          icon={<SlidersHorizontal size={18} />}
+          isLoading={isLoadingAll}
+        />
+        <StatCard
+          title="Active Filter Facets"
+          value={filterStats.active}
+          subtitle="Active on catalog sidebar"
+          icon={<CheckCircle2 size={18} />}
+          color="bg-green-600"
+          isLoading={isLoadingAll}
+        />
+        <StatCard
+          title="Disabled Filters"
+          value={filterStats.disabled}
+          subtitle="Hidden filter facets"
+          icon={<XCircle size={18} />}
+          color="bg-gray-600"
+          isLoading={isLoadingAll}
+        />
+        <StatCard
+          title="Available Facet Values"
+          value={filterStats.totalValues}
+          subtitle="Configured option choices"
+          icon={<Tag size={18} />}
+          color="bg-blue-600"
+          isLoading={isLoadingAll}
+        />
+      </div>
+
       <div className="mb-5 flex items-center justify-between gap-3">
         <p className="text-[13.5px] text-[#6B6B6B]">
           Configure which filters appear on the storefront product listing page. Toggle each filter on or off.

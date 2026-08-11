@@ -146,6 +146,7 @@ type ProductInput = {
   technicalSpecs?: ProductSpecInput[];
   warranty?: string[];
   primaryFeatures?: ProductHighlightInput[];
+  additionalInfo?: ProductSpecInput[];
   packageWeight?: number | string | null;
   packageLength?: number | string | null;
   packageWidth?: number | string | null;

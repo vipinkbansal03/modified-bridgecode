@@ -2177,6 +2177,19 @@ export const useUpdateOrderStatus = () => {
   });
 };
 
+export const useUpdatePaymentStatus = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, paymentStatus }: { id: string; paymentStatus: string }) =>
+      adminApi.put(`/orders/${id}/payment-status`, { paymentStatus }),
+    onSuccess: (_d, { id }) => {
+      qc.invalidateQueries({ queryKey: ["admin-orders"] });
+      qc.invalidateQueries({ queryKey: ["admin-order", id] });
+    },
+  });
+};
+
+
 export const useShipOrder = () => {
   const qc = useQueryClient();
   return useMutation({

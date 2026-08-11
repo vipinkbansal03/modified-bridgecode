@@ -1155,10 +1155,10 @@ async function importPriceSpreadsheet(filePath: string) {
 }
 
 export async function getPricingDashboard() {
-  const { counts, recentRules } = await collectPricingRows({ limit: "100", page: "1" });
+  const { counts, data: recentRules } = await collectPricingRows({});
   return {
     ...counts,
-    recentlyUpdatedRules: recentRules,
+    recentlyUpdatedRules: recentRules.slice(0, 10),
   };
 }
 

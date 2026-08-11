@@ -949,7 +949,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                           type="button"
                           disabled={isSelectedOutOfStock}
                           onClick={handleAddToCart}
-                          className={`inline-flex items-center justify-center gap-2 rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand ${
+                          className={`inline-flex items-center justify-center gap-2 rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-brand hover:bg-transparent hover:text-brand ${
                             isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
                           }`}
                         >

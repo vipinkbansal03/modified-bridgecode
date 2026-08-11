@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Download, Truck, Package, ExternalLink, RotateCw } from "lucide-react";
+import { ArrowLeft, Download, Truck, Package, ExternalLink, RotateCw, Eye, Pencil } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { StatusBadge, AdminSelect, AdminInput } from "@/components/admin/AdminComponents";
 import {
   useAdminOrder,
   useUpdateOrderStatus,
+  useUpdatePaymentStatus,
   useShipOrder,
   useDeliverOrder,
   useAdminShippingProviders,
@@ -29,16 +30,11 @@ const ORDER_STATUS_OPTIONS = [
   { value: "CANCELLED", label: "Cancelled" },
 ];
 
-const SHIPMENT_STATUS_OPTIONS = [
-  { value: "CREATED", label: "Created" },
-  { value: "LABEL_GENERATED", label: "Label Generated" },
-  { value: "PICKED_UP", label: "Picked Up" },
-  { value: "IN_TRANSIT", label: "In Transit" },
-  { value: "OUT_FOR_DELIVERY", label: "Out for Delivery" },
-  { value: "DELIVERED", label: "Delivered" },
+const PAYMENT_STATUS_OPTIONS = [
+  { value: "PENDING", label: "Pending" },
+  { value: "PAID", label: "Paid" },
   { value: "FAILED", label: "Failed" },
-  { value: "RETURNED", label: "Returned" },
-  { value: "CANCELLED", label: "Cancelled" },
+  { value: "REFUNDED", label: "Refunded" },
 ];
 
 const TABS = ["Overview", "Items", "Shipping"] as const;
@@ -121,14 +117,19 @@ interface OrderDetail {
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isEdit = searchParams.get("mode") === "edit";
+
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const { data: order, isLoading } = useAdminOrder(id) as { data: OrderDetail | undefined; isLoading: boolean };
 
   const { mutate: updateStatus, isPending: statusPending } = useUpdateOrderStatus();
+  const { mutate: updatePaymentStatus, isPending: paymentStatusPending } = useUpdatePaymentStatus();
   const { mutate: ship, isPending: shipPending } = useShipOrder();
   const { mutate: deliver, isPending: deliverPending } = useDeliverOrder();
 
   const [newStatus, setNewStatus] = useState("");
+  const [newPaymentStatus, setNewPaymentStatus] = useState("");
   const [shipProvider, setShipProvider] = useState("");
   const [trackingNumber, setTrackingNumber] = useState("");
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
@@ -254,14 +255,18 @@ export default function OrderDetailPage() {
 
   return (
     <AdminLayout
-      title={`Order ${order.orderNumber}`}
-      breadcrumb={[{ label: "Orders", href: "/admin/orders" }, { label: order.orderNumber }]}
+      title={`Order ${order.orderNumber} ${isEdit ? "(Edit Mode)" : "(View Only)"}`}
+      breadcrumb={[
+        { label: "Orders", href: "/admin/orders" },
+        { label: order.orderNumber, href: `/admin/orders/${order.id}` },
+        ...(isEdit ? [{ label: "Edit" }] : []),
+      ]}
     >
-      <div className="mb-5 flex items-center justify-between">
-        <button onClick={() => router.back()} className="flex items-center gap-1.5 text-[13.5px] text-[#6B6B6B] hover:text-[#111]">
-          <ArrowLeft size={14} /> Back
-        </button>
-        <div className="flex items-center gap-2">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Link href="/admin/orders" className="inline-flex items-center gap-1.5 text-[13.5px] text-[#6B6B6B] hover:text-[#111]">
+          <ArrowLeft size={14} /> Back to orders
+        </Link>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <button
             onClick={handleDownloadInvoice}
             disabled={isDownloadingInvoice}
@@ -270,13 +275,35 @@ export default function OrderDetailPage() {
             <Download size={14} />
             {isDownloadingInvoice ? "Downloading..." : "Download Invoice"}
           </button>
-          <StatusBadge status={order.paymentStatus} />
-          <StatusBadge status={order.status} />
+          {isEdit ? (
+            <Link
+              href={`/admin/orders/${order.id}`}
+              className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[13px] font-medium text-[#111] hover:bg-[#F8F8F8]"
+            >
+              <Eye size={14} />
+              View Details
+            </Link>
+          ) : (
+            <Link
+              href={`/admin/orders/${order.id}?mode=edit`}
+              className="inline-flex items-center gap-1.5 rounded-md bg-[#111] px-3 py-1.5 text-[13px] font-medium text-white hover:bg-[#222]"
+            >
+              <Pencil size={14} />
+              Edit Order
+            </Link>
+          )}
+          <div className="inline-flex items-center gap-1.5 rounded border border-[#E6E6E6] bg-[#F8F8F8] px-2.5 py-1 text-[12px] font-semibold text-[#6B6B6B]">
+            <span>Order Status:</span>
+            <StatusBadge status={order.status} />
+          </div>
+          <div className="inline-flex items-center gap-1.5 rounded border border-[#E6E6E6] bg-[#F8F8F8] px-2.5 py-1 text-[12px] font-semibold text-[#6B6B6B]">
+            <span>Payment Status:</span>
+            <StatusBadge status={order.paymentStatus} />
+          </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="mb-5 flex gap-1 border-b border-[#E6E6E6]">
+      <div className="mb-5 flex gap-1 border-b border-[#E6E6E6] overflow-x-auto whitespace-nowrap pb-px">
         {TABS.map((tab) => (
           <button
             key={tab}
@@ -299,61 +326,86 @@ export default function OrderDetailPage() {
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          {/* ── OVERVIEW TAB ────────────────────────────── */}
           {activeTab === "Overview" && (
             <div className="space-y-5">
-              {/* Status update */}
-              <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-3">
-                <h3 className="text-[14px] font-semibold text-[#111]">Update Status</h3>
-                <AdminSelect
-                  label=""
-                  options={ORDER_STATUS_OPTIONS}
-                  value={newStatus || order.status}
-                  onChange={(e) => setNewStatus(e.target.value)}
-                />
-                <button
-                  onClick={() => updateStatus({ id: order.id, status: newStatus }, { onSuccess: () => setNewStatus("") })}
-                  disabled={statusPending || !newStatus || newStatus === order.status}
-                  className="w-full rounded-md bg-[#111] px-4 py-2.5 text-[13.5px] font-medium text-white hover:bg-[#222] disabled:opacity-50"
-                >
-                  {statusPending ? "Saving…" : "Update Status"}
-                </button>
-              </div>
-
-              {/* Quick ship (from order status endpoint) */}
-              {order.status !== "SHIPPED" && order.status !== "DELIVERED" && (
+              {isEdit && (
+                <>
+                  <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-3">
+                    <h3 className="text-[14px] font-semibold text-[#111]">Order Status</h3>
+                    <AdminSelect
+                      label="Select Order Status"
+                      options={ORDER_STATUS_OPTIONS}
+                      value={newStatus || order.status}
+                      onChange={(e) => setNewStatus(e.target.value)}
+                    />
+                    <button
+                      onClick={() => updateStatus({ id: order.id, status: newStatus }, { onSuccess: () => setNewStatus("") })}
+                      disabled={statusPending || !newStatus || newStatus === order.status}
+                      className="w-full rounded-md bg-[#111] px-4 py-2.5 text-[13.5px] font-medium text-white hover:bg-[#222] disabled:opacity-50"
+                    >
+                      {statusPending ? "Saving…" : "Update Order Status"}
+                    </button>
+                  </div>
+                  <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-3">
+                    <h3 className="text-[14px] font-semibold text-[#111]">Payment Status</h3>
+                    <AdminSelect
+                      label="Select Payment Status"
+                      options={PAYMENT_STATUS_OPTIONS}
+                      value={newPaymentStatus || order.paymentStatus}
+                      onChange={(e) => setNewPaymentStatus(e.target.value)}
+                    />
+                    <button
+                      onClick={() => updatePaymentStatus({ id: order.id, paymentStatus: newPaymentStatus }, { onSuccess: () => setNewPaymentStatus("") })}
+                      disabled={paymentStatusPending || !newPaymentStatus || newPaymentStatus === order.paymentStatus}
+                      className="w-full rounded-md bg-[#111] px-4 py-2.5 text-[13.5px] font-medium text-white hover:bg-[#222] disabled:opacity-50"
+                    >
+                      {paymentStatusPending ? "Saving…" : "Update Payment Status"}
+                    </button>
+                  </div>
+                  {order.status !== "SHIPPED" && order.status !== "DELIVERED" && (
+                    <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-3">
+                      <h3 className="flex items-center gap-2 text-[14px] font-semibold text-[#111]"><Truck size={15} /> Mark as Shipped</h3>
+                      <AdminSelect label="Provider" options={providerOptions.length ? providerOptions : [{ value: "", label: "No providers enabled" }]} value={shipProvider} onChange={(e) => setShipProvider(e.target.value)} />
+                      <AdminInput label="Tracking Number" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} placeholder="1Z999AA10123456784" />
+                      <button
+                        onClick={() => ship({ id: order.id, shippingProvider: shipProvider, trackingNumber })}
+                        disabled={shipPending || !shipProvider || !trackingNumber}
+                        className="w-full rounded-md bg-[#111] px-4 py-2.5 text-[13.5px] font-medium text-white hover:bg-[#222] disabled:opacity-50"
+                      >
+                        {shipPending ? "Saving…" : "Mark Shipped"}
+                      </button>
+                    </div>
+                  )}
+                  {order.status === "SHIPPED" && (
+                    <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-3">
+                      <h3 className="flex items-center gap-2 text-[14px] font-semibold text-[#111]"><Package size={15} /> Mark as Delivered</h3>
+                      <p className="text-[13px] text-[#6B6B6B]">This will set the order to DELIVERED.</p>
+                      <button
+                        onClick={() => deliver(order.id)}
+                        disabled={deliverPending}
+                        className="w-full rounded-md bg-[#111] px-4 py-2.5 text-[13.5px] font-medium text-white hover:bg-[#222] disabled:opacity-50"
+                      >
+                        {deliverPending ? "Saving…" : "Mark Delivered"}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+              {!isEdit && (
                 <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-3">
-                  <h3 className="flex items-center gap-2 text-[14px] font-semibold text-[#111]"><Truck size={15} /> Mark as Shipped</h3>
-                  <AdminSelect label="Provider" options={providerOptions.length ? providerOptions : [{ value: "", label: "No providers enabled" }]} value={shipProvider} onChange={(e) => setShipProvider(e.target.value)} />
-                  <AdminInput label="Tracking Number" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} placeholder="1Z999AA10123456784" />
-                  <button
-                    onClick={() => ship({ id: order.id, shippingProvider: shipProvider, trackingNumber })}
-                    disabled={shipPending || !shipProvider || !trackingNumber}
-                    className="w-full rounded-md bg-[#111] px-4 py-2.5 text-[13.5px] font-medium text-white hover:bg-[#222] disabled:opacity-50"
-                  >
-                    {shipPending ? "Saving…" : "Mark Shipped"}
-                  </button>
+                  <h3 className="text-[14px] font-semibold text-[#111]">Order Information</h3>
+                  <InfoRow label="Order Number" value={<span className="font-mono font-semibold">{order.orderNumber}</span>} />
+                  <InfoRow label="Date Placed" value={new Date(order.createdAt).toLocaleString()} />
+                  <InfoRow label="Order Status" value={<StatusBadge status={order.status} />} />
+                  <InfoRow label="Payment Status" value={<StatusBadge status={order.paymentStatus} />} />
+                  <InfoRow label="Payment Method" value={formatPaymentMethod(order.paymentMethod)} />
+                  {order.paymentProvider && <InfoRow label="Payment Provider" value={order.paymentProvider} />}
+                  {order.paymentId && <InfoRow label="Payment ID" value={<span className="font-mono text-[12px] break-all">{order.paymentId}</span>} />}
                 </div>
               )}
-
-              {order.status === "SHIPPED" && (
-                <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-3">
-                  <h3 className="flex items-center gap-2 text-[14px] font-semibold text-[#111]"><Package size={15} /> Mark as Delivered</h3>
-                  <p className="text-[13px] text-[#6B6B6B]">This will set the order to DELIVERED and decrement inventory for all variant items.</p>
-                  <button
-                    onClick={() => deliver(order.id)}
-                    disabled={deliverPending}
-                    className="w-full rounded-md bg-[#111] px-4 py-2.5 text-[13.5px] font-medium text-white hover:bg-[#222] disabled:opacity-50"
-                  >
-                    {deliverPending ? "Saving…" : "Mark Delivered"}
-                  </button>
-                </div>
-              )}
-
-              {/* Summary */}
               <div className="rounded-lg border border-[#E6E6E6] bg-white overflow-hidden">
                 <div className="border-b border-[#E6E6E6] px-5 py-3.5">
-                  <h3 className="text-[14px] font-semibold text-[#111]">Summary</h3>
+                  <h3 className="text-[14px] font-semibold text-[#111]">Pricing &amp; Summary</h3>
                 </div>
                 <div className="px-5 py-4 space-y-1.5 text-[13.5px]">
                   <div className="flex justify-between text-[#6B6B6B]"><span>Subtotal</span><span>{sym}{Number(order.subtotal).toFixed(2)}</span></div>
@@ -363,246 +415,113 @@ export default function OrderDetailPage() {
                   {order.couponCode && Number(order.couponDiscount ?? 0) > 0 && (
                     <div className="flex justify-between text-[#2A6A40]"><span>Coupon ({order.couponCode})</span><span>−{sym}{Number(order.couponDiscount).toFixed(2)}</span></div>
                   )}
-                  <div className="flex justify-between text-[#6B6B6B]">
-                    <span>Tax</span>
-                    <span>{sym}{Number(order.taxAmount ?? 0).toFixed(2)}</span>
-                  </div>
-                  {((order.cgstAmount && Number(order.cgstAmount) > 0) ||
-                    (order.sgstAmount && Number(order.sgstAmount) > 0) ||
-                    (order.igstAmount && Number(order.igstAmount) > 0)) && (
-                    <div className="pl-3 border-l-2 border-brand/20 text-[12px] text-[#6B6B6B] space-y-0.5 my-1">
-                      {order.cgstAmount && Number(order.cgstAmount) > 0 && (
-                        <div className="flex justify-between">
-                          <span>CGST</span>
-                          <span>{sym}{Number(order.cgstAmount).toFixed(2)}</span>
-                        </div>
-                      )}
-                      {order.sgstAmount && Number(order.sgstAmount) > 0 && (
-                        <div className="flex justify-between">
-                          <span>SGST</span>
-                          <span>{sym}{Number(order.sgstAmount).toFixed(2)}</span>
-                        </div>
-                      )}
-                      {order.igstAmount && Number(order.igstAmount) > 0 && (
-                        <div className="flex justify-between">
-                          <span>IGST</span>
-                          <span>{sym}{Number(order.igstAmount).toFixed(2)}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  <div className="flex justify-between text-[#6B6B6B]"><span>Tax</span><span>{sym}{Number(order.taxAmount ?? 0).toFixed(2)}</span></div>
                   <div className="flex justify-between text-[#6B6B6B]"><span>Shipping</span><span>{sym}{Number(order.shippingCharge).toFixed(2)}</span></div>
                   <div className="flex justify-between font-semibold text-[#111] text-[15px]"><span>Total</span><span>{sym}{Number(order.total).toFixed(2)}</span></div>
                 </div>
               </div>
             </div>
           )}
-
-          {/* ── ITEMS TAB ───────────────────────────────── */}
           {activeTab === "Items" && (
             <div className="rounded-lg border border-[#E6E6E6] bg-white overflow-hidden">
               <div className="border-b border-[#E6E6E6] px-5 py-3.5">
                 <h3 className="text-[14px] font-semibold text-[#111]">Items ({order.items.length})</h3>
               </div>
-              <table className="w-full text-sm">
-                <thead className="bg-[#F8F8F8] border-b border-[#E6E6E6]">
-                  <tr>
-                    {["Product", "Variant", "SKU", "Qty", "Unit Price", "Total"].map((h) => (
-                      <th key={h} className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E6E6E6]">
-                  {order.items.map((item) => (
-                    <tr key={item.id}>
-                      <td className="px-4 py-3 font-medium text-[#111]">{item.product.title}</td>
-                      <td className="px-4 py-3 text-[#6B6B6B]">{item.variant?.title ?? "—"}</td>
-                      <td className="px-4 py-3 font-mono text-[12px] text-[#6B6B6B]">{item.sku ?? "—"}</td>
-                      <td className="px-4 py-3 text-[#6B6B6B]">{item.quantity}</td>
-                      <td className="px-4 py-3 text-[#6B6B6B]">{sym}{Number(item.unitPrice).toFixed(2)}</td>
-                      <td className="px-4 py-3 font-semibold text-[#111]">{sym}{Number(item.total).toFixed(2)}</td>
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-sm min-w-[600px]">
+                  <thead className="bg-[#F8F8F8] border-b border-[#E6E6E6]">
+                    <tr>
+                      {["Product", "Variant", "SKU", "Qty", "Unit Price", "Total"].map((h) => (
+                        <th key={h} className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">{h}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#E6E6E6]">
+                    {order.items.map((item) => (
+                      <tr key={item.id}>
+                        <td className="px-4 py-3 font-medium text-[#111]">{item.product.title}</td>
+                        <td className="px-4 py-3 text-[#6B6B6B]">{item.variant?.title ?? "—"}</td>
+                        <td className="px-4 py-3 font-mono text-[12px] text-[#6B6B6B]">{item.sku ?? "—"}</td>
+                        <td className="px-4 py-3 text-[#6B6B6B]">{item.quantity}</td>
+                        <td className="px-4 py-3 text-[#6B6B6B]">{sym}{Number(item.unitPrice).toFixed(2)}</td>
+                        <td className="px-4 py-3 font-semibold text-[#111]">{sym}{Number(item.total).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
-
-          {/* ── SHIPPING TAB ────────────────────────────── */}
           {activeTab === "Shipping" && (
             <div className="space-y-5">
-              {/* Create shipment */}
-              <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-[14px] font-semibold text-[#111]">Shipments</h3>
-                  {shipments.length > 0 && (
+              {isEdit && (
+                <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <h3 className="text-[14px] font-semibold text-[#111]">Shipments</h3>
                     <button
                       onClick={() => setShowNewShipment(!showNewShipment)}
                       className="rounded-md bg-[#111] px-3 py-1.5 text-[13px] font-medium text-white hover:bg-[#222]"
                     >
                       {showNewShipment ? "Cancel" : "Add Shipment"}
                     </button>
+                  </div>
+                  {showNewShipment && (
+                    <div className="rounded-md border border-[#E6E6E6] bg-[#F8F8F8] p-4 space-y-3">
+                      <h4 className="text-[13.5px] font-semibold text-[#111]">New Shipment</h4>
+                      <AdminSelect label="Provider" options={providerOptions.length ? providerOptions : [{ value: "", label: "No providers enabled" }]} value={newShipmentProvider} onChange={(e) => setNewShipmentProvider(e.target.value)} />
+                      <AdminInput label="Tracking Number" value={newShipmentTracking} onChange={(e) => setNewShipmentTracking(e.target.value)} />
+                      <button onClick={handleCreateShipment} disabled={creatingShipment} className="w-full rounded-md bg-[#111] px-4 py-2.5 text-[13.5px] font-medium text-white">Create</button>
+                    </div>
                   )}
                 </div>
-
-                {shipments.length === 0 && !showNewShipment && (
-                  <div className="text-center py-6">
-                    <Truck size={32} className="mx-auto mb-3 text-[#9A9A9A]" />
-                    <p className="text-[13.5px] text-[#9A9A9A]">No shipments yet for this order.</p>
-                    <button
-                      onClick={() => setShowNewShipment(true)}
-                      className="mt-3 rounded-md bg-[#111] px-4 py-2 text-[13.5px] font-medium text-white hover:bg-[#222]"
-                    >
-                      Create First Shipment
-                    </button>
-                  </div>
-                )}
-
-                {showNewShipment && (
-                  <div className="rounded-md border border-[#E6E6E6] bg-[#F8F8F8] p-4 space-y-3">
-                    <h4 className="text-[13.5px] font-semibold text-[#111]">New Shipment</h4>
-                    <AdminSelect
-                      label="Provider"
-                      options={providerOptions.length ? providerOptions : [{ value: "", label: "No providers enabled" }]}
-                      value={newShipmentProvider}
-                      onChange={(e) => setNewShipmentProvider(e.target.value)}
-                    />
-                    <AdminInput label="Tracking Number" value={newShipmentTracking} onChange={(e) => setNewShipmentTracking(e.target.value)} placeholder="e.g. 1Z999AA10123456784" />
-                    <AdminInput label="AWB Number" value={newShipmentAwb} onChange={(e) => setNewShipmentAwb(e.target.value)} placeholder="e.g. 1234567890" />
-                    <AdminInput
-                      label="Shipping Charge"
-                      type="text"
-                      inputMode="decimal"
-                      value={newShipmentCharge}
-                      onChange={(e) => setNewShipmentCharge(e.target.value)}
-                      placeholder="0.00"
-                    />
-                    <AdminInput label="Notes" value={newShipmentNotes} onChange={(e) => setNewShipmentNotes(e.target.value)} placeholder="Optional notes" />
-                    <label className="flex items-center gap-2 text-[13px] text-[#111]">
-                      <input
-                        type="checkbox"
-                        checked={newShipmentCallProvider}
-                        onChange={(e) => setNewShipmentCallProvider(e.target.checked)}
-                        className="h-4 w-4 rounded border-[#E6E6E6] text-[#111] focus:ring-[#111]"
-                      />
-                      Book shipment with provider API (generates AWB &amp; label)
-                    </label>
-                    <button
-                      onClick={handleCreateShipment}
-                      disabled={creatingShipment}
-                      className="w-full rounded-md bg-[#111] px-4 py-2.5 text-[13.5px] font-medium text-white hover:bg-[#222] disabled:opacity-50"
-                    >
-                      {creatingShipment ? "Creating…" : "Create Shipment"}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Shipment cards */}
+              )}
               {shipments.map((s) => (
                 <div key={s.id} className="rounded-lg border border-[#E6E6E6] bg-white overflow-hidden">
-                  <div className="flex items-center justify-between border-b border-[#E6E6E6] px-5 py-3.5">
+                  <div className="flex justify-between border-b border-[#E6E6E6] px-5 py-3.5">
                     <div className="flex items-center gap-3">
-                      <Truck size={15} className="text-[#6B6B6B]" />
-                      <span className="text-[14px] font-semibold text-[#111]">
-                        {s.provider?.displayName ?? "Unknown Provider"}
-                      </span>
+                      <Truck size={15} />
+                      <span className="text-[14px] font-semibold">{s.provider?.displayName ?? "Shipping"}</span>
                       <StatusBadge status={s.status} />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleTrackShipment(s.id)}
-                        disabled={tracking}
-                        className="inline-flex items-center gap-1 rounded-md border border-[#E6E6E6] bg-white px-2.5 py-1.5 text-[12px] font-medium text-[#111] hover:bg-[#F8F8F8] disabled:opacity-50"
-                      >
-                        <RotateCw size={12} /> Refresh
-                      </button>
-                      {s.status !== "CANCELLED" && s.status !== "DELIVERED" && (
-                        <button
-                          onClick={() => handleCancelShipment(s.id)}
-                          disabled={cancelling}
-                          className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-white px-2.5 py-1.5 text-[12px] font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50"
-                        >
-                          Cancel
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleDeleteShipment(s.id)}
-                        disabled={deletingShipment}
-                        className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-[12px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-                      >
-                        Delete
-                      </button>
-                    </div>
                   </div>
-
                   <div className="px-5 py-4 space-y-2">
-                    {s.trackingNumber && <InfoRow label="Tracking #" value={<span className="font-mono">{s.trackingNumber}</span>} />}
-                    {s.awbNumber && <InfoRow label="AWB #" value={<span className="font-mono">{s.awbNumber}</span>} />}
-                    {s.estimatedDelivery && <InfoRow label="Est. Delivery" value={new Date(s.estimatedDelivery).toLocaleDateString()} />}
-                    {s.shippingCharge != null && <InfoRow label="Charge" value={`${sym}${Number(s.shippingCharge).toFixed(2)}`} />}
-                    {s.notes && <InfoRow label="Notes" value={s.notes} />}
-                    {s.labelUrl && (
-                      <InfoRow
-                        label="Label"
-                        value={
-                          <a href={s.labelUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand hover:underline">
-                            View Label <ExternalLink size={11} />
-                          </a>
-                        }
-                      />
-                    )}
-                    <InfoRow label="Created" value={new Date(s.createdAt).toLocaleDateString()} />
+                    {s.trackingNumber && <InfoRow label="Tracking #" value={s.trackingNumber} />}
+                    {s.labelUrl && <a href={s.labelUrl} target="_blank" className="text-brand text-[13px] hover:underline">View Label</a>}
                   </div>
-
-                  {/* Events timeline */}
-                  {s.events.length > 0 && (
-                    <div className="border-t border-[#E6E6E6] px-5 py-4">
-                      <h4 className="text-[12.5px] font-semibold text-[#9A9A9A] uppercase tracking-wide mb-3">Tracking Events</h4>
-                      <div className="space-y-3">
-                        {[...s.events].reverse().map((ev) => (
-                          <div key={ev.id} className="flex gap-3 text-[13px]">
-                            <div className="flex flex-col items-center">
-                              <div className="h-2 w-2 rounded-full bg-[#111]" />
-                              <div className="h-full w-px bg-[#E6E6E6]" />
-                            </div>
-                            <div className="pb-3">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-[#111]">{ev.status}</span>
-                                {ev.location && <span className="text-[#9A9A9A]">· {ev.location}</span>}
-                              </div>
-                              {ev.description && <p className="text-[#6B6B6B] mt-0.5">{ev.description}</p>}
-                              <span className="text-[12px] text-[#9A9A9A]">{new Date(ev.timestamp).toLocaleString()}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
           )}
         </div>
-
-        {/* Right column */}
         <div className="space-y-5">
-          {/* Customer */}
+          {/* Customer Card */}
           <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-3">
             <h3 className="text-[14px] font-semibold text-[#111]">Customer</h3>
             <InfoRow label="Name" value={order.customerName} />
-            <InfoRow label="Email" value={<a href={`mailto:${order.customerEmail}`} className="text-brand hover:underline">{order.customerEmail}</a>} />
-             {order.customerPhone && <InfoRow label="Phone" value={order.customerPhone} />}
+            <InfoRow label="Email" value={<a href={`mailto:${order.customerEmail}`} className="text-brand hover:underline break-all">{order.customerEmail}</a>} />
+            {order.customerPhone && <InfoRow label="Phone" value={order.customerPhone} />}
             {order.companyName && <InfoRow label="Company" value={order.companyName} />}
             {order.taxIdSnapshot && (
               <InfoRow
                 label={order.taxIdTypeSnapshot || "Tax ID"}
-                value={<span className="font-mono text-brand font-semibold">{order.taxIdSnapshot}</span>}
+                value={<span className="font-mono text-brand font-semibold break-all">{order.taxIdSnapshot}</span>}
               />
             )}
           </div>
 
-          {/* Shipping address */}
+          {/* Order Details Card */}
+          <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-3">
+            <h3 className="text-[14px] font-semibold text-[#111]">Order Details</h3>
+            <InfoRow label="Order #" value={<span className="font-mono font-semibold">{order.orderNumber}</span>} />
+            <InfoRow label="Created" value={new Date(order.createdAt).toLocaleDateString()} />
+            <InfoRow label="Order Status" value={<StatusBadge status={order.status} />} />
+            <InfoRow label="Payment Status" value={<StatusBadge status={order.paymentStatus} />} />
+            <InfoRow label="Payment Mode" value={formatPaymentMethod(order.paymentMethod)} />
+            {order.paymentProvider && <InfoRow label="Provider" value={order.paymentProvider} />}
+            {order.paymentId && <InfoRow label="Payment ID" value={<span className="font-mono text-[12px] break-all">{order.paymentId}</span>} />}
+          </div>
+
+          {/* Shipping Address Card */}
           {order.shippingAddress && Object.keys(order.shippingAddress).length > 0 && (
             <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-2">
               <h3 className="text-[14px] font-semibold text-[#111]">Shipping Address</h3>
@@ -612,18 +531,7 @@ export default function OrderDetailPage() {
             </div>
           )}
 
-          {/* Order details */}
-          <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-3">
-            <h3 className="text-[14px] font-semibold text-[#111]">Order Details</h3>
-            <InfoRow label="Order #" value={<span className="font-mono font-semibold">{order.orderNumber}</span>} />
-            <InfoRow label="Created" value={new Date(order.createdAt).toLocaleDateString()} />
-            <InfoRow label="Payment Status" value={<StatusBadge status={order.paymentStatus} />} />
-            <InfoRow label="Payment Mode" value={formatPaymentMethod(order.paymentMethod)} />
-            {order.paymentProvider && <InfoRow label="Provider" value={order.paymentProvider} />}
-            {order.paymentId && <InfoRow label="Payment ID" value={<span className="font-mono text-[12px]">{order.paymentId}</span>} />}
-          </div>
-
-          {/* Legacy shipping info */}
+          {/* Shipping Info Card */}
           {(order.shippingProvider || order.shippingZone || order.trackingNumber || Number(order.shippingCharge) > 0) && (
             <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-2">
               <h3 className="text-[14px] font-semibold text-[#111]">Shipping Info</h3>
@@ -645,7 +553,7 @@ export default function OrderDetailPage() {
                   }
                 />
               )}
-              {order.trackingNumber && <InfoRow label="Tracking #" value={<span className="font-mono">{order.trackingNumber}</span>} />}
+              {order.trackingNumber && <InfoRow label="Tracking #" value={<span className="font-mono break-all">{order.trackingNumber}</span>} />}
             </div>
           )}
         </div>
@@ -656,9 +564,9 @@ export default function OrderDetailPage() {
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex justify-between gap-3 text-[13.5px]">
-      <span className="text-[#9A9A9A]">{label}</span>
-      <span className="text-right font-medium text-[#111]">{value}</span>
+    <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-3 text-[13.5px]">
+      <span className="text-[#9A9A9A] shrink-0">{label}</span>
+      <span className="sm:text-right font-medium text-[#111] break-words">{value}</span>
     </div>
   );
 }

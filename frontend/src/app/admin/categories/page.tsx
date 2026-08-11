@@ -3,10 +3,10 @@
 import { useMemo, useRef, useState } from "react";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import * as Yup from "yup";
-import { Archive, Copy, Download, Image as ImageIcon, Pencil, Plus, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
+import { Archive, CheckCircle2, Copy, Download, FolderTree, GitFork, Image as ImageIcon, Layers, Pencil, Plus, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, AdminTextarea, AdminRichTextEditor, ConfirmModal, StatusBadge, toastMessages, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminTextarea, AdminRichTextEditor, ConfirmModal, StatCard, StatusBadge, toastMessages, useToast } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import {
   filterTranslationLanguages,
@@ -149,6 +149,14 @@ export default function CategoriesPage() {
   const { showToast, ToastComponent } = useToast();
 
   const { data: categories = [], isLoading, refetch } = useAdminCategories();
+
+  const categoryStats = useMemo(() => {
+    const total = categories.length;
+    const active = categories.filter((c: Category) => c.status === "ACTIVE").length;
+    const root = categories.filter((c: Category) => !c.parentId).length;
+    const sub = categories.filter((c: Category) => !!c.parentId).length;
+    return { total, active, root, sub };
+  }, [categories]);
   const { data: languages = [] } = useAdminLanguages();
   const { data: countries = [], isLoading: countriesLoading } = useAdminCategoryCountries(editing?.id);
   const createCategory = useCreateCategory();
@@ -429,6 +437,41 @@ export default function CategoriesPage() {
 
   return (
     <AdminLayout title="Categories" breadcrumb={[{ label: "Categories" }]}>
+      {/* StatCards Row */}
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Total Categories"
+          value={categoryStats.total}
+          subtitle="Catalog taxonomy structure"
+          icon={<FolderTree size={18} />}
+          isLoading={isLoading}
+        />
+        <StatCard
+          title="Active Categories"
+          value={categoryStats.active}
+          subtitle="Visible on navigation & catalog"
+          icon={<CheckCircle2 size={18} />}
+          color="bg-green-600"
+          isLoading={isLoading}
+        />
+        <StatCard
+          title="Top-Level Categories"
+          value={categoryStats.root}
+          subtitle="Root catalog categories"
+          icon={<Layers size={18} />}
+          color="bg-indigo-600"
+          isLoading={isLoading}
+        />
+        <StatCard
+          title="Sub-Categories"
+          value={categoryStats.sub}
+          subtitle="Child & nested categories"
+          icon={<GitFork size={18} />}
+          color="bg-blue-600"
+          isLoading={isLoading}
+        />
+      </div>
+
       <div className="mb-5 flex items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {/* <p className="text-[13.5px] text-[#6B6B6B]">Drag rows to reorder. Child categories are indented under their parent.</p> */}
