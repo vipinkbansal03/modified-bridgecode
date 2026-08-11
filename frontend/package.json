@@ -11,7 +11,6 @@
   "dependencies": {
     "@tanstack/react-query": "^5.101.0",
     "@types/node": "^26.0.0",
-    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.5.0",
     "axios": "^1.18.0",
@@ -34,6 +33,7 @@
     "yup": "^1.7.1"
   },
   "devDependencies": {
+    "@types/react": "^19.2.18",
     "eslint": "^9.39.0",
     "eslint-config-next": "^16.2.9"
   }

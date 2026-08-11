@@ -60,6 +60,7 @@ interface CartContextValue {
   addItem: (item: CartItem) => void;
   addItems: (items: CartItem[]) => void;
   updateQuantity: (variantId: string, quantity: number) => void;
+  updateWarehouse: (variantId: string, warehouseId: string | undefined, warehouseName: string, estimatedDeliveryDays?: number | string, isLocalWarehouse?: boolean) => void;
   removeItem: (variantId: string) => void;
   clearCart: () => void;
   openCart: () => void;
@@ -417,6 +418,27 @@ export function CartProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  const updateWarehouse = (
+    variantId: string,
+    warehouseId: string | undefined,
+    warehouseName: string,
+    estimatedDeliveryDays?: number | string,
+    isLocalWarehouse?: boolean
+  ) => {
+    setItems((current) =>
+      current.map((item) => {
+        if (item.variantId !== variantId) return item;
+        return {
+          ...item,
+          warehouseId,
+          warehouseName,
+          estimatedDeliveryDays,
+          isLocalWarehouse,
+        };
+      })
+    );
+  };
+
   const removeItem = (variantId: string) => {
     setItems((current) =>
       current.filter((item) => item.variantId !== variantId),
@@ -469,6 +491,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         addItem,
         addItems,
         updateQuantity,
+        updateWarehouse,
         removeItem,
         clearCart,
         openCart,

@@ -99,14 +99,9 @@ async function calculateCustomerOrder(
           400,
         );
 
-      const stockRecord =
-        variant.inventories.find(
-          (inventory) => inventory.warehouse?.countryId === orderCountry.id,
-        ) ??
-        variant.inventories.find(
-          (inventory) => inventory.countryId === orderCountry.id,
-        ) ??
-        variant.inventories.find((inventory) => inventory.warehouseId === null);
+      const stockRecord = item.warehouseId
+        ? variant.inventories.find(inv => inv.warehouseId === item.warehouseId)
+        : variant.inventories.find((inventory) => inventory.warehouseId === null);
       const availableStock = Math.max(
         0,
         (stockRecord?.stock ?? 0) - (stockRecord?.reservedStock ?? 0),
@@ -160,6 +155,7 @@ async function calculateCustomerOrder(
         total: unitPrice * item.quantity,
         subtotal: unitPriceBeforeTax * item.quantity,
         taxTotal: unitTax * item.quantity,
+        warehouseId: stockRecord?.warehouseId ?? null,
       };
     }),
   );
@@ -183,7 +179,43 @@ async function calculateCustomerOrder(
       ? sum + item.taxTotal
       : sum;
   }, 0);
-  const shipping = await calculateRequiredShipping(orderCountry.code, subtotal, input.shippingZoneId);
+  const warehouseGroups = new Map<string | null, number>();
+  for (const item of orderItems) {
+    const current = warehouseGroups.get(item.warehouseId) || 0;
+    warehouseGroups.set(item.warehouseId, current + item.subtotal);
+  }
+
+  let totalShippingCharge = 0;
+  let primaryProvider: string | null = "Standard Shipping";
+  let primaryZoneId: string | null | undefined = undefined;
+  let isFree = true;
+  let estimatedDays: string | null | undefined = null;
+  
+  const shipmentsData = [];
+  
+  for (const [whId, whSubtotal] of warehouseGroups.entries()) {
+    const whShipping = await calculateRequiredShipping(orderCountry.code, whSubtotal, input.shippingZoneId);
+    totalShippingCharge += whShipping.charge;
+    if (!whShipping.isFree) isFree = false;
+    primaryProvider = warehouseGroups.size > 1 ? "Multiple Shipments" : whShipping.provider;
+    primaryZoneId = whShipping.zoneId;
+    estimatedDays = whShipping.estimatedDays;
+    
+    shipmentsData.push({
+      warehouseId: whId,
+      shipping: whShipping
+    });
+  }
+
+  const shipping = {
+    provider: primaryProvider,
+    providerId: shipmentsData[0]?.shipping.providerId,
+    zoneId: primaryZoneId,
+    estimatedDays: warehouseGroups.size > 1 ? "Varies by shipment" : estimatedDays,
+    isFree: isFree,
+    charge: totalShippingCharge,
+    shipmentsData
+  };
   const shippingCharge = shipping.charge;
   const packaging = await calculateShipment(
     orderItems.map((item) => ({
@@ -329,6 +361,7 @@ export async function estimateCustomerOrder(
     shippingZoneId: calculation.shipping.zoneId,
     shippingEstimatedDays: calculation.shipping.estimatedDays,
     shippingIsFree: calculation.shipping.isFree,
+    shipmentsCount: calculation.shipping.shipmentsData?.length || 1,
     shippingBox: calculation.packaging.box,
     packageWeight: calculation.packaging.totalWeight,
     packageVolume: calculation.packaging.totalVolume,
@@ -483,6 +516,15 @@ export async function createCustomerOrder(
             total: item.subtotal,
             hsnCode: item.variant.product.hsnCode,
             taxAmount: item.taxTotal,
+            warehouseId: item.warehouseId,
+          })),
+        },
+        shipments: {
+          create: shipping.shipmentsData.map((shipmentData) => ({
+            providerId: shipmentData.shipping.providerId!,
+            warehouseId: shipmentData.warehouseId,
+            shippingCharge: shipmentData.shipping.charge,
+            status: "CREATED",
           })),
         },
       },
@@ -493,6 +535,7 @@ export async function createCustomerOrder(
         shippingZone: { include: { provider: true, countries: { include: { country: true } } } },
         shippingBox: true,
         orderBoxes: true,
+        shipments: true,
       },
     });
 
@@ -500,7 +543,7 @@ export async function createCustomerOrder(
       await decrementVariantStock(
         item.variant.id,
         item.quantity,
-        order.countryId,
+        item.warehouseId,
         {
           reason: "customer_order",
           adjustedBy: `customer:${customer.id};order:${order.id}`,

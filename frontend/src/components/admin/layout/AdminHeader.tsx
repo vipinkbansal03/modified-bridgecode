@@ -14,22 +14,22 @@ export function AdminHeader({ title, breadcrumb, onMenuOpen }: AdminHeaderProps)
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-[#E6E6E6] bg-white px-5 relative z-0">
-      <div className="flex items-center gap-4">
-        <button onClick={onMenuOpen} className="lg:hidden text-[#6B6B6B] hover:text-[#1A1A1A]">
+      <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 pr-3">
+        <button onClick={onMenuOpen} className="lg:hidden text-[#6B6B6B] hover:text-[#1A1A1A] flex-shrink-0">
           <Menu size={20} />
         </button>
-        <div>
-          <h1 className="text-[15px] font-semibold text-[#1A1A1A]">{title}</h1>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-[14px] sm:text-[15px] font-semibold text-[#1A1A1A] truncate">{title}</h1>
           {breadcrumb && breadcrumb.length > 0 && (
-            <div className="flex items-center gap-1 text-[11.5px] text-[#9A9A9A]">
-              <span>Admin</span>
+            <div className="flex items-center gap-1 text-[11.5px] text-[#9A9A9A] truncate">
+              <span className="flex-shrink-0">Admin</span>
               {breadcrumb.map((crumb, i) => (
-                <span key={i} className="flex items-center gap-1">
-                  <ChevronRight size={10} />
+                <span key={i} className="flex items-center gap-1 flex-shrink-0">
+                  <ChevronRight size={10} className="flex-shrink-0" />
                   {crumb.href ? (
-                    <a href={crumb.href} className="hover:text-[#1A1A1A]">{crumb.label}</a>
+                    <a href={crumb.href} className="hover:text-[#1A1A1A] truncate">{crumb.label}</a>
                   ) : (
-                    <span className="text-[#1A1A1A]">{crumb.label}</span>
+                    <span className="text-[#1A1A1A] truncate">{crumb.label}</span>
                   )}
                 </span>
               ))}

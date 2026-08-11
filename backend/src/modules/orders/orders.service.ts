@@ -124,7 +124,7 @@ export async function listOrders(query: {
 }
 
 export async function getOrder(id: string) {
-  const o = await prisma.order.findUnique({ where: { id }, include: { items: { include: { product: true, variant: true } }, country: true, currency: true, coupon: true, shippingZone: { include: { provider: true, countries: { include: { country: true } } } }, shippingBox: true, orderBoxes: true } });
+  const o = await prisma.order.findUnique({ where: { id }, include: { items: { include: { product: true, variant: true, warehouse: true as any } }, country: true, currency: true, coupon: true, shippingZone: { include: { provider: true, countries: { include: { country: true } } } }, shippingBox: true, orderBoxes: true } });
   if (!o) throw new AppError("Order not found.", 404);
   return o;
 }
@@ -282,15 +282,15 @@ export async function shipOrder(id: string, data: { shippingProvider: string; tr
 }
 
 export async function deliverOrder(id: string) {
-  const order = await getOrder(id);
+  const order: any = await getOrder(id);
   if (order.status === "DELIVERED") {
     return order;
   }
 
   await Promise.all(
-    order.items
-      .filter((item) => item.variantId)
-      .map((item) =>
+    (order.items ?? [])
+      .filter((item: any) => item.variantId)
+      .map((item: any) =>
         decrementVariantStock(item.variantId!, item.quantity, order.countryId, {
           reason: "order_delivered",
           adjustedBy: `system:${id}`,

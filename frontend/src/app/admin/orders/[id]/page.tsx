@@ -49,6 +49,7 @@ interface OrderItem {
   total: number;
   product: { title: string };
   variant: { title: string } | null;
+  warehouse: { name: string } | null;
 }
 
 interface ShipmentEvent {
@@ -431,7 +432,7 @@ export default function OrderDetailPage() {
                 <table className="w-full text-sm min-w-[600px]">
                   <thead className="bg-[#F8F8F8] border-b border-[#E6E6E6]">
                     <tr>
-                      {["Product", "Variant", "SKU", "Qty", "Unit Price", "Total"].map((h) => (
+                      {["Product", "Variant", "SKU", "Qty", "Warehouse", "Unit Price", "Total"].map((h) => (
                         <th key={h} className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">{h}</th>
                       ))}
                     </tr>
@@ -443,6 +444,17 @@ export default function OrderDetailPage() {
                         <td className="px-4 py-3 text-[#6B6B6B]">{item.variant?.title ?? "—"}</td>
                         <td className="px-4 py-3 font-mono text-[12px] text-[#6B6B6B]">{item.sku ?? "—"}</td>
                         <td className="px-4 py-3 text-[#6B6B6B]">{item.quantity}</td>
+                        <td className="px-4 py-3 text-[#6B6B6B]">
+                          {item.warehouse?.name ? (
+                            <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                              {item.warehouse.name}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10">
+                              Default Seller
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-[#6B6B6B]">{sym}{Number(item.unitPrice).toFixed(2)}</td>
                         <td className="px-4 py-3 font-semibold text-[#111]">{sym}{Number(item.total).toFixed(2)}</td>
                       </tr>

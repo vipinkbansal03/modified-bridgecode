@@ -26,6 +26,8 @@ import {
   useUpdateCollectionCountries,
 } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
+import { uploadMediaFiles } from "@/utils/uploadMedia";
+import { Loader2 } from "lucide-react";
 
 type Product = { id: string; title: string };
 type Collection = {
@@ -82,11 +84,36 @@ export default function CollectionsPage() {
   const [sortBy, setSortBy] = useState<CollectionSortBy>("sortOrder");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [showForm, setShowForm] = useState(false);
+  const [selectedDiscountIds, setSelectedDiscountIds] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>("");
   const [deleting, setDeleting] = useState<string | null>(null);
   const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
   const [countrySearch, setCountrySearch] = useState("");
   const { showToast, ToastComponent } = useToast();
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      const results = await uploadMediaFiles([file], {
+        entityType: "COLLECTION",
+        purpose: "COLLECTION_IMAGE",
+      });
+      const url = results[0]?.url;
+      if (url) {
+        form.setFieldValue("image", url);
+        showToast("Image uploaded successfully", "success");
+      }
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to upload image"), "error");
+    } finally {
+      setIsUploading(false);
+      e.target.value = "";
+    }
+  };
 
   const createCollection = useCreateCollection();
   const updateCollection = useUpdateCollection();
@@ -340,16 +367,6 @@ export default function CollectionsPage() {
         width: "220px",
         render: (row) => (
           <div className="flex items-center gap-1.5">
-            {canUpdate && (
-              <button
-                type="button"
-                onClick={() => setSelectedCollectionId(row.id)}
-                className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-                title="Manage countries"
-              >
-                <Globe size={13} />
-              </button>
-            )}
             {canCreate && (
               <button
                 type="button"
@@ -417,7 +434,21 @@ export default function CollectionsPage() {
           </div>
           <div className="grid grid-cols-3 gap-6">
             <AdminInput label="Sort Order" type="number" {...form.getFieldProps("sortOrder")} error={form.errors.sortOrder as string} />
-            <AdminInput label="Image URL" {...form.getFieldProps("image")} error={form.errors.image as string} />
+            <div className="space-y-1">
+              <label className="text-[13px] font-medium text-[#111]">Image URL</label>
+              <div className="flex gap-2">
+                <input
+                  {...form.getFieldProps("image")}
+                  className="flex-1 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none focus:border-[#E31E24]"
+                  placeholder="https://..."
+                />
+                <label className="flex cursor-pointer items-center justify-center rounded-md bg-[#F2F2F2] px-3 py-2 text-[13.5px] font-medium text-[#111] hover:bg-[#E6E6E6]">
+                  {isUploading ? <Loader2 size={16} className="animate-spin" /> : "Upload"}
+                  <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} disabled={isUploading} />
+                </label>
+              </div>
+              {form.errors.image && <div className="text-[12px] text-red-500">{form.errors.image as string}</div>}
+            </div>
             <AdminInput label="Description" {...form.getFieldProps("description")} error={form.errors.description as string} />
           </div>
       <div className="mt-4">

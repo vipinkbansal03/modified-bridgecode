@@ -3,6 +3,7 @@ import { z } from "zod";
 export const customerOrderItemSchema = z.object({
   variantId: z.string().min(1, "Variant is required"),
   quantity: z.coerce.number().int().min(1, "Quantity must be at least 1"),
+  warehouseId: z.string().optional(),
 });
 
 export const customerOrderAddressSchema = z.object({

@@ -49,7 +49,8 @@ type Action =
   | { type: "ADD_ITEMS"; payload: QuoteCartItem[] }
   | { type: "UPDATE_QTY"; variantId: string; quantity: number }
   | { type: "REMOVE"; variantId: string }
-  | { type: "CLEAR" };
+  | { type: "CLEAR" }
+  | { type: "UPDATE_WAREHOUSE"; variantId: string; warehouseId: string | undefined; warehouseName: string; estimatedDeliveryDays?: number | string; isLocalWarehouse?: boolean };
 
 function reducer(state: QuoteCartItem[], action: Action): QuoteCartItem[] {
   switch (action.type) {
@@ -76,6 +77,18 @@ function reducer(state: QuoteCartItem[], action: Action): QuoteCartItem[] {
       return state.map((i) =>
         i.variantId === action.variantId
           ? { ...i, quantity: action.quantity }
+          : i,
+      );
+    case "UPDATE_WAREHOUSE":
+      return state.map((i) =>
+        i.variantId === action.variantId
+          ? {
+              ...i,
+              warehouseId: action.warehouseId,
+              warehouseName: action.warehouseName,
+              estimatedDeliveryDays: action.estimatedDeliveryDays,
+              isLocalWarehouse: action.isLocalWarehouse,
+            }
           : i,
       );
     case "REMOVE":
@@ -106,6 +119,7 @@ interface QuoteCartContextValue {
   totals: QuoteCartTotals;
   addItems: (items: QuoteCartItem[]) => void;
   updateQuantity: (variantId: string, quantity: number) => void;
+  updateWarehouse: (variantId: string, warehouseId: string | undefined, warehouseName: string, estimatedDeliveryDays?: number | string, isLocalWarehouse?: boolean) => void;
   removeItem: (variantId: string) => void;
   clearCart: () => void;
 }
@@ -280,6 +294,11 @@ export function QuoteCartProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: "UPDATE_QTY", variantId, quantity }),
     [],
   );
+  const updateWarehouse = useCallback(
+    (variantId: string, warehouseId: string | undefined, warehouseName: string, estimatedDeliveryDays?: number | string, isLocalWarehouse?: boolean) =>
+      dispatch({ type: "UPDATE_WAREHOUSE", variantId, warehouseId, warehouseName, estimatedDeliveryDays, isLocalWarehouse }),
+    [],
+  );
   const removeItem = useCallback(
     (variantId: string) => dispatch({ type: "REMOVE", variantId }),
     [],
@@ -294,6 +313,7 @@ export function QuoteCartProvider({ children }: { children: React.ReactNode }) {
         totals: computeTotals(items),
         addItems,
         updateQuantity,
+        updateWarehouse,
         removeItem,
         clearCart,
       }}

@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { Button } from "@/components/ui/Button";
+import { QuantityInput } from "@/components/product/QuantityInput";
+import { CartItemWarehouseSelector } from "@/components/cart/CartItemWarehouseSelector";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { useCart } from "@/contexts/CartContext";
@@ -206,7 +208,7 @@ function CustomSelect({
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, totals, updateQuantity, removeItem, clearCart, revalidateCart } = useCart();
+  const { items, totals, updateQuantity, removeItem, clearCart, revalidateCart, updateWarehouse } = useCart();
   const { currentCustomer, isLoading } = useCustomerAuth();
   const { selectedCountryCode, setSelectedCountryCode } = useCurrencyContext();
   const { selectedAddress: sessionAddress, setSelectedAddress } = useDeliveryAddress();
@@ -294,6 +296,7 @@ export default function CheckoutPage() {
   const [selectedSavedAddressId, setSelectedSavedAddressId] = useState<string>("");
 
   const [form, setForm] = useState({
+    id: "",
     fullName: "",
     phone: "",
     addressLine1: "",
@@ -433,15 +436,21 @@ export default function CheckoutPage() {
         .then((saved) => {
           setAddresses(saved);
 
-          if (sessionAddress) {
-            if (sessionAddress.id.startsWith("geo-") || sessionAddress.id.startsWith("pin-")) {
-              applyLocationSelection(sessionAddress);
-            } else {
-              applySavedAddress(sessionAddress, false);
-            }
+          const activeCountryCode = selectedCountryCode
+            ? selectedCountryCode.toUpperCase()
+            : "IN";
+          const matchingCountryAddress = saved.find(
+            (addr) => addr.country?.code?.toUpperCase() === activeCountryCode,
+          );
+          const realSessionAddress = sessionAddress && saved.some(a => a.id === sessionAddress.id) ? sessionAddress : null;
+
+          if (sessionAddress && (sessionAddress.id.startsWith("geo-") || sessionAddress.id.startsWith("pin-"))) {
+            applyLocationSelection(sessionAddress);
           } else {
             const preselected =
-              saved.find((address) => address.isDefault) ?? saved[0];
+              realSessionAddress ||
+              matchingCountryAddress ||
+              (saved.find((address) => address.isDefault) ?? saved[0] ?? sessionAddress);
 
             if (preselected) {
               addressInitialisedRef.current = true;
@@ -971,6 +980,7 @@ export default function CheckoutPage() {
 
     setForm((current) => ({
       ...current,
+      id: address.id,
       fullName: (address.fullName && address.fullName.trim())
         ? address.fullName.trim()
         : (current.fullName.trim() || fallbackName),
@@ -1148,7 +1158,7 @@ export default function CheckoutPage() {
                     </label>
                     <select
                       id="savedAddress"
-                      value={selectedSavedAddressId}
+                      value={selectedSavedAddressId || form.id || ""}
                       onChange={(event) => {
                         const val = event.target.value;
                         if (!val) {
@@ -1366,19 +1376,22 @@ export default function CheckoutPage() {
                   <div className="space-y-2">
                     {availableProviders.map((option) => {
                       const isSelected = selectedZoneId === option.zoneId;
+                      const actualShipmentsCount = (estimate as any)?.shipmentsCount || new Set(items.map((i) => i.warehouseId)).size || 1;
+                      const totalOptionCharge = option.charge * actualShipmentsCount;
                       return (
                         <label
                           key={option.zoneId}
                           className={`flex items-center justify-between rounded-lg border p-3 cursor-pointer transition-colors ${
                             isSelected
-                              ? "border-brand bg-brand/5"
-                              : "border-line bg-white"
+                              ? "border-brand bg-brand/5 ring-1 ring-brand"
+                              : "border-line bg-white hover:border-steel-2"
                           }`}
                         >
                           <div className="flex items-center gap-3">
                             <input
                               type="radio"
-                              name="shippingMethod"
+                              name="shipping"
+                              value={option.zoneId}
                               checked={isSelected}
                               onChange={() => {
                                 setSelectedZoneId(option.zoneId);
@@ -1389,28 +1402,31 @@ export default function CheckoutPage() {
                                   );
                                 }
                               }}
-                              className="text-brand focus:ring-brand"
+                              className="h-4 w-4 text-brand focus:ring-brand"
                             />
                             <div>
-                              <p className="text-[14px] font-semibold text-ink">
+                              <span className="block text-[14px] font-semibold text-ink">
                                 {option.provider}
-                              </p>
-                              {option.estimatedDays && (
-                                <p className="text-[12px] text-steel mt-0.5">
-                                  Estimated delivery: {option.estimatedDays}
-                                </p>
+                              </span>
+                              <span className="block text-[12px] text-steel">
+                                Estimated delivery: {option.estimatedDays}
+                              </span>
+                              {actualShipmentsCount > 1 && (
+                                <span className="block text-[11px] text-steel-2 italic mt-0.5">
+                                  Includes {actualShipmentsCount} separate shipments
+                                </span>
                               )}
                             </div>
                           </div>
-                          <strong className="text-[14px] text-ink">
+                          <span className="font-semibold text-ink">
                             {option.isFree
-                              ? "Free"
+                              ? "FREE"
                               : formatMoney(
                                   estimate?.currency?.symbol ??
                                     totals.currencySymbol,
-                                  option.charge,
+                                  totalOptionCharge,
                                 )}
-                          </strong>
+                          </span>
                         </label>
                       );
                     })}
@@ -1463,7 +1479,7 @@ export default function CheckoutPage() {
               </div>
             </div>
 
-            <aside className="h-fit rounded-md border border-line bg-white p-5 shadow-[0_16px_50px_rgba(31,24,18,0.08)]">
+            <aside className="h-fit rounded-md border border-line bg-white p-5 shadow-[0_16px_50px_rgba(31,24,18,0.08)] sticky top-6">
               <div className="mb-5 flex items-center gap-2">
                 <ShoppingCart size={17} className="text-brand" />
                 <h2 className="text-[18px] font-semibold text-ink">
@@ -1471,7 +1487,7 @@ export default function CheckoutPage() {
                 </h2>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-4 max-h-[calc(100vh-350px)] overflow-y-auto pr-2 custom-scrollbar">
                 {items.map((item) => {
                   const estimatedItem = estimate?.items?.find(
                     (ei) => ei.variantId === item.variantId,
@@ -1501,16 +1517,12 @@ export default function CheckoutPage() {
                           <p className="mt-1 text-[12.5px] text-steel">
                             {item.variantTitle}
                           </p>
-                          {item.warehouseName && (
-                            <div className="mt-1.5 flex flex-col gap-0.5">
-                              <span className="text-[11.5px] font-medium text-[#1A1A1A]">
-                                Sold by {item.warehouseName} {item.isLocalWarehouse ? "(Local)" : ""}
-                              </span>
-                              <span className="text-[11px] text-[#6B6B6B]">
-                                Estimated Delivery: {item.estimatedDeliveryDays} days
-                              </span>
-                            </div>
-                          )}
+                          <div className="mt-2">
+                            <CartItemWarehouseSelector 
+                              item={item} 
+                              updateWarehouse={updateWarehouse} 
+                            />
+                          </div>
                         </div>
                         <button
                           type="button"
@@ -1760,21 +1772,28 @@ export default function CheckoutPage() {
                 <div className="flex items-center justify-between text-[14px]">
                   <span className="text-steel">Shipping</span>
                   <strong className="text-ink">
-                    {selectedShippingOption
-                      ? selectedShippingOption.isFree
+                    {estimate?.shippingCharge != null
+                      ? estimate.shippingIsFree
                         ? "Free"
                         : formatMoney(
                             estimate?.currency?.symbol ?? totals.currencySymbol,
-                            selectedShippingOption.charge,
+                            estimate.shippingCharge,
                           )
-                      : shippingEstimate?.available
-                        ? shippingEstimate.isFree
+                      : selectedShippingOption
+                        ? selectedShippingOption.isFree
                           ? "Free"
                           : formatMoney(
                               estimate?.currency?.symbol ?? totals.currencySymbol,
-                              estimate?.shippingCharge ?? shippingEstimate.charge,
+                              selectedShippingOption.charge,
                             )
-                        : "Unavailable"}
+                        : shippingEstimate?.available
+                          ? shippingEstimate.isFree
+                            ? "Free"
+                            : formatMoney(
+                                estimate?.currency?.symbol ?? totals.currencySymbol,
+                                shippingEstimate.charge,
+                              )
+                          : "Unavailable"}
                   </strong>
                 </div>
                 <div className="mt-4 space-y-2 border-t border-line pt-3">
@@ -2098,19 +2117,26 @@ export default function CheckoutPage() {
               <span>Shipping</span>
 
               <span className="font-mono">
-                {selectedShippingOption
-                  ? selectedShippingOption.isFree
+                {estimate?.shippingCharge != null
+                  ? estimate.shippingIsFree
                     ? "FREE"
                     : formatMoney(
                         estimate?.currency?.symbol ?? totals.currencySymbol,
-                        selectedShippingOption.charge,
+                        estimate.shippingCharge,
                       )
-                  : estimate?.shippingIsFree
-                    ? "FREE"
-                    : formatMoney(
-                        estimate?.currency?.symbol ?? totals.currencySymbol,
-                        estimate?.shippingCharge ?? 0,
-                      )}
+                  : selectedShippingOption
+                    ? selectedShippingOption.isFree
+                      ? "FREE"
+                      : formatMoney(
+                          estimate?.currency?.symbol ?? totals.currencySymbol,
+                          selectedShippingOption.charge,
+                        )
+                    : estimate?.shippingIsFree
+                      ? "FREE"
+                      : formatMoney(
+                          estimate?.currency?.symbol ?? totals.currencySymbol,
+                          estimate?.shippingCharge ?? 0,
+                        )}
               </span>
             </div>
 

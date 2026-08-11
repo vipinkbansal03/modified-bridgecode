@@ -1238,7 +1238,7 @@ type PublicProductDetailRecord = {
       dealerPrice?: Prisma.Decimal | number | null;
       distributorPrice?: Prisma.Decimal | number | null;
     }>;
-    inventories: Array<{ countryId: string | null; stock: number; reservedStock: number; status: string }>;
+    inventories: Array<{ countryId: string | null; warehouseId: string | null; stock: number; reservedStock: number; status: string }>;
   }>;
   prices: Array<{
     country: { code: string; name: string };
@@ -1426,6 +1426,11 @@ async function toPublicProductDetail(
                 )?.status ?? "OUT_OF_STOCK",
             }
           : null,
+      warehouseInventories: v.inventories.map((inv) => ({
+        warehouseId: inv.warehouseId,
+        available: Math.max(0, (inv.stock ?? 0) - (inv.reservedStock ?? 0)),
+        status: inv.status,
+      })).filter((inv) => inv.available > 0),
     };
   });
 
@@ -1674,7 +1679,10 @@ export async function getProductWarehouses(
       productId: product.id,
       ...(variantId ? { variantId } : {}),
       stock: { gt: 0 },
-      warehouseId: { not: null },
+      OR: [
+        { variantId: null },
+        { variant: { status: "ACTIVE" } }
+      ]
     },
     include: {
       warehouse: {
@@ -1688,6 +1696,27 @@ export async function getProductWarehouses(
   const validWarehousesMap = new Map<string, any>();
 
   for (const inv of inventories) {
+    if (!inv.warehouseId) {
+      if (validWarehousesMap.has("default")) {
+        const existing = validWarehousesMap.get("default");
+        existing.stock += inv.stock;
+      } else {
+        validWarehousesMap.set("default", {
+          id: "default",
+          name: "Default Seller",
+          countryId: "",
+          countryCode: "",
+          countryName: "Global",
+          state: null,
+          stock: inv.stock,
+          estimatedDeliveryDays: "7-14",
+          isLocal: false,
+          isStateMatch: false
+        });
+      }
+      continue;
+    }
+
     if (!inv.warehouse || inv.warehouse.status !== "ACTIVE") continue;
     const w = inv.warehouse;
 

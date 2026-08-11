@@ -29,26 +29,28 @@ model User {
 }
 
 model Warehouse {
-  id           String          @id @default(cuid())
-  name         String
-  countryId    String
-  state        String
-  address      String?
-  addressLine1 String?
-  addressLine2 String?
-  city         String?
-  postalCode   String?
-  gstin        String?
+  id             String   @id @default(cuid())
+  name           String
+  countryId      String
+  state          String
+  address        String?
+  addressLine1   String?
+  addressLine2   String?
+  city           String?
+  postalCode     String?
+  gstin          String?
   deliveryStates String[] @default([])
-  status       Status          @default(ACTIVE)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  
+  status         Status   @default(ACTIVE)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
   country       Country         @relation("WarehousePhysicalCountry", fields: [countryId], references: [id])
   deliveryZones Json            @default("[]")
   inventories   Inventory[]
-  orders      Order[]
-  users       UserWarehouse[]
+  orders        Order[]
+  users         UserWarehouse[]
+  orderItems    OrderItem[]
+  shipments     Shipment[]
 
   @@map("warehouses")
 }
@@ -102,15 +104,15 @@ model Category {
 }
 
 model Collection {
-  id          String              @id @default(cuid())
+  id          String               @id @default(cuid())
   name        String
-  slug        String              @unique
-  status      Status              @default(ACTIVE)
-  sortOrder   Int                 @default(0)
+  slug        String               @unique
+  status      Status               @default(ACTIVE)
+  sortOrder   Int                  @default(0)
   description String?
   image       String?
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
   products    CollectionProduct[]
   countries   CollectionCountry[]
   discounts   DiscountCollection[]
@@ -119,63 +121,63 @@ model Collection {
 }
 
 model Product {
-  id                String               @id @default(cuid())
-  title             String
-  slug              String               @unique
-  shortDescription  String?
-  description       String?
-  informationImage  String?
+  id                     String                 @id @default(cuid())
+  title                  String
+  slug                   String                 @unique
+  shortDescription       String?
+  description            String?
+  informationImage       String?
   informationDescription String?
-  sortOrder         Int                  @default(0)
-  categoryId        String
-  sku               String?              @unique
-  productCode       String?
-  hsnCode           String?
-  brand             String               @default("Modern Orthodontics")
-  status            ProductStatus        @default(DRAFT)
-  isFeatured        Boolean              @default(false)
-  hasVariants       Boolean              @default(false)
-  defaultCountryId  String?
-  defaultCurrencyId String?
-  seoTitle          String?
-  seoDescription    String?
-  seoKeywords       String?
-  highlights        Json?
-  technicalSpecs    Json?
-  warranty          Json?
-  primaryFeatures   Json?
-  additionalInfo    Json?
-  packageWeight     Decimal?             @db.Decimal(10, 3)
-  packageLength     Decimal?             @db.Decimal(10, 2)
-  packageWidth      Decimal?             @db.Decimal(10, 2)
-  packageHeight     Decimal?             @db.Decimal(10, 2)
-  shippingClass     String?
-  fragile           Boolean              @default(false)
-  hazardous         Boolean              @default(false)
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-  deletedAt         DateTime?
-  OrderItem         OrderItem[]
-  attributes        ProductAttribute[]
-  inventories       Inventory[]
-  media             ProductMedia[]
-  packages          ProductPackage[]
-  prices            ProductPrice[]
-  translations      ProductTranslation[]
-  variants          ProductVariant[]
-  collections       CollectionProduct[]
-  countries         ProductCountry[]
-  discounts         DiscountProduct[]
-  moqPricing        MoqPricing[]
-  tierPricing       TierPricing[]
-  category          Category             @relation(fields: [categoryId], references: [id])
-  defaultCountry    Country?             @relation(fields: [defaultCountryId], references: [id])
-  defaultCurrency   Currency?            @relation(fields: [defaultCurrencyId], references: [id])
-  QuoteItem         QuoteItem[]
-  taxRules          TaxRule[]            @relation("ProductTaxRules")
-  reviews           ProductReview[]
-  wishlistItems     Wishlist[]
-  paymentMethods    ProductPaymentMethod[]
+  sortOrder              Int                    @default(0)
+  categoryId             String
+  sku                    String?                @unique
+  productCode            String?
+  hsnCode                String?
+  brand                  String                 @default("Modern Orthodontics")
+  status                 ProductStatus          @default(DRAFT)
+  isFeatured             Boolean                @default(false)
+  hasVariants            Boolean                @default(false)
+  defaultCountryId       String?
+  defaultCurrencyId      String?
+  seoTitle               String?
+  seoDescription         String?
+  seoKeywords            String?
+  highlights             Json?
+  technicalSpecs         Json?
+  warranty               Json?
+  primaryFeatures        Json?
+  additionalInfo         Json?
+  packageWeight          Decimal?               @db.Decimal(10, 3)
+  packageLength          Decimal?               @db.Decimal(10, 2)
+  packageWidth           Decimal?               @db.Decimal(10, 2)
+  packageHeight          Decimal?               @db.Decimal(10, 2)
+  shippingClass          String?
+  fragile                Boolean                @default(false)
+  hazardous              Boolean                @default(false)
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  deletedAt              DateTime?
+  OrderItem              OrderItem[]
+  attributes             ProductAttribute[]
+  inventories            Inventory[]
+  media                  ProductMedia[]
+  packages               ProductPackage[]
+  prices                 ProductPrice[]
+  translations           ProductTranslation[]
+  variants               ProductVariant[]
+  collections            CollectionProduct[]
+  countries              ProductCountry[]
+  discounts              DiscountProduct[]
+  moqPricing             MoqPricing[]
+  tierPricing            TierPricing[]
+  category               Category               @relation(fields: [categoryId], references: [id])
+  defaultCountry         Country?               @relation(fields: [defaultCountryId], references: [id])
+  defaultCurrency        Currency?              @relation(fields: [defaultCurrencyId], references: [id])
+  QuoteItem              QuoteItem[]
+  taxRules               TaxRule[]              @relation("ProductTaxRules")
+  reviews                ProductReview[]
+  wishlistItems          Wishlist[]
+  paymentMethods         ProductPaymentMethod[]
 
   @@map("products")
 }
@@ -256,15 +258,15 @@ model AttributeValue {
 }
 
 model ProductAttribute {
-  id                  String                           @id @default(cuid())
-  productId           String
-  attributeId         String
-  required            Boolean                          @default(false)
-  gridAxis            GridAxis?
-  createdAt           DateTime                         @default(now())
-  allowedValues       ProductAttributeValueSelection[]
-  attribute           Attribute                        @relation(fields: [attributeId], references: [id])
-  product             Product                          @relation(fields: [productId], references: [id])
+  id            String                           @id @default(cuid())
+  productId     String
+  attributeId   String
+  required      Boolean                          @default(false)
+  gridAxis      GridAxis?
+  createdAt     DateTime                         @default(now())
+  allowedValues ProductAttributeValueSelection[]
+  attribute     Attribute                        @relation(fields: [attributeId], references: [id])
+  product       Product                          @relation(fields: [productId], references: [id])
 
   @@unique([productId, attributeId])
   @@map("product_attributes")
@@ -331,43 +333,43 @@ model ProductVariantAttributeValue {
 }
 
 model Country {
-  id                  String              @id @default(uuid())
-  name                String
-  code                String              @unique
-  currencyId          String
-  status              CountryStatus       @default(ACTIVE)
-  isDefault           Boolean             @default(false)
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @default(now())
-  sortOrder           Int                 @default(0)
-  dutyPercentage      Decimal             @default(0) @db.Decimal(5, 2)
-  currency            Currency            @relation(fields: [currencyId], references: [id])
-  banners             Banner[]
-  categoryCountries   CategoryCountry[]
-  collectionCountries CollectionCountry[]
-  inventories         Inventory[]
-  defaultCustomers    Customer[]          @relation("CustomerDefaultCountry")
-  customerAddresses   CustomerAddress[]   @relation("CustomerAddressCountry")
-  productCountries    ProductCountry[]
-  discounts           DiscountCountry[]
-  moqPricing          MoqPricing[]
-  tierCountries       TierCountry[]
-  attributeValues     AttributeValue[]    @relation("CountryAttributeValues")
-  couponCountries     CouponCountry[]
-  bannerCountries     BannerCountry[]
-  taxRuleCountries    TaxRuleCountry[]
-  Coupon              Coupon[]
-  Order               Order[]
-  prices              ProductPrice[]
+  id                    String                 @id @default(uuid())
+  name                  String
+  code                  String                 @unique
+  currencyId            String
+  status                CountryStatus          @default(ACTIVE)
+  isDefault             Boolean                @default(false)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @default(now())
+  sortOrder             Int                    @default(0)
+  dutyPercentage        Decimal                @default(0) @db.Decimal(5, 2)
+  currency              Currency               @relation(fields: [currencyId], references: [id])
+  banners               Banner[]
+  categoryCountries     CategoryCountry[]
+  collectionCountries   CollectionCountry[]
+  inventories           Inventory[]
+  defaultCustomers      Customer[]             @relation("CustomerDefaultCountry")
+  customerAddresses     CustomerAddress[]      @relation("CustomerAddressCountry")
+  productCountries      ProductCountry[]
+  discounts             DiscountCountry[]
+  moqPricing            MoqPricing[]
+  tierCountries         TierCountry[]
+  attributeValues       AttributeValue[]       @relation("CountryAttributeValues")
+  couponCountries       CouponCountry[]
+  bannerCountries       BannerCountry[]
+  taxRuleCountries      TaxRuleCountry[]
+  Coupon                Coupon[]
+  Order                 Order[]
+  prices                ProductPrice[]
   shippingZoneCountries ShippingZoneCountry[]
   shippingBoxCountries  ShippingBoxCountry[]
-  taxRules            TaxRule[]
-  defaultProducts     Product[]
-  tierPricing         TierPricing[]
-  Quote               Quote[]
-  variantCountries    VariantCountry[]
-  paymentMethods      PaymentMethodCountry[]
-  warehouses          Warehouse[]            @relation("WarehousePhysicalCountry")
+  taxRules              TaxRule[]
+  defaultProducts       Product[]
+  tierPricing           TierPricing[]
+  Quote                 Quote[]
+  variantCountries      VariantCountry[]
+  paymentMethods        PaymentMethodCountry[]
+  warehouses            Warehouse[]            @relation("WarehousePhysicalCountry")
 
   @@map("countries")
 }
@@ -440,16 +442,16 @@ model Customer {
   defaultCountryId           String?
   refreshToken               String?
   taxId                      String?
-  taxIdType                  String?           // "GSTIN", "VAT", "EIN", "OTHER"
+  taxIdType                  String? // "GSTIN", "VAT", "EIN", "OTHER"
   taxIdStatus                String            @default("UNVERIFIED") // "UNVERIFIED" | "PENDING" | "VALID" | "INVALID"
   taxIdVerifiedAt            DateTime?
   vatNumber                  String?
-  vatValidationStatus        String?           // "VALID" | "INVALID" | "UNVERIFIED"
+  vatValidationStatus        String? // "VALID" | "INVALID" | "UNVERIFIED"
   vatValidatedAt             DateTime?
   vatCompanyName             String?
   vatCompanyAddress          String?
   vatCountryCode             String?
-  vatValidationSource        String?           // "VIES"
+  vatValidationSource        String? // "VIES"
   taxExemptCertificateUrl    String?
   createdAt                  DateTime          @default(now())
   updatedAt                  DateTime          @updatedAt
@@ -557,22 +559,22 @@ model Inventory {
 }
 
 model Coupon {
-  id            String       @id @default(cuid())
-  code          String       @unique
+  id            String          @id @default(cuid())
+  code          String          @unique
   description   String?
   discountType  DiscountType
-  discountValue Decimal      @db.Decimal(10, 2)
-  minOrderValue Decimal?     @db.Decimal(10, 2)
-  maxDiscount   Decimal?     @db.Decimal(10, 2)
+  discountValue Decimal         @db.Decimal(10, 2)
+  minOrderValue Decimal?        @db.Decimal(10, 2)
+  maxDiscount   Decimal?        @db.Decimal(10, 2)
   startDate     DateTime
   endDate       DateTime
   usageLimit    Int?
-  usedCount     Int          @default(0)
+  usedCount     Int             @default(0)
   countryId     String?
   currencyId    String?
-  status        Status       @default(ACTIVE)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  status        Status          @default(ACTIVE)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
   country       Country?        @relation(fields: [countryId], references: [id])
   currency      Currency?       @relation(fields: [currencyId], references: [id])
   countries     CouponCountry[]
@@ -671,85 +673,87 @@ model QuoteNote {
 }
 
 model Order {
-  id               String           @id @default(cuid())
-  orderNumber      String           @unique
-  customerName     String
-  customerEmail    String
-  customerPhone    String?
-  companyName      String?
-  shippingAddress  Json
-  countryId        String
-  currencyId       String
-  subtotal         Decimal          @db.Decimal(12, 2)
-  discount         Decimal          @default(0) @db.Decimal(12, 2)
-  shippingCharge   Decimal          @default(0) @db.Decimal(12, 2)
-  total            Decimal          @db.Decimal(12, 2)
-  couponId         String?
-  customerId       String?
-  paymentMethodId  String?
-  paymentMethod    String?
-  taxAmount          Decimal          @default(0) @db.Decimal(12, 2)
-  taxType            String?
-  taxIdSnapshot      String?
-  taxIdTypeSnapshot  String?
-  taxMode            String           @default("EXCLUSIVE") // "INCLUSIVE" | "EXCLUSIVE" | "EXEMPT"
-  taxLabel           String           @default("Tax")
-  igstAmount         Decimal          @default(0) @db.Decimal(12, 2)
-  cgstAmount         Decimal          @default(0) @db.Decimal(12, 2)
-  sgstAmount         Decimal          @default(0) @db.Decimal(12, 2)
-  vatAmount          Decimal          @default(0) @db.Decimal(12, 2)
-  salesTaxAmount     Decimal          @default(0) @db.Decimal(12, 2)
-  isZeroRated        Boolean          @default(false)
-  shippingZoneId   String?
-  shippingBoxId    String?
-  shippingBoxName  String?
-  packageWeight    Decimal?  @db.Decimal(10, 3)
-  packageVolume    Decimal?  @db.Decimal(12, 2)
-  couponCode       String?
-  couponDiscount   Decimal?         @default(0) @db.Decimal(12, 2)
-  status           OrderStatus      @default(PENDING)
-  paymentStatus    PaymentStatus    @default(PENDING)
-  paymentProvider  PaymentProvider?
-  paymentId        String?
-  shippingProvider String?
-  trackingNumber   String?
-  notes            String?
-  fromQuoteId      String?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  items            OrderItem[]
-  shipments        Shipment[]
-  orderBoxes       OrderShippingBox[]
-  customer         Customer?        @relation(fields: [customerId], references: [id])
-  country          Country          @relation(fields: [countryId], references: [id])
-  coupon           Coupon?          @relation(fields: [couponId], references: [id])
-  currency         Currency         @relation(fields: [currencyId], references: [id])
-  quote            Quote?
-  shippingZone     ShippingZone?    @relation(fields: [shippingZoneId], references: [id])
-  shippingBox      ShippingBox?     @relation(fields: [shippingBoxId], references: [id])
-  paymentMethodRef PaymentMethod?   @relation(fields: [paymentMethodId], references: [id])
-  warehouseId      String?
-  warehouse        Warehouse?       @relation(fields: [warehouseId], references: [id])
+  id                String             @id @default(cuid())
+  orderNumber       String             @unique
+  customerName      String
+  customerEmail     String
+  customerPhone     String?
+  companyName       String?
+  shippingAddress   Json
+  countryId         String
+  currencyId        String
+  subtotal          Decimal            @db.Decimal(12, 2)
+  discount          Decimal            @default(0) @db.Decimal(12, 2)
+  shippingCharge    Decimal            @default(0) @db.Decimal(12, 2)
+  total             Decimal            @db.Decimal(12, 2)
+  couponId          String?
+  customerId        String?
+  paymentMethodId   String?
+  paymentMethod     String?
+  taxAmount         Decimal            @default(0) @db.Decimal(12, 2)
+  taxType           String?
+  taxIdSnapshot     String?
+  taxIdTypeSnapshot String?
+  taxMode           String             @default("EXCLUSIVE") // "INCLUSIVE" | "EXCLUSIVE" | "EXEMPT"
+  taxLabel          String             @default("Tax")
+  igstAmount        Decimal            @default(0) @db.Decimal(12, 2)
+  cgstAmount        Decimal            @default(0) @db.Decimal(12, 2)
+  sgstAmount        Decimal            @default(0) @db.Decimal(12, 2)
+  vatAmount         Decimal            @default(0) @db.Decimal(12, 2)
+  salesTaxAmount    Decimal            @default(0) @db.Decimal(12, 2)
+  isZeroRated       Boolean            @default(false)
+  shippingZoneId    String?
+  shippingBoxId     String?
+  shippingBoxName   String?
+  packageWeight     Decimal?           @db.Decimal(10, 3)
+  packageVolume     Decimal?           @db.Decimal(12, 2)
+  couponCode        String?
+  couponDiscount    Decimal?           @default(0) @db.Decimal(12, 2)
+  status            OrderStatus        @default(PENDING)
+  paymentStatus     PaymentStatus      @default(PENDING)
+  paymentProvider   PaymentProvider?
+  paymentId         String?
+  shippingProvider  String?
+  trackingNumber    String?
+  notes             String?
+  fromQuoteId       String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  items             OrderItem[]
+  shipments         Shipment[]
+  orderBoxes        OrderShippingBox[]
+  customer          Customer?          @relation(fields: [customerId], references: [id])
+  country           Country            @relation(fields: [countryId], references: [id])
+  coupon            Coupon?            @relation(fields: [couponId], references: [id])
+  currency          Currency           @relation(fields: [currencyId], references: [id])
+  quote             Quote?
+  shippingZone      ShippingZone?      @relation(fields: [shippingZoneId], references: [id])
+  shippingBox       ShippingBox?       @relation(fields: [shippingBoxId], references: [id])
+  paymentMethodRef  PaymentMethod?     @relation(fields: [paymentMethodId], references: [id])
+  warehouseId       String?
+  warehouse         Warehouse?         @relation(fields: [warehouseId], references: [id])
 
   @@map("orders")
 }
 
 model OrderItem {
-  id        String          @id @default(cuid())
-  orderId   String
-  productId String
-  variantId String?
-  title     String
-  sku        String?
-  quantity   Int
-  unitPrice  Decimal         @db.Decimal(12, 2)
-  total      Decimal         @db.Decimal(12, 2)
-  hsnCode    String?
-  taxAmount  Decimal         @default(0) @db.Decimal(12, 2)
-  createdAt DateTime        @default(now())
-  order     Order           @relation(fields: [orderId], references: [id])
-  product   Product         @relation(fields: [productId], references: [id])
-  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+  id          String          @id @default(cuid())
+  orderId     String
+  productId   String
+  variantId   String?
+  title       String
+  sku         String?
+  quantity    Int
+  unitPrice   Decimal         @db.Decimal(12, 2)
+  total       Decimal         @db.Decimal(12, 2)
+  hsnCode     String?
+  taxAmount   Decimal         @default(0) @db.Decimal(12, 2)
+  createdAt   DateTime        @default(now())
+  order       Order           @relation(fields: [orderId], references: [id])
+  product     Product         @relation(fields: [productId], references: [id])
+  variant     ProductVariant? @relation(fields: [variantId], references: [id])
+  warehouseId String?
+  warehouse   Warehouse?      @relation(fields: [warehouseId], references: [id])
 
   @@map("order_items")
 }
@@ -767,34 +771,34 @@ model ShippingProvider {
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
   zones       ShippingZone[]
-  shipments  Shipment[]
+  shipments   Shipment[]
 
   @@map("shipping_providers")
 }
 
 model ShippingZone {
-  id            String               @id @default(cuid())
+  id            String                @id @default(cuid())
   providerId    String
-  charge        Decimal              @db.Decimal(10, 2)
-  freeAbove     Decimal?             @db.Decimal(10, 2)
+  charge        Decimal               @db.Decimal(10, 2)
+  freeAbove     Decimal?              @db.Decimal(10, 2)
   estimatedDays String?
-  status        Status               @default(ACTIVE)
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
+  status        Status                @default(ACTIVE)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
   orders        Order[]
-  provider      ShippingProvider     @relation(fields: [providerId], references: [id])
+  provider      ShippingProvider      @relation(fields: [providerId], references: [id])
   countries     ShippingZoneCountry[]
 
   @@map("shipping_zones")
 }
 
 model ShippingZoneCountry {
-  id        String        @id @default(cuid())
+  id        String       @id @default(cuid())
   zoneId    String
   countryId String
-  createdAt DateTime      @default(now())
-  zone      ShippingZone  @relation(fields: [zoneId], references: [id], onDelete: Cascade)
-  country   Country       @relation(fields: [countryId], references: [id])
+  createdAt DateTime     @default(now())
+  zone      ShippingZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  country   Country      @relation(fields: [countryId], references: [id])
 
   @@unique([zoneId, countryId])
   @@map("shipping_zone_countries")
@@ -813,51 +817,53 @@ enum ShipmentStatus {
 }
 
 model Shipment {
-  id                String          @id @default(cuid())
+  id                String           @id @default(cuid())
   orderId           String
   providerId        String
-  status            ShipmentStatus  @default(CREATED)
+  status            ShipmentStatus   @default(CREATED)
   trackingNumber    String?
   awbNumber         String?
   labelUrl          String?
   estimatedDelivery String?
-  shippingCharge    Decimal?        @db.Decimal(12, 2)
+  shippingCharge    Decimal?         @db.Decimal(12, 2)
   notes             String?
   providerResponse  Json?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  order             Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
   provider          ShippingProvider @relation(fields: [providerId], references: [id])
   events            ShipmentEvent[]
+  warehouseId       String?
+  warehouse         Warehouse?       @relation(fields: [warehouseId], references: [id])
 
   @@index([orderId])
   @@map("shipments")
 }
 
 model ShipmentEvent {
-  id          String          @id @default(cuid())
+  id          String         @id @default(cuid())
   shipmentId  String
   status      ShipmentStatus
   location    String?
   description String?
-  timestamp   DateTime        @default(now())
+  timestamp   DateTime       @default(now())
   raw         Json?
-  shipment    Shipment        @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  shipment    Shipment       @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
 
   @@index([shipmentId])
   @@map("shipment_events")
 }
 
 model ShippingBox {
-  id         String                @id @default(cuid())
+  id         String               @id @default(cuid())
   name       String
-  length     Decimal               @db.Decimal(10, 2)
-  width      Decimal               @db.Decimal(10, 2)
-  height     Decimal               @db.Decimal(10, 2)
-  maxWeight  Decimal               @db.Decimal(10, 2)
-  isActive   Boolean               @default(true)
-  createdAt  DateTime              @default(now())
-  updatedAt  DateTime              @updatedAt
+  length     Decimal              @db.Decimal(10, 2)
+  width      Decimal              @db.Decimal(10, 2)
+  height     Decimal              @db.Decimal(10, 2)
+  maxWeight  Decimal              @db.Decimal(10, 2)
+  isActive   Boolean              @default(true)
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
   orders     Order[]
   countries  ShippingBoxCountry[]
   orderBoxes OrderShippingBox[]
@@ -878,16 +884,16 @@ model ShippingBoxCountry {
 }
 
 model OrderShippingBox {
-  id       String        @id @default(cuid())
+  id       String       @id @default(cuid())
   orderId  String
   boxId    String?
   boxName  String
-  quantity Int           @default(1)
-  weight   Decimal       @db.Decimal(12, 3)
-  volume   Decimal       @db.Decimal(12, 2)
+  quantity Int          @default(1)
+  weight   Decimal      @db.Decimal(12, 3)
+  volume   Decimal      @db.Decimal(12, 2)
   items    Json?
-  order    Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  box      ShippingBox?  @relation(fields: [boxId], references: [id])
+  order    Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  box      ShippingBox? @relation(fields: [boxId], references: [id])
 
   @@index([orderId])
   @@index([boxId])
@@ -1412,13 +1418,13 @@ model TierPricing {
 }
 
 model Discount {
-  id              String           @id @default(cuid())
+  id              String               @id @default(cuid())
   name            String
   type            DiscountRuleType
-  status          Status           @default(ACTIVE)
+  status          Status               @default(ACTIVE)
   tierId          String?
   minQuantity     Int?
-  discountPercent Decimal?         @db.Decimal(5, 2)
+  discountPercent Decimal?             @db.Decimal(5, 2)
   fixedAmount     Decimal?             @db.Decimal(12, 2)
   countries       DiscountCountry[]
   products        DiscountProduct[]
@@ -1501,6 +1507,7 @@ model TaxRule {
   products   Product[]        @relation("ProductTaxRules")
   categories Category[]       @relation("CategoryTaxRules")
   variants   ProductVariant[] @relation("VariantTaxRules")
+
   @@map("tax_rules")
 }
 
@@ -1672,6 +1679,7 @@ enum MediaStatus {
   FAILED
   DELETED
 }
+
 enum StorageProvider {
   LOCAL
   CLOUDINARY
@@ -1685,20 +1693,20 @@ enum PaymentMethodType {
 }
 
 model PaymentMethod {
-  id              String                 @id @default(cuid())
-  code            String                 @unique
-  name            String
-  description     String?
-  iconUrl         String?
-  type            PaymentMethodType
-  sortOrder       Int                    @default(0)
-  isEnabled       Boolean                @default(true)
-  clientScriptUrl String?
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
-  countries       PaymentMethodCountry[]
-  configs         PaymentMethodConfig[]
-  orders          Order[]
+  id               String                 @id @default(cuid())
+  code             String                 @unique
+  name             String
+  description      String?
+  iconUrl          String?
+  type             PaymentMethodType
+  sortOrder        Int                    @default(0)
+  isEnabled        Boolean                @default(true)
+  clientScriptUrl  String?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  countries        PaymentMethodCountry[]
+  configs          PaymentMethodConfig[]
+  orders           Order[]
   productOverrides ProductPaymentMethod[]
   variantOverrides VariantPaymentMethod[]
 
@@ -1784,8 +1792,8 @@ model ProductPaymentMethod {
   createdAt       DateTime                   @default(now())
   updatedAt       DateTime                   @updatedAt
 
-  product         Product                    @relation(fields: [productId], references: [id], onDelete: Cascade)
-  paymentMethod   PaymentMethod              @relation(fields: [paymentMethodId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Cascade)
 
   @@unique([productId, paymentMethodId])
   @@map("product_payment_methods")
@@ -1799,10 +1807,9 @@ model VariantPaymentMethod {
   createdAt       DateTime                   @default(now())
   updatedAt       DateTime                   @updatedAt
 
-  variant         ProductVariant             @relation(fields: [variantId], references: [id], onDelete: Cascade)
-  paymentMethod   PaymentMethod              @relation(fields: [paymentMethodId], references: [id], onDelete: Cascade)
+  variant       ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  paymentMethod PaymentMethod  @relation(fields: [paymentMethodId], references: [id], onDelete: Cascade)
 
   @@unique([variantId, paymentMethodId])
   @@map("variant_payment_methods")
 }
-

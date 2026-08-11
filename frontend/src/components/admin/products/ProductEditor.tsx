@@ -657,6 +657,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [uploadingMediaCount, setUploadingMediaCount] = useState(0);
   const [deletingMedia, setDeletingMedia] = useState<string | null>(null);
   const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set());
+  const lastSelectedMediaIndexRef = useRef<number | null>(null);
   const [previewMediaIndex, setPreviewMediaIndex] = useState<number | null>(null);
   const [isDragOverMedia, setIsDragOverMedia] = useState(false);
   const [deletingBulkMedia, setDeletingBulkMedia] = useState(false);
@@ -988,6 +989,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [vpBulkActionType, setVpBulkActionType] = useState("Bulk Action");
   const [vpBulkActionValue, setVpBulkActionValue] = useState("");
   const [selectedVPIds, setSelectedVPIds] = useState<string[]>([]);
+  const lastSelectedVPIndexRef = useRef<number | null>(null);
   const [expandedVPVariantIds, setExpandedVPVariantIds] = useState<string[]>([]);
   const [filterInvVariant, setFilterInvVariant] = useState("");
   const [filterInvType, setFilterInvType] = useState("");
@@ -1001,6 +1003,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [invBulkActionValue, setInvBulkActionValue] = useState("");
   const [invBulkCountryId, setInvBulkCountryId] = useState("");
   const [selectedInvIds, setSelectedInvIds] = useState<string[]>([]);
+  const lastSelectedGroupIndexRef = useRef<number | null>(null);
   const [variantCountryModalVariant, setVariantCountryModalVariant] = useState<VariantRow | null>(null);
   const [variantCountryOverrides, setVariantCountryOverrides] = useState<Record<string, boolean>>({});
   const [inventoryOverrideDrafts, setInventoryOverrideDrafts] = useState<Record<string, { countryId: string; stock: string }>>({});
@@ -1018,6 +1021,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [variantPriceImporting, setVariantPriceImporting] = useState(false);
   const variantPriceImportInputRef = useRef<HTMLInputElement>(null);
   const [selectedVariantIds, setSelectedVariantIds] = useState<string[]>([]);
+  const lastSelectedVariantIndexRef = useRef<number | null>(null);
   const [tierRuleDraft, setTierRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
   const [moqRuleDraft, setMoqRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
   const [countryPriceModalOpen, setCountryPriceModalOpen] = useState(false);
@@ -1041,6 +1045,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [basePriceBulkEditMode, setBasePriceBulkEditMode] = useState(false);
   const [basePriceBulkDrafts, setBasePriceBulkDrafts] = useState<Record<string, { mrp: string; sellingPrice: string; dealerPrice: string; distributorPrice: string; status: string }>>({});
   const [selectedPriceIds, setSelectedPriceIds] = useState<string[]>([]);
+  const lastSelectedPriceIndexRef = useRef<number | null>(null);
   const [bulkEditPricesModalOpen, setBulkEditPricesModalOpen] = useState(false);
   const [bulkEditPricesForm, setBulkEditPricesForm] = useState({
     mrp: "",
@@ -4577,14 +4582,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const content = (
     <>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1 rounded-lg border border-[#E6E6E6] bg-white p-1">
+        <div className="flex w-full overflow-x-auto gap-1 rounded-lg border border-[#E6E6E6] bg-white p-1 lg:w-auto">
           {visibleTabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "rounded-md px-3.5 py-1.5 text-[12.5px] font-medium transition-colors",
+                "whitespace-nowrap rounded-md px-3.5 py-1.5 text-[12.5px] font-medium transition-colors flex-shrink-0",
                 activeTab === tab.id ? "bg-[#E31E24] text-white" : "text-[#6B6B6B] hover:bg-[#F2F2F2]"
               )}
             >
@@ -4902,9 +4907,29 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       {media.id && (
                         <button
                           type="button"
-                          onClick={(e) => {
+                          onClick={(e: any) => {
                             e.stopPropagation();
-                            handleToggleSelectMedia(media.id!);
+                            const isShift = e.shiftKey;
+                            const isChecked = !isSelected;
+                            
+                            if (isShift && lastSelectedMediaIndexRef.current !== null) {
+                              const start = Math.min(lastSelectedMediaIndexRef.current, index);
+                              const end = Math.max(lastSelectedMediaIndexRef.current, index);
+                              const rangeMedia = (product.media ?? []).slice(start, end + 1).filter((m: any) => m.id);
+                              
+                              setSelectedMediaIds((prev) => {
+                                const newSet = new Set(prev);
+                                if (isChecked) {
+                                  rangeMedia.forEach((m: any) => newSet.add(m.id!));
+                                } else {
+                                  rangeMedia.forEach((m: any) => newSet.delete(m.id!));
+                                }
+                                return newSet;
+                              });
+                            } else {
+                              handleToggleSelectMedia(media.id!);
+                            }
+                            lastSelectedMediaIndexRef.current = index;
                           }}
                           className={`absolute left-2.5 top-2.5 z-10 flex h-6 w-6 items-center justify-center rounded-md border transition-all ${
                             isSelected
@@ -5091,6 +5116,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
         {activeTab === 4 && (
           <div className="p-6">
+            <div className="mb-4">
+              <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Product Variants</h3>
+              <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Variants are created from package + selected attribute values.</p>
+            </div>
+
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <div className="relative">
@@ -5134,14 +5164,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   ))}
                 </select>
               </div>
-            </div>
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Product Variants</h3>
-                <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Variants are created from package + selected attribute values.</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
 
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={handleBulkDeleteVariants}
@@ -5191,22 +5215,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     {bulkSaving ? "Saving..." : "Save All"}
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBulkEditMode((current) => !current);
-                    setBulkDrafts({});
-                    setBulkRowErrors({});
-                  }}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-md border px-4 py-2 text-[13px] font-medium",
-                    bulkEditMode
-                      ? "border-[#F2C9C9] bg-red-50 text-[#B5151B] hover:bg-red-100"
-                      : "border-[#E6E6E6] bg-white text-[#1A1A1A] hover:bg-[#F5F5F5]"
-                  )}
-                >
-                  {bulkEditMode ? "Exit Bulk Edit" : "Bulk Edit"}
-                </button>
+
                 <button
                   onClick={openGenerateVariantModal}
                   disabled={generatingVariants || !product.hasVariants}
@@ -5612,7 +5621,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                         </td>
                       </tr>
                     ) : (
-                      paginatedVariantRows.map((variant) => {
+                      paginatedVariantRows.map((variant, index) => {
                         const warehouseInv = variantTabWarehouseFilter
                           ? variant.inventories?.find((inv: any) => inv.warehouseId === variantTabWarehouseFilter)
                           : null;
@@ -5630,12 +5639,28 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                               <input
                                 type="checkbox"
                                 checked={selectedVariantIds.includes(variant.id)}
-                                onChange={(e) => {
-                                  setSelectedVariantIds((prev) =>
-                                    e.target.checked
-                                      ? [...prev, variant.id]
-                                      : prev.filter((id) => id !== variant.id)
-                                  );
+                                onChange={(e: any) => {
+                                  const isShift = e.nativeEvent?.shiftKey;
+                                  const isChecked = e.target.checked;
+                                  
+                                  if (isShift && lastSelectedVariantIndexRef.current !== null) {
+                                    const start = Math.min(lastSelectedVariantIndexRef.current, index);
+                                    const end = Math.max(lastSelectedVariantIndexRef.current, index);
+                                    const rangeIds = paginatedVariantRows.slice(start, end + 1).map(r => r.id);
+                                    
+                                    if (isChecked) {
+                                      setSelectedVariantIds((prev) => Array.from(new Set([...prev, ...rangeIds])));
+                                    } else {
+                                      setSelectedVariantIds((prev) => prev.filter(id => !rangeIds.includes(id)));
+                                    }
+                                  } else {
+                                    if (isChecked) {
+                                      setSelectedVariantIds((prev) => [...prev, variant.id]);
+                                    } else {
+                                      setSelectedVariantIds((prev) => prev.filter(id => id !== variant.id));
+                                    }
+                                  }
+                                  lastSelectedVariantIndexRef.current = index;
                                 }}
                                 className="h-4 w-4 accent-[#E31E24]"
                               />
@@ -6056,7 +6081,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                               </td>
                             </tr>
                           ) : (
-                            paginatedBasePrices.map((price: any) => {
+                            paginatedBasePrices.map((price: any, index: number) => {
                               const formattedMRP = `${price.currency?.symbol ?? "$"}${price.mrp}`;
                               const formattedSelling = `${price.currency?.symbol ?? "$"}${price.sellingPrice}`;
                               const formattedDealer = price.dealerPrice != null ? `${price.currency?.symbol ?? "$"}${price.dealerPrice}` : "—";
@@ -6068,7 +6093,29 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                     <input
                                       type="checkbox"
                                       checked={selectedPriceIds.includes(price.id)}
-                                      onChange={() => handleToggleSelectPrice(price.id)}
+                                      onChange={(e: any) => {
+                                        const isShift = e.nativeEvent?.shiftKey;
+                                        const isChecked = e.target.checked;
+                                        
+                                        if (isShift && lastSelectedPriceIndexRef.current !== null) {
+                                          const start = Math.min(lastSelectedPriceIndexRef.current, index);
+                                          const end = Math.max(lastSelectedPriceIndexRef.current, index);
+                                          const rangeIds = paginatedBasePrices.slice(start, end + 1).map((r: any) => r.id);
+                                          
+                                          if (isChecked) {
+                                            setSelectedPriceIds((prev) => Array.from(new Set([...prev, ...rangeIds])));
+                                          } else {
+                                            setSelectedPriceIds((prev) => prev.filter(id => !rangeIds.includes(id)));
+                                          }
+                                        } else {
+                                          if (isChecked) {
+                                            setSelectedPriceIds((prev) => [...prev, price.id]);
+                                          } else {
+                                            setSelectedPriceIds((prev) => prev.filter(id => id !== price.id));
+                                          }
+                                        }
+                                        lastSelectedPriceIndexRef.current = index;
+                                      }}
                                       className="h-4 w-4 accent-[#E31E24]"
                                     />
                                   </td>
@@ -6202,7 +6249,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       type="button"
                       onClick={handleVPBulkApplyAction}
                       disabled={bulkSaving || selectedVPIds.length === 0 || vpBulkActionType === "Bulk Action"}
-                      className="h-8.5 rounded-md bg-[#808080] px-4 text-[12.5px] font-semibold text-white hover:bg-[#6B6B6B] disabled:opacity-50"
+                      className="h-8.5 rounded-md bg-[#1A1A1A] px-4 text-[12.5px] font-semibold text-white hover:bg-[#333] disabled:opacity-50"
                     >
                       {bulkSaving ? "Applying..." : "Apply"}
                     </button>
@@ -6390,7 +6437,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                           </td>
                         </tr>
                       ) : (
-                        paginatedGroupedVariantIds.map((variantId) => {
+                        paginatedGroupedVariantIds.map((variantId, index) => {
                           const group = groupedVariantPrices[variantId];
                           const isExpanded = expandedVPVariantIds.includes(variantId);
                           const toggleExpand = () => {
@@ -6407,15 +6454,31 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                 <td className="px-4 py-3 text-center border-b border-[#E6E6E6]" onClick={(e) => e.stopPropagation()}>
                                   <input
                                     type="checkbox"
-                                    checked={group.prices.length > 0 && group.prices.every((p) => selectedVPIds.includes(p.id))}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        const groupIds = group.prices.map((p) => p.id);
-                                        setSelectedVPIds((prev) => Array.from(new Set([...prev, ...groupIds])));
+                                    checked={group.prices.length > 0 && group.prices.every((p: any) => selectedVPIds.includes(p.id))}
+                                    onChange={(e: any) => {
+                                      const isShift = e.nativeEvent?.shiftKey;
+                                      const isChecked = e.target.checked;
+                                      const groupIds = group.prices.map((p: any) => p.id);
+
+                                      if (isShift && lastSelectedVPIndexRef.current !== null) {
+                                        const start = Math.min(lastSelectedVPIndexRef.current, index);
+                                        const end = Math.max(lastSelectedVPIndexRef.current, index);
+                                        const rangeVariantIds = paginatedGroupedVariantIds.slice(start, end + 1);
+                                        const rangeVPIds = rangeVariantIds.flatMap(vid => groupedVariantPrices[vid]?.prices.map((p: any) => p.id) || []);
+                                        
+                                        if (isChecked) {
+                                          setSelectedVPIds((prev) => Array.from(new Set([...prev, ...rangeVPIds])));
+                                        } else {
+                                          setSelectedVPIds((prev) => prev.filter((id) => !rangeVPIds.includes(id)));
+                                        }
                                       } else {
-                                        const groupIds = new Set(group.prices.map((p) => p.id));
-                                        setSelectedVPIds((prev) => prev.filter((id) => !groupIds.has(id)));
+                                        if (isChecked) {
+                                          setSelectedVPIds((prev) => Array.from(new Set([...prev, ...groupIds])));
+                                        } else {
+                                          setSelectedVPIds((prev) => prev.filter((id) => !groupIds.includes(id)));
+                                        }
                                       }
+                                      lastSelectedVPIndexRef.current = index;
                                     }}
                                     className="h-4 w-4 accent-[#E31E24]"
                                   />
@@ -6719,7 +6782,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       type="button"
                       onClick={handleInvBulkApplyAction}
                       disabled={bulkSaving || selectedInvIds.length === 0 || invBulkActionType === "Bulk Action"}
-                      className="h-8.5 rounded-md bg-[#808080] px-4 text-[12.5px] font-semibold text-white hover:bg-[#6B6B6B] disabled:opacity-50"
+                      className="h-8.5 rounded-md bg-[#1A1A1A] px-4 text-[12.5px] font-semibold text-white hover:bg-[#333] disabled:opacity-50"
                     >
                       {bulkSaving ? "Applying..." : "Apply"}
                     </button>
@@ -6824,20 +6887,37 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                           </td>
                         </tr>
                       ) : (
-                        paginatedVariantGroups.map((group: any) => {
+                        paginatedVariantGroups.map((group: any, index: number) => {
                           return (
                             <tr key={group.variantId} className="hover:bg-[#FAFAFA] align-middle">
                               <td className="px-4 py-3 text-center border-b border-[#E6E6E6] align-middle">
                                 <input
                                   type="checkbox"
                                   checked={group.inventories.every((inv: any) => selectedInvIds.includes(inv.id))}
-                                  onChange={(e) => {
+                                  onChange={(e: any) => {
+                                    const isShift = e.nativeEvent?.shiftKey;
+                                    const isChecked = e.target.checked;
                                     const invIds = group.inventories.map((inv: any) => inv.id);
-                                    if (e.target.checked) {
-                                      setSelectedInvIds((prev) => Array.from(new Set([...prev, ...invIds])));
+
+                                    if (isShift && lastSelectedGroupIndexRef.current !== null) {
+                                      const start = Math.min(lastSelectedGroupIndexRef.current, index);
+                                      const end = Math.max(lastSelectedGroupIndexRef.current, index);
+                                      const rangeGroups = paginatedVariantGroups.slice(start, end + 1);
+                                      const rangeInvIds = rangeGroups.flatMap((g: any) => g.inventories.map((i: any) => i.id));
+                                      
+                                      if (isChecked) {
+                                        setSelectedInvIds((prev) => Array.from(new Set([...prev, ...rangeInvIds])));
+                                      } else {
+                                        setSelectedInvIds((prev) => prev.filter((id) => !rangeInvIds.includes(id)));
+                                      }
                                     } else {
-                                      setSelectedInvIds((prev) => prev.filter((id) => !invIds.includes(id)));
+                                      if (isChecked) {
+                                        setSelectedInvIds((prev) => Array.from(new Set([...prev, ...invIds])));
+                                      } else {
+                                        setSelectedInvIds((prev) => prev.filter((id) => !invIds.includes(id)));
+                                      }
                                     }
+                                    lastSelectedGroupIndexRef.current = index;
                                   }}
                                   className="h-4 w-4 accent-[#E31E24]"
                                 />
@@ -6866,7 +6946,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                 {group.inventories.map((inventory: any) => {
                                   const stockLevel = inventory.stock ?? 0;
                                   return (
-                                    <div key={inventory.id} className="h-12 flex items-center justify-center border-b border-[#F0F0F0] last:border-b-0">
+                                    <div key={`${inventory.id}-${stockLevel}`} className="h-12 flex items-center justify-center border-b border-[#F0F0F0] last:border-b-0">
                                       <input
                                         type="number"
                                         min="0"
