@@ -1751,6 +1751,7 @@ export async function generateVariants(
           const wasInactive = existing.status === "INACTIVE";
           if (wasInactive) {
             await prisma.productPrice.deleteMany({ where: { variantId: existing.id } });
+            await prisma.inventory.deleteMany({ where: { variantId: existing.id } });
           }
           const restored = wasInactive
             ? await prisma.productVariant.update({ where: { id: existing.id }, data: { status: "ACTIVE" } })
@@ -2272,10 +2273,17 @@ export async function importVariantCountryPricesSpreadsheet(
 
 export async function deleteVariant(productId: string, variantId: string) {
   await getVariant(productId, variantId);
-  return prisma.productVariant.update({
-    where: { id: variantId },
-    data: { status: "INACTIVE" },
-  });
+  
+  const [variant] = await prisma.$transaction([
+    prisma.productVariant.update({
+      where: { id: variantId },
+      data: { status: "INACTIVE" },
+    }),
+    prisma.inventory.deleteMany({ where: { variantId } }),
+    prisma.productPrice.deleteMany({ where: { variantId } }),
+  ]);
+  
+  return variant;
 }
 
 export async function archiveVariant(productId: string, variantId: string) {
