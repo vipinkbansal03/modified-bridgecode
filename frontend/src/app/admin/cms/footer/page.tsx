@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { AdminInput, AdminSelect, AdminTextarea, useToast, toastMessages, LoadingButton } from "@/components/admin/AdminComponents";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import {
@@ -253,13 +254,18 @@ export default function CmsFooterPage() {
             </div>
             <AdminTextarea label="Fallback Address" value={form.address ?? ""} onChange={(e) => setField("address", e.target.value)} rows={2} />
 
-            <div className="rounded-xl border border-gray-200 p-4">
-              <p className="mb-3 text-sm font-medium text-gray-700">Social Links</p>
-              <div className="grid gap-4 md:grid-cols-2">
-                <AdminInput label="Facebook" value={form.socialLinksJson?.facebook ?? ""} onChange={(e) => setSocialField("facebook", e.target.value)} placeholder="https://facebook.com/..." />
-                <AdminInput label="LinkedIn" value={form.socialLinksJson?.linkedin ?? ""} onChange={(e) => setSocialField("linkedin", e.target.value)} placeholder="https://linkedin.com/..." />
-                <AdminInput label="X / Twitter" value={form.socialLinksJson?.twitter ?? ""} onChange={(e) => setSocialField("twitter", e.target.value)} placeholder="https://x.com/..." />
-                <AdminInput label="Instagram" value={form.socialLinksJson?.instagram ?? ""} onChange={(e) => setSocialField("instagram", e.target.value)} placeholder="https://instagram.com/..." />
+            <div className="rounded-xl border border-gray-200 bg-[#FAFAFA] p-4 space-y-2">
+              <p className="text-sm font-medium text-gray-700">Social Links</p>
+              <p className="text-[13px] text-gray-500">
+                Social media links are managed country-wise from <strong>Settings → Social Media</strong>.
+              </p>
+              <div className="pt-2">
+                <Link
+                  href="/admin/settings?tab=social"
+                  className="inline-flex items-center justify-center rounded-md bg-[#1A1A1A] px-4 py-2 text-xs font-semibold text-white hover:bg-[#333] transition-colors"
+                >
+                  Manage Country-wise Social Media
+                </Link>
               </div>
             </div>
 

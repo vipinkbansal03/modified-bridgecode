@@ -133,6 +133,7 @@ function renderCmsHomeSection(section: CmsSection, bannerSlides: HeroSlide[]) {
     return [
       <CertificationsSection key="home.certifications" data={certifications.length > 0 ? certifications : homeContent.certifications} />,
       <TestimonialsSection key="home.testimonials" />,
+      <HomepagePromoBannerSection key="home.promo" />,
       <BlogSection key="home.blog" />,
     ];
   }

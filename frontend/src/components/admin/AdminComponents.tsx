@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, createContext, useContext, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, XCircle, Info, Check, Plus } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, XCircle, Info, Check, Plus, GripVertical } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { adminApi } from "@/services/adminApi";
 import { ToastProvider, useToast as useSharedToast } from "@/components/ui/ToastProvider";
@@ -24,15 +24,47 @@ interface DataTableProps<T> {
   rowKey: keyof T;
   onRowClick?: (row: T) => void;
   rowTooltip?: string | ((row: T) => string);
+
+  // Optional Selection configuration
+  enableSelection?: boolean;
+  selectedIds?: string[];
+  onSelectionChange?: (ids: string[]) => void;
+
+  // Optional Reordering configuration
+  enableReorder?: boolean;
+  onReorder?: (items: T[]) => void;
+  disabledReorder?: boolean;
 }
 
-export function DataTable<T>({ columns, data, isLoading, emptyMessage = "No records found.", rowKey, onRowClick, rowTooltip }: DataTableProps<T>) {
+export function DataTable<T>({
+  columns,
+  data,
+  isLoading,
+  emptyMessage = "No records found.",
+  rowKey,
+  onRowClick,
+  rowTooltip,
+  enableSelection = false,
+  selectedIds = [],
+  onSelectionChange,
+  enableReorder = false,
+  onReorder,
+  disabledReorder = false,
+}: DataTableProps<T>) {
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+
+  const totalColumns = columns.length + (enableReorder ? 1 : 0) + (enableSelection ? 1 : 0);
+
   if (isLoading) {
     return (
       <div className="rounded-lg border border-[#E6E6E6] bg-white overflow-hidden">
         <div className="divide-y divide-[#E6E6E6]">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="flex gap-4 px-4 py-3.5">
+              {(enableReorder || enableSelection) && (
+                <div className="h-4 w-6 animate-pulse rounded bg-[#E6E6E6]" />
+              )}
               {columns.map((_, j) => (
                 <div key={j} className="h-4 flex-1 animate-pulse rounded bg-[#E6E6E6]" />
               ))}
@@ -49,6 +81,26 @@ export function DataTable<T>({ columns, data, isLoading, emptyMessage = "No reco
         <table className="w-full text-sm">
           <thead className="bg-[#F8F8F8] border-b border-[#E6E6E6]">
             <tr>
+              {enableReorder && (
+                <th className="px-2 py-3 w-9 text-center" />
+              )}
+              {enableSelection && (
+                <th className="px-2 py-3 w-9 text-center">
+                  <input
+                    type="checkbox"
+                    checked={data.length > 0 && selectedIds.length === data.length}
+                    onChange={(e) => {
+                      if (!onSelectionChange) return;
+                      if (e.target.checked) {
+                        onSelectionChange(data.map((item) => String(item[rowKey])));
+                      } else {
+                        onSelectionChange([]);
+                      }
+                    }}
+                    className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24]"
+                  />
+                </th>
+              )}
               {columns.map((col) => (
                 <th key={String(col.key)} className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]" style={{ width: col.width }}>
                   {col.label}
@@ -59,23 +111,85 @@ export function DataTable<T>({ columns, data, isLoading, emptyMessage = "No reco
           <tbody className="divide-y divide-[#E6E6E6]">
             {data.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-12 text-center text-[#9A9A9A] text-[13.5px]">
+                <td colSpan={totalColumns} className="px-4 py-12 text-center text-[#9A9A9A] text-[13.5px]">
                   {emptyMessage}
                 </td>
               </tr>
             ) : (
               data.map((row) => {
                 const tooltip = typeof rowTooltip === "function" ? rowTooltip(row) : rowTooltip;
+                const rowId = String(row[rowKey]);
                 return (
                   <tr
-                    key={String(row[rowKey])}
+                    key={rowId}
+                    draggable={enableReorder && !disabledReorder}
+                    onDragStart={() => {
+                      if (enableReorder) setDraggingId(rowId);
+                    }}
+                    onDragEnd={() => {
+                      setDraggingId(null);
+                      setOverId(null);
+                    }}
+                    onDragOver={(e) => {
+                      if (enableReorder) {
+                        e.preventDefault();
+                        setOverId(rowId);
+                      }
+                    }}
+                    onDrop={(e) => {
+                      if (enableReorder) {
+                        e.preventDefault();
+                        const fromId = draggingId;
+                        const toId = rowId;
+                        if (fromId && toId && fromId !== toId) {
+                          const fromIndex = data.findIndex((item) => String(item[rowKey]) === fromId);
+                          const toIndex = data.findIndex((item) => String(item[rowKey]) === toId);
+                          if (fromIndex >= 0 && toIndex >= 0) {
+                            const next = [...data];
+                            const [moved] = next.splice(fromIndex, 1);
+                            next.splice(toIndex, 0, moved);
+                            onReorder?.(next);
+                          }
+                        }
+                        setDraggingId(null);
+                        setOverId(null);
+                      }
+                    }}
                     onClick={() => onRowClick?.(row)}
                     title={tooltip}
                     className={cn(
                       "transition-colors",
-                      onRowClick ? "cursor-pointer hover:bg-[#FFF8F8]" : "hover:bg-[#FAFAFA]"
+                      onRowClick ? "cursor-pointer hover:bg-[#FFF8F8]" : "hover:bg-[#FAFAFA]",
+                      draggingId === rowId && "opacity-50",
+                      overId === rowId && draggingId && draggingId !== rowId && "bg-red-50 border-y-2 border-dashed border-[#E31E24]"
                     )}
                   >
+                    {enableReorder && (
+                      <td className="px-2 py-3 w-9 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 text-center">
+                        <div className="flex justify-center items-center">
+                          <GripVertical size={18} />
+                        </div>
+                      </td>
+                    )}
+                    {enableSelection && (
+                      <td className="px-2 py-3 w-9 text-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-center items-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(rowId)}
+                            onChange={() => {
+                              if (!onSelectionChange) return;
+                              if (selectedIds.includes(rowId)) {
+                                onSelectionChange(selectedIds.filter((x) => x !== rowId));
+                              } else {
+                                onSelectionChange([...selectedIds, rowId]);
+                              }
+                            }}
+                            className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24]"
+                          />
+                        </div>
+                      </td>
+                    )}
                     {columns.map((col) => (
                       <td key={String(col.key)} className="px-4 py-3 text-[13.5px] text-[#1A1A1A]">
                         {col.render ? col.render(row) : String((row as Record<string, unknown>)[String(col.key)] ?? "")}
@@ -89,6 +203,54 @@ export function DataTable<T>({ columns, data, isLoading, emptyMessage = "No reco
         </table>
       </div>
     </div>
+  );
+}
+
+// ─── TableStatusAction ────────────────────────────────────
+
+export interface TableStatusActionProps {
+  status: string | boolean;
+  loading?: boolean;
+  onToggle: () => void | Promise<void>;
+  activeLabel?: string;
+  inactiveLabel?: string;
+  tooltipActive?: string;
+  tooltipInactive?: string;
+}
+
+export function TableStatusAction({
+  status,
+  loading = false,
+  onToggle,
+  activeLabel = "ACTIVE",
+  inactiveLabel = "INACTIVE",
+  tooltipActive = "Click to deactivate",
+  tooltipInactive = "Click to activate",
+}: TableStatusActionProps) {
+  const isCurrentlyActive = status === true || String(status).toUpperCase() === "ACTIVE" || String(status) === "true" || String(status) === "1";
+  const tooltip = isCurrentlyActive ? tooltipActive : tooltipInactive;
+
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!loading) {
+          void onToggle();
+        }
+      }}
+      disabled={loading}
+      title={tooltip}
+      className={cn(
+        "inline-flex items-center gap-1.5 focus:outline-none transition-all",
+        loading ? "opacity-75 cursor-not-allowed" : "cursor-pointer hover:opacity-80"
+      )}
+    >
+      <StatusBadge status={isCurrentlyActive ? "ACTIVE" : "INACTIVE"} />
+      {loading && (
+        <span className="inline-block animate-spin rounded-full border border-gray-300 border-t-[#E31E24] w-3 h-3 flex-none" aria-hidden="true" />
+      )}
+    </button>
   );
 }
 

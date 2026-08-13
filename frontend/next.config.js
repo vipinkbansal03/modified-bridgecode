@@ -6,6 +6,7 @@ const nextConfig = {
     qualities: [70, 75, 85],
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },
+      { protocol: "https", hostname: "plus.unsplash.com" },
       { protocol: "https", hostname: "www.modortho.com" },
       // Allow serving product images uploaded to the Express backend
       { protocol: "http", hostname: "localhost" },

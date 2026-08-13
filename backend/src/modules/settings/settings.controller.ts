@@ -13,9 +13,10 @@ export const upsertMany = asyncHandler(async (req: AuthRequest, res: Response) =
 );
 
 // Public
-export const publicTracking = asyncHandler(async (_req: AuthRequest, res: Response) => {
+export const publicTracking = asyncHandler(async (req: AuthRequest, res: Response) => {
   res.setHeader("Cache-Control", "no-cache, must-revalidate");
-  return ApiResponse.success(res, "Tracking settings.", await S.getPublicTrackingSettings());
+  const country = req.query.country as string | undefined;
+  return ApiResponse.success(res, "Tracking settings.", await S.getPublicTrackingSettings(country));
 });
 
 export const publicAuth = asyncHandler(async (_req: AuthRequest, res: Response) => {
