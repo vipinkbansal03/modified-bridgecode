@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Edit2, Eye, FileEdit, FileText, Globe, LayoutList, Plus, RotateCcw, Save, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, AdminTextarea, ConfirmModal, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminTextarea, AdminStatsGrid, ConfirmModal, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import {
   useAdminCmsPage,
   useAdminCmsPages,
@@ -1088,39 +1088,15 @@ function CmsPagesPageContent() {
   return (
     <AdminLayout title="CMS Pages" breadcrumb={[{ label: "Content" }, { label: "Pages" }]}>
       {/* StatCards Row */}
-      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Pages"
-          value={pageStats.total}
-          subtitle="Site content & landing pages"
-          icon={<FileText size={18} />}
-          isLoading={isPagesLoading}
-        />
-        <StatCard
-          title="Published Pages"
-          value={pageStats.published}
-          subtitle="Live on storefront"
-          icon={<Globe size={18} />}
-          color="bg-green-600"
-          isLoading={isPagesLoading}
-        />
-        <StatCard
-          title="Draft Pages"
-          value={pageStats.draft}
-          subtitle="Unpublished or in draft"
-          icon={<FileEdit size={18} />}
-          color="bg-amber-600"
-          isLoading={isPagesLoading}
-        />
-        <StatCard
-          title="Content Sections"
-          value={pageStats.totalSections}
-          subtitle="Configured CMS layout blocks"
-          icon={<LayoutList size={18} />}
-          color="bg-[#0F6CBD]"
-          isLoading={isPagesLoading}
-        />
-      </div>
+      <AdminStatsGrid
+        stats={[
+          { title: "Total Pages", value: pageStats.total, subtitle: "Site content & landing pages", icon: <FileText size={18} /> },
+          { title: "Published Pages", value: pageStats.published, subtitle: "Live on storefront", icon: <Globe size={18} />, color: "bg-green-600" },
+          { title: "Draft Pages", value: pageStats.draft, subtitle: "Unpublished or in draft", icon: <FileEdit size={18} />, color: "bg-amber-600" },
+          { title: "Content Sections", value: pageStats.totalSections, subtitle: "Configured CMS layout blocks", icon: <LayoutList size={18} />, color: "bg-[#0F6CBD]" }
+        ]}
+        isLoading={isPagesLoading}
+      />
 
       <div className="mb-5 flex items-center justify-between">
         <p className="text-sm text-gray-500">{pages.length} page{pages.length !== 1 ? "s" : ""}</p>
@@ -1484,6 +1460,7 @@ function CmsPagesPageContent() {
         message="This will permanently delete the selected section and all of its blocks."
         onConfirm={handleDeleteSection}
         onCancel={() => setDeleteSectionId(null)}
+        isLoading={deleteSection.isPending}
         danger
       />
       <ConfirmModal
@@ -1492,6 +1469,7 @@ function CmsPagesPageContent() {
         message="This will permanently delete the selected block."
         onConfirm={handleDeleteBlock}
         onCancel={() => setDeleteBlockId(null)}
+        isLoading={deleteBlock.isPending}
         danger
       />
       <ConfirmModal
@@ -1500,6 +1478,7 @@ function CmsPagesPageContent() {
         message="This will permanently delete the selected page and all its sections and blocks."
         onConfirm={handleDeletePage}
         onCancel={() => setDeletePageId(null)}
+        isLoading={deletePage.isPending}
         danger
       />
     </AdminLayout>

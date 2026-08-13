@@ -38,7 +38,6 @@ export function ContactCTASection({ data }: ContactCTASectionProps) {
           alt=""
           fill
           className="object-cover"
-          style={{ filter: "grayscale(100%) contrast(1.08) brightness(0.6)" }}
         />
       </div>
       <div

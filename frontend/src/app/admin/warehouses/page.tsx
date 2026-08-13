@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight, Edit2, PackageOpen, Plus, Search, Trash2, Warehouse } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, AdminMultiSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminMultiSelect, AdminStatsGrid, AdminListToolbar, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { useAdminWarehouses, useCreateWarehouse, useUpdateWarehouse, useDeleteWarehouse, useAdminCountries } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
@@ -221,39 +221,35 @@ export default function WarehousesPage() {
   return (
     <AdminLayout title="Warehouses" breadcrumb={[{ label: "Commerce" }, { label: "Warehouses" }]}>
       <div className="space-y-5">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard title="Total Warehouses" value={stats.total} subtitle="All configured origins" icon={<Warehouse size={18} />} />
-          <StatCard title="Active Warehouses" value={stats.active} subtitle="Currently available" icon={<Plus size={18} />} color="bg-green-600" />
-          <StatCard title="Inactive Warehouses" value={stats.inactive} subtitle="Hidden from routing" icon={<Trash2 size={18} />} color="bg-gray-600" />
-          <StatCard title="Indian Warehouses" value={stats.indian} subtitle="Requires GSTIN" icon={<Search size={18} />} color="bg-[#0F6CBD]" />
-        </div>
+        <AdminStatsGrid
+          stats={[
+            { title: "Total Warehouses", value: stats.total, subtitle: "All configured origins", icon: <Warehouse size={18} /> },
+            { title: "Active Warehouses", value: stats.active, subtitle: "Currently available", icon: <Plus size={18} />, color: "bg-green-600" },
+            { title: "Inactive Warehouses", value: stats.inactive, subtitle: "Hidden from routing", icon: <Trash2 size={18} />, color: "bg-gray-600" },
+            { title: "Indian Warehouses", value: stats.indian, subtitle: "Requires GSTIN", icon: <Search size={18} />, color: "bg-[#0F6CBD]" }
+          ]}
+          isLoading={isLoading}
+        />
+
+        <AdminListToolbar
+          search={{
+            value: search,
+            onChange: setSearch,
+            placeholder: "Search warehouses...",
+            widthClassName: "max-w-[280px]",
+          }}
+          primaryAction={
+            canManage
+              ? {
+                  onClick: handleCreate,
+                  label: "Add Warehouse",
+                  icon: <Plus size={14} />,
+                }
+              : undefined
+          }
+        />
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <div className="relative w-full max-w-[280px]">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search warehouses..."
-                className="h-10 w-full rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {canManage && (
-                <button
-                  type="button"
-                  onClick={handleCreate}
-                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-                >
-                  <Plus size={14} />
-                  Add Warehouse
-                </button>
-              )}
-            </div>
-          </div>
-
           <div className="overflow-hidden rounded-lg border border-[#F0F0F0]">
             <DataTable
               rowKey="id"
@@ -545,9 +541,14 @@ export default function WarehousesPage() {
             <button type="button" onClick={form.handleClose} className="rounded-md px-4 py-2 text-sm font-medium text-[#6B6B6B] hover:text-[#1A1A1A]">
               Cancel
             </button>
-            <button type="submit" disabled={form.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-sm font-medium text-white hover:bg-[#C91A20] disabled:opacity-50">
-              {form.isSubmitting ? "Processing..." : (editing ? "Save Changes" : "Create Warehouse")}
-            </button>
+            <LoadingButton
+              type="submit"
+              loading={form.isSubmitting || createMutation.isPending || updateMutation.isPending}
+              loadingText="Processing..."
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-sm font-medium text-white hover:bg-[#C91A20]"
+            >
+              {editing ? "Save Changes" : "Create Warehouse"}
+            </LoadingButton>
           </div>
         </form>
       </Modal>

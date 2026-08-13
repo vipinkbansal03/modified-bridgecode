@@ -8,28 +8,16 @@ import { BlogCard } from "@/components/ui/BlogCard";
 import { SkeletonGrid } from "@/components/ui/Skeleton";
 import { useBlogs } from "@/hooks/api/useBlogs";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
-import type { StaticMessageKey } from "@/i18n/staticMessages";
-
-const blogTranslationKeys: Record<string, { title: StaticMessageKey; excerpt: StaticMessageKey }> = {
-  "patients-now-expect-high-quality-orthodontics-that-is-also-aesthetically-pleasing-from-their-orthodontists": {
-    title: "ui.home.blogPatientsTitle",
-    excerpt: "ui.home.blogPatientsExcerpt",
-  },
-  "how-orthodontics-can-improve-your-patients-teeth-alignment": {
-    title: "ui.home.blogAlignmentTitle",
-    excerpt: "ui.home.blogAlignmentExcerpt",
-  },
-  "oem-services-offered-by-original-equipment-manufacturers": {
-    title: "ui.home.blogOemTitle",
-    excerpt: "ui.home.blogOemExcerpt",
-  },
-};
 
 export function BlogSection() {
   const { t } = useStaticTranslations();
   const { data, isLoading } = useBlogs();
   const viewportRef = useRef<HTMLDivElement>(null);
   const scrollBy = (delta: number) => viewportRef.current?.scrollBy({ left: delta, behavior: "smooth" });
+
+  if (!isLoading && (!data || data.length === 0)) {
+    return null;
+  }
 
   return (
     <section id="resources" className="border-t border-line py-6 lg:py-[34px]">
@@ -56,8 +44,6 @@ export function BlogSection() {
                 <BlogCard
                   key={b.slug}
                   {...b}
-                  title={blogTranslationKeys[b.slug] ? t(blogTranslationKeys[b.slug].title) : b.title}
-                  excerpt={blogTranslationKeys[b.slug] ? t(blogTranslationKeys[b.slug].excerpt) : b.excerpt}
                 />
               ))}
             </div>
@@ -67,3 +53,4 @@ export function BlogSection() {
     </section>
   );
 }
+

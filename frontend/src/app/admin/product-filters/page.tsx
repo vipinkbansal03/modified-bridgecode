@@ -9,8 +9,11 @@ import {
   AdminSelect,
   ConfirmModal,
   StatCard,
+  AdminStatsGrid,
+  AdminListToolbar,
   StatusBadge,
   useToast,
+  LoadingButton,
 } from "@/components/admin/AdminComponents";
 import { AttributeRoleBadge } from "@/components/admin/attributes/AttributeRoleBadge";
 import { Modal } from "@/components/ui/Modal";
@@ -235,67 +238,48 @@ export default function ProductFiltersPage() {
 
   return (
     <AdminLayout title="Product Filters" breadcrumb={[{ label: "Product Filters" }]}>
-      {/* StatCards Row */}
-      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Filter Facets"
-          value={filterStats.total}
-          subtitle="Storefront filter facets"
-          icon={<SlidersHorizontal size={18} />}
-          isLoading={isLoadingAll}
-        />
-        <StatCard
-          title="Active Filter Facets"
-          value={filterStats.active}
-          subtitle="Active on catalog sidebar"
-          icon={<CheckCircle2 size={18} />}
-          color="bg-green-600"
-          isLoading={isLoadingAll}
-        />
-        <StatCard
-          title="Disabled Filters"
-          value={filterStats.disabled}
-          subtitle="Hidden filter facets"
-          icon={<XCircle size={18} />}
-          color="bg-gray-600"
-          isLoading={isLoadingAll}
-        />
-        <StatCard
-          title="Available Facet Values"
-          value={filterStats.totalValues}
-          subtitle="Configured option choices"
-          icon={<Tag size={18} />}
-          color="bg-blue-600"
-          isLoading={isLoadingAll}
-        />
-      </div>
+      <AdminStatsGrid
+        stats={[
+          { title: "Total Filter Facets", value: filterStats.total, subtitle: "Storefront filter facets", icon: <SlidersHorizontal size={18} /> },
+          { title: "Active Filter Facets", value: filterStats.active, subtitle: "Active on catalog sidebar", icon: <CheckCircle2 size={18} />, color: "bg-green-600" },
+          { title: "Disabled Filters", value: filterStats.disabled, subtitle: "Hidden filter facets", icon: <XCircle size={18} />, color: "bg-gray-600" },
+          { title: "Available Facet Values", value: filterStats.totalValues, subtitle: "Configured option choices", icon: <Tag size={18} />, color: "bg-blue-600" }
+        ]}
+        isLoading={isLoadingAll}
+      />
 
-      <div className="mb-5 flex items-center justify-between gap-3">
-        <p className="text-[13.5px] text-[#6B6B6B]">
-          Configure which filters appear on the storefront product listing page. Toggle each filter on or off.
-        </p>
-      </div>
+      <AdminListToolbar
+        leftExtra={
+          <div className="flex flex-col gap-0.5">
+            <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Attribute Filters ({localFilters.length})</h3>
+            <p className="text-[12.5px] text-[#6B6B6B]">
+              Configure which filters appear on the storefront product listing page. Toggle each filter on or off.
+            </p>
+          </div>
+        }
+        refresh={{
+          onRefresh: () => {
+            hasInitialized.current = false;
+            refetchAttrs();
+            refetch();
+          },
+          isRefreshing: isLoadingAll,
+        }}
+        primaryAction={
+          canManageFilters
+            ? {
+                onClick: handleBulkSave,
+                label: isSaving || updateFilters.isPending ? "Saving..." : "Save All Changes",
+                disabled: isSaving || updateFilters.isPending,
+              }
+            : undefined
+        }
+      />
 
       {isLoadingAll ? (
         <div className="space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-16 animate-pulse rounded-lg bg-[#E6E6E6]" />)}</div>
       ) : (
         <>
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Attribute Filters ({localFilters.length})</h3>
-              <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">These are the filters currently shown on the storefront <span className="font-medium text-[#6B6B6B]">/products</span> page. Toggle to show or hide each one.</p>
-            </div>
-            {canManageFilters && (
-              <button
-                type="button"
-                onClick={handleBulkSave}
-                disabled={isSaving || updateFilters.isPending}
-                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
-              >
-                {isSaving || updateFilters.isPending ? "Saving..." : "Save All Changes"}
-              </button>
-            )}
-          </div>
 
           {localFilters.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[#E6E6E6] py-12 text-center text-[13.5px] text-[#9A9A9A]">
@@ -500,14 +484,15 @@ export default function ProductFiltersPage() {
                   </div>
 
                   <div className="mt-6 flex gap-2">
-                    <button
+                    <LoadingButton
                       type="button"
                       onClick={handleSaveAttributeFilter}
-                      disabled={isSaving}
-                      className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
+                      loading={isSaving}
+                      loadingText="Saving..."
+                      className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
                     >
-                      {isSaving ? "Saving..." : "Save"}
-                    </button>
+                      Save
+                    </LoadingButton>
                     <button type="button" onClick={resetEditorState} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] text-[#6B6B6B]">
                       Cancel
                     </button>
@@ -525,6 +510,7 @@ export default function ProductFiltersPage() {
             message="This will remove the attribute from the storefront filters. The attribute itself will not be deleted."
             onConfirm={handleDeleteAttributeFilter}
             onCancel={() => setDeletingId(null)}
+            isLoading={updateFilters.isPending}
           />
 
           {ToastComponent}

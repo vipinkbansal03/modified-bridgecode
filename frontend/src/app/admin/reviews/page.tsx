@@ -6,7 +6,7 @@ import { adminApi } from "@/services/adminApi";
 import { Star, CheckCircle2, XCircle, Trash2, Search, Filter, MessageSquare, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { StatCard } from "@/components/admin/AdminComponents";
+import { StatCard, AdminStatsGrid, AdminListToolbar, ConfirmModal, LoadingButton } from "@/components/admin/AdminComponents";
 
 interface ReviewItem {
   id: string;
@@ -34,6 +34,8 @@ export default function AdminReviewsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingLoading, setDeletingLoading] = useState(false);
 
   const fetchReviews = async () => {
     setLoading(true);
@@ -55,7 +57,7 @@ export default function AdminReviewsPage() {
 
   useEffect(() => {
     fetchReviews();
-  }, [statusFilter]);
+  }, [statusFilter, search]);
 
   const reviewStats = useMemo(() => {
     const total = reviews.length;
@@ -64,11 +66,6 @@ export default function AdminReviewsPage() {
     const avgScore = total > 0 ? (reviews.reduce((sum, r) => sum + r.ratingOverall, 0) / total).toFixed(1) : "0.0";
     return { total, approved, pending, avgScore };
   }, [reviews]);
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchReviews();
-  };
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     setUpdatingId(id);
@@ -87,113 +84,65 @@ export default function AdminReviewsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this review permanently?")) return;
-    setUpdatingId(id);
+  const confirmDeleteReview = async () => {
+    if (!deletingId) return;
+    setDeletingLoading(true);
     try {
-      const res = await adminApi.delete(`/reviews/${id}`);
+      const res = await adminApi.delete(`/reviews/${deletingId}`);
       if (res.data?.success) {
-        setReviews((prev) => prev.filter((r) => r.id !== id));
+        setReviews((prev) => prev.filter((r) => r.id !== deletingId));
       }
     } catch (err) {
       console.error("Failed to delete review", err);
       alert("Failed to delete review.");
     } finally {
-      setUpdatingId(null);
+      setDeletingLoading(false);
+      setDeletingId(null);
     }
   };
 
   return (
     <AdminLayout title="Product Reviews & Feedback" breadcrumb={[{ label: "Reviews" }]}>
       <div className="space-y-5">
-        {/* StatCards Row */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Total Reviews"
-            value={reviewStats.total}
-            subtitle="Customer feedback entries"
-            icon={<MessageSquare size={18} />}
-            isLoading={loading}
-          />
-          <StatCard
-            title="Approved Reviews"
-            value={reviewStats.approved}
-            subtitle="Published on product pages"
-            icon={<CheckCircle2 size={18} />}
-            color="bg-green-600"
-            isLoading={loading}
-          />
-          <StatCard
-            title="Pending Reviews"
-            value={reviewStats.pending}
-            subtitle="Awaiting moderation"
-            icon={<Star size={18} />}
-            color="bg-amber-600"
-            isLoading={loading}
-          />
-          <StatCard
-            title="Average Score"
-            value={`${reviewStats.avgScore} ★`}
-            subtitle="Overall average rating"
-            icon={<Star size={18} />}
-            color="bg-indigo-600"
-            isLoading={loading}
-          />
-        </div>
-        {/* Header Summary */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-xl border border-[#E5E7EB] shadow-2xs">
-          <div>
-            <h1 className="text-xl font-bold text-[#111827]">Product Reviews & Feedback Manager</h1>
-            <p className="text-sm text-[#6B7280] mt-0.5">
-              Review, approve, reject, or delete customer ratings and feedback submitted across all store products.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
+        <AdminStatsGrid
+          stats={[
+            { title: "Total Reviews", value: reviewStats.total, subtitle: "Customer feedback entries", icon: <MessageSquare size={18} /> },
+            { title: "Approved Reviews", value: reviewStats.approved, subtitle: "Published on product pages", icon: <CheckCircle2 size={18} />, color: "bg-green-600" },
+            { title: "Pending Reviews", value: reviewStats.pending, subtitle: "Awaiting moderation", icon: <Star size={18} />, color: "bg-amber-600" },
+            { title: "Average Score", value: `${reviewStats.avgScore} ★`, subtitle: "Overall average rating", icon: <Star size={18} />, color: "bg-indigo-600" }
+          ]}
+          isLoading={loading}
+        />
+        <AdminListToolbar
+          search={{
+            value: search,
+            onChange: setSearch,
+            placeholder: "Search customer, email, text...",
+            widthClassName: "max-w-[280px]",
+          }}
+          leftExtra={
+            <div className="flex items-center gap-1 overflow-x-auto">
+              {["ALL", "APPROVED", "PENDING", "REJECTED"].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setStatusFilter(tab)}
+                  className={`px-3.5 py-1.5 rounded-lg text-[13px] font-semibold transition-colors ${
+                    statusFilter === tab
+                      ? "bg-[#E31E24] text-white shadow-2xs"
+                      : "bg-[#F9FAFB] text-[#4B5563] hover:bg-[#F3F4F6]"
+                  }`}
+                >
+                  {tab === "ALL" ? "All Reviews" : tab}
+                </button>
+              ))}
+            </div>
+          }
+          rightExtra={
             <span className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#F3F4F6] text-[#374151]">
               Total Reviews: {reviews.length}
             </span>
-          </div>
-        </div>
-
-        {/* Filter and Search Bar */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#E5E7EB]">
-          {/* Status Tabs */}
-          <div className="flex items-center gap-1 overflow-x-auto w-full md:w-auto">
-            {["ALL", "APPROVED", "PENDING", "REJECTED"].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setStatusFilter(tab)}
-                className={`px-3.5 py-1.5 rounded-lg text-[13px] font-semibold transition-colors ${
-                  statusFilter === tab
-                    ? "bg-[#E31E24] text-white shadow-2xs"
-                    : "bg-[#F9FAFB] text-[#4B5563] hover:bg-[#F3F4F6]"
-                }`}
-              >
-                {tab === "ALL" ? "All Reviews" : tab}
-              </button>
-            ))}
-          </div>
-
-          {/* Search Input */}
-          <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 w-full md:w-80">
-            <div className="relative w-full">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-              <input
-                type="text"
-                placeholder="Search customer, email, text..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-sm border border-[#E5E7EB] rounded-lg focus:outline-none focus:border-[#E31E24]"
-              />
-            </div>
-            <button
-              type="submit"
-              className="px-3 py-1.5 bg-[#111827] text-white text-xs font-medium rounded-lg hover:bg-black shrink-0"
-            >
-              Filter
-            </button>
-          </form>
-        </div>
+          }
+        />
 
         {/* Reviews List Table */}
         <div className="bg-white rounded-xl border border-[#E5E7EB] shadow-2xs overflow-hidden">
@@ -293,35 +242,36 @@ export default function AdminReviewsPage() {
                         })}
                       </td>
 
-                      {/* Actions */}
                       {(canUpdate || canDelete) && (
                         <td className="py-3.5 px-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
                             {canUpdate && rev.status !== "APPROVED" && (
-                              <button
-                                disabled={updatingId === rev.id}
+                              <LoadingButton
+                                loading={updatingId === rev.id}
+                                loadingText="Approving..."
                                 onClick={() => handleUpdateStatus(rev.id, "APPROVED")}
                                 className="px-2.5 py-1 bg-[#16A34A] text-white text-[11px] font-semibold rounded hover:bg-[#15803D] transition-colors"
                                 title="Approve Review"
                               >
                                 Approve
-                              </button>
+                              </LoadingButton>
                             )}
                             {canUpdate && rev.status !== "REJECTED" && (
-                              <button
-                                disabled={updatingId === rev.id}
+                              <LoadingButton
+                                loading={updatingId === rev.id}
+                                loadingText="Rejecting..."
                                 onClick={() => handleUpdateStatus(rev.id, "REJECTED")}
                                 className="px-2.5 py-1 bg-[#EA580C] text-white text-[11px] font-semibold rounded hover:bg-[#C2410C] transition-colors"
                                 title="Reject Review"
                               >
                                 Reject
-                              </button>
+                              </LoadingButton>
                             )}
                             {canDelete && (
                               <button
                                 disabled={updatingId === rev.id}
-                                onClick={() => handleDelete(rev.id)}
-                                className="p-1.5 text-[#EF4444] hover:bg-[#FEE2E2] rounded transition-colors"
+                                onClick={() => setDeletingId(rev.id)}
+                                className="p-1.5 text-[#EF4444] hover:bg-[#FEE2E2] rounded transition-colors disabled:opacity-50"
                                 title="Delete Review"
                               >
                                 <Trash2 size={15} />
@@ -338,6 +288,15 @@ export default function AdminReviewsPage() {
           )}
         </div>
       </div>
+      <ConfirmModal
+        open={!!deletingId}
+        title="Delete review?"
+        message="Are you sure you want to delete this review permanently?"
+        onConfirm={confirmDeleteReview}
+        onCancel={() => setDeletingId(null)}
+        isLoading={deletingLoading}
+        danger
+      />
     </AdminLayout>
   );
 }

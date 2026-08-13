@@ -275,7 +275,14 @@ export function ConfirmModal({
             disabled={isLoading}
             className={cn("rounded-md px-4 py-2 text-[13.5px] font-medium text-white disabled:opacity-50", danger ? "bg-red-600 hover:bg-red-700" : "bg-[#E31E24] hover:bg-[#B5151B]")}
           >
-            {isLoading ? finalLoadingText : confirmText}
+            {isLoading ? (
+              <span className="flex items-center justify-center gap-1.5">
+                <span className="inline-block animate-spin rounded-full border-2 border-white border-t-transparent w-3.5 h-3.5" aria-hidden="true" />
+                <span>{finalLoadingText}</span>
+              </span>
+            ) : (
+              confirmText
+            )}
           </button>
         </div>
       </div>
@@ -1053,5 +1060,11 @@ export function useToast() {
   const shared = useSharedToast();
   return { showToast: shared.showToast, ToastComponent: null as ReactNode };
 }
+
+export { AdminListToolbar } from "@/components/admin/layout/AdminListToolbar";
+export { AdminStatsGrid } from "@/components/admin/layout/AdminStatsGrid";
+export { default as LoadingButton } from "@/components/ui/LoadingSpinner/LoadingButton";
+export { default as Spinner } from "@/components/ui/LoadingSpinner/Spinner";
+
 
 

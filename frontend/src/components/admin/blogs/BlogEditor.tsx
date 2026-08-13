@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, X } from "lucide-react";
-import { AdminInput, AdminRichTextEditor, AdminSelect, AdminTextarea, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminRichTextEditor, AdminSelect, AdminTextarea, useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import { useAdminBlogAuthors, useAdminBlogCategories, useCreateBlog, useUpdateBlog } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { slugify } from "@/utils/slugify";
@@ -130,15 +130,36 @@ export function BlogEditor({ blog }: { blog?: Blog }) {
           <AdminSelect label="Status" value={form.status} onChange={(event) => set("status", event.target.value)} options={[{ value: "DRAFT", label: "Draft" }, { value: "PUBLISHED", label: "Published" }, { value: "SCHEDULED", label: "Scheduled" }]} />
           {form.status === "SCHEDULED" && <AdminInput label="Scheduled At" type="datetime-local" value={form.scheduledAt} onChange={(event) => set("scheduledAt", event.target.value)} />}
           <div className="mt-4 flex gap-2">
-            <button type="button" onClick={() => save("DRAFT")} className="rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-semibold">Save Draft</button>
-            <button type="button" onClick={() => form.status === "SCHEDULED" ? save() : save("PUBLISHED")} className="rounded-md bg-[#E31E24] px-3 py-2 text-[13px] font-semibold text-white">{form.status === "SCHEDULED" ? "Schedule" : "Publish"}</button>
+            <LoadingButton
+              type="button"
+              onClick={() => save("DRAFT")}
+              loading={createBlog.isPending || updateBlog.isPending}
+              loadingText="Saving..."
+              className="rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-semibold hover:bg-gray-50 disabled:opacity-50"
+            >
+              Save Draft
+            </LoadingButton>
+            <LoadingButton
+              type="button"
+              onClick={() => form.status === "SCHEDULED" ? save() : save("PUBLISHED")}
+              loading={createBlog.isPending || updateBlog.isPending}
+              loadingText={form.status === "SCHEDULED" ? "Scheduling..." : "Publishing..."}
+              className="rounded-md bg-[#E31E24] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
+            >
+              {form.status === "SCHEDULED" ? "Schedule" : "Publish"}
+            </LoadingButton>
           </div>
         </section>
         <section className="rounded-lg border border-[#E6E6E6] bg-white p-5">
           <h3 className="mb-3 text-[14px] font-semibold">Featured Image</h3>
           {form.featuredImage && <img src={form.featuredImage} alt="" className="mb-3 h-36 w-full rounded-md object-cover" />}
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-semibold">
-            <Upload size={14} /> {uploading ? "Uploading..." : "Upload image"}
+          <label className={`inline-flex cursor-pointer items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-semibold ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
+            {uploading ? (
+              <span className="inline-block animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent w-3.5 h-3.5" aria-hidden="true" />
+            ) : (
+              <Upload size={14} />
+            )}
+            {uploading ? "Uploading..." : "Upload image"}
             <input type="file" accept="image/*" className="hidden" onChange={(event) => upload(event.target.files?.[0])} disabled={uploading} />
           </label>
           <AdminInput label="Image URL" value={form.featuredImage} onChange={(event) => set("featuredImage", event.target.value)} className="mt-3" />

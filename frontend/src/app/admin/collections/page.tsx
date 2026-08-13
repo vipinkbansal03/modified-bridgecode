@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Archive, CheckCircle2, Copy, Edit2, Globe, Image as ImageIcon, Layers, Package, Plus, RotateCcw, Search, Trash2, XCircle } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, Column, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, Column, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import { Modal } from "@/components/ui/Modal";
@@ -155,7 +155,7 @@ export default function CollectionsPage() {
 
   const [discountForm, setDiscountForm] = useState(emptyDiscountForm);
 
-  const { data, isLoading } = useAdminCollections({
+  const { data, isLoading, refetch, isFetching } = useAdminCollections({
     page,
     limit: 10,
     status: statusFilter || undefined,
@@ -468,94 +468,75 @@ export default function CollectionsPage() {
         </div>
       </div>
 
-      <button type="submit" className="mt-5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
+      <LoadingButton
+        type="submit"
+        loading={form.isSubmitting || createCollection.isPending || updateCollection.isPending}
+        loadingText={form.values.id ? "Updating..." : "Creating..."}
+        className="mt-5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
+      >
         {form.values.id ? "Update Collection" : "Create Collection"}
-      </button>
+      </LoadingButton>
         </form>
   );
 
   return (
     <AdminLayout title="Collections" breadcrumb={[{ label: "Collections" }]}>
-      {/* StatCards Row */}
-      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Collections"
-          value={collectionStats.total}
-          subtitle="Curated product groupings"
-          icon={<Layers size={18} />}
-          isLoading={collectionsAllLoading}
-        />
-        <StatCard
-          title="Active Collections"
-          value={collectionStats.active}
-          subtitle="Visible on storefront"
-          icon={<CheckCircle2 size={18} />}
-          color="bg-green-600"
-          isLoading={collectionsAllLoading}
-        />
-        <StatCard
-          title="Inactive Collections"
-          value={collectionStats.inactive}
-          subtitle="Hidden collections"
-          icon={<XCircle size={18} />}
-          color="bg-gray-600"
-          isLoading={collectionsAllLoading}
-        />
-        <StatCard
-          title="Assigned Products"
-          value={collectionStats.totalProducts}
-          subtitle="Total product assignments"
-          icon={<Package size={18} />}
-          color="bg-blue-600"
-          isLoading={collectionsAllLoading}
-        />
-      </div>
+      <AdminStatsGrid
+        stats={[
+          { title: "Total Collections", value: collectionStats.total, subtitle: "Curated product groupings", icon: <Layers size={18} />, isLoading: collectionsAllLoading },
+          { title: "Active Collections", value: collectionStats.active, subtitle: "Visible on storefront", icon: <CheckCircle2 size={18} />, color: "bg-green-600", isLoading: collectionsAllLoading },
+          { title: "Inactive Collections", value: collectionStats.inactive, subtitle: "Hidden collections", icon: <XCircle size={18} />, color: "bg-gray-600", isLoading: collectionsAllLoading },
+          { title: "Assigned Products", value: collectionStats.totalProducts, subtitle: "Total product assignments", icon: <Package size={18} />, color: "bg-blue-600", isLoading: collectionsAllLoading }
+        ]}
+      />
 
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-            <input
-              value={search}
+      <AdminListToolbar
+        search={{
+          value: search,
+          onChange: (val) => {
+            setSearch(val);
+            setPage(1);
+          },
+          placeholder: "Search collections...",
+          widthClassName: "w-[240px]",
+        }}
+        leftExtra={
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={statusFilter}
               onChange={(event) => {
-                setSearch(event.target.value);
+                setStatusFilter(event.target.value);
                 setPage(1);
               }}
-              placeholder="Search collections..."
-              className="w-[240px] rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] outline-none focus:border-[#E31E24]"
-            />
+              className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13.5px] outline-none hover:border-[#D1D1D1]"
+            >
+              <option value="">All Status</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+            </select>
+            <select value={sortBy} onChange={(event) => setSortBy(event.target.value as CollectionSortBy)} className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13.5px] outline-none hover:border-[#D1D1D1]">
+              <option value="sortOrder">Sort order</option>
+              <option value="name">Name</option>
+              <option value="slug">Slug</option>
+              <option value="status">Status</option>
+              <option value="updatedAt">Updated date</option>
+              <option value="createdAt">Created date</option>
+            </select>
+            <select value={sortDir} onChange={(event) => setSortDir(event.target.value as "asc" | "desc")} className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13.5px] outline-none hover:border-[#D1D1D1]">
+              <option value="asc">Ascending</option>
+              <option value="desc">Descending</option>
+            </select>
           </div>
-          <select
-            value={statusFilter}
-            onChange={(event) => {
-              setStatusFilter(event.target.value);
-              setPage(1);
-            }}
-            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none"
-          >
-            <option value="">All Status</option>
-            <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Inactive</option>
-          </select>
-          <select value={sortBy} onChange={(event) => setSortBy(event.target.value as CollectionSortBy)} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none">
-            <option value="sortOrder">Sort order</option>
-            <option value="name">Name</option>
-            <option value="slug">Slug</option>
-            <option value="status">Status</option>
-            <option value="updatedAt">Updated date</option>
-            <option value="createdAt">Created date</option>
-          </select>
-          <select value={sortDir} onChange={(event) => setSortDir(event.target.value as "asc" | "desc")} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none">
-            <option value="asc">Ascending</option>
-            <option value="desc">Descending</option>
-          </select>
-        </div>
-        {canCreate && (
-          <button onClick={openCreateModal} className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
-            <Plus size={14} /> Create Collection
-          </button>
-        )}
-      </div>
+        }
+        refresh={{
+          onRefresh: refetch,
+          isRefreshing: isFetching,
+        }}
+        primaryAction={canCreate ? {
+          onClick: openCreateModal,
+          label: "Create Collection",
+        } : undefined}
+      />
 
       <Modal
         open={showForm}
@@ -586,9 +567,9 @@ export default function CollectionsPage() {
                       className="w-[240px] rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3 text-[13px] outline-none focus:border-[#E31E24]"
                     />
                   </div>
-                  <button onClick={saveCountries} className="rounded-md bg-[#111] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#222]">
+                  <LoadingButton onClick={saveCountries} loading={updateCountries.isPending} loadingText="Saving..." className="rounded-md bg-[#111] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#222]">
                     Save Visibility
-                  </button>
+                  </LoadingButton>
                 </div>
 
                 <div className="grid max-h-[260px] grid-cols-1 gap-2 overflow-y-auto md:grid-cols-3">
@@ -646,9 +627,9 @@ export default function CollectionsPage() {
                     <AdminInput label="Start Date" type="date" value={discountForm.startDate} onChange={(event) => setDiscountForm({ ...discountForm, startDate: event.target.value })} />
                     <AdminInput label="End Date" type="date" value={discountForm.endDate} onChange={(event) => setDiscountForm({ ...discountForm, endDate: event.target.value })} />
                     <div className="md:col-span-4">
-                      <button type="submit" disabled={createCollectionDiscount.isPending} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
+                      <LoadingButton type="submit" loading={createCollectionDiscount.isPending} loadingText="Adding..." className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
                         Add Discount
-                      </button>
+                      </LoadingButton>
                     </div>
                   </form>
                   <div className="mt-4 divide-y divide-[#EFEFEF] rounded-md border border-[#E6E6E6] bg-white">
@@ -658,14 +639,10 @@ export default function CollectionsPage() {
                       (collectionDiscounts as DiscountRow[]).map((discount) => (
                         <div key={discount.id} className="flex flex-wrap items-center justify-between gap-3 p-3 text-[13px]">
                           <div>
-                            <div className="font-semibold text-[#111]">{discount.name}</div>
-                            <div className="mt-1 text-[#6B6B6B]">
-                              {discount.type}
-                              {discount.tier ? ` · ${discount.tier.name}` : ""}
-                              {discount.minQuantity ? ` · Qty ${discount.minQuantity}+` : ""}
-                              {discount.country ? ` · ${discount.country.code}` : " · All countries"}
-                              {" · "}
-                              {discount.discountPercent ? `${Number(discount.discountPercent)}% off` : `${Number(discount.fixedAmount ?? 0).toFixed(2)} off`}
+                            <div className="font-medium text-[#111]">{discount.name}</div>
+                            <div className="text-[12px] text-[#6B6B6B]">
+                              {discount.type === "TIER" ? `Tier: ${discount.tier?.name || "All"}` : `Min Qty: ${discount.minQuantity || 1}`} •{" "}
+                              {discount.discountPercent ? `${discount.discountPercent}% off` : `$${discount.fixedAmount} off`} • Country: {discount.country?.code || "Global"}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -694,6 +671,7 @@ export default function CollectionsPage() {
         message="This removes the collection and its product/country mappings."
         onConfirm={confirmDelete}
         onCancel={() => setDeleting(null)}
+        isLoading={deleteCollection.isPending}
       />
 
       {ToastComponent}

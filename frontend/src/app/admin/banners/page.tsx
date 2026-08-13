@@ -1,42 +1,122 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Edit2, Plus, Trash2, Upload, X } from "lucide-react";
-import { AdminInput, AdminSelect, ConfirmModal, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { ArrowLeft, Edit2, GripVertical, Plus, Save, Trash2, Upload, X } from "lucide-react";
+import { AdminInput, AdminSelect, ConfirmModal, StatusBadge, useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { SortableList } from "@/components/admin/SortableList";
+import { Modal } from "@/components/ui/Modal";
 import { useAdminBanners, useAdminCountries, useBulkBanners, useCreateBanner, useDeleteBanner, useReorderBanners, useUpdateBanner } from "@/hooks/admin/useAdminHooks";
-import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
+import { getAdminErrorMessage } from "@/services/adminApi";
 import { uploadMediaFiles } from "@/utils/uploadMedia";
-type Banner = { id: string; title: string; image: string; mobileImage?: string | null; linkUrl?: string | null; linkText?: string | null; placement: string; countryId?: string | null; country?: { code: string; name: string } | null; sortOrder: number; status: boolean; startDate?: string | null; endDate?: string | null };
+
+type Banner = {
+  id: string;
+  title: string;
+  image: string;
+  mobileImage?: string | null;
+  linkUrl?: string | null;
+  linkText?: string | null;
+  placement: string;
+  countryId?: string | null;
+  country?: { code: string; name: string } | null;
+  sortOrder: number;
+  status: boolean;
+  startDate?: string | null;
+  endDate?: string | null;
+};
+
 const placements = ["", "HOMEPAGE_HERO", "HOMEPAGE_PROMO", "CATEGORY_TOP", "PRODUCT_TOP", "SIDEBAR"];
-const empty = { id: "", title: "", image: "", mobileImage: "", linkUrl: "", linkText: "", placement: "HOMEPAGE_HERO", countryId: "", countryIds: [] as string[], status: true, startDate: "", endDate: "" };
+const empty = {
+  id: "",
+  title: "",
+  image: "",
+  mobileImage: "",
+  linkUrl: "",
+  linkText: "",
+  placement: "HOMEPAGE_HERO",
+  countryId: "",
+  countryIds: [] as string[],
+  status: true,
+  startDate: "",
+  endDate: "",
+};
+
+const PLACEMENT_DESCRIPTIONS: Record<string, string> = {
+  "": "Showing all promotional banners across all Storefront placements.",
+  HOMEPAGE_HERO: "Controls the main promotional hero carousel at the top of the Homepage. At least 1 Homepage Hero banner must remain active at all times.",
+  HOMEPAGE_PROMO: "Controls promotional banners displayed within the Homepage body content.",
+  CATEGORY_TOP: "Controls promotional banners displayed above Product & Category listings.",
+  PRODUCT_TOP: "Controls promotional banners displayed at the top of Product Detail pages.",
+  SIDEBAR: "Controls promotional banners displayed inside the Product Filter sidebar.",
+};
 
 export default function BannersPage() {
   const [placement, setPlacement] = useState("");
   const [form, setForm] = useState(empty);
-  const [showForm, setShowForm] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [uploading, setUploading] = useState<"image" | "mobileImage" | null>(null);
+
   const { showToast, ToastComponent } = useToast();
+  const { data: allBannersData = [] } = useAdminBanners({});
   const { data = [], isLoading } = useAdminBanners({ placement });
   const { data: countries = [] } = useAdminCountries();
+
   const createBanner = useCreateBanner();
   const updateBanner = useUpdateBanner();
   const deleteBanner = useDeleteBanner();
   const reorderBanners = useReorderBanners();
   const bulkBanners = useBulkBanners();
+
+  const allBanners = (allBannersData ?? []) as Banner[];
   const banners = useMemo(() => ((data ?? []) as Banner[]).slice().sort((a, b) => a.sortOrder - b.sortOrder), [data]);
+
+  const placementCounts = useMemo(() => {
+    const counts: Record<string, number> = { "": allBanners.length };
+    for (const b of allBanners) {
+      counts[b.placement] = (counts[b.placement] || 0) + 1;
+    }
+    return counts;
+  }, [allBanners]);
+
+  const gridTemplateColumns = "32px 80px 1fr 160px 80px 110px 90px";
+
   const set = (key: keyof typeof form, value: unknown) => setForm((prev) => ({ ...prev, [key]: value }));
-  const edit = (row: Banner) => {
-    setForm({ id: row.id, title: row.title, image: row.image, mobileImage: row.mobileImage ?? "", linkUrl: row.linkUrl ?? "", linkText: row.linkText ?? "", placement: row.placement, countryId: row.countryId ?? "", countryIds: row.countryId ? [row.countryId] : [], status: row.status, startDate: row.startDate?.slice(0, 10) ?? "", endDate: row.endDate?.slice(0, 10) ?? "" });
-    setShowForm(true);
+
+  const openNew = () => {
+    setForm(empty);
+    setShowModal(true);
   };
+
+  const edit = (row: Banner) => {
+    setForm({
+      id: row.id,
+      title: row.title,
+      image: row.image,
+      mobileImage: row.mobileImage ?? "",
+      linkUrl: row.linkUrl ?? "",
+      linkText: row.linkText ?? "",
+      placement: row.placement,
+      countryId: row.countryId ?? "",
+      countryIds: row.countryId ? [row.countryId] : [],
+      status: row.status,
+      startDate: row.startDate?.slice(0, 10) ?? "",
+      endDate: row.endDate?.slice(0, 10) ?? "",
+    });
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setForm(empty);
+  };
+
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
-    const selectedCountries = form.countryIds?.length ? form.countryIds : (form.countryId ? [form.countryId] : []);
+    const selectedCountries = form.countryIds?.length ? form.countryIds : form.countryId ? [form.countryId] : [];
     const basePayload = {
       title: form.title,
       image: form.image,
@@ -50,85 +130,411 @@ export default function BannersPage() {
       startDate: form.startDate || null,
       endDate: form.endDate || null,
     };
+
     try {
       if (form.id) {
         await updateBanner.mutateAsync({ ...basePayload, id: form.id });
       } else {
         await createBanner.mutateAsync(basePayload);
       }
-      setForm(empty); setShowForm(false); showToast("Banner saved.");
-    } catch (error) { showToast(getAdminErrorMessage(error, "Failed to save banner."), "error"); }
+      closeModal();
+      showToast("Banner saved successfully.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to save banner."), "error");
+    }
   };
+
   const upload = async (field: "image" | "mobileImage", file?: File) => {
     if (!file) return;
     setUploading(field);
     try {
       const results = await uploadMediaFiles([file], {
         entityType: "BANNER",
-        entityId: form.id || undefined
+        entityId: form.id || undefined,
       });
       const uploaded = results[0];
       if (uploaded?.url) set(field, uploaded.url);
-    } catch (error) { showToast(getAdminErrorMessage(error, "Upload failed."), "error"); }
-    finally { setUploading(null); }
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Upload failed."), "error");
+    } finally {
+      setUploading(null);
+    }
   };
+
   const runBulk = async (action: string) => {
-    try { await bulkBanners.mutateAsync({ ids: selected, action }); setSelected([]); showToast("Bulk action completed."); }
-    catch (error) { showToast(getAdminErrorMessage(error, "Bulk action failed."), "error"); }
+    try {
+      await bulkBanners.mutateAsync({ ids: selected, action });
+      setSelected([]);
+      showToast("Bulk action completed.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Bulk action failed."), "error");
+    }
   };
+
+  const toggleSelectAll = () => {
+    if (selected.length === banners.length) {
+      setSelected([]);
+    } else {
+      setSelected(banners.map((b) => b.id));
+    }
+  };
+
   return (
     <AdminLayout title="Banners" breadcrumb={[{ label: "Banners" }]}>
+      {/* Top Header & Placement Tabs */}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">{placements.map((row) => <button key={row || "ALL"} onClick={() => setPlacement(row)} className={`h-9 rounded-md border px-3 text-[13px] font-semibold ${placement === row ? "border-[#E31E24] bg-[#E31E24] text-white" : "border-[#E6E6E6] bg-white text-[#555]"}`}>{row ? row.replace(/_/g, " ") : "All"}</button>)}</div>
-        <button onClick={() => { setShowForm(!showForm); setForm(empty); }} className="inline-flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white">{showForm ? <X size={14} /> : <Plus size={14} />} {showForm ? "Cancel" : "New Banner"}</button>
+        <div className="flex flex-wrap gap-2">
+          {placements.map((row) => {
+            const count = placementCounts[row] ?? 0;
+            const isSelected = placement === row;
+            return (
+              <button
+                key={row || "ALL"}
+                onClick={() => setPlacement(row)}
+                className={`h-9 rounded-md border px-3 text-[13px] font-semibold transition-colors ${
+                  isSelected
+                    ? "border-[#E31E24] bg-[#E31E24] text-white shadow-xs"
+                    : "border-[#E6E6E6] bg-white text-[#555] hover:bg-gray-50"
+                }`}
+              >
+                {row ? row.replace(/_/g, " ") : "All"}{" "}
+                <span
+                  className={`ml-1 rounded-full px-1.5 py-0.5 text-[11px] ${
+                    isSelected ? "bg-white/20 text-white" : "bg-gray-100 text-gray-600"
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <button
+          onClick={openNew}
+          className="inline-flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white shadow-xs hover:bg-[#B5151B] transition-colors"
+        >
+          <Plus size={15} /> New Banner
+        </button>
       </div>
-      {showForm && <form onSubmit={save} className="mb-5 rounded-lg border border-[#E6E6E6] bg-white p-5">
-        <div className="grid gap-4 md:grid-cols-3">
-          <AdminInput label="Title" value={form.title} onChange={(event) => set("title", event.target.value)} />
-          <AdminSelect label="Placement" value={form.placement} onChange={(event) => set("placement", event.target.value)} options={placements.filter(Boolean).map((row) => ({ value: row, label: row.replace(/_/g, " ") }))} />
-          <AdminMultiSearchableSelect
-            label="Countries"
-            values={form.countryIds ?? (form.countryId ? [form.countryId] : [])}
-            onValuesChange={(values) => setForm((prev) => ({ ...prev, countryIds: values, countryId: values[0] ?? "" }))}
-            options={(countries as any[]).map((country) => ({
-              value: country.id,
-              label: `${country.name} (${country.code})`,
-            }))}
-            placeholder="Select countries"
-            allowSelectAll
-            selectAllLabel="All countries"
-          />
-          <AdminInput label="Link URL" value={form.linkUrl} onChange={(event) => set("linkUrl", event.target.value)} />
-          <AdminInput label="Link Text" value={form.linkText} onChange={(event) => set("linkText", event.target.value)} />
-          <AdminSelect label="Status" value={form.status ? "true" : "false"} onChange={(event) => set("status", event.target.value === "true")} options={[{ value: "true", label: "Active" }, { value: "false", label: "Inactive" }]} />
-          <AdminInput label="Start Date" type="date" value={form.startDate} onChange={(event) => set("startDate", event.target.value)} />
-          <AdminInput label="End Date" type="date" value={form.endDate} onChange={(event) => set("endDate", event.target.value)} />
+
+      {/* Placement Description Hint */}
+      <div className="mb-4 rounded-md border border-[#E6E6E6] bg-gray-50/70 px-4 py-2.5 text-[12.5px] text-[#555]">
+        <span className="font-semibold text-[#1A1A1A]">Placement Info:</span>{" "}
+        {PLACEMENT_DESCRIPTIONS[placement] || PLACEMENT_DESCRIPTIONS[""]}
+      </div>
+
+      {/* Bulk Action Toolbar */}
+      {selected.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-[#E6E6E6] bg-white p-3 shadow-xs">
+          <span className="text-[13px] font-semibold text-[#1A1A1A]">{selected.length} selected</span>
+          <div className="h-4 w-px bg-[#E6E6E6]" />
+          <LoadingButton
+            onClick={() => runBulk("enable")}
+            loading={bulkBanners.isPending}
+            loadingText="Enabling..."
+            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[13px] font-medium text-[#333] hover:bg-gray-50"
+          >
+            Enable
+          </LoadingButton>
+          <LoadingButton
+            onClick={() => runBulk("disable")}
+            loading={bulkBanners.isPending}
+            loadingText="Disabling..."
+            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[13px] font-medium text-[#333] hover:bg-gray-50"
+          >
+            Disable
+          </LoadingButton>
+          <LoadingButton
+            onClick={() => runBulk("delete")}
+            loading={bulkBanners.isPending}
+            loadingText="Deleting..."
+            className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-[13px] font-medium text-red-600 hover:bg-red-100"
+          >
+            Delete
+          </LoadingButton>
         </div>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {(["image", "mobileImage"] as const).map((field) => <div key={field} className="rounded-md border border-[#E6E6E6] p-3">
-            <div className="mb-2 text-[13px] font-semibold">{field === "image" ? "Desktop Image" : "Mobile Override"}</div>
-            {form[field] && <img src={form[field]} alt="" className="mb-2 h-32 w-full rounded object-cover" />}
-            <AdminInput label="Image URL" value={String(form[field] ?? "")} onChange={(event) => set(field, event.target.value)} />
-            <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-semibold"><Upload size={14} />{uploading === field ? "Uploading..." : "Upload"}<input type="file" accept="image/*" className="hidden" onChange={(event) => upload(field, event.target.files?.[0])} /></label>
-          </div>)}
+      )}
+
+      {/* Structured Admin Table UI Matching Product Table Layout */}
+      <div className="rounded-lg border border-[#E6E6E6] bg-white overflow-hidden shadow-xs">
+        <div className="overflow-x-auto">
+          <div className="p-3 min-w-[960px]">
+            {/* Table Header Row aligned perfectly with SortableList items */}
+            <div className="mb-3 flex items-center gap-2 px-3 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">
+              {/* Drag handle placeholder matching GripVertical button width */}
+              <div className="w-[28px] shrink-0" />
+              
+              <div
+                className="grid flex-1 gap-4 items-center pr-3"
+                style={{ gridTemplateColumns }}
+              >
+                <div>
+                  <input
+                    type="checkbox"
+                    checked={banners.length > 0 && selected.length === banners.length}
+                    onChange={toggleSelectAll}
+                    className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24]"
+                  />
+                </div>
+                <span>Preview</span>
+                <span>Title & Link</span>
+                <span>Placement</span>
+                <span>Target</span>
+                <span>Status</span>
+                <span className="text-right">Actions</span>
+              </div>
+            </div>
+
+            {/* Table Body / Sortable Rows */}
+            {isLoading ? (
+              <div className="divide-y divide-[#E6E6E6]">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="flex gap-4 px-4 py-4">
+                    <div className="h-4 flex-1 animate-pulse rounded bg-[#E6E6E6]" />
+                  </div>
+                ))}
+              </div>
+            ) : banners.length === 0 ? (
+              <div className="px-4 py-12 text-center text-[13.5px] text-[#9A9A9A]">
+                No banners found for this placement.
+              </div>
+            ) : (
+              <SortableList
+                items={banners}
+                onReorder={(items) =>
+                  reorderBanners
+                    .mutateAsync(items.map((item) => item.id))
+                    .catch((error) => showToast(getAdminErrorMessage(error, "Failed to reorder banners."), "error"))
+                }
+                rowWidthClassName="w-full"
+                contentClassName="flex-1 py-2 pr-3"
+                renderItem={(row) => (
+                  <div
+                    className="grid gap-4 items-center"
+                    style={{ gridTemplateColumns }}
+                  >
+                    <div>
+                      <input
+                        type="checkbox"
+                        checked={selected.includes(row.id)}
+                        onChange={() =>
+                          setSelected((current) =>
+                            current.includes(row.id) ? current.filter((id) => id !== row.id) : [...current, row.id]
+                          )
+                        }
+                        className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24]"
+                      />
+                    </div>
+                    <div>
+                      <img src={row.image} alt="" className="h-10 w-16 rounded border border-[#E6E6E6] object-cover bg-grey" />
+                    </div>
+                    <div className="pr-3 min-w-0">
+                      <div className="font-semibold text-[#1A1A1A] text-[13.5px] truncate">{row.title}</div>
+                      <div className="text-[11.5px] text-[#9A9A9A] truncate">{row.linkUrl || "No link specified"}</div>
+                    </div>
+                    <div>
+                      <span className="inline-block rounded bg-gray-100 px-2 py-0.5 text-[11.5px] font-medium text-[#444]">
+                        {row.placement.replace(/_/g, " ")}
+                      </span>
+                    </div>
+                    <div className="text-[12.5px] font-medium text-[#555]">{row.country?.code ?? "All"}</div>
+                    <div>
+                      <StatusBadge status={row.status ? "ACTIVE" : "INACTIVE"} />
+                    </div>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => edit(row)}
+                        title="Edit banner"
+                        className="flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#555] hover:bg-gray-50 hover:text-[#1A1A1A] transition-colors"
+                      >
+                        <Edit2 size={13} />
+                      </button>
+                      <button
+                        onClick={() => setDeleting(row.id)}
+                        title="Delete banner"
+                        className="flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] bg-white text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              />
+            )}
+
+          </div>
         </div>
-        <button className="mt-5 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white">Save Banner</button>
-      </form>}
-      {selected.length > 0 && <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-[#E6E6E6] bg-white p-3"><span className="text-[13px]">{selected.length} selected</span><button onClick={() => runBulk("enable")} className="rounded-md border px-3 py-2 text-[13px]">Enable</button><button onClick={() => runBulk("disable")} className="rounded-md border px-3 py-2 text-[13px]">Disable</button><button onClick={() => runBulk("delete")} className="rounded-md border border-red-200 px-3 py-2 text-[13px] text-red-600">Delete</button></div>}
-      {isLoading ? <div className="rounded-lg border bg-white p-5 text-[13px] text-[#9A9A9A]">Loading banners...</div> : <SortableList items={banners} onReorder={(items) => reorderBanners.mutateAsync(items.map((item) => item.id)).catch((error) => showToast(getAdminErrorMessage(error, "Failed to reorder banners."), "error"))} renderItem={(row) => (
-        <div className="grid gap-3 md:grid-cols-[40px_90px_1fr_160px_90px_120px] md:items-center">
-          <input type="checkbox" checked={selected.includes(row.id)} onChange={() => setSelected((current) => current.includes(row.id) ? current.filter((id) => id !== row.id) : [...current, row.id])} />
-          <img src={row.image} alt="" className="h-12 w-20 rounded object-cover" />
-          <div><div className="font-medium">{row.title}</div><div className="text-[12px] text-[#9A9A9A]">{row.linkUrl || "No link"}</div></div>
-          <div className="text-[12px]">{row.placement.replace(/_/g, " ")}</div>
-          <div className="text-[12px]">{row.country?.code ?? "All"}</div>
-          <div className="flex items-center gap-2"><StatusBadge status={row.status ? "ACTIVE" : "INACTIVE"} /><button onClick={() => edit(row)} className="flex h-7 w-7 items-center justify-center rounded border"><Edit2 size={13} /></button><button onClick={() => setDeleting(row.id)} className="flex h-7 w-7 items-center justify-center rounded border text-red-500"><Trash2 size={13} /></button></div>
-        </div>
-      )} />}
-      <ConfirmModal open={!!deleting} title="Delete banner?" message="This permanently deletes the banner." onCancel={() => setDeleting(null)} onConfirm={async () => {
-        if (!deleting) return;
-        try { await deleteBanner.mutateAsync(deleting); showToast("Banner deleted."); } catch (error) { showToast(getAdminErrorMessage(error, "Failed to delete banner."), "error"); } finally { setDeleting(null); }
-      }} />
+      </div>
+
+      {/* Unified Modal Component for Add & Edit */}
+      <Modal
+        open={showModal}
+        onClose={closeModal}
+        panelClassName="max-w-3xl max-h-[90vh] overflow-y-auto"
+      >
+        <form onSubmit={save} className="flex flex-col h-full">
+          {/* Unified Sticky Action Header Bar matching ProductEditor style */}
+          <div className="sticky top-0 z-20 flex items-center justify-between border-b border-[#E6E6E6] bg-white px-6 py-4 shadow-xs">
+            <div>
+              <h3 className="text-[15.5px] font-bold text-ink">
+                {form.id ? "Edit Banner" : "New Banner"}
+              </h3>
+              <p className="text-[11.5px] text-steel-2">
+                Changes are not applied until you save.
+              </p>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={closeModal}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 text-[13px] font-semibold text-[#555] hover:bg-gray-50 transition-colors"
+              >
+                <ArrowLeft size={14} /> Back
+              </button>
+              <LoadingButton
+                type="submit"
+                loading={createBanner.isPending || updateBanner.isPending}
+                loadingText="Saving..."
+                className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#E31E24] px-5 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors"
+              >
+                <Save size={14} /> Save Changes
+              </LoadingButton>
+            </div>
+          </div>
+
+          {/* Scrollable Form Body */}
+          <div className="p-6 space-y-5">
+            <div className="grid gap-4 md:grid-cols-3">
+              <AdminInput
+                label="Banner Title"
+                value={form.title}
+                onChange={(event) => set("title", event.target.value)}
+                required
+              />
+              <AdminSelect
+                label="Placement"
+                value={form.placement}
+                onChange={(event) => set("placement", event.target.value)}
+                options={placements
+                  .filter(Boolean)
+                  .map((row) => ({ value: row, label: row.replace(/_/g, " ") }))}
+              />
+              <AdminMultiSearchableSelect
+                label="Countries"
+                values={form.countryIds ?? (form.countryId ? [form.countryId] : [])}
+                onValuesChange={(values) =>
+                  setForm((prev) => ({ ...prev, countryIds: values, countryId: values[0] ?? "" }))
+                }
+                options={(countries as any[]).map((country) => ({
+                  value: country.id,
+                  label: `${country.name} (${country.code})`,
+                }))}
+                placeholder="Select countries"
+                allowSelectAll
+                selectAllLabel="All countries"
+              />
+              <AdminInput
+                label="Link URL"
+                value={form.linkUrl}
+                onChange={(event) => set("linkUrl", event.target.value)}
+                placeholder="e.g. /products or https://..."
+              />
+              <AdminInput
+                label="Link Button Text"
+                value={form.linkText}
+                onChange={(event) => set("linkText", event.target.value)}
+                placeholder="e.g. Explore Now"
+              />
+              <AdminSelect
+                label="Status"
+                value={form.status ? "true" : "false"}
+                onChange={(event) => set("status", event.target.value === "true")}
+                options={[
+                  { value: "true", label: "Active" },
+                  { value: "false", label: "Inactive" },
+                ]}
+              />
+              <AdminInput
+                label="Start Date"
+                type="date"
+                value={form.startDate}
+                onChange={(event) => set("startDate", event.target.value)}
+              />
+              <AdminInput
+                label="End Date"
+                type="date"
+                value={form.endDate}
+                onChange={(event) => set("endDate", event.target.value)}
+              />
+            </div>
+
+            {/* Images Upload Section */}
+            <div className="grid gap-4 md:grid-cols-2 pt-2">
+              {(["image", "mobileImage"] as const).map((field) => (
+                <div key={field} className="rounded-lg border border-[#E6E6E6] bg-gray-50/50 p-4">
+                  <div className="mb-2 text-[13px] font-semibold text-[#1A1A1A]">
+                    {field === "image" ? "Desktop Image *" : "Mobile Image Override (Optional)"}
+                  </div>
+                  {form[field] ? (
+                    <div className="relative mb-3 overflow-hidden rounded-md border border-[#E6E6E6]">
+                      <img src={form[field]} alt="" className="h-36 w-full object-cover" />
+                    </div>
+                  ) : null}
+                  <AdminInput
+                    label="Image URL"
+                    value={String(form[field] ?? "")}
+                    onChange={(event) => set(field, event.target.value)}
+                    placeholder="https://..."
+                  />
+                  <label
+                    className={`mt-3 inline-flex cursor-pointer items-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-3.5 py-2 text-[12.5px] font-semibold text-[#333] hover:bg-gray-50 ${
+                      uploading === field ? "opacity-50 pointer-events-none" : ""
+                    }`}
+                  >
+                    {uploading === field ? (
+                      <span
+                        className="inline-block animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent w-3.5 h-3.5"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <Upload size={14} />
+                    )}
+                    {uploading === field ? "Uploading Image..." : "Upload Image File"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={uploading !== null}
+                      className="hidden"
+                      onChange={(event) => upload(field, event.target.files?.[0])}
+                    />
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        open={!!deleting}
+        title="Delete banner?"
+        message="This will permanently delete this banner record."
+        onCancel={() => setDeleting(null)}
+        isLoading={deleteBanner.isPending}
+        onConfirm={async () => {
+          if (!deleting) return;
+          try {
+            await deleteBanner.mutateAsync(deleting);
+            showToast("Banner deleted.");
+          } catch (error) {
+            showToast(getAdminErrorMessage(error, "Failed to delete banner."), "error");
+          } finally {
+            setDeleting(null);
+          }
+        }}
+      />
+
       {ToastComponent}
     </AdminLayout>
   );

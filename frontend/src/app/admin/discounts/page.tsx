@@ -24,7 +24,11 @@ import {
   DataTable,
   Pagination,
   StatCard,
+  AdminStatsGrid,
+  AdminListToolbar,
+  StatusBadge,
   useToast,
+  LoadingButton,
 } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
@@ -941,125 +945,72 @@ export default function DiscountsPage() {
         >
           Cancel
         </button>
-        <button
+        <LoadingButton
           type="submit"
-          disabled={form.isSubmitting || createDiscount.isPending || updateDiscount.isPending}
-          className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
+          loading={form.isSubmitting || createDiscount.isPending || updateDiscount.isPending}
+          loadingText="Processing..."
+          className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
         >
-          {form.isSubmitting ? "Processing..." : (form.values.id ? "Update Discount" : "Create Discount")}
-        </button>
+          {form.values.id ? "Update Discount" : "Create Discount"}
+        </LoadingButton>
       </div>
     </form>
   );
 
   return (
     <AdminLayout title="Discounts" breadcrumb={[{ label: "Discounts" }]}>
-      <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <StatCard
-          title="Total Discounts"
-          value={dashboard?.totalDiscounts ?? 0}
-          subtitle="All discount rules"
-          icon={<Filter size={18} />}
-          isLoading={dashboardLoading}
-        />
-        <StatCard
-          title="Active Discounts"
-          value={dashboard?.activeDiscounts ?? 0}
-          subtitle="Currently available"
-          icon={<SquareCheckBig size={18} />}
-          color="bg-green-600"
-          isLoading={dashboardLoading}
-        />
-        <StatCard
-          title="Inactive Discounts"
-          value={dashboard?.inactiveDiscounts ?? 0}
-          subtitle="Paused or disabled"
-          icon={<X size={18} />}
-          color="bg-gray-600"
-          isLoading={dashboardLoading}
-        />
-      </div>
+      <AdminStatsGrid
+        stats={[
+          { title: "Total Discounts", value: dashboard?.totalDiscounts ?? 0, subtitle: "All discount rules", icon: <Filter size={18} />, isLoading: dashboardLoading },
+          { title: "Active Discounts", value: dashboard?.activeDiscounts ?? 0, subtitle: "Currently available", icon: <SquareCheckBig size={18} />, color: "bg-green-600", isLoading: dashboardLoading },
+          { title: "Inactive Discounts", value: dashboard?.inactiveDiscounts ?? 0, subtitle: "Paused or disabled", icon: <X size={18} />, color: "bg-gray-600", isLoading: dashboardLoading }
+        ]}
+      />
 
-      <div className="mb-5 rounded-xl border border-[#E6E6E6] bg-white p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="relative w-full max-w-[280px]">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                resetPage();
-              }}
-              placeholder="Search rule, product, category..."
-              className="h-10 w-full rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-start gap-2">
-            <RefreshButton onRefresh={refetch} isRefreshing={isFetching} />
-            <button
-              type="button"
-              onClick={() => setShowFilters((current) => !current)}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
-            >
-              <Filter size={14} />
-              {showFilters ? "Hide filters" : "Show filters"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowColumns((current) => !current)}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
-            >
-              <SlidersHorizontal size={14} />
-              Columns
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleExport(false)}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]"
-            >
-              <Download size={14} />
-              Export
-            </button>
-            {canCreate && (
-              <button
-                type="button"
-                onClick={() => {
-                  resetForm();
-                  setShowForm(true);
-                }}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-              >
-                <Plus size={14} />
-                Create Discount
-              </button>
-            )}
-          </div>
-        </div>
-
-        {showFilters && (
-          <div className="mt-4 border-t border-[#F0F0F0] pt-4">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-[13px] font-bold text-[#1A1A1A]">Filters & Sorting</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setSearch("");
-                  setStatus("");
-                  setTypeFilter("");
-                  setScopeFilter("");
-                  setCountryFilter("");
-                  setSortBy("createdAt");
-                  setSortDir("desc");
-                  resetPage();
-                }}
-                className="text-[12.5px] font-medium text-[#E31E24] hover:underline"
-              >
-                Reset
-              </button>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <AdminListToolbar
+          search={{
+            value: search,
+            onChange: (val) => {
+              setSearch(val);
+              resetPage();
+            },
+            placeholder: "Search rule, product, category...",
+            widthClassName: "max-w-[280px]",
+          }}
+          filters={{
+            showFilters: showFilters,
+            onToggle: () => setShowFilters(!showFilters),
+            activeCount: [status, typeFilter, scopeFilter, countryFilter].filter(Boolean).length,
+            label: "Filters",
+          }}
+          columns={{
+            visibleColumns: visibleColumns,
+            onToggleColumn: (key) => {
+              setVisibleColumns((current) => ({
+                ...current,
+                [key]: !current[key as keyof typeof current],
+              }));
+            },
+            options: Object.keys(visibleColumns).map((key) => ({ key, label: key })),
+          }}
+          exportAction={{
+            onClick: () => void handleExport(selectedIds.length > 0),
+            label: selectedIds.length > 0 ? `Export Selected (${selectedIds.length})` : "Export",
+          }}
+          primaryAction={
+            canCreate
+              ? {
+                  onClick: () => {
+                    resetForm();
+                    setShowForm(true);
+                  },
+                  label: "Create Discount",
+                  icon: <Plus size={14} />,
+                }
+              : undefined
+          }
+          filterPanel={
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 pt-2">
               <AdminSelect
                 label="Status"
                 value={status}
@@ -1146,8 +1097,18 @@ export default function DiscountsPage() {
                 ]}
               />
             </div>
-          </div>
-        )}
+          }
+          onResetFilters={() => {
+            setSearch("");
+            setStatus("");
+            setTypeFilter("");
+            setScopeFilter("");
+            setCountryFilter("");
+            setSortBy("createdAt");
+            setSortDir("desc");
+            resetPage();
+          }}
+        />
 
         {selectedIds.length > 0 && (
           <div className="mt-4 rounded-xl border border-dashed border-[#E31E24]/30 bg-[#FFF5F5]/30 p-4 flex flex-wrap items-center justify-between gap-3">
@@ -1164,7 +1125,6 @@ export default function DiscountsPage() {
             </div>
           </div>
         )}
-      </div>
 
       <Modal
         open={showForm}
@@ -1191,61 +1151,41 @@ export default function DiscountsPage() {
             <span className="text-[12.5px] text-[#6B6B6B]">
               {selectedIds.length} selected
             </span>
-            <button
+            <LoadingButton
               type="button"
               onClick={() => runBulkAction("ENABLE")}
-              disabled={!selectedIds.length || bulkDiscounts.isPending}
+              loading={bulkDiscounts.isPending}
+              loadingText="Enabling..."
+              disabled={!selectedIds.length}
               className="rounded-md border border-[#DCEFE5] bg-[#F4FBF7] px-3 py-1.5 text-[12.5px] font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Bulk enable
-            </button>
-            <button
+            </LoadingButton>
+            <LoadingButton
               type="button"
               onClick={() => runBulkAction("DISABLE")}
-              disabled={!selectedIds.length || bulkDiscounts.isPending}
+              loading={bulkDiscounts.isPending}
+              loadingText="Disabling..."
+              disabled={!selectedIds.length}
               className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] font-medium text-[#6B6B6B] disabled:cursor-not-allowed disabled:opacity-50"
             >
               Bulk disable
-            </button>
-            <button
+            </LoadingButton>
+            <LoadingButton
               type="button"
               onClick={() => setBulkDeleting(true)}
-              disabled={!selectedIds.length || bulkDiscounts.isPending}
+              loading={bulkDiscounts.isPending}
+              loadingText="Deleting..."
+              disabled={!selectedIds.length}
               className="rounded-md border border-red-100 bg-red-50 px-3 py-1.5 text-[12.5px] font-medium text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Bulk delete
-            </button>
+            </LoadingButton>
           </div>
         </div>
       )}
 
-      {showColumns ? (
-        <div className="mb-5 rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">
-            Column visibility
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {Object.entries(visibleColumns).map(([key, value]) => (
-              <label
-                key={key}
-                className="flex items-center gap-2 text-[13px] text-[#1A1A1A]"
-              >
-                <input
-                  type="checkbox"
-                  checked={value}
-                  onChange={(event) =>
-                    setVisibleColumns((current) => ({
-                      ...current,
-                      [key]: event.target.checked,
-                    }))
-                  }
-                />
-                <span className="capitalize">{key}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      ) : null}
+
 
       <div className="flex gap-6 items-start">
         {/* TABLE */}
@@ -1427,6 +1367,7 @@ export default function DiscountsPage() {
         message="This rule will stop applying immediately."
         onConfirm={confirmDelete}
         onCancel={() => setDeleting(null)}
+        isLoading={deleteDiscount.isPending}
       />
       <ConfirmModal
         open={bulkDeleting}
@@ -1434,6 +1375,7 @@ export default function DiscountsPage() {
         message="Selected discount rules will stop applying immediately."
         onConfirm={() => runBulkAction("DELETE")}
         onCancel={() => setBulkDeleting(false)}
+        isLoading={bulkDiscounts.isPending}
       />
       {ToastComponent}
     </AdminLayout>

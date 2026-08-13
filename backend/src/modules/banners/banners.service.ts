@@ -119,10 +119,35 @@ export async function createBanner(input: BannerInput) {
   return formatBannerResponse(banner);
 }
 
+async function ensureAtLeastOneActiveHeroBanner(deactivatingIds: string[]) {
+  const remainingActiveHeroCount = await prisma.banner.count({
+    where: {
+      placement: "HOMEPAGE_HERO",
+      status: true,
+      id: { notIn: deactivatingIds },
+    },
+  });
+
+  if (remainingActiveHeroCount === 0) {
+    throw new AppError(
+      "At least one Homepage Hero banner must remain active. Please activate another Homepage Hero banner before deactivating or deleting this one.",
+      400
+    );
+  }
+}
+
 export async function updateBanner(id: string, input: BannerInput) {
   const current = await getBanner(id);
   const data = normalize(input, current as any);
   const { countryIds, ...bannerData } = data;
+
+  if (
+    current.placement === "HOMEPAGE_HERO" &&
+    current.status &&
+    (!data.status || data.placement !== "HOMEPAGE_HERO")
+  ) {
+    await ensureAtLeastOneActiveHeroBanner([id]);
+  }
 
   await prisma.bannerCountry.deleteMany({ where: { bannerId: id } });
 
@@ -140,7 +165,10 @@ export async function updateBanner(id: string, input: BannerInput) {
 }
 
 export async function deleteBanner(id: string) {
-  await getBanner(id);
+  const current = await getBanner(id);
+  if (current.placement === "HOMEPAGE_HERO" && current.status) {
+    await ensureAtLeastOneActiveHeroBanner([id]);
+  }
   await prisma.banner.delete({ where: { id } });
 }
 
@@ -153,6 +181,16 @@ export async function reorderBanners(ids: string[]) {
 export async function bulkUpdateBanners(input: { ids?: string[]; action?: "enable" | "disable" | "delete" }) {
   const ids = Array.from(new Set(input.ids ?? []));
   if (!ids.length) throw new AppError("Select at least one banner.", 400);
+
+  if (input.action === "disable" || input.action === "delete") {
+    const activeHeroBanners = await prisma.banner.findMany({
+      where: { id: { in: ids }, placement: "HOMEPAGE_HERO", status: true },
+    });
+    if (activeHeroBanners.length > 0) {
+      await ensureAtLeastOneActiveHeroBanner(ids);
+    }
+  }
+
   if (input.action === "delete") {
     await prisma.banner.deleteMany({ where: { id: { in: ids } } });
     return { updated: ids.length };
@@ -164,12 +202,29 @@ export async function bulkUpdateBanners(input: { ids?: string[]; action?: "enabl
   throw new AppError("Unsupported bulk action.", 400);
 }
 
+
 export async function listPublicBanners(query: { placement?: BannerPlacement; countryCode?: string }) {
   if (!query.placement) throw new AppError("placement is required.", 400);
   const country = query.countryCode
     ? await prisma.country.findUnique({ where: { code: query.countryCode.toUpperCase() } })
     : null;
   const now = new Date();
+
+  const countryCondition: Prisma.BannerWhereInput = country
+    ? {
+        OR: [
+          { countryId: null, countries: { none: {} } },
+          { countryId: country.id },
+          { countries: { some: { countryId: country.id } } },
+        ],
+      }
+    : {
+        OR: [
+          { countryId: null },
+          { countries: { none: {} } },
+        ],
+      };
+
   return prisma.banner.findMany({
     where: {
       placement: query.placement,
@@ -177,10 +232,11 @@ export async function listPublicBanners(query: { placement?: BannerPlacement; co
       AND: [
         { OR: [{ startDate: null }, { startDate: { lte: now } }] },
         { OR: [{ endDate: null }, { endDate: { gte: now } }] },
-        { OR: [{ countryId: null }, ...(country ? [{ countryId: country.id }] : [])] },
+        countryCondition,
       ],
     },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-    include: { country: true },
+    include: bannerInclude,
   });
 }
+

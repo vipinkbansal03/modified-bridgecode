@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { Calculator, Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column, AdminListToolbar, LoadingButton } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
@@ -197,22 +197,28 @@ export default function ShippingBoxesPage() {
   return (
     <AdminLayout title="Package/Box Management" breadcrumb={[{ label: "Shipping", href: "/admin/shipping" }, { label: "Boxes" }]}>
       <div className="space-y-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex gap-2 border-b border-[#E6E6E6]">
-            <Link href="/admin/shipping" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
-              Providers
-            </Link>
-            <Link href="/admin/shipping/zones" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
-              Zones
-            </Link>
-            <span className="border-b-2 border-[#E31E24] px-4 py-2 text-[13px] font-semibold text-[#111]">Boxes</span>
-          </div>
-          {canManage && (
-            <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-md bg-[#E31E24] px-4 py-2.5 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
-              <Plus size={15} /> Add Box
-            </button>
-          )}
-        </div>
+        <AdminListToolbar
+          leftExtra={
+            <div className="flex gap-2 border-b border-[#E6E6E6]">
+              <Link href="/admin/shipping" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
+                Providers
+              </Link>
+              <Link href="/admin/shipping/zones" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
+                Zones
+              </Link>
+              <span className="border-b-2 border-[#E31E24] px-4 py-2 text-[13px] font-semibold text-[#111]">Boxes</span>
+            </div>
+          }
+          primaryAction={
+            canManage
+              ? {
+                  onClick: openCreate,
+                  label: "Add Box",
+                  icon: <Plus size={15} />,
+                }
+              : undefined
+          }
+        />
 
         <div className="flex gap-2 border-b border-[#E6E6E6]">
           <button
@@ -423,13 +429,14 @@ export default function ShippingBoxesPage() {
             <button type="button" onClick={() => setFormOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2.5 text-[13.5px] font-medium text-[#555] hover:bg-[#F2F2F2]">
               Cancel
             </button>
-            <button
+            <LoadingButton
               type="submit"
-              disabled={form.isSubmitting}
-              className="rounded-md bg-[#E31E24] px-5 py-2.5 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
+              loading={form.isSubmitting || upsertMutation.isPending}
+              loadingText="Saving..."
+              className="rounded-md bg-[#E31E24] px-5 py-2.5 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
             >
-              {form.isSubmitting ? "Saving..." : form.values.id ? "Update Box" : "Create Box"}
-            </button>
+              {form.values.id ? "Update Box" : "Create Box"}
+            </LoadingButton>
           </div>
         </form>
       </Modal>
@@ -450,6 +457,7 @@ export default function ShippingBoxesPage() {
             }
           }}
           onCancel={() => setDeletingBox(null)}
+          isLoading={deleteMutation.isPending}
         />
       )}
 

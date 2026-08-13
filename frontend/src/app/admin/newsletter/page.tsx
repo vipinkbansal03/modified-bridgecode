@@ -18,6 +18,8 @@ import {
   AdminInput,
   AdminSelect,
   StatCard,
+  AdminStatsGrid,
+  AdminListToolbar,
   useToast,
   ConfirmModal,
   type Column,
@@ -234,79 +236,47 @@ export default function NewsletterAdminPage() {
   return (
     <AdminLayout title="Newsletter Subscribers">
       <div className="space-y-6">
-        {/* Quick Stats */}
-        <div className="grid gap-4 md:grid-cols-3">
-          <StatCard
-            title="Total List Count"
-            value={stats.total}
-            subtitle="All registered emails"
-            icon={<Users size={18} />}
-            isLoading={isLoading}
-          />
-          <StatCard
-            title="Active Subscriptions"
-            value={stats.active}
-            subtitle="Subscribed and active"
-            icon={<Mail size={18} />}
-            color="bg-emerald-600"
-            isLoading={isLoading}
-          />
-          <StatCard
-            title="Unsubscriptions"
-            value={stats.unsubscribed}
-            subtitle="Opted-out subscribers"
-            icon={<X size={18} />}
-            color="bg-gray-600"
-            isLoading={isLoading}
-          />
-        </div>
+        <AdminStatsGrid
+          stats={[
+            { title: "Total List Count", value: stats.total, subtitle: "All registered emails", icon: <Users size={18} />, isLoading: isLoading },
+            { title: "Active Subscriptions", value: stats.active, subtitle: "Subscribed and active", icon: <Mail size={18} />, color: "bg-emerald-600", isLoading: isLoading },
+            { title: "Unsubscriptions", value: stats.unsubscribed, subtitle: "Opted-out subscribers", icon: <X size={18} />, color: "bg-gray-600", isLoading: isLoading }
+          ]}
+        />
 
-        {/* List Toolbar */}
-        <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="relative w-full max-w-[280px]">
-              <Search
-                size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]"
-              />
-              <input
-                type="search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search subscriber email..."
-                className="h-10 w-full rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-start gap-2">
-              <RefreshButton onRefresh={refetch} isRefreshing={isFetching} />
-
-              <AdminSelect
-                label=""
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="h-10"
-                options={[
-                  { value: "", label: "All Statuses" },
-                  { value: "ACTIVE", label: "Active" },
-                  { value: "UNSUBSCRIBED", label: "Unsubscribed" },
-                ]}
-              />
-
-              <button
-                type="button"
-                onClick={() => setIsAddOpen(true)}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-              >
-                <UserPlus size={14} />
-                Add Subscriber
-              </button>
-            </div>
-          </div>
-        </div>
+        <AdminListToolbar
+          search={{
+            value: search,
+            onChange: setSearch,
+            placeholder: "Search subscriber email...",
+            widthClassName: "max-w-[280px]",
+          }}
+          leftExtra={
+            <AdminSelect
+              label=""
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              className="h-10"
+              options={[
+                { value: "", label: "All Statuses" },
+                { value: "ACTIVE", label: "Active" },
+                { value: "UNSUBSCRIBED", label: "Unsubscribed" },
+              ]}
+            />
+          }
+          refresh={{
+            onRefresh: refetch,
+            isRefreshing: isFetching,
+          }}
+          primaryAction={{
+            onClick: () => setIsAddOpen(true),
+            label: "Add Subscriber",
+            icon: <UserPlus size={14} />,
+          }}
+        />
 
         {/* Subscribers Table */}
         <DataTable

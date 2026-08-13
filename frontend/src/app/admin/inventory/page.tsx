@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Clock3, Download, Filter, History, Layers, Search, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { RefreshButton } from "@/components/admin/RefreshButton";
 import { Modal } from "@/components/ui/Modal";
 import {
@@ -484,150 +484,120 @@ export default function InventoryPage() {
 
   return (
     <AdminLayout title="Inventory" breadcrumb={[{ label: "Inventory" }]}>
-      <div className="mb-5 flex flex-col gap-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-              <input
-                placeholder="Search inventory..."
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                className="w-[260px] rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
-              />
-            </div>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 rounded-md border px-3 py-2 text-[13.5px] outline-none transition-colors ${showFilters ? "bg-[#F8F8F8] border-[#D1D1D1] text-[#1A1A1A]" : "bg-white border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F8F8F8]"}`}
+      <AdminStatsGrid
+        stats={[
+          { title: "Tracked Items", value: tinyNumber(dashboard.data?.totals?.trackedItems ?? 0), icon: <Layers size={18} /> },
+          { title: "Total Stock", value: tinyNumber(dashboard.data?.totals?.totalStock ?? 0), icon: <Clock3 size={18} />, color: "bg-blue-600" },
+          { title: "Reserved Stock", value: tinyNumber(dashboard.data?.totals?.reservedStock ?? 0), icon: <Clock3 size={18} />, color: "bg-slate-600" },
+          { title: "Low Stock", value: tinyNumber(dashboard.data?.totals?.lowStockCount ?? 0), icon: <History size={18} />, color: "bg-orange-500" },
+          { title: "Out of Stock", value: tinyNumber(dashboard.data?.totals?.outOfStockCount ?? 0), icon: <X size={18} />, color: "bg-red-500" }
+        ]}
+        isLoading={dashboard.isLoading}
+      />
+
+      <AdminListToolbar
+        search={{
+          value: searchInput,
+          onChange: setSearchInput,
+          placeholder: "Search inventory...",
+          widthClassName: "w-[260px]",
+        }}
+        filters={{
+          showFilters,
+          onToggle: () => setShowFilters(!showFilters),
+          activeCount: [status, warehouseFilterId, sortBy !== "updatedAt" ? sortBy : ""].filter(Boolean).length,
+        }}
+        columns={{
+          visibleColumns,
+          onToggleColumn: (key) => setVisibleColumns((current) => ({ ...current, [key]: !current[key as InventoryColumnKey] })),
+          options: (Object.keys(DEFAULT_COLUMNS) as InventoryColumnKey[]).map((k) => ({
+            key: k,
+            label: k === "warehouse" ? "Warehouse" : k === "reserved" ? "Reserved Stock" : k === "threshold" ? "Low Stock At" : k === "status" ? "Status" : "Updated Date",
+          })),
+        }}
+        exportAction={{
+          onClick: () => exportInventory(selectedCount > 0),
+          label: selectedCount > 0 ? `Export Selected (${selectedCount})` : "Export Excel",
+          disabled: exporting,
+        }}
+        importAction={canUpdate ? {
+          onClick: openImportDialog,
+          label: "Import Excel",
+        } : undefined}
+        refresh={{
+          onRefresh: refetch,
+          isRefreshing: isFetching,
+        }}
+        onResetFilters={() => {
+          setStatus("");
+          setWarehouseFilterId("");
+          setSortBy("updatedAt");
+          setSortDir("desc");
+          setPage(1);
+        }}
+        filterPanel={
+          <div className="flex flex-wrap items-center gap-3">
+            <select
+              value={status}
+              onChange={(event) => {
+                setStatus(event.target.value);
+                setPage(1);
+              }}
+              className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
             >
-              <Filter size={14} /> Filters
-            </button>
-            <details className="relative">
-              <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none">
-                <SlidersHorizontal size={14} /> Columns
-              </summary>
-              <div className="absolute left-0 z-20 mt-2 w-[240px] rounded-md border border-[#E6E6E6] bg-white p-3 shadow-lg">
-                <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wide text-[#9A9A9A]">
-                  <Filter size={12} /> Visibility
-                </div>
-                <div className="grid gap-2">
-                  {(Object.keys(DEFAULT_COLUMNS) as InventoryColumnKey[]).map((key) => (
-                    <label key={key} className="flex items-center justify-between gap-3 rounded border border-[#F0F0F0] px-2.5 py-1.5 text-[12.5px] text-[#1A1A1A]">
-                      <span>{key === "warehouse" ? "Warehouse" : key === "reserved" ? "Reserved Stock" : key === "threshold" ? "Low Stock At" : key === "status" ? "Status" : "Updated Date"}</span>
-                      <input
-                        type="checkbox"
-                        checked={visibleColumns[key]}
-                        onChange={(event) => setVisibleColumns((current) => ({ ...current, [key]: event.target.checked }))}
-                      />
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </details>
+              <option value="">All Status</option>
+              <option value="IN_STOCK">In Stock</option>
+              <option value="LOW_STOCK">Low Stock</option>
+              <option value="OUT_OF_STOCK">Out of Stock</option>
+              <option value="BACKORDER">Backorder</option>
+            </select>
+            <select
+              value={warehouseFilterId}
+              onChange={(event) => {
+                setWarehouseFilterId(event.target.value);
+                setPage(1);
+              }}
+              className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
+            >
+              <option value="">All Warehouses</option>
+              {warehouses.map((w: any) => (
+                <option key={w.id} value={w.id}>
+                  {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
+                </option>
+              ))}
+            </select>
+            <select
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value)}
+              className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
+            >
+              <option value="updatedAt">Updated Date</option>
+              <option value="product">Product</option>
+              <option value="variant">Variant</option>
+              <option value="sku">SKU</option>
+              <option value="stock">Stock</option>
+              <option value="reservedStock">Reserved Stock</option>
+              <option value="lowStockThreshold">Low Stock Threshold</option>
+              <option value="status">Status</option>
+            </select>
+            <select value={sortDir} onChange={(event) => setSortDir(event.target.value as "asc" | "desc")} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]">
+              <option value="desc">Descending</option>
+              <option value="asc">Ascending</option>
+            </select>
           </div>
+        }
+      />
 
-          <div className="flex flex-wrap items-start gap-2">
-          <button
-            type="button"
-            onClick={() => exportInventory(false)}
-            disabled={exporting}
-            className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2] disabled:opacity-50"
-          >
-            <Download size={15} /> Export Excel
-          </button>
-          {selectedCount > 0 ? (
-            <button
-              type="button"
-              onClick={() => exportInventory(true)}
-              disabled={exporting}
-              className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2] disabled:opacity-50"
-            >
-              <Download size={15} /> Export Selected
-            </button>
-          ) : null}
-          {canUpdate && (
-            <button
-              type="button"
-              onClick={openImportDialog}
-              className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
-            >
-              <Upload size={15} /> Import Excel
-            </button>
-          )}
-          <RefreshButton onRefresh={refetch} isRefreshing={isFetching} />
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            className="hidden"
-            onChange={(event) => {
-              void previewImport(event.target.files?.[0] || undefined);
-              event.currentTarget.value = "";
-            }}
-          />
-        </div>
-      </div>
-      </div>
-
-      {showFilters && (
-        <div className="mb-5 flex flex-wrap items-center gap-3 rounded-md border border-[#E6E6E6] bg-[#F8F8F8] p-3">
-          <select
-            value={status}
-            onChange={(event) => {
-              setStatus(event.target.value);
-              setPage(1);
-            }}
-            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
-          >
-            <option value="">All Status</option>
-            <option value="IN_STOCK">In Stock</option>
-            <option value="LOW_STOCK">Low Stock</option>
-            <option value="OUT_OF_STOCK">Out of Stock</option>
-            <option value="BACKORDER">Backorder</option>
-          </select>
-          <select
-            value={warehouseFilterId}
-            onChange={(event) => {
-              setWarehouseFilterId(event.target.value);
-              setPage(1);
-            }}
-            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
-          >
-            <option value="">All Warehouses</option>
-            {warehouses.map((w: any) => (
-              <option key={w.id} value={w.id}>
-                {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
-              </option>
-            ))}
-          </select>
-          <select
-            value={sortBy}
-            onChange={(event) => setSortBy(event.target.value)}
-            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
-          >
-            <option value="updatedAt">Updated Date</option>
-            <option value="product">Product</option>
-            <option value="variant">Variant</option>
-            <option value="sku">SKU</option>
-            <option value="stock">Stock</option>
-            <option value="reservedStock">Reserved Stock</option>
-            <option value="lowStockThreshold">Low Stock Threshold</option>
-            <option value="status">Status</option>
-          </select>
-          <select value={sortDir} onChange={(event) => setSortDir(event.target.value as "asc" | "desc")} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]">
-            <option value="desc">Descending</option>
-            <option value="asc">Ascending</option>
-          </select>
-        </div>
-      )}
-
-      <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-5">
-        <StatCard title="Tracked Items" value={tinyNumber(dashboard.data?.totals?.trackedItems ?? 0)} icon={<Layers size={18} />} />
-        <StatCard title="Total Stock" value={tinyNumber(dashboard.data?.totals?.totalStock ?? 0)} icon={<Clock3 size={18} />} color="bg-blue-600" />
-        <StatCard title="Reserved Stock" value={tinyNumber(dashboard.data?.totals?.reservedStock ?? 0)} icon={<Clock3 size={18} />} color="bg-slate-600" />
-        <StatCard title="Low Stock" value={tinyNumber(dashboard.data?.totals?.lowStockCount ?? 0)} icon={<History size={18} />} color="bg-orange-500" />
-        <StatCard title="Out of Stock" value={tinyNumber(dashboard.data?.totals?.outOfStockCount ?? 0)} icon={<X size={18} />} color="bg-red-500" />
-      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        className="hidden"
+        onChange={(event) => {
+          void previewImport(event.target.files?.[0] || undefined);
+          event.currentTarget.value = "";
+        }}
+      />
 
       {/* Tabs */}
       <div className="mb-6 flex border-b border-[#E6E6E6]">
@@ -1135,12 +1105,14 @@ export default function InventoryPage() {
 
               {importPreview && (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                    <StatCard title="Total Rows" value={tinyNumber(importPreview.totalRows)} icon={<Clock3 size={18} />} />
-                    <StatCard title="Valid Rows" value={tinyNumber(importPreview.validRows)} icon={<History size={18} />} color="bg-emerald-600" />
-                    <StatCard title="Invalid Rows" value={tinyNumber(importPreview.invalidRows)} icon={<X size={18} />} color="bg-red-500" />
-                    <StatCard title="Duplicates" value={tinyNumber(importPreview.duplicateWarnings.length)} icon={<Filter size={18} />} color="bg-orange-500" />
-                  </div>
+                  <AdminStatsGrid
+                    stats={[
+                      { title: "Total Rows", value: tinyNumber(importPreview.totalRows), icon: <Clock3 size={18} /> },
+                      { title: "Valid Rows", value: tinyNumber(importPreview.validRows), icon: <History size={18} />, color: "bg-emerald-600" },
+                      { title: "Invalid Rows", value: tinyNumber(importPreview.invalidRows), icon: <X size={18} />, color: "bg-red-500" },
+                      { title: "Duplicates", value: tinyNumber(importPreview.duplicateWarnings.length), icon: <Filter size={18} />, color: "bg-orange-500" }
+                    ]}
+                  />
                   {importPreview.issues.length > 0 && (
                     <div className="rounded-lg border border-[#F1D6D6] bg-[#FFF8F8] p-4">
                       <h3 className="mb-3 text-[14px] font-semibold text-[#1A1A1A]">Validation Issues</h3>

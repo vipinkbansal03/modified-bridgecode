@@ -14,7 +14,9 @@ import { VariantConfigurator } from "@/components/product/VariantConfigurator";
 import { BundleSection } from "@/components/sections/BundleSection";
 import { RecentlySeenSection } from "@/components/sections/RecentlySeenSection";
 import { ContactCTASection } from "@/components/sections/ContactCTASection";
+import { ProductTopBannerSection } from "@/components/sections/ProductTopBannerSection";
 import { WishlistButton } from "@/components/product/WishlistButton";
+
 import { ViewSpecsLink } from "@/components/product/ViewSpecsLink";
 import { buildMetadata } from "@/lib/seo";
 import productsData from "@/data/products.json";
@@ -204,7 +206,10 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             / {product.title}
           </nav>
 
+          <ProductTopBannerSection />
+
           <div className="mb-6 flex items-center justify-between border-b border-line pb-3">
+
             <h6 className="text-[14.5px] font-medium text-ink">{product.title}</h6>
             <div className="flex items-center gap-3">
               {apiProduct?.id && <WishlistButton productId={apiProduct.id} />}

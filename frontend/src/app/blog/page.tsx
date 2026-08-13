@@ -4,11 +4,37 @@ import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, CalendarDays, Search, X } from "lucide-react";
+import { ArrowRight, CalendarDays, Search, X, AlertCircle, RefreshCw, Newspaper } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { SkeletonGrid } from "@/components/ui/Skeleton";
 import { useBlogs } from "@/hooks/api/useBlogs";
 import { BlogSearchModal } from "@/components/blog/BlogSearchModal";
+
+function BlogImageContainer({ src, alt, priority = false, sizes, className = "" }: { src?: string; alt: string; priority?: boolean; sizes?: string; className?: string }) {
+  const [imageError, setImageError] = useState(false);
+  const hasImage = Boolean(src && src.trim() && !imageError);
+
+  if (!hasImage) {
+    return (
+      <div className={`flex flex-col items-center justify-center gap-2 bg-grey text-steel-2 p-6 text-center ${className}`}>
+        <Newspaper size={36} className="text-[#E31E24]/60" />
+        <span className="text-[11px] font-semibold tracking-wider uppercase">Modern Orthodontics</span>
+      </div>
+    );
+  }
+
+  return (
+    <Image
+      src={src!}
+      alt={alt}
+      fill
+      className={`object-cover ${className}`}
+      sizes={sizes}
+      priority={priority}
+      onError={() => setImageError(true)}
+    />
+  );
+}
 
 function BlogContent() {
   const router = useRouter();
@@ -18,7 +44,7 @@ function BlogContent() {
   const [search, setSearch] = useState(initialQuery);
   const [isModalOpen, setIsModalOpen] = useState(Boolean(initialQuery));
 
-  const { data: blogs = [], isLoading } = useBlogs();
+  const { data: blogs = [], isLoading, isError, refetch } = useBlogs({ search });
   const featuredBlog = blogs[0];
   const otherBlogs = blogs.slice(1);
 
@@ -48,11 +74,11 @@ function BlogContent() {
             Resources
           </span>
 
-          <h1 className="max-w-[50%] text-[clamp(30px,4vw,44px)] font-light leading-tight text-ink">
+          <h1 className="max-w-[720px] text-[clamp(30px,4vw,44px)] font-light leading-tight text-ink">
             Orthodontic insights, product updates and industry notes.
           </h1>
 
-          <p className="mt-4 max-w-[50%] text-[15.5px] leading-relaxed text-steel">
+          <p className="mt-4 max-w-[640px] text-[15.5px] leading-relaxed text-steel">
             Explore practical articles from Modern Orthodontics around products,
             clinical trends, manufacturing, and better buying decisions for
             dental professionals.
@@ -112,19 +138,38 @@ function BlogContent() {
 
           {isLoading ? (
             <SkeletonGrid count={6} columns={3} />
+          ) : isError ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50/50 px-6 py-14 text-center">
+              <AlertCircle size={36} className="mx-auto text-[#E31E24]" />
+              <h3 className="mt-4 text-[20px] font-semibold text-ink">
+                Unable to load articles right now
+              </h3>
+              <p className="mt-2 text-[14px] text-steel max-w-[480px] mx-auto">
+                We encountered an error while fetching the latest blog posts. Please check your connection and try again.
+              </p>
+              <button
+                type="button"
+                onClick={() => refetch()}
+                className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#E31E24] px-5 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#B5151B]"
+              >
+                <RefreshCw size={14} />
+                Try Again
+              </button>
+            </div>
           ) : blogs.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-line bg-[#FAFAFA] px-6 py-14 text-center">
-              <h3 className="text-[20px] font-semibold text-ink">
-                {search ? "No articles found" : "No blog posts yet"}
+              <Newspaper size={40} className="mx-auto text-steel/40" />
+              <h3 className="mt-4 text-[20px] font-semibold text-ink">
+                {search ? "No matching articles found" : "No articles yet"}
               </h3>
-              <p className="mt-2 text-[14px] text-steel">
+              <p className="mt-2 text-[14px] text-steel max-w-[500px] mx-auto">
                 {search ? (
                   <>
                     No blog posts matched your search for &quot;
                     <strong className="text-ink">{search}</strong>&quot;.
                   </>
                 ) : (
-                  "Published blog posts will appear here once added from the admin panel."
+                  "We're preparing something new. Check back soon for our latest orthodontic insights and updates."
                 )}
               </p>
               {search && (
@@ -145,13 +190,12 @@ function BlogContent() {
                   className="group grid overflow-hidden rounded-3xl border border-line bg-white shadow-[0_18px_55px_rgba(0,0,0,0.06)] transition-transform duration-200 hover:-translate-y-1 lg:grid-cols-[1.08fr_0.92fr]"
                 >
                   <div className="relative min-h-[320px] bg-grey lg:min-h-[430px]">
-                    <Image
+                    <BlogImageContainer
                       src={featuredBlog.image}
                       alt={featuredBlog.title}
-                      fill
-                      className="object-cover transition-transform duration-500 group-hover:scale-105"
-                      sizes="(min-width: 1024px) 55vw, 100vw"
                       priority
+                      sizes="(min-width: 1024px) 55vw, 100vw"
+                      className="transition-transform duration-500 group-hover:scale-105"
                     />
                   </div>
                   <div className="flex flex-col justify-center p-6 sm:p-9 lg:p-12">
@@ -169,7 +213,7 @@ function BlogContent() {
                     <h3 className="break-words text-[28px] font-semibold leading-tight tracking-[-0.02em] text-ink sm:text-[40px]">
                       {featuredBlog.title}
                     </h3>
-                    <p className="mt-4 text-[15px] leading-7 text-steel">
+                    <p className="mt-4 text-[15px] leading-7 text-steel line-clamp-4">
                       {featuredBlog.excerpt}
                     </p>
                     <span className="mt-8 inline-flex items-center gap-2 self-start text-[13px] font-semibold text-[#E31E24]">
@@ -189,12 +233,11 @@ function BlogContent() {
                       className="group overflow-hidden rounded-2xl border border-line bg-white transition-shadow hover:shadow-[0_16px_40px_rgba(0,0,0,0.08)]"
                     >
                       <div className="relative h-[230px] bg-grey">
-                        <Image
+                        <BlogImageContainer
                           src={blog.image}
                           alt={blog.title}
-                          fill
-                          className="object-cover transition-transform duration-500 group-hover:scale-105"
                           sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                          className="transition-transform duration-500 group-hover:scale-105"
                         />
                       </div>
                       <div className="p-5">
@@ -234,3 +277,4 @@ export default function BlogPage() {
     </Suspense>
   );
 }
+

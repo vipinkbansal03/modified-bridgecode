@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ChevronDown, ChevronRight, PackageOpen, Search, ArrowLeft } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { useToast } from "@/components/admin/AdminComponents";
+import { useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import { useAdminProducts, useAdminProductVariants, useBulkUpdateProducts } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
 
@@ -417,20 +417,26 @@ export default function AssignProductsPage() {
                 </span> Variants selected
               </div>
               <div className="flex items-center gap-2">
-                <button 
+                <LoadingButton 
+                  type="button"
                   onClick={handleUnassignSubmit} 
-                  disabled={bulkUpdateProducts.isPending || (selectedProductIds.length === 0 && selectedVariantIds.length === 0 && fullVariantProductIds.length === 0)}
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-4 text-[13px] font-semibold text-[#555] hover:bg-[#F5F5F5] hover:text-[#E31E24] disabled:opacity-50 transition-colors"
+                  loading={bulkUpdateProducts.isPending}
+                  loadingText="Unassigning..."
+                  disabled={selectedProductIds.length === 0 && selectedVariantIds.length === 0 && fullVariantProductIds.length === 0}
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-4 text-[13px] font-semibold text-[#555] hover:bg-[#F5F5F5] hover:text-[#E31E24]"
                 >
                   Unassign Selected
-                </button>
-                <button 
+                </LoadingButton>
+                <LoadingButton 
+                  type="button"
                   onClick={handleAssignSubmit} 
-                  disabled={bulkUpdateProducts.isPending || (selectedProductIds.length === 0 && selectedVariantIds.length === 0 && fullVariantProductIds.length === 0)}
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-[#E31E24] px-5 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50 transition-colors"
+                  loading={bulkUpdateProducts.isPending}
+                  loadingText="Assigning..."
+                  disabled={selectedProductIds.length === 0 && selectedVariantIds.length === 0 && fullVariantProductIds.length === 0}
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-[#E31E24] px-5 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
                 >
-                  {bulkUpdateProducts.isPending ? "Processing..." : `Assign Selected Items`}
-                </button>
+                  Assign Selected Items
+                </LoadingButton>
               </div>
             </div>
           </div>

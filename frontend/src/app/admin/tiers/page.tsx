@@ -19,7 +19,7 @@ import {
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
-import { AdminInput, AdminSelect, ConfirmModal, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminStatsGrid, ConfirmModal, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
 import {
@@ -401,12 +401,14 @@ export default function AdminTiersPage() {
   return (
     <AdminLayout title="Tiers" breadcrumb={[{ label: "Tiers" }]}>
       <div className="space-y-5">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard title="Total Tiers" value={tierDashboard?.totalTiers ?? 0} subtitle="All tier records" icon={<Filter size={18} />} isLoading={dashboardLoading} />
-          <StatCard title="Active Tiers" value={tierDashboard?.activeTiers ?? 0} subtitle="Available for use" icon={<SquareCheckBig size={18} />} color="bg-green-600" isLoading={dashboardLoading} />
-          <StatCard title="Inactive Tiers" value={tierDashboard?.inactiveTiers ?? 0} subtitle="Disabled tiers" icon={<X size={18} />} color="bg-gray-600" isLoading={dashboardLoading} />
-          <StatCard title="Country Rules" value={tierDashboard?.mappedCountries ?? 0} subtitle="Tiers with country mapping" icon={<RefreshCw size={18} />} color="bg-[#0F6CBD]" isLoading={dashboardLoading} />
-        </div>
+        <AdminStatsGrid
+          stats={[
+            { title: "Total Tiers", value: tierDashboard?.totalTiers ?? 0, subtitle: "All tier records", icon: <Filter size={18} />, isLoading: dashboardLoading },
+            { title: "Active Tiers", value: tierDashboard?.activeTiers ?? 0, subtitle: "Available for use", icon: <SquareCheckBig size={18} />, color: "bg-green-600", isLoading: dashboardLoading },
+            { title: "Inactive Tiers", value: tierDashboard?.inactiveTiers ?? 0, subtitle: "Disabled tiers", icon: <X size={18} />, color: "bg-gray-600", isLoading: dashboardLoading },
+            { title: "Country Rules", value: tierDashboard?.mappedCountries ?? 0, subtitle: "Tiers with country mapping", icon: <RefreshCw size={18} />, color: "bg-[#0F6CBD]", isLoading: dashboardLoading }
+          ]}
+        />
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">

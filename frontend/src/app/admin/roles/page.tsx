@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { ConfirmModal, useToast } from "@/components/admin/AdminComponents";
+import { ConfirmModal, useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { useAdminRoles } from "@/hooks/admin/useAdminHooks";
 import { adminApi } from "@/services/adminApi";
@@ -62,7 +62,24 @@ export default function RolesPage() {
   const [isFullAccess, setIsFullAccess] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingLoading, setDeletingLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingId) return;
+    setDeletingLoading(true);
+    try {
+      await adminApi.delete(`/roles/${deletingId}`);
+      showToast("Role deleted successfully.");
+      refetch();
+    } catch (err) {
+      console.error("Delete failed", err);
+      showToast("Cannot delete role with assigned users.", "error");
+    } finally {
+      setDeletingLoading(false);
+      setDeletingId(null);
+    }
+  };
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     Catalog: true,
     Operations: true,
@@ -190,20 +207,6 @@ export default function RolesPage() {
       showToast("Failed to save role.", "error");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!deletingId) return;
-    try {
-      await adminApi.delete(`/roles/${deletingId}`);
-      showToast("Role deleted successfully.");
-      refetch();
-    } catch (err) {
-      console.error("Delete failed", err);
-      showToast("Cannot delete role with assigned users.", "error");
-    } finally {
-      setDeletingId(null);
     }
   };
 
@@ -568,14 +571,15 @@ export default function RolesPage() {
             >
               Cancel
             </button>
-            <button
+            <LoadingButton
               type="button"
-              disabled={saving}
               onClick={handleSave}
+              loading={saving}
+              loadingText="Saving..."
               className="px-4 py-1.5 rounded-lg bg-[#E31E24] text-xs font-bold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
             >
-              {saving ? "Saving..." : editingRole ? "Update Role" : "Create Role"}
-            </button>
+              {editingRole ? "Update Role" : "Create Role"}
+            </LoadingButton>
           </div>
         </div>
       </Modal>
@@ -586,6 +590,7 @@ export default function RolesPage() {
         message="Are you sure you want to delete this system role? Make sure no active admins or staff members are assigned to this role before deleting."
         onConfirm={handleDeleteConfirm}
         onCancel={() => setDeletingId(null)}
+        isLoading={deletingLoading}
       />
 
       {ToastComponent}

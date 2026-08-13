@@ -6,12 +6,12 @@ import homeContent from "@/data/home.json";
 import type { LocationPin } from "@/types/common.types";
 import type { CmsPage, CmsSection } from "@/hooks/api/useCmsContent";
 import {
-  transformHeroSlides,
   transformStats,
   transformCertifications,
   transformAboutIntro,
   transformContactCta,
 } from "@/utils/cmsTransform";
+
 import type { HeroSlide } from "@/components/sections/HeroSection";
 
 // Code-split below-the-fold sections for instant initial JS execution & low TBT
@@ -43,6 +43,10 @@ const BlogSection = dynamic(
   () => import("@/components/sections/BlogSection").then((m) => m.BlogSection),
   { ssr: true }
 );
+const HomepagePromoBannerSection = dynamic(
+  () => import("@/components/sections/HomepagePromoBannerSection").then((m) => m.HomepagePromoBannerSection),
+  { ssr: true }
+);
 const ContactCTASection = dynamic(
   () => import("@/components/sections/ContactCTASection").then((m) => m.ContactCTASection),
   { ssr: true }
@@ -50,7 +54,9 @@ const ContactCTASection = dynamic(
 
 export const revalidate = 300;
 
+
 const staticLocations = homeContent.locations as { subtitle: string; pins: LocationPin[] };
+
 
 async function fetchCmsHomePage(): Promise<CmsPage | null> {
   try {
@@ -89,12 +95,12 @@ async function fetchHomepageHeroBanners(countryCode?: string): Promise<HeroSlide
 
 function renderCmsHomeSection(section: CmsSection, bannerSlides: HeroSlide[]) {
   if (section.sectionKey === "home.hero") {
-    const heroSlides = transformHeroSlides(section);
-    const heroData = bannerSlides.length > 0 ? { slides: bannerSlides } : heroSlides.length > 0 ? { slides: heroSlides } : homeContent.hero;
+    const heroData = { slides: bannerSlides };
     return [
       <HeroSection key="home.hero" data={heroData} />,
     ];
   }
+
 
   if (section.sectionKey === "home.about") {
     const transformed = transformAboutIntro(section);
@@ -156,9 +162,6 @@ export default async function HomePage() {
   const cms = await fetchCmsHomePage();
   const bannerSlides = await fetchHomepageHeroBanners(cookieStore.get("country")?.value ?? "IN");
 
-  const heroSlides = bannerSlides.length > 0 ? bannerSlides : homeContent.hero.slides;
-  const heroLcpImage = heroSlides[0]?.image;
-
   if (cms?.sections?.length) {
     const renderedSections = cms.sections.flatMap((section) => renderCmsHomeSection(section, bannerSlides));
     if (renderedSections.length > 0) {
@@ -172,7 +175,7 @@ export default async function HomePage() {
 
   return (
     <>
-      <HeroSection data={bannerSlides.length > 0 ? { slides: bannerSlides } : homeContent.hero} />
+      <HeroSection data={{ slides: bannerSlides }} />
       <AboutSection data={homeContent.about} />
       <FeaturedProductsSection slugs={homeContent.featuredProductSlugs} captions={homeContent.featuredCaptions} />
       <CategoriesSection />
@@ -180,8 +183,11 @@ export default async function HomePage() {
       <LocationsSection data={staticLocations} />
       <CertificationsSection data={homeContent.certifications} />
       <TestimonialsSection />
+      <HomepagePromoBannerSection />
       <BlogSection />
       <ContactCTASection data={homeContent.contactCta} />
     </>
   );
 }
+
+

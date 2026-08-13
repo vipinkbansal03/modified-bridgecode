@@ -126,10 +126,9 @@ export const sidebarSections: SidebarSection[] = [
       { label: "Menus", href: "/admin/cms/menus", icon: Menu, permission: "cms.view" },
       { label: "Footer", href: "/admin/cms/footer", icon: AlignLeft, permission: "cms.view" },
       { label: "Banners", href: "/admin/banners", icon: Image, permission: "cms.view" },
-      { label: "Blog Posts", href: "/admin/blogs", icon: FileText, permission: "cms.view" },
-      { label: "Blog Categories", href: "/admin/blogs/categories", icon: Tag, permission: "cms.view" },
-      { label: "Blog Authors", href: "/admin/blogs/authors", icon: Users, permission: "cms.view" },
+      { label: "Blog", href: "/admin/blogs", icon: FileText, permission: "cms.view" },
     ],
+
   },
   {
     title: "Platform",

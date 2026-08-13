@@ -7,7 +7,7 @@ import * as Yup from "yup";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { Modal } from "@/components/ui/Modal";
-import { DataTable, Column, StatusBadge, AdminInput, AdminSelect, AdminMultiSelect, ConfirmModal, useToast } from "@/components/admin/AdminComponents";
+import { DataTable, Column, StatusBadge, AdminInput, AdminSelect, AdminMultiSelect, ConfirmModal, useToast, AdminListToolbar, LoadingButton } from "@/components/admin/AdminComponents";
 import { useAdminUsers, useAdminRoles, useAdminWarehouses } from "@/hooks/admin/useAdminHooks";
 import { adminApi } from "@/services/adminApi";
 import { Plus, X, Trash2, Edit2 } from "lucide-react";
@@ -81,10 +81,12 @@ export default function UsersPage() {
     setEditingUser(null);
     form.reset();
   };
+  const [deletingLoading, setDeletingLoading] = useState(false);
   const handleDelete = async () => {
     if (!deleting) return;
+    setDeletingLoading(true);
     try { await adminApi.delete(`/users/${deleting}`); showToast("User removed."); refetch(); }
-    catch { showToast("Failed.", "error"); } finally { setDeleting(null); }
+    catch { showToast("Failed.", "error"); } finally { setDeletingLoading(false); setDeleting(null); }
   };
   const columns: Column<User>[] = [
     { key: "name", label: "Name", render: (r) => <div><div className="font-medium">{r.name}</div><div className="text-[11.5px] text-[#9A9A9A]">{r.email}</div></div> },
@@ -158,33 +160,35 @@ export default function UsersPage() {
   return (
     <AdminLayout title="Users & Customers" breadcrumb={[{ label: "Users" }]}>
       <div className="space-y-5">
-        {/* Navigation Tabs */}
-        <div className="flex border-b border-[#E6E6E6] mb-5">
-          {hasPermission("customers.view") && (
-            <Link
-              href="/admin/customers"
-              className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-transparent text-[#6B7280] hover:text-[#111827]"
-            >
-              Customers
-            </Link>
-          )}
-          <Link
-            href="/admin/users"
-            className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-[#E31E24] text-[#E31E24]"
-          >
-            Staff (Users)
-          </Link>
-        </div>
-        {canCreate && (
-          <div className="flex justify-end mb-5">
-            <button
-              onClick={() => setShowForm(true)}
-              className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-            >
-              <Plus size={14} /> New User
-            </button>
-          </div>
-        )}
+        <AdminListToolbar
+          leftExtra={
+            <div className="flex border-b border-[#E6E6E6]">
+              {hasPermission("customers.view") && (
+                <Link
+                  href="/admin/customers"
+                  className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-transparent text-[#6B7280] hover:text-[#111827]"
+                >
+                  Customers
+                </Link>
+              )}
+              <Link
+                href="/admin/users"
+                className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-[#E31E24] text-[#E31E24]"
+              >
+                Staff (Users)
+              </Link>
+            </div>
+          }
+          primaryAction={
+            canCreate
+              ? {
+                  label: "New User",
+                  onClick: () => setShowForm(true),
+                  icon: <Plus size={14} />,
+                }
+              : undefined
+          }
+        />
 
         <Modal open={showForm} onClose={handleCloseForm}>
           <form onSubmit={form.handleSubmit} className="flex flex-col max-h-[90vh] w-full max-w-2xl bg-white rounded-xl shadow-xl overflow-hidden">
@@ -248,18 +252,19 @@ export default function UsersPage() {
               >
                 Cancel
               </button>
-              <button
+              <LoadingButton
                 type="submit"
+                loading={form.isSubmitting}
+                loadingText="Saving..."
                 className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-                disabled={form.isSubmitting}
               >
                 {editingUser ? "Update User" : "Create User"}
-              </button>
+              </LoadingButton>
             </div>
           </form>
         </Modal>
       <DataTable<User> columns={columns} data={users} rowKey="id" isLoading={isLoading} emptyMessage="No users." />
-      <ConfirmModal open={!!deleting} title="Remove user?" message="This will deactivate the user account." onConfirm={handleDelete} onCancel={() => setDeleting(null)} />
+      <ConfirmModal open={!!deleting} title="Remove user?" message="This will deactivate the user account." onConfirm={handleDelete} onCancel={() => setDeleting(null)} isLoading={deletingLoading} />
       {ToastComponent}
       </div>
     </AdminLayout>

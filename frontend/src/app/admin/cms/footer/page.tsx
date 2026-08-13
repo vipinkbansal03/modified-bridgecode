@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AdminInput, AdminSelect, AdminTextarea, useToast, toastMessages } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminTextarea, useToast, toastMessages, LoadingButton } from "@/components/admin/AdminComponents";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import {
   NoTranslationLanguagesMessage,
@@ -336,13 +336,15 @@ export default function CmsFooterPage() {
               })}
             </div>
 
-            <button
+            <LoadingButton
               type="submit"
-              disabled={upsert.isPending || !dirty}
+              loading={upsert.isPending}
+              loadingText="Saving..."
+              disabled={!dirty}
               className="rounded-lg bg-brand px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
             >
-              {upsert.isPending ? "Saving..." : "Save Footer"}
-            </button>
+              Save Footer
+            </LoadingButton>
           </>
         )}
 

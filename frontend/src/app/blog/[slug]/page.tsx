@@ -1,16 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, ArrowRight, CalendarDays, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarDays, UserRound, RefreshCw, AlertCircle, Newspaper } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Container } from "@/components/ui/Container";
-import fallbackBlogData from "@/data/blogs.json";
 import { apiClient } from "@/lib/apiClient";
-import type { BlogItem } from "@/types/blog.types";
-
-const fallbackBlogs = fallbackBlogData as BlogItem[];
+import { useBlogs } from "@/hooks/api/useBlogs";
 
 type ApiBlog = {
   title: string;
@@ -37,41 +35,30 @@ function formatBlogDate(value?: string | null) {
   }).format(date);
 }
 
-async function fetchBlog(slug: string) {
-  const fallbackBlog = fallbackBlogs.find((blog) => blog.slug === slug);
-  if (fallbackBlog) {
-    return {
-      title: fallbackBlog.title,
-      slug: fallbackBlog.slug,
-      content: fallbackBlog.excerpt,
-      excerpt: fallbackBlog.excerpt,
-      featuredImage: fallbackBlog.image,
-      publishedAt: fallbackBlog.date,
-      category: { name: fallbackBlog.category },
-      author: { name: "Modern Orthodontics" },
-    } satisfies ApiBlog;
-  }
-
-  try {
-    const response = await apiClient.get(`/blogs/${slug}`);
-    return response.data.data as ApiBlog;
-  } catch {
-    throw new Error("Blog not found");
-  }
+async function fetchBlog(slug: string): Promise<ApiBlog> {
+  const response = await apiClient.get(`/blogs/${slug}`);
+  return response.data.data as ApiBlog;
 }
 
 export default function BlogDetailPage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
+
+  const [imageError, setImageError] = useState(false);
+
   const {
     data: blog,
     isLoading,
     isError,
+    refetch,
   } = useQuery({
     queryKey: ["blog", slug],
     queryFn: () => fetchBlog(slug),
     enabled: Boolean(slug),
   });
+
+  const { data: allBlogs = [] } = useBlogs({ limit: 4 });
+  const recentArticles = allBlogs.filter((item) => item.slug !== slug).slice(0, 3);
 
   if (isLoading) {
     return (
@@ -92,19 +79,50 @@ export default function BlogDetailPage() {
       <main className="bg-white py-20">
         <Container>
           <div className="mx-auto max-w-[640px] rounded-2xl border border-line bg-[#FAFAFA] p-8 text-center">
-            <h1 className="text-[28px] font-semibold text-ink">
-              Blog not found
-            </h1>
-            <p className="mt-2 text-[14px] text-steel">
-              This article may have been removed or unpublished.
-            </p>
-            <Link
-              href="/blog"
-              className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#E31E24] px-5 py-3 text-[13px] font-semibold text-white"
-            >
-              <ArrowLeft size={14} />
-              Back to blog
-            </Link>
+            {isError ? (
+              <>
+                <AlertCircle size={36} className="mx-auto text-[#E31E24]" />
+                <h1 className="mt-4 text-[28px] font-semibold text-ink">
+                  Unable to load article
+                </h1>
+                <p className="mt-2 text-[14px] text-steel">
+                  We encountered an error loading this article. Please try again.
+                </p>
+                <div className="mt-6 flex flex-wrap justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => refetch()}
+                    className="inline-flex items-center gap-2 rounded-full bg-[#E31E24] px-5 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#B5151B]"
+                  >
+                    <RefreshCw size={14} />
+                    Try Again
+                  </button>
+                  <Link
+                    href="/blog"
+                    className="inline-flex items-center gap-2 rounded-full border border-line px-5 py-2.5 text-[13px] font-semibold text-steel hover:bg-white"
+                  >
+                    <ArrowLeft size={14} />
+                    Back to blog
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <>
+                <h1 className="text-[28px] font-semibold text-ink">
+                  Blog not found
+                </h1>
+                <p className="mt-2 text-[14px] text-steel">
+                  This article may have been removed or unpublished.
+                </p>
+                <Link
+                  href="/blog"
+                  className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#E31E24] px-5 py-3 text-[13px] font-semibold text-white"
+                >
+                  <ArrowLeft size={14} />
+                  Back to blog
+                </Link>
+              </>
+            )}
           </div>
         </Container>
       </main>
@@ -113,13 +131,13 @@ export default function BlogDetailPage() {
 
   const date = formatBlogDate(blog.publishedAt || blog.createdAt);
   const paragraphs = blog.content
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
-  const recentArticles = fallbackBlogs
-    .filter((item) => item.slug !== blog.slug)
-    .slice(0, 3)
-    .map((item) => ({ ...item, url: `/blog/${item.slug}` }));
+    ? blog.content
+        .split(/\n{2,}/)
+        .map((paragraph) => paragraph.trim())
+        .filter(Boolean)
+    : [];
+
+  const hasFeaturedImage = Boolean(blog.featuredImage && blog.featuredImage.trim() && !imageError);
 
   return (
     <main className="bg-white">
@@ -175,16 +193,22 @@ export default function BlogDetailPage() {
         <Container>
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
             <article className="min-w-0">
-              {blog.featuredImage && (
+              {hasFeaturedImage ? (
                 <div className="relative mb-10 h-[320px] overflow-hidden rounded-3xl bg-grey sm:h-[460px]">
                   <Image
-                    src={blog.featuredImage}
+                    src={blog.featuredImage!}
                     alt={blog.title}
                     fill
                     className="object-cover"
                     sizes="(min-width: 1024px) 820px, 100vw"
                     priority
+                    onError={() => setImageError(true)}
                   />
+                </div>
+              ) : (
+                <div className="relative mb-10 flex h-[220px] sm:h-[300px] flex-col items-center justify-center gap-3 overflow-hidden rounded-3xl bg-grey p-6 text-center text-steel-2 border border-line">
+                  <Newspaper size={48} className="text-[#E31E24]/60" />
+                  <span className="text-[12px] font-semibold uppercase tracking-widest">Modern Orthodontics Article</span>
                 </div>
               )}
 
@@ -275,3 +299,4 @@ export default function BlogDetailPage() {
     </main>
   );
 }
+

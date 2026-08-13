@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useLayoutEffect, useState, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, CheckCircle2, MapPin, PackageSearch, Save, XCircle, Edit2, X } from "lucide-react";
-import { AdminInput, AdminSelect, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, StatusBadge, useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -353,15 +353,16 @@ export default function AdminCustomerDetailPage() {
                   >
                     Cancel
                   </Link>
-                  <button
+                  <LoadingButton
                     type="button"
                     onClick={handleProfileSave}
-                    disabled={updateCustomer.isPending}
-                    className="inline-flex h-10 items-center gap-2 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#C91920] disabled:opacity-60"
+                    loading={updateCustomer.isPending}
+                    loadingText="Saving..."
+                    className="inline-flex h-10 items-center gap-2 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#C91920]"
                   >
                     <Save size={15} />
                     Save Profile
-                  </button>
+                  </LoadingButton>
                 </div>
               )}
             </section>
@@ -372,24 +373,28 @@ export default function AdminCustomerDetailPage() {
                   <div className="text-[13px] font-semibold text-[#1A1A1A]">Wholesale approval required</div>
                   <p className="mt-1 text-[12.5px] leading-relaxed text-[#6B6B6B]">Pending customers cannot place checkout orders until approved.</p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <button
+                    <LoadingButton
                       type="button"
                       onClick={() => handleApprovalAction("approve")}
-                      disabled={isReadOnly || approveCustomer.isPending || rejectCustomer.isPending}
-                      className="inline-flex h-9 items-center gap-2 rounded-md bg-[#1F8F4A] px-3 text-[12.5px] font-semibold text-white disabled:opacity-60"
+                      loading={approveCustomer.isPending}
+                      loadingText="Approving..."
+                      disabled={isReadOnly || rejectCustomer.isPending}
+                      className="inline-flex h-9 items-center gap-2 rounded-md bg-[#1F8F4A] px-3 text-[12.5px] font-semibold text-white"
                     >
                       <CheckCircle2 size={14} />
                       Approve
-                    </button>
-                    <button
+                    </LoadingButton>
+                    <LoadingButton
                       type="button"
                       onClick={() => handleApprovalAction("reject")}
-                      disabled={isReadOnly || approveCustomer.isPending || rejectCustomer.isPending}
-                      className="inline-flex h-9 items-center gap-2 rounded-md border border-[#E31E24] bg-white px-3 text-[12.5px] font-semibold text-[#E31E24] disabled:opacity-60"
+                      loading={rejectCustomer.isPending}
+                      loadingText="Rejecting..."
+                      disabled={isReadOnly || approveCustomer.isPending}
+                      className="inline-flex h-9 items-center gap-2 rounded-md border border-[#E31E24] bg-white px-3 text-[12.5px] font-semibold text-[#E31E24]"
                     >
                       <XCircle size={14} />
                       Reject
-                    </button>
+                    </LoadingButton>
                   </div>
                 </div>
               ) : null}

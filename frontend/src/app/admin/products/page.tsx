@@ -3,8 +3,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { ConfirmModal, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminListToolbar, AdminStatsGrid, ConfirmModal, Pagination, StatCard, StatusBadge, useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import { RefreshButton } from "@/components/admin/RefreshButton";
 import { SortableList, toSortOrderPayload } from "@/components/admin/SortableList";
 import { Modal } from "@/components/ui/Modal";
@@ -371,171 +372,122 @@ export default function AdminProductsPage() {
 
   return (
     <AdminLayout title="Products" breadcrumb={[{ label: "Products" }]}>
-      {/* StatCards Row */}
-      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Products"
-          value={productStats.total}
-          subtitle="All catalog items"
-          icon={<Package size={18} />}
-          isLoading={totalLoading}
-        />
-        <StatCard
-          title="Active Products"
-          value={productStats.active}
-          subtitle="Currently live on storefront"
-          icon={<CheckCircle2 size={18} />}
-          color="bg-green-600"
-          isLoading={activeLoading}
-        />
-        <StatCard
-          title="Draft Products"
-          value={productStats.draft}
-          subtitle="Unpublished drafts"
-          icon={<FileText size={18} />}
-          color="bg-amber-600"
-          isLoading={draftLoading}
-        />
-        <StatCard
-          title="Inactive Products"
-          value={productStats.inactive}
-          subtitle="Disabled / hidden"
-          icon={<XCircle size={18} />}
-          color="bg-gray-600"
-          isLoading={inactiveLoading}
-        />
-      </div>
+      <AdminStatsGrid
+        stats={[
+          { title: "Total Products", value: productStats.total, subtitle: "All catalog items", icon: <Package size={18} />, isLoading: totalLoading },
+          { title: "Active Products", value: productStats.active, subtitle: "Currently live on storefront", icon: <CheckCircle2 size={18} />, color: "bg-green-600", isLoading: activeLoading },
+          { title: "Draft Products", value: productStats.draft, subtitle: "Unpublished drafts", icon: <FileText size={18} />, color: "bg-amber-600", isLoading: draftLoading },
+          { title: "Inactive Products", value: productStats.inactive, subtitle: "Disabled / hidden", icon: <XCircle size={18} />, color: "bg-gray-600", isLoading: inactiveLoading }
+        ]}
+      />
 
-      <div className="mb-5 flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-            <input
-              placeholder="Search products..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="w-[220px] rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
-            />
-          </div>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 rounded-md border px-3 py-2 text-[13.5px] outline-none transition-colors ${showFilters ? "bg-[#F8F8F8] border-[#D1D1D1] text-[#1A1A1A]" : "bg-white border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F8F8F8]"}`}
-          >
-            <Filter size={14} /> Filters
-          </button>
-          <details className="relative">
-            <summary className="list-none cursor-pointer rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none flex items-center gap-2">
-              <SlidersHorizontal size={14} /> Columns
-            </summary>
-            <div className="absolute left-0 z-20 mt-2 w-[240px] rounded-md border border-[#E6E6E6] bg-white p-3 shadow-lg">
-              <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wide text-[#9A9A9A]">
-                <Filter size={12} /> Visibility
-              </div>
-              <div className="grid gap-2">
-                {(Object.keys(DEFAULT_COLUMNS) as ColumnKey[]).map((key) => (
-                  <label key={key} className="flex items-center justify-between gap-3 rounded border border-[#F0F0F0] px-2.5 py-1.5 text-[12.5px] text-[#1A1A1A]">
-                    <span className="capitalize">{key}</span>
-                    <input
-                      type="checkbox"
-                      checked={visibleColumns[key]}
-                      onChange={(e) => setVisibleColumns((current) => ({ ...current, [key]: e.target.checked }))}
-                    />
-                  </label>
+        <AdminListToolbar
+          search={{
+            value: search,
+            onChange: (val: string) => {
+              setSearch(val);
+              setPage(1);
+            },
+            placeholder: "Search products...",
+            widthClassName: "w-[220px]",
+          }}
+          filters={{
+            showFilters,
+            onToggle: () => setShowFilters(!showFilters),
+            activeCount: [status, categoryId, warehouseFilterId, sortBy !== "sortOrder" ? sortBy : ""].filter(Boolean).length,
+          }}
+          columns={{
+            visibleColumns,
+            onToggleColumn: (key: string) => setVisibleColumns((current) => ({ ...current, [key]: !current[key as ColumnKey] })),
+            options: (Object.keys(DEFAULT_COLUMNS) as ColumnKey[]).map((k) => ({ key: k, label: k })),
+          }}
+          exportAction={{
+            onClick: () => exportProducts(selectedIds.length > 0),
+            label: selectedIds.length > 0 ? `Export Selected (${selectedIds.length})` : "Export Excel",
+          }}
+          importAction={{
+            onClick: openImportDialog,
+            label: "Import Excel",
+          }}
+          refresh={{
+            onRefresh: refetch,
+            isRefreshing: isFetching,
+          }}
+          primaryAction={canCreate ? { href: "/admin/products/create", label: "New Product" } : undefined}
+          onResetFilters={() => {
+            setStatus("");
+            setCategoryId("");
+            setWarehouseFilterId("");
+            setSortBy("sortOrder");
+            setSortDir("asc");
+            setPage(1);
+          }}
+          filterPanel={
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                value={status}
+                onChange={(e) => {
+                  setStatus(e.target.value);
+                  setPage(1);
+                }}
+                className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
+              >
+                <option value="">All Status</option>
+                <option value="DRAFT">Draft</option>
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+                <option value="ARCHIVED">Archived</option>
+              </select>
+              <select
+                value={categoryId}
+                onChange={(e) => {
+                  setCategoryId(e.target.value);
+                  setPage(1);
+                }}
+                className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
+              >
+                <option value="">All Categories</option>
+                {categories.map((category: { id: string; name: string }) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
                 ))}
-              </div>
+              </select>
+              <select
+                value={warehouseFilterId}
+                onChange={(e) => {
+                  setWarehouseFilterId(e.target.value);
+                  setPage(1);
+                }}
+                className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
+              >
+                <option value="">All Warehouses</option>
+                {(warehouses.data ?? warehouses).map((w: any) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
+              >
+                <option value="sortOrder">Sort order</option>
+                <option value="title">Name</option>
+                <option value="sku">SKU</option>
+                <option value="brand">Brand</option>
+                <option value="category">Category</option>
+                <option value="status">Status</option>
+                <option value="updatedAt">Updated date</option>
+              </select>
+              <select value={sortDir} onChange={(e) => setSortDir(e.target.value as "asc" | "desc")} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]">
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+              </select>
             </div>
-          </details>
-        </div>
-        <div className="flex flex-wrap items-start gap-2">
-          {canCreate && (
-            <Link href="/admin/products/create" className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
-              <Plus size={15} /> New Product
-            </Link>
-          )}
-          <button type="button" onClick={() => exportProducts(false)} className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">
-            <Download size={15} /> Export Excel
-          </button>
-          {selectedIds.length > 0 ? (
-            <button type="button" onClick={() => exportProducts(true)} className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">
-              <Download size={15} /> Export Selected
-            </button>
-          ) : null}
-          <button type="button" onClick={openImportDialog} className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">
-            <Upload size={15} /> Import Excel
-          </button>
-          <RefreshButton onRefresh={refetch} isRefreshing={isFetching} />
-        </div>
-        </div>
-        {showFilters && (
-          <div className="flex flex-wrap items-center gap-3 rounded-md border border-[#E6E6E6] bg-[#F8F8F8] p-3">
-            <select
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
-                setPage(1);
-              }}
-              className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
-            >
-              <option value="">All Status</option>
-              <option value="DRAFT">Draft</option>
-              <option value="ACTIVE">Active</option>
-              <option value="INACTIVE">Inactive</option>
-              <option value="ARCHIVED">Archived</option>
-            </select>
-            <select
-              value={categoryId}
-              onChange={(e) => {
-                setCategoryId(e.target.value);
-                setPage(1);
-              }}
-              className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
-            >
-              <option value="">All Categories</option>
-              {categories.map((category: { id: string; name: string }) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={warehouseFilterId}
-              onChange={(e) => {
-                setWarehouseFilterId(e.target.value);
-                setPage(1);
-              }}
-              className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
-            >
-              <option value="">All Warehouses</option>
-              {(warehouses.data ?? warehouses).map((w: any) => (
-                <option key={w.id} value={w.id}>
-                  {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
-                </option>
-              ))}
-            </select>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
-            >
-              <option value="sortOrder">Sort order</option>
-              <option value="title">Name</option>
-              <option value="sku">SKU</option>
-              <option value="brand">Brand</option>
-              <option value="category">Category</option>
-              <option value="status">Status</option>
-              <option value="updatedAt">Updated date</option>
-            </select>
-            <select value={sortDir} onChange={(e) => setSortDir(e.target.value as "asc" | "desc")} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]">
-              <option value="asc">Ascending</option>
-              <option value="desc">Descending</option>
-            </select>
-          </div>
-        )}
-      </div>
+          }
+        />
         <input
           ref={fileInputRef}
           type="file"
@@ -547,16 +499,8 @@ export default function AdminProductsPage() {
           }}
         />
 
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-[12.5px] text-[#9A9A9A]">
-        <span>{data?.pagination ? `${data.pagination.total} products` : ""}</span>
-        <label className="inline-flex items-center gap-2 text-[#555]">
-          <input type="checkbox" checked={allVisibleSelected} onChange={toggleVisible} />
-          Select visible
-        </label>
-      </div>
-
-      {selectedIds.length > 0 ? (
-        <div className="mb-4 rounded-lg border border-[#E6E6E6] bg-white p-3">
+      <div className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg p-3 text-[12.5px] transition-all min-h-[61.6px] ${selectedIds.length > 0 ? "border border-[#E6E6E6] bg-white shadow-2xs" : "border border-transparent text-[#9A9A9A]"}`}>
+        {selectedIds.length > 0 ? (
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-[13px] font-semibold text-[#1A1A1A]">{selectedIds.length} selected</span>
             <select
@@ -642,8 +586,15 @@ export default function AdminProductsPage() {
               Clear
             </button>
           </div>
-        </div>
-      ) : null}
+        ) : (
+          <span>{data?.pagination ? `${data.pagination.total} products` : ""}</span>
+        )}
+
+        <label className="inline-flex items-center gap-2 text-[#555] cursor-pointer">
+          <input type="checkbox" checked={allVisibleSelected} onChange={toggleVisible} />
+          Select visible
+        </label>
+      </div>
 
       {isLoading ? (
         <div className="rounded-lg border border-[#E6E6E6] bg-white p-5 text-[13.5px] text-[#9A9A9A]">Loading products...</div>
@@ -788,14 +739,15 @@ export default function AdminProductsPage() {
             >
               Cancel
             </button>
-            <button
+            <LoadingButton
               type="button"
               onClick={handleProductsWarehouseAssignSubmit}
-              disabled={bulkUpdate.isPending}
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
+              loading={bulkUpdate.isPending}
+              loadingText="Assigning..."
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
             >
-              {bulkUpdate.isPending ? "Assigning..." : "Assign"}
-            </button>
+              Assign
+            </LoadingButton>
           </div>
         </div>
       </Modal>
@@ -817,36 +769,61 @@ export default function AdminProductsPage() {
       >
         <div className="space-y-4 p-6">
           <p className="text-[13.5px] leading-5 text-[#6B6B6B]">
-            Upload an `.xlsx` or `.csv` file. The first sheet is read automatically, then the server validates the rows before any write happens.
+            Upload an `.xlsx` or `.csv` file. The first sheet is validated on the server before any product is created or updated.
           </p>
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
+              className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
             >
-              Choose File
+              <Upload size={14} />
+              {importFile ? importFile.name : "Choose Excel / CSV File"}
             </button>
-            <span className="text-[13px] text-[#6B6B6B]">{importFile ? importFile.name : "No file selected"}</span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.csv"
+              className="hidden"
+              onChange={(e) => handleImportFile(e.target.files?.[0])}
+            />
+            {importFile && (
+              <button
+                type="button"
+                onClick={() => {
+                  setImportFile(null);
+                  setImportPreview(null);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+                className="text-[12.5px] text-red-600 hover:underline"
+              >
+                Remove
+              </button>
+            )}
           </div>
-          {importMessage ? <div className="rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2 text-[13px] text-[#1A1A1A]">{importMessage}</div> : null}
+          {importing && (
+            <div className="flex items-center gap-2 text-[13px] text-[#6B6B6B]">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
+              Parsing file preview...
+            </div>
+          )}
           {importPreview ? (
-            <div className="space-y-4 rounded-lg border border-[#E6E6E6] bg-white p-4">
-              <div className="grid gap-3 md:grid-cols-4">
-                <div className="rounded border border-[#E6E6E6] p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-[#9A9A9A]">Rows</div>
+            <div className="space-y-3 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="rounded border border-[#E6E6E6] bg-white p-3">
+                  <div className="text-[11.5px] font-semibold text-[#9A9A9A]">Total Rows</div>
                   <div className="mt-1 text-[20px] font-semibold text-[#1A1A1A]">{importPreview.totalRows}</div>
                 </div>
-                <div className="rounded border border-[#E6E6E6] p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-[#9A9A9A]">Valid</div>
-                  <div className="mt-1 text-[20px] font-semibold text-green-600">{importPreview.validRows}</div>
+                <div className="rounded border border-[#E6E6E6] bg-white p-3">
+                  <div className="text-[11.5px] font-semibold text-[#9A9A9A]">Valid Rows</div>
+                  <div className="mt-1 text-[20px] font-semibold text-emerald-600">{importPreview.validRows}</div>
                 </div>
-                <div className="rounded border border-[#E6E6E6] p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-[#9A9A9A]">Invalid</div>
+                <div className="rounded border border-[#E6E6E6] bg-white p-3">
+                  <div className="text-[11.5px] font-semibold text-[#9A9A9A]">Invalid Rows</div>
                   <div className="mt-1 text-[20px] font-semibold text-red-600">{importPreview.invalidRows}</div>
                 </div>
-                <div className="rounded border border-[#E6E6E6] p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-[#9A9A9A]">Warnings</div>
+                <div className="rounded border border-[#E6E6E6] bg-white p-3">
+                  <div className="text-[11.5px] font-semibold text-[#9A9A9A]">Duplicate Warnings</div>
                   <div className="mt-1 text-[20px] font-semibold text-amber-600">{importPreview.duplicateWarnings.length}</div>
                 </div>
               </div>
@@ -854,22 +831,10 @@ export default function AdminProductsPage() {
                 <div>
                   <h4 className="mb-2 text-[13px] font-semibold text-[#1A1A1A]">Validation Issues</h4>
                   <div className="max-h-48 overflow-y-auto rounded border border-[#E6E6E6]">
-                    {importPreview.issues.map((issue, index) => (
+                    {importPreview.issues.map((issue: any, index: number) => (
                       <div key={`${issue.row}-${issue.field}-${index}`} className="border-b border-[#F0F0F0] px-3 py-2 text-[13px] last:border-b-0">
                         <span className="font-semibold text-[#E31E24]">Row {issue.row}</span> <span className="text-[#6B6B6B]">[{issue.field}]</span> {issue.message}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-              {importPreview.sampleRows.length > 0 ? (
-                <div>
-                  <h4 className="mb-2 text-[13px] font-semibold text-[#1A1A1A]">Preview Rows</h4>
-                  <div className="max-h-48 overflow-y-auto rounded border border-[#E6E6E6]">
-                    {importPreview.sampleRows.map((row: Record<string, unknown>, index) => (
-                      <pre key={index} className="border-b border-[#F0F0F0] px-3 py-2 text-[11.5px] text-[#555] last:border-b-0 whitespace-pre-wrap">
-                        {JSON.stringify(row)}
-                      </pre>
                     ))}
                   </div>
                 </div>
@@ -880,14 +845,16 @@ export default function AdminProductsPage() {
             <button type="button" onClick={() => setImportOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium text-[#555] hover:bg-[#F2F2F2]">
               Close
             </button>
-            <button
+            <LoadingButton
               type="button"
               onClick={confirmImport}
-              disabled={!importFile || importing || !!importPreview?.invalidRows}
+              loading={importing}
+              loadingText="Importing..."
+              disabled={!importFile || !!importPreview?.invalidRows}
               className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white disabled:opacity-60"
             >
-              {importing ? "Importing..." : "Import Products"}
-            </button>
+              Import Products
+            </LoadingButton>
           </div>
         </div>
       </Modal>

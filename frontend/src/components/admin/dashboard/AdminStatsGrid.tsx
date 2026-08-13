@@ -1,15 +1,1 @@
-import { ReactNode } from "react";
-
-interface AdminStatsGridProps {
-  children: ReactNode;
-}
-
-export function AdminStatsGrid({
-  children,
-}: AdminStatsGridProps) {
-  return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      {children}
-    </div>
-  );
-}
+export { AdminStatsGrid, type AdminStatsGridProps, type StatItem } from "../layout/AdminStatsGrid";

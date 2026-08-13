@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column, LoadingButton } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { getAdminErrorMessage } from "@/services/adminApi";
 import {
@@ -226,22 +226,20 @@ export default function ShippingZonesPage() {
   return (
     <AdminLayout title="Shipping Zones" breadcrumb={[{ label: "Shipping", href: "/admin/shipping" }, { label: "Zones" }]}>
       <div className="space-y-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex gap-2 border-b border-[#E6E6E6]">
-            <Link href="/admin/shipping" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
-              Providers
-            </Link>
-            <span className="border-b-2 border-[#E31E24] px-4 py-2 text-[13px] font-semibold text-[#111]">Zones</span>
-            <Link href="/admin/shipping/boxes" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
-              Boxes
-            </Link>
-          </div>
-          {canCreate && (
-            <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-md bg-[#E31E24] px-4 py-2.5 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]">
-              <Plus size={15} /> Add Zone
-            </button>
-          )}
-        </div>
+        <AdminListToolbar
+          leftExtra={
+            <div className="flex gap-2 border-b border-[#E6E6E6]">
+              <Link href="/admin/shipping" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
+                Providers
+              </Link>
+              <span className="border-b-2 border-[#E31E24] px-4 py-2 text-[13px] font-semibold text-[#111]">Zones</span>
+              <Link href="/admin/shipping/boxes" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
+                Boxes
+              </Link>
+            </div>
+          }
+          primaryAction={canCreate ? { onClick: openCreate, label: "Add Zone" } : undefined}
+        />
 
         <DataTable columns={columns} data={zoneList} isLoading={zonesLoading} rowKey="id" emptyMessage="No shipping zones configured." />
       </div>
@@ -302,9 +300,14 @@ export default function ShippingZonesPage() {
                 <button type="button" onClick={() => setFormOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2]">
                   Cancel
                 </button>
-                <button type="submit" disabled={form.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
-                  {form.isSubmitting ? "Saving..." : editingZone ? "Save Changes" : "Create Zone"}
-                </button>
+                <LoadingButton
+                  type="submit"
+                  loading={form.isSubmitting || createMutation.isPending || updateMutation.isPending}
+                  loadingText="Saving..."
+                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
+                >
+                  {editingZone ? "Save Changes" : "Create Zone"}
+                </LoadingButton>
               </div>
             </form>
           </div>

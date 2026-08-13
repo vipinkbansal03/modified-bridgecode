@@ -10,6 +10,7 @@ import {
   AdminSelect,
   ConfirmModal,
   useToast,
+  LoadingButton,
 } from "@/components/admin/AdminComponents";
 import { AttributeRoleBadge } from "@/components/admin/attributes/AttributeRoleBadge";
 import { AttributeValueEditors } from "@/components/admin/attributes/AttributeValueEditors";
@@ -128,13 +129,15 @@ export default function AttributeDetailPage() {
             {roleWarnings.join(" ")}
           </p>
         )}
-        <button
+        <LoadingButton
           type="button"
           onClick={handleSave}
+          loading={updateAttribute.isPending}
+          loadingText="Saving..."
           className="mt-4 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
         >
           Save attribute
-        </button>
+        </LoadingButton>
       </div>
 
       <div>

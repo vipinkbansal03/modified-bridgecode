@@ -11,8 +11,11 @@ import {
   AdminSelect,
   ConfirmModal,
   StatCard,
+  AdminStatsGrid,
+  AdminListToolbar,
   StatusBadge,
   useToast,
+  LoadingButton,
 } from "@/components/admin/AdminComponents";
 import { AttributeRoleBadge } from "@/components/admin/attributes/AttributeRoleBadge";
 import { AttributeValueEditors } from "@/components/admin/attributes/AttributeValueEditors";
@@ -186,55 +189,36 @@ export default function AttributesPage() {
 
   return (
     <AdminLayout title="Attributes & Options" breadcrumb={[{ label: "Attributes" }]}>
-      {/* StatCards Row */}
-      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Attributes"
-          value={attributeStats.total}
-          subtitle="Product specifications & options"
-          icon={<Sliders size={18} />}
-          isLoading={isLoading}
-        />
-        <StatCard
-          title="Active Attributes"
-          value={attributeStats.active}
-          subtitle="Enabled for products"
-          icon={<CheckCircle2 size={18} />}
-          color="bg-green-600"
-          isLoading={isLoading}
-        />
-        <StatCard
-          title="Grid Attributes"
-          value={attributeStats.grid}
-          subtitle="Generates variant matrices"
-          icon={<Zap size={18} />}
-          color="bg-indigo-600"
-          isLoading={isLoading}
-        />
-        <StatCard
-          title="Attribute Values"
-          value={attributeStats.totalValues}
-          subtitle="Configured value choices"
-          icon={<Tag size={18} />}
-          color="bg-blue-600"
-          isLoading={isLoading}
-        />
-      </div>
+      <AdminStatsGrid
+        stats={[
+          { title: "Total Attributes", value: attributeStats.total, subtitle: "Product specifications & options", icon: <Sliders size={18} /> },
+          { title: "Active Attributes", value: attributeStats.active, subtitle: "Enabled for products", icon: <CheckCircle2 size={18} />, color: "bg-green-600" },
+          { title: "Grid Attributes", value: attributeStats.grid, subtitle: "Generates variant matrices", icon: <Zap size={18} />, color: "bg-indigo-600" },
+          { title: "Attribute Values", value: attributeStats.totalValues, subtitle: "Configured value choices", icon: <Tag size={18} />, color: "bg-blue-600" }
+        ]}
+        isLoading={isLoading}
+      />
 
-      <div className="mb-5 flex items-center justify-between gap-3">
-        <p className="text-[13.5px] text-[#6B6B6B]">
-          Manage global attribute definitions. Drag rows to reorder.
-        </p>
-        {canCreate && (
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2.5 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-          >
-            <Plus size={14} /> New attribute
-          </button>
-        )}
-      </div>
+      <AdminListToolbar
+        leftExtra={
+          <p className="text-[13.5px] text-[#6B6B6B]">
+            Manage global attribute definitions. Drag rows to reorder.
+          </p>
+        }
+        refresh={{
+          onRefresh: refetch,
+          isRefreshing: isLoading,
+        }}
+        primaryAction={
+          canCreate
+            ? {
+                onClick: openCreateModal,
+                label: "New attribute",
+                icon: <Plus size={14} />,
+              }
+            : undefined
+        }
+      />
 
       {isLoading ? (
         <div className="space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-16 animate-pulse rounded-lg bg-[#E6E6E6]" />)}</div>
@@ -341,14 +325,16 @@ export default function AttributesPage() {
               ) : null}
 
               <div className="mt-6 flex gap-2">
-                <button
+                <LoadingButton
                   type="button"
                   onClick={handleSave}
-                  disabled={isSaving || (editorMode === "edit" && editLoading)}
+                  loading={isSaving}
+                  loadingText={editorMode === "edit" ? "Saving..." : "Creating..."}
+                  disabled={editorMode === "edit" && editLoading}
                   className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
                 >
-                  {isSaving ? (editorMode === "edit" ? "Saving..." : "Creating...") : editorMode === "edit" ? "Save" : "Create"}
-                </button>
+                  {editorMode === "edit" ? "Save" : "Create"}
+                </LoadingButton>
                 <button type="button" onClick={resetEditorState} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] text-[#6B6B6B]">
                   Cancel
                 </button>
@@ -364,6 +350,7 @@ export default function AttributesPage() {
         message="This will deactivate the attribute and its values."
         onConfirm={handleDelete}
         onCancel={() => setDeletingId(null)}
+        isLoading={deleteAttribute.isPending}
       />
       {ToastComponent}
     </AdminLayout>

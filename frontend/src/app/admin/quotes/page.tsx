@@ -6,11 +6,9 @@ import { useRouter } from "next/navigation";
 import { Clock3, Eye, Filter, MessageSquareQuote, Pencil, Plus, Search, ShoppingCart, Trash2, UserCheck, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
 import { useAdminQuotes, useDeleteAdminQuote } from "@/hooks/admin/useAdminHooks";
-import { RefreshButton } from "@/components/admin/RefreshButton";
 import { getAdminErrorMessage } from "@/services/adminApi";
-import { AdminStatsGrid } from "@/components/admin/dashboard/AdminStatsGrid";
 
 type QuoteRow = {
   id: string;
@@ -204,119 +202,97 @@ export default function QuotesPage() {
   return (
     <AdminLayout title="Quotes" breadcrumb={[{ label: "Quotes" }]}>
       <div className="space-y-5">
-        <AdminStatsGrid>
-          <StatCard title="Total Quotes" value={counts.total} subtitle="All quote requests" icon={<MessageSquareQuote size={18} />} />
-          <StatCard title="Pending Quotes" value={counts.pending} subtitle="Awaiting review" icon={<Clock3 size={18} />} color="bg-amber-600" />
-          <StatCard title="Reviewing" value={counts.reviewing} subtitle="In progress" icon={<Filter size={18} />} color="bg-[#0F6CBD]" />
-          <StatCard title="Converted" value={counts.converted} subtitle="Turned into orders" icon={<ShoppingCart size={18} />} color="bg-green-600" />
-        </AdminStatsGrid>
+        <AdminStatsGrid
+          stats={[
+            { title: "Total Quotes", value: counts.total, icon: <MessageSquareQuote size={18} /> },
+            { title: "Pending Quotes", value: counts.pending, icon: <Clock3 size={18} />, color: "bg-amber-600" },
+            { title: "Reviewing", value: counts.reviewing, icon: <Filter size={18} />, color: "bg-[#0F6CBD]" },
+            { title: "Converted", value: counts.converted, icon: <ShoppingCart size={18} />, color: "bg-green-600" }
+          ]}
+          isLoading={isLoading}
+        />
 
-        <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="relative w-full max-w-[280px]">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search quotes..."
-                className="h-10 w-full rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+        <AdminListToolbar
+          search={{
+            value: search,
+            onChange: setSearch,
+            placeholder: "Search quotes...",
+            widthClassName: "max-w-[280px]",
+          }}
+          filters={{
+            showFilters,
+            onToggle: () => setShowFilters((prev) => !prev),
+            activeCount: [status].filter(Boolean).length,
+          }}
+          refresh={{
+            onRefresh: refetch,
+            isRefreshing: isFetching,
+          }}
+          primaryAction={canCreate ? { href: "/admin/quotes/create", label: "Create Quote" } : undefined}
+          onResetFilters={() => {
+            setSearch("");
+            setStatus("");
+            setSortBy("createdAt");
+            setSortDir("desc");
+            setLimit(10);
+            setPage(1);
+          }}
+          filterPanel={
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <AdminSelect
+                label="Status"
+                value={status}
+                onChange={(event) => {
+                  setStatus(event.target.value);
+                  setPage(1);
+                }}
+                options={[
+                  { value: "", label: "All status" },
+                  { value: "PENDING", label: "Pending" },
+                  { value: "REVIEWING", label: "Reviewing" },
+                  { value: "SENT", label: "Sent" },
+                  { value: "ACCEPTED", label: "Accepted" },
+                  { value: "DECLINED", label: "Declined" },
+                  { value: "CONVERTED", label: "Converted" },
+                  { value: "EXPIRED", label: "Expired" },
+                ]}
+              />
+              <AdminSelect
+                label="Sort By"
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+                options={[
+                  { value: "createdAt", label: "Created date" },
+                  { value: "updatedAt", label: "Updated date" },
+                  { value: "quoteNumber", label: "Quote number" },
+                  { value: "customerName", label: "Customer name" },
+                  { value: "total", label: "Total" },
+                  { value: "status", label: "Status" },
+                  { value: "country", label: "Country" },
+                ]}
+              />
+              <AdminSelect
+                label="Direction"
+                value={sortDir}
+                onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+                options={[
+                  { value: "desc", label: "Descending" },
+                  { value: "asc", label: "Ascending" },
+                ]}
+              />
+              <AdminSelect
+                label="Page Size"
+                value={String(limit)}
+                onChange={(event) => setLimit(Number(event.target.value))}
+                options={[
+                  { value: "10", label: "10 per page" },
+                  { value: "20", label: "20 per page" },
+                  { value: "50", label: "50 per page" },
+                ]}
               />
             </div>
-
-            <div className="flex flex-wrap items-start gap-2">
-              <RefreshButton onRefresh={refetch} isRefreshing={isFetching} />
-              <button
-                type="button"
-                onClick={() => setShowFilters((current) => !current)}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
-              >
-                <Filter size={14} />
-                {showFilters ? "Hide filters" : "Show filters"}
-              </button>
-              {canCreate && (
-                <Link href="/admin/quotes/create" className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-                  <Plus size={14} />
-                  Create Quote
-                </Link>
-              )}
-            </div>
-          </div>
-
-          {showFilters && (
-            <div className="mt-4 border-t border-[#F0F0F0] pt-4">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-[13px] font-bold text-[#1A1A1A]">Filters & Sorting</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch("");
-                    setStatus("");
-                    setSortBy("createdAt");
-                    setSortDir("desc");
-                    setLimit(10);
-                    setPage(1);
-                  }}
-                  className="text-[12.5px] font-medium text-[#E31E24] hover:underline"
-                >
-                  Reset
-                </button>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <AdminSelect
-                  label="Status"
-                  value={status}
-                  onChange={(event) => {
-                    setStatus(event.target.value);
-                    setPage(1);
-                  }}
-                  options={[
-                    { value: "", label: "All status" },
-                    { value: "PENDING", label: "Pending" },
-                    { value: "REVIEWING", label: "Reviewing" },
-                    { value: "SENT", label: "Sent" },
-                    { value: "ACCEPTED", label: "Accepted" },
-                    { value: "DECLINED", label: "Declined" },
-                    { value: "CONVERTED", label: "Converted" },
-                    { value: "EXPIRED", label: "Expired" },
-                  ]}
-                />
-                <AdminSelect
-                  label="Sort By"
-                  value={sortBy}
-                  onChange={(event) => setSortBy(event.target.value)}
-                  options={[
-                    { value: "createdAt", label: "Created date" },
-                    { value: "updatedAt", label: "Updated date" },
-                    { value: "quoteNumber", label: "Quote number" },
-                    { value: "customerName", label: "Customer name" },
-                    { value: "total", label: "Total" },
-                    { value: "status", label: "Status" },
-                    { value: "country", label: "Country" },
-                  ]}
-                />
-                <AdminSelect
-                  label="Direction"
-                  value={sortDir}
-                  onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
-                  options={[
-                    { value: "desc", label: "Descending" },
-                    { value: "asc", label: "Ascending" },
-                  ]}
-                />
-                <AdminSelect
-                  label="Page Size"
-                  value={String(limit)}
-                  onChange={(event) => setLimit(Number(event.target.value))}
-                  options={[
-                    { value: "10", label: "10 per page" },
-                    { value: "20", label: "20 per page" },
-                    { value: "50", label: "50 per page" },
-                  ]}
-                />
-              </div>
-            </div>
-          )}
-        </div>
+          }
+        />
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white">
           <DataTable<QuoteRow> columns={columns} data={quotes} rowKey="id" isLoading={isLoading} emptyMessage="No quote requests yet." />
@@ -332,6 +308,7 @@ export default function QuotesPage() {
         onConfirm={handleDelete}
         title="Delete Quote Request"
         message="Are you sure you want to permanently delete this quote request? This action cannot be undone."
+        isLoading={deleteQuote.isPending}
         danger
       />
     </AdminLayout>

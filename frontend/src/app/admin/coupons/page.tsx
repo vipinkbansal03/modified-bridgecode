@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Edit2, Filter, Plus, Search, Shield, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column, LoadingButton } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
@@ -330,120 +330,93 @@ export default function CouponsPage() {
   return (
     <AdminLayout title="Coupons" breadcrumb={[{ label: "Coupons" }]}>
       <div className="space-y-5">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard title="Total Coupons" value={stats.total} subtitle="All coupon records" icon={<Shield size={18} />} />
-          <StatCard title="Active Coupons" value={stats.active} subtitle="Available & valid now" icon={<Shield size={18} />} color="bg-green-600" />
-          <StatCard title="Scheduled Coupons" value={stats.scheduled} subtitle="Upcoming promotions" icon={<Shield size={18} />} color="bg-[#0F6CBD]" />
-          <StatCard title="Expired Coupons" value={stats.expired} subtitle="Ended promotions" icon={<Shield size={18} />} color="bg-[#7A4F01]" />
-        </div>
+        <AdminStatsGrid
+          stats={[
+            { title: "Total Coupons", value: stats.total, subtitle: "All coupon records", icon: <Shield size={18} /> },
+            { title: "Active Coupons", value: stats.active, subtitle: "Available & valid now", icon: <Shield size={18} />, color: "bg-green-600" },
+            { title: "Scheduled Coupons", value: stats.scheduled, subtitle: "Upcoming promotions", icon: <Shield size={18} />, color: "bg-[#0F6CBD]" },
+            { title: "Expired Coupons", value: stats.expired, subtitle: "Ended promotions", icon: <Shield size={18} />, color: "bg-[#7A4F01]" }
+          ]}
+          isLoading={isLoading}
+        />
 
-        <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="relative w-full max-w-[280px]">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-              <input
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search coupon code..."
-                className="h-10 w-full rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+        <AdminListToolbar
+          search={{
+            value: search,
+            onChange: setSearch,
+            placeholder: "Search coupon code...",
+            widthClassName: "max-w-[280px]",
+          }}
+          filters={{
+            showFilters,
+            onToggle: () => setShowFilters((prev) => !prev),
+            activeCount: [status].filter(Boolean).length,
+          }}
+          refresh={{
+            onRefresh: refetch,
+            isRefreshing: isFetching,
+          }}
+          primaryAction={canCreate ? { onClick: openCreate, label: "Create Coupon" } : undefined}
+          onResetFilters={() => {
+            setSearch("");
+            setStatus("");
+            setSortBy("createdAt");
+            setSortDir("desc");
+            setPage(1);
+          }}
+          filterPanel={
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <AdminSelect
+                label="Status"
+                value={status}
+                onChange={(event) => {
+                  setStatus(event.target.value);
+                  setPage(1);
+                }}
+                options={[
+                  { value: "", label: "All statuses" },
+                  { value: "ACTIVE", label: "Active" },
+                  { value: "SCHEDULED", label: "Scheduled" },
+                  { value: "EXPIRED", label: "Expired" },
+                  { value: "INACTIVE", label: "Inactive" },
+                ]}
+              />
+              <AdminSelect
+                label="Sort By"
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+                options={[
+                  { value: "createdAt", label: "Created date" },
+                  { value: "code", label: "Code" },
+                  { value: "discountValue", label: "Discount" },
+                  { value: "usedCount", label: "Usage" },
+                  { value: "startDate", label: "Start date" },
+                  { value: "endDate", label: "End date" },
+                  { value: "status", label: "Status" },
+                ]}
+              />
+              <AdminSelect
+                label="Direction"
+                value={sortDir}
+                onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+                options={[
+                  { value: "desc", label: "Descending" },
+                  { value: "asc", label: "Ascending" },
+                ]}
+              />
+              <AdminSelect
+                label="Page Size"
+                value={String(limit)}
+                onChange={(event) => setLimit(Number(event.target.value))}
+                options={[
+                  { value: "10", label: "10 per page" },
+                  { value: "20", label: "20 per page" },
+                  { value: "50", label: "50 per page" },
+                ]}
               />
             </div>
-
-            <div className="flex flex-wrap items-start gap-2">
-              <RefreshButton onRefresh={refetch} isRefreshing={isFetching} />
-              <button
-                type="button"
-                onClick={() => setShowFilters((current) => !current)}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
-              >
-                <Filter size={14} />
-                {showFilters ? "Hide filters" : "Show filters"}
-              </button>
-              {canCreate && (
-                <button
-                  type="button"
-                  onClick={openCreate}
-                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-                >
-                  <Plus size={14} />
-                  Create Coupon
-                </button>
-              )}
-            </div>
-          </div>
-
-          {showFilters && (
-            <div className="mt-4 border-t border-[#F0F0F0] pt-4">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-[13px] font-bold text-[#1A1A1A]">Filters & Sorting</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch("");
-                    setStatus("");
-                    setSortBy("createdAt");
-                    setSortDir("desc");
-                    setPage(1);
-                  }}
-                  className="text-[12.5px] font-medium text-[#E31E24] hover:underline"
-                >
-                  Reset
-                </button>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <AdminSelect
-                  label="Status"
-                  value={status}
-                  onChange={(event) => {
-                    setStatus(event.target.value);
-                    setPage(1);
-                  }}
-                  options={[
-                    { value: "", label: "All statuses" },
-                    { value: "ACTIVE", label: "Active" },
-                    { value: "SCHEDULED", label: "Scheduled" },
-                    { value: "EXPIRED", label: "Expired" },
-                    { value: "INACTIVE", label: "Inactive" },
-                  ]}
-                />
-                <AdminSelect
-                  label="Sort By"
-                  value={sortBy}
-                  onChange={(event) => setSortBy(event.target.value)}
-                  options={[
-                    { value: "createdAt", label: "Created date" },
-                    { value: "code", label: "Code" },
-                    { value: "discountValue", label: "Discount" },
-                    { value: "usedCount", label: "Usage" },
-                    { value: "startDate", label: "Start date" },
-                    { value: "endDate", label: "End date" },
-                    { value: "status", label: "Status" },
-                  ]}
-                />
-                <AdminSelect
-                  label="Direction"
-                  value={sortDir}
-                  onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
-                  options={[
-                    { value: "desc", label: "Descending" },
-                    { value: "asc", label: "Ascending" },
-                  ]}
-                />
-                <AdminSelect
-                  label="Page Size"
-                  value={String(limit)}
-                  onChange={(event) => setLimit(Number(event.target.value))}
-                  options={[
-                    { value: "10", label: "10 per page" },
-                    { value: "20", label: "20 per page" },
-                    { value: "50", label: "50 per page" },
-                  ]}
-                />
-              </div>
-            </div>
-          )}
-        </div>
+          }
+        />
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white">
           <DataTable<CouponRow> columns={columns} data={coupons} rowKey="id" isLoading={isLoading} emptyMessage="No coupons found." />
@@ -517,13 +490,14 @@ export default function CouponsPage() {
             <button type="button" onClick={resetForm} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2]">
               Cancel
             </button>
-            <button
+            <LoadingButton
               type="submit"
-              disabled={form.isSubmitting}
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
+              loading={form.isSubmitting}
+              loadingText="Processing..."
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
             >
-              {form.isSubmitting ? "Processing..." : form.values.id ? "Update Coupon" : "Create Coupon"}
-            </button>
+              {form.values.id ? "Update Coupon" : "Create Coupon"}
+            </LoadingButton>
           </div>
         </form>
       </Modal>
@@ -534,6 +508,7 @@ export default function CouponsPage() {
         message={deleting ? `${deleting.code} will stop being available immediately.` : ""}
         onConfirm={confirmDelete}
         onCancel={() => setDeleting(null)}
+        isLoading={deleteCoupon.isPending}
       />
 
       {ToastComponent}

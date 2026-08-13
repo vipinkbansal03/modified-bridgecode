@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, Plus, Trash2, GripVertical, Edit2, Save, X, Languages, Upload } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminTextarea, AdminSelect, useToast, ConfirmModal, toastMessages } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminTextarea, AdminSelect, useToast, ConfirmModal, toastMessages, LoadingButton } from "@/components/admin/AdminComponents";
 import {
   useAdminCmsPage, useAdminCmsPages, useUpdateCmsPage, useCreateCmsSection, useUpdateCmsSection, useDeleteCmsSection,
   useCreateCmsBlock, useUpdateCmsBlock, useDeleteCmsBlock, useAdminLanguages,
@@ -271,7 +271,7 @@ function SectionPanel({
                 placeholder="Block type (e.g. slide, stat, card)"
                 className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand"
               />
-              <button onClick={handleAddBlock} disabled={createBlock.isPending} className="whitespace-nowrap rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand/90 disabled:opacity-50">{createBlock.isPending ? "Adding…" : "Add Block"}</button>
+              <LoadingButton onClick={handleAddBlock} loading={createBlock.isPending} loadingText="Adding…" className="whitespace-nowrap rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand/90">Add Block</LoadingButton>
               <button onClick={() => setAddingBlock(false)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50">Cancel</button>
             </div>
           ) : (
@@ -280,7 +280,7 @@ function SectionPanel({
         </div>
       )}
 
-      <ConfirmModal open={!!deleteBlockId} title="Delete block" message="Delete this block permanently?" onConfirm={handleDeleteBlock} onCancel={() => setDeleteBlockId(null)} danger />
+      <ConfirmModal open={!!deleteBlockId} title="Delete block" message="Delete this block permanently?" onConfirm={handleDeleteBlock} onCancel={() => setDeleteBlockId(null)} isLoading={deleteBlock.isPending} danger />
     </div>
   );
 }
@@ -640,7 +640,7 @@ export default function CmsPageEditorPage() {
         )
       )}
 
-      <ConfirmModal open={!!deleteSectionId} title="Delete section" message="This will permanently delete the section and all its blocks." onConfirm={handleDeleteSection} onCancel={() => setDeleteSectionId(null)} danger />
+      <ConfirmModal open={!!deleteSectionId} title="Delete section" message="This will permanently delete the section and all its blocks." onConfirm={handleDeleteSection} onCancel={() => setDeleteSectionId(null)} isLoading={deleteSection.isPending} danger />
     </AdminLayout>
   );
 }

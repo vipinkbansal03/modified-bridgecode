@@ -1,91 +1,142 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
-import { Edit2, Plus, Search, Trash2 } from "lucide-react";
+import { Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { FileText, Tag, Users, Globe, FileEdit } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { ConfirmModal, DataTable, Pagination, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
-import { useAdminBlogs, useBulkBlogs, useDeleteBlog } from "@/hooks/admin/useAdminHooks";
-import { getAdminErrorMessage } from "@/services/adminApi";
+import { AdminStatsGrid } from "@/components/admin/AdminComponents";
+import { BlogPostsTab } from "@/components/admin/blogs/BlogPostsTab";
+import { BlogCategoriesTab } from "@/components/admin/blogs/BlogCategoriesTab";
+import { BlogAuthorsTab } from "@/components/admin/blogs/BlogAuthorsTab";
+import { useAdminBlogs, useAdminBlogCategories, useAdminBlogAuthors } from "@/hooks/admin/useAdminHooks";
 
-type Blog = { id: string; title: string; slug: string; status: string; publishedAt?: string | null; author?: { name: string } | null; category?: { name: string } | null };
-const tabs = ["", "PUBLISHED", "DRAFT", "SCHEDULED"];
+type TabId = "posts" | "categories" | "authors";
 
-export default function AdminBlogsPage() {
-  const [page, setPage] = useState(1);
-  const [status, setStatus] = useState("");
-  const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<string[]>([]);
-  const [deleting, setDeleting] = useState<string | null>(null);
-  const { showToast, ToastComponent } = useToast();
-  const { data, isLoading } = useAdminBlogs({ page, limit: 20, status, search });
-  const deleteBlog = useDeleteBlog();
-  const bulkBlogs = useBulkBlogs();
-  const blogs = (data?.data ?? []) as Blog[];
+const tabs: Array<{ id: TabId; label: string; icon: typeof FileText }> = [
+  { id: "posts", label: "Blog Posts", icon: FileText },
+  { id: "categories", label: "Categories", icon: Tag },
+  { id: "authors", label: "Authors", icon: Users },
+];
 
-  const toggle = (id: string) => setSelected((rows) => rows.includes(id) ? rows.filter((row) => row !== id) : [...rows, id]);
-  const runBulk = async (action: string) => {
-    try {
-      await bulkBlogs.mutateAsync({ ids: selected, action });
-      setSelected([]);
-      showToast("Bulk action completed.");
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Bulk action failed."), "error");
-    }
+function AdminBlogHubContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawTab = searchParams.get("tab") || "posts";
+  const activeTab: TabId = (["posts", "categories", "authors"].includes(rawTab) ? rawTab : "posts") as TabId;
+
+  const { data: postsData, isLoading: isLoadingPosts } = useAdminBlogs({ limit: 100 });
+  const { data: categoriesData = [], isLoading: isLoadingCategories } = useAdminBlogCategories();
+  const { data: authorsData = [], isLoading: isLoadingAuthors } = useAdminBlogAuthors();
+
+  const totalPosts = postsData?.pagination?.total ?? 0;
+  const postsList = postsData?.data ?? [];
+  const publishedCount = postsList.filter((p: { status: string }) => p.status === "PUBLISHED").length;
+  const draftCount = postsList.filter((p: { status: string }) => p.status === "DRAFT" || p.status === "SCHEDULED").length;
+
+  const handleTabChange = (tabId: TabId) => {
+    router.push(`/admin/blogs?tab=${tabId}`);
   };
 
-  const columns: Column<Blog>[] = [
-    { key: "select", label: "", width: "34px", render: (row) => <input type="checkbox" checked={selected.includes(row.id)} onChange={() => toggle(row.id)} /> },
-    { key: "title", label: "Title", render: (row) => <div><div className="font-medium">{row.title}</div><div className="text-[12px] text-[#9A9A9A]">/blog/{row.slug}</div></div> },
-    { key: "author", label: "Author", render: (row) => row.author?.name ?? "-" },
-    { key: "category", label: "Category", render: (row) => row.category?.name ?? "-" },
-    { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
-    { key: "publishedAt", label: "Published Date", render: (row) => row.publishedAt ? new Date(row.publishedAt).toLocaleString() : "-" },
-    { key: "actions", label: "", width: "90px", render: (row) => (
-      <div className="flex gap-1.5">
-        <Link href={`/admin/blogs/${row.id}/edit`} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6]"><Edit2 size={13} /></Link>
-        <button onClick={() => setDeleting(row.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500"><Trash2 size={13} /></button>
-      </div>
-    ) },
-  ];
+  const activeTabObject = tabs.find((t) => t.id === activeTab) || tabs[0];
 
   return (
-    <AdminLayout title="Blog" breadcrumb={[{ label: "Blog" }]}>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          {tabs.map((tab) => (
-            <button key={tab || "ALL"} onClick={() => { setStatus(tab); setPage(1); }} className={`h-9 rounded-md border px-3 text-[13px] font-semibold ${status === tab ? "border-[#E31E24] bg-[#E31E24] text-white" : "border-[#E6E6E6] bg-white text-[#555]"}`}>
-              {tab || "All"}
-            </button>
-          ))}
+    <AdminLayout
+      title="Blog Management"
+      breadcrumb={[
+        { label: "Blog", href: "/admin/blogs" },
+        { label: activeTabObject.label },
+      ]}
+    >
+      {/* Reusable Admin Stats Grid */}
+      <AdminStatsGrid
+        stats={[
+          {
+            title: "Total Blog Posts",
+            value: totalPosts,
+            subtitle: "All articles created",
+            icon: <FileText size={18} />,
+          },
+          {
+            title: "Published Articles",
+            value: publishedCount,
+            subtitle: "Visible on Storefront",
+            icon: <Globe size={18} />,
+            color: "bg-green-600",
+          },
+          {
+            title: "Drafts & Scheduled",
+            value: draftCount,
+            subtitle: "Unpublished posts",
+            icon: <FileEdit size={18} />,
+            color: "bg-amber-600",
+          },
+          {
+            title: "Categories & Authors",
+            value: `${categoriesData.length} / ${authorsData.length}`,
+            subtitle: "Taxonomy & Contributors",
+            icon: <Tag size={18} />,
+            color: "bg-[#0F6CBD]",
+          },
+        ]}
+        isLoading={isLoadingPosts || isLoadingCategories || isLoadingAuthors}
+      />
+
+      {/* Tab Navigation Header */}
+      <div className="mb-6 overflow-hidden rounded-xl border border-[#E6E6E6] bg-white shadow-sm">
+        <div className="border-b border-[#E6E6E6] bg-[#FAFAFA] px-4 pt-3">
+          <div className="flex flex-wrap gap-2">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => handleTabChange(tab.id)}
+                  className={`flex items-center gap-2 border-b-2 px-4 py-3 text-[13.5px] font-semibold transition-colors ${
+                    isActive
+                      ? "border-[#E31E24] text-[#E31E24] bg-white rounded-t-lg shadow-sm"
+                      : "border-transparent text-[#666] hover:text-[#1A1A1A] hover:bg-white/50"
+                  }`}
+                >
+                  <Icon size={15} />
+                  {tab.label}
+                  {tab.id === "posts" && totalPosts > 0 && (
+                    <span className={`ml-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${isActive ? "bg-red-100 text-[#E31E24]" : "bg-gray-200 text-gray-700"}`}>
+                      {totalPosts}
+                    </span>
+                  )}
+                  {tab.id === "categories" && categoriesData.length > 0 && (
+                    <span className={`ml-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${isActive ? "bg-red-100 text-[#E31E24]" : "bg-gray-200 text-gray-700"}`}>
+                      {categoriesData.length}
+                    </span>
+                  )}
+                  {tab.id === "authors" && authorsData.length > 0 && (
+                    <span className={`ml-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${isActive ? "bg-red-100 text-[#E31E24]" : "bg-gray-200 text-gray-700"}`}>
+                      {authorsData.length}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/admin/blogs/categories" className="rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-semibold">Categories</Link>
-          <Link href="/admin/blogs/authors" className="rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-semibold">Authors</Link>
-          <Link href="/admin/blogs/new" className="inline-flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white"><Plus size={14} /> New Blog</Link>
+
+        <div className="p-6">
+          {activeTab === "posts" && <BlogPostsTab />}
+          {activeTab === "categories" && <BlogCategoriesTab />}
+          {activeTab === "authors" && <BlogAuthorsTab />}
         </div>
       </div>
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-          <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search title" className="h-10 w-[260px] rounded-md border border-[#E6E6E6] pl-8 pr-3 text-[13px]" />
-        </div>
-        {selected.length > 0 && (
-          <>
-            <span className="text-[13px] text-[#6B6B6B]">{selected.length} selected</span>
-            <button onClick={() => runBulk("publish")} className="rounded-md border px-3 py-2 text-[13px]">Publish</button>
-            <button onClick={() => runBulk("unpublish")} className="rounded-md border px-3 py-2 text-[13px]">Unpublish</button>
-            <button onClick={() => runBulk("delete")} className="rounded-md border border-red-200 px-3 py-2 text-[13px] text-red-600">Delete</button>
-          </>
-        )}
-      </div>
-      <DataTable columns={columns} data={blogs} rowKey="id" isLoading={isLoading} emptyMessage="No blog posts yet." />
-      <Pagination page={page} totalPages={data?.pagination?.totalPages || 1} onPageChange={setPage} />
-      <ConfirmModal open={!!deleting} title="Delete blog?" message="This permanently deletes the blog post." onCancel={() => setDeleting(null)} onConfirm={async () => {
-        if (!deleting) return;
-        try { await deleteBlog.mutateAsync(deleting); showToast("Blog deleted."); } catch (error) { showToast(getAdminErrorMessage(error, "Failed to delete blog."), "error"); } finally { setDeleting(null); }
-      }} />
-      {ToastComponent}
     </AdminLayout>
   );
 }
+
+export default function AdminBlogsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminBlogHubContent />
+    </Suspense>
+  );
+}
+

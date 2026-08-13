@@ -12,7 +12,16 @@ import { useProducts, useProductFacets, useProductFiltersConfig } from "@/hooks/
 import { useCategories } from "@/hooks/api/useCategories";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
+import { usePublicBanners } from "@/hooks/api/usePublicBanners";
+import { StorefrontBanner } from "@/components/ui/StorefrontBanner";
 import { cn } from "@/utils/cn";
+
+function CategoryTopBannerSection() {
+  const { data: banners = [] } = usePublicBanners("CATEGORY_TOP");
+  if (banners.length === 0) return null;
+  return <StorefrontBanner banner={banners[0]} className="mt-6" />;
+}
+
 
 function formatListingPrice(
   prices: Array<{ sellingPrice: number; currencySymbol?: string; currencyCode?: string }> | undefined,
@@ -86,7 +95,9 @@ export function ProductsListingClient() {
         <p className="mt-4 max-w-[880px] text-[15px] leading-relaxed text-steel">
           {category?.description ?? t("ui.products.description")}
         </p>
+        <CategoryTopBannerSection />
       </Container>
+
 
       <div className="border-y border-line">
         <Container className="flex flex-wrap items-center justify-between gap-5 py-4 lg:py-5">

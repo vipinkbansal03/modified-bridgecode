@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminTextarea, AdminSelect, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminTextarea, AdminSelect, useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { Logo } from "@/components/ui/Logo";
 import { cn } from "@/utils/cn";
@@ -523,14 +523,15 @@ export default function SettingsPage() {
                     Unsaved Changes
                   </span>
                 )}
-                <button
+                <LoadingButton
                   onClick={handleSave}
-                  disabled={saving}
-                  className="flex items-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white shadow-[0_8px_20px_rgba(227,30,36,0.28)] transition-colors hover:bg-[#B5151B] disabled:opacity-50"
+                  loading={saving}
+                  loadingText="Saving…"
+                  className="flex items-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white shadow-[0_8px_20px_rgba(227,30,36,0.28)] transition-colors hover:bg-[#B5151B]"
                 >
                   <Save size={13} />
-                  {saving ? "Saving…" : "Save Settings"}
-                </button>
+                  Save Settings
+                </LoadingButton>
               </div>
             )}
           </div>

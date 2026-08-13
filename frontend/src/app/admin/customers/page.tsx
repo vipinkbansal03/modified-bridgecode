@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, Eye, Filter, Search, Shield, Store, UserCog, Users, XCircle, Edit2, Trash2 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminSelect, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import {
@@ -319,9 +319,11 @@ export default function AdminCustomersPage() {
   };
 
   const [deletingCustomer, setDeletingCustomer] = useState<string | null>(null);
+  const [deletingLoading, setDeletingLoading] = useState(false);
 
   const handleDeleteCustomer = async () => {
     if (!deletingCustomer) return;
+    setDeletingLoading(true);
     try {
       await adminApi.delete(`/customers/${deletingCustomer}`);
       showToast("Customer deleted successfully.");
@@ -329,6 +331,7 @@ export default function AdminCustomersPage() {
     } catch (err) {
       showToast(getAdminErrorMessage(err, "Failed to delete customer."), "error");
     } finally {
+      setDeletingLoading(false);
       setDeletingCustomer(null);
     }
   };
@@ -380,76 +383,47 @@ export default function AdminCustomersPage() {
             </Link>
           )}
         </div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard title="Total Customers" value={totals.total} subtitle="All customer records" icon={<Users size={18} />} />
-          <StatCard title="Active Accounts" value={totals.active} subtitle="Currently enabled" icon={<Shield size={18} />} color="bg-green-600" />
-          <StatCard title="Pending Approval" value={totals.pending} subtitle="Wholesale accounts waiting" icon={<UserCog size={18} />} color="bg-amber-600" />
-          <StatCard title="Wholesale Customers" value={totals.wholesale} subtitle="Sales-focused accounts" icon={<Store size={18} />} color="bg-[#0F6CBD]" />
-        </div>
+        <AdminStatsGrid
+          stats={[
+            { title: "Total Customers", value: totals.total, subtitle: "All customer records", icon: <Users size={18} /> },
+            { title: "Active Accounts", value: totals.active, subtitle: "Currently enabled", icon: <Shield size={18} />, color: "bg-green-600" },
+            { title: "Pending Approval", value: totals.pending, subtitle: "Wholesale accounts waiting", icon: <UserCog size={18} />, color: "bg-amber-600" },
+            { title: "Wholesale Customers", value: totals.wholesale, subtitle: "Sales-focused accounts", icon: <Store size={18} />, color: "bg-[#0F6CBD]" }
+          ]}
+          isLoading={customerQuery.isLoading}
+        />
 
-        {/* Clean Filter Toolbar */}
-        <div className="rounded-xl border border-[#E6E6E6] bg-white p-4 shadow-2xs space-y-3">
-          {/* Row 1: Search & Primary Controls */}
-          <div className="flex flex-col lg:flex-row items-center gap-3">
-            <div className="relative flex-1 w-full">
-              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search by customer name, email, company, phone..."
-                className="h-10 w-full rounded-lg border border-[#E5E7EB] bg-white py-2 pl-9 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24] focus:ring-1 focus:ring-[#E31E24]"
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-[#111827] text-xs font-semibold"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 w-full lg:w-auto overflow-x-auto">
-              <div className="w-40 shrink-0">
+        <AdminListToolbar
+          search={{
+            value: search,
+            onChange: setSearch,
+            placeholder: "Search customer name, email, company, phone...",
+            widthClassName: "max-w-[340px]",
+          }}
+          filters={{
+            showFilters: showAdvancedFilters,
+            onToggle: () => setShowAdvancedFilters(!showAdvancedFilters),
+            activeCount: activeFilterCount,
+            label: "More Filters",
+          }}
+          leftExtra={
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="w-36 shrink-0">
                 <AdminSelect label="" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} options={roleOptions} />
               </div>
-              <div className="w-44 shrink-0">
+              <div className="w-40 shrink-0">
                 <AdminSelect label="" value={approvalFilter} onChange={(e) => setApprovalFilter(e.target.value)} options={APPROVAL_OPTIONS} />
               </div>
-
-              <button
-                type="button"
-                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                className={`h-10 px-3.5 rounded-lg border text-[13px] font-semibold flex items-center gap-2 transition-colors shrink-0 ${
-                  showAdvancedFilters || activeFilterCount > 0
-                    ? "border-[#E31E24] bg-[#FFF5F5] text-[#E31E24]"
-                    : "border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F9FAFB]"
-                }`}
-              >
-                <Filter size={14} />
-                <span>More Filters</span>
-                {activeFilterCount > 0 && (
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-[11px] font-bold text-white">
-                    {activeFilterCount}
-                  </span>
-                )}
-              </button>
-
-              {(activeFilterCount > 0 || search) && (
-                <button
-                  type="button"
-                  onClick={resetFilters}
-                  className="h-10 px-3 rounded-lg text-[12.5px] font-semibold text-[#6B7280] hover:text-[#E31E24] hover:bg-[#F9FAFB] shrink-0"
-                >
-                  Reset All
-                </button>
-              )}
             </div>
-          </div>
-
-          {/* Row 2: Collapsible Advanced Filters Drawer */}
-          {showAdvancedFilters && (
-            <div className="pt-3 border-t border-[#F3F4F6] grid gap-3 grid-cols-2 md:grid-cols-4 bg-[#FAFAFA] p-3 rounded-lg border border-[#E5E7EB]">
+          }
+          refresh={{
+            onRefresh: customerQuery.refetch,
+            isRefreshing: customerQuery.isFetching,
+          }}
+          primaryAction={hasPermission("customers.create") ? { href: "/admin/customers/create", label: "Add Customer" } : undefined}
+          onResetFilters={resetFilters}
+          filterPanel={
+            <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">Account Status</label>
                 <AdminSelect label="" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={STATUS_OPTIONS} />
@@ -501,8 +475,8 @@ export default function AdminCustomersPage() {
                 />
               </div>
             </div>
-          )}
-
+          }
+        />
           {/* Row 3: Footer Bar */}
           <div className="flex items-center justify-between pt-1 text-[12.5px] text-[#6B7280]">
             <div className="font-semibold text-[#111827]">
@@ -521,7 +495,6 @@ export default function AdminCustomersPage() {
               </select>
             </div>
           </div>
-        </div>
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white">
           <DataTable<CustomerRow> columns={columns} data={customers} rowKey="id" isLoading={customerQuery.isLoading} emptyMessage="No customers found." />
@@ -550,6 +523,7 @@ export default function AdminCustomersPage() {
         message="Are you sure you want to delete this customer account? This will mark the customer as deleted."
         onConfirm={handleDeleteCustomer}
         onCancel={() => setDeletingCustomer(null)}
+        isLoading={deletingLoading}
       />
 
       {ToastComponent}

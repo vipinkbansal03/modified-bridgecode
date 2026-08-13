@@ -41,6 +41,7 @@ export function HeroSection({ data }: HeroSectionProps) {
   // Handle manual navigation with temporary pause
   const go = useCallback(
     (delta: number) => {
+      if (slides.length <= 1) return;
       setIndex((i) => (i + delta + slides.length) % slides.length);
       setIsPaused(true);
       if (pauseTimerRef.current) clearTimeout(pauseTimerRef.current);
@@ -60,6 +61,30 @@ export function HeroSection({ data }: HeroSectionProps) {
     }, 7000);
   }, []);
 
+  if (!slides || slides.length === 0) {
+    return (
+      <section className="relative flex h-[calc(100vh-80px)] min-h-[460px] max-h-[700px] items-center overflow-hidden bg-gradient-to-br from-[#0F2D52] via-[#1A1A1A] to-[#0D0D0D] sm:h-[420px]">
+        <Container className="relative flex h-full flex-col justify-center items-start py-12">
+          <div className="flex w-full max-w-[820px] flex-col justify-center text-left">
+            <span className="mb-3.5 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3.5 py-1 text-[12px] font-semibold tracking-wider uppercase text-white backdrop-blur-sm shadow-xs">
+              <span className="h-1.5 w-1.5 rounded-full bg-brand" />
+              Modern Orthodontics
+            </span>
+            <h1 className="max-w-[780px] text-left text-[clamp(36px,5vw,64px)] font-light leading-[1.08] text-white drop-shadow-sm">
+              Engineering precision orthodontic hardware, since 1994.
+            </h1>
+            <p className="mt-4 max-w-[620px] text-[16px] text-white/80 leading-relaxed">
+              Global manufacturer of premium orthodontic brackets, molar tubes, archwires, and OEM solutions.
+            </p>
+            <div className="mt-6 flex justify-start">
+              <PillCTA href="/products" label="Explore Products" />
+            </div>
+          </div>
+        </Container>
+      </section>
+    );
+  }
+
   const slide = slides[index];
   const kicker = slide.kicker === "Since 1994" ? t("ui.home.since1994") : slide.kicker;
   const ctaLabel = slide.ctaLabel === "Shop by category" ? t("ui.home.shopByCategory") : slide.ctaLabel;
@@ -70,6 +95,7 @@ export function HeroSection({ data }: HeroSectionProps) {
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
+
       <AnimatePresence initial={false}>
         <motion.div
           key={index}
@@ -87,12 +113,12 @@ export function HeroSection({ data }: HeroSectionProps) {
               priority={index === 0}
               fetchPriority={index === 0 ? "high" : "auto"}
               sizes="100vw"
-              quality={85}
+              quality={90}
               className="object-cover"
-              style={{
-                filter: "grayscale(100%) contrast(1.08) brightness(0.6)",
-              }}
             />
+            {/* Vibrant, high-contrast gradient overlay ensuring crystal-clear text readability */}
+            <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/55 to-black/25" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-black/20" />
           </div>
           <Container className="relative flex h-full flex-col justify-end md:justify-center items-start py-12">
             <div className="flex min-h-[200px] w-full max-w-[820px] flex-col justify-center text-left">
@@ -102,10 +128,11 @@ export function HeroSection({ data }: HeroSectionProps) {
                 transition={{ duration: 0.35, delay: 0.05, ease: "easeOut" }}
                 className="flex flex-col items-start text-left"
               >
-                <span className="mb-3 block text-left text-[13px] font-medium tracking-[0.04em] uppercase text-white/90">
+                <span className="mb-3.5 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3.5 py-1 text-[12px] font-semibold tracking-wider uppercase text-white backdrop-blur-sm shadow-xs">
+                  <span className="h-1.5 w-1.5 rounded-full bg-brand" />
                   {kicker}
                 </span>
-                <h1 className="max-w-[780px] text-left text-[clamp(38px,5.5vw,72px)] font-light leading-[1.06] text-white">
+                <h1 className="max-w-[780px] text-left text-[clamp(38px,5.5vw,72px)] font-light leading-[1.06] text-white drop-shadow-sm">
                   {slide.title}
                 </h1>
                 <div className="mt-6 flex justify-start">

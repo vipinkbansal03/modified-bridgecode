@@ -7,7 +7,7 @@ import { Edit2, Filter, Plus, Search, Shield, Trash2, Users, X } from "lucide-re
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { Modal } from "@/components/ui/Modal";
-import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminStatsGrid, ConfirmModal, DataTable, StatCard, StatusBadge, useToast, type Column, LoadingButton } from "@/components/admin/AdminComponents";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import {
   useAdminCustomerRoles,
@@ -273,12 +273,15 @@ export default function AdminCustomerRolesPage() {
             Customer Roles
           </Link>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard title="Total Roles" value={totals.total} subtitle="Role catalog entries" icon={<Users size={18} />} />
-          <StatCard title="Active Roles" value={totals.active} subtitle="Assignable now" icon={<Shield size={18} />} color="bg-green-600" />
-          <StatCard title="Inactive Roles" value={totals.inactive} subtitle="Hidden from active use" icon={<X size={18} />} color="bg-gray-600" />
-          <StatCard title="System Roles" value={totals.system} subtitle="Protected defaults" icon={<Shield size={18} />} color="bg-[#0F6CBD]" />
-        </div>
+        <AdminStatsGrid
+          stats={[
+            { title: "Total Roles", value: totals.total, subtitle: "Role catalog entries", icon: <Users size={18} /> },
+            { title: "Active Roles", value: totals.active, subtitle: "Assignable now", icon: <Shield size={18} />, color: "bg-green-600" },
+            { title: "Inactive Roles", value: totals.inactive, subtitle: "Hidden from active use", icon: <X size={18} />, color: "bg-gray-600" },
+            { title: "System Roles", value: totals.system, subtitle: "Protected defaults", icon: <Shield size={18} />, color: "bg-[#0F6CBD]" }
+          ]}
+          isLoading={isLoading}
+        />
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -432,13 +435,14 @@ export default function AdminCustomerRolesPage() {
               >
                 Cancel
               </button>
-              <button
+              <LoadingButton
                 type="submit"
-                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
-                disabled={form.isSubmitting}
+                loading={form.isSubmitting}
+                loadingText="Processing..."
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
               >
-                {form.isSubmitting ? "Processing..." : form.values.id ? "Update Role" : "Create Role"}
-              </button>
+                {form.values.id ? "Update Role" : "Create Role"}
+              </LoadingButton>
             </div>
           </form>
         </Modal>

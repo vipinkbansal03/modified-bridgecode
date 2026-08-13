@@ -8,6 +8,7 @@ import {
   ConfirmModal,
   StatusBadge,
   useToast,
+  LoadingButton,
 } from "@/components/admin/AdminComponents";
 import { SortableList, toSortOrderPayload } from "@/components/admin/SortableList";
 import {
@@ -235,9 +236,15 @@ function ValueListSection({
           <h4 className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">{editingId ? "Edit value" : "New value"}</h4>
           <ValueFormFields form={form} setForm={setForm} />
           <div className="mt-4 flex gap-2">
-            <button type="button" onClick={handleSave} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
+            <LoadingButton
+              type="button"
+              onClick={handleSave}
+              loading={createValue.isPending || updateValue.isPending}
+              loadingText={editingId ? "Saving..." : "Adding..."}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+            >
               {editingId ? "Save changes" : "Add value"}
-            </button>
+            </LoadingButton>
             <button
               type="button"
               onClick={() => {
@@ -258,6 +265,7 @@ function ValueListSection({
         message="This will deactivate the value."
         onConfirm={handleDelete}
         onCancel={() => setDeletingId(null)}
+        isLoading={deleteValue.isPending}
       />
       {ToastComponent}
     </div>

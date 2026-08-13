@@ -1,7 +1,7 @@
 "use client";
 
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { StatCard, DataTable, StatusBadge, Column } from "@/components/admin/AdminComponents";
+import { StatCard, AdminStatsGrid, DataTable, StatusBadge, Column } from "@/components/admin/AdminComponents";
 import { useAdminOrders, useAdminProducts, useAdminQuotes, useAdminInventory, useAdminInventoryDashboard, useOrderAnalytics } from "@/hooks/admin/useAdminHooks";
 import { Package, ShoppingCart, MessageSquare, Warehouse, ArrowRight, TrendingUp } from "lucide-react";
 import Link from "next/link";
@@ -32,20 +32,22 @@ const PIE_COLORS = ["#E31E24", "#111111", "#6B6B6B", "#B5151B", "#9A9A9A", "#D4D
 export default function DashboardPage() {
   const { data: orders, isLoading: ordersLoading } = useAdminOrders({ limit: 5 } as never);
   const { data: products, isLoading: productsLoading } = useAdminProducts({ limit: 1 });
-  const { data: quotes } = useAdminQuotes({ page: 1 });
-  const { data: inventory } = useAdminInventory({ status: "LOW_STOCK", limit: 6 } as never);
-  const { data: inventorySummary } = useAdminInventoryDashboard();
+  const { data: quotes, isLoading: quotesLoading } = useAdminQuotes({ page: 1 });
+  const { data: inventory, isLoading: inventoryLoading } = useAdminInventory({ status: "LOW_STOCK", limit: 6 } as never);
+  const { data: inventorySummary, isLoading: inventorySummaryLoading } = useAdminInventoryDashboard();
   const { data: analytics } = useOrderAnalytics();
 
   return (
     <AdminLayout title="Dashboard">
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 mb-6">
-        <StatCard title="Total Products" value={products?.pagination?.total ?? "—"} icon={<Package size={18} />} isLoading={productsLoading} />
-        <StatCard title="Total Orders" value={orders?.pagination?.total ?? analytics?.totals?.totalOrders ?? "—"} icon={<ShoppingCart size={18} />} isLoading={ordersLoading} color="bg-blue-600" />
-        <StatCard title="Pending Quotes" value={quotes?.pagination?.total ?? "—"} icon={<MessageSquare size={18} />} color="bg-orange-500" />
-        <StatCard title="Low Stock Items" value={inventorySummary?.totals?.lowStockCount ?? "—"} icon={<Warehouse size={18} />} color="bg-red-500" />
-      </div>
+      <AdminStatsGrid
+        stats={[
+          { title: "Total Products", value: products?.pagination?.total ?? "—", icon: <Package size={18} />, isLoading: productsLoading },
+          { title: "Total Orders", value: orders?.pagination?.total ?? analytics?.totals?.totalOrders ?? "—", icon: <ShoppingCart size={18} />, isLoading: ordersLoading, color: "bg-blue-600" },
+          { title: "Pending Quotes", value: quotes?.pagination?.total ?? "—", icon: <MessageSquare size={18} />, isLoading: quotesLoading, color: "bg-orange-500" },
+          { title: "Low Stock Items", value: inventorySummary?.totals?.lowStockCount ?? "—", icon: <Warehouse size={18} />, isLoading: inventorySummaryLoading, color: "bg-red-500" }
+        ]}
+      />
 
       {/* Charts */}
       {analytics && (
@@ -137,6 +139,7 @@ export default function DashboardPage() {
             columns={invColumns}
             data={inventory?.data?.slice(0, 6) || []}
             rowKey="id"
+            isLoading={inventoryLoading}
             emptyMessage="All stock levels are healthy."
           />
         </div>

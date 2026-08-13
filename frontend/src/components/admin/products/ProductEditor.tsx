@@ -7,7 +7,7 @@ import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import * as Yup from "yup";
 import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search, ChevronRight, ChevronLeft, ChevronDown, Eye, ZoomIn, CheckSquare, Square, Check, FolderUp, Image as ImageIcon, Loader2, Box, Package, Info } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, AdminMultiSelect, StatusBadge, useToast, ConfirmModal, DataTable, AdminSectionTable, Column, toastMessages } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, AdminMultiSelect, StatusBadge, useToast, ConfirmModal, DataTable, AdminSectionTable, Column, toastMessages, LoadingButton } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
@@ -4581,37 +4581,76 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
   const content = (
     <>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex w-full overflow-x-auto gap-1 rounded-lg border border-[#E6E6E6] bg-white p-1 lg:w-auto">
-          {visibleTabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "whitespace-nowrap rounded-md px-3.5 py-1.5 text-[12.5px] font-medium transition-colors flex-shrink-0",
-                activeTab === tab.id ? "bg-[#E31E24] text-white" : "text-[#6B6B6B] hover:bg-[#F2F2F2]"
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
+      {/* ── Tab Navigation ── */}
+      <div className="mb-4 flex w-full overflow-x-auto gap-1 rounded-xl border border-[#E6E6E6] bg-white p-1.5 shadow-2xs scrollbar-thin">
+        {visibleTabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            className={cn(
+              "whitespace-nowrap rounded-lg px-3.5 py-1.5 text-[12.5px] font-semibold transition-all flex-shrink-0",
+              activeTab === tab.id
+                ? "bg-[#E31E24] text-white shadow-xs"
+                : "text-[#6B6B6B] hover:bg-[#F4F4F4] hover:text-[#1A1A1A]"
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Sticky Action Bar & Status Header ── */}
+      <div className="sticky -top-6 z-20 mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#E6E6E6] bg-white/95 px-5 py-3 shadow-[0_10px_25px_rgba(0,0,0,0.05)] backdrop-blur relative transition-all">
+        <div className="flex items-center gap-3 min-w-0">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1A1A1A] truncate">
+                {visibleTabs.find((t) => t.id === activeTab)?.label}
+              </h2>
+              {product?.title ? (
+                <span className="text-[12.5px] text-[#8B8B8B] font-medium hidden sm:inline truncate max-w-[280px]">
+                  — {product.title}
+                </span>
+              ) : null}
+            </div>
+            {!isReadOnly ? (
+              <p className="mt-0.5 text-[11.5px] text-[#8B8B8B]">
+                Changes are not applied until you save.
+              </p>
+            ) : (
+              <p className="mt-0.5 text-[11.5px] font-medium text-amber-600">
+                Read-only mode. You do not have permissions to edit product catalog.
+              </p>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {!isReadOnly && (activeTab === 0 || activeTab === 1 || activeTab === 10 || activeTab === 13) ? (
-            <button
+
+        <div className="flex items-center gap-2.5">
+          {form.dirty && !isReadOnly && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 border border-amber-200 shadow-2xs">
+              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+              Unsaved Changes
+            </span>
+          )}
+
+          {!isReadOnly && (activeTab === 0 || activeTab === 1 || activeTab === 4 || activeTab === 10 || activeTab === 11 || activeTab === 13) ? (
+            <LoadingButton
               type="button"
               onClick={() => form.handleSubmit()}
-              disabled={form.isSubmitting}
-              className="rounded-md bg-[#E31E24] px-5 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
+              loading={form.isSubmitting || updateProduct.isPending}
+              loadingText="Saving…"
+              className="flex items-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white shadow-[0_4px_14px_rgba(227,30,36,0.28)] hover:bg-[#B5151B] transition-all active:scale-[0.98]"
             >
-              {form.isSubmitting ? "Saving…" : "Save Changes"}
-            </button>
+              <Save size={14} />
+              Save Changes
+            </LoadingButton>
           ) : null}
+
           <button
             type="button"
             onClick={() => router.push("/admin/products")}
-            className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3.5 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#E6E6E6] bg-white px-3.5 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] transition-colors shadow-2xs"
             title="Back to products list"
           >
             <ChevronLeft size={16} />
@@ -4802,29 +4841,28 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       ) : (
                         <>
                           <Square size={14} className="text-[#9A9A9A]" />
-                          Select All ({selectedMediaIds.size > 0 ? `${selectedMediaIds.size}/${(product.media ?? []).length}` : "All"})
+                          Select All ({selectedMediaIds.size > 0 ? `${selectedMediaIds.size}/${(product.media ?? []).length}` : "0"})
                         </>
                       )}
                     </button>
 
-                    {selectedMediaIds.size > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setDeletingBulkMedia(true)}
-                        className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-                      >
-                        <Trash2 size={14} />
-                        Delete Selected ({selectedMediaIds.size})
-                      </button>
-                    )}
-
                     <button
                       type="button"
-                      onClick={() => setDeletingAllMedia(true)}
-                      className="flex items-center gap-1.5 rounded-md border border-[#F2C9C9] bg-white px-3.5 py-2 text-[13px] font-medium text-red-600 hover:bg-red-50"
+                      onClick={() => {
+                        if (selectedMediaIds.size > 0) {
+                          setDeletingBulkMedia(true);
+                        } else {
+                          setDeletingAllMedia(true);
+                        }
+                      }}
+                      className={`flex items-center gap-1.5 rounded-md px-3.5 py-2 text-[13px] font-semibold transition-colors ${
+                        selectedMediaIds.size > 0
+                          ? "bg-[#E31E24] text-white hover:bg-[#B5151B]"
+                          : "border border-[#F2C9C9] bg-white text-red-600 hover:bg-red-50"
+                      }`}
                     >
                       <Trash2 size={14} />
-                      Delete All
+                      {selectedMediaIds.size > 0 ? `Delete Selected (${selectedMediaIds.size})` : "Delete All"}
                     </button>
                   </>
                 )}
@@ -5250,13 +5288,13 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             )}
 
             {/* Custom Table Controls row directly above the table */}
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#E6E6E6] bg-white p-3.5 shadow-sm">
+            <div className="mb-4 flex flex-col xl:flex-row xl:items-center justify-between gap-3 rounded-lg border border-[#E6E6E6] bg-white p-3.5 shadow-sm min-h-[58px]">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-[13px] font-semibold text-[#1A1A1A]">List</span>
-                <span className="rounded-full bg-[#FEF2F2] border border-red-100 px-2.5 py-0.5 text-[11.5px] font-semibold text-red-600">
+                <span className="inline-flex items-center justify-center rounded-full bg-[#FEF2F2] border border-red-100 px-2.5 py-0.5 text-[11.5px] font-semibold text-red-600 min-w-[84px]">
                   {selectedVariantIds.length} selected
                 </span>
-                <span className="text-[12.5px] text-[#6B6B6B]">
+                <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">
                   Showing {totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalItems)} of {totalItems}
                 </span>
                 <div className="flex items-center gap-1">
@@ -5307,7 +5345,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                 <input
                   type="text"
                   placeholder={

@@ -6,7 +6,7 @@ import * as Yup from "yup";
 import { Archive, CheckCircle2, Copy, Download, FolderTree, GitFork, Image as ImageIcon, Layers, Pencil, Plus, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, AdminTextarea, AdminRichTextEditor, ConfirmModal, StatCard, StatusBadge, toastMessages, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, AdminTextarea, AdminRichTextEditor, ConfirmModal, StatCard, StatusBadge, toastMessages, useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import {
   filterTranslationLanguages,
@@ -437,81 +437,51 @@ export default function CategoriesPage() {
 
   return (
     <AdminLayout title="Categories" breadcrumb={[{ label: "Categories" }]}>
-      {/* StatCards Row */}
-      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Categories"
-          value={categoryStats.total}
-          subtitle="Catalog taxonomy structure"
-          icon={<FolderTree size={18} />}
-          isLoading={isLoading}
-        />
-        <StatCard
-          title="Active Categories"
-          value={categoryStats.active}
-          subtitle="Visible on navigation & catalog"
-          icon={<CheckCircle2 size={18} />}
-          color="bg-green-600"
-          isLoading={isLoading}
-        />
-        <StatCard
-          title="Top-Level Categories"
-          value={categoryStats.root}
-          subtitle="Root catalog categories"
-          icon={<Layers size={18} />}
-          color="bg-indigo-600"
-          isLoading={isLoading}
-        />
-        <StatCard
-          title="Sub-Categories"
-          value={categoryStats.sub}
-          subtitle="Child & nested categories"
-          icon={<GitFork size={18} />}
-          color="bg-blue-600"
-          isLoading={isLoading}
-        />
-      </div>
+      <AdminStatsGrid
+        stats={[
+          { title: "Total Categories", value: categoryStats.total, subtitle: "Catalog taxonomy structure", icon: <FolderTree size={18} /> },
+          { title: "Active Categories", value: categoryStats.active, subtitle: "Visible on navigation & catalog", icon: <CheckCircle2 size={18} />, color: "bg-green-600" },
+          { title: "Top-Level Categories", value: categoryStats.root, subtitle: "Root catalog categories", icon: <Layers size={18} />, color: "bg-indigo-600" },
+          { title: "Sub-Categories", value: categoryStats.sub, subtitle: "Child & nested categories", icon: <GitFork size={18} />, color: "bg-blue-600" }
+        ]}
+        isLoading={isLoading}
+      />
 
-      <div className="mb-5 flex items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* <p className="text-[13.5px] text-[#6B6B6B]">Drag rows to reorder. Child categories are indented under their parent.</p> */}
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search categories..."
-              className="w-[220px] rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] outline-none focus:border-[#E31E24]"
-            />
-          </div>
+      <AdminListToolbar
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: "Search categories...",
+          widthClassName: "w-[220px]",
+        }}
+        leftExtra={
           <select
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value)}
-            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none"
+            className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13.5px] outline-none hover:border-[#D1D1D1]"
           >
             <option value="">All status</option>
             <option value="ACTIVE">Active</option>
             <option value="INACTIVE">Inactive</option>
           </select>
-          <button type="button" onClick={exportCategories} className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">
-            <Download size={14} /> Export Excel
-          </button>
-          {canCreate && (
-            <button type="button" onClick={openImportDialog} className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">
-              <Upload size={14} /> Import Excel
-            </button>
-          )}
-        </div>
-        {canCreate && (
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-          >
-            <Plus size={14} />
-            Add category
-          </button>
-        )}
+        }
+        exportAction={{
+          onClick: exportCategories,
+          label: "Export Excel",
+        }}
+        importAction={canCreate ? {
+          onClick: openImportDialog,
+          label: "Import Excel",
+        } : undefined}
+        refresh={{
+          onRefresh: refetch,
+          isRefreshing: isLoading,
+        }}
+        primaryAction={canCreate ? {
+          onClick: openCreateModal,
+          label: "Add category",
+        } : undefined}
+      />
         <input
           ref={fileInputRef}
           type="file"
@@ -522,7 +492,6 @@ export default function CategoriesPage() {
             event.currentTarget.value = "";
           }}
         />
-      </div>
 
       <Modal
         open={showEditor}
@@ -710,9 +679,14 @@ export default function CategoriesPage() {
 
           <div className="flex gap-2.5 justify-end">
             {(!editing || categoryEditorTab === "content") && (
-              <button type="submit" disabled={form.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
-                {form.isSubmitting ? "Saving..." : editing ? "Update category" : "Create category"}
-              </button>
+              <LoadingButton
+                type="submit"
+                loading={form.isSubmitting}
+                loadingText="Saving..."
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
+              >
+                {editing ? "Update category" : "Create category"}
+              </LoadingButton>
             )}
             <button type="button" onClick={closeEditor} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] hover:bg-[#F2F2F2]">Cancel</button>
           </div>
@@ -794,9 +768,14 @@ export default function CategoriesPage() {
             <button type="button" onClick={closeCreateModal} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] hover:bg-[#F2F2F2]">
               Cancel
             </button>
-            <button type="submit" disabled={form.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
-              {form.isSubmitting ? "Creating..." : "Create category"}
-            </button>
+            <LoadingButton
+              type="submit"
+              loading={form.isSubmitting}
+              loadingText="Creating..."
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
+            >
+              Create category
+            </LoadingButton>
           </div>
         </form>
       </Modal>
@@ -878,6 +857,7 @@ export default function CategoriesPage() {
         message="This soft deletes the category. Deletion is blocked if products or child categories still reference it."
         onConfirm={handleDelete}
         onCancel={() => setDeleting(null)}
+        isLoading={deleteCategory.isPending}
       />
 
       <Modal
@@ -939,14 +919,16 @@ export default function CategoriesPage() {
             <button type="button" onClick={() => setImportOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium text-[#555] hover:bg-[#F2F2F2]">
               Close
             </button>
-            <button
+            <LoadingButton
               type="button"
               onClick={confirmImport}
-              disabled={!importFile || importing || !!importPreview?.invalidRows}
+              loading={importing}
+              loadingText="Importing..."
+              disabled={!importFile || !!importPreview?.invalidRows}
               className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white disabled:opacity-60"
             >
-              {importing ? "Importing..." : "Import Categories"}
-            </button>
+              Import Categories
+            </LoadingButton>
           </div>
         </div>
       </Modal>

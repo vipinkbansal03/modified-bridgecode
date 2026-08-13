@@ -176,6 +176,8 @@ export function useAdminForm<T extends Record<string, any>>({
     [values, handleChange, handleBlur]
   );
 
+  const dirty = JSON.stringify(values) !== JSON.stringify(initialValuesState);
+
   return {
     values,
     setValues,
@@ -183,6 +185,7 @@ export function useAdminForm<T extends Record<string, any>>({
     setErrors,
     touched,
     isSubmitting,
+    dirty,
     status,
     setStatus,
     handleChange,

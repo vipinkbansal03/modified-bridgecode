@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Loader2, Plug } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import {
   useAdminShippingProviders,
   useUpsertShippingProvider,
@@ -185,14 +185,16 @@ export default function ShippingPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     {canUpdate && isTestable && (
-                      <button
+                      <LoadingButton
+                        type="button"
                         onClick={() => handleTest(p)}
-                        disabled={testConnection.isPending}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-1.5 text-[12px] font-medium text-[#6B6B6B] hover:bg-[#F2F2F2] disabled:opacity-50"
+                        loading={testConnection.isPending}
+                        loadingText="Testing..."
+                        className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-1.5 text-[12px] font-medium text-[#6B6B6B] hover:bg-[#F2F2F2]"
                       >
                         <Plug size={12} />
-                        {testConnection.isPending ? "Testing..." : "Test Connection"}
-                      </button>
+                        Test Connection
+                      </LoadingButton>
                     )}
                     {canUpdate && (
                       <label className="flex items-center gap-2 cursor-pointer">
@@ -265,13 +267,15 @@ export default function ShippingPage() {
                 </div>
 
                 {canUpdate && isDirty && (
-                  <button
+                  <LoadingButton
+                    type="button"
                     onClick={() => handleSave(p)}
-                    disabled={upsertMutation.isPending}
-                    className="mt-4 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
+                    loading={upsertMutation.isPending}
+                    loadingText="Saving..."
+                    className="mt-4 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
                   >
-                    {upsertMutation.isPending ? "Saving..." : `Save ${p.displayName}`}
-                  </button>
+                    Save {p.displayName}
+                  </LoadingButton>
                 )}
               </div>
             );

@@ -2,7 +2,7 @@
 
 import { useRef, useState, type ChangeEvent } from "react";
 import * as Yup from "yup";
-import { AdminInput, AdminSelect, AdminTextarea, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminTextarea, useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import { useAdminCategories, useCreateProduct } from "@/hooks/admin/useAdminHooks";
 import { cn } from "@/utils/cn";
 import { getAdminErrorMessage } from "@/services/adminApi";
@@ -336,13 +336,14 @@ export function ProductCreateForm({
               </button>
             ) : null}
 
-            <button
+            <LoadingButton
               type="submit"
-              disabled={form.isSubmitting}
-              className="rounded-md bg-[#E31E24] px-5 py-2 text-sm font-medium text-white transition hover:bg-[#C91A20] disabled:opacity-50"
+              loading={form.isSubmitting}
+              loadingText="Creating..."
+              className="rounded-md bg-[#E31E24] px-5 py-2 text-sm font-medium text-white transition hover:bg-[#C91A20]"
             >
-              {form.isSubmitting ? "Creating..." : submitLabel}
-            </button>
+              {submitLabel}
+            </LoadingButton>
           </div>
         </div>
       </form>

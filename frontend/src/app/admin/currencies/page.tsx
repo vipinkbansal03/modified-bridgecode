@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Copy, Download, Edit2, Filter, Plus, RefreshCw, Search, SlidersHorizontal, SquareCheckBig, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, ConfirmModal, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminStatsGrid, AdminListToolbar, ConfirmModal, Pagination, StatCard, StatusBadge, useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import {
   useAdminCurrencyDashboard,
@@ -387,58 +387,64 @@ export default function CurrenciesPage() {
   return (
     <AdminLayout title="Currencies" breadcrumb={[{ label: "Currencies" }]}>
       <div className="space-y-5">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <StatCard title="Total Currencies" value={dashboard?.totalCurrencies ?? 0} subtitle="All records" icon={<SquareCheckBig size={18} />} isLoading={dashboardLoading} />
-          <StatCard title="Active" value={dashboard?.activeCurrencies ?? 0} subtitle="Usable now" icon={<SlidersHorizontal size={18} />} color="bg-green-600" isLoading={dashboardLoading} />
-          <StatCard title="Inactive" value={dashboard?.inactiveCurrencies ?? 0} subtitle="Disabled records" icon={<X size={18} />} color="bg-gray-600" isLoading={dashboardLoading} />
-          <div className="flex flex-col justify-between rounded-xl border border-[#E6E6E6] bg-white p-4 shadow-sm relative overflow-hidden">
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-medium text-[#6B7280]">Base Currency</span>
-              <span className="inline-flex items-center rounded-full bg-[#0F6CBD]/10 px-2 py-0.5 text-[10px] font-bold text-[#0F6CBD]">
-                BASE
-              </span>
-            </div>
-            {dashboardLoading ? (
-              <div className="h-8 animate-pulse bg-gray-100 rounded my-1.5" />
-            ) : dashboard?.baseCurrency ? (
-              <div className="mt-1.5 space-y-0.5">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-[16px] font-bold text-[#1A1A1A] truncate">{dashboard.baseCurrency.name}</span>
-                  <span className="text-[12px] font-semibold text-[#0F6CBD]">({dashboard.baseCurrency.code})</span>
+        <AdminStatsGrid
+          stats={[
+            { title: "Total Currencies", value: dashboard?.totalCurrencies ?? 0, subtitle: "All records", icon: <SquareCheckBig size={18} />, isLoading: dashboardLoading },
+            { title: "Active", value: dashboard?.activeCurrencies ?? 0, subtitle: "Usable now", icon: <SlidersHorizontal size={18} />, color: "bg-green-600", isLoading: dashboardLoading },
+            { title: "Inactive", value: dashboard?.inactiveCurrencies ?? 0, subtitle: "Disabled records", icon: <X size={18} />, color: "bg-gray-600", isLoading: dashboardLoading },
+            {
+              customCard: (
+                <div className="flex flex-col justify-between rounded-xl border border-[#E6E6E6] bg-white p-4 shadow-sm relative overflow-hidden h-full">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] font-medium text-[#6B7280]">Base Currency</span>
+                    <span className="inline-flex items-center rounded-full bg-[#0F6CBD]/10 px-2 py-0.5 text-[10px] font-bold text-[#0F6CBD]">
+                      BASE
+                    </span>
+                  </div>
+                  {dashboardLoading ? (
+                    <div className="h-8 animate-pulse bg-gray-100 rounded my-1.5" />
+                  ) : dashboard?.baseCurrency ? (
+                    <div className="mt-1.5 space-y-0.5">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-[16px] font-bold text-[#1A1A1A] truncate">{dashboard.baseCurrency.name}</span>
+                        <span className="text-[12px] font-semibold text-[#0F6CBD]">({dashboard.baseCurrency.code})</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-[#6B7280]">
+                        <span>Rate: <strong className="text-[#1A1A1A]">1.000000</strong></span>
+                        <span className="font-semibold text-[#1A1A1A]">{dashboard.baseCurrency.symbol}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-1.5 text-[12px] font-semibold text-amber-600">
+                      ⚠️ No Base Currency set!
+                    </div>
+                  )}
+                  <div className="mt-1.5 text-[10px] text-[#9A9A9A] space-y-1">
+                    <div>
+                      {dashboard?.baseCurrency?.updatedAt ? `Last updated: ${formatDate(dashboard.baseCurrency.updatedAt)}` : "Primary system currency"}
+                    </div>
+                    {dashboard?.lastRatesSyncAt && (
+                      <div className="border-t border-[#F3F4F6] pt-1 mt-1 text-[9.5px]">
+                        <span>Sync: {formatDateTime(dashboard.lastRatesSyncAt)} </span>
+                        <span className="font-semibold">({dashboard.lastSyncSource || "Manual"})</span>
+                        {" · "}
+                        <span className={dashboard.lastSyncStatus === "Success" ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                          {dashboard.lastSyncStatus || "Success"}
+                        </span>
+                      </div>
+                    )}
+                    {dashboard?.nextScheduledSyncTime && (
+                      <div className="text-[9.5px] text-[#9A9A9A]">
+                        Next Auto: {formatDateTime(dashboard.nextScheduledSyncTime)}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-[#6B7280]">
-                  <span>Rate: <strong className="text-[#1A1A1A]">1.000000</strong></span>
-                  <span className="font-semibold text-[#1A1A1A]">{dashboard.baseCurrency.symbol}</span>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-1.5 text-[12px] font-semibold text-amber-600">
-                ⚠️ No Base Currency set!
-              </div>
-            )}
-            <div className="mt-1.5 text-[10px] text-[#9A9A9A] space-y-1">
-              <div>
-                {dashboard?.baseCurrency?.updatedAt ? `Last updated: ${formatDate(dashboard.baseCurrency.updatedAt)}` : "Primary system currency"}
-              </div>
-              {dashboard?.lastRatesSyncAt && (
-                <div className="border-t border-[#F3F4F6] pt-1 mt-1 text-[9.5px]">
-                  <span>Sync: {formatDateTime(dashboard.lastRatesSyncAt)} </span>
-                  <span className="font-semibold">({dashboard.lastSyncSource || "Manual"})</span>
-                  {" · "}
-                  <span className={dashboard.lastSyncStatus === "Success" ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                    {dashboard.lastSyncStatus || "Success"}
-                  </span>
-                </div>
-              )}
-              {dashboard?.nextScheduledSyncTime && (
-                <div className="text-[9.5px] text-[#9A9A9A]">
-                  Next Auto: {formatDateTime(dashboard.nextScheduledSyncTime)}
-                </div>
-              )}
-            </div>
-          </div>
-          <StatCard title="Mapped Countries" value={dashboard?.mappedCountries ?? 0} subtitle="Countries using currencies" icon={<Filter size={18} />} color="bg-[#7A4F01]" isLoading={dashboardLoading} />
-        </div>
+              )
+            },
+            { title: "Mapped Countries", value: dashboard?.mappedCountries ?? 0, subtitle: "Countries using currencies", icon: <Filter size={18} />, color: "bg-[#7A4F01]", isLoading: dashboardLoading }
+          ]}
+        />
 
         {showSyncReminder && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -474,192 +480,152 @@ export default function CurrenciesPage() {
           </div>
         )}
 
-        <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="relative w-full max-w-[280px]">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-              <input
-                value={search}
+        <AdminListToolbar
+          search={{
+            value: search,
+            onChange: (val) => {
+              setSearch(val);
+              setPage(1);
+            },
+            placeholder: "Search currencies...",
+            widthClassName: "max-w-[280px]",
+          }}
+          filters={{
+            showFilters: showFilters,
+            onToggle: () => setShowFilters(!showFilters),
+            activeCount: [statusFilter].filter(Boolean).length,
+            label: "Filters",
+          }}
+          columns={{
+            visibleColumns: visibleColumns,
+            onToggleColumn: (key) => {
+              setVisibleColumns((current) => ({
+                ...current,
+                [key]: !current[key as keyof typeof current],
+              }));
+            },
+            options: Object.keys(visibleColumns).map((key) => ({ key, label: key.replace(/([A-Z])/g, " $1") })),
+          }}
+          leftExtra={
+            canUpdate && (
+              <button
+                type="button"
+                disabled={syncCurrencyRates.isPending}
+                onClick={handleSyncRates}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-60"
+              >
+                <RefreshCw size={14} className={syncCurrencyRates.isPending ? "animate-spin text-[#E31E24]" : ""} />
+                {syncCurrencyRates.isPending ? "Syncing..." : "Sync Rates"}
+              </button>
+            )
+          }
+          exportAction={{
+            onClick: () => void handleExport(selectedIds.length > 0),
+            label: selectedIds.length > 0 ? `Export Selected (${selectedIds.length})` : "Export",
+          }}
+          primaryAction={
+            canCreate
+              ? {
+                  onClick: openCreate,
+                  label: "Add Currency",
+                  icon: <Plus size={14} />,
+                }
+              : undefined
+          }
+          filterPanel={
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 pt-2">
+              <AdminSelect
+                label="Status"
+                value={statusFilter}
                 onChange={(event) => {
-                  setSearch(event.target.value);
+                  setStatusFilter(event.target.value);
                   setPage(1);
                 }}
-                placeholder="Search currencies..."
-                className="h-10 w-full rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                options={[
+                  { value: "", label: "All status" },
+                  { value: "ACTIVE", label: "Active" },
+                  { value: "INACTIVE", label: "Inactive" },
+                ]}
+              />
+              <AdminSelect
+                label="Sort By"
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+                options={[
+                  { value: "code", label: "Code" },
+                  { value: "name", label: "Name" },
+                  { value: "exchangeRate", label: "Exchange rate" },
+                  { value: "status", label: "Status" },
+                  { value: "updatedAt", label: "Updated date" },
+                ]}
+              />
+              <AdminSelect
+                label="Direction"
+                value={sortDir}
+                onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+                options={[
+                  { value: "asc", label: "Ascending" },
+                  { value: "desc", label: "Descending" },
+                ]}
+              />
+              <AdminSelect
+                label="Page Size"
+                value={String(limit)}
+                onChange={(event) => {
+                  setLimit(Number(event.target.value));
+                  setPage(1);
+                }}
+                options={[
+                  { value: "10", label: "10 per page" },
+                  { value: "20", label: "20 per page" },
+                  { value: "50", label: "50 per page" },
+                ]}
               />
             </div>
+          }
+          onResetFilters={() => {
+            setSearch("");
+            setStatusFilter("");
+            setSortBy("code");
+            setSortDir("asc");
+            setPage(1);
+          }}
+        />
 
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowFilters((current) => !current)}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
-              >
-                <Filter size={14} />
-                {showFilters ? "Hide filters" : "Show filters"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowColumns((current) => !current)}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
-              >
-                <SlidersHorizontal size={14} />
-                Columns
-              </button>
-              {canUpdate && (
-                <button
-                  type="button"
-                  disabled={syncCurrencyRates.isPending}
-                  onClick={handleSyncRates}
-                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-60"
-                >
-                  <RefreshCw size={14} className={syncCurrencyRates.isPending ? "animate-spin text-[#E31E24]" : ""} />
-                  {syncCurrencyRates.isPending ? "Syncing..." : "Sync Rates"}
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => void handleExport(false)}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]"
-              >
-                <Download size={14} />
-                Export
-              </button>
-              {canCreate && (
-                <button
-                  type="button"
-                  onClick={openCreate}
-                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-                >
-                  <Plus size={14} />
-                  Add Currency
-                </button>
-              )}
-            </div>
-          </div>
-
-          {showFilters && (
-            <div className="mt-4 border-t border-[#F0F0F0] pt-4">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-[13px] font-bold text-[#1A1A1A]">Filters & Sorting</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch("");
-                    setStatusFilter("");
-                    setSortBy("code");
-                    setSortDir("asc");
-                    setPage(1);
-                  }}
-                  className="text-[12.5px] font-medium text-[#E31E24] hover:underline"
-                >
-                  Reset
-                </button>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <AdminSelect
-                  label="Status"
-                  value={statusFilter}
-                  onChange={(event) => {
-                    setStatusFilter(event.target.value);
-                    setPage(1);
-                  }}
-                  options={[
-                    { value: "", label: "All status" },
-                    { value: "ACTIVE", label: "Active" },
-                    { value: "INACTIVE", label: "Inactive" },
-                  ]}
-                />
-                <AdminSelect
-                  label="Sort By"
-                  value={sortBy}
-                  onChange={(event) => setSortBy(event.target.value)}
-                  options={[
-                    { value: "code", label: "Code" },
-                    { value: "name", label: "Name" },
-                    { value: "exchangeRate", label: "Exchange rate" },
-                    { value: "status", label: "Status" },
-                    { value: "updatedAt", label: "Updated date" },
-                  ]}
-                />
-                <AdminSelect
-                  label="Direction"
-                  value={sortDir}
-                  onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
-                  options={[
-                    { value: "asc", label: "Ascending" },
-                    { value: "desc", label: "Descending" },
-                  ]}
-                />
-                <AdminSelect
-                  label="Page Size"
-                  value={String(limit)}
-                  onChange={(event) => {
-                    setLimit(Number(event.target.value));
-                    setPage(1);
-                  }}
-                  options={[
-                    { value: "10", label: "10 per page" },
-                    { value: "20", label: "20 per page" },
-                    { value: "50", label: "50 per page" },
-                  ]}
-                />
-              </div>
-            </div>
-          )}
-
-          {selectedIds.length > 0 && (
-            <div className="mt-4 rounded-xl border border-dashed border-[#E31E24]/30 bg-[#FFF5F5]/30 p-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <span className="text-[13px] font-semibold text-[#E31E24]">{selectedIds.length} rows selected</span>
-                <div className="h-4 w-[1px] bg-[#E6E6E6]" />
-                <div className="flex items-center gap-2">
-                  <AdminSelect
-                    label=""
-                    value={bulkAction}
-                    onChange={(event) => setBulkAction(event.target.value as "ENABLE" | "DISABLE" | "DELETE" | "")}
-                    options={[
-                      { value: "", label: "Choose action" },
-                      { value: "ENABLE", label: "Enable" },
-                      { value: "DISABLE", label: "Disable" },
-                      { value: "DELETE", label: "Delete" },
-                    ]}
-                  />
-                  <button type="button" onClick={() => void handleBulkAction()} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-                    Apply
-                  </button>
-                </div>
-              </div>
+        {selectedIds.length > 0 && (
+          <div className="rounded-xl border border-dashed border-[#E31E24]/30 bg-[#FFF5F5]/30 p-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-[13px] font-semibold text-[#E31E24]">{selectedIds.length} rows selected</span>
+              <div className="h-4 w-[1px] bg-[#E6E6E6]" />
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => void handleExport(true)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
-                  <Download size={13} /> Export selected
-                </button>
-                <button type="button" onClick={() => setSelectedIds([])} className="text-[13px] font-medium text-[#6B6B6B] hover:text-[#E31E24] hover:underline">
-                  Clear selection
+                <AdminSelect
+                  label=""
+                  value={bulkAction}
+                  onChange={(event) => setBulkAction(event.target.value as "ENABLE" | "DISABLE" | "DELETE" | "")}
+                  options={[
+                    { value: "", label: "Choose action" },
+                    { value: "ENABLE", label: "Enable" },
+                    { value: "DISABLE", label: "Disable" },
+                    { value: "DELETE", label: "Delete" },
+                  ]}
+                />
+                <button type="button" onClick={() => void handleBulkAction()} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
+                  Apply
                 </button>
               </div>
             </div>
-          )}
-        </div>
-
-        {showColumns ? (
-          <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-            <div className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">Column visibility</div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {Object.entries(visibleColumns).map(([key, value]) => (
-                <label key={key} className="flex items-center gap-2 text-[13px] text-[#1A1A1A]">
-                  <input
-                    type="checkbox"
-                    checked={value}
-                    onChange={(event) => setVisibleColumns((current) => ({ ...current, [key]: event.target.checked }))}
-                    className="h-4 w-4 accent-[#E31E24]"
-                  />
-                  <span className="capitalize">{key.replace(/([A-Z])/g, " $1")}</span>
-                </label>
-              ))}
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => void handleExport(true)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
+                <Download size={13} /> Export selected
+              </button>
+              <button type="button" onClick={() => setSelectedIds([])} className="text-[13px] font-medium text-[#6B6B6B] hover:text-[#E31E24] hover:underline">
+                Clear selection
+              </button>
             </div>
           </div>
-        ) : null}
+        )}
+
+
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.95fr)]">
           <div className="rounded-xl border border-[#E6E6E6] bg-white">
@@ -1000,9 +966,9 @@ export default function CurrenciesPage() {
                 <button type="button" onClick={() => resetForm()} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
                   Cancel
                 </button>
-                <button type="submit" disabled={form.isSubmitting || createCurrency.isPending || updateCurrency.isPending} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
-                  {form.isSubmitting ? "Processing..." : form.values.id ? "Save currency" : "Create currency"}
-                </button>
+                <LoadingButton type="submit" loading={form.isSubmitting || createCurrency.isPending || updateCurrency.isPending} loadingText="Processing..." className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
+                  {form.values.id ? "Save currency" : "Create currency"}
+                </LoadingButton>
               </div>
             </div>
           </form>

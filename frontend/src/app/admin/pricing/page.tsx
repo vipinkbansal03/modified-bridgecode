@@ -22,10 +22,14 @@ import {
   AdminInput,
   AdminSelect,
   ConfirmModal,
+  DataTable,
   Pagination,
   StatCard,
+  AdminStatsGrid,
+  AdminListToolbar,
   StatusBadge,
   useToast,
+  LoadingButton,
 } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
@@ -747,176 +751,185 @@ export default function PricingPage() {
 
   return (
     <AdminLayout title="Pricing" breadcrumb={[{ label: "Pricing" }]}>
-      <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Total Pricing Rules" value={dashboard?.totalRules ?? 0} subtitle="All active pricing records" icon={<SquareCheckBig size={18} />} isLoading={isStatsLoading} />
-        <StatCard title="Active Rules" value={dashboard?.activeRules ?? 0} subtitle="Ready to resolve in checkout" icon={<CheckCircle2 size={18} />} color="bg-emerald-500" isLoading={isStatsLoading} />
-        <StatCard title="Inactive Rules" value={dashboard?.inactiveRules ?? 0} subtitle="Disabled or archived" icon={<Trash2 size={18} />} color="bg-slate-500" isLoading={isStatsLoading} />
-        <StatCard title="Recently Updated" value={dashboard?.recentlyUpdatedRules?.length ?? 0} subtitle="Latest touched rules" icon={<RefreshCw size={18} />} color="bg-[#E31E24]" isLoading={isStatsLoading} />
-      </div>
+      <AdminStatsGrid
+        stats={[
+          { title: "Total Pricing Rules", value: dashboard?.totalRules ?? 0, subtitle: "All active pricing records", icon: <SquareCheckBig size={18} />, isLoading: isStatsLoading },
+          { title: "Active Rules", value: dashboard?.activeRules ?? 0, subtitle: "Ready to resolve in checkout", icon: <CheckCircle2 size={18} />, color: "bg-emerald-500", isLoading: isStatsLoading },
+          { title: "Inactive Rules", value: dashboard?.inactiveRules ?? 0, subtitle: "Disabled or archived", icon: <Trash2 size={18} />, color: "bg-slate-500", isLoading: isStatsLoading },
+          { title: "Recently Updated", value: dashboard?.recentlyUpdatedRules?.length ?? 0, subtitle: "Latest touched rules", icon: <RefreshCw size={18} />, color: "bg-[#E31E24]", isLoading: isStatsLoading }
+        ]}
+      />
 
-      <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <StatCard title="Country Pricing" value={dashboard?.countryPricingRules ?? 0} icon={<FolderSymlink size={18} />} isLoading={isStatsLoading} />
-        <StatCard title="Tier Pricing" value={dashboard?.tierPricingRules ?? 0} icon={<Filter size={18} />} color="bg-[#0F766E]" isLoading={isStatsLoading} />
-        <StatCard title="MOQ Pricing" value={dashboard?.moqPricingRules ?? 0} icon={<SlidersHorizontal size={18} />} color="bg-[#2563EB]" isLoading={isStatsLoading} />
-        <StatCard title="Variant Pricing" value={dashboard?.variantPricingRules ?? 0} icon={<Eye size={18} />} color="bg-[#7C3AED]" isLoading={isStatsLoading} />
-        <StatCard title="Customer Specific" value={dashboard?.customerSpecificPricing ?? 0} icon={<CheckCircle2 size={18} />} color="bg-[#0EA5E9]" isLoading={isStatsLoading} />
-      </div>
-
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#E6E6E6] bg-white p-4">
-        <div>
-          <h2 className="text-[15px] font-semibold text-[#1A1A1A]">Pricing Administration</h2>
-          <p className="mt-1 text-[12.5px] text-[#6B6B6B]">
-            Reuses the existing resolver, product, variant, customer role, tier, country, MOQ, quote, and checkout pricing stack.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setShowFilters((current) => !current)} className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
-            <Filter size={14} /> Filters
-          </button>
-          <button type="button" onClick={() => setShowColumnPanel((current) => !current)} className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
-            <SlidersHorizontal size={14} /> Columns
-          </button>
-          {canCreate && (
-            <button type="button" onClick={() => openCreateForm("BASE_PRICE")} className="inline-flex items-center gap-2 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-              <Plus size={14} /> New Pricing Rule
-            </button>
-          )}
-        </div>
-      </div>
+      <AdminStatsGrid
+        stats={[
+          { title: "Country Pricing", value: dashboard?.countryPricingRules ?? 0, icon: <FolderSymlink size={18} />, isLoading: isStatsLoading },
+          { title: "Tier Pricing", value: dashboard?.tierPricingRules ?? 0, icon: <Filter size={18} />, color: "bg-[#0F766E]", isLoading: isStatsLoading },
+          { title: "MOQ Pricing", value: dashboard?.moqPricingRules ?? 0, icon: <SlidersHorizontal size={18} />, color: "bg-[#2563EB]", isLoading: isStatsLoading },
+          { title: "Variant Pricing", value: dashboard?.variantPricingRules ?? 0, icon: <Eye size={18} />, color: "bg-[#7C3AED]", isLoading: isStatsLoading },
+          { title: "Customer Specific", value: dashboard?.customerSpecificPricing ?? 0, icon: <CheckCircle2 size={18} />, color: "bg-[#0EA5E9]", isLoading: isStatsLoading }
+        ]}
+      />
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_420px]">
         <div className="space-y-5">
-          {showFilters ? (
-            <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Search and Filters</h3>
-                  <p className="mt-1 text-[12.5px] text-[#6B6B6B]">Search, filter, and sort across the existing pricing tables.</p>
+          <AdminListToolbar
+            search={{
+              value: search,
+              onChange: (val) => {
+                setSearch(val);
+                setPage(1);
+              },
+              placeholder: "Search rule, product, country, tier...",
+              widthClassName: "max-w-[280px]",
+            }}
+            filters={{
+              showFilters: showFilters,
+              onToggle: () => setShowFilters(!showFilters),
+              activeCount: [
+                statusFilter !== "ALL" ? statusFilter : "",
+                ruleTypeFilter !== "ALL" ? ruleTypeFilter : "",
+                countryFilter,
+                tierFilter,
+                productFilter,
+                variantFilter,
+                minQuantityFilter,
+              ].filter(Boolean).length,
+              label: "Filters",
+            }}
+            columns={{
+              visibleColumns: columnVisibility,
+              onToggleColumn: (key) => {
+                setColumnVisibility((current) => ({
+                  ...current,
+                  [key]: !current[key as keyof typeof current],
+                }));
+              },
+              options: columns.map((c) => ({ key: c.key, label: c.label })),
+            }}
+            primaryAction={
+              canCreate
+                ? {
+                    onClick: () => openCreateForm("BASE_PRICE"),
+                    label: "New Pricing Rule",
+                    icon: <Plus size={14} />,
+                  }
+                : undefined
+            }
+            filterPanel={
+              <div className="space-y-4 pt-2">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <AdminSelect
+                    label="Rule Type"
+                    value={ruleTypeFilter}
+                    onChange={(event) => {
+                      setRuleTypeFilter(event.target.value as PricingRuleType);
+                      setPage(1);
+                    }}
+                    options={[
+                      { value: "ALL", label: "All rule types" },
+                      ...Object.entries(ruleTypeLabels).map(([value, label]) => ({ value, label })),
+                    ]}
+                  />
+                  <AdminSelect
+                    label="Status"
+                    value={statusFilter}
+                    onChange={(event) => {
+                      setStatusFilter(event.target.value as PricingStatusFilter);
+                      setPage(1);
+                    }}
+                    options={[
+                      { value: "ALL", label: "All statuses" },
+                      { value: "ACTIVE", label: "Active" },
+                      { value: "INACTIVE", label: "Inactive" },
+                    ]}
+                  />
+                  <AdminMultiSearchableSelect
+                    label="Country"
+                    values={countryFilter ? countryFilter.split(",").filter(Boolean) : []}
+                    onValuesChange={(values) => {
+                      setCountryFilter(values.join(","));
+                      setPage(1);
+                    }}
+                    options={(countries as any[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+                    placeholder="Select countries"
+                    allowSelectAll
+                    selectAllLabel="All countries"
+                  />
+                  <AdminSelect label="Tier" value={tierFilter} onChange={(event) => { setTierFilter(event.target.value); setPage(1); }} options={tierOptions} />
+                  <AdminSearchableSelect
+                    label="Product"
+                    value={productFilter}
+                    onChange={(event) => { setProductFilter(event.target.value); setPage(1); }}
+                    options={productOptions}
+                    onSearchChange={setProductSearch}
+                    onMenuScrollToBottom={() => {
+                      if (hasNextProductsPage && !isFetchingNextProductsPage) {
+                        fetchNextProductsPage();
+                      }
+                    }}
+                    isLoadingMore={isFetchingNextProductsPage}
+                  />
+                  <AdminSelect label="Variant" value={variantFilter} onChange={(event) => { setVariantFilter(event.target.value); setPage(1); }} options={[{ value: "", label: "All variants" }, ...(filterProductData?.variants ?? []).map((variant: { id: string; title: string; sku?: string | null }) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]} />
+                  <AdminInput label="MOQ" type="number" min="1" value={minQuantityFilter} onChange={(event) => { setMinQuantityFilter(event.target.value); setPage(1); }} placeholder="Filter MOQ" />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch("");
-                    setStatusFilter("ALL");
-                    setRuleTypeFilter("ALL");
-                    setCountryFilter("");
-                    setTierFilter("");
-                    setProductFilter("");
-                    setVariantFilter("");
-                    setMinQuantityFilter("");
-                    setSortBy("updatedAt");
-                    setSortDir("desc");
-                    setShowAdvancedFilters(false);
-                    setPage(1);
-                  }}
-                  className="text-[13px] font-medium text-[#E31E24] hover:underline"
-                >
-                  Reset
-                </button>
-              </div>
 
-              <div className="grid gap-4 md:grid-cols-[repeat(2,minmax(0,1fr))_120px] items-end">
-                <AdminInput label="Search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Rule, product, country, tier" />
-                <AdminSelect
-                  label="Rule Type"
-                  value={ruleTypeFilter}
-                  onChange={(event) => {
-                    setRuleTypeFilter(event.target.value as PricingRuleType);
-                    setPage(1);
-                  }}
-                  options={[
-                    { value: "ALL", label: "All rule types" },
-                    ...Object.entries(ruleTypeLabels).map(([value, label]) => ({ value, label })),
-                  ]}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowAdvancedFilters((prev) => !prev)}
-                  className="flex h-[46px] w-full items-center justify-center gap-1 rounded-lg border border-[#E6E6E6] bg-white text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7] active:scale-[0.98] transition-all"
-                >
-                  {showAdvancedFilters ? "Fewer Filters" : "More Filters"}
-                </button>
-              </div>
-
-              {showAdvancedFilters && (
-                <div className="mt-4 pt-4 border-t border-[#FAFAFA] space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    <AdminSelect label="Status" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as PricingStatusFilter); setPage(1); }} options={[{ value: "ALL", label: "All statuses" }, { value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
-                    <AdminMultiSearchableSelect
-                      label="Country"
-                      values={countryFilter ? countryFilter.split(",").filter(Boolean) : []}
-                      onValuesChange={(values) => {
-                        setCountryFilter(values.join(","));
-                        setPage(1);
-                      }}
-                      options={(countries as any[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
-                      placeholder="Select countries"
-                      allowSelectAll
-                      selectAllLabel="All countries"
-                    />
-                    <AdminSelect label="Tier" value={tierFilter} onChange={(event) => { setTierFilter(event.target.value); setPage(1); }} options={tierOptions} />
-                    <AdminSearchableSelect
-                      label="Product"
-                      value={productFilter}
-                      onChange={(event) => { setProductFilter(event.target.value); setPage(1); }}
-                      options={productOptions}
-                      onSearchChange={setProductSearch}
-                      onMenuScrollToBottom={() => {
-                        if (hasNextProductsPage && !isFetchingNextProductsPage) {
-                          fetchNextProductsPage();
-                        }
-                      }}
-                      isLoadingMore={isFetchingNextProductsPage}
-                    />
-                    <AdminSelect label="Variant" value={variantFilter} onChange={(event) => { setVariantFilter(event.target.value); setPage(1); }} options={[{ value: "", label: "All variants" }, ...(filterProductData?.variants ?? []).map((variant: { id: string; title: string; sku?: string | null }) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]} />
-                    <AdminInput label="MOQ" type="number" min="1" value={minQuantityFilter} onChange={(event) => { setMinQuantityFilter(event.target.value); setPage(1); }} placeholder="Filter MOQ" />
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-4 pt-2">
-                    <AdminSelect
-                      label="Sort By"
-                      value={sortBy}
-                      onChange={(event) => setSortBy(event.target.value as PricingSortBy)}
-                      options={[
-                        { value: "updatedAt", label: "Updated date" },
-                        { value: "createdAt", label: "Created date" },
-                        { value: "ruleName", label: "Rule name" },
-                        { value: "ruleType", label: "Rule type" },
-                        { value: "product", label: "Product" },
-                        { value: "country", label: "Country" },
-                        { value: "tier", label: "Tier" },
-                        { value: "basePrice", label: "Base price" },
-                        { value: "status", label: "Status" },
-                      ]}
-                    />
-                    <AdminSelect
-                      label="Direction"
-                      value={sortDir}
-                      onChange={(event) => setSortDir(event.target.value as PricingSortDir)}
-                      options={[
-                        { value: "desc", label: "Descending" },
-                        { value: "asc", label: "Ascending" },
-                      ]}
-                    />
-                    <AdminSelect
-                      label="Page Size"
-                      value={String(limit)}
-                      onChange={(event) => {
-                        setLimit(Number(event.target.value));
-                        setPage(1);
-                      }}
-                      options={[
-                        { value: "10", label: "10" },
-                        { value: "20", label: "20" },
-                        { value: "50", label: "50" },
-                        { value: "100", label: "100" },
-                      ]}
-                    />
-                  </div>
+                <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-4 pt-2">
+                  <AdminSelect
+                    label="Sort By"
+                    value={sortBy}
+                    onChange={(event) => setSortBy(event.target.value as PricingSortBy)}
+                    options={[
+                      { value: "updatedAt", label: "Updated date" },
+                      { value: "createdAt", label: "Created date" },
+                      { value: "ruleName", label: "Rule name" },
+                      { value: "ruleType", label: "Rule type" },
+                      { value: "product", label: "Product" },
+                      { value: "country", label: "Country" },
+                      { value: "tier", label: "Tier" },
+                      { value: "basePrice", label: "Base price" },
+                      { value: "status", label: "Status" },
+                    ]}
+                  />
+                  <AdminSelect
+                    label="Direction"
+                    value={sortDir}
+                    onChange={(event) => setSortDir(event.target.value as PricingSortDir)}
+                    options={[
+                      { value: "desc", label: "Descending" },
+                      { value: "asc", label: "Ascending" },
+                    ]}
+                  />
+                  <AdminSelect
+                    label="Page Size"
+                    value={String(limit)}
+                    onChange={(event) => {
+                      setLimit(Number(event.target.value));
+                      setPage(1);
+                    }}
+                    options={[
+                      { value: "10", label: "10" },
+                      { value: "20", label: "20" },
+                      { value: "50", label: "50" },
+                      { value: "100", label: "100" },
+                    ]}
+                  />
                 </div>
-              )}
-            </div>
-          ) : null}
+              </div>
+            }
+            onResetFilters={() => {
+              setSearch("");
+              setStatusFilter("ALL");
+              setRuleTypeFilter("ALL");
+              setCountryFilter("");
+              setTierFilter("");
+              setProductFilter("");
+              setVariantFilter("");
+              setMinQuantityFilter("");
+              setSortBy("updatedAt");
+              setSortDir("desc");
+              setPage(1);
+            }}
+          />
 
           <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -933,8 +946,8 @@ export default function PricingPage() {
                 <button type="button" onClick={() => setSelectedIds([])} className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
                   <X size={14} /> Clear
                 </button>
-                <button type="button" onClick={() => handleExport(false)} className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
-                  <Download size={14} /> Export
+                <button type="button" onClick={() => handleExport(selectedIds.length > 0)} className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
+                  <Download size={14} /> {selectedIds.length > 0 ? `Export Selected (${selectedIds.length})` : "Export"}
                 </button>
               </div>
             </div>
@@ -1215,76 +1228,7 @@ export default function PricingPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-[#E6E6E6] bg-white p-4 shadow-sm">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Live Preview</h3>
-                <p className="mt-1 text-[12.5px] text-[#6B6B6B]">Resolver-backed pricing check for the exact customer journey.</p>
-              </div>
-              <button type="button" onClick={() => setPreviewInput(emptyPreview)} className="text-[12.5px] font-medium text-[#E31E24] hover:underline">
-                Reset
-              </button>
-            </div>
-            <div className="grid gap-3">
-              <AdminSelect label="Product" value={previewInput.productId} onChange={(event) => setPreviewInput((current) => ({ ...current, productId: event.target.value, variantId: "" }))} options={productOptions} />
-              <AdminSelect label="Variant" value={previewInput.variantId} onChange={(event) => setPreviewInput((current) => ({ ...current, variantId: event.target.value }))} options={previewVariantOptions} />
-              <AdminSelect label="Country" value={previewInput.countryId} onChange={(event) => setPreviewInput((current) => ({ ...current, countryId: event.target.value }))} options={countryOptions} />
-              <AdminSelect
-                label="Customer Role"
-                value={previewInput.customerRoleKey}
-                onChange={(event) => setPreviewInput((current) => ({ ...current, customerRoleKey: event.target.value }))}
-                options={previewCustomerRoleOptions}
-              />
-              <AdminSelect label="Tier" value={previewInput.tierId} onChange={(event) => setPreviewInput((current) => ({ ...current, tierId: event.target.value }))} options={tierOptions} />
-              <AdminInput label="Quantity" type="number" min="1" value={previewInput.quantity} onChange={(event) => setPreviewInput((current) => ({ ...current, quantity: event.target.value }))} />
-            </div>
-            <div className="mt-4 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
-              {previewLoading ? (
-                <p className="text-[13px] text-[#6B6B6B]">Loading preview...</p>
-              ) : previewError ? (
-                <p className="text-[13px] text-red-600">{getAdminErrorMessage(previewError, "Preview failed.")}</p>
-              ) : resolutionPreview ? (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Base price</div>
-                      <div className="text-[15px] font-semibold text-[#1A1A1A]">{formatMoney(resolutionPreview.basePrice, resolutionPreview.currency.symbol)}</div>
-                    </div>
-                    <div>
-                      <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Final price</div>
-                      <div className="text-[15px] font-semibold text-[#E31E24]">{formatMoney(resolutionPreview.finalPrice, resolutionPreview.currency.symbol)}</div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Applied rules</div>
-                    <ul className="mt-2 space-y-2">
-                      {resolutionPreview.appliedDiscounts.map((layer, index) => (
-                        <li key={`${layer.type}-${index}`} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[12.5px] text-[#1A1A1A]">
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="font-medium">{layer.label}</span>
-                            <span className="text-[#6B6B6B]">{formatMoney(layer.amountAfter, resolutionPreview.currency.symbol)}</span>
-                          </div>
-                          {layer.warning ? <div className="mt-1 text-[11.5px] text-amber-700">{layer.warning}</div> : null}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 text-[12.5px]">
-                    <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
-                      <div className="text-[#9A9A9A]">Tax</div>
-                      <div className="font-medium">{formatMoney(resolutionPreview.taxAmount, resolutionPreview.currency.symbol)}</div>
-                    </div>
-                    <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
-                      <div className="text-[#9A9A9A]">Resolution order</div>
-                      <div className="font-medium">Resolver hierarchy enforced server-side</div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-[13px] text-[#6B6B6B]">Choose product and country to preview the final price.</p>
-              )}
-            </div>
-          </div>
+
 
           <div className="rounded-xl border border-[#E6E6E6] bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
@@ -1442,9 +1386,9 @@ export default function PricingPage() {
                 <button type="button" onClick={resetForm} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
                   Cancel
                 </button>
-                <button type="submit" disabled={form.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
-                  {form.isSubmitting ? "Processing..." : (form.values.id ? "Save rule" : "Create rule")}
-                </button>
+                <LoadingButton type="submit" loading={form.isSubmitting || createPricing.isPending || updatePricing.isPending} loadingText="Processing..." className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
+                  {form.values.id ? "Save rule" : "Create rule"}
+                </LoadingButton>
               </div>
             </div>
           </form>
@@ -1457,6 +1401,7 @@ export default function PricingPage() {
         message={deleteTarget ? `Delete ${deleteTarget.ruleName}?` : ""}
         onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
         onCancel={() => setDeleteTarget(null)}
+        isLoading={deletePricing.isPending}
       />
 
       {ToastComponent}

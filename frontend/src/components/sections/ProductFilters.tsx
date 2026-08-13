@@ -4,7 +4,10 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { useCategories } from "@/hooks/api/useCategories";
+import { usePublicBanners } from "@/hooks/api/usePublicBanners";
+import { StorefrontBanner } from "@/components/ui/StorefrontBanner";
 import { cn } from "@/utils/cn";
+
 
 export interface ProductFilterState {
   featuredOnly: boolean;
@@ -218,6 +221,15 @@ export function ProductFilters({ value, onChange, availableAttributeValues = [],
           </div>
         );
       })}
+
+      <SidebarBannerSection />
     </aside>
   );
 }
+
+function SidebarBannerSection() {
+  const { data: banners = [] } = usePublicBanners("SIDEBAR");
+  if (banners.length === 0) return null;
+  return <StorefrontBanner banner={banners[0]} variant="sidebar" className="mt-6" />;
+}
+
