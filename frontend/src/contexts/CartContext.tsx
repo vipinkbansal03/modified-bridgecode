@@ -227,6 +227,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
               continue;
             }
 
+            if (message.includes("requested variants are not available")) {
+              console.warn(`Removing unavailable variants for product ${productSlug} from cart.`);
+              updatedItems = updatedItems.filter((item) => item.productSlug !== productSlug);
+              continue;
+            }
+
             updatedItems.forEach((item, index) => {
               if (item.productSlug === productSlug) {
                 updatedItems[index] = {
@@ -467,7 +473,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           const best = warehouses[0];
           return {
             ...item,
-            warehouseId: best.id,
+            warehouseId: best.id === "default" ? undefined : best.id,
             warehouseName: best.name,
             estimatedDeliveryDays: best.estimatedDeliveryDays,
             isLocalWarehouse: best.isLocal

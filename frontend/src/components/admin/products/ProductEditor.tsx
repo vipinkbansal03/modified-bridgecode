@@ -83,6 +83,7 @@ const basicSchema = Yup.object({
   title: Yup.string().required("Required"),
   slug: Yup.string(),
   categoryId: Yup.string().required("Required"),
+  activeCountryIds: Yup.array().of(Yup.string()).min(1, "Required").required("Required"),
   status: Yup.string().required(),
   productCode: Yup.string(),
   sku: Yup.string(),
@@ -117,6 +118,7 @@ type ProductEditorFormValues = {
   title: string;
   slug: string;
   categoryId: string;
+  activeCountryIds: string[];
   status: string;
   productCode: string;
   sku: string;
@@ -1816,7 +1818,17 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           payload.lowStockThreshold = parseInt(invBulkActionValue);
         }
         await Promise.all(
-          selectedInvIds.map((id) => adminApi.put(`/inventory/${id}`, payload))
+          selectedInvIds.map(async (id) => {
+            const inv = variantGroups.flatMap((g) => g.inventories).find((i) => i.id === id);
+            if (!inv) return;
+            if (id === "dummy-base-product") {
+              return adminApi.put(`/inventory/product/${product?.id}`, payload);
+            } else if (id.startsWith("dummy-")) {
+              return adminApi.post(`/inventory/upsert`, { variantId: inv.variantId, warehouseId: inv.isOverride ? inv.warehouseId : null, ...payload });
+            } else {
+              return adminApi.put(`/inventory/${id}`, payload);
+            }
+          })
         );
         showToast(`Successfully updated ${selectedInvIds.length} inventory record(s).`, "success");
       }
@@ -1905,8 +1917,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     [selectedAttributeDetail]
   );
   const availableMappingAttributes = useMemo(
-    () => attributeCatalog.filter((attribute) => !mappedAttributeIds.has(attribute.id)),
-    [attributeCatalog, mappedAttributeIds]
+    () => attributeCatalog.filter((attribute) => !mappedAttributeIds.has(attribute.id) || attribute.id === selectedMappingAttributeId),
+    [attributeCatalog, mappedAttributeIds, selectedMappingAttributeId]
   );
   const hasMappedProductAttributes = mappedAttributeRows.length > 0;
   const variantGenerationCatalog = useMemo(
@@ -2636,6 +2648,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       title: product?.title || "",
       slug: product?.slug || "",
       categoryId: product?.categoryId || "",
+      activeCountryIds: (productCountries as CountryAvailability[])?.filter(c => c.enabled)?.map(c => c.id) || (product?.defaultCountryId ? [product.defaultCountryId] : []),
       status: product?.status || "DRAFT",
       productCode: product?.productCode || "",
       sku: product?.sku || "",
@@ -3491,20 +3504,40 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
     try {
       const existingMappings = toProductAttributePayload(mappedAttributeRows);
-      await assignProductAttributes.mutateAsync([
-        ...existingMappings,
-        {
-          attributeId: selectedMappingAttributeId,
-          required: newMappingRequired,
-          gridAxis: newMappingGridAxis,
-          allowedValueIds: newMappingValueIds,
-        },
-      ]);
+      const isUpdate = existingMappings.some(m => m.attributeId === selectedMappingAttributeId);
+      
+      const nextMappings = isUpdate 
+        ? existingMappings.map(m => m.attributeId === selectedMappingAttributeId ? {
+            attributeId: selectedMappingAttributeId,
+            required: newMappingRequired,
+            gridAxis: newMappingGridAxis,
+            allowedValueIds: newMappingValueIds,
+          } : m)
+        : [
+            ...existingMappings,
+            {
+              attributeId: selectedMappingAttributeId,
+              required: newMappingRequired,
+              gridAxis: newMappingGridAxis,
+              allowedValueIds: newMappingValueIds,
+            },
+          ];
+
+      await assignProductAttributes.mutateAsync(nextMappings);
       resetAttributeMappingForm();
-      showToast("Product attribute mapped.");
+      showToast(isUpdate ? "Product attribute updated." : "Product attribute mapped.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to map product attribute."), "error");
     }
+  };
+
+  const handleEditMappedAttribute = (mapping: ProductAttributeMapping) => {
+    setSelectedMappingAttributeId(mapping.attributeId);
+    setNewMappingRequired(mapping.required);
+    setNewMappingGridAxis(mapping.gridAxis);
+    setNewMappingValueIds(mapping.allowedValues.map((v) => v.attributeValueId));
+    // Scroll to form slightly
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
   };
 
   const handleToggleMappedRequired = async (attributeId: string, required: boolean) => {
@@ -3875,7 +3908,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     const seedAttributeIds = hasMappedProductAttributes
       ? mappedAttributeRows.map((mapping) => mapping.attributeId)
       : attributeCatalog.map((attribute) => attribute.id);
-    setGeneratePackageIds(packageRows.map((pkg) => pkg.id));
+    setGeneratePackageIds([]);
     setGenerateAttributeIds(seedAttributeIds);
     
     // Auto-select all available values for each attribute by default
@@ -4670,11 +4703,22 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               <div className="sm:col-span-2">
                 <AdminInput label="Slug" {...form.getFieldProps("slug")} placeholder="Auto-generated from title" />
               </div>
-              <AdminSelect label="Category" options={catOptions} {...form.getFieldProps("categoryId")} error={form.errors.categoryId as string} />
+              <AdminSelect label="Category" options={catOptions} {...form.getFieldProps("categoryId")} error={form.errors.categoryId as string} required />
+              <div className="z-[1000] relative">
+                <AdminMultiSelect
+                  label="Active Country"
+                  options={countryRows.map((c: any) => ({ value: c.id, label: c.name }))}
+                  value={form.values.activeCountryIds as string[]}
+                  onChange={(val) => form.setFieldValue("activeCountryIds", val)}
+                  error={form.errors.activeCountryIds as string}
+                  required
+                />
+              </div>
               <AdminSelect
                 label="Status"
                 options={[{ value: "DRAFT", label: "Draft" }, { value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }, { value: "ARCHIVED", label: "Archived" }]}
                 {...form.getFieldProps("status")}
+                required
               />
               <AdminInput
                 id="product-code-input"
@@ -6994,7 +7038,13 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                         onBlur={async (e) => {
                                           const nextStock = parseInt(e.target.value);
                                           if (isNaN(nextStock) || nextStock < 0) return;
-                                          await adminApi.put(`/inventory/${inventory.id}`, { stock: nextStock });
+                                          if (inventory.id === "dummy-base-product") {
+                                            await adminApi.put(`/inventory/product/${product?.id}`, { stock: nextStock });
+                                          } else if (inventory.id.startsWith("dummy-")) {
+                                            await adminApi.post(`/inventory/upsert`, { variantId: inventory.variantId, warehouseId: inventory.isOverride ? inventory.warehouseId : null, stock: nextStock });
+                                          } else {
+                                            await adminApi.put(`/inventory/${inventory.id}`, { stock: nextStock });
+                                          }
                                           showToast("Stock updated.");
                                           refetch();
                                         }}
@@ -7504,14 +7554,24 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                             Visible on Storefront Filter
                           </label>
                           {canManageAttributes && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveProductAttribute(mapping.attributeId)}
-                              disabled={removeProductAttribute.isPending}
-                              className="rounded-md border border-[#F2C9C9] px-2.5 py-1.5 text-[12px] text-red-600 hover:bg-red-50 disabled:opacity-50"
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleEditMappedAttribute(mapping)}
+                                disabled={removeProductAttribute.isPending || assignProductAttributes.isPending}
+                                className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] disabled:opacity-50"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveProductAttribute(mapping.attributeId)}
+                                disabled={removeProductAttribute.isPending}
+                                className="rounded-md border border-[#F2C9C9] px-2.5 py-1.5 text-[12px] text-red-600 hover:bg-red-50 disabled:opacity-50"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </>
                           )}
                         </div>
                       </div>
@@ -7522,7 +7582,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
               {canManageAttributes && (
                 <div className="rounded-lg border border-[#E6E6E6] p-4">
-                  <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">Add Attribute</h4>
+                  <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">{mappedAttributeIds.has(selectedMappingAttributeId) ? "Edit Attribute" : "Add Attribute"}</h4>
                   <div className="mt-4 space-y-4">
                     <AdminSelect
                       label="Attribute"
@@ -7617,7 +7677,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                           disabled={assignProductAttributes.isPending}
                           className="w-full rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
                         >
-                          {assignProductAttributes.isPending ? "Saving..." : "Map Attribute"}
+                          {assignProductAttributes.isPending ? "Saving..." : (mappedAttributeIds.has(selectedMappingAttributeId) ? "Update Attribute" : "Map Attribute")}
                         </button>
                       </div>
                     ) : (
@@ -7733,13 +7793,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 value={shippingPackageHeight}
                 onChange={(e) => setShippingPackageHeight(e.target.value)}
               />
-              <AdminInput
-                label="Shipping Class"
-                type="text"
-                placeholder="e.g. Standard, Express, Heavy"
-                value={shippingClass}
-                onChange={(e) => setShippingClass(e.target.value)}
-              />
+
               <div className="flex items-end gap-6 pb-2">
                 <label className="flex cursor-pointer items-center gap-2">
                   <input type="checkbox" checked={shippingFragile} onChange={(e) => setShippingFragile(e.target.checked)} className="rounded" />
@@ -8376,7 +8430,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     <AdminInput label="Length (cm)" type="text" placeholder="e.g. 30" value={editVariantLength} onChange={(e) => setEditVariantLength(e.target.value)} />
                     <AdminInput label="Width (cm)" type="text" placeholder="e.g. 20" value={editVariantWidth} onChange={(e) => setEditVariantWidth(e.target.value)} />
                     <AdminInput label="Height (cm)" type="text" placeholder="e.g. 10" value={editVariantHeight} onChange={(e) => setEditVariantHeight(e.target.value)} />
-                    <AdminInput label="Shipping Class" type="text" placeholder="e.g. Standard, Express, Heavy" value={editVariantShippingClass} onChange={(e) => setEditVariantShippingClass(e.target.value)} />
+
                     <div className="flex items-end gap-6 pb-2">
                       <label className="flex cursor-pointer items-center gap-2">
                         <input type="checkbox" checked={editVariantFragile} onChange={(e) => setEditVariantFragile(e.target.checked)} className="rounded" />

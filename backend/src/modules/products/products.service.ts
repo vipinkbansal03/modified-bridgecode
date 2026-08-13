@@ -75,8 +75,8 @@ async function syncStorefrontVisibility(tx: Prisma.TransactionClient, productId:
     countries.map((country) =>
       tx.productCountry.upsert({
         where: { productId_countryId: { productId, countryId: country.id } },
-        update: { enabled: true },
-        create: { productId, countryId: country.id, enabled: true },
+        update: {}, // Do not overwrite existing enabled state
+        create: { productId, countryId: country.id, enabled: false }, // Default to false
       }),
     ),
   );
@@ -142,6 +142,7 @@ type ProductInput = {
   seoTitle?: string;
   seoDescription?: string;
   seoKeywords?: string;
+  activeCountryIds?: string[];
   highlights?: ProductHighlightInput[];
   technicalSpecs?: ProductSpecInput[];
   warranty?: string[];
@@ -670,10 +671,12 @@ export async function createProduct(data: ProductInput) {
   await assertUniqueProductSku(sku);
   const normalizedStatus = (data.status as never) || "DRAFT";
 
-  return prisma.$transaction(async (tx) => {
+  const { activeCountryIds, ...createData } = data;
+
+  const createdProduct = await prisma.$transaction(async (tx) => {
     const product = await tx.product.create({
       data: {
-        ...data,
+        ...createData,
         title,
         slug,
         sku,
@@ -686,6 +689,12 @@ export async function createProduct(data: ProductInput) {
     await syncStorefrontVisibility(tx, product.id, normalizedStatus, null);
     return product;
   });
+
+  if (activeCountryIds?.length) {
+    await updateProductCountries(createdProduct.id, activeCountryIds.map(id => ({ countryId: id, enabled: true })));
+  }
+
+  return createdProduct;
 }
 
 // ─── Update ───────────────────────────────────────────────
@@ -711,6 +720,9 @@ export async function updateProduct(id: string, data: Partial<ProductInput>) {
     // remove scalar foreign-key to avoid Prisma validation error
     delete updateData.categoryId;
   }
+  if (data.activeCountryIds !== undefined) {
+    delete updateData.activeCountryIds;
+  }
   if (data.defaultCountryId !== undefined) {
     updateData.defaultCountry = data.defaultCountryId ? { connect: { id: data.defaultCountryId } } : { disconnect: true };
     delete updateData.defaultCountryId;
@@ -723,11 +735,17 @@ export async function updateProduct(id: string, data: Partial<ProductInput>) {
   if (data.description !== undefined) updateData.description = data.description || null;
   if (data.brand !== undefined) updateData.brand = data.brand?.trim() || existing.brand;
 
-  return prisma.$transaction(async (tx) => {
+  const updatedProduct = await prisma.$transaction(async (tx) => {
     const product = await tx.product.update({ where: { id }, data: updateData as Prisma.ProductUpdateInput });
     await syncStorefrontVisibility(tx, product.id, product.status, existing.status);
     return product;
   });
+
+  if (data.activeCountryIds?.length) {
+    await updateProductCountries(updatedProduct.id, data.activeCountryIds.map(id => ({ countryId: id, enabled: true })));
+  }
+
+  return updatedProduct;
 }
 
 // ─── Shipping Info ────────────────────────────────────────
