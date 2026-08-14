@@ -1,11 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { ArrowLeft, Edit2, GripVertical, Plus, Save, Trash2, Upload, X } from "lucide-react";
-import { AdminInput, AdminSelect, ConfirmModal, StatusBadge, useToast, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, ConfirmModal, StatusBadge, useToast, LoadingButton, DataTable, TableStatusAction } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { SortableList } from "@/components/admin/SortableList";
 import { Modal } from "@/components/ui/Modal";
 import { useAdminBanners, useAdminCountries, useBulkBanners, useCreateBanner, useDeleteBanner, useReorderBanners, useUpdateBanner } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
@@ -82,16 +81,34 @@ export default function BannersPage() {
     return counts;
   }, [allBanners]);
 
-  const gridTemplateColumns = "32px 80px 1fr 160px 80px 110px 90px";
+  const toggleStatus = useCallback(
+    async (row: Banner) => {
+      const selectedCountries = row.countryId ? [row.countryId] : [];
+      const basePayload = {
+        id: row.id,
+        title: row.title,
+        image: row.image,
+        mobileImage: row.mobileImage || null,
+        linkUrl: row.linkUrl || null,
+        linkText: row.linkText || null,
+        placement: row.placement,
+        countryIds: selectedCountries,
+        countryId: row.countryId || null,
+        status: !row.status,
+        startDate: row.startDate?.slice(0, 10) || null,
+        endDate: row.endDate?.slice(0, 10) || null,
+      };
+      try {
+        await updateBanner.mutateAsync(basePayload);
+        showToast("Status updated.");
+      } catch (error) {
+        showToast(getAdminErrorMessage(error, "Failed to update status."), "error");
+      }
+    },
+    [updateBanner, showToast]
+  );
 
-  const set = (key: keyof typeof form, value: unknown) => setForm((prev) => ({ ...prev, [key]: value }));
-
-  const openNew = () => {
-    setForm(empty);
-    setShowModal(true);
-  };
-
-  const edit = (row: Banner) => {
+  const edit = useCallback((row: Banner) => {
     setForm({
       id: row.id,
       title: row.title,
@@ -105,6 +122,93 @@ export default function BannersPage() {
       status: row.status,
       startDate: row.startDate?.slice(0, 10) ?? "",
       endDate: row.endDate?.slice(0, 10) ?? "",
+    });
+    setShowModal(true);
+  }, []);
+
+  const columns = useMemo(
+    () => [
+      {
+        key: "image",
+        label: "Preview",
+        width: "80px",
+        render: (row: Banner) => (
+          <img src={row.image} alt="" className="h-10 w-16 rounded border border-[#E6E6E6] object-cover bg-[#F2F2F2]" />
+        ),
+      },
+      {
+        key: "title",
+        label: "Title & Link",
+        render: (row: Banner) => (
+          <div className="pr-3 min-w-0">
+            <div className="font-semibold text-[#1A1A1A] text-[13px] truncate">{row.title}</div>
+            <div className="text-[11px] text-[#9A9A9A] truncate">{row.linkUrl || "No link specified"}</div>
+          </div>
+        ),
+      },
+      {
+        key: "placement",
+        label: "Placement",
+        width: "160px",
+        render: (row: Banner) => (
+          <span className="inline-block rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-[#444]">
+            {row.placement.replace(/_/g, " ")}
+          </span>
+        ),
+      },
+      {
+        key: "country",
+        label: "Target",
+        width: "80px",
+        render: (row: Banner) => (
+          <div className="text-[12.5px] font-medium text-[#555]">{row.country?.code ?? "All"}</div>
+        ),
+      },
+      {
+        key: "status",
+        label: "Status",
+        width: "110px",
+        render: (row: Banner) => (
+          <TableStatusAction
+            status={row.status}
+            loading={updateBanner.isPending && updateBanner.variables?.id === row.id}
+            onToggle={() => toggleStatus(row)}
+          />
+        ),
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        width: "90px",
+        render: (row: Banner) => (
+          <div className="flex items-center justify-end gap-1.5">
+            <button
+              onClick={() => edit(row)}
+              title="Edit banner"
+              className="flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#555] hover:bg-gray-50 hover:text-[#1A1A1A] transition-colors"
+            >
+              <Edit2 size={13} />
+            </button>
+            <button
+              onClick={() => setDeleting(row.id)}
+              title="Delete banner"
+              className="flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] bg-white text-red-500 hover:bg-red-50 transition-colors"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [updateBanner.isPending, updateBanner.variables, toggleStatus, edit]
+  );
+
+  const set = (key: keyof typeof form, value: unknown) => setForm((prev) => ({ ...prev, [key]: value }));
+
+  const openNew = () => {
+    setForm({
+      ...empty,
+      placement: placement || "HOMEPAGE_HERO",
     });
     setShowModal(true);
   };
@@ -255,116 +359,27 @@ export default function BannersPage() {
         </div>
       )}
 
-      {/* Structured Admin Table UI Matching Product Table Layout */}
-      <div className="rounded-lg border border-[#E6E6E6] bg-white overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
-          <div className="p-3 min-w-[960px]">
-            {/* Table Header Row aligned perfectly with SortableList items */}
-            <div className="mb-3 flex items-center gap-2 px-3 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">
-              {/* Drag handle placeholder matching GripVertical button width */}
-              <div className="w-[28px] shrink-0" />
-              
-              <div
-                className="grid flex-1 gap-4 items-center pr-3"
-                style={{ gridTemplateColumns }}
-              >
-                <div>
-                  <input
-                    type="checkbox"
-                    checked={banners.length > 0 && selected.length === banners.length}
-                    onChange={toggleSelectAll}
-                    className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24]"
-                  />
-                </div>
-                <span>Preview</span>
-                <span>Title & Link</span>
-                <span>Placement</span>
-                <span>Target</span>
-                <span>Status</span>
-                <span className="text-right">Actions</span>
-              </div>
-            </div>
-
-            {/* Table Body / Sortable Rows */}
-            {isLoading ? (
-              <div className="divide-y divide-[#E6E6E6]">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="flex gap-4 px-4 py-4">
-                    <div className="h-4 flex-1 animate-pulse rounded bg-[#E6E6E6]" />
-                  </div>
-                ))}
-              </div>
-            ) : banners.length === 0 ? (
-              <div className="px-4 py-12 text-center text-[13.5px] text-[#9A9A9A]">
-                No banners found for this placement.
-              </div>
-            ) : (
-              <SortableList
-                items={banners}
-                onReorder={(items) =>
-                  reorderBanners
-                    .mutateAsync(items.map((item) => item.id))
-                    .catch((error) => showToast(getAdminErrorMessage(error, "Failed to reorder banners."), "error"))
-                }
-                rowWidthClassName="w-full"
-                contentClassName="flex-1 py-2 pr-3"
-                renderItem={(row) => (
-                  <div
-                    className="grid gap-4 items-center"
-                    style={{ gridTemplateColumns }}
-                  >
-                    <div>
-                      <input
-                        type="checkbox"
-                        checked={selected.includes(row.id)}
-                        onChange={() =>
-                          setSelected((current) =>
-                            current.includes(row.id) ? current.filter((id) => id !== row.id) : [...current, row.id]
-                          )
-                        }
-                        className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24]"
-                      />
-                    </div>
-                    <div>
-                      <img src={row.image} alt="" className="h-10 w-16 rounded border border-[#E6E6E6] object-cover bg-grey" />
-                    </div>
-                    <div className="pr-3 min-w-0">
-                      <div className="font-semibold text-[#1A1A1A] text-[13.5px] truncate">{row.title}</div>
-                      <div className="text-[11.5px] text-[#9A9A9A] truncate">{row.linkUrl || "No link specified"}</div>
-                    </div>
-                    <div>
-                      <span className="inline-block rounded bg-gray-100 px-2 py-0.5 text-[11.5px] font-medium text-[#444]">
-                        {row.placement.replace(/_/g, " ")}
-                      </span>
-                    </div>
-                    <div className="text-[12.5px] font-medium text-[#555]">{row.country?.code ?? "All"}</div>
-                    <div>
-                      <StatusBadge status={row.status ? "ACTIVE" : "INACTIVE"} />
-                    </div>
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        onClick={() => edit(row)}
-                        title="Edit banner"
-                        className="flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#555] hover:bg-gray-50 hover:text-[#1A1A1A] transition-colors"
-                      >
-                        <Edit2 size={13} />
-                      </button>
-                      <button
-                        onClick={() => setDeleting(row.id)}
-                        title="Delete banner"
-                        className="flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] bg-white text-red-500 hover:bg-red-50 transition-colors"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              />
-            )}
-
-          </div>
-        </div>
-      </div>
+      {/* Structured Admin Table UI using generic DataTable */}
+      <DataTable
+        columns={columns}
+        data={banners}
+        rowKey="id"
+        isLoading={isLoading}
+        emptyMessage="No banners found for this placement."
+        enableSelection={true}
+        selectedIds={selected}
+        onSelectionChange={setSelected}
+        enableReorder={true}
+        onReorder={async (items) => {
+          try {
+            await reorderBanners.mutateAsync(items.map((item) => item.id));
+            showToast("Banners reordered.");
+          } catch (error) {
+            showToast(getAdminErrorMessage(error, "Failed to reorder banners."), "error");
+          }
+        }}
+        disabledReorder={reorderBanners.isPending}
+      />
 
       {/* Unified Modal Component for Add & Edit */}
       <Modal

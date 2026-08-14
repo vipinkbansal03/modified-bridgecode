@@ -36,14 +36,13 @@ export async function fetchTrackingSettings(): Promise<TrackingSettings | null> 
   }
 }
 
-export function useTrackingSettings() {
+export function useTrackingSettings(countryCode?: string) {
   return useQuery<TrackingSettings | null>({
-    queryKey: ["tracking-settings"],
+    queryKey: ["tracking-settings", countryCode],
     queryFn: async () => {
       try {
-        const r = await apiClient.get("/settings/public/tracking");
+        const r = await apiClient.get("/settings/public/tracking", { params: { country: countryCode } });
         const data = r.data.data ?? null;
-        cachedSettings = data;
         return data;
       } catch {
         return null;

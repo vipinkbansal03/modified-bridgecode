@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/apiClient";
 import { STALE } from "@/lib/queryConfig";
+import { useLanguageContext } from "@/contexts/LanguageContext";
 
 export type CmsBlock = {
   id: string;
@@ -87,11 +88,12 @@ export type CmsFooter = {
 };
 
 export function useCmsPage(pageKey: string) {
+  const { selectedLanguage } = useLanguageContext();
   return useQuery<CmsPage | null>({
-    queryKey: ["cms-page", pageKey],
+    queryKey: ["cms-page", pageKey, selectedLanguage],
     queryFn: async () => {
       try {
-        const r = await apiClient.get(`/cms/pages/key/${pageKey}`);
+        const r = await apiClient.get(`/cms/pages/key/${pageKey}`, { params: { lang: selectedLanguage } });
         return r.data.data ?? null;
       } catch {
         return null;
@@ -103,11 +105,12 @@ export function useCmsPage(pageKey: string) {
 }
 
 export function useCmsMenu(location: string) {
+  const { selectedLanguage } = useLanguageContext();
   return useQuery<CmsMenu | null>({
-    queryKey: ["cms-menu", location],
+    queryKey: ["cms-menu", location, selectedLanguage],
     queryFn: async () => {
       try {
-        const r = await apiClient.get(`/cms/menus/${location}`);
+        const r = await apiClient.get(`/cms/menus/${location}`, { params: { lang: selectedLanguage } });
         return r.data.data ?? null;
       } catch {
         return null;
@@ -118,11 +121,12 @@ export function useCmsMenu(location: string) {
 }
 
 export function useCmsFooter() {
+  const { selectedLanguage } = useLanguageContext();
   return useQuery<CmsFooter | null>({
-    queryKey: ["cms-footer"],
+    queryKey: ["cms-footer", selectedLanguage],
     queryFn: async () => {
       try {
-        const r = await apiClient.get("/cms/footer");
+        const r = await apiClient.get("/cms/footer", { params: { lang: selectedLanguage } });
         return r.data.data ?? null;
       } catch {
         return null;

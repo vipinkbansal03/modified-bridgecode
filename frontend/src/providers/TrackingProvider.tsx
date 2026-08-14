@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect } from "react";
 import Script from "next/script";
 import { MessageCircle, X, Check } from "lucide-react";
 import { useTrackingSettings, type TrackingSettings } from "@/hooks/api/useTrackingSettings";
+import { useCurrencyContext } from "@/contexts/CurrencyContext";
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
@@ -26,7 +27,8 @@ function getConsent(): boolean | null {
 // ─── Main provider ────────────────────────────────────────────────────────────
 
 export function TrackingProvider({ children }: { children: React.ReactNode }) {
-  const { data: settings } = useTrackingSettings();
+  const { selectedCountryCode } = useCurrencyContext();
+  const { data: settings } = useTrackingSettings(selectedCountryCode);
   const [consent, setConsent] = useState<boolean | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [scriptsReady, setScriptsReady] = useState(false);

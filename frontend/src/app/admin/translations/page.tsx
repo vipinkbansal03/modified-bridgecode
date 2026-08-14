@@ -12,6 +12,7 @@ import { useAdminLanguages, useAdminProducts } from "@/hooks/admin/useAdminHooks
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { staticMessages, type StaticMessageKey } from "@/i18n/staticMessages";
 import { Check, Plus, Search, Shield, Trash2, X, Zap } from "lucide-react";
+import { RefreshButton } from "@/components/admin/RefreshButton";
 
 type KeywordRow = { id: string; key: StaticMessageKey; languageId: string; value: string };
 type LanguageRow = { id: string; name: string; code: string; isDefault: boolean; isEnabled: boolean };
@@ -97,23 +98,35 @@ export default function TranslationsPage() {
   const [staticPage, setStaticPage] = useState(1);
   const [staticPageSize, setStaticPageSize] = useState<(typeof STATIC_PAGE_SIZE_OPTIONS)[number]>(25);
   const { showToast, ToastComponent } = useToast();
-  const { data: languages = [], refetch: refetchLangs } = useAdminLanguages();
+  const { data: languages = [], refetch: refetchLangs, isFetching: isFetchingLangs } = useAdminLanguages();
   const { data: productsData } = useAdminProducts({ limit: 30 });
   const products = productsData?.data || [];
   const translationLanguages = (languages as LanguageRow[]).filter((language) => !language.isDefault);
-  const { data: keywordRows = [], refetch: refetchKeywords } = useQuery({
+  const { data: keywordRows = [], refetch: refetchKeywords, isFetching: isFetchingKeywords } = useQuery({
     queryKey: ["admin-static-keywords", selectedStaticLanguage],
     queryFn: () => adminApi.get("/translations/keywords", { params: { languageId: selectedStaticLanguage } }).then((r) => r.data.data as KeywordRow[]),
     enabled: !!selectedStaticLanguage,
   });
-  const { data: reviewQueue = [], refetch: refetchReviewQueue } = useQuery({
+  const { data: reviewQueue = [], refetch: refetchReviewQueue, isFetching: isFetchingReviewQueue } = useQuery({
     queryKey: ["admin-translation-review-queue"],
     queryFn: () => adminApi.get("/translations/review-queue").then((r) => r.data.data as ReviewQueueItem[]),
   });
-  const { data: protectedKeywords = [], refetch: refetchProtectedKeywords } = useQuery({
+  const { data: protectedKeywords = [], refetch: refetchProtectedKeywords, isFetching: isFetchingProtectedKeywords } = useQuery({
     queryKey: ["admin-protected-keywords"],
     queryFn: () => adminApi.get("/translations/protected-keywords").then((r) => r.data.data as ProtectedKeywordRow[]),
   });
+
+  const isRefreshing = isFetchingLangs || isFetchingKeywords || isFetchingReviewQueue || isFetchingProtectedKeywords;
+
+  const handleRefresh = async () => {
+    await Promise.all([
+      refetchLangs(),
+      selectedStaticLanguage ? refetchKeywords() : Promise.resolve(),
+      refetchReviewQueue(),
+      refetchProtectedKeywords(),
+    ]);
+    showToast("Translations list refreshed.", "success");
+  };
 
   const keywordMap = new Map(keywordRows.map((row) => [row.key, row.value]));
   const allStaticKeywordEntries = Object.entries(staticMessages) as Array<[StaticMessageKey, string]>;
@@ -460,19 +473,22 @@ export default function TranslationsPage() {
                 Use this editor for already translated labels too. Changes are saved when you leave an input field.
               </p>
             </div>
-            <div className="w-full sm:w-[260px]">
-              <AdminSelect
-                label="Language"
-                value={selectedStaticLanguage}
-                onChange={(e) => {
-                  setSelectedStaticLanguage(e.target.value);
-                  setStaticSearch("");
-                  setStaticGroupFilter("all");
-                  setStaticStatusFilter("all");
-                  setStaticPage(1);
-                }}
-                options={[{ value: "", label: "Select language..." }, ...translationLanguages.map((l) => ({ value: l.id, label: `${l.name} (${l.code})` }))]}
-              />
+            <div className="flex items-end gap-3 w-full sm:w-auto">
+              <div className="flex-1 sm:w-[260px] sm:flex-none">
+                <AdminSelect
+                  label="Language"
+                  value={selectedStaticLanguage}
+                  onChange={(e) => {
+                    setSelectedStaticLanguage(e.target.value);
+                    setStaticSearch("");
+                    setStaticGroupFilter("all");
+                    setStaticStatusFilter("all");
+                    setStaticPage(1);
+                  }}
+                  options={[{ value: "", label: "Select language..." }, ...translationLanguages.map((l) => ({ value: l.id, label: `${l.name} (${l.code})` }))]}
+                />
+              </div>
+              <RefreshButton onRefresh={handleRefresh} isRefreshing={isRefreshing} className="shrink-0" />
             </div>
           </div>
 

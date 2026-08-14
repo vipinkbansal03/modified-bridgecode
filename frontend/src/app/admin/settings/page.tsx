@@ -3,6 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Globe, Search, BarChart2, Megaphone, Share2, ShieldCheck, Code2, Cookie, MessageCircle, Mail,
   CheckCircle2, AlertCircle, Eye, EyeOff, Save, RefreshCw, Lock, Upload, Plus, Trash2, ArrowUp, ArrowDown, Scale, Info,
@@ -14,6 +15,7 @@ import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { Logo } from "@/components/ui/Logo";
 import { cn } from "@/utils/cn";
 import { uploadMediaFiles } from "@/utils/uploadMedia";
+import { useAdminCountries } from "@/hooks/admin/useAdminHooks";
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
@@ -262,6 +264,29 @@ export default function SettingsPage() {
   const canUpdate = hasPermission("settings.update");
 
   const [activeTab, setActiveTab] = useState("general");
+  const { data: countries = [] } = useAdminCountries();
+  const defaultCountry = countries.find((c: any) => c.isDefault);
+  const [selectedCountryCode, setSelectedCountryCode] = useState("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const searchParams = new URLSearchParams(window.location.search);
+      const tabParam = searchParams.get("tab");
+      if (tabParam) {
+        setActiveTab(tabParam);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (countries.length > 0 && !selectedCountryCode) {
+      const defaultCountry = countries.find((c: any) => c.isDefault) ?? countries[0];
+      if (defaultCountry) {
+        setSelectedCountryCode(defaultCountry.code);
+      }
+    }
+  }, [countries, selectedCountryCode]);
+
   const [settings, setSettings] = useState<SettingMap>({});
   const [loginSlides, setLoginSlides] = useState<LoginSlide[]>(DEFAULT_LOGIN_SLIDES);
   const [loading, setLoading] = useState(true);
@@ -448,13 +473,13 @@ export default function SettingsPage() {
         "auth.login_slides": JSON.stringify(loginSlides),
       };
       const settingsList = Object.entries(settingsToSave)
-        .filter(([key]) => SETTINGS_META[key])
+        .filter(([key]) => SETTINGS_META[key] || key.startsWith("social."))
         .map(([key, value]) => ({
           key,
           value,
-          group:    SETTINGS_META[key]!.group,
-          type:     SETTINGS_META[key]!.type,
-          isSecret: SETTINGS_META[key]!.isSecret ?? false,
+          group:    SETTINGS_META[key]?.group ?? "social",
+          type:     SETTINGS_META[key]?.type ?? "string",
+          isSecret: SETTINGS_META[key]?.isSecret ?? false,
         }));
       const previousSlides = savedLoginSlidesRef.current;
       await adminApi.put("/settings", { settings: settingsList });
@@ -757,18 +782,55 @@ export default function SettingsPage() {
             {/* ── Social Media ── */}
             {activeTab === "social" && (
               <div>
+                {countries.length > 0 && (
+                  <div className="mb-6 space-y-4">
+                    {defaultCountry && (
+                      <div className="rounded-lg border border-[#E31E24]/20 bg-[#E31E24]/[0.02] p-3 text-[13px] text-[#1A1A1A] leading-relaxed flex gap-2.5">
+                        <Info size={16} className="mt-0.5 shrink-0 text-[#E31E24]" />
+                        <div>
+                          <strong className="text-[#1A1A1A]">Default Country: {defaultCountry.name} ({defaultCountry.code.toUpperCase()})</strong>
+                          <span className="text-[#6B6B6B]"> — Used as the fallback when a country has no social media links configured. You can change the default country in <Link href="/admin/countries" className="underline font-semibold hover:text-[#E31E24] transition-colors">Countries Management</Link>.</span>
+                        </div>
+                      </div>
+                    )}
+                    <div className="max-w-xs">
+                      <AdminSelect
+                        label="Country / Region"
+                        value={selectedCountryCode}
+                        onChange={(e) => setSelectedCountryCode(e.target.value)}
+                        options={countries.map((c: any) => ({
+                          value: c.code,
+                          label: `${c.name} (${c.code.toUpperCase()})`
+                        }))}
+                      />
+                    </div>
+                  </div>
+                )}
                 {([
-                  { key: "social.facebook_url",  label: "Facebook URL",   placeholder: "https://facebook.com/modortho" },
-                  { key: "social.instagram_url", label: "Instagram URL",  placeholder: "https://instagram.com/modortho" },
-                  { key: "social.linkedin_url",  label: "LinkedIn URL",   placeholder: "https://linkedin.com/company/modortho" },
-                  { key: "social.youtube_url",   label: "YouTube URL",    placeholder: "https://youtube.com/@modortho" },
-                  { key: "social.twitter_url",   label: "Twitter / X URL",placeholder: "https://twitter.com/modortho" },
-                  { key: "social.pinterest_url", label: "Pinterest URL",  placeholder: "https://pinterest.com/modortho" },
-                ] as const).map((item) => (
-                  <FieldRow key={item.key} label={item.label}>
-                    <AdminInput value={g(item.key)} onChange={(e) => set(item.key, e.target.value)} placeholder={item.placeholder} />
-                  </FieldRow>
-                ))}
+                  { platform: "facebook",  label: "Facebook URL",   placeholder: "https://facebook.com/modortho" },
+                  { platform: "instagram", label: "Instagram URL",  placeholder: "https://instagram.com/modortho" },
+                  { platform: "linkedin",  label: "LinkedIn URL",   placeholder: "https://linkedin.com/company/modortho" },
+                  { platform: "youtube",   label: "YouTube URL",    placeholder: "https://youtube.com/@modortho" },
+                  { platform: "twitter",   label: "Twitter / X URL",placeholder: "https://twitter.com/modortho" },
+                  { platform: "pinterest", label: "Pinterest URL",  placeholder: "https://pinterest.com/modortho" },
+                ] as const).map((item) => {
+                  const key = selectedCountryCode ? `social.${selectedCountryCode.toUpperCase()}.${item.platform}_url` : `social.${item.platform}_url`;
+                  
+                  let placeholder: string = item.placeholder;
+                  const isCurrentDefault = defaultCountry && selectedCountryCode.toUpperCase() === defaultCountry.code.toUpperCase();
+                  if (!isCurrentDefault && defaultCountry) {
+                    const fallbackVal = g(`social.${defaultCountry.code.toUpperCase()}.${item.platform}_url`) || g(`social.${item.platform}_url`);
+                    if (fallbackVal) {
+                      placeholder = `${fallbackVal} (Fallback from ${defaultCountry.name})`;
+                    }
+                  }
+
+                  return (
+                    <FieldRow key={item.platform} label={item.label}>
+                      <AdminInput value={g(key)} onChange={(e) => set(key, e.target.value)} placeholder={placeholder} />
+                    </FieldRow>
+                  );
+                })}
               </div>
             )}
 

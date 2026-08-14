@@ -10,7 +10,19 @@ import { adminApi } from "@/services/adminApi";
 import { cn } from "@/utils/cn";
 
 type CmsTranslations = Record<string, Array<{ languageId: string; value: string }>>;
-type Language = { id: string; name: string; code: string };
+type Language = { id: string; name: string; code: string; isDefault?: boolean; isEnabled?: boolean };
+
+const NAV_LABEL_KEYS: Record<string, string> = {
+  Products: "ui.nav.products",
+  "Quality Certifications": "ui.nav.qualityCertifications",
+  "Contact Us": "ui.nav.contactUs",
+  "Design & Engineering": "ui.nav.designEngineering",
+  "Manufacturing Services": "ui.nav.manufacturingServices",
+  "OEM Services": "ui.nav.oemServices",
+  "Custom Packaging": "ui.nav.customPackaging",
+  "Become a Dealer": "ui.nav.becomeDealer",
+  "Quick Order": "ui.nav.quickOrder",
+};
 type MenuItem = {
   id: string;
   parentId?: string | null;
@@ -40,6 +52,9 @@ function normalizeItem(item: MenuItem): MenuItem {
 export default function CmsMenusPage() {
   const { data: menus, isLoading, refetch } = useAdminCmsMenus();
   const { data: languages = [] } = useAdminLanguages();
+  const activeTranslationLanguages = useMemo(() => {
+    return (languages as Language[]).filter((lang) => lang.isEnabled && !lang.isDefault);
+  }, [languages]);
   const { data: categories = [] } = useAdminCategories();
   const { data: cmsPagesResponse } = useAdminCmsPages();
   const cmsPages = cmsPagesResponse?.data ?? [];
@@ -63,6 +78,10 @@ export default function CmsMenusPage() {
   const [addParentId, setAddParentId] = useState("");
   const [addOpenInNewTab, setAddOpenInNewTab] = useState<string>("false");
   const [addSortOrder, setAddSortOrder] = useState<number>(0);
+  const [selectedTranslationLangId, setSelectedTranslationLangId] = useState<string>("");
+  const [addTranslations, setAddTranslations] = useState<Record<string, string>>({});
+  const [activeTranslationValue, setActiveTranslationValue] = useState<string>("");
+  const [loadingTranslation, setLoadingTranslation] = useState<boolean>(false);
 
   const { showToast } = useToast();
 
@@ -84,6 +103,36 @@ export default function CmsMenusPage() {
   const [menuLocation, setMenuLocation] = useState("");
   const [menuStatus, setMenuStatus] = useState("ACTIVE");
   const [items, setItems] = useState<MenuItem[]>([]);
+
+  const activeLangId = selectedTranslationLangId || (activeTranslationLanguages[0]?.id ?? "");
+
+  useEffect(() => {
+    if (!editingItem || !activeLangId) {
+      setActiveTranslationValue("");
+      return;
+    }
+
+    const staticKey = NAV_LABEL_KEYS[editingItem.label];
+    if (staticKey) {
+      setLoadingTranslation(true);
+      adminApi
+        .get("/translations/keywords", { params: { languageId: activeLangId } })
+        .then((res) => {
+          const rows = res.data.data || [];
+          const match = rows.find((r: any) => r.key === staticKey);
+          setActiveTranslationValue(match?.value ?? "");
+        })
+        .catch(() => {
+          setActiveTranslationValue("");
+        })
+        .finally(() => {
+          setLoadingTranslation(false);
+        });
+    } else {
+      setActiveTranslationValue(translationValue(editingItem.translations, "label", activeLangId));
+      setLoadingTranslation(false);
+    }
+  }, [editingItem, activeLangId]);
 
   useEffect(() => {
     if (activeMenu) {
@@ -204,11 +253,38 @@ export default function CmsMenusPage() {
         status: "ACTIVE",
       });
 
-      setItems((prev) => [...prev, normalizeItem(response.data.data)]);
+      const createdItem = response.data.data;
+      const translationPromises = Object.entries(addTranslations)
+        .filter(([_, val]) => val.trim().length > 0)
+        .map(([langId, val]) => {
+          const staticKey = NAV_LABEL_KEYS[addLabel];
+          if (staticKey) {
+            return adminApi.put("/translations/keywords", {
+              key: staticKey,
+              languageId: langId,
+              value: val.trim(),
+            });
+          } else {
+            return adminApi.put(`/cms/translations/menuItem/${createdItem.id}/${langId}`, {
+              label: val.trim(),
+            });
+          }
+        });
+
+      try {
+        if (translationPromises.length > 0) {
+          await Promise.all(translationPromises);
+        }
+      } catch {
+        showToast("Menu item added, but failed to save translations.", "error");
+      }
+
+      setItems((prev) => [...prev, normalizeItem(createdItem)]);
       setAddLabel("");
       setAddUrl("");
       setAddParentId("");
       setAddOpenInNewTab("false");
+      setAddTranslations({});
       setIsAddModalOpen(false);
       showToast("Menu item added.", "success");
       refetch();
@@ -216,6 +292,12 @@ export default function CmsMenusPage() {
       showToast("Failed to add menu item.", "error");
     }
   }
+
+  const closeEditModal = () => {
+    setEditingItem(null);
+    setSelectedTranslationLangId("");
+    setActiveTranslationValue("");
+  };
 
   async function saveItem(nextItem: MenuItem) {
     try {
@@ -229,7 +311,7 @@ export default function CmsMenusPage() {
       });
       const saved = normalizeItem(response.data.data);
       setItems((prev) => prev.map((item) => (item.id === nextItem.id ? saved : item)));
-      setEditingItem(null);
+      closeEditModal();
       showToast("Menu item updated.", "success");
       refetch();
     } catch {
@@ -278,9 +360,27 @@ export default function CmsMenusPage() {
 
   async function saveItemTranslation(itemId: string, languageId: string, value: string) {
     try {
-      await adminApi.put(`/cms/translations/menuItem/${itemId}/${languageId}`, {
-        label: value,
-      });
+      const itemLabel = editingItem?.id === itemId ? editingItem.label : (items.find((i) => i.id === itemId)?.label ?? "");
+      const staticKey = NAV_LABEL_KEYS[itemLabel];
+
+      const promises = [];
+      if (staticKey) {
+        promises.push(
+          adminApi.put("/translations/keywords", {
+            key: staticKey,
+            languageId,
+            value: value.trim(),
+          })
+        );
+      } else {
+        promises.push(
+          adminApi.put(`/cms/translations/menuItem/${itemId}/${languageId}`, {
+            label: value,
+          })
+        );
+      }
+
+      await Promise.all(promises);
       showToast("Translation saved.", "success");
       refetch();
     } catch {
@@ -635,7 +735,7 @@ export default function CmsMenusPage() {
 
               {/* Action Toolbar */}
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="relative max-w-xs flex-1">
+                <div className="relative w-full sm:max-w-xs">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
                   <input
                     type="text"
@@ -646,9 +746,9 @@ export default function CmsMenusPage() {
                   />
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
                   {categories.length > 0 && (
-                    <div className="w-48">
+                    <div className="w-full sm:w-48">
                       <AdminSelect
                         label=""
                         value=""
@@ -669,7 +769,7 @@ export default function CmsMenusPage() {
                     </div>
                   )}
                   {cmsPages.length > 0 && (
-                    <div className="w-48">
+                    <div className="w-full sm:w-48">
                       <AdminSelect
                         label=""
                         value=""
@@ -699,7 +799,7 @@ export default function CmsMenusPage() {
                       setAddSortOrder(items.length);
                       setIsAddModalOpen(true);
                     }}
-                    className="flex items-center gap-1.5 rounded-lg bg-[#E31E24] px-4 py-2 text-xs font-semibold text-white hover:bg-[#B5151B] transition-all shadow-xs"
+                    className="flex w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg bg-[#E31E24] px-4 py-2.5 sm:py-2 text-xs font-semibold text-white hover:bg-[#B5151B] transition-all shadow-xs"
                   >
                     <Plus size={14} /> Add Menu Item
                   </button>
@@ -722,10 +822,10 @@ export default function CmsMenusPage() {
       {/* Add Item Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl space-y-4">
+          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-white p-6 shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b border-[#E6E6E6] pb-3">
               <h3 className="text-[15px] font-bold text-[#1A1A1A]">Add Menu Item</h3>
-              <button onClick={() => setIsAddModalOpen(false)} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
+              <button onClick={() => { setIsAddModalOpen(false); setAddTranslations({}); }} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
                 <X size={18} />
               </button>
             </div>
@@ -746,12 +846,47 @@ export default function CmsMenusPage() {
                   ]}
                 />
               </div>
+
+              {activeTranslationLanguages.length > 0 && (
+                <div className="pt-3 border-t border-[#E6E6E6] space-y-2">
+                  <p className="text-xs font-bold uppercase tracking-wider text-[#9A9A9A]">Multi-Language Translations</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <AdminSelect
+                        label="Select Language to Translate"
+                        value={selectedTranslationLangId || (activeTranslationLanguages[0]?.id ?? "")}
+                        onChange={(e) => setSelectedTranslationLangId(e.target.value)}
+                        options={activeTranslationLanguages.map((lang: Language) => ({
+                          value: lang.id,
+                          label: `${lang.name} (${lang.code})`,
+                        }))}
+                      />
+                    </div>
+                  </div>
+                  <div className="pt-1">
+                    {(() => {
+                      const activeLangId = selectedTranslationLangId || (activeTranslationLanguages[0]?.id ?? "");
+                      const activeLang = activeTranslationLanguages.find((l: Language) => l.id === activeLangId);
+                      return activeLang ? (
+                        <AdminTextarea
+                          key={activeLangId}
+                          label={`Translation Value for ${activeLang.name}`}
+                          value={addTranslations[activeLangId] ?? ""}
+                          onChange={(e) => setAddTranslations((prev) => ({ ...prev, [activeLangId]: e.target.value }))}
+                          rows={1}
+                          placeholder={`Enter translation for ${addLabel || "Item"}...`}
+                        />
+                      ) : null;
+                    })()}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E6E6E6]">
               <button
                 type="button"
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={() => { setIsAddModalOpen(false); setAddTranslations({}); }}
                 className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-xs font-semibold text-[#1A1A1A] hover:bg-[#F5F5F5]"
               >
                 Cancel
@@ -774,7 +909,7 @@ export default function CmsMenusPage() {
           <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-white p-6 shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b border-[#E6E6E6] pb-3">
               <h3 className="text-[15px] font-bold text-[#1A1A1A]">Edit Menu Item</h3>
-              <button onClick={() => setEditingItem(null)} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
+              <button onClick={closeEditModal} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
                 <X size={18} />
               </button>
             </div>
@@ -827,19 +962,39 @@ export default function CmsMenusPage() {
                 />
               </div>
 
-              {languages.length > 0 && (
+              {activeTranslationLanguages.length > 0 && (
                 <div className="pt-3 border-t border-[#E6E6E6] space-y-2">
                   <p className="text-xs font-bold uppercase tracking-wider text-[#9A9A9A]">Multi-Language Translations</p>
-                  <div className="grid gap-2 md:grid-cols-2">
-                    {languages.map((language: Language) => (
-                      <AdminTextarea
-                        key={language.id}
-                        label={`${language.name} (${language.code})`}
-                        defaultValue={translationValue(editingItem.translations, "label", language.id)}
-                        rows={1}
-                        onBlur={(e) => saveItemTranslation(editingItem.id, language.id, e.target.value)}
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <AdminSelect
+                        label="Select Language to Translate"
+                        value={selectedTranslationLangId || (activeTranslationLanguages[0]?.id ?? "")}
+                        onChange={(e) => setSelectedTranslationLangId(e.target.value)}
+                        options={activeTranslationLanguages.map((lang: Language) => ({
+                          value: lang.id,
+                          label: `${lang.name} (${lang.code})`,
+                        }))}
                       />
-                    ))}
+                    </div>
+                  </div>
+                  <div className="pt-1">
+                    {(() => {
+                      const activeLangId = selectedTranslationLangId || (activeTranslationLanguages[0]?.id ?? "");
+                      const activeLang = activeTranslationLanguages.find((l: Language) => l.id === activeLangId);
+                      return activeLang ? (
+                        <AdminTextarea
+                          key={activeLangId}
+                          label={`Translation Value for ${activeLang.name}`}
+                          value={loadingTranslation ? "" : activeTranslationValue}
+                          onChange={(e) => setActiveTranslationValue(e.target.value)}
+                          rows={1}
+                          onBlur={(e) => saveItemTranslation(editingItem.id, activeLangId, e.target.value)}
+                          placeholder={loadingTranslation ? "Loading translation..." : `Enter translation for ${editingItem.label}...`}
+                          disabled={loadingTranslation}
+                        />
+                      ) : null;
+                    })()}
                   </div>
                 </div>
               )}
@@ -848,7 +1003,7 @@ export default function CmsMenusPage() {
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E6E6E6]">
               <button
                 type="button"
-                onClick={() => setEditingItem(null)}
+                onClick={closeEditModal}
                 className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-xs font-semibold text-[#1A1A1A] hover:bg-[#F5F5F5]"
               >
                 Cancel

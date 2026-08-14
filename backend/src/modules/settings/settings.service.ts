@@ -136,8 +136,8 @@ function parseLoginSlides(value?: string): LoginSlideSetting[] {
   }
 }
 
-export async function getPublicTrackingSettings() {
-  const rows = await prisma.setting.findMany({
+export async function getPublicTrackingSettings(countryCode?: string) {
+  let currentRows = await prisma.setting.findMany({
     where: {
       group: {
         in: ["analytics", "pixels", "marketing", "social", "verification", "scripts", "cookies", "whatsapp", "seo", "general"],
@@ -145,7 +145,67 @@ export async function getPublicTrackingSettings() {
     },
   });
 
-  const m = new Map(rows.map((r) => [r.key, { value: r.value, isEnabled: r.isEnabled, isSecret: r.isSecret }]));
+  const defaultCountry = await prisma.country.findFirst({ where: { isDefault: true } });
+  const defaultCode = defaultCountry?.code?.toUpperCase() || "IN";
+
+  // Check if default country has facebook_url set, if not run safe lazy migration
+  const defaultFbKey = `social.${defaultCode}.facebook_url`;
+  const defaultFbSetting = currentRows.find((r) => r.key === defaultFbKey);
+  if (!defaultFbSetting) {
+    const legacyKeys = [
+      "social.facebook_url",
+      "social.instagram_url",
+      "social.linkedin_url",
+      "social.youtube_url",
+      "social.twitter_url",
+      "social.pinterest_url",
+    ];
+    const legacyRows = currentRows.filter((r) => legacyKeys.includes(r.key) && r.value.trim().length > 0);
+    if (legacyRows.length > 0) {
+      const migratePromises = legacyRows.map(async (row) => {
+        const platform = row.key.replace("social.", "").replace("_url", "");
+        const newKey = `social.${defaultCode}.${platform}_url`;
+        const exists = await prisma.setting.findUnique({ where: { key: newKey } });
+        if (!exists) {
+          return prisma.setting.create({
+            data: {
+              key: newKey,
+              value: row.value,
+              group: "social",
+              label: `${row.label} (${defaultCode})`,
+              type: "string",
+            },
+          });
+        }
+      });
+      await Promise.all(migratePromises);
+
+      // Refetch rows to include newly created settings
+      currentRows = await prisma.setting.findMany({
+        where: {
+          group: {
+            in: ["analytics", "pixels", "marketing", "social", "verification", "scripts", "cookies", "whatsapp", "seo", "general"],
+          },
+        },
+      });
+    }
+  }
+
+  const m = new Map(currentRows.map((r) => [r.key, { value: r.value, isEnabled: r.isEnabled, isSecret: r.isSecret }]));
+
+  const activeCode = countryCode?.trim().toUpperCase();
+
+  const getSocialUrl = (platform: string) => {
+    if (activeCode) {
+      const specificVal = str(m, `social.${activeCode}.${platform}_url`);
+      if (specificVal) return specificVal;
+    }
+    const defaultVal = str(m, `social.${defaultCode}.${platform}_url`);
+    if (defaultVal) return defaultVal;
+
+    // For backwards compatibility, check the legacy non-country key
+    return str(m, `social.${platform}_url`);
+  };
 
   return {
     ga4: {
@@ -211,12 +271,12 @@ export async function getPublicTrackingSettings() {
       floatingButtonEnabled: enabled(m, "whatsapp.floating_button_enabled"),
     },
     social: {
-      facebook: str(m, "social.facebook_url"),
-      instagram: str(m, "social.instagram_url"),
-      linkedin: str(m, "social.linkedin_url"),
-      youtube: str(m, "social.youtube_url"),
-      twitter: str(m, "social.twitter_url"),
-      pinterest: str(m, "social.pinterest_url"),
+      facebook: getSocialUrl("facebook"),
+      instagram: getSocialUrl("instagram"),
+      linkedin: getSocialUrl("linkedin"),
+      youtube: getSocialUrl("youtube"),
+      twitter: getSocialUrl("twitter"),
+      pinterest: getSocialUrl("pinterest"),
     },
     seo: {
       defaultTitle: val(m, "seo.default_title") || "Modern Orthodontics",
