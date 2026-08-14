@@ -454,6 +454,7 @@ type PricingRuleRow = {
   country?: { id: string; name: string; code: string } | null;
   variant?: { id: string; title: string; sku?: string | null } | null;
   minQuantity?: number | null;
+  maxQuantity?: number | null;
   discountPercent?: string | number | null;
   fixedPrice?: string | number | null;
 };
@@ -465,6 +466,7 @@ type RuleDraft = {
   countryIds?: string[];
   variantIds?: string[];
   minQuantity: string;
+  maxQuantity: string;
   mode: "discount" | "fixed";
   discountPercent: string;
   fixedPrice: string;
@@ -477,6 +479,7 @@ const emptyRuleDraft: RuleDraft = {
   countryIds: [],
   variantIds: [],
   minQuantity: "10",
+  maxQuantity: "",
   mode: "discount",
   discountPercent: "",
   fixedPrice: "",
@@ -897,7 +900,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     discountPercent: "",
     fixedPrice: "",
   });
-  const [bulkPriceUpdateModalOpen, setBulkPriceUpdateModalOpen] = useState(false);
+  const [bulkPriceUpdateModalContext, setBulkPriceUpdateModalContext] = useState<'variants' | 'base' | 'variant_prices' | null>(null);
+  const [bulkCountryAvailabilityCountryIds, setBulkCountryAvailabilityCountryIds] = useState<string[]>([]);
   const [modalCountryIds, setModalCountryIds] = useState<string[]>(["ALL_COUNTRIES"]);
   const [bulkPriceUpdateDraft, setBulkPriceUpdateDraft] = useState({
     mrp: "",
@@ -976,7 +980,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [priceSortField, setPriceSortField] = useState<string | null>(null);
   const [priceSortDirection, setPriceSortDirection] = useState<"asc" | "desc">("asc");
   const [priceBulkActionType, setPriceBulkActionType] = useState("Bulk Action");
-  const [priceBulkActionValue, setPriceBulkActionValue] = useState("");
   const [filterVPVariant, setFilterVPVariant] = useState("");
   const [filterVPCountry, setFilterVPCountry] = useState("");
   const [filterVPMRP, setFilterVPMRP] = useState("");
@@ -989,7 +992,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [vpSortField, setVpSortField] = useState<string | null>(null);
   const [vpSortDirection, setVpSortDirection] = useState<"asc" | "desc">("asc");
   const [vpBulkActionType, setVpBulkActionType] = useState("Bulk Action");
-  const [vpBulkActionValue, setVpBulkActionValue] = useState("");
   const [selectedVPIds, setSelectedVPIds] = useState<string[]>([]);
   const lastSelectedVPIndexRef = useRef<number | null>(null);
   const [expandedVPVariantIds, setExpandedVPVariantIds] = useState<string[]>([]);
@@ -1570,34 +1572,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           payload.status = "ACTIVE";
         } else if (priceBulkActionType === "Mark inactive") {
           payload.status = "INACTIVE";
-        } else if (priceBulkActionType === "Update MRP") {
-          if (!priceBulkActionValue.trim() || isNaN(parseFloat(priceBulkActionValue))) {
-            showToast("Please enter a valid MRP.", "error");
-            setBulkSaving(false);
-            return;
-          }
-          payload.mrp = parseFloat(priceBulkActionValue);
-        } else if (priceBulkActionType === "Update Selling Price") {
-          if (!priceBulkActionValue.trim() || isNaN(parseFloat(priceBulkActionValue))) {
-            showToast("Please enter a valid Selling Price.", "error");
-            setBulkSaving(false);
-            return;
-          }
-          payload.sellingPrice = parseFloat(priceBulkActionValue);
-        } else if (priceBulkActionType === "Update Dealer") {
-          if (!priceBulkActionValue.trim() || isNaN(parseFloat(priceBulkActionValue))) {
-            showToast("Please enter a valid Dealer Price.", "error");
-            setBulkSaving(false);
-            return;
-          }
-          payload.dealerPrice = parseFloat(priceBulkActionValue);
-        } else if (priceBulkActionType === "Update Doctor / Retailer") {
-          if (!priceBulkActionValue.trim() || isNaN(parseFloat(priceBulkActionValue))) {
-            showToast("Please enter a valid Doctor/Retailer Price.", "error");
-            setBulkSaving(false);
-            return;
-          }
-          payload.distributorPrice = parseFloat(priceBulkActionValue);
         }
         await Promise.all(
           selectedPriceIds.map((id) => adminApi.put(`/pricing/${id}`, payload))
@@ -1605,7 +1579,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         showToast(`Successfully updated ${selectedPriceIds.length} price(s).`, "success");
       }
       setSelectedPriceIds([]);
-      setPriceBulkActionValue("");
       setPriceBulkActionType("Bulk Action");
       await refetch();
     } catch (error) {
@@ -1631,50 +1604,23 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           setBulkSaving(false);
           return;
         }
-        await Promise.all(selectedVPIds.map((id) => adminApi.delete(`/pricing/${id}`)));
-        showToast(`Successfully deleted ${selectedVPIds.length} variant price(s).`, "success");
+        const overridesToDelete = selectedVPIds.filter(id => !id.startsWith("base-"));
+        await Promise.all(overridesToDelete.map((id) => adminApi.delete(`/pricing/${id}`)));
+        showToast(`Successfully deleted ${overridesToDelete.length} variant price(s). (Base prices ignored)`, "success");
       } else {
         const payload: any = {};
         if (vpBulkActionType === "Mark active") {
           payload.status = "ACTIVE";
         } else if (vpBulkActionType === "Mark inactive") {
           payload.status = "INACTIVE";
-        } else if (vpBulkActionType === "Update MRP") {
-          if (!vpBulkActionValue.trim() || isNaN(parseFloat(vpBulkActionValue))) {
-            showToast("Please enter a valid MRP.", "error");
-            setBulkSaving(false);
-            return;
-          }
-          payload.mrp = parseFloat(vpBulkActionValue);
-        } else if (vpBulkActionType === "Update Selling Price") {
-          if (!vpBulkActionValue.trim() || isNaN(parseFloat(vpBulkActionValue))) {
-            showToast("Please enter a valid Selling Price.", "error");
-            setBulkSaving(false);
-            return;
-          }
-          payload.sellingPrice = parseFloat(vpBulkActionValue);
-        } else if (vpBulkActionType === "Update Dealer") {
-          if (!vpBulkActionValue.trim() || isNaN(parseFloat(vpBulkActionValue))) {
-            showToast("Please enter a valid Dealer Price.", "error");
-            setBulkSaving(false);
-            return;
-          }
-          payload.dealerPrice = parseFloat(vpBulkActionValue);
-        } else if (vpBulkActionType === "Update Doctor / Retailer") {
-          if (!vpBulkActionValue.trim() || isNaN(parseFloat(vpBulkActionValue))) {
-            showToast("Please enter a valid Doctor/Retailer Price.", "error");
-            setBulkSaving(false);
-            return;
-          }
-          payload.distributorPrice = parseFloat(vpBulkActionValue);
         }
+        const overridesToUpdate = selectedVPIds.filter(id => !id.startsWith("base-"));
         await Promise.all(
-          selectedVPIds.map((id) => adminApi.put(`/pricing/${id}`, payload))
+          overridesToUpdate.map((id) => adminApi.put(`/pricing/${id}`, payload))
         );
-        showToast(`Successfully updated ${selectedVPIds.length} variant price(s).`, "success");
+        showToast(`Successfully updated ${overridesToUpdate.length} variant price(s). (Base prices ignored)`, "success");
       }
       setSelectedVPIds([]);
-      setVpBulkActionValue("");
       setVpBulkActionType("Bulk Action");
       await refetch();
     } catch (error) {
@@ -2021,18 +1967,42 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
   const productVariantPrices = useMemo(() => {
     const rawPrices = (product?.prices || []).filter((p: any) => p.variantId != null);
-    return rawPrices
-      .map((price: any) => {
-        const variant = variantRows.find((v) => v.id === price.variantId);
-        if (!variant) return null; // Variant was deleted or not found
-        return {
-          ...price,
-          variantTitle: variant.title ?? "Unknown Variant",
-          variantSku: variant.sku ?? "",
-        };
-      })
-      .filter(Boolean);
-  }, [product?.prices, variantRows]);
+    const enabledCountries = (productCountries as CountryAvailability[]).filter((c) => c.enabled);
+    const rows: any[] = [];
+
+    variantRows.forEach((variant) => {
+      enabledCountries.forEach((country) => {
+        const override = rawPrices.find((p: any) => p.variantId === variant.id && p.countryId === country.id);
+        
+        if (override) {
+          rows.push({
+            ...override,
+            variantTitle: variant.title ?? "Unknown Variant",
+            variantSku: variant.sku ?? "",
+            isOverride: true
+          });
+        } else {
+          const basePrice = product?.prices?.find((p: any) => p.variantId == null && p.countryId === country.id);
+          rows.push({
+            id: `base-${variant.id}-${country.id}`, 
+            variantId: variant.id,
+            countryId: country.id,
+            country: country,
+            mrp: basePrice?.mrp ?? 0,
+            sellingPrice: basePrice?.sellingPrice ?? 0,
+            dealerPrice: basePrice?.dealerPrice ?? null,
+            distributorPrice: basePrice?.distributorPrice ?? null,
+            status: basePrice?.status ?? "ACTIVE",
+            variantTitle: variant.title ?? "Unknown Variant",
+            variantSku: variant.sku ?? "",
+            isOverride: false
+          });
+        }
+      });
+    });
+
+    return rows;
+  }, [product?.prices, variantRows, productCountries]);
 
   const filteredVariantPrices = useMemo(() => {
     let rows = productVariantPrices;
@@ -3392,7 +3362,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     ...(draft.tierId ? { tierId: draft.tierId } : {}),
     countryId: draft.countryId,
     variantId: draft.variantId || null,
-    ...(includeMoq ? { minQuantity: Number(draft.minQuantity) } : {}),
+    ...(includeMoq ? { 
+      minQuantity: Number(draft.minQuantity),
+      maxQuantity: draft.maxQuantity ? Number(draft.maxQuantity) : null
+    } : {}),
     discountPercent: draft.mode === "discount" ? draft.discountPercent : null,
     fixedPrice: draft.mode === "fixed" ? draft.fixedPrice : null,
   });
@@ -5390,26 +5363,38 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-                <input
-                  type="text"
-                  placeholder={
-                    bulkActionType === "Price update"
-                      ? "Use popup"
-                      : bulkActionType === "Stock update filtered"
-                      ? "Stock quantity"
-                      : "Value"
-                  }
-                  value={bulkActionValue}
-                  onChange={(e) => setBulkActionValue(e.target.value)}
-                  disabled={
-                    bulkActionType === "Bulk Action" ||
-                    bulkActionType === "Mark active" ||
-                    bulkActionType === "Mark inactive" ||
-                    bulkActionType === "Delete selected" ||
-                    bulkActionType === "Price update"
-                  }
-                  className="w-[130px] rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] outline-none focus:border-[#E31E24] disabled:opacity-50"
-                />
+                {bulkActionType === "Country availability update" ? (
+                  <div className="w-[200px]">
+                    <AdminMultiSelect
+                      options={(productCountries as CountryAvailability[]).filter(c => c.status === "ACTIVE").map(c => ({ value: c.id, label: c.name }))}
+                      value={bulkCountryAvailabilityCountryIds}
+                      onChange={setBulkCountryAvailabilityCountryIds}
+                      placeholder="Select active countries..."
+                      className="h-[32px] py-0 px-3 text-[12.5px]"
+                    />
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    placeholder={
+                      bulkActionType === "Price update"
+                        ? "Use popup"
+                        : bulkActionType === "Stock update filtered"
+                        ? "Stock quantity"
+                        : "Value"
+                    }
+                    value={bulkActionValue}
+                    onChange={(e) => setBulkActionValue(e.target.value)}
+                    disabled={
+                      bulkActionType === "Bulk Action" ||
+                      bulkActionType === "Mark active" ||
+                      bulkActionType === "Mark inactive" ||
+                      bulkActionType === "Delete selected" ||
+                      bulkActionType === "Price update"
+                    }
+                    className="h-[32px] w-[130px] rounded-md border border-[#E6E6E6] bg-white px-3 text-[12.5px] outline-none focus:border-[#E31E24] disabled:opacity-50"
+                  />
+                )}
                 <select
                   value={bulkActionType}
                   onChange={(e) => {
@@ -5422,22 +5407,24 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                         return;
                       }
                       setModalCountryIds(["ALL_COUNTRIES"]);
-                      setBulkPriceUpdateModalOpen(true);
+                      setBulkPriceUpdateModalContext("variants");
                       setTimeout(() => setBulkActionType("Bulk Action"), 0);
                     }
                   }}
-                  className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                  className="h-[32px] rounded-md border border-[#E6E6E6] bg-white px-3 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
                 >
                   <option value="Bulk Action">Bulk Action</option>
                   <option value="Mark active">Mark active</option>
                   <option value="Mark inactive">Mark inactive</option>
                   <option value="Price update">Price update</option>
+                  <option value="Country availability update">Country availability update</option>
                   <option value="Stock update filtered">Stock update filtered</option>
                   <option value="Delete selected">Delete selected</option>
                 </select>
                 <button
                   type="button"
                   onClick={async () => {
+                    if (bulkSaving) return;
                     if (!selectedVariantIds.length) {
                       showToast("Please select at least one variant.", "error");
                       return;
@@ -5446,6 +5433,53 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       showToast("Please select a bulk action.", "error");
                       return;
                     }
+                    
+                    if (bulkActionType === "Country availability update") {
+                      if (bulkCountryAvailabilityCountryIds.length === 0) {
+                         showToast("Please select at least one country to enable.", "error");
+                         return;
+                      }
+                      setBulkSaving(true);
+                      try {
+                        let hasError = false;
+                        for (const vId of selectedVariantIds) {
+                          try {
+                            const currentAvailability = await adminApi
+                              .get(`/products/${productId}/variants/${vId}/countries`)
+                              .then((r) => r.data.data as CountryAvailability[]);
+
+                            const updatedItems = currentAvailability.map((country) => {
+                              return { 
+                                countryId: country.id, 
+                                enabled: bulkCountryAvailabilityCountryIds.includes(country.id) 
+                              };
+                            });
+
+                            await adminApi.put(`/products/${productId}/variants/${vId}/countries`, {
+                              items: updatedItems,
+                            });
+                          } catch (err) {
+                            hasError = true;
+                            console.error(`Failed to update country availability for variant ${vId}`, err);
+                          }
+                        }
+
+                        if (hasError) {
+                          showToast("Failed to update country availability for some variants.", "error");
+                        } else {
+                          showToast("Country availability updated for selected variants.");
+                        }
+                        
+                        setBulkActionType("Bulk Action");
+                        setBulkCountryAvailabilityCountryIds([]);
+                      } catch (e) {
+                        showToast("Failed to update country availability.", "error");
+                      } finally {
+                        setBulkSaving(false);
+                      }
+                      return;
+                    }
+
                     setBulkSaving(true);
                     try {
                       let updates: any[] = [];
@@ -5485,7 +5519,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     }
                   }}
                   disabled={bulkSaving || selectedVariantIds.length === 0}
-                  className="rounded-md bg-[#1A1A1A] hover:bg-[#333] px-4 py-1.5 text-[12.5px] font-bold text-white shadow-sm disabled:opacity-40"
+                  className="h-[32px] rounded-md bg-[#1A1A1A] px-4 text-[12.5px] font-bold text-white hover:bg-[#333] shadow-sm disabled:opacity-40"
                 >
                   Apply
                 </button>
@@ -5928,41 +5962,27 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2.5">
-                        <input
-                          type="text"
-                          placeholder={
-                            priceBulkActionType === "Update MRP"
-                              ? "MRP"
-                              : priceBulkActionType === "Update Selling Price"
-                              ? "Selling Price"
-                              : priceBulkActionType === "Update Dealer"
-                              ? "Dealer Price"
-                              : priceBulkActionType === "Update Doctor / Retailer"
-                              ? "Doctor/Retailer Price"
-                              : "Value"
-                          }
-                          value={priceBulkActionValue}
-                          onChange={(e) => setPriceBulkActionValue(e.target.value)}
-                          disabled={
-                            priceBulkActionType === "Bulk Action" ||
-                            priceBulkActionType === "Mark active" ||
-                            priceBulkActionType === "Mark inactive" ||
-                            priceBulkActionType === "Delete selected"
-                          }
-                          className="w-[130px] rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] outline-none focus:border-[#E31E24] disabled:opacity-50"
-                        />
                         <select
                           value={priceBulkActionType}
-                          onChange={(e) => setPriceBulkActionType(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setPriceBulkActionType(val);
+                            if (val === "Price update") {
+                              if (selectedPriceIds.length === 0) {
+                                showToast("Please select at least one price row first.", "error");
+                                setTimeout(() => setPriceBulkActionType("Bulk Action"), 0);
+                                return;
+                              }
+                              setBulkPriceUpdateModalContext("base");
+                              setTimeout(() => setPriceBulkActionType("Bulk Action"), 0);
+                            }
+                          }}
                           className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
                         >
                           <option value="Bulk Action">Bulk Action</option>
                           <option value="Mark active">Mark active</option>
                           <option value="Mark inactive">Mark inactive</option>
-                          <option value="Update MRP">Update MRP</option>
-                          <option value="Update Selling Price">Update Selling Price</option>
-                          <option value="Update Dealer">Update Dealer</option>
-                          <option value="Update Doctor / Retailer">Update Doctor / Retailer</option>
+                          <option value="Price update">Price update</option>
                           <option value="Delete selected">Delete selected</option>
                         </select>
                         <button
@@ -6248,14 +6268,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Variant-wise Pricing</h3>
                     <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Manage country-specific overrides for product variants.</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setAddVariantOverrideModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B]"
-                  >
-                    <Plus size={14} />
-                    Add Override
-                  </button>
+
                 </div>
 
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E6E6E6] bg-white p-3">
@@ -6305,27 +6318,28 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="Value"
-                      value={vpBulkActionValue}
-                      onChange={(e) => setVpBulkActionValue(e.target.value)}
-                      disabled={bulkSaving || ["Bulk Action", "Mark active", "Mark inactive", "Delete selected"].includes(vpBulkActionType)}
-                      className="h-8.5 rounded-md border border-[#E6E6E6] px-3 text-[12.5px] outline-none disabled:bg-[#FAFAFA]"
-                    />
                     <select
                       value={vpBulkActionType}
-                      onChange={(e) => setVpBulkActionType(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setVpBulkActionType(val);
+                        if (val === "Price update") {
+                          if (selectedVPIds.length === 0) {
+                            showToast("Please select at least one variant price row first.", "error");
+                            setTimeout(() => setVpBulkActionType("Bulk Action"), 0);
+                            return;
+                          }
+                          setBulkPriceUpdateModalContext("variant_prices");
+                          setTimeout(() => setVpBulkActionType("Bulk Action"), 0);
+                        }
+                      }}
                       className="h-8.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[12.5px] outline-none focus:border-[#E31E24]"
                     >
-                      <option>Bulk Action</option>
-                      <option>Mark active</option>
-                      <option>Mark inactive</option>
-                      <option>Update MRP</option>
-                      <option>Update Selling Price</option>
-                      <option>Update Dealer</option>
-                      <option>Update Doctor / Retailer</option>
-                      <option>Delete selected</option>
+                      <option value="Bulk Action">Bulk Action</option>
+                      <option value="Mark active">Mark active</option>
+                      <option value="Mark inactive">Mark inactive</option>
+                      <option value="Price update">Price update</option>
+                      <option value="Delete selected">Delete selected</option>
                     </select>
                     <button
                       type="button"
@@ -6568,11 +6582,24 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                 <td className="px-4 py-3 text-center border-b border-[#E6E6E6] text-[#9A9A9A]">
                                   {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                                 </td>
-                                <td className="px-4 py-3 font-medium text-[#1A1A1A] border-b border-[#E6E6E6]" colSpan={8}>
+                                <td className="px-4 py-3 font-medium text-[#1A1A1A] border-b border-[#E6E6E6]" colSpan={7}>
                                   {group.variantTitle} {group.variantSku ? `(${group.variantSku})` : ""}
                                   <span className="ml-3 text-[12px] text-[#6B6B6B] font-normal px-2 py-0.5 rounded bg-white border border-[#E6E6E6]">
-                                    {group.prices.length} Pricing Override{group.prices.length !== 1 ? 's' : ''}
+                                    {group.prices.filter((p: any) => p.isOverride).length} Pricing Override{group.prices.filter((p: any) => p.isOverride).length !== 1 ? 's' : ''}
                                   </span>
+                                </td>
+                                <td className="px-4 py-3 border-b border-[#E6E6E6]" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const variant = variantRows.find((v) => v.id === variantId);
+                                      if (variant) openEditVariantModal(variant);
+                                    }}
+                                    title="Add Override"
+                                    className="rounded border border-[#E6E6E6] bg-white p-1 text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#1A1A1A]"
+                                  >
+                                    <Plus size={13} />
+                                  </button>
                                 </td>
                               </tr>
                               {isExpanded && group.prices.map((price: any) => {
@@ -6628,23 +6655,28 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                     </td>
                                     <td className="px-4 py-3">
                                       <div className="flex items-center gap-1.5">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const variant = variantRows.find((v) => v.id === price.variantId);
-                                            if (variant) openEditVariantModal(variant);
-                                          }}
-                                          className="rounded border border-[#E6E6E6] p-1 text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#1A1A1A]"
-                                        >
-                                          <Pencil size={13} />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleDeleteProductPrice(price.id)}
-                                          className="rounded border border-[#F2C9C9] p-1 text-red-600 hover:bg-red-50"
-                                        >
-                                          <Trash2 size={13} />
-                                        </button>
+                                        {price.isOverride && (
+                                          <>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const variant = variantRows.find((v) => v.id === price.variantId);
+                                                if (variant) openEditVariantModal(variant);
+                                              }}
+                                              title="Edit Override"
+                                              className="rounded border border-[#E6E6E6] p-1 text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#1A1A1A]"
+                                            >
+                                              <Pencil size={13} />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleDeleteProductPrice(price.id)}
+                                              className="rounded border border-[#F2C9C9] p-1 text-red-600 hover:bg-red-50"
+                                            >
+                                              <Trash2 size={13} />
+                                            </button>
+                                          </>
+                                        )}
                                       </div>
                                     </td>
                                   </tr>
@@ -6713,7 +6745,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   <h3 className="text-[14px] font-semibold text-[#1A1A1A]">MOQ Pricing</h3>
                   <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Create quantity price-break rules. Existing variant MOQ remains a minimum-quantity gate only.</p>
                 </div>
-                <div className="grid gap-3 lg:grid-cols-6">
+                <div className="grid gap-3 lg:grid-cols-7">
                   <AdminMultiSearchableSelect
                     label="Countries"
                     values={moqRuleDraft.countryIds ?? (moqRuleDraft.countryId ? [moqRuleDraft.countryId] : [])}
@@ -6732,6 +6764,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     isInfinite={true}
                   />
                   <AdminInput label="Min Qty" type="number" min={1} value={moqRuleDraft.minQuantity} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, minQuantity: e.target.value }))} />
+                  <AdminInput label="Max Qty" type="number" min={1} placeholder="None" value={moqRuleDraft.maxQuantity} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, maxQuantity: e.target.value }))} />
                   <AdminSelect label="Mode" value={moqRuleDraft.mode} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, mode: e.target.value as "discount" | "fixed" }))} options={[{ value: "discount", label: "% Discount" }, { value: "fixed", label: "Fixed Price" }]} />
                   <AdminInput label={moqRuleDraft.mode === "discount" ? "Discount %" : "Fixed Price"} type="number" min={0} step="0.01" value={moqRuleDraft.mode === "discount" ? moqRuleDraft.discountPercent : moqRuleDraft.fixedPrice} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, [d.mode === "discount" ? "discountPercent" : "fixedPrice"]: e.target.value }))} />
                   <div className="flex items-end">
@@ -6743,7 +6776,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     <div className="px-4 py-6 text-center text-[13px] text-[#9A9A9A]">No MOQ pricing rules yet.</div>
                   ) : moqPricingRows.map((rule) => (
                     <div key={rule.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-[13px]">
-                      <span className="font-medium text-[#1A1A1A]">{rule.minQuantity}+ units</span>
+                      <span className="font-medium text-[#1A1A1A]">{rule.minQuantity}{rule.maxQuantity ? ` - ${rule.maxQuantity}` : '+'} units</span>
                       <span className="text-[#6B6B6B]">{rule.country ? `${rule.country.name} (${rule.country.code})` : "Country"}</span>
                       <span className="text-[#6B6B6B]">{rule.variant ? rule.variant.title : "All Variants"}</span>
                       <span className="ml-auto font-semibold text-[#1A1A1A]">{rule.discountPercent ? `${rule.discountPercent}% off` : `${rule.fixedPrice} fixed`}</span>
@@ -7703,7 +7736,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-[12px] text-[#9A9A9A]">{enabledCountryCount} enabled</span>
+                <span className="text-[12px] text-[#9A9A9A]">
+                  {(productCountries as CountryAvailability[]).filter((c) => c.status === "ACTIVE").filter((country) => countryOverrides[country.id] ?? country.enabled).length} enabled
+                </span>
                 <button
                   type="button"
                   onClick={saveCountryAvailability}
@@ -7723,7 +7758,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               </div>
             ) : (
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                {(productCountries as CountryAvailability[]).map((country) => (
+                {(productCountries as CountryAvailability[]).filter((c) => c.status === "ACTIVE").map((country) => (
                   <label key={country.id} className="flex items-center justify-between gap-3 rounded-md border border-[#E6E6E6] px-3 py-2">
                     <span className="min-w-0">
                       <span className="block truncate text-[13px] font-medium text-[#1A1A1A]">{country.name}</span>
@@ -8336,7 +8371,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             <div className="mb-4 flex items-center justify-between rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2">
               <span className="text-[13px] font-medium text-[#1A1A1A]">{variantCountryModalVariant.sku || "No SKU"}</span>
               <span className="text-[12px] text-[#9A9A9A]">
-                {(variantCountries as CountryAvailability[]).filter((country) => variantCountryOverrides[country.id] ?? country.enabled).length} enabled
+                {(variantCountries as CountryAvailability[]).filter((c) => c.status === "ACTIVE").filter((country) => variantCountryOverrides[country.id] ?? country.enabled).length} enabled
               </span>
             </div>
 
@@ -8346,7 +8381,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               <p className="rounded-md border border-[#E6E6E6] px-3 py-4 text-[13px] text-[#9A9A9A]">No countries found.</p>
             ) : (
               <div className="grid gap-2 md:grid-cols-2">
-                {(variantCountries as CountryAvailability[]).map((country) => (
+                {(variantCountries as CountryAvailability[]).filter((c) => c.status === "ACTIVE").map((country) => (
                   <label key={country.id} className="flex items-center justify-between gap-3 rounded-md border border-[#E6E6E6] px-3 py-2">
                     <span className="min-w-0">
                       <span className="block truncate text-[13px] font-medium text-[#1A1A1A]">{country.name}</span>
@@ -8716,7 +8751,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               <div className="space-y-4">
                 <div className="rounded-lg border border-[#E6E6E6] bg-white p-4">
                   <div className="mb-3 text-[13.5px] font-semibold text-[#1A1A1A]">Add MOQ Override Rule</div>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <AdminSelect
                       label="Country"
                       value={modalMoqRuleDraft.countryId}
@@ -8729,6 +8764,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       min={1}
                       value={modalMoqRuleDraft.minQuantity}
                       onChange={(e) => setModalMoqRuleDraft((d) => ({ ...d, minQuantity: e.target.value }))}
+                    />
+                    <AdminInput
+                      label="Max Qty"
+                      type="number"
+                      min={1}
+                      placeholder="None"
+                      value={modalMoqRuleDraft.maxQuantity}
+                      onChange={(e) => setModalMoqRuleDraft((d) => ({ ...d, maxQuantity: e.target.value }))}
                     />
                     <AdminSelect
                       label="Mode"
@@ -8758,12 +8801,13 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                               variantId: editingVariant.id,
                               countryId: modalMoqRuleDraft.countryId,
                               minQuantity: Number(modalMoqRuleDraft.minQuantity) || 1,
+                              maxQuantity: modalMoqRuleDraft.maxQuantity ? Number(modalMoqRuleDraft.maxQuantity) : null,
                               discountPercent: modalMoqRuleDraft.mode === "discount" ? Number(modalMoqRuleDraft.discountPercent) || 0 : null,
                               fixedPrice: modalMoqRuleDraft.mode === "fixed" ? Number(modalMoqRuleDraft.fixedPrice) || 0 : null,
                             };
                             await createMoqPricing.mutateAsync(payload);
                             showToast("MOQ pricing rule added.");
-                            setModalMoqRuleDraft({ countryId: "", minQuantity: "", mode: "discount", discountPercent: "", fixedPrice: "" });
+                            setModalMoqRuleDraft({ countryId: "", minQuantity: "", maxQuantity: "", mode: "discount", discountPercent: "", fixedPrice: "" });
                           } catch {
                             showToast("Failed to add rule.", "error");
                           }
@@ -8785,7 +8829,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     }
                     return rules.map((rule) => (
                       <div key={rule.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-[13px]">
-                        <span className="font-medium text-[#1A1A1A]">{rule.minQuantity}+ units</span>
+                        <span className="font-medium text-[#1A1A1A]">{rule.minQuantity}{rule.maxQuantity ? ` - ${rule.maxQuantity}` : '+'} units</span>
                         <span className="text-[#6B6B6B]">{rule.country ? `${rule.country.name} (${rule.country.code})` : "Country"}</span>
                         <span className="ml-auto font-semibold text-[#1A1A1A]">{rule.discountPercent ? `${rule.discountPercent}% off` : `${rule.fixedPrice} fixed`}</span>
                         <button
@@ -9436,7 +9480,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         }}
       />
 
-      {bulkPriceUpdateModalOpen && (
+      {bulkPriceUpdateModalContext !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="w-[480px] rounded-xl bg-white p-6 shadow-2xl">
             <h2 className="mb-4 text-lg font-semibold text-[#1A1A1A]">Bulk Update Prices</h2>
@@ -9445,23 +9489,33 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               They will be automatically converted for your selected countries. Leave fields blank to keep current values.
             </p>
 
-            <div className="z-[99999] relative mb-6">
-              <AdminMultiSelect
-                label="Target Countries"
-                options={[
-                  { value: "ALL_COUNTRIES", label: "All Enabled Countries" },
-                  ...bulkCountryOptions.map((c) => ({ value: c.id, label: c.label }))
-                ]}
-                value={modalCountryIds}
-                onChange={(next) => setModalCountryIds(next)}
-                placeholder="Select Countries"
-              />
-            </div>
+            {bulkPriceUpdateModalContext === "variants" && (
+              <div className="z-[99999] relative mb-6">
+                <AdminMultiSelect
+                  label="Target Countries"
+                  options={[
+                    { value: "ALL_COUNTRIES", label: "All Enabled Countries" },
+                    ...bulkCountryOptions.map((c) => ({ value: c.id, label: c.label }))
+                  ]}
+                  value={modalCountryIds}
+                  onChange={(next) => setModalCountryIds(next)}
+                  placeholder="Select Countries"
+                />
+              </div>
+            )}
 
             <form onSubmit={async (e) => {
               e.preventDefault();
-              if (!selectedVariantIds.length) {
+              if (bulkPriceUpdateModalContext === "variants" && !selectedVariantIds.length) {
                 showToast("Please select at least one variant.", "error");
+                return;
+              }
+              if (bulkPriceUpdateModalContext === "base" && !selectedPriceIds.length) {
+                showToast("Please select at least one price row.", "error");
+                return;
+              }
+              if (bulkPriceUpdateModalContext === "variant_prices" && !selectedVPIds.length) {
+                showToast("Please select at least one variant price row.", "error");
                 return;
               }
               const hasValues = 
@@ -9477,6 +9531,52 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           
               setBulkSaving(true);
               try {
+                if (bulkPriceUpdateModalContext === "base" || bulkPriceUpdateModalContext === "variant_prices") {
+                  const targetIds = bulkPriceUpdateModalContext === "base" ? selectedPriceIds : selectedVPIds;
+                  const payload: any = {};
+                  let mrpRate: number | null = parseFloat(bulkPriceUpdateDraft.mrp);
+                  if (!isNaN(mrpRate)) payload.mrp = mrpRate;
+                  let sellingRate: number | null = parseFloat(bulkPriceUpdateDraft.sellingPrice);
+                  if (!isNaN(sellingRate)) payload.sellingPrice = sellingRate;
+                  let dealerRate: number | null = parseFloat(bulkPriceUpdateDraft.dealerPrice);
+                  if (!isNaN(dealerRate)) payload.dealerPrice = dealerRate;
+                  let docRate: number | null = parseFloat(bulkPriceUpdateDraft.doctorRetailerPrice);
+                  if (!isNaN(docRate)) payload.distributorPrice = docRate;
+  
+                  await Promise.all(
+                    targetIds.map(async (id) => {
+                      if (id.startsWith("base-")) {
+                        const row = productVariantPrices.find((p: any) => p.id === id);
+                        if (row) {
+                          return adminApi.post('/pricing', {
+                            productId: productId,
+                            variantId: row.variantId,
+                            countryId: row.countryId,
+                            status: "ACTIVE",
+                            ...payload
+                          });
+                        }
+                      } else {
+                        return adminApi.put(`/pricing/${id}`, payload);
+                      }
+                    })
+                  );
+                  showToast(`Successfully updated ${targetIds.length} price(s).`, "success");
+                  
+                  if (bulkPriceUpdateModalContext === "base") {
+                    setSelectedPriceIds([]);
+                    setPriceBulkActionType("Bulk Action");
+                  } else {
+                    setSelectedVPIds([]);
+                    setVpBulkActionType("Bulk Action");
+                  }
+                  
+                  setBulkPriceUpdateModalContext(null);
+                  setBulkPriceUpdateDraft({ mrp: "", sellingPrice: "", dealerPrice: "", doctorRetailerPrice: "" });
+                  refetch();
+                  return;
+                }
+
                 let countriesToUpdate = modalCountryIds.length > 0 ? modalCountryIds : ["ALL_COUNTRIES"];
                 
                 // If "ALL_COUNTRIES" is selected, expand it to all enabled country IDs for this product
@@ -9538,7 +9638,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   showToast("Prices updated successfully.", "success");
                 }
 
-                setBulkPriceUpdateModalOpen(false);
+                setBulkPriceUpdateModalContext(null);
                 setBulkPriceUpdateDraft({ mrp: "", sellingPrice: "", dealerPrice: "", doctorRetailerPrice: "" });
                 setModalCountryIds(["ALL_COUNTRIES"]);
                 setSelectedVariantIds([]);
@@ -9603,7 +9703,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               <div className="flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setBulkPriceUpdateModalOpen(false)}
+                  onClick={() => setBulkPriceUpdateModalContext(null)}
                   className="rounded-md px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#1A1A1A]"
                 >
                   Cancel
@@ -9904,6 +10004,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           </div>
         </div>
       </Modal>
+
 
       {ToastComponent}
     </>

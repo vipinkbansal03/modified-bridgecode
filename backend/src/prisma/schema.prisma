@@ -1386,6 +1386,7 @@ model MoqPricing {
   variantId       String?
   countryId       String
   minQuantity     Int
+  maxQuantity     Int?
   discountPercent Decimal?        @db.Decimal(5, 2)
   fixedPrice      Decimal?        @db.Decimal(12, 2)
   createdAt       DateTime        @default(now())

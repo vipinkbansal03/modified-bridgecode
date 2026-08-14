@@ -346,6 +346,7 @@ type PricingRuleInput = {
   variantId?: string | null;
   countryId?: string | null;
   minQuantity?: number | string | null;
+  maxQuantity?: number | string | null;
   discountPercent?: number | string | Prisma.Decimal | null;
   fixedPrice?: number | string | Prisma.Decimal | null;
 };
@@ -1658,7 +1659,7 @@ export async function generateVariants(
   const product = await getProduct(productId);
 
   const productInventoryTemplates = product.inventories
-    .filter((inventory) => !inventory.variantId)
+    .filter((inventory) => !inventory.variantId && !inventory.warehouseId)
     .map((inventory) => ({
       countryId: inventory.countryId,
       warehouseId: inventory.warehouseId,
@@ -2455,7 +2456,14 @@ export async function createMoqPricing(productId: string, data: PricingRuleInput
   if (!data.countryId) throw new AppError("Country is required.", 400);
   const minQuantity = Number(data.minQuantity);
   if (!Number.isInteger(minQuantity) || minQuantity < 1) throw new AppError("Minimum quantity must be at least 1.", 400);
-  const rule = normalizeExclusivePriceRule(data);
+
+  let maxQty: number | null = null;
+  if (data.maxQuantity !== undefined && data.maxQuantity !== null && data.maxQuantity !== "") {
+    maxQty = Number(data.maxQuantity);
+    if (!Number.isInteger(maxQty) || maxQty < 0) throw new AppError("Max quantity must be a non-negative integer.", 400);
+  }
+
+  const { discountPercent, fixedPrice } = normalizeExclusivePriceRule(data);
   await ensureVariantBelongsToProduct(productId, data.variantId);
 
   const country = await prisma.country.findUnique({ where: { id: data.countryId } });
@@ -2467,7 +2475,15 @@ export async function createMoqPricing(productId: string, data: PricingRuleInput
   if (existing) throw new AppError("An MOQ pricing rule already exists for this combination.", 409);
 
   return prisma.moqPricing.create({
-    data: { productId, countryId: data.countryId, variantId: data.variantId || null, minQuantity, ...rule },
+    data: { 
+      productId, 
+      countryId: data.countryId, 
+      variantId: data.variantId || null, 
+      minQuantity, 
+      maxQuantity: maxQty,
+      discountPercent, 
+      fixedPrice 
+    },
     include: { country: true, variant: true },
   });
 }
@@ -2481,7 +2497,18 @@ export async function updateMoqPricing(productId: string, ruleId: string, data: 
   const variantId = data.variantId === undefined ? existing.variantId : data.variantId || null;
   const minQuantity = data.minQuantity === undefined ? existing.minQuantity : Number(data.minQuantity);
   if (!Number.isInteger(minQuantity) || minQuantity < 1) throw new AppError("Minimum quantity must be at least 1.", 400);
-  const rule = normalizeExclusivePriceRule({
+
+  let maxQty: number | null = existing.maxQuantity;
+  if (data.maxQuantity !== undefined) {
+    if (data.maxQuantity === null || data.maxQuantity === "") {
+      maxQty = null;
+    } else {
+      maxQty = Number(data.maxQuantity);
+      if (!Number.isInteger(maxQty) || maxQty < 0) throw new AppError("Max quantity must be a non-negative integer.", 400);
+    }
+  }
+
+  const { discountPercent, fixedPrice } = normalizeExclusivePriceRule({
     discountPercent: data.discountPercent ?? existing.discountPercent,
     fixedPrice: data.fixedPrice ?? existing.fixedPrice,
   });
@@ -2494,7 +2521,7 @@ export async function updateMoqPricing(productId: string, ruleId: string, data: 
 
   return prisma.moqPricing.update({
     where: { id: ruleId },
-    data: { countryId, variantId, minQuantity, ...rule },
+    data: { countryId, variantId, minQuantity, maxQuantity: maxQty, discountPercent, fixedPrice },
     include: { country: true, variant: true },
   });
 }
