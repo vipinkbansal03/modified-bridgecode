@@ -896,6 +896,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [modalMoqRuleDraft, setModalMoqRuleDraft] = useState({
     countryId: "",
     minQuantity: "",
+    maxQuantity: "",
     mode: "discount" as "discount" | "fixed",
     discountPercent: "",
     fixedPrice: "",
@@ -3507,7 +3508,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const handleEditMappedAttribute = (mapping: ProductAttributeMapping) => {
     setSelectedMappingAttributeId(mapping.attributeId);
     setNewMappingRequired(mapping.required);
-    setNewMappingGridAxis(mapping.gridAxis);
+    setNewMappingGridAxis(mapping.gridAxis ?? null);
     setNewMappingValueIds(mapping.allowedValues.map((v) => v.attributeValueId));
     // Scroll to form slightly
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });

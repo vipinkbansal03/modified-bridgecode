@@ -70,8 +70,10 @@ export function getCustomerErrorMessage(
 }
 
 export interface CustomerOrderItemPayload {
-  variantId: string;
+  productId: string;
+  variantId?: string;
   quantity: number;
+  warehouseId?: string;
 }
 
 export interface CustomerOrderAddressPayload {

@@ -28,7 +28,6 @@ function formatMoney(symbol: string, amount: number) {
 export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorProps) {
   const router = useRouter();
   const { showToast } = useToast();
-  const { currencySymbol } = useCurrencyContext();
   const { addItem } = useCart();
 
   const [quantity, setQuantity] = useState(1);

@@ -10,9 +10,11 @@ const STATUS_CONFIG: Record<StockStatus, { label: string; cls: string }> = {
 export function StockBadge({
   status,
   available,
+  className = "",
 }: {
   status: StockStatus | null | undefined;
   available?: number;
+  className?: string;
 }) {
   const effectiveStatus =
     available !== undefined && available <= 0
@@ -20,11 +22,11 @@ export function StockBadge({
       : status ?? "OUT_OF_STOCK";
 
   if (!status && available === undefined)
-    return <span className="text-[11px] text-[#9A9A9A]">—</span>;
+    return <span className={`text-[11px] text-[#9A9A9A] ${className}`}>—</span>;
 
   const { label, cls } = STATUS_CONFIG[effectiveStatus] ?? STATUS_CONFIG.OUT_OF_STOCK;
   return (
-    <span className={`inline-block border rounded px-1.5 py-0.5 text-[10.5px] font-medium tracking-wide ${cls}`}>
+    <span className={`inline-block border rounded px-1.5 py-0.5 text-[10.5px] font-medium tracking-wide ${cls} ${className}`}>
       {label}
     </span>
   );
