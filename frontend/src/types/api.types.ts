@@ -136,6 +136,8 @@ export interface ApiProductDetail extends Omit<ApiProductSummary, "images"> {
   attributes: ApiAttribute[];
   variants: ApiVariant[];
   lowestPrice?: ApiProductPrice[];
+  inventory?: ApiVariantInventory | null;
+  warehouseInventories?: { warehouseId: string | null; available: number; status: string }[];
 }
 
 export interface ApiSearchResult {

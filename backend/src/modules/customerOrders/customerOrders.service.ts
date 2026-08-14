@@ -44,23 +44,35 @@ async function calculateCustomerOrder(
     );
   }
 
-  const requestedVariantIds = [
-    ...new Set(input.items.map((item) => item.variantId)),
-  ];
-  const variants = await prisma.productVariant.findMany({
-    where: { id: { in: requestedVariantIds }, status: "ACTIVE" },
-    include: {
-      product: {
-        include: {
-          defaultCountry: true,
-          defaultCurrency: true,
-        },
-      },
-      inventories: { include: { warehouse: true } },
-    },
+  input.items.forEach((item) => {
+    if (item.variantId === item.productId) item.variantId = undefined;
+    if (item.warehouseId === "default") item.warehouseId = undefined;
   });
 
-  if (variants.length !== requestedVariantIds.length) {
+  const requestedVariantIds = [
+    ...new Set(input.items.map((item) => item.variantId).filter(Boolean) as string[]),
+  ];
+  const requestedProductIds = [
+    ...new Set(input.items.map((item) => item.productId)),
+  ];
+  const [products, variants] = await Promise.all([
+    prisma.product.findMany({
+      where: { id: { in: requestedProductIds }, deletedAt: null },
+      include: {
+        defaultCountry: true,
+        defaultCurrency: true,
+        inventories: { include: { warehouse: true } },
+      },
+    }),
+    prisma.productVariant.findMany({
+      where: { id: { in: requestedVariantIds }, status: "ACTIVE" },
+      include: {
+        inventories: { include: { warehouse: true } },
+      },
+    }),
+  ]);
+
+  if (variants.length !== requestedVariantIds.length || products.length !== requestedProductIds.length) {
     throw new AppError("One or more cart items are no longer available.", 400);
   }
 
@@ -76,7 +88,7 @@ async function calculateCustomerOrder(
   }
 
   const firstProductDefaultCountry =
-    variants[0]?.product.defaultCountry ?? null;
+    products[0]?.defaultCountry ?? null;
   const orderCountry =
     explicitCountry ?? customer.defaultCountry ?? firstProductDefaultCountry;
   if (!orderCountry) {
@@ -89,25 +101,22 @@ async function calculateCustomerOrder(
     throw new AppError("Selected shipping country is inactive.", 400);
   }
 
-  const variantMap = new Map(variants.map((variant) => [variant.id, variant]));
+  const productMap = new Map(products.map((p) => [p.id, p]));
+  const variantMap = new Map(variants.map((v) => [v.id, v]));
   const orderItems = await Promise.all(
     input.items.map(async (item) => {
-      const variant = variantMap.get(item.variantId);
-      if (!variant)
-        throw new AppError(
-          "One or more cart items are no longer available.",
-          400,
-        );
+      const product = productMap.get(item.productId);
+      const variant = item.variantId ? variantMap.get(item.variantId) : null;
+      if (!product || (item.variantId && !variant))
+        throw new AppError("One or more cart items are no longer available.", 400);
 
+      const inventorySource = variant || product;
       const stockRecord = item.warehouseId
-        ? variant.inventories.find(inv => inv.warehouseId === item.warehouseId)
-        : variant.inventories.find((inventory) => inventory.warehouseId === null);
-      const availableStock = Math.max(
-        0,
-        (stockRecord?.stock ?? 0) - (stockRecord?.reservedStock ?? 0),
-      );
+        ? inventorySource.inventories.find((inv) => inv.warehouseId === item.warehouseId && (!variant ? inv.variantId === null : true))
+        : inventorySource.inventories.find((inv) => inv.warehouseId === null && (!variant ? inv.variantId === null : true));
+      const availableStock = Math.max(0, (stockRecord?.stock ?? 0) - (stockRecord?.reservedStock ?? 0));
       const isOutOfStock = availableStock <= 0 || stockRecord?.status === "OUT_OF_STOCK";
-      const displayName = `${variant.product.title}${variant.title ? ` - ${variant.title}` : ""}`;
+      const displayName = variant ? `${product.title} - ${variant.title}` : product.title;
 
       if (isOutOfStock) {
         throw new AppError(`"${displayName}" is currently out of stock.`, 400);
@@ -119,15 +128,15 @@ async function calculateCustomerOrder(
         );
       }
 
-      const itemCountryId = orderCountry.id ?? variant.product.defaultCountryId;
+      const itemCountryId = orderCountry.id ?? product.defaultCountryId;
       await assertSellableInCountry({
         countryId: itemCountryId,
-        productId: variant.productId,
-        variantId: variant.id,
+        productId: product.id,
+        variantId: variant?.id ?? null,
       });
       const resolvedPrice = await resolvePrice({
-        productId: variant.productId,
-        variantId: variant.id,
+        productId: product.id,
+        variantId: variant?.id ?? null,
         countryId: itemCountryId,
         customerId: customer.id,
         quantity: item.quantity,
@@ -146,7 +155,8 @@ async function calculateCustomerOrder(
       const unitPriceBeforeTax = resolvedPrice.priceBeforeTax;
       const unitTax = resolvedPrice.taxAmount;
       return {
-        variant,
+          product,
+          variant,
         resolvedPrice,
         quantity: item.quantity,
         unitPrice,
@@ -156,6 +166,7 @@ async function calculateCustomerOrder(
         subtotal: unitPriceBeforeTax * item.quantity,
         taxTotal: unitTax * item.quantity,
         warehouseId: stockRecord?.warehouseId ?? null,
+        inventoryId: stockRecord?.id ?? null,
       };
     }),
   );
@@ -219,8 +230,8 @@ async function calculateCustomerOrder(
   const shippingCharge = shipping.charge;
   const packaging = await calculateShipment(
     orderItems.map((item) => ({
-      productId: item.variant.productId,
-      variantId: item.variant.id,
+      productId: item.product.id,
+      variantId: item.variant?.id ?? null,
       quantity: item.quantity,
     })),
     { countryCode: orderCountry.code },
@@ -260,8 +271,8 @@ export async function estimateCustomerOrder(
     item.resolvedPrice.appliedDiscounts
       .filter((entry) => entry.type === "PROMOTIONAL_DISCOUNT")
       .map((entry) => ({
-        variantId: item.variant.id,
-        sku: item.variant.sku,
+        variantId: item.variant?.id ?? null,
+        sku: item.variant?.sku ?? item.product.sku,
         label: entry.label,
         discountRuleType: entry.discountRuleType,
         discountPercent: entry.discountPercent ?? null,
@@ -371,9 +382,9 @@ export async function estimateCustomerOrder(
     automaticDiscount,
     automaticDiscounts,
     items: calculation.orderItems.map((item) => ({
-      variantId: item.variant.id,
-      sku: item.variant.sku,
-      title: item.variant.title,
+      variantId: item.variant?.id ?? null,
+      sku: item.variant?.sku ?? item.product.sku,
+      title: item.variant?.title ?? item.product.title,
       quantity: item.quantity,
       basePrice: item.resolvedPrice.basePrice,
       unitPrice: item.unitPrice,
@@ -507,14 +518,14 @@ export async function createCustomerOrder(
         notes: input.notes,
         items: {
           create: orderItems.map((item) => ({
-            productId: item.variant.productId,
-            variantId: item.variant.id,
-            title: item.variant.title,
-            sku: item.variant.sku,
+            productId: item.product.id,
+            variantId: item.variant?.id ?? null,
+            title: item.variant?.title ?? item.product.title,
+            sku: item.variant?.sku ?? item.product.sku,
             quantity: item.quantity,
             unitPrice: item.unitPriceBeforeTax,
             total: item.subtotal,
-            hsnCode: item.variant.product.hsnCode,
+            hsnCode: item.product.hsnCode,
             taxAmount: item.taxTotal,
             warehouseId: item.warehouseId,
           })),
@@ -540,16 +551,24 @@ export async function createCustomerOrder(
     });
 
     for (const item of orderItems) {
-      await decrementVariantStock(
-        item.variant.id,
-        item.quantity,
-        item.warehouseId,
-        {
+      if (!item.inventoryId) continue;
+      const inv = await tx.inventory.findUnique({ where: { id: item.inventoryId } });
+      if (!inv) continue;
+      const nextStock = inv.stock - item.quantity;
+      await tx.inventory.update({
+        where: { id: item.inventoryId },
+        data: { stock: nextStock }
+      });
+      await tx.inventoryAdjustment.create({
+        data: {
+          inventoryId: item.inventoryId,
+          variantId: item.variant?.id ?? null,
+          previousQty: inv.stock,
+          newQty: nextStock,
           reason: "customer_order",
           adjustedBy: `customer:${customer.id};order:${order.id}`,
-        },
-        tx,
-      );
+        }
+      });
     }
 
     if (couponValidation) {
@@ -740,3 +759,5 @@ export async function releaseStock(orderId: string) {
     }
   });
 }
+
+

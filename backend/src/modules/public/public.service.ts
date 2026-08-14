@@ -47,20 +47,14 @@ function buildStorefrontProductWhere(
           variants: {
             some: {
               status: "ACTIVE",
-              OR: [
-                { countries: { some: { countryId, enabled: true } } },
-                { countries: { none: {} } },
-              ],
+              countries: { some: { countryId, enabled: true } },
             },
           },
         },
       ],
     },
     {
-      OR: [
-        { countries: { some: { countryId, enabled: true } } },
-        { countries: { none: {} } },
-      ],
+      countries: { some: { countryId, enabled: true } },
     },
   ];
 
@@ -72,10 +66,7 @@ function buildStorefrontProductWhere(
     status: "ACTIVE",
     deletedAt: null,
     category: {
-      OR: [
-        { countries: { some: { countryId, enabled: true } } },
-        { countries: { none: {} } },
-      ],
+      countries: { some: { countryId, enabled: true } },
     },
     ...extraRest,
     AND: andConditions,
@@ -117,10 +108,7 @@ export async function publicListProducts(
       }),
       category: {
         ...(query.category ? { slug: query.category } : {}),
-        OR: [
-          { countries: { some: { countryId: country.id, enabled: true } } },
-          { countries: { none: {} } },
-        ],
+        countries: { some: { countryId: country.id, enabled: true } },
       },
       ...(query.search && {
         OR: buildProductTextSearchOr(query.search, languageCode),
@@ -196,10 +184,7 @@ export async function publicListProducts(
         variants: {
           where: {
             status: "ACTIVE",
-            OR: [
-              { countries: { some: { countryId: country.id, enabled: true } } },
-              { countries: { none: {} } },
-            ],
+            countries: { some: { countryId: country.id, enabled: true } },
           },
           include: {
             prices: {
@@ -213,10 +198,7 @@ export async function publicListProducts(
             variants: {
               where: {
                 status: "ACTIVE",
-                OR: [
-                  { countries: { some: { countryId: country.id, enabled: true } } },
-                  { countries: { none: {} } },
-                ],
+                countries: { some: { countryId: country.id, enabled: true } },
               },
             },
           },
@@ -236,10 +218,7 @@ export async function publicListProductFacets(countryCode?: string) {
       attributeValue: { status: "ACTIVE" },
       variant: {
         status: "ACTIVE",
-        OR: [
-          { countries: { some: { countryId: country.id, enabled: true } } },
-          { countries: { none: {} } },
-        ],
+        countries: { some: { countryId: country.id, enabled: true } },
         product: buildStorefrontProductWhere(country.id),
       },
     },
@@ -306,10 +285,7 @@ export async function publicGetProduct(
       variants: {
         where: {
           status: "ACTIVE",
-          OR: [
-            { countries: { some: { countryId: country.id, enabled: true } } },
-            { countries: { none: {} } },
-          ],
+          countries: { some: { countryId: country.id, enabled: true } },
         },
         include: {
           package: true,
@@ -329,6 +305,10 @@ export async function publicGetProduct(
       prices: {
         where: { status: "ACTIVE", countryId: country.id, variantId: null },
         include: { country: true, currency: true },
+      },
+      inventories: {
+        where: { variantId: null, OR: [{ countryId: country.id }, { countryId: null }] },
+        orderBy: [{ countryId: "desc" }],
       },
     },
   });
@@ -359,18 +339,20 @@ export async function previewPublicProductPrices(
 
   if (!product) throw new AppError("Product not found.", 404);
 
+  const processedItems = items.map(item => ({
+    ...item,
+    actualVariantId: item.variantId === product.id ? null : item.variantId
+  }));
+
   const requestedVariantIds = Array.from(
-    new Set(items.map((item) => item.variantId)),
+    new Set(processedItems.map((item) => item.actualVariantId).filter(Boolean) as string[]),
   );
   const variants = await prisma.productVariant.findMany({
     where: {
       id: { in: requestedVariantIds },
       productId: product.id,
       status: "ACTIVE",
-      OR: [
-        { countries: { some: { countryId: country.id, enabled: true } } },
-        { countries: { none: {} } },
-      ],
+      countries: { some: { countryId: country.id, enabled: true } },
     },
     select: { id: true, productId: true },
   });
@@ -385,13 +367,13 @@ export async function previewPublicProductPrices(
   const variantById = new Map(variants.map((variant) => [variant.id, variant]));
 
   return Promise.all(
-    items.map(async (item) => {
+    processedItems.map(async (item) => {
       if (!Number.isInteger(item.quantity) || item.quantity < 1) {
         throw new AppError("Preview quantity must be at least 1.", 400);
       }
 
-      const variant = variantById.get(item.variantId);
-      if (!variant)
+      const variant = item.actualVariantId ? variantById.get(item.actualVariantId) : null;
+      if (item.actualVariantId && !variant)
         throw new AppError(
           "One or more requested variants are not available for this product or country.",
           400,
@@ -399,13 +381,13 @@ export async function previewPublicProductPrices(
 
       await assertSellableInCountry({
         countryId: country.id,
-        productId: variant.productId,
-        variantId: variant.id,
+        productId: product.id,
+        variantId: variant?.id ?? null,
       });
 
       const resolved = await resolvePrice({
-        productId: variant.productId,
-        variantId: variant.id,
+        productId: product.id,
+        variantId: variant?.id ?? null,
         countryId: country.id,
         customerId: customerId ?? undefined,
         quantity: item.quantity,
@@ -419,7 +401,7 @@ export async function previewPublicProductPrices(
       }
 
       return {
-        variantId: variant.id,
+        variantId: item.variantId,
         quantity: item.quantity,
         unitPrice: resolved.finalPrice,
         basePrice: resolved.basePrice,
@@ -444,10 +426,7 @@ export async function publicListCategories(
     where: {
       status: "ACTIVE",
       deletedAt: null,
-      OR: [
-        { countries: { some: { countryId: country.id, enabled: true } } },
-        { countries: { none: {} } },
-      ],
+      countries: { some: { countryId: country.id, enabled: true } },
     },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     include: {
@@ -475,10 +454,7 @@ export async function publicGetCategory(
       slug,
       status: "ACTIVE",
       deletedAt: null,
-      OR: [
-        { countries: { some: { countryId: country.id, enabled: true } } },
-        { countries: { none: {} } },
-      ],
+      countries: { some: { countryId: country.id, enabled: true } },
     },
     include: {
       ...(languageCode ? approvedCategoryTranslationInclude(languageCode) : {}),
@@ -1344,6 +1320,21 @@ async function toPublicProductDetail(
     landedCost: buildPublicPriceBreakdown(pr),
   }));
 
+  const baseInventoryRecord = 
+    (p as any).inventories?.find((inv: any) => inv.countryId === countryId) ??
+    (p as any).inventories?.find((inv: any) => inv.countryId === null);
+  
+  const baseInventory = baseInventoryRecord ? {
+    available: Math.max(0, (baseInventoryRecord.stock ?? 0) - (baseInventoryRecord.reservedStock ?? 0)),
+    status: baseInventoryRecord.status ?? "OUT_OF_STOCK",
+  } : null;
+
+  const baseWarehouseInventories = (p as any).inventories?.map((inv: any) => ({
+    warehouseId: inv.warehouseId,
+    available: Math.max(0, (inv.stock ?? 0) - (inv.reservedStock ?? 0)),
+    status: inv.status ?? "OUT_OF_STOCK",
+  })).filter((inv: any) => inv.available > 0) ?? [];
+
   const publicVariants = p.variants.map((v) => {
     const variantPrices = v.prices.map((pr) => ({
       countryCode: pr.country.code,
@@ -1550,6 +1541,8 @@ async function toPublicProductDetail(
     attributes: configuratorAttributes,
     variants: publicVariants,
     prices: productPrices,
+    inventory: baseInventory,
+    warehouseInventories: baseWarehouseInventories,
     hasCountryPrice: productPrices.length > 0 || publicVariants.some((v) => v.hasCountryPrice),
     pricingStatus: (productPrices.length > 0 || publicVariants.some((v) => v.hasCountryPrice))
       ? "AVAILABLE"
@@ -1676,10 +1669,12 @@ export async function getProductWarehouses(
     where: { code: countryCode }
   });
 
+  const actualVariantId = variantId === product.id ? null : variantId;
+
   const inventories = await prisma.inventory.findMany({
     where: {
       productId: product.id,
-      ...(variantId ? { variantId } : {}),
+      ...(actualVariantId ? { variantId: actualVariantId } : { variantId: null }),
       stock: { gt: 0 },
       OR: [
         { variantId: null },

@@ -629,8 +629,10 @@ export default function CheckoutPage() {
   const orderPayload = useMemo(
     () => ({
       items: items.map((item) => ({
-        variantId: item.variantId,
+        productId: item.productId,
+        variantId: item.variantId === item.productId ? undefined : item.variantId,
         quantity: item.quantity,
+        warehouseId: item.warehouseId,
       })),
       shippingAddress: {
         fullName: form.fullName.trim(),

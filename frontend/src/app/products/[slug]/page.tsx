@@ -11,6 +11,7 @@ import { ProductHeaderRating } from "@/components/product/ProductHeaderRating";
 import { BulkOrderPanel } from "@/components/sections/BulkOrderPanel";
 import { SimpleInquiryPanel } from "@/components/sections/SimpleInquiryPanel";
 import { VariantConfigurator } from "@/components/product/VariantConfigurator";
+import { BaseProductConfigurator } from "@/components/product/BaseProductConfigurator";
 import { BundleSection } from "@/components/sections/BundleSection";
 import { RecentlySeenSection } from "@/components/sections/RecentlySeenSection";
 import { ContactCTASection } from "@/components/sections/ContactCTASection";
@@ -306,6 +307,12 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                   <ViewSpecsLink />
                 </div>
               </div>
+
+              {apiProduct && apiProduct.variants.length === 0 && apiProduct.prices && apiProduct.prices.length > 0 && (
+                <div className="mt-8 pt-6 border-t border-line">
+                  <BaseProductConfigurator apiProduct={apiProduct} />
+                </div>
+              )}
             </div>
           </div>
 

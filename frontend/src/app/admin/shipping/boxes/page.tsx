@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Calculator, Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -86,6 +86,37 @@ export default function ShippingBoxesPage() {
   const [previewItems, setPreviewItems] = useState<{ productId: string; quantity: number }[]>([]);
   const [previewResult, setPreviewResult] = useState<any>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!previewItems.length) {
+      setPreviewResult(null);
+      return;
+    }
+
+    const calculate = async () => {
+      setPreviewLoading(true);
+      try {
+        const res = await adminApi.post("/shipping/calculate-packages", {
+          items: previewItems,
+          countryCode: previewCountryId || undefined,
+          orderTotal: previewOrderTotal ? Number(previewOrderTotal) : undefined,
+        });
+        if (!cancelled) setPreviewResult(res.data.data);
+      } catch (error) {
+        if (!cancelled) showToast(getAdminErrorMessage(error, "Calculation failed."), "error");
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    };
+
+    const debounce = setTimeout(calculate, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(debounce);
+    };
+  }, [previewItems, previewCountryId, previewOrderTotal]);
 
   const form = useAdminForm<BoxFormState>({
     initialValues: emptyForm,
@@ -297,32 +328,32 @@ export default function ShippingBoxesPage() {
                       </div>
                     );
                   })}
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!previewItems.length) return;
-                      setPreviewLoading(true);
-                      try {
-                        const res = await adminApi.post("/shipping/calculate-packages", {
-                          items: previewItems,
-                          countryCode: previewCountryId || undefined,
-                          orderTotal: previewOrderTotal ? Number(previewOrderTotal) : undefined,
-                        });
-                        setPreviewResult(res.data.data);
-                      } catch (error) {
-                        showToast(getAdminErrorMessage(error, "Calculation failed."), "error");
-                      } finally {
-                        setPreviewLoading(false);
-                      }
-                    }}
-                    disabled={previewLoading}
-                    className="rounded-md bg-[#1A1A1A] px-4 py-2 text-[13px] font-semibold text-white hover:bg-black disabled:opacity-60"
-                  >
-                    {previewLoading ? "Calculating..." : "Calculate Package"}
-                  </button>
-                </div>
-              )}
-            </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!previewItems.length) return;
+                        setPreviewLoading(true);
+                        try {
+                          const res = await adminApi.post("/shipping/calculate-packages", {
+                            items: previewItems,
+                            countryCode: previewCountryId || undefined,
+                            orderTotal: previewOrderTotal ? Number(previewOrderTotal) : undefined,
+                          });
+                          setPreviewResult(res.data.data);
+                        } catch (error) {
+                          showToast(getAdminErrorMessage(error, "Calculation failed."), "error");
+                        } finally {
+                          setPreviewLoading(false);
+                        }
+                      }}
+                      disabled={previewLoading}
+                      className="rounded-md bg-[#1A1A1A] px-4 py-2 text-[13px] font-semibold text-white hover:bg-black disabled:opacity-60"
+                    >
+                      {previewLoading ? "Calculating..." : "Calculate Package"}
+                    </button>
+                  </div>
+                )}
+              </div>
 
             <div className="rounded-xl border border-[#E6E6E6] bg-white p-5">
               {previewResult ? (

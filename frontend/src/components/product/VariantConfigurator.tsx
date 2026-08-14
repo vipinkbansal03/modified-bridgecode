@@ -566,7 +566,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     window.setTimeout(() => setSummaryHighlighted(false), 1400);
   }
 
-  function handleAddToCart() {
+  function handleAddToCart(isBuyNow = false) {
     if (!currentVariant) {
       setError(
         "This configuration is not available. Please adjust the selected variant options.",
@@ -621,7 +621,12 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     });
     setAdded(false);
     setError(null);
-    openCart();
+    
+    if (isBuyNow) {
+      router.push("/checkout");
+    } else {
+      openCart();
+    }
   }
 
   function updateDraftQuantity(
@@ -989,13 +994,23 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                         <button
                           type="button"
                           disabled={isSelectedOutOfStock}
-                          onClick={handleAddToCart}
+                          onClick={() => handleAddToCart(false)}
                           className={`inline-flex items-center justify-center gap-2 rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-brand hover:bg-transparent hover:text-brand ${
                             isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
                           }`}
                         >
                           <ShoppingBag size={15} />
                           {getButtonLabel("Add to Cart")}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isSelectedOutOfStock}
+                          onClick={() => handleAddToCart(true)}
+                          className={`inline-flex items-center justify-center gap-2 rounded-pill bg-[#1a1a1a] px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-[#333] ${
+                            isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
+                          }`}
+                        >
+                          Buy Now
                         </button>
                       </>
                     );

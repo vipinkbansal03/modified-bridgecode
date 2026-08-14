@@ -75,8 +75,8 @@ async function syncStorefrontVisibility(tx: Prisma.TransactionClient, productId:
     countries.map((country) =>
       tx.productCountry.upsert({
         where: { productId_countryId: { productId, countryId: country.id } },
-        update: { enabled: true },
-        create: { productId, countryId: country.id, enabled: true },
+        update: {}, // Do not overwrite existing enabled state
+        create: { productId, countryId: country.id, enabled: false }, // Default to false
       }),
     ),
   );
@@ -142,6 +142,7 @@ type ProductInput = {
   seoTitle?: string;
   seoDescription?: string;
   seoKeywords?: string;
+  activeCountryIds?: string[];
   highlights?: ProductHighlightInput[];
   technicalSpecs?: ProductSpecInput[];
   warranty?: string[];
@@ -345,6 +346,7 @@ type PricingRuleInput = {
   variantId?: string | null;
   countryId?: string | null;
   minQuantity?: number | string | null;
+  maxQuantity?: number | string | null;
   discountPercent?: number | string | Prisma.Decimal | null;
   fixedPrice?: number | string | Prisma.Decimal | null;
 };
@@ -670,10 +672,12 @@ export async function createProduct(data: ProductInput) {
   await assertUniqueProductSku(sku);
   const normalizedStatus = (data.status as never) || "DRAFT";
 
-  return prisma.$transaction(async (tx) => {
+  const { activeCountryIds, ...createData } = data;
+
+  const createdProduct = await prisma.$transaction(async (tx) => {
     const product = await tx.product.create({
       data: {
-        ...data,
+        ...createData,
         title,
         slug,
         sku,
@@ -686,6 +690,12 @@ export async function createProduct(data: ProductInput) {
     await syncStorefrontVisibility(tx, product.id, normalizedStatus, null);
     return product;
   });
+
+  if (activeCountryIds?.length) {
+    await updateProductCountries(createdProduct.id, activeCountryIds.map(id => ({ countryId: id, enabled: true })));
+  }
+
+  return createdProduct;
 }
 
 // ─── Update ───────────────────────────────────────────────
@@ -711,6 +721,9 @@ export async function updateProduct(id: string, data: Partial<ProductInput>) {
     // remove scalar foreign-key to avoid Prisma validation error
     delete updateData.categoryId;
   }
+  if (data.activeCountryIds !== undefined) {
+    delete updateData.activeCountryIds;
+  }
   if (data.defaultCountryId !== undefined) {
     updateData.defaultCountry = data.defaultCountryId ? { connect: { id: data.defaultCountryId } } : { disconnect: true };
     delete updateData.defaultCountryId;
@@ -723,11 +736,17 @@ export async function updateProduct(id: string, data: Partial<ProductInput>) {
   if (data.description !== undefined) updateData.description = data.description || null;
   if (data.brand !== undefined) updateData.brand = data.brand?.trim() || existing.brand;
 
-  return prisma.$transaction(async (tx) => {
+  const updatedProduct = await prisma.$transaction(async (tx) => {
     const product = await tx.product.update({ where: { id }, data: updateData as Prisma.ProductUpdateInput });
     await syncStorefrontVisibility(tx, product.id, product.status, existing.status);
     return product;
   });
+
+  if (data.activeCountryIds?.length) {
+    await updateProductCountries(updatedProduct.id, data.activeCountryIds.map(id => ({ countryId: id, enabled: true })));
+  }
+
+  return updatedProduct;
 }
 
 // ─── Shipping Info ────────────────────────────────────────
@@ -1640,7 +1659,7 @@ export async function generateVariants(
   const product = await getProduct(productId);
 
   const productInventoryTemplates = product.inventories
-    .filter((inventory) => !inventory.variantId)
+    .filter((inventory) => !inventory.variantId && !inventory.warehouseId)
     .map((inventory) => ({
       countryId: inventory.countryId,
       warehouseId: inventory.warehouseId,
@@ -2437,7 +2456,14 @@ export async function createMoqPricing(productId: string, data: PricingRuleInput
   if (!data.countryId) throw new AppError("Country is required.", 400);
   const minQuantity = Number(data.minQuantity);
   if (!Number.isInteger(minQuantity) || minQuantity < 1) throw new AppError("Minimum quantity must be at least 1.", 400);
-  const rule = normalizeExclusivePriceRule(data);
+
+  let maxQty: number | null = null;
+  if (data.maxQuantity !== undefined && data.maxQuantity !== null && data.maxQuantity !== "") {
+    maxQty = Number(data.maxQuantity);
+    if (!Number.isInteger(maxQty) || maxQty < 0) throw new AppError("Max quantity must be a non-negative integer.", 400);
+  }
+
+  const { discountPercent, fixedPrice } = normalizeExclusivePriceRule(data);
   await ensureVariantBelongsToProduct(productId, data.variantId);
 
   const country = await prisma.country.findUnique({ where: { id: data.countryId } });
@@ -2449,7 +2475,15 @@ export async function createMoqPricing(productId: string, data: PricingRuleInput
   if (existing) throw new AppError("An MOQ pricing rule already exists for this combination.", 409);
 
   return prisma.moqPricing.create({
-    data: { productId, countryId: data.countryId, variantId: data.variantId || null, minQuantity, ...rule },
+    data: { 
+      productId, 
+      countryId: data.countryId, 
+      variantId: data.variantId || null, 
+      minQuantity, 
+      maxQuantity: maxQty,
+      discountPercent, 
+      fixedPrice 
+    },
     include: { country: true, variant: true },
   });
 }
@@ -2463,7 +2497,18 @@ export async function updateMoqPricing(productId: string, ruleId: string, data: 
   const variantId = data.variantId === undefined ? existing.variantId : data.variantId || null;
   const minQuantity = data.minQuantity === undefined ? existing.minQuantity : Number(data.minQuantity);
   if (!Number.isInteger(minQuantity) || minQuantity < 1) throw new AppError("Minimum quantity must be at least 1.", 400);
-  const rule = normalizeExclusivePriceRule({
+
+  let maxQty: number | null = existing.maxQuantity;
+  if (data.maxQuantity !== undefined) {
+    if (data.maxQuantity === null || data.maxQuantity === "") {
+      maxQty = null;
+    } else {
+      maxQty = Number(data.maxQuantity);
+      if (!Number.isInteger(maxQty) || maxQty < 0) throw new AppError("Max quantity must be a non-negative integer.", 400);
+    }
+  }
+
+  const { discountPercent, fixedPrice } = normalizeExclusivePriceRule({
     discountPercent: data.discountPercent ?? existing.discountPercent,
     fixedPrice: data.fixedPrice ?? existing.fixedPrice,
   });
@@ -2476,7 +2521,7 @@ export async function updateMoqPricing(productId: string, ruleId: string, data: 
 
   return prisma.moqPricing.update({
     where: { id: ruleId },
-    data: { countryId, variantId, minQuantity, ...rule },
+    data: { countryId, variantId, minQuantity, maxQuantity: maxQty, discountPercent, fixedPrice },
     include: { country: true, variant: true },
   });
 }

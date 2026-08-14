@@ -2,8 +2,8 @@
 
 import { useRef, useState, type ChangeEvent } from "react";
 import * as Yup from "yup";
-import { AdminInput, AdminSelect, AdminTextarea, useToast, LoadingButton } from "@/components/admin/AdminComponents";
-import { useAdminCategories, useCreateProduct } from "@/hooks/admin/useAdminHooks";
+import { AdminInput, AdminSelect, AdminMultiSelect, AdminTextarea, useToast, LoadingButton } from "@/components/admin/AdminComponents";
+import { useAdminCategories, useAdminCountries, useCreateProduct } from "@/hooks/admin/useAdminHooks";
 import { cn } from "@/utils/cn";
 import { getAdminErrorMessage } from "@/services/adminApi";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
@@ -12,6 +12,7 @@ const schema = Yup.object({
   title: Yup.string().required("Title is required"),
   slug: Yup.string(),
   categoryId: Yup.string().required("Category is required"),
+  activeCountryIds: Yup.array().of(Yup.string()).min(1, "Active Country is required").required("Active Country is required"),
   status: Yup.string().required("Status is required"),
   productCode: Yup.string(),
   sku: Yup.string(),
@@ -70,6 +71,7 @@ export function ProductCreateForm({
   const { showToast, ToastComponent } = useToast();
   const createProduct = useCreateProduct();
   const { data: categories = [] } = useAdminCategories();
+  const { data: countries = [] } = useAdminCountries({ includeInactive: false });
 
   const handleTitleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -83,6 +85,7 @@ export function ProductCreateForm({
       title: "",
       slug: "",
       categoryId: "",
+      activeCountryIds: [],
       status: "DRAFT",
       productCode: "",
       sku: "",
@@ -118,6 +121,7 @@ export function ProductCreateForm({
   });
 
   const categoryOptions = [{ value: "", label: "Select category..." }, ...categories.map((category: { id: string; name: string }) => ({ value: category.id, label: category.name }))];
+  const countryOptions = [{ value: "", label: "Select active country..." }, ...countries.map((c: any) => ({ value: c.id, label: c.name }))];
   const wrapperClassName = compact ? "space-y-5" : "space-y-6";
 
   return (
@@ -190,7 +194,19 @@ export function ProductCreateForm({
                   value={form.values.categoryId}
                   onChange={(e) => form.setFieldValue("categoryId", e.target.value)}
                   error={form.errors.categoryId as string}
+                  required
                 />
+
+                <div className="z-[1000] relative">
+                  <AdminMultiSelect
+                    label="Active Country"
+                    options={countryOptions.filter(o => o.value !== "")}
+                    value={form.values.activeCountryIds as string[]}
+                    onChange={(val) => form.setFieldValue("activeCountryIds", val)}
+                    error={form.errors.activeCountryIds as string}
+                    required
+                  />
+                </div>
 
                 <AdminSelect
                   label="Status"
@@ -202,6 +218,7 @@ export function ProductCreateForm({
                   value={form.values.status}
                   onChange={(e) => form.setFieldValue("status", e.target.value)}
                   error={form.errors.status as string}
+                  required
                 />
 
                 <AdminInput label="Product Code" value={form.values.productCode} onChange={(e) => form.setFieldValue("productCode", e.target.value)} />

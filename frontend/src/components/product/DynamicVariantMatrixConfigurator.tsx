@@ -535,7 +535,7 @@ export function DynamicVariantMatrixConfigurator({
     setFeedback(null);
   };
 
-  const handleAddSelectedToCart = () => {
+  const handleAddSelectedToCart = (isBuyNow = false) => {
     const items = buildCartItems(
       apiProduct,
       normalizedVariants,
@@ -557,12 +557,17 @@ export function DynamicVariantMatrixConfigurator({
     }
 
     addCartItems(items.map((item) => item.cart));
-    openCart();
-    setQuantityMap({});
-    setFeedback({
-      kind: "success",
-      message: `${items.length} variant line${items.length === 1 ? "" : "s"} added to cart.`,
-    });
+    
+    if (isBuyNow) {
+      router.push("/checkout");
+    } else {
+      openCart();
+      setQuantityMap({});
+      setFeedback({
+        kind: "success",
+        message: `${items.length} variant line${items.length === 1 ? "" : "s"} added to cart.`,
+      });
+    }
   };
 
   const handleAddSelectedToQuote = () => {
@@ -973,15 +978,25 @@ export function DynamicVariantMatrixConfigurator({
               </div>
 
               <div className="mt-5 space-y-3">
-                <button
-                  type="button"
-                  onClick={handleAddSelectedToCart}
-                  disabled={selectedEntries.length === 0}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A]"
-                >
-                  <ShoppingBag size={15} />
-                  {selectedEntries.length === 0 ? "Select Variants" : "Add Selected To Cart"}
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleAddSelectedToCart(false)}
+                    disabled={selectedEntries.length === 0}
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-pill bg-[#1a1a1a] px-4 py-3 text-[13px] font-semibold text-white transition hover:bg-[#333] disabled:cursor-not-allowed disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A]"
+                  >
+                    <ShoppingBag size={15} />
+                    {selectedEntries.length === 0 ? "Select Variants" : "Add To Cart"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddSelectedToCart(true)}
+                    disabled={selectedEntries.length === 0}
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-pill bg-brand px-4 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A]"
+                  >
+                    Buy Now
+                  </button>
+                </div>
                 <button
                   type="button"
                   onClick={handleAddSelectedToQuote}
