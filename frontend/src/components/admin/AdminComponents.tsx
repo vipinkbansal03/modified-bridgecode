@@ -34,6 +34,18 @@ interface DataTableProps<T> {
   enableReorder?: boolean;
   onReorder?: (items: T[]) => void;
   disabledReorder?: boolean;
+
+  // Optional Status Toggle configuration
+  onToggleStatus?: (row: T) => void | Promise<void>;
+  statusLoadingId?: string | null;
+
+  // Optional Bulk Actions
+  renderBulkActions?: (selectedIds: string[]) => React.ReactNode;
+
+  // Optional Card Header configuration
+  title?: React.ReactNode;
+  description?: React.ReactNode;
+  headerActions?: React.ReactNode;
 }
 
 export function DataTable<T>({
@@ -50,6 +62,12 @@ export function DataTable<T>({
   enableReorder = false,
   onReorder,
   disabledReorder = false,
+  onToggleStatus,
+  statusLoadingId = null,
+  renderBulkActions,
+  title,
+  description,
+  headerActions,
 }: DataTableProps<T>) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
@@ -75,8 +93,27 @@ export function DataTable<T>({
     );
   }
 
+  const hasBulkActionsActive = enableSelection && selectedIds.length > 0 && renderBulkActions;
+
   return (
-    <div className="rounded-lg border border-[#E6E6E6] bg-white overflow-hidden">
+    <div className="rounded-lg border border-[#E6E6E6] bg-white overflow-hidden flex flex-col">
+      {(title || description || hasBulkActionsActive) && (
+        <div className="border-b border-[#E6E6E6] bg-white px-4 flex items-center justify-between h-[56px] transition-all">
+          {hasBulkActionsActive ? (
+            <div className="flex items-center justify-between gap-3 w-full animate-fade-in">
+              {renderBulkActions(selectedIds)}
+            </div>
+          ) : (
+            <div className="flex items-center justify-between w-full">
+              <div>
+                {title && <h3 className="text-[14.5px] font-bold text-[#1A1A1A]">{title}</h3>}
+                {description && <p className="mt-0.5 text-[12px] text-[#6B6B6B]">{description}</p>}
+              </div>
+              {headerActions}
+            </div>
+          )}
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-[#F8F8F8] border-b border-[#E6E6E6]">
@@ -97,7 +134,7 @@ export function DataTable<T>({
                         onSelectionChange([]);
                       }
                     }}
-                    className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24]"
+                    className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24] cursor-pointer"
                   />
                 </th>
               )}
@@ -185,16 +222,31 @@ export function DataTable<T>({
                                 onSelectionChange([...selectedIds, rowId]);
                               }
                             }}
-                            className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24]"
+                            className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24] cursor-pointer"
                           />
                         </div>
                       </td>
                     )}
-                    {columns.map((col) => (
-                      <td key={String(col.key)} className="px-4 py-3 text-[13.5px] text-[#1A1A1A]">
-                        {col.render ? col.render(row) : String((row as Record<string, unknown>)[String(col.key)] ?? "")}
-                      </td>
-                    ))}
+                    {columns.map((col) => {
+                      const isStatusCol = col.key === "status";
+                      const cellContent = isStatusCol && onToggleStatus ? (
+                        <TableStatusAction
+                          status={(row as any).status}
+                          loading={statusLoadingId === rowId}
+                          onToggle={() => onToggleStatus(row)}
+                        />
+                      ) : col.render ? (
+                        col.render(row)
+                      ) : (
+                        String((row as Record<string, unknown>)[String(col.key)] ?? "")
+                      );
+
+                      return (
+                        <td key={String(col.key)} className="px-4 py-3 text-[13.5px] text-[#1A1A1A]">
+                          {cellContent}
+                        </td>
+                      );
+                    })}
                   </tr>
                 );
               })

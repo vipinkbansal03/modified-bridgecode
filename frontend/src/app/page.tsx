@@ -43,10 +43,7 @@ const BlogSection = dynamic(
   () => import("@/components/sections/BlogSection").then((m) => m.BlogSection),
   { ssr: true }
 );
-const HomepagePromoBannerSection = dynamic(
-  () => import("@/components/sections/HomepagePromoBannerSection").then((m) => m.HomepagePromoBannerSection),
-  { ssr: true }
-);
+
 const ContactCTASection = dynamic(
   () => import("@/components/sections/ContactCTASection").then((m) => m.ContactCTASection),
   { ssr: true }
@@ -133,7 +130,6 @@ function renderCmsHomeSection(section: CmsSection, bannerSlides: HeroSlide[]) {
     return [
       <CertificationsSection key="home.certifications" data={certifications.length > 0 ? certifications : homeContent.certifications} />,
       <TestimonialsSection key="home.testimonials" />,
-      <HomepagePromoBannerSection key="home.promo" />,
       <BlogSection key="home.blog" />,
     ];
   }
@@ -184,7 +180,6 @@ export default async function HomePage() {
       <LocationsSection data={staticLocations} />
       <CertificationsSection data={homeContent.certifications} />
       <TestimonialsSection />
-      <HomepagePromoBannerSection />
       <BlogSection />
       <ContactCTASection data={homeContent.contactCta} />
     </>

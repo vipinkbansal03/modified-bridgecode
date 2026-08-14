@@ -67,7 +67,6 @@ const ALL_TABS: TabConfig[] = [
   { id: 1, label: "Product Info" },
   { id: 2, label: "Media" },
   { id: 3, label: "Packages" },
-  { id: 13, label: "Additional Info" },
   { id: 4, label: "Variants", permission: "variants.view" },
   { id: 5, label: "Pricing", permission: "pricing.view" },
   { id: 6, label: "Inventory", permission: "inventory.view" },
@@ -194,32 +193,7 @@ type PackageRow = {
   status?: string;
 };
 
-const DEFAULT_PRODUCT_PACKAGES: PackageRow[] = [
-  {
-    id: "default-pack-standard",
-    title: "Pack Standard",
-    slug: "pack-standard",
-    description: "Sealed Medical Packaging",
-    sortOrder: 1,
-    status: "ACTIVE",
-  },
-  {
-    id: "default-quality-control",
-    title: "Quality Control",
-    slug: "quality-control",
-    description: "ISO 13485 Certified",
-    sortOrder: 2,
-    status: "ACTIVE",
-  },
-  {
-    id: "default-storage",
-    title: "Storage",
-    slug: "storage",
-    description: "Clean, Dry & Dust-Free",
-    sortOrder: 3,
-    status: "ACTIVE",
-  },
-];
+
 
 type VariantRow = {
   id: string;
@@ -1927,35 +1901,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     return catalog;
   }, [attributeCatalog, editingVariant, variantGenerationCatalog]);
   const packageRows = useMemo(() => {
-    const dbPackages = (product?.packages ?? []) as PackageRow[];
-    const activeDefaults = DEFAULT_PRODUCT_PACKAGES.filter((def) => {
-      if (deletedDefaultPackageIds.includes(def.id)) return false;
-      const isOverridden = dbPackages.some(
-        (dbPkg) =>
-          dbPkg.slug === def.slug ||
-          dbPkg.title.toLowerCase().trim() === def.title.toLowerCase().trim()
-      );
-      return !isOverridden;
-    });
+    const dbPackages = ((product?.packages ?? []) as PackageRow[]).slice();
+    dbPackages.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 
-    const combined = [...activeDefaults, ...dbPackages];
-
-    // Sort by sortOrder ascending; when tied, custom DB packages take priority over defaults
-    combined.sort((a, b) => {
-      const orderA = a.sortOrder ?? 0;
-      const orderB = b.sortOrder ?? 0;
-      if (orderA !== orderB) return orderA - orderB;
-      const isDefaultA = a.id.startsWith("default-");
-      const isDefaultB = b.id.startsWith("default-");
-      if (isDefaultA !== isDefaultB) {
-        return isDefaultA ? 1 : -1;
-      }
-      return a.title.localeCompare(b.title);
-    });
-
-    // Auto-reindex any duplicate sort orders dynamically
     const occupied = new Set<number>();
-    return combined.map((pkg) => {
+    return dbPackages.map((pkg) => {
       let order = pkg.sortOrder ?? 1;
       while (occupied.has(order)) {
         order++;
@@ -1963,7 +1913,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       occupied.add(order);
       return { ...pkg, sortOrder: order };
     });
-  }, [product?.packages, deletedDefaultPackageIds]);
+  }, [product?.packages]);
   const variantRows = useMemo(() => (product?.variants ?? []) as VariantRow[], [product?.variants]);
 
   const productVariantPrices = useMemo(() => {
@@ -4641,7 +4591,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             </span>
           )}
 
-          {!isReadOnly && (activeTab === 0 || activeTab === 1 || activeTab === 4 || activeTab === 10 || activeTab === 11 || activeTab === 13) ? (
+          {!isReadOnly && (activeTab === 0 || activeTab === 1 || activeTab === 4 || activeTab === 10 || activeTab === 11) ? (
             <LoadingButton
               type="button"
               onClick={() => form.handleSubmit()}
@@ -4816,6 +4766,72 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               onRowClick={(row) => openDirectionModal(row.index)}
               rowTooltip="Click row or edit icon to edit clinical guideline"
               emptyMessage="No clinical guidelines added yet."
+            />
+
+            {/* Synced Info Notice */}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/70 p-4 text-[13px] text-blue-900">
+              <div className="flex items-center gap-3">
+                <Info className="text-blue-600 shrink-0" size={18} />
+                <div>
+                  <span className="font-semibold">Product Code Sync:</span> Product Code (
+                  <button
+                    type="button"
+                    onClick={goToBasicInfoAndFocusProductCode}
+                    className="mx-1 rounded bg-blue-100 px-2 py-0.5 font-mono text-[12px] font-bold text-blue-800 hover:bg-blue-200 hover:text-blue-900 transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                    title="Click to edit Product Code in Basic Info tab"
+                  >
+                    {form.values.productCode || "Not set in Basic Info"}
+                    <Pencil size={11} className="text-blue-600" />
+                  </button>
+                  ) is automatically synchronized from{" "}
+                  <button
+                    type="button"
+                    onClick={goToBasicInfoAndFocusProductCode}
+                    className="font-bold underline decoration-blue-400 hover:text-blue-950 cursor-pointer"
+                  >
+                    Basic Info
+                  </button>{" "}
+                  and rendered at the top of Additional Info on the product page.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={goToBasicInfoAndFocusProductCode}
+                className="shrink-0 rounded-md border border-blue-300 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-blue-700 hover:bg-blue-50 hover:text-blue-900 shadow-2xs transition-colors"
+              >
+                Go to Basic Info →
+              </button>
+            </div>
+
+            <AdminSectionTable
+              title="Additional Information"
+              description="Manage key-value pairs displayed under the Additional Info tab on the product page."
+              addButtonLabel="Add Info Row"
+              onAdd={() => openAdditionalInfoModal()}
+              columns={additionalInfoCols}
+              data={[
+                {
+                  isProductCode: true,
+                  label: "Product Code",
+                  value: form.values.productCode || "Not set in Basic Info",
+                  index: -1,
+                },
+                ...(form.values.additionalInfo || []).map((item: any, index: number) => ({
+                  isProductCode: false,
+                  ...item,
+                  index,
+                })),
+              ]}
+              rowKey="index"
+              onRowClick={(row) => {
+                if (row.isProductCode) {
+                  goToBasicInfoAndFocusProductCode();
+                } else {
+                  openAdditionalInfoModal(row.index);
+                }
+              }}
+              rowTooltip={(row) => (row.isProductCode ? "Click to edit Product Code in Basic Info tab" : "Click row or edit icon to edit additional info")}
+              emptyMessage="No additional information rows added yet."
             />
 
             <AdminSectionTable
@@ -5100,75 +5116,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 13 && (
-          <div className="p-6 space-y-5">
-            {/* Synced Info Notice */}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/70 p-4 text-[13px] text-blue-900">
-              <div className="flex items-center gap-3">
-                <Info className="text-blue-600 shrink-0" size={18} />
-                <div>
-                  <span className="font-semibold">Product Code Sync:</span> Product Code (
-                  <button
-                    type="button"
-                    onClick={goToBasicInfoAndFocusProductCode}
-                    className="mx-1 rounded bg-blue-100 px-2 py-0.5 font-mono text-[12px] font-bold text-blue-800 hover:bg-blue-200 hover:text-blue-900 transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
-                    title="Click to edit Product Code in Basic Info tab"
-                  >
-                    {form.values.productCode || "Not set in Basic Info"}
-                    <Pencil size={11} className="text-blue-600" />
-                  </button>
-                  ) is automatically synchronized from{" "}
-                  <button
-                    type="button"
-                    onClick={goToBasicInfoAndFocusProductCode}
-                    className="font-bold underline decoration-blue-400 hover:text-blue-950 cursor-pointer"
-                  >
-                    Basic Info
-                  </button>{" "}
-                  and rendered at the top of Additional Info on the product page.
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={goToBasicInfoAndFocusProductCode}
-                className="shrink-0 rounded-md border border-blue-300 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-blue-700 hover:bg-blue-50 hover:text-blue-900 shadow-2xs transition-colors"
-              >
-                Go to Basic Info →
-              </button>
-            </div>
 
-            <AdminSectionTable
-              title="Additional Information"
-              description="Manage key-value pairs displayed under the Additional Info tab on the product page."
-              addButtonLabel="Add Info Row"
-              onAdd={() => openAdditionalInfoModal()}
-              columns={additionalInfoCols}
-              data={[
-                {
-                  isProductCode: true,
-                  label: "Product Code",
-                  value: form.values.productCode || "Not set in Basic Info",
-                  index: -1,
-                },
-                ...(form.values.additionalInfo || []).map((item: any, index: number) => ({
-                  isProductCode: false,
-                  ...item,
-                  index,
-                })),
-              ]}
-              rowKey="index"
-              onRowClick={(row) => {
-                if (row.isProductCode) {
-                  goToBasicInfoAndFocusProductCode();
-                } else {
-                  openAdditionalInfoModal(row.index);
-                }
-              }}
-              rowTooltip={(row) => (row.isProductCode ? "Click to edit Product Code in Basic Info tab" : "Click row or edit icon to edit additional info")}
-              emptyMessage="No additional information rows added yet."
-            />
-          </div>
-        )}
 
         {activeTab === 4 && (
           <div className="p-6">

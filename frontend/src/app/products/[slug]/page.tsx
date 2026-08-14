@@ -146,6 +146,7 @@ function mergeProduct(api: ApiProductDetail, staticProduct: ProductDetail | unde
     technicalSpecs: api.technicalSpecs ?? staticProduct?.technicalSpecs ?? [],
     warranty: api.warranty ?? staticProduct?.warranty ?? [],
     primaryFeatures: api.primaryFeatures ?? staticProduct?.primaryFeatures ?? [],
+    additionalInfo: api.additionalInfo ?? [],
     prescriptionOptions: staticProduct?.prescriptionOptions,
     slotOptions: staticProduct?.slotOptions,
     packagingOptions: staticProduct?.packagingOptions,

@@ -81,27 +81,12 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
   );
 
   const displayedPackages = useMemo(() => {
-    const dbPkgs = apiProduct?.packages || [];
-    const defaultPkgs = [
-      { id: "default-pack-standard", title: "Pack Standard", description: "Sealed Medical Packaging" },
-      { id: "default-quality-control", title: "Quality Control", description: "ISO 13485 Certified" },
-      { id: "default-storage", title: "Storage", description: "Clean, Dry & Dust-Free" },
-    ];
-    const activeDefaults = defaultPkgs.filter(
-      (def) => !dbPkgs.some((pkg) => pkg.title.toLowerCase().trim() === def.title.toLowerCase().trim())
-    );
-    return [...activeDefaults, ...dbPkgs];
+    return apiProduct?.packages || [];
   }, [apiProduct?.packages]);
 
   const customInfoList = useMemo(() => {
-    const defaultInfo = [
-      { label: "Manufacturer", value: "Modern Orthodontics" },
-      { label: "Country of Origin", value: "India" },
-      { label: "Regulatory Compliance", value: "ISO 13485 & CE Certified" },
-      { label: "Shelf Life", value: "5 Years from manufacturing date" },
-    ];
     const raw = (apiProduct?.additionalInfo || product.additionalInfo) as Array<{ label: string; value: string }> | undefined;
-    return Array.isArray(raw) && raw.length > 0 ? raw : defaultInfo;
+    return Array.isArray(raw) ? raw : [];
   }, [apiProduct?.additionalInfo, product.additionalInfo]);
 
   useEffect(() => {
@@ -235,29 +220,46 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
           <div className="space-y-4">
             <h3 className="text-[16px] font-bold text-[#1A1A1A]">Commercial Packages & Packaging Details</h3>
             {displayedPackages.length > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {displayedPackages.map((pkg) => (
-                  <div key={pkg.id} className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-2xs flex items-start gap-3">
-                    {"image" in pkg && pkg.image ? (
-                      <img src={pkg.image} alt={pkg.title} className="h-12 w-12 rounded-lg object-cover shrink-0" />
-                    ) : (
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#E31E24]/10 text-[#E31E24]">
-                        <Box size={20} />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {displayedPackages.map((pkg) => {
+                  const hasImage = Boolean(pkg.image && pkg.image.trim());
+                  return (
+                    <div key={pkg.id} className="group flex flex-row items-center border border-gray-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden w-full h-28">
+                      {/* Left Image / Placeholder */}
+                      <div className="relative w-32 h-28 bg-gray-50 overflow-hidden border-r border-gray-100 shrink-0">
+                        {hasImage ? (
+                          <img
+                            src={pkg.image!}
+                            alt={pkg.title}
+                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-gray-50/50">
+                            <Box size={32} className="text-gray-300 stroke-[1.5]" />
+                          </div>
+                        )}
                       </div>
-                    )}
-                    <div>
-                      <h4 className="text-[14px] font-bold text-[#1A1A1A]">{pkg.title}</h4>
-                      {pkg.description ? (
-                        <p className="mt-1 text-[12.5px] text-[#6B7280] leading-relaxed">{pkg.description}</p>
-                      ) : (
-                        <p className="mt-1 text-[12px] font-medium text-[#16A34A]">✓ Available Package Option</p>
-                      )}
+
+                      {/* Right Body / Content */}
+                      <div className="p-4 flex flex-col justify-center flex-grow min-w-0">
+                        {/* Header Row */}
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#FDE8E8] text-[#EF4444]">
+                            <Box size={14} className="stroke-[2]" />
+                          </div>
+                          <h4 className="font-semibold text-gray-900 text-sm md:text-base truncate">{pkg.title}</h4>
+                        </div>
+                        {/* Description */}
+                        <p className="text-xs md:text-sm text-gray-500 mt-1 leading-relaxed line-clamp-2">
+                          {pkg.description || "Available packaging option for commercial and clinical use."}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
-              <p className="text-[13.5px] text-[#6B7280]">No packaging details available.</p>
+              <p className="text-[13.5px] text-[#6B7280]">No packaging options available for this product.</p>
             )}
           </div>
         )}
@@ -327,19 +329,25 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
         {activeTab === "additional" && (
           <div className="space-y-3">
             <h3 className="text-[16px] font-bold text-[#1A1A1A]">Additional Information</h3>
-            <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
-              <div className="space-y-2 text-[13px] text-[#374151]">
-                <p><strong>Product Code:</strong> {product.productCode || apiProduct?.productCode || "MO-ORTHO"}</p>
-                {customInfoList.slice(0, Math.ceil(customInfoList.length / 2)).map((item, idx) => (
-                  <p key={idx}><strong>{item.label}:</strong> {item.value}</p>
-                ))}
+            {((product.productCode || apiProduct?.productCode) || customInfoList.length > 0) ? (
+              <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
+                <div className="space-y-2 text-[13px] text-[#374151]">
+                  {(product.productCode || apiProduct?.productCode) ? (
+                    <p><strong>Product Code:</strong> {product.productCode || apiProduct?.productCode}</p>
+                  ) : null}
+                  {customInfoList.slice(0, Math.ceil(customInfoList.length / 2)).map((item, idx) => (
+                    <p key={idx}><strong>{item.label}:</strong> {item.value}</p>
+                  ))}
+                </div>
+                <div className="space-y-2 text-[13px] text-[#374151]">
+                  {customInfoList.slice(Math.ceil(customInfoList.length / 2)).map((item, idx) => (
+                    <p key={idx}><strong>{item.label}:</strong> {item.value}</p>
+                  ))}
+                </div>
               </div>
-              <div className="space-y-2 text-[13px] text-[#374151]">
-                {customInfoList.slice(Math.ceil(customInfoList.length / 2)).map((item, idx) => (
-                  <p key={idx}><strong>{item.label}:</strong> {item.value}</p>
-                ))}
-              </div>
-            </div>
+            ) : (
+              <p className="text-[13.5px] text-[#6B7280]">No additional information available for this product.</p>
+            )}
           </div>
         )}
 
