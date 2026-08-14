@@ -5,9 +5,9 @@ import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { Pagination, ConfirmModal, useToast } from "@/components/admin/AdminComponents";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { adminApi } from "@/services/adminApi";
-import { Upload, Trash2, Copy, Check, Folder, ChevronRight, Image as ImageIcon, FileText, Video, Box, Layers, Tag, Users, ShoppingCart, Settings, File } from "lucide-react";
+import { Upload, Trash2, Copy, Check, Folder, ChevronRight, Image as ImageIcon, FileText, Video, Box, Layers, Tag, Users, ShoppingCart, Settings, File, MoreVertical, Edit2 } from "lucide-react";
 
-interface Media { id: string; url: string; filename: string; originalName: string; mimeType: string; size: number; type: string; status: string; }
+interface Media { id: string; url: string; filename: string; originalName: string; mimeType: string; size: number; type: string; status: string; title?: string; altText?: string; description?: string; tags?: string; createdAt?: string; }
 interface MediaFolder { id: string; name: string; count: number; icon?: string; }
 interface PathSegment { id?: string; name: string; level: number; }
 
@@ -27,10 +27,13 @@ export default function MediaPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const { showToast, ToastComponent } = useToast();
 
   const [path, setPath] = useState<PathSegment[]>([{ name: "Media Library", level: 0 }]);
   const [folders, setFolders] = useState<MediaFolder[]>([]);
+  const [selectedMedia, setSelectedMedia] = useState<Media | null>(null);
+  const [savingDetails, setSavingDetails] = useState(false);
   const [files, setFiles] = useState<{data: Media[], pagination: any}>({ data: [], pagination: {} });
   const [loading, setLoading] = useState(true);
 
@@ -141,6 +144,36 @@ export default function MediaPage() {
     }
   };
 
+
+  const handleSaveDetails = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!selectedMedia) return;
+    setSavingDetails(true);
+    try {
+      const formData = new FormData(e.currentTarget);
+      const data = {
+        title: formData.get('title') as string,
+        altText: formData.get('altText') as string,
+        description: formData.get('description') as string,
+        tags: formData.get('tags') as string,
+      };
+      await adminApi.put(`/media/${selectedMedia.id}`, data);
+      showToast("Media details updated successfully");
+      
+      // Update local state
+      setFiles((prev: any) => ({
+        ...prev,
+        data: prev.data.map((m: any) => m.id === selectedMedia.id ? { ...m, ...data } : m)
+      }));
+      setSelectedMedia(prev => prev ? { ...prev, ...data } : null);
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to update media details", "error");
+    } finally {
+      setSavingDetails(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (!deleting) return;
     try { await adminApi.delete(`/media/${deleting}`); showToast("File deleted successfully"); fetchData(); }
@@ -202,13 +235,14 @@ export default function MediaPage() {
           {[...Array(16)].map((_, i) => <div key={i} className="aspect-square animate-pulse rounded-xl bg-[#E6E6E6]" />)}
         </div>
       ) : (
-        <div className="space-y-8">
+        <div className="flex flex-col xl:flex-row gap-6 items-start">
+          <div className={`space-y-8 transition-all duration-300 ${selectedMedia ? "w-full xl:w-[65%]" : "w-full"}`}>
           
           {/* Folders Grid */}
           {folders.length > 0 && (
             <div>
               <h3 className="text-[12px] font-bold text-[#9A9A9A] uppercase tracking-wider mb-3">Folders</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+              <div className={`grid gap-4 ${selectedMedia ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-6'}`}>
                 {folders.map(f => (
                   <button 
                     key={f.id} 
@@ -228,40 +262,77 @@ export default function MediaPage() {
           {files.data.length > 0 && (
             <div>
               <h3 className="text-[12px] font-bold text-[#9A9A9A] uppercase tracking-wider mb-3">Files</h3>
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+              <div className={`grid gap-4 ${selectedMedia ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5' : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8'}`}>
                 {files.data.map((m: Media) => (
-                  <div key={m.id} className="group relative aspect-square rounded-lg border border-[#E6E6E6] overflow-hidden bg-[#F8F8F8]">
-                    {m.type === "IMAGE" ? (
-                      <img src={m.url} alt={m.originalName} className="h-full w-full object-cover" />
-                    ) : m.type === "VIDEO" ? (
-                      <div className="flex h-full flex-col items-center justify-center gap-1">
-                        <Video size={24} className="text-[#9A9A9A]" />
-                        <div className="text-[10px] text-[#9A9A9A] px-1 text-center truncate w-full">{m.originalName}</div>
-                      </div>
-                    ) : (
-                      <div className="flex h-full flex-col items-center justify-center gap-1">
-                        <FileText size={24} className="text-[#9A9A9A]" />
-                        <div className="text-[10px] font-bold text-[#6B6B6B] uppercase">{m.mimeType.split("/")[1]}</div>
-                        <div className="text-[10px] text-[#9A9A9A] px-1 text-center truncate w-full">{m.originalName}</div>
-                      </div>
-                    )}
+                  <div key={m.id} onClick={() => setSelectedMedia(m)} className={`cursor-pointer group relative aspect-square rounded-lg border bg-[#F8F8F8] transition-all ${selectedMedia?.id === m.id ? "border-[#E31E24] ring-2 ring-[#E31E24]/20" : "border-[#E6E6E6] hover:border-[#9A9A9A]"}`}>
+                    <div className="absolute inset-0 rounded-lg overflow-hidden">
+                      {m.type === "IMAGE" ? (
+                        <img src={m.url} alt={m.originalName} className="h-full w-full object-cover" />
+                      ) : m.type === "VIDEO" ? (
+                        <div className="flex h-full flex-col items-center justify-center gap-1">
+                          <Video size={24} className="text-[#9A9A9A]" />
+                          <div className="text-[10px] text-[#9A9A9A] px-1 text-center truncate w-full">{m.originalName}</div>
+                        </div>
+                      ) : (
+                        <div className="flex h-full flex-col items-center justify-center gap-1">
+                          <FileText size={24} className="text-[#9A9A9A]" />
+                          <div className="text-[10px] font-bold text-[#6B6B6B] uppercase">{m.mimeType.split("/")[1]}</div>
+                          <div className="text-[10px] text-[#9A9A9A] px-1 text-center truncate w-full">{m.originalName}</div>
+                        </div>
+                      )}
+                    </div>
                     
                     {/* Hover Overlay */}
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
-                      <div className="flex gap-2">
-                        <button onClick={() => copyUrl(m.id, m.url)} className="flex items-center justify-center h-7 w-7 rounded-full bg-white/20 text-white hover:bg-white/30" title="Copy URL">
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 rounded-lg pointer-events-none">
+                      <div className="flex gap-2 pointer-events-auto">
+                        <button onClick={(e) => { e.stopPropagation(); copyUrl(m.id, m.url); }} className="flex items-center justify-center h-7 w-7 rounded-full bg-white/20 text-white hover:bg-white/30" title="Copy URL">
                           {copiedId === m.id ? <Check size={13} /> : <Copy size={13} />}
                         </button>
                         {canDelete && (
-                          <button onClick={() => setDeleting(m.id)} className="flex items-center justify-center h-7 w-7 rounded-full bg-white/20 text-white hover:bg-red-500" title="Delete">
+                          <button onClick={(e) => { e.stopPropagation(); setDeleting(m.id); }} className="flex items-center justify-center h-7 w-7 rounded-full bg-white/20 text-white hover:bg-red-500" title="Delete">
                             <Trash2 size={13} />
                           </button>
                         )}
                       </div>
                     </div>
                     
+                    {/* Options Menu */}
+                    <div className="absolute top-2 right-2 z-10">
+                      <button 
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          setOpenDropdownId(openDropdownId === m.id ? null : m.id); 
+                        }} 
+                        className="bg-white hover:bg-gray-100 p-1 rounded border border-[#E6E6E6] shadow-sm text-gray-600"
+                      >
+                        <MoreVertical size={16} />
+                      </button>
+                      
+                      {openDropdownId === m.id && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setOpenDropdownId(null); }} />
+                          <div className="absolute right-0 top-8 w-28 bg-white rounded-md shadow-lg border border-[#E6E6E6] py-1 z-20">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setSelectedMedia(m); setOpenDropdownId(null); }}
+                              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[13px] text-[#1A1A1A] hover:bg-gray-50"
+                            >
+                              <Edit2 size={14} className="text-[#6B6B6B]" /> Edit
+                            </button>
+                            {canDelete && (
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); setDeleting(m.id); setOpenDropdownId(null); }}
+                                className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[13px] text-[#E31E24] hover:bg-red-50"
+                              >
+                                <Trash2 size={14} /> Delete
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    
                     {/* File Info Footer */}
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-1 opacity-0 group-hover:opacity-100 transition-opacity rounded-b-lg pointer-events-none">
                       <p className="text-[10px] text-white truncate">{m.originalName}</p>
                       <p className="text-[9px] text-white/60">{(m.size / 1024).toFixed(0)}KB</p>
                     </div>
@@ -288,6 +359,69 @@ export default function MediaPage() {
           {files.pagination?.totalPages > 1 && (
             <div className="pt-4">
               <Pagination page={page} totalPages={files.pagination.totalPages} onPageChange={setPage} />
+            </div>
+          )}
+        </div>
+
+          {/* Right Side Panel */}
+          {selectedMedia && (
+            <div className="fixed top-14 bottom-0 inset-x-0 z-50 xl:static xl:z-auto w-full xl:w-[35%] shrink-0 bg-white xl:bg-[#F9F9F9] rounded-none xl:rounded-xl border-0 xl:border border-[#E6E6E6] p-5 overflow-y-auto xl:overflow-visible xl:sticky xl:top-[80px]">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-[14px] font-bold text-[#1A1A1A]">Media Details</h3>
+                <button type="button" onClick={() => setSelectedMedia(null)} className="text-[12px] font-semibold text-[#6B6B6B] hover:text-black">
+                  CLOSE PANEL
+                </button>
+              </div>
+
+              <div className="mb-4 h-40 bg-white rounded-lg border border-[#E6E6E6] flex items-center justify-center overflow-hidden p-2">
+                {selectedMedia.type === "IMAGE" ? (
+                  <img src={selectedMedia.url} alt={selectedMedia.originalName} className="max-h-full max-w-full object-contain" />
+                ) : (
+                  <div className="flex flex-col items-center text-[#9A9A9A]">
+                    {selectedMedia.type === "VIDEO" ? <Video size={32} /> : <FileText size={32} />}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1 mb-4 text-[12px] text-[#6B6B6B]">
+                <p><span className="font-semibold text-[#1A1A1A]">Name:</span> {selectedMedia.originalName}</p>
+                <p><span className="font-semibold text-[#1A1A1A]">Type:</span> {selectedMedia.type.toLowerCase()}</p>
+                <p><span className="font-semibold text-[#1A1A1A]">Size:</span> {(selectedMedia.size / 1024).toFixed(1)} KB</p>
+                {selectedMedia.createdAt && <p><span className="font-semibold text-[#1A1A1A]">Added:</span> {new Date(selectedMedia.createdAt).toLocaleString()}</p>}
+              </div>
+
+              <form onSubmit={handleSaveDetails} className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-1">Title</label>
+                  <input type="text" name="title" defaultValue={selectedMedia.title || ''} className="w-full rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-black focus:border-black focus:outline-none" />
+                </div>
+                
+                <div>
+                  <label className="block text-[11px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-1">Alt Text</label>
+                  <input type="text" name="altText" defaultValue={selectedMedia.altText || ''} placeholder="Required for images" className="w-full rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-black focus:border-black focus:outline-none" />
+                </div>
+                
+                <div>
+                  <label className="block text-[11px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-1">Description</label>
+                  <textarea name="description" defaultValue={selectedMedia.description || ''} rows={2} className="w-full rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-black focus:border-black focus:outline-none resize-none" />
+                </div>
+                
+                <div>
+                  <label className="block text-[11px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-1">Tags</label>
+                  <input type="text" name="tags" defaultValue={selectedMedia.tags || ''} placeholder="Comma separated tags" className="w-full rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] text-black focus:border-black focus:outline-none" />
+                </div>
+
+                <div className="pt-1 flex items-center gap-2">
+                  <button type="submit" disabled={savingDetails} className={`px-4 py-2 text-[12px] font-bold text-white rounded shrink-0 ${savingDetails ? 'bg-gray-400' : 'bg-black hover:bg-gray-800'}`}>
+                    {savingDetails ? 'SAVING...' : 'SAVE DETAILS'}
+                  </button>
+                  {canDelete && (
+                    <button type="button" onClick={() => setDeleting(selectedMedia.id)} className="px-4 py-2 text-[12px] font-bold text-white rounded shrink-0 bg-[#E31E24] hover:bg-[#B5151B]">
+                      DELETE
+                    </button>
+                  )}
+                </div>
+              </form>
             </div>
           )}
         </div>

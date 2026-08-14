@@ -20,6 +20,7 @@ import { cn } from "@/utils/cn";
 import type { NavigationData } from "@/types/common.types";
 import type { StaticMessageKey } from "@/i18n/staticMessages";
 import { LocaleSwitcher } from "@/components/ui/LocaleSwitcher";
+import { NotificationBell } from "@/components/ui/NotificationBell";
 import { HAS_LIVE_API } from "@/lib/apiClient";
 
 const nav = navigation as NavigationData;
@@ -282,6 +283,8 @@ export function Header() {
                   </Link>
                 )}
               </div>
+
+              {currentCustomer && <NotificationBell role="customer" />}
 
               <Link
                 href="/wishlist"

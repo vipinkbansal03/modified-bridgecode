@@ -182,6 +182,18 @@ export async function register(input: CustomerRegisterInput) {
   });
 
   const token = signCustomerToken(customer.id);
+
+  // Notify Admins
+  import("../notifications/notifications.service").then(({ notificationsService }) => {
+    notificationsService.createNotification({
+      title: "New Customer Registration",
+      message: `${customer.firstName} ${customer.lastName} (${customer.email}) has registered.`,
+      type: "INFO",
+      targetType: "ALL_ADMINS",
+      link: `/admin/customers/${customer.id}`,
+    }).catch(console.error);
+  });
+
   return { token, customer: toCustomerSession(customer) };
 }
 

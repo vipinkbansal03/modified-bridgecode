@@ -18,6 +18,11 @@ export const upload = asyncHandler(async (req: AuthRequest, res: Response) => {
   ));
 });
 
+export const update = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await S.updateMedia(String(req.params.id), req.body);
+  return ApiResponse.success(res, "Media updated.", result);
+});
+
 export const removeByUrl = asyncHandler(async (req: AuthRequest, res: Response) => {
   await S.deleteMediaByUrl(req.query.url as string);
   return ApiResponse.success(res, "Deleted.");

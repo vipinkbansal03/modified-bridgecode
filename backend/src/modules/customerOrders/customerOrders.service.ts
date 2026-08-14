@@ -466,7 +466,7 @@ export async function createCustomerOrder(
   const taxLabel = hasVatReverseCharge ? "VAT Reverse Charge" : isExempt ? "Tax Exempt" : hasVat ? "VAT" : "GST";
   const primaryTaxMode = orderItems[0]?.resolvedPrice.taxMode || "EXCLUSIVE";
 
-  return prisma.$transaction(async (tx) => {
+  const createdOrder = await prisma.$transaction(async (tx) => {
     const order = await tx.order.create({
       data: {
         orderNumber: generateOrderNumber(),
@@ -580,6 +580,19 @@ export async function createCustomerOrder(
 
     return order;
   });
+
+  // Notify Admins
+  import("../notifications/notifications.service").then(({ notificationsService }) => {
+    notificationsService.createNotification({
+      title: "New Order Placed",
+      message: `Order #${createdOrder.id} has been placed.`,
+      type: "ORDER",
+      targetType: "ALL_ADMINS",
+      link: `/admin/orders/${createdOrder.id}`,
+    }).catch(console.error);
+  });
+
+  return createdOrder;
 }
 
 export async function listCustomerOrders(customerId: string) {

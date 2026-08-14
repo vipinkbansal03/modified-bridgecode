@@ -168,15 +168,27 @@ export async function presignUpload(data: {
 }
 
 export async function confirmUpload(mediaId: string) {
-  // In a real scenario, we'd verify the S3 object exists using AWS SDK (e.g., HeadObject)
-  // For now, we'll mark it as UPLOADED and dispatch processing
   const media = await prisma.media.update({
     where: { id: mediaId },
     data: { status: "UPLOADED" },
   });
 
-  dispatchMediaProcessingJob(mediaId);
+  if (media.entityType === "PRODUCT" && media.entityId) {
+    const existing = await prisma.productMedia.findFirst({
+      where: { productId: media.entityId, url: media.url }
+    });
+    if (!existing) {
+      await prisma.productMedia.create({
+        data: {
+          productId: media.entityId,
+          url: media.url,
+          type: media.type,
+        }
+      });
+    }
+  }
 
+  dispatchMediaProcessingJob(mediaId);
   return media;
 }
 
@@ -189,7 +201,8 @@ export async function uploadMedia(
 ) {
   if (!files || !files.length) return [];
   const results = await Promise.all(files.map((f) => uploadFile(f.path, folder)));
-  return prisma.$transaction(
+  
+  const createdMedia = await prisma.$transaction(
     files.map((f, i) =>
       prisma.media.create({
         data: {
@@ -213,12 +226,46 @@ export async function uploadMedia(
       }),
     ),
   );
+
+  if (entityType === "PRODUCT" && entityId) {
+    await prisma.productMedia.createMany({
+      data: createdMedia.map(m => ({
+        productId: entityId,
+        url: m.url,
+        type: m.type,
+      }))
+    });
+  }
+
+  return createdMedia;
+}
+
+export async function updateMedia(id: string, data: { title?: string; altText?: string; description?: string; tags?: string; filename?: string; originalName?: string }) {
+  const media = await prisma.media.findUnique({ where: { id } });
+  if (!media) throw new AppError("Media not found.", 404);
+
+  return prisma.media.update({
+    where: { id },
+    data: {
+      title: data.title,
+      altText: data.altText,
+      description: data.description,
+      tags: data.tags,
+      filename: data.filename,
+      originalName: data.originalName,
+    },
+  });
 }
 
 export async function deleteMedia(id: string) {
   const media = await prisma.media.findUnique({ where: { id } });
   if (!media) throw new AppError("Media not found.", 404);
+  
   await deleteFile(media.storageProvider === "LOCAL" ? media.url : media.publicId || media.url, media.storageProvider, media.folder);
+  
+  // Also delete associated ProductMedia if it shares the same URL
+  await prisma.productMedia.deleteMany({ where: { url: media.url } });
+
   return prisma.media.delete({ where: { id } });
 }
 
@@ -229,5 +276,9 @@ export async function deleteMediaByUrl(url: string) {
   if (!media) return null;
 
   await deleteFile(media.storageProvider === "LOCAL" ? media.url : media.publicId || media.url, media.storageProvider, media.folder);
+  
+  // Also delete associated ProductMedia if it shares the same URL
+  await prisma.productMedia.deleteMany({ where: { url: media.url } });
+
   return prisma.media.delete({ where: { id: media.id } });
 }

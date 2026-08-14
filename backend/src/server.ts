@@ -10,6 +10,14 @@ async function main() {
   await connectDB();
   await initScheduledSync();
 
+  try {
+    const { initializeApp } = await import("firebase-admin/app");
+    initializeApp();
+    logger.info("Firebase Admin initialized successfully.");
+  } catch (err: any) {
+    logger.warn(`Firebase Admin initialization skipped: ${err.message}`);
+  }
+
   const server = app.listen(PORT, () => {
     logger.info(`🚀 Server running on http://localhost:${PORT}`);
     logger.info(`   Environment: ${process.env.NODE_ENV || "development"}`);

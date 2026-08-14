@@ -224,7 +224,10 @@ export default function AccountPage() {
               Orders, saved addresses, and account details for {displayName}.
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3 mt-4 sm:mt-0">
+            <Button href="/account/notifications" variant="outline">
+              Notifications
+            </Button>
             <Button href="/products" variant="outline">
               Continue shopping
             </Button>

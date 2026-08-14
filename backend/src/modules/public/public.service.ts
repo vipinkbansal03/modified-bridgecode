@@ -649,6 +649,17 @@ export async function submitPublicQuote(input: QuoteSubmitInput) {
     notes: input.message,
   });
 
+  // Notify Admins
+  import("../notifications/notifications.service").then(({ notificationsService }) => {
+    notificationsService.createNotification({
+      title: "New Quote Request",
+      message: `Quote #${quote.quoteNumber} has been requested by ${quote.customerName}.`,
+      type: "QUOTE",
+      targetType: "ALL_ADMINS",
+      link: `/admin/quotes/${quote.id}`,
+    }).catch(console.error);
+  });
+
   return quote;
 }
 

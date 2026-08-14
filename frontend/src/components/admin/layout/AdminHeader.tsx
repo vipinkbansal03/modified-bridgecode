@@ -2,6 +2,7 @@
 
 import { Menu, Bell, LogOut, ChevronRight } from "lucide-react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { NotificationBell } from "@/components/ui/NotificationBell";
 
 interface AdminHeaderProps {
   title: string;
@@ -13,7 +14,7 @@ export function AdminHeader({ title, breadcrumb, onMenuOpen }: AdminHeaderProps)
   const { user, logout } = useAdminAuth();
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-[#E6E6E6] bg-white px-5 relative z-0">
+    <header className="flex h-14 items-center justify-between border-b border-[#E6E6E6] bg-white px-5 relative z-40">
       <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 pr-3">
         <button onClick={onMenuOpen} className="lg:hidden text-[#6B6B6B] hover:text-[#1A1A1A] flex-shrink-0">
           <Menu size={20} />
@@ -39,9 +40,7 @@ export function AdminHeader({ title, breadcrumb, onMenuOpen }: AdminHeaderProps)
       </div>
 
       <div className="flex items-center gap-2.5">
-        <button className="flex items-center justify-center h-8 w-8 rounded-full hover:bg-[#F2F2F2] text-[#6B6B6B]">
-          <Bell size={16} />
-        </button>
+        <NotificationBell role="admin" />
         <div className="flex items-center gap-2.5 border-l border-[#E6E6E6] pl-3">
           <div className="text-right hidden sm:block">
             <div className="text-[13px] font-medium text-[#1A1A1A]">{user?.name}</div>

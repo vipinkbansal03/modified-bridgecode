@@ -24,6 +24,8 @@ model User {
   QuoteNote    QuoteNote[]
   role         Role            @relation(fields: [roleId], references: [id])
   warehouses   UserWarehouse[]
+  notifications Notification[]
+  deviceTokens  DeviceToken[]
 
   @@map("users")
 }
@@ -463,6 +465,8 @@ model Customer {
   orders                     Order[]
   quotes                     Quote[]
   wishlistItems              Wishlist[]
+  notifications              Notification[]
+  deviceTokens               DeviceToken[]
 
   @@map("customers")
 }
@@ -923,6 +927,10 @@ model Media {
   purpose         String?
   filename        String
   originalName    String
+  title           String?
+  altText         String?
+  description     String?
+  tags            String?
   url             String
   publicId        String?
   mimeType        String
@@ -1814,3 +1822,56 @@ model VariantPaymentMethod {
   @@unique([variantId, paymentMethodId])
   @@map("variant_payment_methods")
 }
+
+enum NotificationType {
+  INFO
+  ALERT
+  ORDER
+  PROMOTION
+}
+
+enum NotificationTarget {
+  ALL_ADMINS
+  ALL_CUSTOMERS
+  SPECIFIC_USER
+  SPECIFIC_CUSTOMER
+}
+
+model Notification {
+  id           String             @id @default(cuid())
+  title        String
+  message      String             @db.Text
+  type         NotificationType   @default(INFO)
+  targetType   NotificationTarget @default(SPECIFIC_CUSTOMER)
+  link         String?
+  isRead       Boolean            @default(false)
+  userId       String?
+  customerId   String?
+  createdAt    DateTime           @default(now())
+
+  user         User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customer     Customer?          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([customerId])
+  @@index([targetType])
+  @@map("notifications")
+}
+
+model DeviceToken {
+  id         String    @id @default(cuid())
+  token      String    @unique
+  deviceType String    @default("web")
+  userId     String?
+  customerId String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([customerId])
+  @@map("device_tokens")
+}
+

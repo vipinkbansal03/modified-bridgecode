@@ -9,6 +9,7 @@ router.use(protect);
 router.get("/", requirePermission("media.view", "media.manage"), C.list);
 router.post("/", requirePermission("media.manage"), upload.array("files", 20), C.upload);
 router.delete("/by-url", requirePermission("media.manage"), C.removeByUrl);
+router.put("/:id", requirePermission("media.manage"), C.update);
 router.delete("/:id", requirePermission("media.manage"), C.remove);
 
 router.get("/config", requirePermission("media.manage"), C.config);

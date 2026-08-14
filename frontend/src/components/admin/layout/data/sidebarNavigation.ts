@@ -27,6 +27,7 @@ import {
   Truck,
   Users,
   Warehouse,
+  Bell,
 } from "lucide-react";
 
 export interface SidebarSubItem {
@@ -94,6 +95,7 @@ export const sidebarSections: SidebarSection[] = [
       { label: "Inquiries", href: "/admin/contact-submissions", icon: MessageSquare, permission: "contactSubmissions.view" },
       { label: "Newsletter", href: "/admin/newsletter", icon: Newspaper, permission: "contactSubmissions.view" },
       { label: "Roles & Permissions", href: "/admin/roles", icon: Shield, permission: "roles.view" },
+      { label: "Push Notifications", href: "/admin/notifications", icon: Bell, permission: "customers.view" },
     ],
   },
   {
