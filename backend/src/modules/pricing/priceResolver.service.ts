@@ -714,7 +714,7 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
   // Push layers
   layers.push({
     type: "TAX",
-    label: primaryTaxMode === "INCLUSIVE" ? "Inclusive Tax" : "Tax",
+    label: primaryTaxMode === "INCLUSIVE" ? "Inclusive Tax" : "Total after Tax",
     amountBefore: priceBeforeTax,
     amountAfter: primaryTaxMode === "INCLUSIVE" ? priceBeforeTax : roundMoney(priceBeforeTax + totalTaxAmount),
     taxPercent,

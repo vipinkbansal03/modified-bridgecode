@@ -119,18 +119,19 @@ export async function createBanner(input: BannerInput) {
   return formatBannerResponse(banner);
 }
 
-async function ensureAtLeastOneActiveHeroBanner(deactivatingIds: string[]) {
-  const remainingActiveHeroCount = await prisma.banner.count({
+async function ensureAtLeastOneActiveBanner(placement: BannerPlacement, deactivatingIds: string[]) {
+  const remainingActiveCount = await prisma.banner.count({
     where: {
-      placement: "HOMEPAGE_HERO",
+      placement,
       status: true,
       id: { notIn: deactivatingIds },
     },
   });
 
-  if (remainingActiveHeroCount === 0) {
+  if (remainingActiveCount === 0) {
+    const displayName = placement === "HOMEPAGE_HERO" ? "Homepage Hero" : "Homepage Promo";
     throw new AppError(
-      "At least one Homepage Hero banner must remain active. Please activate another Homepage Hero banner before deactivating or deleting this one.",
+      `At least one ${displayName} banner must remain active. Please activate another ${displayName} banner before deactivating or deleting this one.`,
       400
     );
   }
@@ -142,11 +143,11 @@ export async function updateBanner(id: string, input: BannerInput) {
   const { countryIds, ...bannerData } = data;
 
   if (
-    current.placement === "HOMEPAGE_HERO" &&
+    (current.placement === "HOMEPAGE_HERO" || current.placement === "HOMEPAGE_PROMO") &&
     current.status &&
-    (!data.status || data.placement !== "HOMEPAGE_HERO")
+    (!data.status || data.placement !== current.placement)
   ) {
-    await ensureAtLeastOneActiveHeroBanner([id]);
+    await ensureAtLeastOneActiveBanner(current.placement, [id]);
   }
 
   await prisma.bannerCountry.deleteMany({ where: { bannerId: id } });
@@ -166,8 +167,11 @@ export async function updateBanner(id: string, input: BannerInput) {
 
 export async function deleteBanner(id: string) {
   const current = await getBanner(id);
-  if (current.placement === "HOMEPAGE_HERO" && current.status) {
-    await ensureAtLeastOneActiveHeroBanner([id]);
+  if (
+    (current.placement === "HOMEPAGE_HERO" || current.placement === "HOMEPAGE_PROMO") &&
+    current.status
+  ) {
+    await ensureAtLeastOneActiveBanner(current.placement, [id]);
   }
   await prisma.banner.delete({ where: { id } });
 }
@@ -187,7 +191,14 @@ export async function bulkUpdateBanners(input: { ids?: string[]; action?: "enabl
       where: { id: { in: ids }, placement: "HOMEPAGE_HERO", status: true },
     });
     if (activeHeroBanners.length > 0) {
-      await ensureAtLeastOneActiveHeroBanner(ids);
+      await ensureAtLeastOneActiveBanner("HOMEPAGE_HERO", ids);
+    }
+
+    const activePromoBanners = await prisma.banner.findMany({
+      where: { id: { in: ids }, placement: "HOMEPAGE_PROMO", status: true },
+    });
+    if (activePromoBanners.length > 0) {
+      await ensureAtLeastOneActiveBanner("HOMEPAGE_PROMO", ids);
     }
   }
 

@@ -4,10 +4,12 @@ import { useMemo, useState } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import Link from "next/link";
 import { Container } from "@/components/ui/Container";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useProducts } from "@/hooks/api/useProducts";
 import { useFeaturedProducts } from "@/hooks/api/useProducts";
+import { usePublicBanners } from "@/hooks/api/usePublicBanners";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import staticProducts from "@/data/products.json";
 import type { ApiProductSummary } from "@/types/api.types";
@@ -31,9 +33,19 @@ export function FeaturedProductsSection({
   captions,
 }: FeaturedProductsSectionProps) {
   const { t } = useStaticTranslations();
+  const { data: promoBanners = [], isLoading: promoLoading } = usePublicBanners("HOMEPAGE_PROMO");
   const { data: featuredProducts = [], isLoading: featuredLoading } = useFeaturedProducts();
   const { data: allProducts, isLoading: allProductsLoading } = useProducts({ limit: 12 });
   const [index, setIndex] = useState(0);
+
+  const [imageError, setImageError] = useState(false);
+  const [mobileImageError, setMobileImageError] = useState(false);
+
+  const promoBanner = promoBanners[0];
+  const hasDesktopPromo = Boolean(promoBanner?.image && promoBanner.image.trim() && !imageError);
+  const hasMobilePromo = Boolean(
+    promoBanner?.mobileImage && promoBanner.mobileImage.trim() && !mobileImageError,
+  );
 
   const products = useMemo(() => {
     if (featuredProducts.length) return featuredProducts;
@@ -75,7 +87,7 @@ export function FeaturedProductsSection({
       .filter(Boolean) as ApiProductSummary[];
   }, [allProducts, slugs]);
 
-  if (featuredLoading || allProductsLoading) {
+  if (featuredLoading || allProductsLoading || promoLoading) {
     return (
       <section>
         <Skeleton className="h-[420px] w-full rounded-none" />
@@ -90,30 +102,58 @@ export function FeaturedProductsSection({
   const go = (delta: number) =>
     setIndex((i) => (i + delta + products.length) % products.length);
 
+  const renderPromoImage = () => {
+    if (!promoBanner) return null;
+
+    const imgContent = (
+      <>
+        {hasMobilePromo && (
+          <Image
+            src={promoBanner.mobileImage!}
+            alt={promoBanner.title || "Promotional Banner"}
+            fill
+            className="object-cover sm:hidden"
+            sizes="100vw"
+            onError={() => setMobileImageError(true)}
+          />
+        )}
+        {hasDesktopPromo ? (
+          <Image
+            src={promoBanner.image}
+            alt={promoBanner.title || "Promotional Banner"}
+            fill
+            className={`object-cover ${hasMobilePromo ? "hidden sm:block" : "block"}`}
+            sizes="100vw"
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-grey text-steel-2 p-6 text-center">
+            <span className="text-[12px] font-semibold uppercase tracking-wider">
+              {promoBanner.title || "Modern Orthodontics Promotion"}
+            </span>
+          </div>
+        )}
+      </>
+    );
+
+    if (promoBanner.linkUrl) {
+      return (
+        <Link href={promoBanner.linkUrl} className="absolute inset-0 block cursor-pointer">
+          {imgContent}
+        </Link>
+      );
+    }
+
+    return imgContent;
+  };
+
   return (
     <section className="relative">
-      <div className="relative h-[220px] w-full bg-grey sm:h-[260px] md:h-[300px]">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={product.slug}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.4 }}
-            className="absolute inset-0"
-          >
-            {imageUrl ? (
-              <Image
-                src={imageUrl}
-                alt={product.title}
-                fill
-                className="object-cover"
-                sizes="100vw"
-              />
-            ) : null}
-          </motion.div>
-        </AnimatePresence>
-      </div>
+      {promoBanner && (
+        <div className="relative h-[220px] w-full bg-grey sm:h-[260px] md:h-[300px]">
+          {renderPromoImage()}
+        </div>
+      )}
       <div className="bg-ink py-7 lg:py-[34px] text-white">
         <Container className="flex flex-wrap items-end justify-between gap-7">
           <div>

@@ -575,6 +575,29 @@ async function collectPricingRows(query: PricingListQuery) {
   };
 }
 
+function validatePricingFields(
+  roleKey: string | null | undefined,
+  dealerPrice: unknown,
+  distributorPrice: unknown,
+) {
+  if (roleKey === "DEALER") {
+    if (dealerPrice == null) {
+      throw new AppError("Dealer Price is required for B2B Wholesale / Dealer rules.", 400);
+    }
+  } else if (roleKey === "DOCTOR_RETAILER") {
+    if (distributorPrice == null) {
+      throw new AppError("Doctor / Retailer Price is required for Doctor / Retailer rules.", 400);
+    }
+  } else if (roleKey === "GUEST") {
+    // Guest only requires MRP and Selling Price (already checked outside)
+  } else {
+    // None / Any case: all four are required
+    if (dealerPrice == null || distributorPrice == null) {
+      throw new AppError("Dealer Price and Doctor / Retailer Price are required for standard pricing rules.", 400);
+    }
+  }
+}
+
 async function createProductPrice(data: {
   productId: string;
   variantId?: string | null;
@@ -585,6 +608,7 @@ async function createProductPrice(data: {
   dealerPrice?: number | string | null;
   distributorPrice?: number | string | null;
   status?: string;
+  customerRoleKey?: string | null;
 }) {
   const product = await assertActiveProduct(data.productId);
   const variant = await assertActiveVariant(data.productId, data.variantId ?? null);
@@ -597,7 +621,12 @@ async function createProductPrice(data: {
   const sellingPrice = toDecimal(data.sellingPrice);
   const dealerPrice = toDecimal(data.dealerPrice);
   const distributorPrice = toDecimal(data.distributorPrice);
-  if (mrp == null || sellingPrice == null) throw new AppError("MRP and selling price are required.", 400);
+
+  if (mrp == null || sellingPrice == null) {
+    throw new AppError("MRP and selling price are required.", 400);
+  }
+
+  validatePricingFields(data.customerRoleKey, dealerPrice, distributorPrice);
 
   const duplicate = await prisma.productPrice.findFirst({
     where: { productId: product.id, variantId: variant?.id ?? null, countryId: country.id },
@@ -638,6 +667,7 @@ async function updateProductPrice(
     dealerPrice?: number | string | null;
     distributorPrice?: number | string | null;
     status?: string;
+    customerRoleKey?: string | null;
   },
 ) {
   const existing = await prisma.productPrice.findUnique({ where: { id } });
@@ -675,7 +705,11 @@ async function updateProductPrice(
       ? money(existing.distributorPrice)
       : null;
 
-  if (mrp == null || sellingPrice == null) throw new AppError("MRP and selling price are required.", 400);
+  if (mrp == null || sellingPrice == null) {
+    throw new AppError("MRP and selling price are required.", 400);
+  }
+
+  validatePricingFields(data.customerRoleKey, dealerPrice, distributorPrice);
 
   return prisma.productPrice.update({
     where: { id },

@@ -1257,6 +1257,7 @@ type PublicProductDetailRecord = {
   technicalSpecs?: Prisma.JsonValue | null;
   warranty?: Prisma.JsonValue | null;
   primaryFeatures?: Prisma.JsonValue | null;
+  additionalInfo?: Prisma.JsonValue | null;
   _count?: { variants: number };
   translations?: ProductTranslationSnapshot[];
 };
@@ -1537,6 +1538,7 @@ async function toPublicProductDetail(
     technicalSpecs: text.technicalSpecs,
     warranty: text.warranty,
     primaryFeatures: text.primaryFeatures,
+    additionalInfo: p.additionalInfo,
     packages: p.packages.map((pkg) => ({
       id: pkg.id,
       title: pkg.title,

@@ -168,13 +168,6 @@ export default function BannersPage() {
         key: "status",
         label: "Status",
         width: "110px",
-        render: (row: Banner) => (
-          <TableStatusAction
-            status={row.status}
-            loading={updateBanner.isPending && updateBanner.variables?.id === row.id}
-            onToggle={() => toggleStatus(row)}
-          />
-        ),
       },
       {
         key: "actions",
@@ -327,40 +320,9 @@ export default function BannersPage() {
         {PLACEMENT_DESCRIPTIONS[placement] || PLACEMENT_DESCRIPTIONS[""]}
       </div>
 
-      {/* Bulk Action Toolbar */}
-      {selected.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-[#E6E6E6] bg-white p-3 shadow-xs">
-          <span className="text-[13px] font-semibold text-[#1A1A1A]">{selected.length} selected</span>
-          <div className="h-4 w-px bg-[#E6E6E6]" />
-          <LoadingButton
-            onClick={() => runBulk("enable")}
-            loading={bulkBanners.isPending}
-            loadingText="Enabling..."
-            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[13px] font-medium text-[#333] hover:bg-gray-50"
-          >
-            Enable
-          </LoadingButton>
-          <LoadingButton
-            onClick={() => runBulk("disable")}
-            loading={bulkBanners.isPending}
-            loadingText="Disabling..."
-            className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[13px] font-medium text-[#333] hover:bg-gray-50"
-          >
-            Disable
-          </LoadingButton>
-          <LoadingButton
-            onClick={() => runBulk("delete")}
-            loading={bulkBanners.isPending}
-            loadingText="Deleting..."
-            className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-[13px] font-medium text-red-600 hover:bg-red-100"
-          >
-            Delete
-          </LoadingButton>
-        </div>
-      )}
-
-      {/* Structured Admin Table UI using generic DataTable */}
       <DataTable
+        title="Banners"
+        description="Manage promotional banners across Storefront placements."
         columns={columns}
         data={banners}
         rowKey="id"
@@ -379,6 +341,46 @@ export default function BannersPage() {
           }
         }}
         disabledReorder={reorderBanners.isPending}
+        onToggleStatus={toggleStatus}
+        statusLoadingId={updateBanner.isPending ? updateBanner.variables?.id : null}
+        renderBulkActions={(selectedIds) => (
+          <div className="flex items-center gap-3 w-full">
+            <span className="text-[13px] font-bold text-[#1A1A1A]">{selectedIds.length} selected</span>
+            <button
+              type="button"
+              onClick={() => setSelected([])}
+              className="inline-flex items-center gap-1.5 rounded border border-[#E6E6E6] bg-white px-2.5 py-1 text-[11.5px] font-semibold text-[#1A1A1A] hover:bg-gray-50 hover:border-gray-300 shadow-sm transition-all"
+            >
+              <X size={12} /> Clear
+            </button>
+            <div className="h-4 w-px bg-[#E6E6E6]" />
+            <span className="text-[12px] text-gray-500 font-medium">Bulk Actions:</span>
+            <LoadingButton
+              onClick={() => runBulk("enable")}
+              loading={bulkBanners.isPending}
+              loadingText="Enabling..."
+              className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11.5px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors shadow-sm"
+            >
+              Enable
+            </LoadingButton>
+            <LoadingButton
+              onClick={() => runBulk("disable")}
+              loading={bulkBanners.isPending}
+              loadingText="Disabling..."
+              className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11.5px] font-semibold text-amber-700 hover:bg-amber-100 transition-colors shadow-sm"
+            >
+              Disable
+            </LoadingButton>
+            <LoadingButton
+              onClick={() => runBulk("delete")}
+              loading={bulkBanners.isPending}
+              loadingText="Deleting..."
+              className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-[11.5px] font-semibold text-red-700 hover:bg-red-100 transition-colors shadow-sm"
+            >
+              Delete
+            </LoadingButton>
+          </div>
+        )}
       />
 
       {/* Unified Modal Component for Add & Edit */}
