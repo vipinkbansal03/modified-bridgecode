@@ -1,5 +1,4 @@
-// components/ui/PillCTA.tsx
-
+import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
 interface PillCTAProps {
@@ -10,7 +9,7 @@ interface PillCTAProps {
 
 export function PillCTA({ href, label, className = "" }: PillCTAProps) {
   return (
-    <a href={href} className={`pill-cta group ${className}`}>
+    <Link href={href} className={`pill-cta group ${className}`}>
       <span>{label}</span>
 
       <span className="arrow overflow-hidden">
@@ -26,6 +25,6 @@ export function PillCTA({ href, label, className = "" }: PillCTAProps) {
           />
         </span>
       </span>
-    </a>
+    </Link>
   );
 }

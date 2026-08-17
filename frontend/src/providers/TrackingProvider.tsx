@@ -232,15 +232,20 @@ function CookieBanner({ title, description, privacyUrl, onAccept, onReject }: {
   return (
     <div className="fixed bottom-4 left-4 right-4 z-50 sm:left-auto sm:right-6 sm:max-w-sm">
       <div className="rounded-2xl border border-line bg-white p-5 shadow-[0_24px_60px_rgba(0,0,0,0.14)]">
-        <p className="mb-1 text-[14px] font-semibold text-ink">{title}</p>
-        <p className="mb-3 text-[12.5px] leading-relaxed text-steel-2">{description}{" "}
-          <a href={privacyUrl} className="underline text-brand hover:opacity-75">Privacy Policy</a>
-        </p>
+        <p className="mb-1.5 text-[14px] font-bold text-ink">{title || "Cookie & Privacy Consent"}</p>
+        <div className="mb-3 max-h-28 overflow-y-auto pr-1 text-[12px] leading-relaxed text-steel-2 custom-scrollbar">
+          {description}
+        </div>
+        <div className="mb-3">
+          <a href={privacyUrl || "/privacy-policy"} target="_blank" rel="noopener noreferrer" className="text-[12px] font-semibold underline text-brand hover:opacity-80">
+            Read Full Privacy Policy →
+          </a>
+        </div>
         <div className="flex gap-2">
-          <button onClick={onAccept} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand py-2 text-[12.5px] font-semibold text-white hover:bg-brand/90 transition-colors">
+          <button onClick={onAccept} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand py-2 text-[12.5px] font-semibold text-white hover:bg-brand/90 transition-colors cursor-pointer">
             <Check size={12} />Accept
           </button>
-          <button onClick={onReject} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-line py-2 text-[12.5px] font-medium text-steel hover:bg-offwhite transition-colors">
+          <button onClick={onReject} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-line py-2 text-[12.5px] font-medium text-steel hover:bg-offwhite transition-colors cursor-pointer">
             <X size={12} />Reject
           </button>
         </div>

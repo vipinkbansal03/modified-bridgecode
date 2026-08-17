@@ -71,15 +71,14 @@ async function syncStorefrontVisibility(tx: Prisma.TransactionClient, productId:
   const countries = await tx.country.findMany({ where: { status: "ACTIVE" }, select: { id: true } });
   if (!countries.length) return;
 
-  await Promise.all(
-    countries.map((country) =>
-      tx.productCountry.upsert({
-        where: { productId_countryId: { productId, countryId: country.id } },
-        update: {}, // Do not overwrite existing enabled state
-        create: { productId, countryId: country.id, enabled: false }, // Default to false
-      }),
-    ),
-  );
+  await tx.productCountry.createMany({
+    data: countries.map((country) => ({
+      productId,
+      countryId: country.id,
+      enabled: false,
+    })),
+    skipDuplicates: true,
+  });
 }
 
 async function syncVariantsStorefrontVisibility(variantIds: string[], productId: string) {
@@ -701,7 +700,11 @@ export async function createProduct(data: ProductInput) {
 // ─── Update ───────────────────────────────────────────────
 
 export async function updateProduct(id: string, data: Partial<ProductInput>) {
-  const existing = await getProduct(id); // Throws 404 if not found
+  const existing = await prisma.product.findUnique({
+    where: { id, deletedAt: null },
+    select: { id: true, brand: true, status: true, categoryId: true },
+  });
+  if (!existing) throw new AppError("Product not found.", 404);
   if (data.categoryId) await assertActiveCategory(data.categoryId);
 
   const updateData = { ...data } as Record<string, unknown>;
@@ -1265,37 +1268,51 @@ export async function listProductCountries(productId: string) {
 }
 
 export async function updateProductCountries(productId: string, items: { countryId: string; enabled: boolean }[]) {
-  const product = await getProduct(productId);
+  const product = await prisma.product.findUnique({
+    where: { id: productId, deletedAt: null },
+    select: { id: true, categoryId: true },
+  });
+  if (!product) throw new AppError("Product not found.", 404);
   if (!Array.isArray(items)) throw new AppError("Country mapping payload must include an array of items.", 400);
   const countryIds = [...new Set(items.map((item) => item.countryId))];
   const countries = await prisma.country.findMany({ where: { id: { in: countryIds } }, select: { id: true } });
   if (countries.length !== countryIds.length) throw new AppError("One or more countries were not found.", 400);
 
-  await prisma.$transaction(
-    items.map((item) =>
-      prisma.productCountry.upsert({
-        where: { productId_countryId: { productId, countryId: item.countryId } },
-        update: { enabled: Boolean(item.enabled) },
-        create: { productId, countryId: item.countryId, enabled: Boolean(item.enabled) },
-      }),
-    ),
-  );
-
   const enabledCountryIds = items.filter((item) => item.enabled).map((item) => item.countryId);
-  if (enabledCountryIds.length) {
-    // Storefront requires the category to be enabled for the same country, or the product stays hidden.
-    if (product.categoryId) {
-      await prisma.$transaction(
-        enabledCountryIds.map((countryId) =>
-          prisma.categoryCountry.upsert({
-            where: { categoryId_countryId: { categoryId: product.categoryId, countryId } },
-            update: { enabled: true },
-            create: { categoryId: product.categoryId, countryId, enabled: true },
-          }),
-        ),
-      );
+  const disabledCountryIds = items.filter((item) => !item.enabled).map((item) => item.countryId);
+
+  await prisma.$transaction(async (tx) => {
+    if (enabledCountryIds.length) {
+      await tx.productCountry.updateMany({
+        where: { productId, countryId: { in: enabledCountryIds } },
+        data: { enabled: true },
+      });
+      await tx.productCountry.createMany({
+        data: enabledCountryIds.map((countryId) => ({ productId, countryId, enabled: true })),
+        skipDuplicates: true,
+      });
     }
 
+    if (disabledCountryIds.length) {
+      await tx.productCountry.updateMany({
+        where: { productId, countryId: { in: disabledCountryIds } },
+        data: { enabled: false },
+      });
+      await tx.productCountry.createMany({
+        data: disabledCountryIds.map((countryId) => ({ productId, countryId, enabled: false })),
+        skipDuplicates: true,
+      });
+    }
+
+    if (enabledCountryIds.length && product.categoryId) {
+      await tx.categoryCountry.createMany({
+        data: enabledCountryIds.map((countryId) => ({ categoryId: product.categoryId, countryId, enabled: true })),
+        skipDuplicates: true,
+      });
+    }
+  });
+
+  if (enabledCountryIds.length) {
     const variants = await prisma.productVariant.findMany({
       where: { productId },
       select: { id: true },
@@ -1338,17 +1355,16 @@ async function syncVariantCountriesFromProduct(productId: string, variantIds: st
 
   if (!enabledCountries.length) return;
 
-  await prisma.$transaction(
-    variantIds.flatMap((variantId) =>
-      enabledCountries.map((country) =>
-        prisma.variantCountry.upsert({
-          where: { variantId_countryId: { variantId, countryId: country.countryId } },
-          update: { enabled: true },
-          create: { variantId, countryId: country.countryId, enabled: true },
-        }),
-      ),
+  await prisma.variantCountry.createMany({
+    data: variantIds.flatMap((variantId) =>
+      enabledCountries.map((country) => ({
+        variantId,
+        countryId: country.countryId,
+        enabled: true,
+      })),
     ),
-  );
+    skipDuplicates: true,
+  });
 }
 
 export async function updateVariantCountries(
