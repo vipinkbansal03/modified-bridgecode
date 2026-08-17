@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useMemo, Suspense } from "react";
+import { useState, useMemo, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Archive, CheckCircle2, Copy, Edit2, Eye, FileText, Image as ImageIcon, Layers, RotateCcw, Trash2, XCircle } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
@@ -65,16 +65,28 @@ function VariantsList() {
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("");
   const [sortBy, setSortBy] = useState<VariantSortBy>("updatedAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [deleting, setDeleting] = useState<VariantRow | null>(null);
   const { showToast, ToastComponent } = useToast();
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
   const { data, isLoading } = useAdminVariants({
     page,
     limit: 10,
-    search: search || undefined,
+    search: debouncedSearch || undefined,
     status: status || undefined,
     sortBy,
     sortDir,

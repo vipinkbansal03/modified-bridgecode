@@ -348,12 +348,11 @@ function OrdersTab({
                 <td className="px-6 py-5">
                   <div className="max-w-[150px]">
                     <input
-                      type="number"
-                      min={1}
+                      type="text"
                       placeholder="-"
                       value={row.maxItems}
                       onChange={(event) => {
-                        const value = event.target.value;
+                        const value = event.target.value.replace(/\D/g, "");
                         setRows((current) => current.map((item) => item.id === row.id ? { ...item, maxItems: value } : item));
                       }}
                       onBlur={() => void handleSaveMaxItems(row)}

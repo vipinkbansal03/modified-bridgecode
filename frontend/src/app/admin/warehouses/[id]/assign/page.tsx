@@ -92,11 +92,13 @@ const ProductRow = ({ warehouseId, p, selectedProductIds, setSelectedProductIds,
          {isProductSelected && (
            <div className="w-24 shrink-0 mr-2">
              <input
-               type="number"
-               min="0"
+               type="text"
                placeholder="Stock"
                value={productStockMap[p.id] ?? ""}
-               onChange={(e) => setProductStockMap({ ...productStockMap, [p.id]: e.target.value ? parseInt(e.target.value) : undefined })}
+               onChange={(e) => {
+                 const sanitized = e.target.value.replace(/\D/g, "");
+                 setProductStockMap({ ...productStockMap, [p.id]: sanitized ? parseInt(sanitized) : undefined });
+               }}
                className="w-full h-8 rounded-md border border-[#D1D1D1] px-2.5 text-[13.5px] outline-none focus:border-[#E31E24] text-right bg-white shadow-sm transition-colors"
                title="Initial stock in this warehouse"
              />
@@ -120,11 +122,10 @@ const ProductRow = ({ warehouseId, p, selectedProductIds, setSelectedProductIds,
             <div className="flex items-center gap-3">
               <div className="flex items-center shadow-sm rounded-md">
                 <input
-                  type="number"
-                  min="0"
+                  type="text"
                   placeholder="Bulk stock..."
                   value={bulkStock}
-                  onChange={(e) => setBulkStock(e.target.value)}
+                  onChange={(e) => setBulkStock(e.target.value.replace(/\D/g, ""))}
                   className="w-28 rounded-l-md border border-[#E6E6E6] bg-white py-1.5 px-3 text-[12.5px] outline-none focus:border-[#E31E24] focus:z-10 relative"
                 />
                 <button 
@@ -219,12 +220,12 @@ const ProductRow = ({ warehouseId, p, selectedProductIds, setSelectedProductIds,
                         <td className="py-2 px-4 text-right">
                           {isChecked || isVAssigned ? (
                             <input
-                              type="number"
-                              min="0"
+                              type="text"
                               placeholder={isVAssigned ? `${vWarehouseStock}` : "0"}
                               value={variantStockMap[v.id] ?? ""}
                               onChange={(e) => {
-                                const val = parseInt(e.target.value);
+                                const sanitized = e.target.value.replace(/\D/g, "");
+                                const val = parseInt(sanitized);
                                 setVariantStockMap((prev: any) => ({
                                   ...prev,
                                   [v.id]: isNaN(val) ? 0 : val

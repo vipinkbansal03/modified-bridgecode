@@ -433,10 +433,10 @@ export default function ShippingBoxesPage() {
             <div className="sm:col-span-2">
               <AdminInput required label="Box Name" placeholder="e.g. Small Box, Medium Box" {...form.getFieldProps("name")} error={form.errors.name as string} />
             </div>
-            <AdminInput required label="Length (cm)" type="number" placeholder="e.g. 30" {...form.getFieldProps("length")} error={form.errors.length as string} />
-            <AdminInput required label="Width (cm)" type="number" placeholder="e.g. 20" {...form.getFieldProps("width")} error={form.errors.width as string} />
-            <AdminInput required label="Height (cm)" type="number" placeholder="e.g. 15" {...form.getFieldProps("height")} error={form.errors.height as string} />
-            <AdminInput required label="Max Weight (kg)" type="number" placeholder="e.g. 5" {...form.getFieldProps("maxWeight")} error={form.errors.maxWeight as string} />
+            <AdminInput required label="Length (cm)" type="text" placeholder="e.g. 30" name="length" value={form.values.length} onChange={(e) => form.setFieldValue("length", e.target.value.replace(/[^0-9.]/g, ""))} onBlur={form.handleBlur} error={form.errors.length as string} />
+            <AdminInput required label="Width (cm)" type="text" placeholder="e.g. 20" name="width" value={form.values.width} onChange={(e) => form.setFieldValue("width", e.target.value.replace(/[^0-9.]/g, ""))} onBlur={form.handleBlur} error={form.errors.width as string} />
+            <AdminInput required label="Height (cm)" type="text" placeholder="e.g. 15" name="height" value={form.values.height} onChange={(e) => form.setFieldValue("height", e.target.value.replace(/[^0-9.]/g, ""))} onBlur={form.handleBlur} error={form.errors.height as string} />
+            <AdminInput required label="Max Weight (kg)" type="text" placeholder="e.g. 5" name="maxWeight" value={form.values.maxWeight} onChange={(e) => form.setFieldValue("maxWeight", e.target.value.replace(/[^0-9.]/g, ""))} onBlur={form.handleBlur} error={form.errors.maxWeight as string} />
             <div className="sm:col-span-2 flex flex-col">
               <AdminMultiSearchableSelect
                 label="Countries"

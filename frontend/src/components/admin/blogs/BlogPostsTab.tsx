@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Edit2, Plus, Trash2 } from "lucide-react";
 import {
   AdminListToolbar,
@@ -32,10 +32,23 @@ export function BlogPostsTab() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
   const { showToast, ToastComponent } = useToast();
-  const { data, isLoading } = useAdminBlogs({ page, limit: 20, status, search });
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
+  const { data, isLoading } = useAdminBlogs({ page, limit: 20, status, search: debouncedSearch });
   const deleteBlog = useDeleteBlog();
   const bulkBlogs = useBulkBlogs();
   const blogs = (data?.data ?? []) as Blog[];

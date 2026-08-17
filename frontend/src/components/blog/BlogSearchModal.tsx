@@ -11,6 +11,7 @@ interface BlogSearchModalProps {
   open: boolean;
   onClose: () => void;
   search: string;
+  debouncedSearch: string;
   onSearchChange: (value: string) => void;
 }
 
@@ -27,10 +28,11 @@ export function BlogSearchModal({
   open,
   onClose,
   search,
+  debouncedSearch,
   onSearchChange,
 }: BlogSearchModalProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const { data: results = [], isFetching } = useBlogs({ search });
+  const { data: results = [], isFetching } = useBlogs({ search: debouncedSearch });
 
   useEffect(() => {
     if (open) {

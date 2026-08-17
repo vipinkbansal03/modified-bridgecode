@@ -1,39 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Container } from "@/components/ui/Container";
-import { apiClient as api } from "@/lib/apiClient";
 import { Eye, Bell } from "lucide-react";
 import Link from "next/link";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { useRouter } from "next/navigation";
+import { useNotifications, useMarkNotificationRead } from "@/hooks/api";
 
 export default function CustomerNotificationsPage() {
-  const [history, setHistory] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { data: notificationsData, isLoading } = useNotifications("customer");
+  const history = notificationsData || [];
+  const markReadMutation = useMarkNotificationRead("customer");
   const { currentCustomer } = useCustomerAuth();
   const router = useRouter();
 
-  useEffect(() => {
-    fetchHistory();
-  }, []);
-
-  const fetchHistory = async () => {
-    try {
-      setIsLoading(true);
-      const { data } = await api.get("/notifications/customer/mine");
-      setHistory(data.data || []);
-    } catch (err) {
-      console.error("Failed to fetch notifications history", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const markAsRead = async (id: string) => {
     try {
-      await api.patch(`/notifications/customer/${id}/read`);
-      setHistory(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+      await markReadMutation.mutateAsync(id);
     } catch (err) {
       console.error("Failed to mark as read", err);
     }
@@ -113,11 +97,11 @@ export default function CustomerNotificationsPage() {
                                 <button 
                                   onClick={async () => {
                                     if (!h.isRead) {
-                                      // Optimistic update
-                                      setHistory(prev => prev.map(n => n.id === h.id ? { ...n, isRead: true } : n));
                                       await markAsRead(h.id);
                                     }
-                                    router.push(h.link);
+                                    if (h.link) {
+                                      router.push(h.link);
+                                    }
                                   }}
                                   className="text-[12px] font-medium text-[#0056b3] hover:underline"
                                 >
@@ -126,7 +110,6 @@ export default function CustomerNotificationsPage() {
                               ) : !h.isRead ? (
                                 <button 
                                   onClick={() => {
-                                    setHistory(prev => prev.map(n => n.id === h.id ? { ...n, isRead: true } : n));
                                     markAsRead(h.id);
                                   }}
                                   className="text-[12px] font-medium text-steel hover:text-ink hover:underline"

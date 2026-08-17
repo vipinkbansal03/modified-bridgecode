@@ -123,6 +123,7 @@ export default function AdminTiersPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
   const [sortBy, setSortBy] = useState("sortOrder");
@@ -164,12 +165,23 @@ export default function AdminTiersPage() {
   const [importMessage, setImportMessage] = useState("");
   const [importing, setImporting] = useState(false);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
   const { data: dashboardData, isLoading: dashboardLoading } = useAdminTierDashboard();
   const { data: countries = [] } = useAdminCountries();
   const tiersQuery = useAdminTiersPaged({
     page,
     limit,
-    search: search || undefined,
+    search: debouncedSearch || undefined,
     status: statusFilter || undefined,
     countryId: countryFilter || undefined,
     sortBy,
@@ -208,7 +220,7 @@ export default function AdminTiersPage() {
 
   useEffect(() => {
     setSelectedIds([]);
-  }, [page, limit, search, statusFilter, countryFilter, sortBy, sortDir]);
+  }, [page, limit, debouncedSearch, statusFilter, countryFilter, sortBy, sortDir]);
 
   useEffect(() => {
     if (rows.length === 0) {

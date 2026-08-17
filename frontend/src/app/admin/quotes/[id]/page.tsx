@@ -241,25 +241,22 @@ export default function QuoteDetailPage() {
                       <td className="px-4 py-3">
                         <input
                           className="w-20 rounded border border-[#E6E6E6] px-2 py-1 disabled:bg-[#F8F8F8] disabled:text-[#9A9A9A]"
-                          type="number"
-                          min="1"
+                          type="text"
                           disabled={isConverted || !canUpdate}
                           value={items.find((i) => i.id === item.id)?.quantity ?? item.quantity}
                           onChange={(event) =>
-                            setItems((current) => current.map((i) => (i.id === item.id ? { ...i, quantity: event.target.value } : i)))
+                            setItems((current) => current.map((i) => (i.id === item.id ? { ...i, quantity: event.target.value.replace(/\D/g, "") } : i)))
                           }
                         />
                       </td>
                       <td className="px-4 py-3">
                         <input
                           className="w-28 rounded border border-[#E6E6E6] px-2 py-1 disabled:bg-[#F8F8F8] disabled:text-[#9A9A9A]"
-                          type="number"
-                          min="0"
-                          step="0.01"
+                          type="text"
                           disabled={isConverted || !canUpdate}
                           value={items.find((i) => i.id === item.id)?.unitPrice ?? item.unitPrice}
                           onChange={(event) =>
-                            setItems((current) => current.map((i) => (i.id === item.id ? { ...i, unitPrice: event.target.value } : i)))
+                            setItems((current) => current.map((i) => (i.id === item.id ? { ...i, unitPrice: event.target.value.replace(/[^0-9.]/g, "") } : i)))
                           }
                         />
                       </td>

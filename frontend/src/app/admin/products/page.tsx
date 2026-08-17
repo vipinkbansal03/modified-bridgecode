@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { AdminListToolbar, AdminStatsGrid, Column, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminListToolbar, AdminStatsGrid, Column, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, LoadingButton, AdminBulkActionsBar, AdminMultiSelect } from "@/components/admin/AdminComponents";
 import { RefreshButton } from "@/components/admin/RefreshButton";
 import { toSortOrderPayload } from "@/components/admin/SortableList";
 import { Modal } from "@/components/ui/Modal";
@@ -92,13 +92,40 @@ export default function AdminProductsPage() {
   const canCreate = hasPermission("products.create");
 
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [warehouseFilterId, setWarehouseFilterId] = useState("");
   const [sortBy, setSortBy] = useState("sortOrder");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const handleSelectAll = async (checked: boolean) => {
+    if (!checked) {
+      setSelectedIds([]);
+      return;
+    }
+    try {
+      const res = await adminApi.get("/products", {
+        params: {
+          search: debouncedSearch || undefined,
+          status: status || undefined,
+          categoryId: categoryId || undefined,
+          warehouseId: warehouseFilterId || undefined,
+          limit: 999999,
+          ignoreMaxLimit: "true",
+          sortBy,
+          sortDir,
+        },
+      });
+      const allIds = (res.data.data ?? []).map((p: any) => p.id);
+      setSelectedIds(allIds);
+      showToast(`Selected all ${allIds.length} products across all pages.`, "success");
+    } catch (err) {
+      showToast("Failed to select all products.", "error");
+    }
+  };
   const [bulkAction, setBulkAction] = useState<BulkAction>("enable");
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const [bulkCountryIds, setBulkCountryIds] = useState<string[]>([]);
@@ -119,6 +146,17 @@ export default function AdminProductsPage() {
   const { showToast, ToastComponent } = useToast();
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
+  useEffect(() => {
     try {
       const raw = localStorage.getItem(PRODUCT_COLUMNS_STORAGE_KEY);
       if (raw) setVisibleColumns({ ...DEFAULT_COLUMNS, ...JSON.parse(raw) });
@@ -133,7 +171,7 @@ export default function AdminProductsPage() {
     localStorage.setItem(PRODUCT_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
   }, [columnsReady, visibleColumns]);
 
-  const { data, isLoading, refetch, isFetching } = useAdminProducts({ page, search, status, categoryId: categoryId || undefined, warehouseId: warehouseFilterId || undefined, limit: 20, sortBy, sortDir });
+  const { data, isLoading, refetch, isFetching } = useAdminProducts({ page, search: debouncedSearch, status, categoryId: categoryId || undefined, warehouseId: warehouseFilterId || undefined, limit, sortBy, sortDir });
   const { data: totalStats, isLoading: totalLoading } = useAdminProducts({ limit: 1 });
   const { data: activeStats, isLoading: activeLoading } = useAdminProducts({ status: "ACTIVE", limit: 1 });
   const { data: draftStats, isLoading: draftLoading } = useAdminProducts({ status: "DRAFT", limit: 1 });
@@ -637,7 +675,6 @@ export default function AdminProductsPage() {
 
       <DataTable<ProductRow>
         title="Product Catalog"
-        description={data?.pagination ? `${data.pagination.total} products registered in catalog` : "Products registered in catalog"}
         columns={columns}
         data={products}
         rowKey="id"
@@ -650,104 +687,87 @@ export default function AdminProductsPage() {
         onReorder={handleReorder}
         disabledReorder={reorderProducts.isPending}
         rowTooltip={canUpdate && sortBy === "sortOrder" ? "Drag product to reorder" : undefined}
+        totalItems={data?.pagination?.total ?? 0}
+        currentPage={page}
+        pageSize={limit}
+        totalPages={data?.pagination?.totalPages || 1}
+        onPageChange={setPage}
+        onPageSizeChange={setLimit}
+        pageSizeOptions={[10, 25, 50, 100]}
+        onSelectAll={handleSelectAll}
         renderBulkActions={(selectedIds) => (
-          <div className="flex flex-wrap items-center justify-between gap-3 w-full animate-fade-in">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-[13px] font-bold text-[#1A1A1A]">{selectedIds.length} selected</span>
-              <select
-                value={bulkAction}
-                onChange={(event) => {
-                  const val = event.target.value as BulkAction;
-                  setBulkAction(val);
-                  if (val === "assignWarehouse") {
-                    if (selectedIds.length === 0) {
-                      showToast("Please select at least one product first.", "error");
-                      setTimeout(() => setBulkAction("enable"), 0);
-                      return;
-                    }
-                    setWarehouseAssignSelections({});
-                    setWarehouseAssignModalOpen(true);
-                  }
-                }}
-                className="h-8 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] text-[#1A1A1A] outline-none"
-              >
-                <option value="enable">Enable</option>
-                <option value="disable">Disable</option>
-                <option value="archive">Archive</option>
-                <option value="restore">Restore</option>
-                <option value="assignCategory">Assign category</option>
-                <option value="assignCountries">Enable countries</option>
-                <option value="assignCollections">Assign collections</option>
-                <option value="assignWarehouse">Assign warehouse</option>
-                <option value="delete">Delete</option>
-              </select>
-              {bulkAction === "assignCategory" ? (
-                <select
-                  value={bulkCategoryId}
-                  onChange={(event) => setBulkCategoryId(event.target.value)}
-                  className="h-8 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] text-[#1A1A1A] outline-none"
-                >
-                  <option value="">Select category</option>
-                  {categories.map((category: { id: string; name: string }) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-              {bulkAction === "assignCountries" ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {countries.map((country: { id: string; code: string; name: string }) => (
-                    <label key={country.id} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12px] cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={bulkCountryIds.includes(country.id)}
-                        onChange={() =>
-                          setBulkCountryIds((current) => (current.includes(country.id) ? current.filter((id) => id !== country.id) : [...current, country.id]))
-                        }
-                        className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24]"
-                      />
-                      {country.code}
-                    </label>
-                  ))}
-                </div>
-              ) : null}
-              {bulkAction === "assignCollections" ? (
-                <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
-                  {(collectionsData?.data ?? []).map((collection: { id: string; name: string }) => (
-                    <label key={collection.id} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12px] cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={bulkCollectionIds.includes(collection.id)}
-                        onChange={() =>
-                          setBulkCollectionIds((current) => (current.includes(collection.id) ? current.filter((id) => id !== collection.id) : [...current, collection.id]))
-                        }
-                        className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24]"
-                      />
-                      {collection.name}
-                    </label>
-                  ))}
-                </div>
-              ) : null}
-              {bulkAction !== "assignWarehouse" && (
-                <button
-                  type="button"
-                  onClick={handleBulkAction}
-                  disabled={bulkUpdate.isPending}
-                  className="h-8 rounded-md bg-[#E31E24] px-3.5 text-[12.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60 transition-colors"
-                >
-                  {bulkUpdate.isPending ? "Applying..." : "Apply"}
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setSelectedIds([])}
-                className="h-8 rounded-md border border-[#E6E6E6] bg-white px-3 text-[12.5px] font-medium text-[#555] hover:bg-gray-50 transition-colors"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
+          <AdminBulkActionsBar
+            selectedCount={selectedIds.length}
+            onClear={() => setSelectedIds([])}
+            actionType={bulkAction}
+            onActionTypeChange={(val) => {
+              const action = val as BulkAction;
+              setBulkAction(action);
+              if (action === "assignWarehouse") {
+                if (selectedIds.length === 0) {
+                  showToast("Please select at least one product first.", "error");
+                  setTimeout(() => setBulkAction("enable"), 0);
+                  return;
+                }
+                setWarehouseAssignSelections({});
+                setWarehouseAssignModalOpen(true);
+              }
+            }}
+            actions={[
+              { value: "enable", label: "Enable" },
+              { value: "disable", label: "Disable" },
+              { value: "archive", label: "Archive" },
+              { value: "restore", label: "Restore" },
+              { value: "assignCategory", label: "Assign category" },
+              { value: "assignCountries", label: "Enable countries" },
+              { value: "assignCollections", label: "Assign collections" },
+              { value: "assignWarehouse", label: "Assign warehouse" },
+              { value: "delete", label: "Delete" },
+            ]}
+            onApply={handleBulkAction}
+            applyLoading={bulkUpdate.isPending}
+            applyDisabled={bulkAction === "assignWarehouse"}
+            renderExtraSelectors={() => (
+              <>
+                {bulkAction === "assignCategory" && (
+                  <select
+                    value={bulkCategoryId}
+                    onChange={(event) => setBulkCategoryId(event.target.value)}
+                    className="h-8 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24] shadow-sm"
+                  >
+                    <option value="">Select category</option>
+                    {categories.map((category: { id: string; name: string }) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {bulkAction === "assignCountries" && (
+                  <div className="w-[180px]">
+                    <AdminMultiSelect
+                      options={countries.map((country: { id: string; code: string; name: string }) => ({ value: country.id, label: `${country.name} (${country.code})` }))}
+                      value={bulkCountryIds}
+                      onChange={setBulkCountryIds}
+                      placeholder="Select active countries..."
+                      className="h-[32px] py-0 px-3 text-[12.5px]"
+                    />
+                  </div>
+                )}
+                {bulkAction === "assignCollections" && (
+                  <div className="w-[180px]">
+                    <AdminMultiSelect
+                      options={(collectionsData?.data ?? []).map((collection: { id: string; name: string }) => ({ value: collection.id, label: collection.name }))}
+                      value={bulkCollectionIds}
+                      onChange={setBulkCollectionIds}
+                      placeholder="Select collections..."
+                      className="h-[32px] py-0 px-3 text-[12.5px]"
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          />
         )}
       />
 

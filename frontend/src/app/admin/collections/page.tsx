@@ -80,6 +80,7 @@ export default function CollectionsPage() {
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sortBy, setSortBy] = useState<CollectionSortBy>("sortOrder");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -91,6 +92,17 @@ export default function CollectionsPage() {
   const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
   const [countrySearch, setCountrySearch] = useState("");
   const { showToast, ToastComponent } = useToast();
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -159,7 +171,7 @@ export default function CollectionsPage() {
     page,
     limit: 10,
     status: statusFilter || undefined,
-    search: search || undefined,
+    search: debouncedSearch || undefined,
     sortBy,
     sortDir,
   });

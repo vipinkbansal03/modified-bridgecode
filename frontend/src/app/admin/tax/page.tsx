@@ -207,6 +207,7 @@ export default function AdminTaxPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -223,6 +224,17 @@ export default function AdminTaxPage() {
   const [previewForm, setPreviewForm] = useState<PreviewState>(emptyPreview);
   const [productSearch, setProductSearch] = useState("");
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
   const { data: dashboardData, isLoading: dashboardLoading } = useAdminTaxDashboard();
   const { data: countries = [] } = useAdminCountries();
   const { data: categories = [] } = useAdminCategories();
@@ -234,7 +246,7 @@ export default function AdminTaxPage() {
   const { data, isLoading, refetch } = useAdminTaxRules({
     page,
     limit,
-    search: search || undefined,
+    search: debouncedSearch || undefined,
     status: statusFilter || undefined,
     countryId: countryFilter || undefined,
     type: typeFilter || undefined,

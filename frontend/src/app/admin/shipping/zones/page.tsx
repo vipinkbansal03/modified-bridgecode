@@ -280,8 +280,8 @@ export default function ShippingZonesPage() {
                   selectAllLabel="Select All"
                   error={form.errors.countryIds as string}
                 />
-                <AdminInput label={rateCurrency ? `Charge (${rateCurrency})` : "Charge"} required type="number" min="0" step="0.01" {...form.getFieldProps("charge")} error={form.errors.charge as string} disabled className="cursor-not-allowed bg-[#F5F5F5] text-[#6B6B6B]" />
-                <AdminInput label={rateCurrency ? `Free Above (${rateCurrency})` : "Free Above"} type="number" min="0" step="0.01" {...form.getFieldProps("freeAbove")} error={form.errors.freeAbove as string} placeholder="Optional" />
+                <AdminInput label={rateCurrency ? `Charge (${rateCurrency})` : "Charge"} required type="text" name="charge" value={form.values.charge} onChange={(e) => form.setFieldValue("charge", e.target.value.replace(/[^0-9.]/g, ""))} onBlur={form.handleBlur} error={form.errors.charge as string} disabled className="cursor-not-allowed bg-[#F5F5F5] text-[#6B6B6B]" />
+                <AdminInput label={rateCurrency ? `Free Above (${rateCurrency})` : "Free Above"} type="text" name="freeAbove" value={form.values.freeAbove} onChange={(e) => form.setFieldValue("freeAbove", e.target.value.replace(/[^0-9.]/g, ""))} onBlur={form.handleBlur} error={form.errors.freeAbove as string} placeholder="Optional" />
                 <AdminInput label="Estimated Days" required {...form.getFieldProps("estimatedDays")} error={form.errors.estimatedDays as string} disabled className="cursor-not-allowed bg-[#F5F5F5] text-[#6B6B6B]" />
                 <AdminSelect
                   label="Status"

@@ -1136,17 +1136,7 @@ export default function DiscountsPage() {
       </Modal>
 
       {canUpdate && (
-        <div className="mb-3 flex flex-col gap-2 rounded-lg border border-[#E6E6E6] bg-white px-4 py-3 md:flex-row md:items-center md:justify-between">
-          <label className="inline-flex cursor-pointer items-center gap-2 text-[13px] font-medium text-[#1A1A1A]">
-            <input
-              type="checkbox"
-              checked={selectedOnPage}
-              onChange={togglePageSelection}
-              disabled={!discounts.length}
-              className="h-4 w-4 cursor-pointer rounded border-[#D9D9D9] accent-[#E31E24] disabled:cursor-not-allowed"
-            />
-            Select visible discounts
-          </label>
+        <div className="mb-3 flex flex-col gap-2 rounded-lg border border-[#E6E6E6] bg-white px-4 py-3 md:flex-row md:items-center md:justify-between justify-end">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[12.5px] text-[#6B6B6B]">
               {selectedIds.length} selected

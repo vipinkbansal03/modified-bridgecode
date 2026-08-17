@@ -9,7 +9,7 @@ import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
-import { useAdminCountries, useAdminOrders, useDeleteAdminOrder, useOrderAnalytics } from "@/hooks/admin/useAdminHooks";
+import { useAdminCountries, useAdminOrders, useDeleteAdminOrder, useOrderAnalytics, useUpdateOrderStatus, useUpdatePaymentStatus } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
 
 type OrderRow = {
