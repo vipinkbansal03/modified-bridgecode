@@ -10,23 +10,25 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const isConfigValid = Boolean(firebaseConfig.projectId && firebaseConfig.apiKey);
+
+const app = isConfigValid
+  ? (!getApps().length ? initializeApp(firebaseConfig) : getApp())
+  : null;
 
 export const requestForToken = async () => {
+  if (!isConfigValid || !app) return null;
   try {
     const supported = await isSupported();
     if (!supported) return null;
 
-    // Explicitly ask for permission (some browsers require this before getToken)
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
-      console.warn('Notification permission not granted:', permission);
       return null;
     }
 
     const messaging = getMessaging(app);
     
-    // Explicitly register the service worker and pass config via query params
     const swUrl = `/firebase-messaging-sw.js?apiKey=${firebaseConfig.apiKey}&authDomain=${firebaseConfig.authDomain}&projectId=${firebaseConfig.projectId}&storageBucket=${firebaseConfig.storageBucket}&senderId=${firebaseConfig.messagingSenderId}&appId=${firebaseConfig.appId}`;
     const registration = await navigator.serviceWorker.register(swUrl);
     
@@ -35,28 +37,25 @@ export const requestForToken = async () => {
       serviceWorkerRegistration: registration
     });
     
-    if (currentToken) {
-      return currentToken;
-    } else {
-      console.log('No registration token available. Request permission to generate one.');
-      return null;
-    }
+    return currentToken || null;
   } catch (err) {
-    console.error('An error occurred while retrieving token. ', err);
     return null;
   }
 };
 
 export const onMessageListener = () =>
   new Promise((resolve) => {
+    if (!isConfigValid || !app) return;
     isSupported().then((supported) => {
       if (supported) {
-        const messaging = getMessaging(app);
-        onMessage(messaging, (payload) => {
-          resolve(payload);
-        });
+        try {
+          const messaging = getMessaging(app);
+          onMessage(messaging, (payload) => {
+            resolve(payload);
+          });
+        } catch (_) {}
       }
-    });
+    }).catch(() => {});
   });
 
 export { app };

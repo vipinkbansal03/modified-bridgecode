@@ -654,7 +654,7 @@ export async function submitPublicQuote(input: QuoteSubmitInput) {
     notificationsService.createNotification({
       title: "New Quote Request",
       message: `Quote #${quote.quoteNumber} has been requested by ${quote.customerName}.`,
-      type: "QUOTE",
+      type: "INFO",
       targetType: "ALL_ADMINS",
       link: `/admin/quotes/${quote.id}`,
     }).catch(console.error);

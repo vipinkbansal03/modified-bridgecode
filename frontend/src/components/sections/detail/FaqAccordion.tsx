@@ -16,7 +16,7 @@ export function FaqAccordion({ items }: FaqAccordionProps) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
-    <section id="faqs" className="py-6 lg:py-[34px]">
+    <section id="faqs" className="scroll-mt-20 xl:scroll-mt-36 py-6 lg:py-[34px]">
       <Container>
         <Reveal>
           <h2 className="mb-2 text-[clamp(24px,2.6vw,32px)] font-normal text-ink leading-none">{t("ui.common.faqsTitle")}</h2>

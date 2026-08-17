@@ -134,8 +134,11 @@ async function fetchProduct(slug: string, lang?: string, countryCode?: string): 
 }
 
 async function fetchFeaturedProducts(lang?: string, countryCode?: string) {
-  if (!HAS_LIVE_API) { const all = await loadStaticProducts(); return all.slice(0, 6); }
-  const res = await apiClient.get("/products", { params: { featured: true, limit: 6, lang, countryCode } });
+  if (!HAS_LIVE_API) {
+    const all = await loadStaticProducts();
+    return all.filter((p) => p.isFeatured);
+  }
+  const res = await apiClient.get("/products", { params: { featured: "true", limit: 20, lang, countryCode } });
   return unwrapPaginated<ApiProductSummary>(res).data;
 }
 
@@ -163,7 +166,7 @@ export function useProduct(slug: string) {
 export function useFeaturedProducts() {
   const { selectedLanguage } = useLanguageContext();
   const { selectedCountryCode } = useCurrencyContext();
-  return useQuery({ queryKey: qk.products.featured(selectedLanguage, selectedCountryCode), queryFn: () => fetchFeaturedProducts(selectedLanguage, selectedCountryCode), staleTime: STALE.long });
+  return useQuery({ queryKey: qk.products.featured(selectedLanguage, selectedCountryCode), queryFn: () => fetchFeaturedProducts(selectedLanguage, selectedCountryCode), staleTime: STALE.short });
 }
 
 export function useProductFacets() {

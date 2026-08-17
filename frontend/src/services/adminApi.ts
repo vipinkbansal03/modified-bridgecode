@@ -9,7 +9,7 @@ const API_BASE = API_ORIGIN ? `${API_ORIGIN}/api/admin` : "/api/admin";
 export const adminApi = axios.create({
   baseURL: API_BASE,
   withCredentials: true,
-  timeout: 15000,
+  timeout: 60000,
 });
 
 // Attach JWT token from localStorage

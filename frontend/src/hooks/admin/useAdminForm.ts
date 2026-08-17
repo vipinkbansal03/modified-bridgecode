@@ -8,7 +8,7 @@ export interface UseAdminFormOptions<T> {
   validationSchema?: any;
   onSubmit: (
     values: T,
-    helpers: { setSubmitting: (isSubmitting: boolean) => void; resetForm: () => void; setStatus: (status: any) => void; setErrors: (errors: any) => void }
+    helpers: { setSubmitting: (isSubmitting: boolean) => void; resetForm: (newInitialValues?: T) => void; setStatus: (status: any) => void; setErrors: (errors: any) => void }
   ) => Promise<void>;
   onClose?: () => void;
 }

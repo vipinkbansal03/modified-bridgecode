@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { AdminListToolbar, AdminStatsGrid, ConfirmModal, Pagination, StatCard, StatusBadge, useToast, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminListToolbar, AdminStatsGrid, Column, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import { RefreshButton } from "@/components/admin/RefreshButton";
-import { SortableList, toSortOrderPayload } from "@/components/admin/SortableList";
+import { toSortOrderPayload } from "@/components/admin/SortableList";
 import { Modal } from "@/components/ui/Modal";
 import {
   useAdminCategories,
@@ -35,6 +35,7 @@ interface ProductRow {
   brand?: string | null;
   category: { id: string; name: string };
   status: string;
+  isFeatured?: boolean;
   sortOrder?: number;
   hasVariants: boolean;
   _count: { variants: number };
@@ -158,37 +159,172 @@ export default function AdminProductsPage() {
   const bulkUpdate = useBulkUpdateProducts();
 
   const products = useMemo(() => (data?.data ?? []) as ProductRow[], [data?.data]);
-  const allVisibleSelected = products.length > 0 && products.every((product) => selectedIds.includes(product.id));
-  const columns = useMemo(
-    () =>
-      [
-        visibleColumns.image ? { key: "image", label: "Image", width: "72px" } : null,
-        visibleColumns.name ? { key: "name", label: "Product Name", width: "280px" } : null,
-        visibleColumns.sku ? { key: "sku", label: "SKU", width: "130px" } : null,
-        visibleColumns.brand ? { key: "brand", label: "Brand", width: "150px" } : null,
-        visibleColumns.category ? { key: "category", label: "Category", width: "160px" } : null,
-        visibleColumns.status ? { key: "status", label: "Status", width: "120px" } : null,
-        visibleColumns.countries ? { key: "countries", label: "Country Availability", width: "130px" } : null,
-        visibleColumns.inventory ? { key: "inventory", label: "Inventory", width: "120px" } : null,
-        visibleColumns.price ? { key: "price", label: "Price", width: "120px" } : null,
-        visibleColumns.updated ? { key: "updated", label: "Updated Date", width: "140px" } : null,
-        visibleColumns.actions ? { key: "actions", label: "Actions", width: "168px" } : null,
-      ].filter(Boolean) as { key: ColumnKey; label: string; width: string }[],
-    [visibleColumns],
-  );
-   const gridTemplateColumns = useMemo(() => `minmax(24px,24px) ${columns.map((column) => column.width).join(" ")}`, [columns]);
 
-  const toggleSelected = (id: string) => {
-    setSelectedIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
-  };
+  const columns: Column<ProductRow>[] = useMemo(() => {
+    const cols: Column<ProductRow>[] = [];
 
-  const toggleVisible = () => {
-    setSelectedIds((current) => {
-      const visibleIds = products.map((product) => product.id);
-      if (visibleIds.every((id) => current.includes(id))) return current.filter((id) => !visibleIds.includes(id));
-      return Array.from(new Set([...current, ...visibleIds]));
-    });
-  };
+    if (visibleColumns.image) {
+      cols.push({
+        key: "image",
+        label: "Image",
+        width: "72px",
+        render: (product) =>
+          product.media[0] ? (
+            <img src={product.media[0].url} alt={product.title} className="h-10 w-10 flex-none rounded object-cover" />
+          ) : (
+            <div className="flex h-10 w-10 items-center justify-center rounded bg-[#F2F2F2] text-[#9A9A9A]">
+              <Layers size={16} />
+            </div>
+          ),
+      });
+    }
+
+    if (visibleColumns.name) {
+      cols.push({
+        key: "name",
+        label: "Product Name",
+        width: "280px",
+        render: (product) => (
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-[13.5px] font-medium text-[#1A1A1A]">{product.title}</span>
+              {product.isFeatured && (
+                <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10.5px] font-semibold text-amber-700 border border-amber-200">
+                  Featured
+                </span>
+              )}
+            </div>
+            <div className="truncate text-[11.5px] text-[#9A9A9A]">{product.productCode || product.id}</div>
+          </div>
+        ),
+      });
+    }
+
+    if (visibleColumns.sku) {
+      cols.push({
+        key: "sku",
+        label: "SKU",
+        width: "130px",
+        render: (product) => <span className="truncate text-[13px] text-[#555]">{product.sku || "—"}</span>,
+      });
+    }
+
+    if (visibleColumns.brand) {
+      cols.push({
+        key: "brand",
+        label: "Brand",
+        width: "150px",
+        render: (product) => <span className="truncate text-[13px] text-[#555]">{product.brand || "—"}</span>,
+      });
+    }
+
+    if (visibleColumns.category) {
+      cols.push({
+        key: "category",
+        label: "Category",
+        width: "160px",
+        render: (product) => <span className="truncate text-[13px] text-[#555]">{product.category?.name || "Uncategorized"}</span>,
+      });
+    }
+
+    if (visibleColumns.status) {
+      cols.push({
+        key: "status",
+        label: "Status",
+        width: "120px",
+        render: (product) => <StatusBadge status={product.status} />,
+      });
+    }
+
+    if (visibleColumns.countries) {
+      cols.push({
+        key: "countries",
+        label: "Country Availability",
+        width: "130px",
+        render: (product) => <span className="text-[13px] text-[#555]">{product.countries.length}</span>,
+      });
+    }
+
+    if (visibleColumns.inventory) {
+      cols.push({
+        key: "inventory",
+        label: "Inventory",
+        width: "120px",
+        render: (product) => {
+          const inventory = getInventorySummary(product);
+          return <span className="text-[13px] text-[#555]">{inventory.available} / {inventory.stock}</span>;
+        },
+      });
+    }
+
+    if (visibleColumns.price) {
+      cols.push({
+        key: "price",
+        label: "Price",
+        width: "120px",
+        render: (product) => <span className="text-[13px] text-[#555]">{formatPrice(product)}</span>,
+      });
+    }
+
+    if (visibleColumns.updated) {
+      cols.push({
+        key: "updated",
+        label: "Updated Date",
+        width: "140px",
+        render: (product) => <span className="text-[13px] text-[#555]">{new Date(product.updatedAt).toLocaleDateString()}</span>,
+      });
+    }
+
+    if (visibleColumns.actions) {
+      cols.push({
+        key: "actions",
+        label: "Actions",
+        width: "168px",
+        render: (product) => (
+          <div className="flex gap-1.5 md:justify-end" onClick={(e) => e.stopPropagation()}>
+            {product.slug ? (
+              <Link href={`/products/${product.slug}`} target="_blank" className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Preview on website">
+                <ExternalLink size={13} />
+              </Link>
+            ) : (
+              <span title="Product slug missing" className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded border border-[#E6E6E6] text-[#C4C4C4]">
+                <ExternalLink size={13} />
+              </span>
+            )}
+            {canUpdate && (
+              <button type="button" onClick={() => handleDuplicate(product.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Duplicate product">
+                <Copy size={13} />
+              </button>
+            )}
+            {canUpdate && (
+              <button
+                type="button"
+                onClick={() => handleArchiveToggle(product)}
+                className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+                title={product.status === "ARCHIVED" ? "Restore product" : "Archive product"}
+              >
+                {product.status === "ARCHIVED" ? <RotateCcw size={13} /> : <Archive size={13} />}
+              </button>
+            )}
+            <Link
+              href={`/admin/products/${product.id}/edit`}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+              title={canUpdate ? "Edit product" : "View product"}
+            >
+              {canUpdate ? <Pencil size={13} /> : <Eye size={13} />}
+            </Link>
+            {canDelete && (
+              <button type="button" onClick={() => setDeleting(product.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50" title="Delete product">
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
+        ),
+      });
+    }
+
+    return cols;
+  }, [visibleColumns, canUpdate, canDelete]);
 
   const handleDelete = async () => {
     if (!deleting) return;
@@ -499,208 +635,121 @@ export default function AdminProductsPage() {
           }}
         />
 
-      <div className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg p-3 text-[12.5px] transition-all min-h-[61.6px] ${selectedIds.length > 0 ? "border border-[#E6E6E6] bg-white shadow-2xs" : "border border-transparent text-[#9A9A9A]"}`}>
-        {selectedIds.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-[13px] font-semibold text-[#1A1A1A]">{selectedIds.length} selected</span>
-            <select
-              value={bulkAction}
-              onChange={(event) => {
-                const val = event.target.value as BulkAction;
-                setBulkAction(val);
-                if (val === "assignWarehouse") {
-                  if (selectedIds.length === 0) {
-                    showToast("Please select at least one product first.", "error");
-                    setTimeout(() => setBulkAction("enable"), 0);
-                    return;
+      <DataTable<ProductRow>
+        title="Product Catalog"
+        description={data?.pagination ? `${data.pagination.total} products registered in catalog` : "Products registered in catalog"}
+        columns={columns}
+        data={products}
+        rowKey="id"
+        isLoading={isLoading}
+        emptyMessage="No products found. Create your first product."
+        enableSelection={true}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
+        enableReorder={canUpdate && sortBy === "sortOrder"}
+        onReorder={handleReorder}
+        disabledReorder={reorderProducts.isPending}
+        rowTooltip={canUpdate && sortBy === "sortOrder" ? "Drag product to reorder" : undefined}
+        renderBulkActions={(selectedIds) => (
+          <div className="flex flex-wrap items-center justify-between gap-3 w-full animate-fade-in">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-[13px] font-bold text-[#1A1A1A]">{selectedIds.length} selected</span>
+              <select
+                value={bulkAction}
+                onChange={(event) => {
+                  const val = event.target.value as BulkAction;
+                  setBulkAction(val);
+                  if (val === "assignWarehouse") {
+                    if (selectedIds.length === 0) {
+                      showToast("Please select at least one product first.", "error");
+                      setTimeout(() => setBulkAction("enable"), 0);
+                      return;
+                    }
+                    setWarehouseAssignSelections({});
+                    setWarehouseAssignModalOpen(true);
                   }
-                  setWarehouseAssignSelections({});
-                  setWarehouseAssignModalOpen(true);
-                }
-              }}
-              className="h-9 rounded-md border border-[#E6E6E6] px-3 text-[13px]"
-            >
-              <option value="enable">Enable</option>
-              <option value="disable">Disable</option>
-              <option value="archive">Archive</option>
-              <option value="restore">Restore</option>
-              <option value="assignCategory">Assign category</option>
-              <option value="assignCountries">Enable countries</option>
-              <option value="assignCollections">Assign collections</option>
-              <option value="assignWarehouse">Assign warehouse</option>
-              <option value="delete">Delete</option>
-            </select>
-            {bulkAction === "assignCategory" ? (
-              <select value={bulkCategoryId} onChange={(event) => setBulkCategoryId(event.target.value)} className="h-9 rounded-md border border-[#E6E6E6] px-3 text-[13px]">
-                <option value="">Select category</option>
-                {categories.map((category: { id: string; name: string }) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
+                }}
+                className="h-8 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] text-[#1A1A1A] outline-none"
+              >
+                <option value="enable">Enable</option>
+                <option value="disable">Disable</option>
+                <option value="archive">Archive</option>
+                <option value="restore">Restore</option>
+                <option value="assignCategory">Assign category</option>
+                <option value="assignCountries">Enable countries</option>
+                <option value="assignCollections">Assign collections</option>
+                <option value="assignWarehouse">Assign warehouse</option>
+                <option value="delete">Delete</option>
               </select>
-            ) : null}
-            {bulkAction === "assignCountries" ? (
-              <div className="flex flex-wrap gap-2">
-                {countries.map((country: { id: string; code: string; name: string }) => (
-                  <label key={country.id} className="inline-flex h-9 items-center gap-2 rounded-md border border-[#E6E6E6] px-3 text-[12.5px]">
-                    <input
-                      type="checkbox"
-                      checked={bulkCountryIds.includes(country.id)}
-                      onChange={() =>
-                        setBulkCountryIds((current) => (current.includes(country.id) ? current.filter((id) => id !== country.id) : [...current, country.id]))
-                      }
-                    />
-                    {country.code}
-                  </label>
-                ))}
-              </div>
-            ) : null}
-            {bulkAction === "assignCollections" ? (
-              <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
-                {(collectionsData?.data ?? []).map((collection: { id: string; name: string }) => (
-                  <label key={collection.id} className="inline-flex h-9 items-center gap-2 rounded-md border border-[#E6E6E6] px-3 text-[12.5px]">
-                    <input
-                      type="checkbox"
-                      checked={bulkCollectionIds.includes(collection.id)}
-                      onChange={() =>
-                        setBulkCollectionIds((current) => (current.includes(collection.id) ? current.filter((id) => id !== collection.id) : [...current, collection.id]))
-                      }
-                    />
-                    {collection.name}
-                  </label>
-                ))}
-              </div>
-            ) : null}
-            {bulkAction !== "assignWarehouse" && (
+              {bulkAction === "assignCategory" ? (
+                <select
+                  value={bulkCategoryId}
+                  onChange={(event) => setBulkCategoryId(event.target.value)}
+                  className="h-8 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] text-[#1A1A1A] outline-none"
+                >
+                  <option value="">Select category</option>
+                  {categories.map((category: { id: string; name: string }) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              {bulkAction === "assignCountries" ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {countries.map((country: { id: string; code: string; name: string }) => (
+                    <label key={country.id} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12px] cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={bulkCountryIds.includes(country.id)}
+                        onChange={() =>
+                          setBulkCountryIds((current) => (current.includes(country.id) ? current.filter((id) => id !== country.id) : [...current, country.id]))
+                        }
+                        className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24]"
+                      />
+                      {country.code}
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+              {bulkAction === "assignCollections" ? (
+                <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
+                  {(collectionsData?.data ?? []).map((collection: { id: string; name: string }) => (
+                    <label key={collection.id} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12px] cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={bulkCollectionIds.includes(collection.id)}
+                        onChange={() =>
+                          setBulkCollectionIds((current) => (current.includes(collection.id) ? current.filter((id) => id !== collection.id) : [...current, collection.id]))
+                        }
+                        className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24]"
+                      />
+                      {collection.name}
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+              {bulkAction !== "assignWarehouse" && (
+                <button
+                  type="button"
+                  onClick={handleBulkAction}
+                  disabled={bulkUpdate.isPending}
+                  className="h-8 rounded-md bg-[#E31E24] px-3.5 text-[12.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60 transition-colors"
+                >
+                  {bulkUpdate.isPending ? "Applying..." : "Apply"}
+                </button>
+              )}
               <button
                 type="button"
-                onClick={handleBulkAction}
-                disabled={bulkUpdate.isPending}
-                className="h-9 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white disabled:opacity-60"
+                onClick={() => setSelectedIds([])}
+                className="h-8 rounded-md border border-[#E6E6E6] bg-white px-3 text-[12.5px] font-medium text-[#555] hover:bg-gray-50 transition-colors"
               >
-                Apply
+                Clear
               </button>
-            )}
-            <button type="button" onClick={() => setSelectedIds([])} className="h-9 rounded-md border border-[#E6E6E6] px-4 text-[13px] font-semibold text-[#555]">
-              Clear
-            </button>
-          </div>
-        ) : (
-          <span>{data?.pagination ? `${data.pagination.total} products` : ""}</span>
-        )}
-
-        <label className="inline-flex items-center gap-2 text-[#555] cursor-pointer">
-          <input type="checkbox" checked={allVisibleSelected} onChange={toggleVisible} />
-          Select visible
-        </label>
-      </div>
-
-      {isLoading ? (
-        <div className="rounded-lg border border-[#E6E6E6] bg-white p-5 text-[13.5px] text-[#9A9A9A]">Loading products...</div>
-      ) : products.length === 0 ? (
-        <div className="rounded-lg border border-[#E6E6E6] bg-white p-5 text-[13.5px] text-[#9A9A9A]">No products found. Create your first product.</div>
-      ) : (
-        <div className="rounded-lg border border-[#E6E6E6] bg-white">
-          <div className="overflow-x-auto">
-            <div className="min-w-[1280px] p-3">
-              <div className="mb-2 hidden w-max min-w-max items-center gap-2 px-3 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A] md:grid" style={{ gridTemplateColumns }}>
-                <span />
-                {columns.map((column) => (
-                  <span key={column.key} className="capitalize">
-                    {column.label}
-                  </span>
-                ))}
-              </div>
-              <SortableList
-                className="min-w-max"
-                items={products}
-                onReorder={handleReorder}
-                disabled={reorderProducts.isPending}
-                handleAriaLabel="Drag product to reorder"
-                itemClassName="overflow-visible"
-                renderItem={(product) => {
-                  const inventory = getInventorySummary(product);
-                  return (
-                    <div className="grid w-max min-w-max gap-2 md:items-center" style={{ gridTemplateColumns }}>
-                      <div className="flex items-center justify-center">
-                        <input type="checkbox" checked={selectedIds.includes(product.id)} onChange={() => toggleSelected(product.id)} onClick={(event) => event.stopPropagation()} />
-                      </div>
-                      {visibleColumns.image ? (
-                        <div className="flex min-w-0 items-center gap-3">
-                          {product.media[0] ? (
-                            <img src={product.media[0].url} alt={product.title} className="h-10 w-10 flex-none rounded object-cover" />
-                          ) : (
-                            <div className="flex h-10 w-10 items-center justify-center rounded bg-[#F2F2F2] text-[#9A9A9A]">
-                              <Layers size={16} />
-                            </div>
-                          )}
-                        </div>
-                      ) : null}
-                      {visibleColumns.name ? (
-                        <div className="flex min-w-0 items-center gap-3">
-                          <div className="min-w-0">
-                            <div className="truncate text-[13.5px] font-medium text-[#1A1A1A]">{product.title}</div>
-                            <div className="truncate text-[11.5px] text-[#9A9A9A]">{product.productCode || product.id}</div>
-                          </div>
-                        </div>
-                      ) : null}
-                      {visibleColumns.sku ? <div className="truncate text-[13px] text-[#555]">{product.sku || "—"}</div> : null}
-                      {visibleColumns.brand ? <div className="truncate text-[13px] text-[#555]">{product.brand || "—"}</div> : null}
-                      {visibleColumns.category ? <div className="truncate text-[13px] text-[#555]">{product.category?.name || "Uncategorized"}</div> : null}
-                      {visibleColumns.status ? <StatusBadge status={product.status} /> : null}
-                      {visibleColumns.countries ? <div className="text-[13px] text-[#555]">{product.countries.length}</div> : null}
-                      {visibleColumns.inventory ? <div className="text-[13px] text-[#555]">{inventory.available} / {inventory.stock}</div> : null}
-                      {visibleColumns.price ? <div className="text-[13px] text-[#555]">{formatPrice(product)}</div> : null}
-                      {visibleColumns.updated ? <div className="text-[13px] text-[#555]">{new Date(product.updatedAt).toLocaleDateString()}</div> : null}
-                      {visibleColumns.actions ? (
-                        <div className="flex gap-1.5 md:justify-end">
-                          {product.slug ? (
-                            <Link href={`/products/${product.slug}`} target="_blank" className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Preview on website">
-                              <ExternalLink size={13} />
-                            </Link>
-                          ) : (
-                            <span title="Product slug missing" className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded border border-[#E6E6E6] text-[#C4C4C4]">
-                              <ExternalLink size={13} />
-                            </span>
-                          )}
-                          {canUpdate && (
-                            <button type="button" onClick={() => handleDuplicate(product.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Duplicate product">
-                              <Copy size={13} />
-                            </button>
-                          )}
-                          {canUpdate && (
-                            <button
-                              type="button"
-                              onClick={() => handleArchiveToggle(product)}
-                              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-                              title={product.status === "ARCHIVED" ? "Restore product" : "Archive product"}
-                            >
-                              {product.status === "ARCHIVED" ? <RotateCcw size={13} /> : <Archive size={13} />}
-                            </button>
-                          )}
-                          <Link
-                            href={`/admin/products/${product.id}/edit`}
-                            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-                            title={canUpdate ? "Edit product" : "View product"}
-                          >
-                            {canUpdate ? <Pencil size={13} /> : <Eye size={13} />}
-                          </Link>
-                          {canDelete && (
-                            <button type="button" onClick={() => setDeleting(product.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50" title="Delete product">
-                              <Trash2 size={13} />
-                            </button>
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                }}
-              />
             </div>
           </div>
-        </div>
-      )}
+        )}
+      />
 
       <Pagination page={page} totalPages={data?.pagination?.totalPages || 1} onPageChange={setPage} />
 

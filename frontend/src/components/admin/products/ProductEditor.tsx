@@ -2602,7 +2602,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           : DEFAULT_ADDITIONAL_INFO,
     },
     validationSchema: basicSchema,
-    onSubmit: async (values) => {
+    onSubmit: async (values, { resetForm }) => {
       try {
         const hasContent = (text?: string | null) =>
           Boolean(text && text.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, "").trim().length > 0);
@@ -2642,16 +2642,16 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         console.log("[ProductEditor] saving sanitized product payload:", payload);
 
         await updateProduct.mutateAsync(payload);
+        resetForm(values);
         showToast("Product saved.");
+        await refetch();
       } catch (error) {
-        // Log full error for debugging (server returned 500)
+        // Log full error for debugging
         // eslint-disable-next-line no-console
         console.error("[ProductEditor] save error:", error, (error as any)?.response?.data);
         // Prefer server message if available
         const serverMessage = (error as any)?.response?.data?.message;
         showToast(serverMessage || getAdminErrorMessage(error, "Save failed."), "error");
-      } finally {
-        
       }
     },
   });

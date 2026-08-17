@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import { ArrowRight } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { PillCTA } from "../ui/PillCTA";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
@@ -26,6 +25,10 @@ export function ContactCTASection({ data }: ContactCTASectionProps) {
       ? t("ui.contactCta.body")
       : data.body;
   const ctaLabel = data.ctaLabel === "Contact us" ? t("ui.contactCta.button") : data.ctaLabel;
+  const ctaHref =
+    data.ctaHref && !data.ctaHref.startsWith("mailto:")
+      ? data.ctaHref
+      : "/contact";
 
   return (
     <section
@@ -54,7 +57,7 @@ export function ContactCTASection({ data }: ContactCTASectionProps) {
         <p className="mt-4 max-w-[380px] text-[15.5px] text-white/82">
           {body}
         </p>
-        <PillCTA href={data.ctaHref} label={ctaLabel} className="mt-8" />
+        <PillCTA href={ctaHref} label={ctaLabel} className="mt-8" />
       </Container>
     </section>
   );

@@ -13,7 +13,7 @@ function Icon({ name, ...props }: { name: string; size?: number; className?: str
 
 export function DetailSection({ section }: { section: Section }) {
   return (
-    <section id={section.id} className="border-b border-line py-6 lg:py-[34px]">
+    <section id={section.id} className="scroll-mt-20 xl:scroll-mt-36 border-b border-line py-6 lg:py-[34px]">
       <Container>
         <Reveal>
           <h2 className="mb-2 md:mb-4 text-[clamp(24px,2.6vw,32px)] font-normal text-ink leading-none">{section.heading}</h2>

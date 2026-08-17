@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { Bell } from "lucide-react";
 import { requestForToken, onMessageListener } from "../../lib/firebase";
@@ -19,24 +19,13 @@ export function NotificationBell({ role = "customer" }: { role?: "admin" | "cust
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
-  const [permissionStatus, setPermissionStatus] = useState<NotificationPermission | "default">("default");
-
-  useEffect(() => {
-    fetchNotifications();
-
-    if ("Notification" in window) {
-      setPermissionStatus(Notification.permission);
-      if (Notification.permission === "granted") {
-        initFirebase();
-      }
+  const [permissionStatus, setPermissionStatus] = useState<NotificationPermission | "default">(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      return Notification.permission;
     }
-
-    onMessageListener().then((payload: any) => {
-      // Add notification to state
-      fetchNotifications(); // Refresh list to get new DB entry
-    }).catch(err => console.log('failed: ', err));
-
-  }, [role]);
+    return "default";
+  });
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const initFirebase = async () => {
     const isTokenValid = (t: string | null) => t && t !== "null" && t !== "undefined";
@@ -54,34 +43,13 @@ export function NotificationBell({ role = "customer" }: { role?: "admin" | "cust
           headers: { Authorization: `Bearer ${storedToken}` }
         });
       } catch (err) {
-        console.error("Failed to register token", err);
+        // quiet fallback if notifications token registration is unconfigured
       }
-    }
-    
-    if ("Notification" in window) {
-      setPermissionStatus(Notification.permission);
-    }
-  };
-
-  const isTokenValid = (t: string | null) => t && t !== "null" && t !== "undefined";
-
-  const fetchNotifications = async () => {
-    const storedToken = role === "admin" ? localStorage.getItem("admin_token") : localStorage.getItem("customer_token");
-    if (!isTokenValid(storedToken)) return; // Only fetch if logged in
-    
-    try {
-      const { data } = await api.get(`/notifications/${role}/mine`, {
-        headers: { Authorization: `Bearer ${storedToken}` }
-      });
-      const unread = data.data.filter((n: Notification) => !n.isRead).length;
-      setNotifications(data.data);
-      setUnreadCount(unread);
-    } catch (error) {
-      console.error("Failed to fetch notifications", error);
     }
   };
 
   const markAsRead = async (id: string) => {
+    const isTokenValid = (t: string | null) => t && t !== "null" && t !== "undefined";
     const storedToken = role === "admin" ? localStorage.getItem("admin_token") : localStorage.getItem("customer_token");
     if (!isTokenValid(storedToken)) return;
 
@@ -92,14 +60,73 @@ export function NotificationBell({ role = "customer" }: { role?: "admin" | "cust
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
-      console.error("Failed to mark notification as read", error);
+      // quiet fallback
     }
   };
 
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchUserNotifications = async () => {
+      const isTokenValid = (t: string | null) => t && t !== "null" && t !== "undefined";
+      const storedToken = role === "admin" ? localStorage.getItem("admin_token") : localStorage.getItem("customer_token");
+      if (!isTokenValid(storedToken)) return;
+      
+      try {
+        const { data } = await api.get(`/notifications/${role}/mine`, {
+          headers: { Authorization: `Bearer ${storedToken}` }
+        });
+        if (!isMounted) return;
+        const unread = (data?.data ?? []).filter((n: Notification) => !n.isRead).length;
+        setNotifications(data?.data ?? []);
+        setUnreadCount(unread);
+      } catch (error) {
+        // quiet fallback if notification service is unconfigured or returns error
+      }
+    };
+
+    fetchUserNotifications();
+
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      initFirebase();
+    }
+
+    onMessageListener().then((_payload: any) => {
+      // Add notification to state
+      fetchUserNotifications();
+    }).catch(err => console.log('failed: ', err));
+
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role]);
+
   return (
-    <div className="relative inline-block">
+    <div ref={containerRef} className="relative inline-block">
       <button 
-        onClick={() => setIsOpen(!isOpen)}
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        aria-label="Notifications"
+        aria-expanded={isOpen}
         className="relative p-2 rounded hover:bg-gray-100 transition-colors border border-transparent focus:border-gray-300"
       >
         <Bell className="w-5 h-5 text-[#333]" />
@@ -147,7 +174,12 @@ export function NotificationBell({ role = "customer" }: { role?: "admin" | "cust
             <div className="p-3 bg-[#f8f9fa] border-b border-[#e0e0e0] flex justify-between items-center">
               <p className="text-[12px] text-[#555]">Get live updates</p>
               <button 
-                onClick={initFirebase}
+                onClick={async () => {
+                  await initFirebase();
+                  if ("Notification" in window) {
+                    setPermissionStatus(Notification.permission);
+                  }
+                }}
                 className="text-[11px] font-semibold px-2 py-1 bg-[#0056b3] text-white rounded hover:bg-[#004494] transition"
               >
                 Enable
