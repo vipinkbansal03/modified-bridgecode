@@ -897,6 +897,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [editVariantSelections, setEditVariantSelections] = useState<SingleSelectionMap>({});
   const [editVariantAttributePicker, setEditVariantAttributePicker] = useState("");
   const [generateSelectionMap, setGenerateSelectionMap] = useState<SelectionMap>({});
+  const [lastSelectedValueMap, setLastSelectedValueMap] = useState<Record<string, string>>({});
   const [generateModeMap, setGenerateModeMap] = useState<GenerateModeMap>({});
   const [generatePackageIds, setGeneratePackageIds] = useState<string[]>([]);
   const [generateAttributePicker, setGenerateAttributePicker] = useState("");
@@ -4228,12 +4229,44 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   };
 
-  const toggleGenerateValue = (attributeId: string, attributeValueId: string, checked: boolean) => {
+  const toggleGenerateValue = (attributeId: string, attributeValueId: string, checked: boolean, isShift: boolean = false) => {
     setGenerateSelectionMap((current) => {
       const next = current[attributeId] ?? [];
+      let newSelection = [...next];
+      const lastValId = lastSelectedValueMap[attributeId];
+
+      if (isShift && lastValId) {
+        const attr = attributes.find((a) => a.id === attributeId);
+        if (attr) {
+          const values = getAttributeValues(attr);
+          const lastIndex = values.findIndex((v) => v.id === lastValId);
+          const currentIndex = values.findIndex((v) => v.id === attributeValueId);
+          if (lastIndex !== -1 && currentIndex !== -1) {
+            const start = Math.min(lastIndex, currentIndex);
+            const end = Math.max(lastIndex, currentIndex);
+            const rangeIds = values.slice(start, end + 1).map((v) => v.id);
+
+            const lastIsChecked = next.includes(lastValId);
+            if (lastIsChecked) {
+              newSelection = Array.from(new Set([...next, ...rangeIds]));
+            } else {
+              newSelection = next.filter((id) => !rangeIds.includes(id));
+            }
+          } else {
+            newSelection = checked ? [...next, attributeValueId] : next.filter((id) => id !== attributeValueId);
+          }
+        } else {
+          newSelection = checked ? [...next, attributeValueId] : next.filter((id) => id !== attributeValueId);
+        }
+      } else {
+        newSelection = checked ? [...next, attributeValueId] : next.filter((id) => id !== attributeValueId);
+      }
+
+      setLastSelectedValueMap((prev) => ({ ...prev, [attributeId]: attributeValueId }));
+
       return {
         ...current,
-        [attributeId]: checked ? [...next, attributeValueId] : next.filter((id) => id !== attributeValueId),
+        [attributeId]: newSelection,
       };
     });
   };
@@ -8052,7 +8085,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                               <button
                                 key={val.id}
                                 type="button"
-                                onClick={() => toggleGenerateValue(attribute.id, val.id, !isSelected)}
+                                onClick={(e) => toggleGenerateValue(attribute.id, val.id, !isSelected, e.shiftKey)}
                                 className={cn(
                                   "group relative flex items-center justify-center rounded-lg border px-4 py-2 text-[12.5px] font-medium transition-all duration-200 select-none cursor-pointer",
                                   isSelected

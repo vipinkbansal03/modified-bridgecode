@@ -6,11 +6,13 @@ import { apiClient as api } from "@/lib/apiClient";
 import { Eye, Bell } from "lucide-react";
 import Link from "next/link";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
+import { useRouter } from "next/navigation";
 
 export default function CustomerNotificationsPage() {
   const [history, setHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { currentCustomer } = useCustomerAuth();
+  const router = useRouter();
 
   useEffect(() => {
     fetchHistory();
@@ -115,11 +117,11 @@ export default function CustomerNotificationsPage() {
                                       setHistory(prev => prev.map(n => n.id === h.id ? { ...n, isRead: true } : n));
                                       await markAsRead(h.id);
                                     }
-                                    window.location.href = h.link;
+                                    router.push(h.link);
                                   }}
                                   className="text-[12px] font-medium text-[#0056b3] hover:underline"
                                 >
-                                  {h.isRead ? 'View Details' : 'Mark as read'}
+                                  View Details
                                 </button>
                               ) : !h.isRead ? (
                                 <button 

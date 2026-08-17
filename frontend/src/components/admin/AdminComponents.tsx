@@ -779,11 +779,36 @@ export function AdminMultiSelect({
     };
   }, [isOpen, updateMenuPosition]);
 
-  const toggleOption = (val: string) => {
-    const next = currentValues.includes(val)
-      ? currentValues.filter((v) => v !== val)
-      : [...currentValues, val];
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
+
+  const toggleOption = (val: string, isShift: boolean) => {
+    let next: string[];
+    if (isShift && lastSelectedId) {
+      const lastIndex = options.findIndex((o) => o.value === lastSelectedId);
+      const currentIndex = options.findIndex((o) => o.value === val);
+      if (lastIndex !== -1 && currentIndex !== -1) {
+        const start = Math.min(lastIndex, currentIndex);
+        const end = Math.max(lastIndex, currentIndex);
+        const rangeValues = options.slice(start, end + 1).map((o) => o.value);
+        
+        const lastIsChecked = currentValues.includes(lastSelectedId);
+        if (lastIsChecked) {
+          next = Array.from(new Set([...currentValues, ...rangeValues]));
+        } else {
+          next = currentValues.filter((v) => !rangeValues.includes(v));
+        }
+      } else {
+        next = currentValues.includes(val)
+          ? currentValues.filter((v) => v !== val)
+          : [...currentValues, val];
+      }
+    } else {
+      next = currentValues.includes(val)
+        ? currentValues.filter((v) => v !== val)
+        : [...currentValues, val];
+    }
     onChange(next);
+    setLastSelectedId(val);
   };
 
   const displayedText = currentValues.length > 0
@@ -860,7 +885,7 @@ export function AdminMultiSelect({
                       key={option.value}
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => toggleOption(option.value)}
+                      onClick={(e) => toggleOption(option.value, e.shiftKey)}
                       className={cn(
                         "w-full cursor-pointer px-3.5 py-2 text-left text-[13.5px] transition flex items-center gap-2.5",
                         isSelected ? "bg-red-50" : "hover:bg-[#F7F7F7]"

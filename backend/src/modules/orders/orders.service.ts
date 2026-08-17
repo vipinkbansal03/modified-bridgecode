@@ -271,7 +271,7 @@ export const updateStatus = async (id: string, status: string) => {
         message: `Your order #${existing.orderNumber} is now ${status}.`,
         type: "ORDER",
         targetType: "SPECIFIC_CUSTOMER",
-        customerId: existing.customerId,
+        customerId: existing.customerId || undefined,
         link: `/account/orders/${id}`,
       }).catch(console.error);
     });
@@ -300,7 +300,7 @@ export async function shipOrder(id: string, data: { shippingProvider: string; tr
       message: `Your order #${order.orderNumber} has been shipped via ${data.shippingProvider} (Tracking: ${data.trackingNumber}).`,
       type: "ORDER",
       targetType: "SPECIFIC_CUSTOMER",
-      customerId: order.customerId,
+      customerId: order.customerId || undefined,
       link: `/account/orders/${id}`,
     }).catch(console.error);
   });
@@ -334,9 +334,9 @@ export async function deliverOrder(id: string) {
     notificationsService.createNotification({
       title: "Order Delivered",
       message: `Your order #${order.orderNumber} has been delivered.`,
-      type: "ORDER",
+      type: "INFO",
       targetType: "SPECIFIC_CUSTOMER",
-      customerId: order.customerId,
+      customerId: order.customerId || undefined,
       link: `/account/orders/${id}`,
     }).catch(console.error);
   });

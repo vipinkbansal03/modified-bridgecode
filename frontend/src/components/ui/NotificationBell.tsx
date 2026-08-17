@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bell } from "lucide-react";
 import { requestForToken, onMessageListener } from "../../lib/firebase";
 import { apiClient as api } from "../../lib/apiClient";
+import { useRouter } from "next/navigation";
 
 interface Notification {
   id: string;
@@ -20,6 +21,7 @@ export function NotificationBell({ role = "customer" }: { role?: "admin" | "cust
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<NotificationPermission | "default">("default");
+  const router = useRouter();
 
   useEffect(() => {
     fetchNotifications();
@@ -175,7 +177,7 @@ export function NotificationBell({ role = "customer" }: { role?: "admin" | "cust
                         await markAsRead(notif.id);
                       }
                       if (notif.link) {
-                        window.location.href = notif.link;
+                        router.push(notif.link);
                       }
                     }}
                   >

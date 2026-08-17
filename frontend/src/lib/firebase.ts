@@ -10,10 +10,33 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const hasFirebaseConfig = 
+  firebaseConfig.apiKey && 
+  firebaseConfig.authDomain && 
+  firebaseConfig.projectId && 
+  firebaseConfig.storageBucket && 
+  firebaseConfig.messagingSenderId && 
+  firebaseConfig.appId;
+
+let app: any = null;
+if (hasFirebaseConfig) {
+  try {
+    app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+  } catch (err) {
+    console.error("Firebase initialization failed:", err);
+  }
+} else {
+  if (typeof window !== "undefined") {
+    console.warn("Firebase configuration is missing or incomplete. Push notifications are disabled.");
+  }
+}
 
 export const requestForToken = async () => {
   try {
+    if (!app) {
+      console.warn("Firebase app not initialized, skipping token request.");
+      return null;
+    }
     const supported = await isSupported();
     if (!supported) return null;
 
@@ -48,15 +71,21 @@ export const requestForToken = async () => {
 };
 
 export const onMessageListener = () =>
-  new Promise((resolve) => {
+  new Promise((resolve, reject) => {
+    if (!app) {
+      reject(new Error("Firebase app not initialized."));
+      return;
+    }
     isSupported().then((supported) => {
       if (supported) {
         const messaging = getMessaging(app);
         onMessage(messaging, (payload) => {
           resolve(payload);
         });
+      } else {
+        reject(new Error("Messaging not supported."));
       }
-    });
+    }).catch(reject);
   });
 
 export { app };
