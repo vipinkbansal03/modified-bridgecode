@@ -167,10 +167,21 @@ export async function getFooter() {
   return attachEntityCmsTranslations("footer", footer);
 }
 
-export async function upsertFooter(body: FooterBody) {
+export async function upsertFooter(body: FooterBody & Record<string, unknown>) {
+  const data = {
+    title: body.title,
+    description: body.description,
+    logo: body.logo,
+    address: body.address,
+    email: body.email,
+    phone: body.phone,
+    socialLinksJson: body.socialLinksJson as any,
+    newsletterEnabled: body.newsletterEnabled !== undefined ? Boolean(body.newsletterEnabled) : true,
+    status: body.status || "ACTIVE",
+  };
   const existing = await prisma.cMSFooter.findFirst();
-  if (existing) return prisma.cMSFooter.update({ where: { id: existing.id }, data: body });
-  return prisma.cMSFooter.create({ data: body });
+  if (existing) return prisma.cMSFooter.update({ where: { id: existing.id }, data });
+  return prisma.cMSFooter.create({ data });
 }
 
 async function syncHeaderProductsMegaMenu() {
