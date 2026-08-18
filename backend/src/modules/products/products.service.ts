@@ -481,10 +481,16 @@ function buildProductWhere(query: {
 }
 
 function buildVariantWhere(query: VariantListQuery): Prisma.ProductVariantWhereInput {
+  const status = query.status === "ACTIVE" || query.status === "INACTIVE" ? query.status : undefined;
+  const productStatus = query.status === "DRAFT" ? "DRAFT" : query.status === "ARCHIVED" ? "ARCHIVED" : undefined;
+
   return {
-    product: { deletedAt: null },
+    product: {
+      deletedAt: null,
+      ...(productStatus && { status: productStatus }),
+    },
     ...(query.productId && { productId: query.productId }),
-    ...(query.status && { status: query.status as never }),
+    ...(status && { status: status as any }),
     ...(query.search && {
       OR: [
         { title: { contains: query.search, mode: "insensitive" } },

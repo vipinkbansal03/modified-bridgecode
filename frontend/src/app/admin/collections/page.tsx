@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Archive, CheckCircle2, Copy, Edit2, Globe, Image as ImageIcon, Layers, Package, Plus, RotateCcw, Search, Trash2, XCircle } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, Column, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, Column, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import { Modal } from "@/components/ui/Modal";
@@ -25,7 +25,7 @@ import {
   useUpdateCollection,
   useUpdateCollectionCountries,
 } from "@/hooks/admin/useAdminHooks";
-import { getAdminErrorMessage } from "@/services/adminApi";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { uploadMediaFiles } from "@/utils/uploadMedia";
 import { Loader2 } from "lucide-react";
 
@@ -92,6 +92,69 @@ export default function CollectionsPage() {
   const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
   const [countrySearch, setCountrySearch] = useState("");
   const { showToast, ToastComponent } = useToast();
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+
+  const handleSelectAll = async (checked: boolean) => {
+    if (!checked) {
+      setSelectedIds([]);
+      return;
+    }
+    try {
+      const res = await adminApi.get("/collections", {
+        params: {
+          status: statusFilter || undefined,
+          search: debouncedSearch || undefined,
+          sortBy,
+          sortDir,
+          limit: 999999,
+          ignoreMaxLimit: "true",
+        },
+      });
+      const allIds = (res.data.data ?? []).map((c: any) => c.id);
+      setSelectedIds(allIds);
+      showToast(`Selected all ${allIds.length} collections across all pages.`, "success");
+    } catch (err) {
+      showToast("Failed to select all collections.", "error");
+    }
+  };
+
+  const handleBulkAction = async () => {
+    if (selectedIds.length === 0 || !bulkAction) return;
+
+    if (bulkAction === "delete") {
+      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected collection(s)? This action cannot be undone.`)) {
+        return;
+      }
+    }
+
+    setBulkSaving(true);
+    try {
+      if (bulkAction === "delete") {
+        await Promise.all(selectedIds.map(id => deleteCollection.mutateAsync(id)));
+        showToast(`Successfully deleted ${selectedIds.length} collection(s).`, "success");
+      } else if (bulkAction === "activate") {
+        await Promise.all(selectedIds.map(id => updateCollection.mutateAsync({ id, status: "ACTIVE" })));
+        showToast(`Successfully activated ${selectedIds.length} collection(s).`, "success");
+      } else if (bulkAction === "deactivate") {
+        await Promise.all(selectedIds.map(id => updateCollection.mutateAsync({ id, status: "INACTIVE" })));
+        showToast(`Successfully deactivated ${selectedIds.length} collection(s).`, "success");
+      }
+      setSelectedIds([]);
+      setBulkAction("");
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to complete bulk action."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [debouncedSearch, statusFilter, sortBy, sortDir]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -674,8 +737,39 @@ export default function CollectionsPage() {
         ) : null}
       </Modal>
 
-      <DataTable<Collection> columns={columns} data={collections} rowKey="id" isLoading={isLoading} emptyMessage="No collections yet." />
-      <Pagination page={page} totalPages={data?.pagination?.totalPages || 1} onPageChange={setPage} />
+      <DataTable<Collection>
+        title="Collections List"
+        columns={columns}
+        data={collections}
+        rowKey="id"
+        isLoading={isLoading}
+        emptyMessage="No collections yet."
+        enableSelection={true}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
+        totalItems={data?.pagination?.total}
+        currentPage={page}
+        pageSize={10}
+        totalPages={data?.pagination?.totalPages || 1}
+        onPageChange={setPage}
+        onSelectAll={handleSelectAll}
+        renderBulkActions={(selectedIds) => (
+          <AdminBulkActionsBar
+            selectedCount={selectedIds.length}
+            onClear={() => setSelectedIds([])}
+            actionType={bulkAction}
+            onActionTypeChange={setBulkAction}
+            actions={[
+              { value: "activate", label: "Mark active" },
+              { value: "deactivate", label: "Mark inactive" },
+              { value: "delete", label: "Delete selected" }
+            ]}
+            onApply={handleBulkAction}
+            applyLoading={bulkSaving}
+            applyDisabled={!bulkAction || selectedIds.length === 0}
+          />
+        )}
+      />
 
       <ConfirmModal
         open={!!deleting}

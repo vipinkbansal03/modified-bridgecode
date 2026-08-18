@@ -34,6 +34,7 @@ interface AdminMultiSearchableSelectProps extends Omit<
   allowSelectAll?: boolean;
   selectAllValue?: string;
   selectAllLabel?: string;
+  emptyMeansAll?: boolean;
   // Infinite scroll / paging props
   onMenuScrollToBottom?: () => void;
   isLoadingMore?: boolean;
@@ -58,6 +59,7 @@ export function AdminMultiSearchableSelect({
   allowSelectAll = false,
   selectAllValue = "__ALL__",
   selectAllLabel = "All",
+  emptyMeansAll = true,
 
   onBlur,
   disabled,
@@ -93,8 +95,9 @@ export function AdminMultiSearchableSelect({
 
   const isAllSelected =
     allowSelectAll &&
-    (selectedValues.length === 0 ||
-      (options.length > 0 && options.every((option) => selectedValues.includes(option.value))));
+    (emptyMeansAll
+      ? selectedValues.length === 0 || (options.length > 0 && options.every((option) => selectedValues.includes(option.value)))
+      : options.length > 0 && options.every((option) => selectedValues.includes(option.value)));
 
   const filteredOptions = useMemo(() => {
     if (!showSearch || !searchQuery.trim() || onSearchChange) return options;
@@ -244,7 +247,13 @@ export function AdminMultiSearchableSelect({
 
   const selectOption = (nextValue: string, isShift: boolean = false) => {
     if (allowSelectAll && nextValue === selectAllValue) {
-      onValuesChange([]);
+      if (emptyMeansAll) {
+        onValuesChange([]);
+      } else {
+        const allOptionValues = options.map((opt) => opt.value);
+        const allAreSelected = options.length > 0 && options.every((opt) => selectedValues.includes(opt.value));
+        onValuesChange(allAreSelected ? [] : allOptionValues);
+      }
       setLastSelectedValue(null);
       return;
     }
@@ -292,7 +301,11 @@ export function AdminMultiSearchableSelect({
       options.length > 0 &&
       options.every((option) => updatedValues.includes(option.value));
 
-    onValuesChange(everySelected ? [] : updatedValues);
+    if (emptyMeansAll) {
+      onValuesChange(everySelected ? [] : updatedValues);
+    } else {
+      onValuesChange(updatedValues);
+    }
   };
 
   useEffect(() => {

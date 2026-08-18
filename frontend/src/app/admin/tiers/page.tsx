@@ -19,7 +19,7 @@ import {
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
-import { AdminInput, AdminSelect, AdminStatsGrid, ConfirmModal, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminStatsGrid, ConfirmModal, Pagination, StatCard, StatusBadge, useToast, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
 import {
@@ -314,10 +314,26 @@ export default function AdminTiersPage() {
     }
 
     try {
-      await bulkTiers.mutateAsync({ ids: selectedIds, action: bulkAction });
-      showToast(
-        bulkAction === "DELETE" ? "Tiers deleted." : bulkAction === "ENABLE" ? "Tiers enabled." : "Tiers disabled.",
-      );
+      const res = await bulkTiers.mutateAsync({ ids: selectedIds, action: bulkAction });
+      const summary = res.data?.summary;
+      if (summary) {
+        if (summary.failed > 0) {
+          if (summary.succeeded === 0) {
+            const firstError = res.data.results.find((r: any) => !r.success)?.error || "Action failed.";
+            showToast(firstError, "error");
+            return;
+          } else {
+            showToast(`Completed with warnings: ${summary.succeeded} succeeded, ${summary.failed} failed.`, "warning");
+          }
+        } else {
+          showToast("Tiers deleted.", "success");
+        }
+      } else {
+        showToast(
+          bulkAction === "ENABLE" ? "Tiers enabled." : "Tiers disabled.",
+          "success"
+        );
+      }
       setSelectedIds([]);
       setBulkAction("");
     } catch (error) {
@@ -561,38 +577,6 @@ export default function AdminTiersPage() {
             </div>
           )}
 
-          {selectedIds.length > 0 && canUpdate && (
-            <div className="mt-4 rounded-xl border border-dashed border-[#E31E24]/30 bg-[#FFF5F5]/30 p-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <span className="text-[13px] font-semibold text-[#E31E24]">{selectedIds.length} rows selected</span>
-                <div className="h-4 w-[1px] bg-[#E6E6E6]" />
-                <div className="flex items-center gap-2">
-                  <AdminSelect
-                    label=""
-                    value={bulkAction}
-                    onChange={(event) => setBulkAction(event.target.value as "ENABLE" | "DISABLE" | "DELETE" | "")}
-                    options={[
-                      { value: "", label: "Choose action" },
-                      { value: "ENABLE", label: "Enable" },
-                      { value: "DISABLE", label: "Disable" },
-                      { value: "DELETE", label: "Delete" },
-                    ]}
-                  />
-                  <button type="button" onClick={handleBulkAction} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-                    Apply
-                  </button>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => void handleExport(true)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
-                  <Download size={13} /> Export selected
-                </button>
-                <button type="button" onClick={() => setSelectedIds([])} className="text-[13px] font-medium text-[#6B6B6B] hover:text-[#E31E24] hover:underline">
-                  Clear selection
-                </button>
-              </div>
-            </div>
-          )}
 
           {showColumns ? (
             <div className="mt-4 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
@@ -647,6 +631,31 @@ export default function AdminTiersPage() {
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.95fr)]">
           <div className="space-y-4">
             <div className="rounded-xl border border-[#E6E6E6] bg-white">
+              <div className="border-b border-[#E6E6E6] bg-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 min-h-[56px] transition-all rounded-t-xl">
+                <div className="flex flex-wrap items-center gap-3 w-full">
+                  <span className="text-[13px] font-bold text-[#1A1A1A]">Tiers List</span>
+                  <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">
+                    Showing {pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.limit + 1}-{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
+                  </span>
+                  
+                  <div className="flex items-center gap-2 border-l border-[#E6E6E6] pl-3 ml-2 flex-wrap">
+                    <AdminBulkActionsBar
+                      selectedCount={selectedIds.length}
+                      onClear={() => setSelectedIds([])}
+                      actionType={bulkAction}
+                      onActionTypeChange={(val) => setBulkAction(val as any)}
+                      actions={[
+                        { value: "ENABLE", label: "Mark active" },
+                        { value: "DISABLE", label: "Mark inactive" },
+                        { value: "DELETE", label: "Delete selected" }
+                      ]}
+                      onApply={handleBulkAction}
+                      applyLoading={bulkTiers.isPending}
+                      applyDisabled={!bulkAction || selectedIds.length === 0}
+                    />
+                  </div>
+                </div>
+              </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead className="bg-[#F8F8F8] border-b border-[#E6E6E6]">

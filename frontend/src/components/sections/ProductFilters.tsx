@@ -89,7 +89,7 @@ export function ProductFilters({ value, onChange, availableAttributeValues = [],
       group.options.sort((a, b) => a.value.localeCompare(b.value));
     }
 
-    return Array.from(groups.values());
+    return Array.from(groups.values()).filter((group) => group.options.length > 0);
   }, [availableAttributeValues, filterConfig]);
 
   const toggleCategory = (slug: string, checked: boolean) => {

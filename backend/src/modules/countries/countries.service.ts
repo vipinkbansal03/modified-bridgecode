@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
 import { WORLD_COUNTRIES } from "../../utils/worldCountriesData";
@@ -104,6 +105,66 @@ export const createCountry = async (data: object) => {
   });
 };
 
+async function deactivateCountryAssociations(tx: Prisma.TransactionClient, countryIds: string[]) {
+  if (countryIds.length === 0) return;
+
+  // 1. Set all ProductCountry mappings for these countries to enabled: false
+  await tx.productCountry.updateMany({
+    where: { countryId: { in: countryIds } },
+    data: { enabled: false }
+  });
+
+  // 2. Set all VariantCountry mappings for these countries to enabled: false
+  await tx.variantCountry.updateMany({
+    where: { countryId: { in: countryIds } },
+    data: { enabled: false }
+  });
+
+  // 3. Set all CategoryCountry mappings for these countries to enabled: false
+  await tx.categoryCountry.updateMany({
+    where: { countryId: { in: countryIds } },
+    data: { enabled: false }
+  });
+
+  // 4. Set all CollectionCountry mappings for these countries to enabled: false
+  await tx.collectionCountry.updateMany({
+    where: { countryId: { in: countryIds } },
+    data: { enabled: false }
+  });
+
+  // 5. Deactivate associated coupons mapped to these countries
+  await tx.coupon.updateMany({
+    where: { countryId: { in: countryIds } },
+    data: { status: "INACTIVE" }
+  });
+
+  // 6. Deactivate associated shipping zones mapped to these countries
+  const zoneIds = (await tx.shippingZoneCountry.findMany({
+    where: { countryId: { in: countryIds } },
+    select: { zoneId: true }
+  })).map(z => z.zoneId);
+
+  if (zoneIds.length > 0) {
+    await tx.shippingZone.updateMany({
+      where: { id: { in: zoneIds } },
+      data: { status: "INACTIVE" }
+    });
+  }
+
+  // 7. Deactivate associated shipping boxes mapped to these countries
+  const boxIds = (await tx.shippingBoxCountry.findMany({
+    where: { countryId: { in: countryIds } },
+    select: { boxId: true }
+  })).map(b => b.boxId);
+
+  if (boxIds.length > 0) {
+    await tx.shippingBox.updateMany({
+      where: { id: { in: boxIds } },
+      data: { isActive: false }
+    });
+  }
+}
+
 export const updateCountry = async (id: string, data: object) => {
   const payload = data as {
     isDefault?: boolean;
@@ -130,6 +191,10 @@ export const updateCountry = async (id: string, data: object) => {
     if (payload.isDefault !== undefined) updateData.isDefault = payload.isDefault;
     if (payload.dutyPercentage !== undefined) updateData.dutyPercentage = payload.dutyPercentage;
 
+    if (payload.status === "INACTIVE") {
+      await deactivateCountryAssociations(tx, [id]);
+    }
+
     return tx.country.update({
       where: { id },
       data: updateData as never,
@@ -141,7 +206,11 @@ export const updateCountry = async (id: string, data: object) => {
 export const deleteCountry = async (id: string) => {
   const country = await prisma.country.findUnique({ where: { id }, select: { isDefault: true } });
   if (country?.isDefault) throw new AppError("Default country cannot be deleted.", 400);
-  return prisma.country.update({ where: { id }, data: { status: "INACTIVE" } });
+  return prisma.$transaction(async (tx) => {
+    const res = await tx.country.update({ where: { id }, data: { status: "INACTIVE" } });
+    await deactivateCountryAssociations(tx, [id]);
+    return res;
+  });
 };
 
 export async function bulkUpdateCountries(input: { ids: string[]; action: "ENABLE" | "DISABLE" | "DELETE" }) {
@@ -173,6 +242,11 @@ export async function bulkUpdateCountries(input: { ids: string[]; action: "ENABL
   }
 
   const status = action === "ENABLE" ? "ACTIVE" : "INACTIVE";
-  await prisma.country.updateMany({ where: { id: { in: ids } }, data: { status } });
+  await prisma.$transaction(async (tx) => {
+    await tx.country.updateMany({ where: { id: { in: ids } }, data: { status } });
+    if (status === "INACTIVE") {
+      await deactivateCountryAssociations(tx, ids);
+    }
+  });
   return { action, affected: ids.length, status };
 }

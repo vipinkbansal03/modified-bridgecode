@@ -431,6 +431,7 @@ async function collectPricingRows(query: PricingListQuery) {
       ? Promise.resolve([])
       : prisma.productPrice.findMany({
           where: {
+            product: { deletedAt: null },
             ...(filters.productId ? { productId: filters.productId } : {}),
             ...(filters.variantId ? { variantId: filters.variantId } : {}),
             ...countryIdsFilter,
@@ -461,6 +462,7 @@ async function collectPricingRows(query: PricingListQuery) {
       ? Promise.resolve([])
       : prisma.tierPricing.findMany({
           where: {
+            product: { deletedAt: null },
             ...(filters.productId ? { productId: filters.productId } : {}),
             ...(filters.variantId ? { variantId: filters.variantId } : {}),
             ...countryIdsFilter,
@@ -492,6 +494,7 @@ async function collectPricingRows(query: PricingListQuery) {
       ? Promise.resolve([])
       : prisma.moqPricing.findMany({
           where: {
+            product: { deletedAt: null },
             ...(filters.productId ? { productId: filters.productId } : {}),
             ...(filters.variantId ? { variantId: filters.variantId } : {}),
             ...countryIdsFilter,

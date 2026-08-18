@@ -120,7 +120,9 @@ function parseBooleanText(value: string | undefined) {
 }
 
 async function buildInventoryWhere(query: InventoryListQuery): Promise<Prisma.InventoryWhereInput> {
-  const where: Prisma.InventoryWhereInput = {};
+  const where: Prisma.InventoryWhereInput = {
+    product: { deletedAt: null }
+  };
   const search = query.search?.trim();
   const status = normalizeInventoryStatus(query.status);
 
@@ -227,17 +229,20 @@ export function getInventoryStatus(stock: number, lowStockThreshold: number): In
 export async function getInventoryDashboard() {
   const [summary, lowStockCount, outOfStockCount, recentItems, recentAdjustments] = await Promise.all([
     prisma.inventory.aggregate({
+      where: { product: { deletedAt: null } },
       _count: { id: true },
       _sum: { stock: true, reservedStock: true },
     }),
-    prisma.inventory.count({ where: { status: "LOW_STOCK" } }),
-    prisma.inventory.count({ where: { status: "OUT_OF_STOCK" } }),
+    prisma.inventory.count({ where: { status: "LOW_STOCK", product: { deletedAt: null } } }),
+    prisma.inventory.count({ where: { status: "OUT_OF_STOCK", product: { deletedAt: null } } }),
     prisma.inventory.findMany({
+      where: { product: { deletedAt: null } },
       take: 6,
       orderBy: { updatedAt: "desc" },
       include: inventoryInclude(),
     }),
     prisma.inventoryAdjustment.findMany({
+      where: { inventory: { product: { deletedAt: null } } },
       take: 8,
       orderBy: { createdAt: "desc" },
       include: adjustmentInclude(),
@@ -265,7 +270,9 @@ export async function listInventoryAdjustments(query: {
   endDate?: string;
 }) {
   const { page, limit, skip } = getPagination(query);
-  const where: Prisma.InventoryAdjustmentWhereInput = {};
+  const where: Prisma.InventoryAdjustmentWhereInput = {
+    inventory: { product: { deletedAt: null } }
+  };
 
   if (query.reason) where.reason = query.reason;
   if (query.startDate || query.endDate) {

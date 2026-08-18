@@ -16,6 +16,7 @@ import {
   StatusBadge,
   useToast,
   LoadingButton,
+  AdminBulkActionsBar,
 } from "@/components/admin/AdminComponents";
 import { AttributeRoleBadge } from "@/components/admin/attributes/AttributeRoleBadge";
 import { AttributeValueEditors } from "@/components/admin/attributes/AttributeValueEditors";
@@ -29,7 +30,7 @@ import {
   useReorderAttributes,
   useUpdateAttribute,
 } from "@/hooks/admin/useAdminHooks";
-import { getAdminErrorMessage } from "@/services/adminApi";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import {
   ATTRIBUTE_DISPLAY_TYPE_LABELS,
   getDisplayTypeChangeWarnings,
@@ -52,6 +53,42 @@ export default function AttributesPage() {
   const deleteAttribute = useDeleteAttribute();
   const reorderAttributes = useReorderAttributes();
   const { showToast, ToastComponent } = useToast();
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
+  const [bulkAction, setBulkAction] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+
+  const handleBulkAction = async () => {
+    if (selectedIds.length === 0 || !bulkAction) return;
+
+    if (bulkAction === "delete") {
+      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected attribute(s)? This action cannot be undone.`)) {
+        return;
+      }
+    }
+
+    setBulkSaving(true);
+    try {
+      if (bulkAction === "delete") {
+        await Promise.all(selectedIds.map(id => deleteAttribute.mutateAsync(id)));
+        showToast(`Successfully deleted ${selectedIds.length} attribute(s).`, "success");
+      } else if (bulkAction === "activate") {
+        await Promise.all(selectedIds.map(id => updateAttribute.mutateAsync({ id, status: "ACTIVE" })));
+        showToast(`Successfully activated ${selectedIds.length} attribute(s).`, "success");
+      } else if (bulkAction === "deactivate") {
+        await Promise.all(selectedIds.map(id => updateAttribute.mutateAsync({ id, status: "INACTIVE" })));
+        showToast(`Successfully deactivated ${selectedIds.length} attribute(s).`, "success");
+      }
+      setSelectedIds([]);
+      setBulkAction("");
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to complete bulk action."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
 
   const [editorMode, setEditorMode] = useState<EditorMode>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -187,6 +224,8 @@ export default function AttributesPage() {
   const isSaving = createAttribute.isPending || updateAttribute.isPending;
   const currentRole = editorMode === "edit" ? editingAttribute?.role : null;
 
+  const attributeGridClass = "grid w-full min-w-0 gap-3 md:grid-cols-[40px_minmax(180px,1fr)_120px_90px_90px_60px_100px] md:items-center";
+
   return (
     <AdminLayout title="Attributes & Options" breadcrumb={[{ label: "Attributes" }]}>
       <AdminStatsGrid
@@ -227,39 +266,130 @@ export default function AttributesPage() {
           No attributes yet. Create your first attribute.
         </div>
       ) : (
-        <SortableList
-          className="w-full min-w-0"
-          rowWidthClassName="w-full min-w-0"
-          contentClassName="flex-1 min-w-0 py-2 pr-3"
-          items={sorted}
-          onReorder={handleReorder}
-          disabled={!canUpdate}
-          renderItem={(attr) => (
-            <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-                <Link href={`/admin/attributes/${attr.id}`} className="text-[14px] font-semibold text-[#1A1A1A] hover:text-[#E31E24]">
-                  {attr.name}
-                </Link>
-                <AttributeRoleBadge role={attr.role} />
-                <StatusBadge status={attr.status} />
-                <span className="text-[12px] text-[#9A9A9A]">{attr._count?.values ?? 0} values</span>
-                <span className="text-[11px] text-[#C4C4C4]">#{attr.sortOrder}</span>
-              </div>
-              <div className="flex shrink-0 gap-1">
-                {canUpdate && (
-                  <button type="button" onClick={() => openEditModal(attr.id)} className="rounded p-1.5 text-[#6B6B6B] hover:bg-[#F0F0F0]">
-                    <Pencil size={14} />
-                  </button>
-                )}
-                {canDelete && (
-                  <button type="button" onClick={() => setDeletingId(attr.id)} className="rounded p-1.5 text-red-500 hover:bg-red-50">
-                    <Trash2 size={14} />
-                  </button>
-                )}
+        <div className="rounded-lg border border-[#E6E6E6] bg-white">
+          <div className="border-b border-[#E6E6E6] bg-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 min-h-[56px] transition-all rounded-t-lg">
+            <div className="flex flex-wrap items-center gap-3 w-full">
+              <span className="text-[13px] font-bold text-[#1A1A1A]">Attributes List</span>
+              <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">
+                {sorted.length} {sorted.length === 1 ? "attribute" : "attributes"}
+              </span>
+              
+              <div className="flex items-center gap-2 border-l border-[#E6E6E6] pl-3 ml-2 flex-wrap">
+                <AdminBulkActionsBar
+                  selectedCount={selectedIds.length}
+                  onClear={() => setSelectedIds([])}
+                  actionType={bulkAction}
+                  onActionTypeChange={setBulkAction}
+                  actions={[
+                    { value: "activate", label: "Mark active" },
+                    { value: "deactivate", label: "Mark inactive" },
+                    { value: "delete", label: "Delete selected" }
+                  ]}
+                  onApply={handleBulkAction}
+                  applyLoading={bulkSaving}
+                  applyDisabled={!bulkAction || selectedIds.length === 0}
+                />
               </div>
             </div>
-          )}
-        />
+          </div>
+          <div className="p-3">
+            <div className="mb-2 hidden items-center gap-2 px-3 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A] md:flex">
+              <span className="w-6 shrink-0" />
+              <div className={`${attributeGridClass} min-w-0 flex-1 pr-3`}>
+                <div className="flex items-center justify-center">
+                  <input
+                    type="checkbox"
+                    checked={sorted.length > 0 && selectedIds.length === sorted.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedIds(sorted.map(a => a.id));
+                      } else {
+                        setSelectedIds([]);
+                      }
+                    }}
+                    className="h-4 w-4 accent-[#E31E24]"
+                  />
+                </div>
+                <span>Attribute</span>
+                <span>Display Type</span>
+                <span>Status</span>
+                <span>Values</span>
+                <span>Sort</span>
+                <span className="text-right">Actions</span>
+              </div>
+            </div>
+            <SortableList
+              className="w-full min-w-0"
+              rowWidthClassName="w-full min-w-0"
+              contentClassName="flex-1 min-w-0 py-2 pr-3"
+              items={sorted}
+              onReorder={handleReorder}
+              disabled={!canUpdate}
+              renderItem={(attr) => (
+                <div className={attributeGridClass}>
+                  <div className="flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(attr.id)}
+                      onChange={(e) => {
+                        const isShiftPressed = (e.nativeEvent as any).shiftKey;
+                        const isSelected = selectedIds.includes(attr.id);
+
+                        if (isShiftPressed && lastSelectedId !== null) {
+                          const prevIndex = sorted.findIndex(a => a.id === lastSelectedId);
+                          const currIndex = sorted.findIndex(a => a.id === attr.id);
+                          if (prevIndex !== -1 && currIndex !== -1) {
+                            const start = Math.min(prevIndex, currIndex);
+                            const end = Math.max(prevIndex, currIndex);
+                            const rangeIds = sorted.slice(start, end + 1).map(a => a.id);
+                            if (!isSelected) {
+                              setSelectedIds(prev => Array.from(new Set([...prev, ...rangeIds])));
+                            } else {
+                              setSelectedIds(prev => prev.filter(id => !rangeIds.includes(id)));
+                            }
+                            setLastSelectedId(attr.id);
+                            return;
+                          }
+                        }
+
+                        if (e.target.checked) {
+                          setSelectedIds(prev => [...prev, attr.id]);
+                        } else {
+                          setSelectedIds(prev => prev.filter(id => id !== attr.id));
+                        }
+                        setLastSelectedId(attr.id);
+                      }}
+                      className="h-4 w-4 accent-[#E31E24]"
+                    />
+                  </div>
+                  <Link href={`/admin/attributes/${attr.id}`} className="truncate text-[14px] font-semibold text-[#1A1A1A] hover:text-[#E31E24]">
+                    {attr.name}
+                  </Link>
+                  <div>
+                    <AttributeRoleBadge role={attr.role} />
+                  </div>
+                  <div>
+                    <StatusBadge status={attr.status} />
+                  </div>
+                  <span className="text-[13px] text-[#6B6B6B]">{attr._count?.values ?? 0} values</span>
+                  <span className="text-[12px] text-[#9A9A9A]">#{attr.sortOrder}</span>
+                  <div className="flex gap-1.5 md:justify-end">
+                    {canUpdate && (
+                      <button type="button" onClick={() => openEditModal(attr.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Edit attribute">
+                        <Pencil size={13} />
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button type="button" onClick={() => setDeletingId(attr.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50" title="Delete attribute">
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            />
+          </div>
+        </div>
       )}
 
       <Modal
@@ -346,8 +476,8 @@ export default function AttributesPage() {
 
       <ConfirmModal
         open={!!deletingId}
-        title="Remove attribute?"
-        message="This will deactivate the attribute and its values."
+        title="Delete attribute?"
+        message="Are you sure you want to permanently delete this attribute? This action cannot be undone."
         onConfirm={handleDelete}
         onCancel={() => setDeletingId(null)}
         isLoading={deleteAttribute.isPending}

@@ -160,7 +160,16 @@ export async function updateWarehouse(id: string, data: {
 }
 
 export async function deleteWarehouse(id: string) {
-  const count = await prisma.inventory.count({ where: { warehouseId: id } });
+  const count = await prisma.inventory.count({ 
+    where: { 
+      warehouseId: id,
+      product: { deletedAt: null }
+    } 
+  });
   if (count > 0) throw new AppError("Cannot delete warehouse with associated inventory.", 400);
-  return prisma.warehouse.delete({ where: { id } });
+  
+  return prisma.$transaction(async (tx) => {
+    await tx.inventory.deleteMany({ where: { warehouseId: id } });
+    return tx.warehouse.delete({ where: { id } });
+  });
 }

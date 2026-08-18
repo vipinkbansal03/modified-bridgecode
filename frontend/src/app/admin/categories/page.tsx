@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import * as Yup from "yup";
 import { Archive, CheckCircle2, Copy, Download, FolderTree, GitFork, Image as ImageIcon, Layers, Pencil, Plus, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, AdminTextarea, AdminRichTextEditor, ConfirmModal, StatCard, StatusBadge, toastMessages, useToast, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, AdminTextarea, AdminRichTextEditor, ConfirmModal, StatCard, StatusBadge, toastMessages, useToast, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import {
   filterTranslationLanguages,
@@ -148,6 +148,42 @@ export default function CategoriesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { showToast, ToastComponent } = useToast();
 
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
+  const [bulkAction, setBulkAction] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+
+  const handleBulkAction = async () => {
+    if (selectedIds.length === 0 || !bulkAction) return;
+
+    if (bulkAction === "delete") {
+      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected category(ies)? This action cannot be undone.`)) {
+        return;
+      }
+    }
+
+    setBulkSaving(true);
+    try {
+      if (bulkAction === "delete") {
+        await Promise.all(selectedIds.map(id => deleteCategory.mutateAsync(id)));
+        showToast(`Successfully deleted ${selectedIds.length} category(ies).`, "success");
+      } else if (bulkAction === "activate") {
+        await Promise.all(selectedIds.map(id => updateCategory.mutateAsync({ id, status: "ACTIVE" })));
+        showToast(`Successfully activated ${selectedIds.length} category(ies).`, "success");
+      } else if (bulkAction === "deactivate") {
+        await Promise.all(selectedIds.map(id => updateCategory.mutateAsync({ id, status: "INACTIVE" })));
+        showToast(`Successfully deactivated ${selectedIds.length} category(ies).`, "success");
+      }
+      setSelectedIds([]);
+      setBulkAction("");
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to complete bulk action."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   const { data: categories = [], isLoading, refetch } = useAdminCategories();
 
   const categoryStats = useMemo(() => {
@@ -179,7 +215,11 @@ export default function CategoriesPage() {
     });
   }, [categories, search, statusFilter]);
   const rows = useMemo(() => flattenCategories(filteredCategories), [filteredCategories]);
-  const categoryGridClass = "grid w-full min-w-0 gap-3 md:grid-cols-[minmax(320px,1.2fr)_minmax(180px,220px)_90px_120px_168px] md:items-center";
+  const categoryGridClass = "grid w-full min-w-0 gap-3 md:grid-cols-[40px_minmax(320px,1.2fr)_minmax(180px,220px)_90px_120px_168px] md:items-center";
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [search, statusFilter]);
   const countryRows = useMemo(() => countries as CountryAvailability[], [countries]);
   const visibleCountries = useMemo(() => {
     const query = countrySearch.trim().toLowerCase();
@@ -785,36 +825,111 @@ export default function CategoriesPage() {
       ) : rows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-[#E6E6E6] py-12 text-center text-[13.5px] text-[#9A9A9A]">No categories yet.</div>
       ) : (
-        <div className="rounded-lg border border-[#E6E6E6] bg-white p-3">
-          <div className="mb-2 hidden items-center gap-2 px-3 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A] md:flex">
-            <span className="w-6 shrink-0" />
-            <div className={`${categoryGridClass} min-w-0 flex-1 pr-3`}>
-              <span>Name</span>
-              <span>Slug</span>
-              <span>Products</span>
-              <span>Status</span>
-              <span className="text-right">Actions</span>
+        <div className="rounded-lg border border-[#E6E6E6] bg-white">
+          <div className="border-b border-[#E6E6E6] bg-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 min-h-[56px] transition-all rounded-t-lg">
+            <div className="flex flex-wrap items-center gap-3 w-full">
+              <span className="text-[13px] font-bold text-[#1A1A1A]">Categories List</span>
+              <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">
+                {rows.length} {rows.length === 1 ? "category" : "categories"}
+              </span>
+              
+              <div className="flex items-center gap-2 border-l border-[#E6E6E6] pl-3 ml-2 flex-wrap">
+                <AdminBulkActionsBar
+                  selectedCount={selectedIds.length}
+                  onClear={() => setSelectedIds([])}
+                  actionType={bulkAction}
+                  onActionTypeChange={setBulkAction}
+                  actions={[
+                    { value: "activate", label: "Mark active" },
+                    { value: "deactivate", label: "Mark inactive" },
+                    { value: "delete", label: "Delete selected" }
+                  ]}
+                  onApply={handleBulkAction}
+                  applyLoading={bulkSaving}
+                  applyDisabled={!bulkAction || selectedIds.length === 0}
+                />
+              </div>
             </div>
           </div>
-          <SortableList
-            className="w-full min-w-0"
-            items={rows}
-            onReorder={handleReorder}
-            disabled={!canUpdate}
-            handleAriaLabel="Drag category to reorder"
-            rowWidthClassName="w-full min-w-0"
-            contentClassName="flex-1 min-w-0 w-full py-2 pr-3"
-            renderItem={(category) => (
-              <div className={categoryGridClass}>
-                <div className="flex min-w-0 items-center gap-2" style={{ paddingLeft: `${Math.min(category.depth, 4) * 14}px` }}>
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
-                    {category.image ? <img src={category.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={16} className="text-[#9A9A9A]" />}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="truncate text-[14px] font-semibold text-[#1A1A1A]">{category.name}</div>
-                    {category.parent && <div className="text-[12px] text-[#9A9A9A]">Child of {category.parent.name}</div>}
-                  </div>
+          <div className="p-3">
+            <div className="mb-2 hidden items-center gap-2 px-3 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A] md:flex">
+              <span className="w-6 shrink-0" />
+              <div className={`${categoryGridClass} min-w-0 flex-1 pr-3`}>
+                <div className="flex items-center justify-center">
+                  <input
+                    type="checkbox"
+                    checked={rows.length > 0 && selectedIds.length === rows.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedIds(rows.map(r => r.id));
+                      } else {
+                        setSelectedIds([]);
+                      }
+                    }}
+                    className="h-4 w-4 accent-[#E31E24]"
+                  />
                 </div>
+                <span>Name</span>
+                <span>Slug</span>
+                <span>Products</span>
+                <span>Status</span>
+                <span className="text-right">Actions</span>
+              </div>
+            </div>
+            <SortableList
+              className="w-full min-w-0"
+              items={rows}
+              onReorder={handleReorder}
+              disabled={!canUpdate}
+              handleAriaLabel="Drag category to reorder"
+              rowWidthClassName="w-full min-w-0"
+              contentClassName="flex-1 min-w-0 w-full py-2 pr-3"
+              renderItem={(category) => (
+                <div className={categoryGridClass}>
+                  <div className="flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(category.id)}
+                      onChange={(e) => {
+                        const isShiftPressed = (e.nativeEvent as any).shiftKey;
+                        const isSelected = selectedIds.includes(category.id);
+
+                        if (isShiftPressed && lastSelectedId !== null) {
+                          const prevIndex = rows.findIndex(r => r.id === lastSelectedId);
+                          const currIndex = rows.findIndex(r => r.id === category.id);
+                          if (prevIndex !== -1 && currIndex !== -1) {
+                            const start = Math.min(prevIndex, currIndex);
+                            const end = Math.max(prevIndex, currIndex);
+                            const rangeIds = rows.slice(start, end + 1).map(r => r.id);
+                            if (!isSelected) {
+                              setSelectedIds(prev => Array.from(new Set([...prev, ...rangeIds])));
+                            } else {
+                              setSelectedIds(prev => prev.filter(id => !rangeIds.includes(id)));
+                            }
+                            setLastSelectedId(category.id);
+                            return;
+                          }
+                        }
+
+                        if (e.target.checked) {
+                          setSelectedIds(prev => [...prev, category.id]);
+                        } else {
+                          setSelectedIds(prev => prev.filter(id => id !== category.id));
+                        }
+                        setLastSelectedId(category.id);
+                      }}
+                      className="h-4 w-4 accent-[#E31E24]"
+                    />
+                  </div>
+                  <div className="flex min-w-0 items-center gap-2" style={{ paddingLeft: `${Math.min(category.depth, 4) * 14}px` }}>
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
+                      {category.image ? <img src={category.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={16} className="text-[#9A9A9A]" />}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-[14px] font-semibold text-[#1A1A1A]">{category.name}</div>
+                      {category.parent && <div className="text-[12px] text-[#9A9A9A]">Child of {category.parent.name}</div>}
+                    </div>
+                  </div>
                 <span className="truncate font-mono text-[12px] text-[#6B6B6B]">{category.slug}</span>
                 <span className="text-[13px] text-[#1A1A1A]">{category._count.products}</span>
                 <StatusBadge status={category.status} />
@@ -849,6 +964,7 @@ export default function CategoriesPage() {
             )}
           />
         </div>
+      </div>
       )}
 
       <ConfirmModal

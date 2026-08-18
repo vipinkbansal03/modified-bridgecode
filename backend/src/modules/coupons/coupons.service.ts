@@ -371,4 +371,24 @@ export async function validateCoupon(code: string, orderTotal: number, countryCo
   };
 }
 
+export async function bulkUpdateCoupons(input: { ids: string[]; action: "ENABLE" | "DISABLE" | "DELETE" }) {
+  const { ids, action } = input;
+  if (!ids || ids.length === 0) {
+    throw new AppError("No coupon IDs provided.", 400);
+  }
+
+  if (action === "DELETE") {
+    await prisma.couponCountry.deleteMany({ where: { couponId: { in: ids } } });
+    const result = await prisma.coupon.deleteMany({ where: { id: { in: ids } } });
+    return { affected: result.count };
+  }
+
+  const nextStatus: Status = action === "ENABLE" ? "ACTIVE" : "INACTIVE";
+  const result = await prisma.coupon.updateMany({
+    where: { id: { in: ids } },
+    data: { status: nextStatus },
+  });
+  return { affected: result.count };
+}
+
 

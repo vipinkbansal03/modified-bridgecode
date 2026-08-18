@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Archive, CheckCircle2, Copy, Edit2, Eye, FileText, Image as ImageIcon, Layers, RotateCcw, Trash2, XCircle } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, AdminStatsGrid, Column, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminStatsGrid, Column, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { ProductEditor } from "@/components/admin/products/ProductEditor";
 import {
@@ -16,7 +16,7 @@ import {
   useDuplicateVariant,
   useRestoreVariant,
 } from "@/hooks/admin/useAdminHooks";
-import { getAdminErrorMessage } from "@/services/adminApi";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
 type VariantRow = {
   id: string;
@@ -71,6 +71,92 @@ function VariantsList() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [deleting, setDeleting] = useState<VariantRow | null>(null);
   const { showToast, ToastComponent } = useToast();
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+
+  const handleSelectAll = async (checked: boolean) => {
+    if (!checked) {
+      setSelectedIds([]);
+      return;
+    }
+    try {
+      const res = await adminApi.get("/variants", {
+        params: {
+          search: debouncedSearch || undefined,
+          status: status || undefined,
+          sortBy,
+          sortDir,
+          limit: 999999,
+          ignoreMaxLimit: "true",
+        },
+      });
+      const allIds = (res.data.data ?? []).map((v: any) => v.id);
+      setSelectedIds(allIds);
+      showToast(`Selected all ${allIds.length} variants across all pages.`, "success");
+    } catch (err) {
+      showToast("Failed to select all variants.", "error");
+    }
+  };
+
+  const handleBulkAction = async () => {
+    if (selectedIds.length === 0 || !bulkAction) return;
+
+    if (bulkAction === "delete") {
+      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected variant(s)? This action cannot be undone.`)) {
+        return;
+      }
+    }
+
+    setBulkSaving(true);
+    try {
+      if (bulkAction === "delete") {
+        await Promise.all(
+          selectedIds.map((id) => {
+            const variant = variants.find((v) => v.id === id);
+            return deleteVariant.mutateAsync({
+              productId: variant?.product.id ?? "",
+              variantId: id,
+            });
+          })
+        );
+        showToast(`Successfully deleted ${selectedIds.length} variant(s).`, "success");
+      } else if (bulkAction === "activate") {
+        await Promise.all(
+          selectedIds.map((id) => {
+            const variant = variants.find((v) => v.id === id);
+            return restoreVariant.mutateAsync({
+              productId: variant?.product.id ?? "",
+              variantId: id,
+            });
+          })
+        );
+        showToast(`Successfully activated ${selectedIds.length} variant(s).`, "success");
+      } else if (bulkAction === "deactivate") {
+        await Promise.all(
+          selectedIds.map((id) => {
+            const variant = variants.find((v) => v.id === id);
+            return archiveVariant.mutateAsync({
+              productId: variant?.product.id ?? "",
+              variantId: id,
+            });
+          })
+        );
+        showToast(`Successfully deactivated ${selectedIds.length} variant(s).`, "success");
+      }
+      setSelectedIds([]);
+      setBulkAction("");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to complete bulk action."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [debouncedSearch, status, sortBy, sortDir]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -348,13 +434,39 @@ function VariantsList() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between">
-          <div className="text-[13.5px] text-[#9A9A9A]">{data?.pagination?.total ?? 0} variants</div>
-        </div>
-
-        <DataTable<VariantRow> columns={columns} data={variants} rowKey="id" isLoading={isLoading} emptyMessage="No variants found." />
-
-        <Pagination page={page} totalPages={data?.pagination?.totalPages || 1} onPageChange={setPage} />
+        <DataTable<VariantRow>
+          title="Variants List"
+          columns={columns}
+          data={variants}
+          rowKey="id"
+          isLoading={isLoading}
+          emptyMessage="No variants found."
+          enableSelection={true}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          totalItems={data?.pagination?.total}
+          currentPage={page}
+          pageSize={10}
+          totalPages={data?.pagination?.totalPages || 1}
+          onPageChange={setPage}
+          onSelectAll={handleSelectAll}
+          renderBulkActions={(selectedIds) => (
+            <AdminBulkActionsBar
+              selectedCount={selectedIds.length}
+              onClear={() => setSelectedIds([])}
+              actionType={bulkAction}
+              onActionTypeChange={setBulkAction}
+              actions={[
+                { value: "activate", label: "Mark active" },
+                { value: "deactivate", label: "Mark inactive" },
+                { value: "delete", label: "Delete selected" }
+              ]}
+              onApply={handleBulkAction}
+              applyLoading={bulkSaving}
+              applyDisabled={!bulkAction || selectedIds.length === 0}
+            />
+          )}
+        />
       </div>
 
       <ConfirmModal

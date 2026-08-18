@@ -216,7 +216,43 @@ export async function updateAttribute(
 
 export const deleteAttribute = async (id: string) => {
   await getAttributeOrThrow(id);
-  return prisma.attribute.update({ where: { id }, data: { status: "INACTIVE" } });
+
+  // Check if any active (non-soft-deleted) variants are using this attribute
+  const count = await prisma.productVariantAttributeValue.count({
+    where: {
+      attributeId: id,
+      variant: {
+        product: {
+          deletedAt: null,
+        },
+      },
+    },
+  });
+
+  if (count > 0) {
+    // If it's in use, we cannot delete it, so we deactivate it.
+    await prisma.attribute.update({
+      where: { id },
+      data: { status: "INACTIVE" },
+    });
+    throw new AppError("Attribute is in use by products/variants. It has been deactivated instead of deleted.", 400);
+  }
+
+  // Otherwise, delete associated options and relations (including links on soft-deleted variants), then delete the attribute
+  return prisma.$transaction(async (tx) => {
+    await tx.productVariantAttributeValue.deleteMany({ where: { attributeId: id } });
+    await tx.productAttributeValueSelection.deleteMany({
+      where: {
+        attributeValue: {
+          attributeId: id,
+        },
+      },
+    });
+    await tx.attributeValue.deleteMany({ where: { attributeId: id } });
+    await tx.productAttribute.deleteMany({ where: { attributeId: id } });
+
+    return tx.attribute.delete({ where: { id } });
+  });
 };
 
 export async function reorderAttributes(items: { id: string; sortOrder: number }[]) {

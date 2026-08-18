@@ -50,6 +50,11 @@ export const deleteZone = asyncHandler(async (req: AuthRequest, res: Response) =
   ApiResponse.success(res, "Zone deleted.", await S.deleteZone(String(req.params.id)))
 );
 
+export const bulkUpdateZones = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await S.bulkUpdateZones(req.body);
+  return ApiResponse.success(res, "Bulk shipping zone action completed.", result);
+});
+
 // ─── Calculation ────────────────────────────────────────
 
 export const calculate = asyncHandler(async (req: AuthRequest, res: Response) => {

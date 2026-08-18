@@ -47,3 +47,8 @@ export const validateCheckout = asyncHandler<CustomerAuthRequest>(async (req, re
   );
   return ApiResponse.success(res, "Coupon valid.", result.public);
 });
+
+export const bulkUpdate = asyncHandler<AuthRequest>(async (req, res: Response) => {
+  const result = await couponService.bulkUpdateCoupons(req.body);
+  return ApiResponse.success(res, "Bulk coupon action completed.", result);
+});

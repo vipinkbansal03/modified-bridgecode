@@ -32,3 +32,8 @@ export const toggle = asyncHandler(async (req: AuthRequest, res: Response) => {
   const box = await ShippingBoxService.toggleBox(req.params.id);
   return ApiResponse.success(res, "Shipping box toggled.", box);
 });
+
+export const bulkUpdate = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await ShippingBoxService.bulkUpdateBoxes(req.body);
+  return ApiResponse.success(res, "Bulk shipping box action completed.", result);
+});

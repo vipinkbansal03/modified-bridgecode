@@ -18,6 +18,7 @@ router.get("/zones", requirePermission("shipping.view", "shipping.manage"), C.li
 router.post("/zones", requirePermission("shipping.manage"), C.createZone);
 router.put("/zones/:id", requirePermission("shipping.manage"), C.updateZone);
 router.delete("/zones/:id", requirePermission("shipping.manage"), C.deleteZone);
+router.post("/zones/bulk", requirePermission("shipping.manage"), C.bulkUpdateZones);
 
 // ─── Calculation (admin) ────────────────────────────────
 router.post("/calculate", requirePermission("shipping.view", "shipping.manage"), C.calculate);

@@ -159,6 +159,8 @@ export default function AdminCustomerDetailPage() {
     taxIdType: "",
     taxIdStatus: "UNVERIFIED",
     taxExemptCertificateUrl: "",
+    customerRoleId: "",
+    tierId: "",
   });
 
   useEffect(() => {
@@ -175,6 +177,8 @@ export default function AdminCustomerDetailPage() {
       taxIdType: customer.taxIdType ?? "",
       taxIdStatus: customer.taxIdStatus ?? "UNVERIFIED",
       taxExemptCertificateUrl: customer.taxExemptCertificateUrl ?? "",
+      customerRoleId: customer.customerRoleId ?? "",
+      tierId: customer.tierId ?? "",
     });
   }, [customer]);
 
@@ -193,6 +197,8 @@ export default function AdminCustomerDetailPage() {
         taxIdType: form.taxIdType || null,
         taxIdStatus: form.taxIdStatus,
         taxExemptCertificateUrl: form.taxExemptCertificateUrl || null,
+        customerRoleId: form.customerRoleId || null,
+        tierId: form.tierId || null,
       });
       showToast("Customer profile updated.", "success");
       router.push(`/admin/customers/${customerId}?mode=view`);
@@ -250,7 +256,7 @@ export default function AdminCustomerDetailPage() {
         <div className="rounded-lg border border-[#E6E6E6] bg-white p-5 text-[13.5px] text-[#9A9A9A]">Loading customer...</div>
       ) : (
         <div className="space-y-5">
-          <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
+          <div className={`grid gap-5 ${customer.approvalStatus === "PENDING_APPROVAL" ? "lg:grid-cols-[1fr_360px]" : "grid-cols-1"}`}>
             <section className="rounded-lg border border-[#E6E6E6] bg-white p-5">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
@@ -306,6 +312,26 @@ export default function AdminCustomerDetailPage() {
                     { value: "ACTIVE", label: "Active" },
                     { value: "PENDING_APPROVAL", label: "Pending Approval" },
                     { value: "SUSPENDED", label: "Suspended" },
+                  ]}
+                />
+                <AdminSelect
+                  label="Customer Role"
+                  value={form.customerRoleId}
+                  onChange={(event) => setForm((prev) => ({ ...prev, customerRoleId: event.target.value }))}
+                  disabled={isReadOnly}
+                  options={customerRoles.map((role: { id: string; name: string; status: string }) => ({
+                    value: role.id,
+                    label: role.status === "ACTIVE" ? role.name : `${role.name} (Inactive)`,
+                  }))}
+                />
+                <AdminSelect
+                  label="Tier"
+                  value={form.tierId}
+                  onChange={(event) => setForm((prev) => ({ ...prev, tierId: event.target.value }))}
+                  disabled={isReadOnly}
+                  options={[
+                    { value: "", label: "None" },
+                    ...tiers.map((tier: { id: string; name: string }) => ({ value: tier.id, label: tier.name })),
                   ]}
                 />
                 <AdminInput label="Tax ID" value={form.taxId} onChange={(event) => setForm((prev) => ({ ...prev, taxId: event.target.value }))} disabled={isReadOnly} />
@@ -367,9 +393,9 @@ export default function AdminCustomerDetailPage() {
               )}
             </section>
 
-            <section className="rounded-lg border border-[#E6E6E6] bg-white p-5">
-              {customer.approvalStatus === "PENDING_APPROVAL" ? (
-                <div className="mb-5 rounded-md border border-[#F6D7D9] bg-[#FFF7F7] p-3">
+            {customer.approvalStatus === "PENDING_APPROVAL" && (
+              <section className="rounded-lg border border-[#E6E6E6] bg-white p-5">
+                <div className="rounded-md border border-[#F6D7D9] bg-[#FFF7F7] p-3">
                   <div className="text-[13px] font-semibold text-[#1A1A1A]">Wholesale approval required</div>
                   <p className="mt-1 text-[12.5px] leading-relaxed text-[#6B6B6B]">Pending customers cannot place checkout orders until approved.</p>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -397,35 +423,8 @@ export default function AdminCustomerDetailPage() {
                     </LoadingButton>
                   </div>
                 </div>
-              ) : null}
-              <div className="mb-3 flex items-center gap-2">
-                <Save size={16} className="text-[#E31E24]" />
-                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Tier Assignment</h3>
-              </div>
-              <AdminSelect
-                label="Customer Role"
-                value={customer.customerRoleId ?? ""}
-                onChange={(event) => handleCustomerRoleChange(event.target.value)}
-                disabled={isReadOnly || updateCustomerRole.isPending}
-                options={customerRoles.map((role: { id: string; name: string; status: string }) => ({
-                  value: role.id,
-                  label: role.status === "ACTIVE" ? role.name : `${role.name} (Inactive)`,
-                }))}
-              />
-              <AdminSelect
-                label="Tier"
-                value={customer.tierId ?? ""}
-                onChange={(event) => handleTierChange(event.target.value)}
-                disabled={isReadOnly || updateTier.isPending}
-                options={[
-                  { value: "", label: "None" },
-                  ...tiers.map((tier: { id: string; name: string }) => ({ value: tier.id, label: tier.name })),
-                ]}
-              />
-              <p className="mt-3 text-[12.5px] leading-relaxed text-[#6B6B6B]">
-                Tier controls customer-specific pricing rules. Profile status controls whether the customer can continue using their account.
-              </p>
-            </section>
+              </section>
+            )}
           </div>
 
           <section className="rounded-lg border border-[#E6E6E6] bg-white p-5">

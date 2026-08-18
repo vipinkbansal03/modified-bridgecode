@@ -88,3 +88,23 @@ export async function toggleBox(id: string) {
     data: { isActive: !box.isActive },
   });
 }
+
+export async function bulkUpdateBoxes(input: { ids: string[]; action: "ENABLE" | "DISABLE" | "DELETE" }) {
+  const { ids, action } = input;
+  if (!ids || ids.length === 0) {
+    throw new AppError("No shipping box IDs provided.", 400);
+  }
+
+  if (action === "DELETE") {
+    await prisma.shippingBoxCountry.deleteMany({ where: { boxId: { in: ids } } });
+    const result = await prisma.shippingBox.deleteMany({ where: { id: { in: ids } } });
+    return { affected: result.count };
+  }
+
+  const nextActive = action === "ENABLE";
+  const result = await prisma.shippingBox.updateMany({
+    where: { id: { in: ids } },
+    data: { isActive: nextActive },
+  });
+  return { affected: result.count };
+}

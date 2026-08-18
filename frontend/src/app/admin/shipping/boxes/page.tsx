@@ -5,7 +5,7 @@ import { useMemo, useState, useEffect } from "react";
 import { Calculator, Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column, AdminListToolbar, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column, AdminListToolbar, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
@@ -70,6 +70,44 @@ export default function ShippingBoxesPage() {
     },
   });
 
+  const bulkMutation = useMutation({
+    mutationFn: (data: { ids: string[]; action: "ENABLE" | "DISABLE" | "DELETE" }) =>
+      adminApi.post("/shipping/boxes/bulk", data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-shipping-boxes"] });
+    },
+  });
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+
+  const handleBulkAction = async () => {
+    if (!bulkAction || selectedIds.length === 0) return;
+    if (bulkAction === "delete") {
+      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected shipping box(es)? This action cannot be undone.`)) {
+        return;
+      }
+    }
+
+    setBulkSaving(true);
+    try {
+      await bulkMutation.mutateAsync({
+        ids: selectedIds,
+        action: bulkAction === "delete" ? "DELETE" : bulkAction === "activate" ? "ENABLE" : "DISABLE",
+      });
+      showToast(
+        bulkAction === "delete" ? "Shipping boxes deleted." : bulkAction === "activate" ? "Shipping boxes activated." : "Shipping boxes paused."
+      );
+      setSelectedIds([]);
+      setBulkAction("");
+    } catch (err) {
+      showToast(getAdminErrorMessage(err, "Failed to run bulk action."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   const [formOpen, setFormOpen] = useState(false);
   const [deletingBox, setDeletingBox] = useState<ApiShippingBox | null>(null);
 
@@ -86,6 +124,10 @@ export default function ShippingBoxesPage() {
   const [previewItems, setPreviewItems] = useState<{ productId: string; quantity: number }[]>([]);
   const [previewResult, setPreviewResult] = useState<any>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [activeSubTab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -269,7 +311,33 @@ export default function ShippingBoxesPage() {
         </div>
 
         {activeSubTab === "boxes" ? (
-          <DataTable columns={columns} data={boxes} isLoading={isLoading} rowKey="id" emptyMessage="No shipping boxes configured." />
+          <DataTable<ApiShippingBox>
+            title="Boxes List"
+            columns={columns}
+            data={boxes}
+            isLoading={isLoading}
+            rowKey="id"
+            emptyMessage="No shipping boxes configured."
+            enableSelection={true}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+            renderBulkActions={(selectedIds) => (
+              <AdminBulkActionsBar
+                selectedCount={selectedIds.length}
+                onClear={() => setSelectedIds([])}
+                actionType={bulkAction}
+                onActionTypeChange={setBulkAction}
+                actions={[
+                  { value: "activate", label: "Mark active" },
+                  { value: "deactivate", label: "Mark inactive" },
+                  { value: "delete", label: "Delete selected" }
+                ]}
+                onApply={handleBulkAction}
+                applyLoading={bulkSaving}
+                applyDisabled={!bulkAction || selectedIds.length === 0}
+              />
+            )}
+          />
         ) : (
           <div className="grid gap-5 lg:grid-cols-[1fr_1.2fr]">
             <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 space-y-4">
@@ -445,6 +513,7 @@ export default function ShippingBoxesPage() {
                 onValuesChange={(vals) => form.setFieldValue("countryIds", vals)}
                 allowSelectAll
                 selectAllLabel="Select All"
+                emptyMeansAll={false}
                 placeholder="Select countries..."
               />
               {form.errors.countryIds && <span className="text-red-500 text-[11.5px] mt-1">{form.errors.countryIds as string}</span>}
