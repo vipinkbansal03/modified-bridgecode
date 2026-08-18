@@ -120,7 +120,7 @@ function LinkPickerInput({
             <div className="flex items-center gap-2 border-b border-[#E6E6E6] px-3 py-2 bg-gray-50/50">
               <button
                 type="button"
-                onClick={() => { setTab("main"); setSearch(""); }}
+                onMouseDown={(e) => { e.preventDefault(); setTab("main"); setSearch(""); }}
                 className="text-[12px] font-semibold text-[#E31E24] hover:underline"
               >
                 ← Back
@@ -140,21 +140,21 @@ function LinkPickerInput({
               <>
                 <button
                   type="button"
-                  onClick={() => { onSelectLink("/", "Home page"); setIsOpen(false); }}
+                  onMouseDown={(e) => { e.preventDefault(); onSelectLink("/", "Home page"); setIsOpen(false); }}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-medium text-[#1A1A1A]"
                 >
                   🏠 Home page
                 </button>
                 <button
                   type="button"
-                  onClick={() => { onSelectLink("/search", "Search"); setIsOpen(false); }}
+                  onMouseDown={(e) => { e.preventDefault(); onSelectLink("/search", "Search"); setIsOpen(false); }}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-medium text-[#1A1A1A]"
                 >
                   🔍 Search page
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setTab("products"); }}
+                  onMouseDown={(e) => { e.preventDefault(); setTab("products"); }}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-medium text-[#1A1A1A] flex items-center justify-between"
                 >
                   <span>📦 Products</span>
@@ -162,7 +162,7 @@ function LinkPickerInput({
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setTab("collections"); }}
+                  onMouseDown={(e) => { e.preventDefault(); setTab("collections"); }}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-medium text-[#1A1A1A] flex items-center justify-between"
                 >
                   <span>📂 Collections</span>
@@ -170,7 +170,7 @@ function LinkPickerInput({
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setTab("categories"); }}
+                  onMouseDown={(e) => { e.preventDefault(); setTab("categories"); }}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-medium text-[#1A1A1A] flex items-center justify-between"
                 >
                   <span>📁 Categories</span>
@@ -178,7 +178,7 @@ function LinkPickerInput({
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setTab("pages"); }}
+                  onMouseDown={(e) => { e.preventDefault(); setTab("pages"); }}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-medium text-[#1A1A1A] flex items-center justify-between"
                 >
                   <span>📄 CMS Pages</span>
@@ -186,7 +186,7 @@ function LinkPickerInput({
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setTab("blogs"); }}
+                  onMouseDown={(e) => { e.preventDefault(); setTab("blogs"); }}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-medium text-[#1A1A1A] flex items-center justify-between"
                 >
                   <span>📰 Blogs</span>
@@ -198,7 +198,7 @@ function LinkPickerInput({
               <>
                 <button
                   type="button"
-                  onClick={() => { onSelectLink("/products", "All Products"); setIsOpen(false); setTab("main"); }}
+                  onMouseDown={(e) => { e.preventDefault(); onSelectLink("/products", "All Products"); setIsOpen(false); setTab("main"); }}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-bold text-gray-700"
                 >
                   All Products
@@ -207,7 +207,7 @@ function LinkPickerInput({
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => { onSelectLink(`/products/${p.slug}`, p.title); setIsOpen(false); setTab("main"); }}
+                    onMouseDown={(e) => { e.preventDefault(); onSelectLink(`/products/${p.slug}`, p.title); setIsOpen(false); setTab("main"); }}
                     className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] text-gray-600 truncate"
                   >
                     {p.title}
@@ -224,7 +224,7 @@ function LinkPickerInput({
                   <button
                     key={c.id}
                     type="button"
-                    onClick={() => { onSelectLink(`/products?collection=${c.slug}`, c.name); setIsOpen(false); setTab("main"); }}
+                    onMouseDown={(e) => { e.preventDefault(); onSelectLink(`/products?collection=${c.slug}`, c.name); setIsOpen(false); setTab("main"); }}
                     className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] text-gray-600"
                   >
                     {c.name}
@@ -241,7 +241,7 @@ function LinkPickerInput({
                   <button
                     key={c.id}
                     type="button"
-                    onClick={() => { onSelectLink(`/products?category=${c.slug}`, c.name); setIsOpen(false); setTab("main"); }}
+                    onMouseDown={(e) => { e.preventDefault(); onSelectLink(`/products?category=${c.slug}`, c.name); setIsOpen(false); setTab("main"); }}
                     className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] text-gray-600"
                   >
                     {c.name}
@@ -258,7 +258,7 @@ function LinkPickerInput({
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => { onSelectLink(`/${p.slug}`, p.title); setIsOpen(false); setTab("main"); }}
+                    onMouseDown={(e) => { e.preventDefault(); onSelectLink(`/${p.slug}`, p.title); setIsOpen(false); setTab("main"); }}
                     className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] text-gray-600"
                   >
                     {p.title}
@@ -273,7 +273,7 @@ function LinkPickerInput({
               <>
                 <button
                   type="button"
-                  onClick={() => { onSelectLink("/blog", "Blog"); setIsOpen(false); setTab("main"); }}
+                  onMouseDown={(e) => { e.preventDefault(); onSelectLink("/blog", "Blog"); setIsOpen(false); setTab("main"); }}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-bold text-gray-700"
                 >
                   All Blogs
@@ -282,7 +282,7 @@ function LinkPickerInput({
                   <button
                     key={b.id}
                     type="button"
-                    onClick={() => { onSelectLink(`/blog/${b.slug}`, b.name); setIsOpen(false); setTab("main"); }}
+                    onMouseDown={(e) => { e.preventDefault(); onSelectLink(`/blog/${b.slug}`, b.name); setIsOpen(false); setTab("main"); }}
                     className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] text-gray-600"
                   >
                     {b.name}
@@ -318,11 +318,8 @@ export default function CmsMenusPage() {
   const { data: productsResponse } = useAdminProducts({ limit: 200 });
   const products = productsResponse?.data?.items ?? productsResponse?.data ?? [];
 
+  // selectedMenuId === null means we are in the main list view of all menus.
   const [selectedMenuId, setSelectedMenuId] = useState<string | null>(null);
-  const [activeGroupFilter, setActiveGroupFilter] = useState<string>("ALL");
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newLocation, setNewLocation] = useState<string>(CMS_MENU_LOCATIONS[0].value);
 
   // Unsaved State Management
   const [localItems, setLocalItems] = useState<MenuItem[]>([]);
@@ -339,7 +336,7 @@ export default function CmsMenusPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
-  const [editingMenuSettings, setEditingMenuSettings] = useState(false);
+  const [deleteMenuTarget, setDeleteMenuTarget] = useState<Menu | null>(null);
 
   // Add Item State
   const [addLabel, setAddLabel] = useState("");
@@ -356,16 +353,12 @@ export default function CmsMenusPage() {
 
   const menuList: Menu[] = useMemo(() => (menus as Menu[]) ?? [], [menus]);
 
-  useEffect(() => {
-    if (menuList.length > 0 && (!selectedMenuId || !menuList.some((m) => m.id === selectedMenuId))) {
-      setSelectedMenuId(menuList[0].id);
+  const activeMenu = useMemo(() => {
+    if (selectedMenuId === "new") {
+      return { id: "new", name: "New Menu", location: "", status: "ACTIVE", items: [] };
     }
+    return menuList.find((m) => m.id === selectedMenuId) || null;
   }, [menuList, selectedMenuId]);
-
-  const activeMenu = useMemo(
-    () => menuList.find((m) => m.id === selectedMenuId) || menuList[0] || null,
-    [menuList, selectedMenuId]
-  );
 
   const [menuName, setMenuName] = useState("");
   const [menuLocation, setMenuLocation] = useState("");
@@ -404,20 +397,23 @@ export default function CmsMenusPage() {
   // Synchronize local items when switching menus
   useEffect(() => {
     if (activeMenu) {
-      setMenuName(activeMenu.name);
-      setMenuLocation(activeMenu.location);
+      setMenuName(activeMenu.id === "new" ? "" : activeMenu.name);
+      setMenuLocation(activeMenu.id === "new" ? "" : activeMenu.location);
       setMenuStatus(activeMenu.status ?? "ACTIVE");
       setLocalItems(activeMenu.items.map(normalizeItem));
       setDeletedItemIds([]);
       setUnsavedChanges(false);
       setSelectedIds([]);
+    } else {
+      setMenuName("");
+      setMenuLocation("");
+      setMenuStatus("ACTIVE");
+      setLocalItems([]);
+      setDeletedItemIds([]);
+      setUnsavedChanges(false);
+      setSelectedIds([]);
     }
   }, [activeMenu]);
-
-  const activeLocationMeta = useMemo(
-    () => (activeMenu ? CMS_MENU_LOCATIONS.find((loc) => loc.value === activeMenu.location) : null),
-    [activeMenu]
-  );
 
   // ─── Nested Hierarchy Sorting Logic ──────────────────────────────────────
   const treeItems = useMemo(() => {
@@ -490,70 +486,6 @@ export default function CmsMenusPage() {
     [localItems]
   );
 
-  // Grouped Menu Tabs for Sidebar
-  const filteredLocationTabs = useMemo(() => {
-    if (activeGroupFilter === "ALL") return menuList;
-    return menuList.filter((m) => {
-      const g = CMS_MENU_LOCATIONS.find((loc) => loc.value === m.location)?.group;
-      return g === activeGroupFilter;
-    });
-  }, [menuList, activeGroupFilter]);
-
-  // Keep selected tab in view when filter changes
-  useEffect(() => {
-    if (filteredLocationTabs.length > 0 && !filteredLocationTabs.some((m) => m.id === selectedMenuId)) {
-      setSelectedMenuId(filteredLocationTabs[0].id);
-    }
-  }, [filteredLocationTabs, selectedMenuId]);
-
-  const groupCounts = useMemo(() => {
-    const header = menuList.filter((m) => CMS_MENU_LOCATIONS.find((l) => l.value === m.location)?.group === "header").length;
-    const footer = menuList.filter((m) => CMS_MENU_LOCATIONS.find((l) => l.value === m.location)?.group === "footer").length;
-    const offices = menuList.filter((m) => CMS_MENU_LOCATIONS.find((l) => l.value === m.location)?.group === "offices_legal").length;
-    return { all: menuList.length, header, footer, offices };
-  }, [menuList]);
-
-  // Create Menu location
-  async function createMenu() {
-    if (!newName.trim()) {
-      showToast("Name is required.", "error");
-      return;
-    }
-
-    try {
-      const response = await adminApi.post("/cms/menus", { name: newName.trim(), location: newLocation, status: "ACTIVE" });
-      showToast("Menu created.", "success");
-      setCreating(false);
-      setNewName("");
-      setNewLocation(CMS_MENU_LOCATIONS[0].value);
-      if (response.data.data?.id) setSelectedMenuId(response.data.data.id);
-      refetch();
-    } catch {
-      showToast("Failed to create menu.", "error");
-    }
-  }
-
-  // Update Location Settings
-  async function saveMenuSettings() {
-    if (!activeMenu || !menuName.trim() || !menuLocation.trim()) {
-      showToast("Name and location key are required.", "error");
-      return;
-    }
-
-    try {
-      await adminApi.put(`/cms/menus/${activeMenu.id}`, {
-        name: menuName.trim(),
-        location: menuLocation.trim(),
-        status: menuStatus,
-      });
-      showToast("Menu settings saved.", "success");
-      setEditingMenuSettings(false);
-      refetch();
-    } catch {
-      showToast("Failed to save menu settings.", "error");
-    }
-  }
-
   // Add Item to Local State
   function addItem() {
     if (!addLabel.trim()) {
@@ -611,12 +543,50 @@ export default function CmsMenusPage() {
     setDeleteItemId(null);
   }
 
+  // Remove whole Menu location
+  async function removeMenu() {
+    if (!deleteMenuTarget) return;
+    try {
+      await adminApi.delete(`/cms/menus/${deleteMenuTarget.id}`);
+      showToast("Menu deleted successfully.", "success");
+      setDeleteMenuTarget(null);
+      refetch();
+    } catch {
+      showToast("Failed to delete menu.", "error");
+    }
+  }
+
   // Batch Save all local modifications to server
   async function saveMenuStructure() {
     if (!activeMenu) return;
+    
+    if (!menuName.trim() || !menuLocation.trim()) {
+      showToast("Menu Name and Handle are required.", "error");
+      return;
+    }
+
     setSaving(true);
     try {
-      // 1. Delete marked items
+      let menuId = activeMenu.id;
+
+      // 1. If it's a new menu, create it first
+      if (activeMenu.id === "new") {
+        const menuResponse = await adminApi.post("/cms/menus", {
+          name: menuName.trim(),
+          location: menuLocation.trim(),
+          status: menuStatus,
+        });
+        menuId = menuResponse.data.data.id;
+      } else {
+        // Update menu details
+        await adminApi.put(`/cms/menus/${activeMenu.id}`, {
+          name: menuName.trim(),
+          location: menuLocation.trim(),
+          status: menuStatus,
+        });
+      }
+
+      // 2. Delete marked items
       for (const id of deletedItemIds) {
         await adminApi.delete(`/cms/menu-items/${id}`);
       }
@@ -624,7 +594,7 @@ export default function CmsMenusPage() {
       // To map temporary ids of parent items to new database ids
       const tempIdMap: Record<string, string> = {};
 
-      // 2. Iterate and process creations and updates in index order
+      // 3. Iterate and process creations and updates in index order
       for (const item of localItems) {
         // Resolve parent ID if it references a temp ID that was just created
         const parentId = item.parentId
@@ -633,7 +603,7 @@ export default function CmsMenusPage() {
 
         if (item.id.startsWith("temp-")) {
           // Create new record
-          const response = await adminApi.post(`/cms/menus/${activeMenu.id}/items`, {
+          const response = await adminApi.post(`/cms/menus/${menuId}/items`, {
             label: item.label.trim(),
             url: item.url.trim(),
             parentId,
@@ -656,10 +626,11 @@ export default function CmsMenusPage() {
         }
       }
 
-      showToast("Menu navigation saved successfully.", "success");
+      showToast("Menu saved successfully.", "success");
       setUnsavedChanges(false);
       setDeletedItemIds([]);
       setSelectedIds([]);
+      setSelectedMenuId(null); // Redirect back to list
       refetch();
     } catch (error) {
       showToast("Failed to save menu changes.", "error");
@@ -807,452 +778,406 @@ export default function CmsMenusPage() {
 
   return (
     <AdminLayout title="Menus" breadcrumb={[{ label: "Content" }, { label: "Menus" }]}>
-      {/* Header */}
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-[17px] font-bold text-[#1A1A1A]">Header & Footer Navigation Menus</h2>
-          <p className="text-xs text-[#6B6B6B]">Select a menu location tab from the left sidebar to view and manage its items.</p>
-        </div>
-        <button
-          onClick={() => setCreating((value) => !value)}
-          className="flex items-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2 text-xs font-semibold text-white hover:bg-[#B5151B] transition-all shadow-xs"
-        >
-          <Plus size={14} />
-          New Menu Location
-        </button>
-      </div>
-
-      {/* Notice Banner */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200/80 bg-blue-50/60 px-4 py-2.5 text-[12.5px] text-blue-900">
-        <div className="flex items-center gap-2">
-          <Globe size={15} className="text-blue-600 shrink-0" />
-          <span>
-            <strong>Social Media Links:</strong> Footer social links are managed under{" "}
-            <a href="/admin/cms/footer" className="font-semibold text-blue-800 underline hover:text-blue-950">
-              CMS → Footer
-            </a>
-            .
-          </span>
-        </div>
-        <a href="/admin/cms/footer" className="shrink-0 font-semibold text-blue-700 hover:text-blue-900 text-xs hover:underline">
-          Manage Social Links →
-        </a>
-      </div>
-
-      {creating && (
-        <div className="mb-5 grid items-end gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 md:grid-cols-[1fr_1fr_auto_auto]">
-          <AdminInput label="Name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Footer About Column" />
-          <AdminSelect
-            label="Location"
-            value={newLocation}
-            onChange={(e) => setNewLocation(e.target.value)}
-            options={CMS_MENU_LOCATIONS.map((option) => ({ value: option.value, label: `${option.label} (${option.value})` }))}
-          />
-          <button onClick={createMenu} className="mb-0.5 rounded-lg bg-[#E31E24] px-4 py-2 text-xs font-semibold text-white hover:bg-[#B5151B]">
-            Create
-          </button>
-          <button onClick={() => setCreating(false)} className="mb-0.5 rounded-lg border border-gray-200 px-4 py-2 text-xs hover:bg-white">
-            Cancel
-          </button>
-        </div>
-      )}
-
-      {/* Unsaved Changes Warning Panel */}
-      {unsavedChanges && (
-        <div className="mb-5 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 p-3 shadow-xs">
-          <div className="flex items-center gap-2 text-amber-800 text-xs font-semibold">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-            </span>
-            <span>You have unsaved changes in this menu. Remember to save changes before leaving.</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                if (activeMenu) {
-                  setLocalItems(activeMenu.items.map(normalizeItem));
-                  setDeletedItemIds([]);
-                  setUnsavedChanges(false);
-                  setSelectedIds([]);
-                }
-              }}
-              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              Discard
-            </button>
-            <button
-              onClick={saveMenuStructure}
-              disabled={saving}
-              className="rounded-md bg-[#E31E24] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50 transition-colors"
-            >
-              {saving ? "Saving..." : "Save Changes"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Main Grid View */}
-      <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)] items-start">
-        {/* Sidebar Tabs List */}
-        <div className="rounded-xl border border-[#E6E6E6] bg-white p-3 space-y-3 shadow-2xs">
-          {/* Group Category Filters */}
-          <div className="flex flex-wrap items-center gap-1 border-b border-[#E6E6E6] pb-2.5">
-            <button
-              type="button"
-              onClick={() => setActiveGroupFilter("ALL")}
-              className={cn(
-                "rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors",
-                activeGroupFilter === "ALL" ? "bg-[#1A1A1A] text-white" : "bg-[#F2F2F2] text-[#6B6B6B] hover:bg-[#E6E6E6]"
-              )}
-            >
-              All ({groupCounts.all})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveGroupFilter("header")}
-              className={cn(
-                "rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors",
-                activeGroupFilter === "header" ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
-              )}
-            >
-              Header ({groupCounts.header})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveGroupFilter("footer")}
-              className={cn(
-                "rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors",
-                activeGroupFilter === "footer" ? "bg-rose-600 text-white" : "bg-rose-50 text-rose-700 hover:bg-rose-100"
-              )}
-            >
-              Footer ({groupCounts.footer})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveGroupFilter("offices_legal")}
-              className={cn(
-                "rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors",
-                activeGroupFilter === "offices_legal" ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-800 hover:bg-amber-100"
-              )}
-            >
-              Offices ({groupCounts.offices})
-            </button>
-          </div>
-
-          {/* Menus List */}
-          {isLoading ? (
-            <div className="py-6 text-center text-xs text-[#9A9A9A]">Loading tabs...</div>
-          ) : (
-            <div className="space-y-1 max-h-[70vh] overflow-y-auto pr-0.5">
-              {filteredLocationTabs.map((tabMenu) => {
-                const isSelected = tabMenu.id === selectedMenuId;
-                return (
-                  <button
-                    key={tabMenu.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedMenuId(tabMenu.id);
-                      setEditingMenuSettings(false);
-                    }}
-                    className={cn(
-                      "w-full text-left rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all flex items-center justify-between gap-2 border",
-                      isSelected
-                        ? "bg-[#E31E24] text-white border-[#E31E24] font-semibold shadow-2xs"
-                        : "bg-transparent text-[#1A1A1A] border-transparent hover:bg-[#F5F5F5]"
-                    )}
-                  >
-                    <span className="truncate">{tabMenu.name}</span>
-                    <span
-                      className={cn(
-                        "rounded-full px-2 py-0.5 font-mono text-[10.5px] font-bold shrink-0",
-                        isSelected ? "bg-white/25 text-white" : "bg-[#EFEFEF] text-[#6B6B6B]"
-                      )}
-                    >
-                      {tabMenu.items.length}
-                    </span>
-                  </button>
-                );
-              })}
-
-              {filteredLocationTabs.length === 0 && (
-                <div className="py-6 text-center text-xs text-[#9A9A9A]">No tabs found.</div>
-              )}
+      
+      {/* ─── CASE 1: Shopify-like Dedicated Menu Editor View ────────────────── */}
+      {selectedMenuId !== null && activeMenu ? (
+        <div className="space-y-5 pb-16 relative w-full">
+          
+          {/* Header Navigation Back-link */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelectedMenuId(null)}
+                className="text-xs font-semibold text-[#6B6B6B] hover:text-[#1A1A1A] transition-colors"
+              >
+                ← Navigation
+              </button>
+              <span className="text-[#9A9A9A] text-xs">/</span>
+              <h2 className="text-[17px] font-bold text-[#1A1A1A]">{menuName || "New Menu"}</h2>
             </div>
-          )}
-        </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSelectedMenuId(null)}
+                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveMenuStructure}
+                disabled={saving}
+                className="rounded-md bg-[#E31E24] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50 transition-colors"
+              >
+                {saving ? "Saving..." : "Save Menu"}
+              </button>
+            </div>
+          </div>
 
-        {/* Selected Menu Workspace */}
-        {activeMenu ? (
-          <div className="space-y-5">
-            {/* Top Config Card */}
-            <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-xs space-y-4">
-              <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#E6E6E6] pb-4">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-[17px] font-bold text-[#1A1A1A]">{activeMenu.name}</h3>
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
-                        activeMenu.status === "ACTIVE"
-                          ? "border border-green-200 bg-green-50 text-green-700"
-                          : "border border-gray-200 bg-gray-50 text-gray-500"
-                      }`}
-                    >
-                      {activeMenu.status ?? "ACTIVE"}
-                    </span>
-                  </div>
-                  {activeLocationMeta?.description && (
-                    <p className="mt-1 text-[13px] text-[#6B6B6B]">{activeLocationMeta.description}</p>
-                  )}
-                  <div className="mt-2 flex items-center gap-2 text-xs text-[#9A9A9A]">
-                    <span className="font-mono text-[11px] text-[#9A9A9A]">Handle: {activeMenu.location}</span>
-                  </div>
-                </div>
-
+          {/* Shopify Unsaved Changes Black Banner */}
+          {unsavedChanges && (
+            <div className="flex items-center justify-between rounded-lg bg-neutral-900 text-white p-3.5 shadow-md">
+              <span className="text-xs font-medium">Unsaved changes</span>
+              <div className="flex items-center gap-2">
                 <button
-                  type="button"
-                  onClick={() => setEditingMenuSettings((prev) => !prev)}
-                  className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3.5 py-1.5 text-xs font-semibold text-[#1A1A1A] hover:bg-[#F5F5F5] transition-colors"
+                  onClick={() => {
+                    if (activeMenu.id === "new") {
+                      setSelectedMenuId(null);
+                    } else {
+                      setLocalItems(activeMenu.items.map(normalizeItem));
+                      setDeletedItemIds([]);
+                      setUnsavedChanges(false);
+                      setSelectedIds([]);
+                    }
+                  }}
+                  className="rounded px-3 py-1 text-xs font-semibold text-white hover:bg-neutral-800 transition-colors border border-neutral-700"
                 >
-                  <Settings size={13} />
-                  {editingMenuSettings ? "Hide Settings" : "Edit Menu Settings"}
+                  Discard
+                </button>
+                <button
+                  onClick={saveMenuStructure}
+                  disabled={saving}
+                  className="rounded bg-white px-4 py-1 text-xs font-semibold text-neutral-950 hover:bg-gray-100 disabled:opacity-50 transition-colors"
+                >
+                  {saving ? "Saving..." : "Save"}
                 </button>
               </div>
+            </div>
+          )}
 
-              {editingMenuSettings && (
-                <div className="grid gap-3 rounded-lg border border-[#E6E6E6] bg-[#FDFDFD] p-4 md:grid-cols-[1fr_1fr_120px_auto]">
-                  <AdminInput label="Menu Display Name" value={menuName} onChange={(e) => setMenuName(e.target.value)} />
-                  <AdminSelect
-                    label="Location Key"
-                    value={menuLocation}
-                    onChange={(e) => setMenuLocation(e.target.value)}
-                    options={CMS_MENU_LOCATIONS.map((option) => ({ value: option.value, label: `${option.label} (${option.value})` }))}
+          {/* Menu Details Card */}
+          <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-xs space-y-4">
+            <h3 className="text-[14px] font-bold text-[#1A1A1A] border-b border-[#E6E6E6] pb-2">Menu details</h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              <AdminInput
+                label="Title"
+                value={menuName}
+                onChange={(e) => {
+                  setMenuName(e.target.value);
+                  setUnsavedChanges(true);
+                }}
+                placeholder="e.g. Main menu"
+              />
+              <AdminInput
+                label="Handle (Location Key)"
+                value={menuLocation}
+                onChange={(e) => {
+                  setMenuLocation(e.target.value.toLowerCase().replace(/\s+/g, "-"));
+                  setUnsavedChanges(true);
+                }}
+                placeholder="e.g. main-menu"
+              />
+            </div>
+            <div className="w-1/2">
+              <AdminSelect
+                label="Status"
+                value={menuStatus}
+                onChange={(e) => {
+                  setMenuStatus(e.target.value);
+                  setUnsavedChanges(true);
+                }}
+                options={[
+                  { value: "ACTIVE", label: "Active" },
+                  { value: "INACTIVE", label: "Inactive" },
+                ]}
+              />
+            </div>
+          </div>
+
+          {/* Shopify-like Menu Items Panel */}
+          <div className="rounded-xl border border-[#E6E6E6] bg-white shadow-xs flex flex-col overflow-hidden">
+            {/* Card Header & Controls */}
+            <div className="border-b border-[#E6E6E6] bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3 min-h-[56px]">
+              <div className="flex items-center gap-2">
+                <h4 className="text-[14px] font-bold text-[#1A1A1A]">Menu items</h4>
+                <span className="rounded-full bg-[#EFEFEF] px-2 py-0.5 font-mono text-[10.5px] font-bold text-[#6B6B6B]">
+                  {filteredTreeItems.length}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
+                  <input
+                    type="text"
+                    placeholder="Search menu items..."
+                    value={itemsSearchQuery}
+                    onChange={(e) => setItemsSearchQuery(e.target.value)}
+                    className="rounded-lg border border-[#E6E6E6] bg-white py-1 pl-7 pr-2.5 text-xs text-[#1A1A1A] outline-none focus:border-[#E31E24] w-48"
                   />
-                  <AdminSelect
-                    label="Status"
-                    value={menuStatus}
-                    onChange={(e) => setMenuStatus(e.target.value)}
-                    options={[
-                      { value: "ACTIVE", label: "Active" },
-                      { value: "INACTIVE", label: "Inactive" },
-                    ]}
-                  />
-                  <div className="flex items-end">
-                    <button
-                      type="button"
-                      onClick={saveMenuSettings}
-                      className="w-full rounded-md bg-[#E31E24] py-2 px-4 text-xs font-semibold text-white hover:bg-[#B5151B] transition-all"
-                    >
-                      Save Settings
-                    </button>
-                  </div>
                 </div>
-              )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAddLabel("");
+                    setAddUrl("");
+                    setAddParentId("");
+                    setAddSortOrder(localItems.length);
+                    setIsAddModalOpen(true);
+                  }}
+                  className="flex items-center gap-1 rounded-lg bg-[#E31E24] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#B5151B] transition-all"
+                >
+                  <Plus size={13} />
+                  Add menu item
+                </button>
+              </div>
             </div>
 
-            {/* Shopify-like Menu Items Editor Panel */}
-            <div className="rounded-xl border border-[#E6E6E6] bg-white shadow-xs flex flex-col overflow-hidden">
-              {/* Card Header & Controls */}
-              <div className="border-b border-[#E6E6E6] bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3 min-h-[56px]">
+            {/* Bulk Actions Header Toolbar (Common Action Section) */}
+            <div className="border-b border-[#E6E6E6] bg-[#FDFDFD] px-4 py-2 flex items-center justify-between text-xs min-h-[44px]">
+              <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
-                  <h4 className="text-[14px] font-bold text-[#1A1A1A]">Menu items</h4>
-                  <span className="rounded-full bg-[#EFEFEF] px-2 py-0.5 font-mono text-[10.5px] font-bold text-[#6B6B6B]">
-                    {filteredTreeItems.length}
-                  </span>
+                  <input
+                    type="checkbox"
+                    checked={filteredTreeItems.length > 0 && selectedIds.length === filteredTreeItems.length}
+                    onChange={handleSelectAllToggle}
+                    className="rounded border-[#CCCCCC] text-[#E31E24] focus:ring-[#E31E24] cursor-pointer"
+                  />
+                  <span className="font-medium text-[#6B6B6B]">{selectedIds.length} Selected</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-                    <input
-                      type="text"
-                      placeholder="Search menu items..."
-                      value={itemsSearchQuery}
-                      onChange={(e) => setItemsSearchQuery(e.target.value)}
-                      className="rounded-lg border border-[#E6E6E6] bg-white py-1 pl-7 pr-2.5 text-xs text-[#1A1A1A] outline-none focus:border-[#E31E24] w-48"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAddLabel("");
-                      setAddUrl("");
-                      setAddParentId("");
-                      setAddSortOrder(localItems.length);
-                      setIsAddModalOpen(true);
-                    }}
-                    className="flex items-center gap-1 rounded-lg bg-[#E31E24] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#B5151B] transition-all"
-                  >
-                    <Plus size={13} />
-                    Add menu item
-                  </button>
-                </div>
-              </div>
-
-              {/* Bulk Actions Header Toolbar (Common Action Section) */}
-              <div className="border-b border-[#E6E6E6] bg-[#FDFDFD] px-4 py-2 flex items-center justify-between text-xs min-h-[44px]">
-                <div className="flex items-center gap-4">
+                {selectedIds.length > 0 && (
+                  <div className="h-4 w-px bg-[#E6E6E6]" />
+                )}
+                {selectedIds.length > 0 && (
                   <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={filteredTreeItems.length > 0 && selectedIds.length === filteredTreeItems.length}
-                      onChange={handleSelectAllToggle}
-                      className="rounded border-[#CCCCCC] text-[#E31E24] focus:ring-[#E31E24] cursor-pointer"
-                    />
-                    <span className="font-medium text-[#6B6B6B]">{selectedIds.length} Selected</span>
-                  </div>
-                  {selectedIds.length > 0 && (
-                    <div className="h-4 w-px bg-[#E6E6E6]" />
-                  )}
-                  {selectedIds.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={bulkAction}
-                        onChange={(e) => setBulkAction(e.target.value as any)}
-                        className="rounded border border-[#E6E6E6] bg-white px-2 py-1 text-xs text-[#1A1A1A] focus:border-[#E31E24] outline-none cursor-pointer"
-                      >
-                        <option value="">Choose Bulk Action</option>
-                        <option value="ENABLE">Mark active</option>
-                        <option value="DISABLE">Mark inactive</option>
-                        <option value="DELETE">Delete selected</option>
-                      </select>
-                      <button
-                        onClick={handleBulkApply}
-                        className="rounded bg-[#E31E24] px-3 py-1 text-xs font-semibold text-white hover:bg-[#B5151B] transition-colors"
-                      >
-                        Apply
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Shopify-like Tree Cards */}
-              <div className="divide-y divide-[#E6E6E6] bg-gray-50/20">
-                {filteredTreeItems.map((node) => {
-                  const { item, depth } = node;
-                  const isChecked = selectedIds.includes(item.id);
-                  return (
-                    <div
-                      key={item.id}
-                      style={{ paddingLeft: `${Math.max(12, depth * 32)}px` }}
-                      className={cn(
-                        "flex items-center justify-between py-3 pr-4 hover:bg-white bg-transparent transition-colors border-l-4",
-                        depth === 1 ? "border-l-indigo-300" : depth >= 2 ? "border-l-rose-300" : "border-l-transparent"
-                      )}
+                    <select
+                      value={bulkAction}
+                      onChange={(e) => setBulkAction(e.target.value as any)}
+                      className="rounded border border-[#E6E6E6] bg-white px-2 py-1 text-xs text-[#1A1A1A] focus:border-[#E31E24] outline-none cursor-pointer"
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        {/* Drag Handle Lookalike */}
-                        <div className="text-gray-300 cursor-grab shrink-0">
-                          <GripVertical size={15} />
-                        </div>
-                        {/* Row Checkbox */}
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => handleSelectToggle(item.id)}
-                          className="rounded border-[#CCCCCC] text-[#E31E24] focus:ring-[#E31E24] cursor-pointer shrink-0"
-                        />
-                        {/* Label & URL */}
-                        <div className="min-w-0">
-                          <span className="text-[13px] font-bold text-[#1A1A1A] block truncate">
-                            {item.label}
-                          </span>
-                          <span className="text-[11px] font-mono text-gray-500 block truncate max-w-[280px]">
-                            {item.url || "/"}
-                            {item.openInNewTab && <span className="ml-1 text-[10px] bg-gray-100 text-gray-600 px-1 rounded">New Tab</span>}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Position & Action Buttons */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        {/* Position controls */}
-                        <div className="flex items-center gap-0.5 border border-[#E6E6E6] rounded-md bg-white p-0.5">
-                          <button
-                            type="button"
-                            onClick={() => handleOutdent(item.id)}
-                            disabled={!item.parentId}
-                            className="p-1 text-gray-500 hover:bg-gray-100 hover:text-black rounded disabled:opacity-20 transition-all"
-                            title="Outdent (Move left)"
-                          >
-                            <ArrowLeft size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleIndent(item.id)}
-                            disabled={depth >= 2}
-                            className="p-1 text-gray-500 hover:bg-gray-100 hover:text-black rounded disabled:opacity-20 transition-all"
-                            title="Indent (Move right / nest)"
-                          >
-                            <ArrowRight size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleMoveUp(item.id)}
-                            className="p-1 text-gray-500 hover:bg-gray-100 hover:text-black rounded transition-all"
-                            title="Move up"
-                          >
-                            <ArrowUp size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleMoveDown(item.id)}
-                            className="p-1 text-gray-500 hover:bg-gray-100 hover:text-black rounded transition-all"
-                            title="Move down"
-                          >
-                            <ArrowDown size={13} />
-                          </button>
-                        </div>
-
-                        {/* Status Badge */}
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                            item.status === "ACTIVE"
-                              ? "bg-green-50 text-green-700 border border-green-200"
-                              : "bg-gray-50 text-gray-500 border border-gray-200"
-                          }`}
-                        >
-                          {item.status || "ACTIVE"}
-                        </span>
-
-                        {/* Edit & Delete Actions */}
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => setEditingItem({ ...item })}
-                            className="p-1.5 border border-[#E6E6E6] hover:bg-gray-50 text-[#1A1A1A] rounded-md transition-all"
-                            title="Edit menu item"
-                          >
-                            <Edit2 size={12} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteItemId(item.id)}
-                            className="p-1.5 border border-red-100 hover:bg-red-50 text-red-600 rounded-md transition-all"
-                            title="Delete menu item"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {filteredTreeItems.length === 0 && (
-                  <div className="py-12 text-center text-sm text-[#6B6B6B]">
-                    No menu items configured for this location. Click "Add menu item" to start.
+                      <option value="">Choose Bulk Action</option>
+                      <option value="ENABLE">Mark active</option>
+                      <option value="DISABLE">Mark inactive</option>
+                      <option value="DELETE">Delete selected</option>
+                    </select>
+                    <button
+                      onClick={handleBulkApply}
+                      className="rounded bg-[#E31E24] px-3 py-1 text-xs font-semibold text-white hover:bg-[#B5151B] transition-colors"
+                    >
+                      Apply
+                    </button>
                   </div>
                 )}
               </div>
             </div>
+
+            {/* Shopify-like Tree Cards */}
+            <div className="divide-y divide-[#E6E6E6] bg-gray-50/20">
+              {filteredTreeItems.map((node) => {
+                const { item, depth } = node;
+                const isChecked = selectedIds.includes(item.id);
+                return (
+                  <div
+                    key={item.id}
+                    style={{ paddingLeft: `${Math.max(12, depth * 32)}px` }}
+                    className={cn(
+                      "flex items-center justify-between py-3 pr-4 hover:bg-white bg-transparent transition-colors border-l-4",
+                      depth === 1 ? "border-l-indigo-300" : depth >= 2 ? "border-l-rose-300" : "border-l-transparent"
+                    )}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {/* Drag Handle Lookalike */}
+                      <div className="text-gray-300 cursor-grab shrink-0">
+                        <GripVertical size={15} />
+                      </div>
+                      {/* Row Checkbox */}
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleSelectToggle(item.id)}
+                        className="rounded border-[#CCCCCC] text-[#E31E24] focus:ring-[#E31E24] cursor-pointer shrink-0"
+                      />
+                      {/* Label & URL */}
+                      <div className="min-w-0">
+                        <span className="text-[13px] font-bold text-[#1A1A1A] block truncate">
+                          {item.label}
+                        </span>
+                        <span className="text-[11px] font-mono text-gray-500 block truncate max-w-[280px]">
+                          {item.url || "/"}
+                          {item.openInNewTab && <span className="ml-1 text-[10px] bg-gray-100 text-gray-600 px-1 rounded">New Tab</span>}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Position & Action Buttons */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {/* Position controls */}
+                      <div className="flex items-center gap-0.5 border border-[#E6E6E6] rounded-md bg-white p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOutdent(item.id)}
+                          disabled={!item.parentId}
+                          className="p-1 text-gray-500 hover:bg-gray-100 hover:text-black rounded disabled:opacity-20 transition-all"
+                          title="Outdent (Move left)"
+                        >
+                          <ArrowLeft size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleIndent(item.id)}
+                          disabled={depth >= 2}
+                          className="p-1 text-gray-500 hover:bg-gray-100 hover:text-black rounded disabled:opacity-20 transition-all"
+                          title="Indent (Move right / nest)"
+                        >
+                          <ArrowRight size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveUp(item.id)}
+                          className="p-1 text-gray-500 hover:bg-gray-100 hover:text-black rounded transition-all"
+                          title="Move up"
+                        >
+                          <ArrowUp size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveDown(item.id)}
+                          className="p-1 text-gray-500 hover:bg-gray-100 hover:text-black rounded transition-all"
+                          title="Move down"
+                        >
+                          <ArrowDown size={13} />
+                        </button>
+                      </div>
+
+                      {/* Status Badge */}
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                          item.status === "ACTIVE"
+                            ? "bg-green-50 text-green-700 border border-green-200"
+                            : "bg-gray-50 text-gray-500 border border-gray-200"
+                        }`}
+                      >
+                        {item.status || "ACTIVE"}
+                      </span>
+
+                      {/* Edit & Delete Actions */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditingItem({ ...item })}
+                          className="p-1.5 border border-[#E6E6E6] hover:bg-gray-50 text-[#1A1A1A] rounded-md transition-all"
+                          title="Edit menu item"
+                        >
+                          <Edit2 size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteItemId(item.id)}
+                          className="p-1.5 border border-red-100 hover:bg-red-50 text-red-600 rounded-md transition-all"
+                          title="Delete menu item"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {filteredTreeItems.length === 0 && (
+                <div className="py-12 text-center text-sm text-[#6B6B6B]">
+                  No menu items configured for this location. Click "Add menu item" to start.
+                </div>
+              )}
+            </div>
           </div>
-        ) : (
-          <div className="rounded-xl border border-dashed border-[#E6E6E6] bg-white p-12 text-center text-sm text-[#6B6B6B]">
-            No menu location selected.
+        </div>
+      ) : (
+        // ─── CASE 2: Shopify-like Table Listing of All Navigation Menus ──────
+        <div className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-[17px] font-bold text-[#1A1A1A]">Navigation Menus</h2>
+              <p className="text-xs text-[#6B6B6B]">Manage the navigation menus that appear on your storefront header, footer, and sidebar zones.</p>
+            </div>
+            <button
+              onClick={() => setSelectedMenuId("new")}
+              className="flex items-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2 text-xs font-semibold text-white hover:bg-[#B5151B] transition-all shadow-xs"
+            >
+              <Plus size={14} />
+              Add menu
+            </button>
           </div>
-        )}
-      </div>
+
+          <div className="rounded-xl border border-[#E6E6E6] bg-white overflow-hidden shadow-2xs">
+            {/* Header info bar */}
+            <div className="border-b border-[#E6E6E6] bg-[#FDFDFD] px-4 py-3 flex items-center justify-between min-h-[56px]">
+              <span className="text-[14px] font-bold text-[#1A1A1A]">Menus ({menuList.length})</span>
+            </div>
+
+            {/* List Table */}
+            {isLoading ? (
+              <div className="py-12 text-center text-sm text-gray-500">Loading menus...</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-[#E6E6E6] bg-gray-50/50 font-semibold text-[#6B6B6B] uppercase tracking-wider">
+                      <th className="px-4 py-3">Menu Title</th>
+                      <th className="px-4 py-3">Handle / Location</th>
+                      <th className="px-4 py-3">Items Count</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E6E6E6]">
+                    {menuList.map((menu) => (
+                      <tr key={menu.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-4 py-3 font-semibold text-[#E31E24]">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedMenuId(menu.id)}
+                            className="hover:underline text-[13px] font-bold text-left"
+                          >
+                            {menu.name}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-gray-500">{menu.location}</td>
+                        <td className="px-4 py-3 font-semibold text-[#1A1A1A]">{menu.items.length} items</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide ${
+                              menu.status === "ACTIVE"
+                                ? "bg-green-50 text-green-700 border border-green-200"
+                                : "bg-gray-50 text-gray-500 border border-gray-200"
+                            }`}
+                          >
+                            {menu.status ?? "ACTIVE"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedMenuId(menu.id)}
+                              className="p-1.5 border border-[#E6E6E6] bg-white rounded-md text-gray-700 hover:bg-gray-50 transition-all"
+                              title="Edit Menu"
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteMenuTarget(menu)}
+                              className="p-1.5 border border-red-100 bg-white rounded-md text-red-600 hover:bg-red-50 transition-all"
+                              title="Delete Menu"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {menuList.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="py-12 text-center text-sm text-[#6B6B6B]">
+                          No menus found. Click "Add menu" to create your first navigation menu.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Add Item Modal with Shopify Link Picker */}
       {isAddModalOpen && (
@@ -1509,7 +1434,11 @@ export default function CmsMenusPage() {
         </div>
       )}
 
+      {/* Delete Item Confirmation Modal */}
       <ConfirmModal open={!!deleteItemId} title="Remove item" message="Are you sure you want to remove this menu item?" onConfirm={removeItem} onCancel={() => setDeleteItemId(null)} danger />
+      
+      {/* Delete Menu Location Confirmation Modal */}
+      <ConfirmModal open={!!deleteMenuTarget} title="Delete Menu" message={`Are you sure you want to delete the menu "${deleteMenuTarget?.name}"? This action cannot be undone.`} onConfirm={removeMenu} onCancel={() => setDeleteMenuTarget(null)} danger />
     </AdminLayout>
   );
 }

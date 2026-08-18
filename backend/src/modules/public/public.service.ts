@@ -334,10 +334,27 @@ export async function previewPublicProductPrices(
   const country = await resolvePublicCountry(countryCode);
   const product = await prisma.product.findFirst({
     where: buildStorefrontProductWhere(country.id, { slug }),
-    select: { id: true },
+    select: { id: true, hasVariants: true },
   });
 
   if (!product) throw new AppError("Product not found.", 404);
+
+  // Validate variant selection compatibility with product variant configuration
+  for (const item of items) {
+    const isBaseProductRequest = item.variantId === product.id;
+    if (product.hasVariants && isBaseProductRequest) {
+      throw new AppError(
+        "One or more requested variants are not available for this product or country.",
+        400,
+      );
+    }
+    if (!product.hasVariants && !isBaseProductRequest) {
+      throw new AppError(
+        "One or more requested variants are not available for this product or country.",
+        400,
+      );
+    }
+  }
 
   const processedItems = items.map(item => ({
     ...item,

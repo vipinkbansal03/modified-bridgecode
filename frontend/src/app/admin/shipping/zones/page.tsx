@@ -226,14 +226,36 @@ export default function ShippingZonesPage() {
       setBulkSaving(false);
     }
   };
-
   const columns: Column<ShippingZone>[] = [
     { key: "provider", label: "Provider", render: (zone) => zone.provider?.displayName ?? "-" },
-    { key: "country", label: "Country", render: (zone) => (zone.countries ?? []).map((entry) => `${entry.country.name} (${entry.country.code})`).join(", ") || "-" },
+    {
+      key: "country",
+      label: "Country",
+      render: (zone) => {
+        return (zone.countries ?? []).map((entry: any) => {
+          const isCountryDisabled = entry.country.status === "INACTIVE";
+          return `${entry.country.name} (${entry.country.code})${isCountryDisabled ? " (Disabled)" : ""}`;
+        }).join(", ") || "-";
+      }
+    },
     { key: "charge", label: "Charge", render: (zone) => money(zone.charge) },
     { key: "freeAbove", label: "Free Above", render: (zone) => money(zone.freeAbove) },
     { key: "estimatedDays", label: "Est. Days", render: (zone) => zone.estimatedDays ?? "-" },
-    { key: "status", label: "Status", render: (zone) => <StatusBadge status={zone.status} /> },
+    {
+      key: "status",
+      label: "Status",
+      render: (zone) => {
+        const allCountriesInactive = zone.countries.length > 0 && zone.countries.every((c: any) => c.country.status === "INACTIVE");
+        if (allCountriesInactive && zone.status === "ACTIVE") {
+          return (
+            <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-inset ring-amber-600/20">
+              INACTIVE (Country Disabled)
+            </span>
+          );
+        }
+        return <StatusBadge status={zone.status} />;
+      }
+    },
     {
       key: "actions",
       label: "Actions",

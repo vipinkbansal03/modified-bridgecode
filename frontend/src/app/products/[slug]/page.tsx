@@ -19,6 +19,7 @@ import { ProductTopBannerSection } from "@/components/sections/ProductTopBannerS
 import { WishlistButton } from "@/components/product/WishlistButton";
 
 import { ViewSpecsLink } from "@/components/product/ViewSpecsLink";
+import { ConfigureButton } from "@/components/product/ConfigureButton";
 import { buildMetadata } from "@/lib/seo";
 import productsData from "@/data/products.json";
 import homeContent from "@/data/home.json";
@@ -303,8 +304,11 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                     Product Code: {product.productCode}
                   </span>
                 )}
-                <div>
+                <div className="flex items-center">
                   <ViewSpecsLink />
+                  {apiProduct && apiProduct.variants.length > 0 && (
+                    <ConfigureButton />
+                  )}
                 </div>
               </div>
 
@@ -317,13 +321,15 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           </div>
 
           {/* Variant Configurator Flow (First: Configurator / Matrix / Bulk Order / Inquiry) */}
-          {apiProduct && apiProduct.variants.length > 0 ? (
-            <VariantConfigurator apiProduct={apiProduct} />
-          ) : product.prescriptionOptions && product.slotOptions && product.packagingOptions && product.discountTiers ? (
-            <BulkOrderPanel product={product as Required<typeof product>} productId={apiProduct?.id} />
-          ) : (
-            <SimpleInquiryPanel product={product} productId={apiProduct?.id} />
-          )}
+          <div id="configurator-section">
+            {apiProduct && apiProduct.variants.length > 0 ? (
+              <VariantConfigurator apiProduct={apiProduct} />
+            ) : product.prescriptionOptions && product.slotOptions && product.packagingOptions && product.discountTiers ? (
+              <BulkOrderPanel product={product as Required<typeof product>} productId={apiProduct?.id} />
+            ) : (
+              <SimpleInquiryPanel product={product} productId={apiProduct?.id} />
+            )}
+          </div>
 
           {/* Full Width Horizontal Tabs Section (Second) */}
           <ProductTabs product={product} apiProduct={apiProduct} />
