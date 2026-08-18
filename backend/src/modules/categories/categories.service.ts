@@ -7,7 +7,7 @@ const categoryInclude = {
   parent: { select: { id: true, name: true, slug: true } },
   children: { where: { deletedAt: null }, select: { id: true, name: true, slug: true, parentId: true } },
   translations: { include: { language: true } },
-  _count: { select: { products: true } },
+  _count: { select: { products: { where: { deletedAt: null } } } },
 } satisfies Prisma.CategoryInclude;
 
 type CategoryInput = {

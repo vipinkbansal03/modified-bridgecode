@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminListToolbar, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { getAdminErrorMessage } from "@/services/adminApi";
 import {
@@ -15,6 +15,7 @@ import {
   useUpdateShippingZone,
   useDeleteShippingZone,
   useGetShippingDefaultRate,
+  useBulkShippingZones,
 } from "@/hooks/admin/useAdminHooks";
 import { useAdminCountries } from "@/hooks/admin/useAdminHooks";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
@@ -78,6 +79,11 @@ export default function ShippingZonesPage() {
   const [deleteTarget, setDeleteTarget] = useState<ShippingZone | null>(null);
   const [rateLoading, setRateLoading] = useState(false);
   const [rateCurrency, setRateCurrency] = useState("");
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const bulkZones = useBulkShippingZones();
 
   const { data: zones, isLoading: zonesLoading } = useAdminShippingZones();
   const { data: providers = [] } = useAdminShippingProviders();
@@ -184,7 +190,6 @@ export default function ShippingZonesPage() {
     });
     setFormOpen(true);
   }
-
   async function handleDelete() {
     if (!deleteTarget) return;
     try {
@@ -195,6 +200,32 @@ export default function ShippingZonesPage() {
       showToast(getAdminErrorMessage(error, "Could not delete shipping zone."), "error");
     }
   }
+
+  const handleBulkAction = async () => {
+    if (!bulkAction || selectedIds.length === 0) return;
+    if (bulkAction === "delete") {
+      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected shipping zone(s)? This action cannot be undone.`)) {
+        return;
+      }
+    }
+
+    setBulkSaving(true);
+    try {
+      await bulkZones.mutateAsync({
+        ids: selectedIds,
+        action: bulkAction === "delete" ? "DELETE" : bulkAction === "activate" ? "ENABLE" : "DISABLE",
+      });
+      showToast(
+        bulkAction === "delete" ? "Shipping zones deleted." : bulkAction === "activate" ? "Shipping zones activated." : "Shipping zones paused."
+      );
+      setSelectedIds([]);
+      setBulkAction("");
+    } catch (err) {
+      showToast(getAdminErrorMessage(err, "Failed to run bulk action."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
 
   const columns: Column<ShippingZone>[] = [
     { key: "provider", label: "Provider", render: (zone) => zone.provider?.displayName ?? "-" },
@@ -241,7 +272,33 @@ export default function ShippingZonesPage() {
           primaryAction={canCreate ? { onClick: openCreate, label: "Add Zone" } : undefined}
         />
 
-        <DataTable columns={columns} data={zoneList} isLoading={zonesLoading} rowKey="id" emptyMessage="No shipping zones configured." />
+        <DataTable<ShippingZone>
+          title="Zones List"
+          columns={columns}
+          data={zoneList}
+          isLoading={zonesLoading}
+          rowKey="id"
+          emptyMessage="No shipping zones configured."
+          enableSelection={true}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          renderBulkActions={(selectedIds) => (
+            <AdminBulkActionsBar
+              selectedCount={selectedIds.length}
+              onClear={() => setSelectedIds([])}
+              actionType={bulkAction}
+              onActionTypeChange={setBulkAction}
+              actions={[
+                { value: "activate", label: "Mark active" },
+                { value: "deactivate", label: "Mark inactive" },
+                { value: "delete", label: "Delete selected" }
+              ]}
+              onApply={handleBulkAction}
+              applyLoading={bulkSaving}
+              applyDisabled={!bulkAction || selectedIds.length === 0}
+            />
+          )}
+        />
       </div>
 
       {formOpen && (
@@ -278,10 +335,11 @@ export default function ShippingZonesPage() {
                   }}
                   allowSelectAll
                   selectAllLabel="Select All"
+                  emptyMeansAll={false}
                   error={form.errors.countryIds as string}
                 />
-                <AdminInput label={rateCurrency ? `Charge (${rateCurrency})` : "Charge"} required type="number" min="0" step="0.01" {...form.getFieldProps("charge")} error={form.errors.charge as string} disabled className="cursor-not-allowed bg-[#F5F5F5] text-[#6B6B6B]" />
-                <AdminInput label={rateCurrency ? `Free Above (${rateCurrency})` : "Free Above"} type="number" min="0" step="0.01" {...form.getFieldProps("freeAbove")} error={form.errors.freeAbove as string} placeholder="Optional" />
+                <AdminInput label={rateCurrency ? `Charge (${rateCurrency})` : "Charge"} required type="text" name="charge" value={form.values.charge} onChange={(e) => form.setFieldValue("charge", e.target.value.replace(/[^0-9.]/g, ""))} onBlur={form.handleBlur} error={form.errors.charge as string} disabled className="cursor-not-allowed bg-[#F5F5F5] text-[#6B6B6B]" />
+                <AdminInput label={rateCurrency ? `Free Above (${rateCurrency})` : "Free Above"} type="text" name="freeAbove" value={form.values.freeAbove} onChange={(e) => form.setFieldValue("freeAbove", e.target.value.replace(/[^0-9.]/g, ""))} onBlur={form.handleBlur} error={form.errors.freeAbove as string} placeholder="Optional" />
                 <AdminInput label="Estimated Days" required {...form.getFieldProps("estimatedDays")} error={form.errors.estimatedDays as string} disabled className="cursor-not-allowed bg-[#F5F5F5] text-[#6B6B6B]" />
                 <AdminSelect
                   label="Status"

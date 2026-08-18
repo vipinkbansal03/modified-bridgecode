@@ -360,6 +360,32 @@ export async function deleteZone(id: string) {
   return prisma.shippingZone.delete({ where: { id } });
 }
 
+export async function bulkUpdateZones(input: { ids: string[]; action: "ENABLE" | "DISABLE" | "DELETE" }) {
+  const { ids, action } = input;
+  if (!ids || ids.length === 0) {
+    throw new AppError("No shipping zone IDs provided.", 400);
+  }
+
+  if (action === "DELETE") {
+    const count = await prisma.order.count({
+      where: { shippingZoneId: { in: ids } },
+    });
+    if (count > 0) {
+      throw new AppError(`Cannot delete: one or more selected zones are linked to order(s). Set status to Inactive instead.`, 400);
+    }
+    await prisma.shippingZoneCountry.deleteMany({ where: { zoneId: { in: ids } } });
+    const result = await prisma.shippingZone.deleteMany({ where: { id: { in: ids } } });
+    return { affected: result.count };
+  }
+
+  const nextStatus = action === "ENABLE" ? "ACTIVE" : "INACTIVE";
+  const result = await prisma.shippingZone.updateMany({
+    where: { id: { in: ids } },
+    data: { status: nextStatus },
+  });
+  return { affected: result.count };
+}
+
 // ─── Shipping Calculation ───────────────────────────────
 
 /**

@@ -4,11 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Edit2, Filter, Plus, Search, Shield, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
-import { useAdminCountries, useAdminCoupons, useCreateCoupon, useDeleteCoupon, useUpdateCoupon } from "@/hooks/admin/useAdminHooks";
+import { useAdminCountries, useAdminCoupons, useCreateCoupon, useDeleteCoupon, useUpdateCoupon, useBulkCoupons } from "@/hooks/admin/useAdminHooks";
 import { RefreshButton } from "@/components/admin/RefreshButton";
 import { getAdminErrorMessage } from "@/services/adminApi";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
@@ -128,6 +128,11 @@ export default function CouponsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [deleting, setDeleting] = useState<CouponRow | null>(null);
 
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const bulkCoupons = useBulkCoupons();
+
   const { data, isLoading, refetch, isFetching } = useAdminCoupons({
     page,
     limit,
@@ -153,6 +158,10 @@ export default function CouponsPage() {
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch, status, sortBy, sortDir, limit]);
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [page, limit, debouncedSearch, status, sortBy, sortDir]);
 
   const stats = useMemo(
     () => ({
@@ -249,6 +258,58 @@ export default function CouponsPage() {
       showToast(getAdminErrorMessage(err, "Failed to delete coupon."), "error");
     } finally {
       setDeleting(null);
+    }
+  };
+
+  const handleSelectAll = async (checked: boolean) => {
+    if (!checked) {
+      setSelectedIds([]);
+      return;
+    }
+    try {
+      const { adminApi } = await import("@/services/adminApi");
+      const res = await adminApi.get("/coupons", {
+        params: {
+          status: status || undefined,
+          search: debouncedSearch.trim() || undefined,
+          sortBy,
+          sortDir,
+          limit: 999999,
+          ignoreMaxLimit: "true",
+        },
+      });
+      const allIds = (res.data.data ?? []).map((c: any) => c.id);
+      setSelectedIds(allIds);
+      showToast(`Selected all ${allIds.length} coupons across all pages.`, "success");
+    } catch (err) {
+      showToast("Failed to select all coupons.", "error");
+    }
+  };
+
+  const handleBulkAction = async () => {
+    if (!bulkAction || selectedIds.length === 0) return;
+    if (bulkAction === "delete") {
+      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected coupon(s)? This action cannot be undone.`)) {
+        return;
+      }
+    }
+
+    setBulkSaving(true);
+    try {
+      await bulkCoupons.mutateAsync({
+        ids: selectedIds,
+        action: bulkAction === "delete" ? "DELETE" : bulkAction === "activate" ? "ENABLE" : "DISABLE",
+      });
+      showToast(
+        bulkAction === "delete" ? "Coupons deleted." : bulkAction === "activate" ? "Coupons activated." : "Coupons paused."
+      );
+      setSelectedIds([]);
+      setBulkAction("");
+      refetch();
+    } catch (err) {
+      showToast(getAdminErrorMessage(err, "Failed to run bulk action."), "error");
+    } finally {
+      setBulkSaving(false);
     }
   };
 
@@ -418,12 +479,40 @@ export default function CouponsPage() {
           }
         />
 
-        <div className="rounded-xl border border-[#E6E6E6] bg-white">
-          <DataTable<CouponRow> columns={columns} data={coupons} rowKey="id" isLoading={isLoading} emptyMessage="No coupons found." />
-          <div className="border-t border-[#E6E6E6] px-4 py-3">
-            <Pagination page={pagination.page} totalPages={pagination.totalPages || 1} onPageChange={setPage} />
-          </div>
-        </div>
+        <DataTable<CouponRow>
+          title="Coupons List"
+          columns={columns}
+          data={coupons}
+          rowKey="id"
+          isLoading={isLoading}
+          emptyMessage="No coupons found."
+          enableSelection={true}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          totalItems={pagination.total}
+          currentPage={page}
+          pageSize={limit}
+          totalPages={pagination.totalPages || 1}
+          onPageChange={setPage}
+          onPageSizeChange={setLimit}
+          onSelectAll={handleSelectAll}
+          renderBulkActions={(selectedIds) => (
+            <AdminBulkActionsBar
+              selectedCount={selectedIds.length}
+              onClear={() => setSelectedIds([])}
+              actionType={bulkAction}
+              onActionTypeChange={setBulkAction}
+              actions={[
+                { value: "activate", label: "Mark active" },
+                { value: "deactivate", label: "Mark inactive" },
+                { value: "delete", label: "Delete selected" }
+              ]}
+              onApply={handleBulkAction}
+              applyLoading={bulkSaving}
+              applyDisabled={!bulkAction || selectedIds.length === 0}
+            />
+          )}
+        />
       </div>
 
       <Modal open={isFormOpen} onClose={resetForm} title={form.values.id ? "Edit coupon" : "New coupon"} panelClassName="max-w-4xl">

@@ -5,7 +5,7 @@ import { useMemo, useState, useEffect } from "react";
 import { Calculator, Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column, AdminListToolbar, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column, AdminListToolbar, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
@@ -70,6 +70,44 @@ export default function ShippingBoxesPage() {
     },
   });
 
+  const bulkMutation = useMutation({
+    mutationFn: (data: { ids: string[]; action: "ENABLE" | "DISABLE" | "DELETE" }) =>
+      adminApi.post("/shipping/boxes/bulk", data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-shipping-boxes"] });
+    },
+  });
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+
+  const handleBulkAction = async () => {
+    if (!bulkAction || selectedIds.length === 0) return;
+    if (bulkAction === "delete") {
+      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected shipping box(es)? This action cannot be undone.`)) {
+        return;
+      }
+    }
+
+    setBulkSaving(true);
+    try {
+      await bulkMutation.mutateAsync({
+        ids: selectedIds,
+        action: bulkAction === "delete" ? "DELETE" : bulkAction === "activate" ? "ENABLE" : "DISABLE",
+      });
+      showToast(
+        bulkAction === "delete" ? "Shipping boxes deleted." : bulkAction === "activate" ? "Shipping boxes activated." : "Shipping boxes paused."
+      );
+      setSelectedIds([]);
+      setBulkAction("");
+    } catch (err) {
+      showToast(getAdminErrorMessage(err, "Failed to run bulk action."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   const [formOpen, setFormOpen] = useState(false);
   const [deletingBox, setDeletingBox] = useState<ApiShippingBox | null>(null);
 
@@ -86,6 +124,10 @@ export default function ShippingBoxesPage() {
   const [previewItems, setPreviewItems] = useState<{ productId: string; quantity: number }[]>([]);
   const [previewResult, setPreviewResult] = useState<any>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [activeSubTab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -269,7 +311,33 @@ export default function ShippingBoxesPage() {
         </div>
 
         {activeSubTab === "boxes" ? (
-          <DataTable columns={columns} data={boxes} isLoading={isLoading} rowKey="id" emptyMessage="No shipping boxes configured." />
+          <DataTable<ApiShippingBox>
+            title="Boxes List"
+            columns={columns}
+            data={boxes}
+            isLoading={isLoading}
+            rowKey="id"
+            emptyMessage="No shipping boxes configured."
+            enableSelection={true}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+            renderBulkActions={(selectedIds) => (
+              <AdminBulkActionsBar
+                selectedCount={selectedIds.length}
+                onClear={() => setSelectedIds([])}
+                actionType={bulkAction}
+                onActionTypeChange={setBulkAction}
+                actions={[
+                  { value: "activate", label: "Mark active" },
+                  { value: "deactivate", label: "Mark inactive" },
+                  { value: "delete", label: "Delete selected" }
+                ]}
+                onApply={handleBulkAction}
+                applyLoading={bulkSaving}
+                applyDisabled={!bulkAction || selectedIds.length === 0}
+              />
+            )}
+          />
         ) : (
           <div className="grid gap-5 lg:grid-cols-[1fr_1.2fr]">
             <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 space-y-4">
@@ -433,10 +501,10 @@ export default function ShippingBoxesPage() {
             <div className="sm:col-span-2">
               <AdminInput required label="Box Name" placeholder="e.g. Small Box, Medium Box" {...form.getFieldProps("name")} error={form.errors.name as string} />
             </div>
-            <AdminInput required label="Length (cm)" type="number" placeholder="e.g. 30" {...form.getFieldProps("length")} error={form.errors.length as string} />
-            <AdminInput required label="Width (cm)" type="number" placeholder="e.g. 20" {...form.getFieldProps("width")} error={form.errors.width as string} />
-            <AdminInput required label="Height (cm)" type="number" placeholder="e.g. 15" {...form.getFieldProps("height")} error={form.errors.height as string} />
-            <AdminInput required label="Max Weight (kg)" type="number" placeholder="e.g. 5" {...form.getFieldProps("maxWeight")} error={form.errors.maxWeight as string} />
+            <AdminInput required label="Length (cm)" type="text" placeholder="e.g. 30" name="length" value={form.values.length} onChange={(e) => form.setFieldValue("length", e.target.value.replace(/[^0-9.]/g, ""))} onBlur={form.handleBlur} error={form.errors.length as string} />
+            <AdminInput required label="Width (cm)" type="text" placeholder="e.g. 20" name="width" value={form.values.width} onChange={(e) => form.setFieldValue("width", e.target.value.replace(/[^0-9.]/g, ""))} onBlur={form.handleBlur} error={form.errors.width as string} />
+            <AdminInput required label="Height (cm)" type="text" placeholder="e.g. 15" name="height" value={form.values.height} onChange={(e) => form.setFieldValue("height", e.target.value.replace(/[^0-9.]/g, ""))} onBlur={form.handleBlur} error={form.errors.height as string} />
+            <AdminInput required label="Max Weight (kg)" type="text" placeholder="e.g. 5" name="maxWeight" value={form.values.maxWeight} onChange={(e) => form.setFieldValue("maxWeight", e.target.value.replace(/[^0-9.]/g, ""))} onBlur={form.handleBlur} error={form.errors.maxWeight as string} />
             <div className="sm:col-span-2 flex flex-col">
               <AdminMultiSearchableSelect
                 label="Countries"
@@ -445,6 +513,7 @@ export default function ShippingBoxesPage() {
                 onValuesChange={(vals) => form.setFieldValue("countryIds", vals)}
                 allowSelectAll
                 selectAllLabel="Select All"
+                emptyMeansAll={false}
                 placeholder="Select countries..."
               />
               {form.errors.countryIds && <span className="text-red-500 text-[11.5px] mt-1">{form.errors.countryIds as string}</span>}

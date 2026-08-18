@@ -11,13 +11,12 @@ async function fetchInventory(variantIds: string[]): Promise<ApiInventoryCheck[]
   return unwrapData<ApiInventoryCheck[]>(res);
 }
 
-/** Check real-time inventory for one or more variant IDs. Refreshes every minute. */
+/** Check real-time inventory for one or more variant IDs. */
 export function useInventoryCheck(variantIds: string[]) {
   return useQuery({
     queryKey: qk.inventory.check(variantIds),
     queryFn: () => fetchInventory(variantIds),
     enabled: variantIds.length > 0 && HAS_LIVE_API,
     staleTime: STALE.short,
-    refetchInterval: STALE.short, // auto-poll every minute
   });
 }

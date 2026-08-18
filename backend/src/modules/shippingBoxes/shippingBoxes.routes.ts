@@ -10,6 +10,7 @@ router.get("/:id", requirePermission("shipping.view", "shipping.manage"), C.getO
 router.post("/", requirePermission("shipping.manage"), C.create);
 router.put("/:id", requirePermission("shipping.manage"), C.update);
 router.post("/:id/toggle", requirePermission("shipping.manage"), C.toggle);
+router.post("/bulk", requirePermission("shipping.manage"), C.bulkUpdate);
 router.delete("/:id", requirePermission("shipping.manage"), C.remove);
 
 export default router;

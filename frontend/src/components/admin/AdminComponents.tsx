@@ -46,6 +46,16 @@ interface DataTableProps<T> {
   title?: React.ReactNode;
   description?: React.ReactNode;
   headerActions?: React.ReactNode;
+
+  // Optional Pagination configuration for unified toolbar
+  totalItems?: number;
+  currentPage?: number;
+  pageSize?: number;
+  totalPages?: number;
+  onPageChange?: (page: number) => void;
+  onPageSizeChange?: (size: number) => void;
+  pageSizeOptions?: number[];
+  onSelectAll?: (checked: boolean) => void | Promise<void>;
 }
 
 export function DataTable<T>({
@@ -68,9 +78,18 @@ export function DataTable<T>({
   title,
   description,
   headerActions,
+  totalItems,
+  currentPage,
+  pageSize,
+  totalPages,
+  onPageChange,
+  onPageSizeChange,
+  pageSizeOptions,
+  onSelectAll,
 }: DataTableProps<T>) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
 
   const totalColumns = columns.length + (enableReorder ? 1 : 0) + (enableSelection ? 1 : 0);
 
@@ -93,26 +112,94 @@ export function DataTable<T>({
     );
   }
 
-  const hasBulkActionsActive = enableSelection && selectedIds.length > 0 && renderBulkActions;
+  const hasBulkActionsActive = enableSelection && !!renderBulkActions;
+  const isUnifiedToolbar = hasBulkActionsActive && totalItems !== undefined;
 
   return (
     <div className="rounded-lg border border-[#E6E6E6] bg-white overflow-hidden flex flex-col">
       {(title || description || hasBulkActionsActive) && (
-        <div className="border-b border-[#E6E6E6] bg-white px-4 flex items-center justify-between h-[56px] transition-all">
-          {hasBulkActionsActive ? (
-            <div className="flex items-center justify-between gap-3 w-full animate-fade-in">
-              {renderBulkActions(selectedIds)}
+        <>
+          {isUnifiedToolbar ? (
+            <div className="border-b border-[#E6E6E6] bg-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 min-h-[56px] transition-all">
+              <div className="flex flex-wrap items-center gap-3 w-full">
+                <span className="text-[13px] font-bold text-[#1A1A1A]">{title || "List"}</span>
+
+                {/* Showing Count */}
+                {totalItems !== undefined && currentPage !== undefined && pageSize !== undefined && (
+                  <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">
+                    Showing {totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalItems)} of {totalItems}
+                  </span>
+                )}
+
+                {/* Page Size Select */}
+                {pageSize !== undefined && onPageSizeChange && (
+                  <div className="flex items-center gap-1">
+                    <select
+                      value={pageSize}
+                      onChange={(e) => onPageSizeChange(Number(e.target.value))}
+                      className="rounded-md border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] text-[#1A1A1A] outline-none"
+                    >
+                      {(pageSizeOptions || [10, 25, 50, 100]).map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Prev / Next Buttons */}
+                {currentPage !== undefined && totalPages !== undefined && onPageChange && (
+                  <div className="flex items-center gap-1.5 ml-2">
+                    <button
+                      type="button"
+                      onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                      className="rounded-md border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] hover:bg-[#F5F5F5] disabled:opacity-40"
+                    >
+                      Prev
+                    </button>
+                    <span className="text-[12.5px] text-[#1A1A1A] font-semibold">{currentPage}/{totalPages}</span>
+                    <button
+                      type="button"
+                      onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages}
+                      className="rounded-md border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] hover:bg-[#F5F5F5] disabled:opacity-40"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+
+                {/* Bulk Actions container */}
+                <div className="flex items-center gap-2 border-l border-[#E6E6E6] pl-3 ml-2 flex-wrap">
+                  {renderBulkActions!(selectedIds)}
+                </div>
+
+                {/* Extra header actions if any */}
+                {headerActions && (
+                  <div className="ml-auto flex items-center gap-2">
+                    {headerActions}
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
-            <div className="flex items-center justify-between w-full">
-              <div>
-                {title && <h3 className="text-[14.5px] font-bold text-[#1A1A1A]">{title}</h3>}
-                {description && <p className="mt-0.5 text-[12px] text-[#6B6B6B]">{description}</p>}
-              </div>
-              {headerActions}
+            <div className="border-b border-[#E6E6E6] bg-white px-4 flex items-center justify-between h-[56px] transition-all">
+              {hasBulkActionsActive ? (
+                <div className="flex items-center justify-between gap-3 w-full animate-fade-in">
+                  {renderBulkActions!(selectedIds)}
+                </div>
+              ) : (
+                <div className="flex items-center justify-between w-full">
+                  <div>
+                    {title && <h3 className="text-[14.5px] font-bold text-[#1A1A1A]">{title}</h3>}
+                    {description && <p className="mt-0.5 text-[12px] text-[#6B6B6B]">{description}</p>}
+                  </div>
+                  {headerActions}
+                </div>
+              )}
             </div>
           )}
-        </div>
+        </>
       )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -125,13 +212,16 @@ export function DataTable<T>({
                 <th className="px-2 py-3 w-9 text-center">
                   <input
                     type="checkbox"
-                    checked={data.length > 0 && selectedIds.length === data.length}
+                    checked={data.length > 0 && (selectedIds.length === data.length || (totalItems !== undefined && selectedIds.length >= totalItems))}
                     onChange={(e) => {
-                      if (!onSelectionChange) return;
-                      if (e.target.checked) {
-                        onSelectionChange(data.map((item) => String(item[rowKey])));
-                      } else {
-                        onSelectionChange([]);
+                      if (onSelectAll) {
+                        void onSelectAll(e.target.checked);
+                      } else if (onSelectionChange) {
+                        if (e.target.checked) {
+                          onSelectionChange(data.map((item) => String(item[rowKey])));
+                        } else {
+                          onSelectionChange([]);
+                        }
                       }
                     }}
                     className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24] cursor-pointer"
@@ -214,13 +304,37 @@ export function DataTable<T>({
                           <input
                             type="checkbox"
                             checked={selectedIds.includes(rowId)}
-                            onChange={() => {
+                            onChange={(e) => {
                               if (!onSelectionChange) return;
-                              if (selectedIds.includes(rowId)) {
+                              const isShiftPressed = (e.nativeEvent as any).shiftKey;
+                              const isSelected = selectedIds.includes(rowId);
+
+                              if (isShiftPressed && lastSelectedId !== null) {
+                                const ids = data.map((item) => String(item[rowKey]));
+                                const prevIndex = ids.indexOf(lastSelectedId);
+                                const currIndex = ids.indexOf(rowId);
+
+                                if (prevIndex !== -1 && currIndex !== -1) {
+                                  const start = Math.min(prevIndex, currIndex);
+                                  const end = Math.max(prevIndex, currIndex);
+                                  const rangeIds = ids.slice(start, end + 1);
+
+                                  if (!isSelected) {
+                                    onSelectionChange(Array.from(new Set([...selectedIds, ...rangeIds])));
+                                  } else {
+                                    onSelectionChange(selectedIds.filter((x) => !rangeIds.includes(x)));
+                                  }
+                                  setLastSelectedId(rowId);
+                                  return;
+                                }
+                              }
+
+                              if (isSelected) {
                                 onSelectionChange(selectedIds.filter((x) => x !== rowId));
                               } else {
                                 onSelectionChange([...selectedIds, rowId]);
                               }
+                              setLastSelectedId(rowId);
                             }}
                             className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24] cursor-pointer"
                           />
@@ -512,7 +626,24 @@ interface AdminInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   error?: string;
 }
 
-export function AdminInput({ label, error, className, ...props }: AdminInputProps) {
+export function AdminInput({ label, error, className, onChange, type, ...props }: AdminInputProps) {
+  const isNumeric = type === "number";
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isNumeric) {
+      let val = e.target.value;
+      val = val.replace(/[^0-9.]/g, "");
+      const dotIndex = val.indexOf(".");
+      if (dotIndex !== -1) {
+        val = val.substring(0, dotIndex + 1) + val.substring(dotIndex + 1).replace(/\./g, "");
+      }
+      e.target.value = val;
+    }
+    if (onChange) {
+      onChange(e);
+    }
+  };
+
   return (
     <div className="space-y-1.5">
       {label && (
@@ -523,6 +654,8 @@ export function AdminInput({ label, error, className, ...props }: AdminInputProp
       )}
       <input
         {...props}
+        type={isNumeric ? "text" : type}
+        onChange={handleChange}
         className={cn(
           "w-full rounded-md border bg-white px-3.5 py-2.5 text-[14px] text-[#1A1A1A] outline-none transition-colors placeholder:text-[#9A9A9A]",
           error ? "border-red-400 focus:border-red-500" : "border-[#E6E6E6] focus:border-[#E31E24]",
@@ -779,11 +912,36 @@ export function AdminMultiSelect({
     };
   }, [isOpen, updateMenuPosition]);
 
-  const toggleOption = (val: string) => {
-    const next = currentValues.includes(val)
-      ? currentValues.filter((v) => v !== val)
-      : [...currentValues, val];
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
+
+  const toggleOption = (val: string, isShift: boolean) => {
+    let next: string[];
+    if (isShift && lastSelectedId) {
+      const lastIndex = options.findIndex((o) => o.value === lastSelectedId);
+      const currentIndex = options.findIndex((o) => o.value === val);
+      if (lastIndex !== -1 && currentIndex !== -1) {
+        const start = Math.min(lastIndex, currentIndex);
+        const end = Math.max(lastIndex, currentIndex);
+        const rangeValues = options.slice(start, end + 1).map((o) => o.value);
+        
+        const lastIsChecked = currentValues.includes(lastSelectedId);
+        if (lastIsChecked) {
+          next = Array.from(new Set([...currentValues, ...rangeValues]));
+        } else {
+          next = currentValues.filter((v) => !rangeValues.includes(v));
+        }
+      } else {
+        next = currentValues.includes(val)
+          ? currentValues.filter((v) => v !== val)
+          : [...currentValues, val];
+      }
+    } else {
+      next = currentValues.includes(val)
+        ? currentValues.filter((v) => v !== val)
+        : [...currentValues, val];
+    }
     onChange(next);
+    setLastSelectedId(val);
   };
 
   const displayedText = currentValues.length > 0
@@ -860,7 +1018,7 @@ export function AdminMultiSelect({
                       key={option.value}
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => toggleOption(option.value)}
+                      onClick={(e) => toggleOption(option.value, e.shiftKey)}
                       className={cn(
                         "w-full cursor-pointer px-3.5 py-2 text-left text-[13.5px] transition flex items-center gap-2.5",
                         isSelected ? "bg-red-50" : "hover:bg-[#F7F7F7]"
@@ -1280,6 +1438,7 @@ export { AdminStatsGrid } from "@/components/admin/layout/AdminStatsGrid";
 export { AdminStickySaveBar } from "@/components/admin/AdminStickySaveBar";
 export { default as LoadingButton } from "@/components/ui/LoadingSpinner/LoadingButton";
 export { default as Spinner } from "@/components/ui/LoadingSpinner/Spinner";
+export { AdminBulkActionsBar } from "./AdminBulkActionsBar";
 
 
 

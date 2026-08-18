@@ -7,7 +7,7 @@ import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import * as Yup from "yup";
 import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search, ChevronRight, ChevronLeft, ChevronDown, Eye, ZoomIn, CheckSquare, Square, Check, FolderUp, Image as ImageIcon, Loader2, Box, Package, Info } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, AdminMultiSelect, StatusBadge, useToast, ConfirmModal, DataTable, AdminSectionTable, Column, toastMessages, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, AdminMultiSelect, StatusBadge, useToast, ConfirmModal, DataTable, AdminSectionTable, Column, toastMessages, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
@@ -280,9 +280,9 @@ function ProductBaseInventoryEditor({
         <p className="mt-1 text-[12px] text-[#6B6B6B]">This inventory is inherited by newly generated variants when no country-specific override applies.</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
-        <AdminInput label="Stock" type="number" min={0} step={1} value={stock} onChange={(event) => setStock(Math.max(0, Math.trunc(Number(event.target.value))))} disabled={disabled} />
-        <AdminInput label="Reserved stock" type="number" min={0} step={1} value={reservedStock} onChange={(event) => setReservedStock(Math.max(0, Math.trunc(Number(event.target.value))))} disabled={disabled} />
-        <AdminInput label="Low-stock threshold" type="number" min={0} step={1} value={lowStockThreshold} onChange={(event) => setLowStockThreshold(Math.max(0, Math.trunc(Number(event.target.value))))} disabled={disabled} />
+        <AdminInput label="Stock" type="text" value={stock} onChange={(event) => setStock(Math.max(0, Math.trunc(Number(event.target.value.replace(/\D/g, ""))) || 0))} disabled={disabled} />
+        <AdminInput label="Reserved stock" type="text" value={reservedStock} onChange={(event) => setReservedStock(Math.max(0, Math.trunc(Number(event.target.value.replace(/\D/g, ""))) || 0))} disabled={disabled} />
+        <AdminInput label="Low-stock threshold" type="text" value={lowStockThreshold} onChange={(event) => setLowStockThreshold(Math.max(0, Math.trunc(Number(event.target.value.replace(/\D/g, ""))) || 0))} disabled={disabled} />
       </div>
       <div className="mt-4 flex items-center justify-between gap-3">
         <span className="text-[12px] text-[#6B6B6B]">Available after reservations: {Math.max(0, stock - reservedStock)}</span>
@@ -527,44 +527,37 @@ function VariantGridMatrix({
                         <div className="grid grid-cols-2 gap-2">
                           <label className="text-[11px] font-medium text-[#6B6B6B]">
                             Selling
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
+                           <input
+                              type="text"
                               value={getDraft(cell.variant).price}
-                              onChange={(e) => onDraftChange(cell.variant!.id, { price: e.target.value })}
+                              onChange={(e) => onDraftChange(cell.variant!.id, { price: e.target.value.replace(/[^0-9.]/g, "") })}
                               className="mt-1 w-full rounded border border-[#E6E6E6] px-2 py-1.5 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
                             />
                           </label>
                           <label className="text-[11px] font-medium text-[#6B6B6B]">
                             Dealer
                             <input
-                              type="number"
-                              min="0"
-                              step="0.01"
+                              type="text"
                               value={getDraft(cell.variant).dealerPrice}
-                              onChange={(e) => onDraftChange(cell.variant!.id, { dealerPrice: e.target.value })}
+                              onChange={(e) => onDraftChange(cell.variant!.id, { dealerPrice: e.target.value.replace(/[^0-9.]/g, "") })}
                               className="mt-1 w-full rounded border border-[#E6E6E6] px-2 py-1.5 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
                             />
                           </label>
                           <label className="text-[11px] font-medium text-[#6B6B6B]">
                             Doctor / Retailer
                             <input
-                              type="number"
-                              min="0"
-                              step="0.01"
+                              type="text"
                               value={getDraft(cell.variant).doctorRetailerPrice}
-                              onChange={(e) => onDraftChange(cell.variant!.id, { doctorRetailerPrice: e.target.value })}
+                              onChange={(e) => onDraftChange(cell.variant!.id, { doctorRetailerPrice: e.target.value.replace(/[^0-9.]/g, "") })}
                               className="mt-1 w-full rounded border border-[#E6E6E6] px-2 py-1.5 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
                             />
                           </label>
                           <label className="text-[11px] font-medium text-[#6B6B6B]">
                             Stock
                             <input
-                              type="number"
-                              min="0"
+                              type="text"
                               value={getDraft(cell.variant).stock}
-                              onChange={(e) => onDraftChange(cell.variant!.id, { stock: e.target.value })}
+                              onChange={(e) => onDraftChange(cell.variant!.id, { stock: e.target.value.replace(/\D/g, "") })}
                               className="mt-1 w-full rounded border border-[#E6E6E6] px-2 py-1.5 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
                             />
                           </label>
@@ -897,6 +890,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [editVariantSelections, setEditVariantSelections] = useState<SingleSelectionMap>({});
   const [editVariantAttributePicker, setEditVariantAttributePicker] = useState("");
   const [generateSelectionMap, setGenerateSelectionMap] = useState<SelectionMap>({});
+  const [lastSelectedValueMap, setLastSelectedValueMap] = useState<Record<string, string>>({});
   const [generateModeMap, setGenerateModeMap] = useState<GenerateModeMap>({});
   const [generatePackageIds, setGeneratePackageIds] = useState<string[]>([]);
   const [generateAttributePicker, setGenerateAttributePicker] = useState("");
@@ -1289,13 +1283,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   <div className="flex items-center gap-1.5">
                     <span className="text-gray-400">{price.currency.symbol}</span>
                     <input
-                      type="number"
-                      min="0"
-                      step="0.01"
+                      type="text"
                       value={draft.mrp}
                       onChange={(e) => setBasePriceBulkDrafts((prev) => ({
                         ...prev,
-                        [price.id]: { ...prev[price.id], mrp: e.target.value }
+                        [price.id]: { ...prev[price.id], mrp: e.target.value.replace(/[^0-9.]/g, "") }
                       }))}
                       className="w-28 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
                     />
@@ -1305,13 +1297,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   <div className="flex items-center gap-1.5">
                     <span className="text-gray-400">{price.currency.symbol}</span>
                     <input
-                      type="number"
-                      min="0"
-                      step="0.01"
+                      type="text"
                       value={draft.sellingPrice}
                       onChange={(e) => setBasePriceBulkDrafts((prev) => ({
                         ...prev,
-                        [price.id]: { ...prev[price.id], sellingPrice: e.target.value }
+                        [price.id]: { ...prev[price.id], sellingPrice: e.target.value.replace(/[^0-9.]/g, "") }
                       }))}
                       className="w-28 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
                     />
@@ -1321,13 +1311,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   <div className="flex items-center gap-1.5">
                     <span className="text-gray-400">{price.currency.symbol}</span>
                     <input
-                      type="number"
-                      min="0"
-                      step="0.01"
+                      type="text"
                       value={draft.dealerPrice}
                       onChange={(e) => setBasePriceBulkDrafts((prev) => ({
                         ...prev,
-                        [price.id]: { ...prev[price.id], dealerPrice: e.target.value }
+                        [price.id]: { ...prev[price.id], dealerPrice: e.target.value.replace(/[^0-9.]/g, "") }
                       }))}
                       className="w-28 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
                     />
@@ -1337,13 +1325,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   <div className="flex items-center gap-1.5">
                     <span className="text-gray-400">{price.currency.symbol}</span>
                     <input
-                      type="number"
-                      min="0"
-                      step="0.01"
+                      type="text"
                       value={draft.distributorPrice}
                       onChange={(e) => setBasePriceBulkDrafts((prev) => ({
                         ...prev,
-                        [price.id]: { ...prev[price.id], distributorPrice: e.target.value }
+                        [price.id]: { ...prev[price.id], distributorPrice: e.target.value.replace(/[^0-9.]/g, "") }
                       }))}
                       className="w-28 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
                     />
@@ -4228,12 +4214,44 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   };
 
-  const toggleGenerateValue = (attributeId: string, attributeValueId: string, checked: boolean) => {
+  const toggleGenerateValue = (attributeId: string, attributeValueId: string, checked: boolean, isShift: boolean = false) => {
     setGenerateSelectionMap((current) => {
       const next = current[attributeId] ?? [];
+      let newSelection = [...next];
+      const lastValId = lastSelectedValueMap[attributeId];
+
+      if (isShift && lastValId) {
+        const attr = (attributes as GlobalAttribute[]).find((a) => a.id === attributeId);
+        if (attr) {
+          const values = getAttributeValues(attr);
+          const lastIndex = values.findIndex((v) => v.id === lastValId);
+          const currentIndex = values.findIndex((v) => v.id === attributeValueId);
+          if (lastIndex !== -1 && currentIndex !== -1) {
+            const start = Math.min(lastIndex, currentIndex);
+            const end = Math.max(lastIndex, currentIndex);
+            const rangeIds = values.slice(start, end + 1).map((v) => v.id);
+
+            const lastIsChecked = next.includes(lastValId);
+            if (lastIsChecked) {
+              newSelection = Array.from(new Set([...next, ...rangeIds]));
+            } else {
+              newSelection = next.filter((id) => !rangeIds.includes(id));
+            }
+          } else {
+            newSelection = checked ? [...next, attributeValueId] : next.filter((id) => id !== attributeValueId);
+          }
+        } else {
+          newSelection = checked ? [...next, attributeValueId] : next.filter((id) => id !== attributeValueId);
+        }
+      } else {
+        newSelection = checked ? [...next, attributeValueId] : next.filter((id) => id !== attributeValueId);
+      }
+
+      setLastSelectedValueMap((prev) => ({ ...prev, [attributeId]: attributeValueId }));
+
       return {
         ...current,
-        [attributeId]: checked ? [...next, attributeValueId] : next.filter((id) => id !== attributeValueId),
+        [attributeId]: newSelection,
       };
     });
   };
@@ -4458,50 +4476,41 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 <td className="px-4 py-3 text-[#555]">{variant.sku || "No SKU"}</td>
                 <td className="px-4 py-3">
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="text"
                     value={draft.mrp}
-                    onChange={(e) => updateBulkDraft(variant.id, { mrp: e.target.value })}
+                    onChange={(e) => updateBulkDraft(variant.id, { mrp: e.target.value.replace(/[^0-9.]/g, "") })}
                     className="w-24 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
                   />
                 </td>
                 <td className="px-4 py-3">
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="text"
                     value={draft.price}
-                    onChange={(e) => updateBulkDraft(variant.id, { price: e.target.value })}
+                    onChange={(e) => updateBulkDraft(variant.id, { price: e.target.value.replace(/[^0-9.]/g, "") })}
                     className="w-24 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
                   />
                 </td>
                 <td className="px-4 py-3">
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="text"
                     value={draft.dealerPrice}
-                    onChange={(e) => updateBulkDraft(variant.id, { dealerPrice: e.target.value })}
+                    onChange={(e) => updateBulkDraft(variant.id, { dealerPrice: e.target.value.replace(/[^0-9.]/g, "") })}
                     className="w-28 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
                   />
                 </td>
                 <td className="px-4 py-3">
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="text"
                     value={draft.doctorRetailerPrice}
-                    onChange={(e) => updateBulkDraft(variant.id, { doctorRetailerPrice: e.target.value })}
+                    onChange={(e) => updateBulkDraft(variant.id, { doctorRetailerPrice: e.target.value.replace(/[^0-9.]/g, "") })}
                     className="w-32 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
                   />
                 </td>
                 <td className="px-4 py-3">
                   <input
-                    type="number"
-                    min="0"
+                    type="text"
                     value={draft.stock}
-                    onChange={(e) => updateBulkDraft(variant.id, { stock: e.target.value })}
+                    onChange={(e) => updateBulkDraft(variant.id, { stock: e.target.value.replace(/\D/g, "") })}
                     className="w-24 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
                   />
                 </td>
@@ -5309,169 +5318,165 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     Next
                   </button>
                 </div>
-              </div>
 
-              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-                {bulkActionType === "Country availability update" ? (
-                  <div className="w-[200px]">
-                    <AdminMultiSelect
-                      options={(productCountries as CountryAvailability[]).filter(c => c.status === "ACTIVE").map(c => ({ value: c.id, label: c.name }))}
-                      value={bulkCountryAvailabilityCountryIds}
-                      onChange={setBulkCountryAvailabilityCountryIds}
-                      placeholder="Select active countries..."
-                      className="h-[32px] py-0 px-3 text-[12.5px]"
-                    />
-                  </div>
-                ) : (
-                  <input
-                    type="text"
-                    placeholder={
-                      bulkActionType === "Price update"
-                        ? "Use popup"
-                        : bulkActionType === "Stock update filtered"
-                        ? "Stock quantity"
-                        : "Value"
-                    }
-                    value={bulkActionValue}
-                    onChange={(e) => setBulkActionValue(e.target.value)}
-                    disabled={
-                      bulkActionType === "Bulk Action" ||
-                      bulkActionType === "Mark active" ||
-                      bulkActionType === "Mark inactive" ||
-                      bulkActionType === "Delete selected" ||
-                      bulkActionType === "Price update"
-                    }
-                    className="h-[32px] w-[130px] rounded-md border border-[#E6E6E6] bg-white px-3 text-[12.5px] outline-none focus:border-[#E31E24] disabled:opacity-50"
-                  />
-                )}
-                <select
-                  value={bulkActionType}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setBulkActionType(val);
-                    if (val === "Price update") {
-                      if (selectedVariantIds.length === 0) {
-                        showToast("Please select at least one variant first.", "error");
+                <div className="flex items-center gap-2 border-l border-[#E6E6E6] pl-3 ml-2">
+                  <select
+                    value={bulkActionType === "Bulk Action" ? "" : bulkActionType}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setBulkActionType(val || "Bulk Action");
+                      if (val === "Price update") {
+                        if (selectedVariantIds.length === 0) {
+                          showToast("Please select at least one variant first.", "error");
+                          setTimeout(() => setBulkActionType("Bulk Action"), 0);
+                          return;
+                        }
+                        setModalCountryIds(["ALL_COUNTRIES"]);
+                        setBulkPriceUpdateModalContext("variants");
                         setTimeout(() => setBulkActionType("Bulk Action"), 0);
+                      }
+                    }}
+                    className="h-8 rounded-md border border-[#D1D5DB] bg-white px-3 text-[12.5px] text-[#1F2937] outline-none focus:border-[#E31E24] cursor-pointer"
+                  >
+                    <option value="">Choose Bulk Action</option>
+                    <option value="Mark active">Mark active</option>
+                    <option value="Mark inactive">Mark inactive</option>
+                    <option value="Price update">Price update</option>
+                    <option value="Country availability update">Country availability update</option>
+                    <option value="Stock update filtered">Stock update filtered</option>
+                    <option value="Delete selected">Delete selected</option>
+                  </select>
+
+                  {bulkActionType === "Country availability update" && (
+                    <div className="w-[180px]">
+                      <AdminMultiSelect
+                        options={(productCountries as CountryAvailability[]).filter(c => c.status === "ACTIVE").map(c => ({ value: c.id, label: c.name }))}
+                        value={bulkCountryAvailabilityCountryIds}
+                        onChange={setBulkCountryAvailabilityCountryIds}
+                        placeholder="Select active countries..."
+                        className="h-[32px] py-0 px-3 text-[12.5px]"
+                      />
+                    </div>
+                  )}
+
+                  {bulkActionType !== "Country availability update" && bulkActionType !== "Bulk Action" && bulkActionType !== "Mark active" && bulkActionType !== "Mark inactive" && bulkActionType !== "Delete selected" && bulkActionType !== "Price update" && (
+                    <input
+                      type="text"
+                      placeholder={
+                        bulkActionType === "Stock update filtered"
+                          ? "Stock quantity"
+                          : "Value"
+                      }
+                      value={bulkActionValue}
+                      onChange={(e) => setBulkActionValue(e.target.value.replace(/\D/g, ""))}
+                      className="h-8 w-[120px] rounded-md border border-[#E6E6E6] bg-white px-3 text-[12.5px] outline-none focus:border-[#E31E24] shadow-sm"
+                    />
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (bulkSaving) return;
+                      if (bulkActionType === "Bulk Action" || bulkActionType === "") {
+                        showToast("Please select a bulk action.", "error");
                         return;
                       }
-                      setModalCountryIds(["ALL_COUNTRIES"]);
-                      setBulkPriceUpdateModalContext("variants");
-                      setTimeout(() => setBulkActionType("Bulk Action"), 0);
-                    }
-                  }}
-                  className="h-[32px] rounded-md border border-[#E6E6E6] bg-white px-3 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
-                >
-                  <option value="Bulk Action">Bulk Action</option>
-                  <option value="Mark active">Mark active</option>
-                  <option value="Mark inactive">Mark inactive</option>
-                  <option value="Price update">Price update</option>
-                  <option value="Country availability update">Country availability update</option>
-                  <option value="Stock update filtered">Stock update filtered</option>
-                  <option value="Delete selected">Delete selected</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (bulkSaving) return;
-                    if (!selectedVariantIds.length) {
-                      showToast("Please select at least one variant.", "error");
-                      return;
-                    }
-                    if (bulkActionType === "Bulk Action") {
-                      showToast("Please select a bulk action.", "error");
-                      return;
-                    }
-                    
-                    if (bulkActionType === "Country availability update") {
-                      if (bulkCountryAvailabilityCountryIds.length === 0) {
-                         showToast("Please select at least one country to enable.", "error");
-                         return;
+                      
+                      if (bulkActionType === "Country availability update") {
+                        if (bulkCountryAvailabilityCountryIds.length === 0) {
+                           showToast("Please select at least one country to enable.", "error");
+                           return;
+                        }
+                        setBulkSaving(true);
+                        try {
+                          let hasError = false;
+                          for (const vId of selectedVariantIds) {
+                            try {
+                              const currentAvailability = await adminApi
+                                .get(`/products/${productId}/variants/${vId}/countries`)
+                                .then((r) => r.data.data as CountryAvailability[]);
+
+                              const updatedItems = currentAvailability.map((country) => {
+                                return { 
+                                  countryId: country.id, 
+                                  enabled: bulkCountryAvailabilityCountryIds.includes(country.id) 
+                                };
+                              });
+
+                              await adminApi.put(`/products/${productId}/variants/${vId}/countries`, {
+                                items: updatedItems,
+                              });
+                            } catch (err) {
+                              hasError = true;
+                              console.error(`Failed to update country availability for variant ${vId}`, err);
+                            }
+                          }
+
+                          if (hasError) {
+                            showToast("Failed to update country availability for some variants.", "error");
+                          } else {
+                            showToast("Country availability updated for selected variants.");
+                          }
+                          
+                          setBulkActionType("Bulk Action");
+                          setBulkCountryAvailabilityCountryIds([]);
+                          setSelectedVariantIds([]);
+                          await refetch();
+                        } catch (e) {
+                          showToast("Failed to update country availability.", "error");
+                        } finally {
+                          setBulkSaving(false);
+                        }
+                        return;
                       }
+
                       setBulkSaving(true);
                       try {
-                        let hasError = false;
-                        for (const vId of selectedVariantIds) {
-                          try {
-                            const currentAvailability = await adminApi
-                              .get(`/products/${productId}/variants/${vId}/countries`)
-                              .then((r) => r.data.data as CountryAvailability[]);
-
-                            const updatedItems = currentAvailability.map((country) => {
-                              return { 
-                                countryId: country.id, 
-                                enabled: bulkCountryAvailabilityCountryIds.includes(country.id) 
-                              };
-                            });
-
-                            await adminApi.put(`/products/${productId}/variants/${vId}/countries`, {
-                              items: updatedItems,
-                            });
-                          } catch (err) {
-                            hasError = true;
-                            console.error(`Failed to update country availability for variant ${vId}`, err);
+                        let updates: any[] = [];
+                        if (bulkActionType === "Mark active") {
+                          updates = selectedVariantIds.map((id) => ({ variantId: id, action: "restore" }));
+                        } else if (bulkActionType === "Mark inactive") {
+                          updates = selectedVariantIds.map((id) => ({ variantId: id, action: "delete" }));
+                        } else if (bulkActionType === "Stock update filtered") {
+                          if (!bulkActionValue.trim() || isNaN(parseInt(bulkActionValue, 10))) {
+                            showToast("Please enter a valid stock quantity.", "error");
+                            setBulkSaving(false);
+                            return;
                           }
+                          updates = selectedVariantIds.map((id) => ({
+                            variantId: id,
+                            stock: parseInt(bulkActionValue, 10),
+                          }));
+                        } else if (bulkActionType === "Delete selected") {
+                          if (!window.confirm(`Delete ${selectedVariantIds.length} selected variant(s)?`)) {
+                            setBulkSaving(false);
+                            return;
+                          }
+                          updates = selectedVariantIds.map((id) => ({ variantId: id, action: "delete" }));
                         }
 
-                        if (hasError) {
-                          showToast("Failed to update country availability for some variants.", "error");
-                        } else {
-                          showToast("Country availability updated for selected variants.");
-                        }
-                        
+                        const response = await adminApi.put(`/products/${productId}/variants/bulk`, { updates });
+                        const summary = response.data.data.summary;
+                        showToast(summary.failed ? `Updated ${summary.succeeded}; ${summary.failed} failed.` : `Successfully updated ${summary.succeeded} variant(s).`, summary.failed ? "error" : "success");
+                        setSelectedVariantIds([]);
+                        setBulkActionValue("");
                         setBulkActionType("Bulk Action");
-                        setBulkCountryAvailabilityCountryIds([]);
-                      } catch (e) {
-                        showToast("Failed to update country availability.", "error");
+                        await refetch();
+                      } catch (error) {
+                        showToast(getAdminErrorMessage(error, "Bulk update failed."), "error");
                       } finally {
                         setBulkSaving(false);
                       }
-                      return;
-                    }
+                    }}
+                    disabled={bulkSaving || selectedVariantIds.length === 0 || !bulkActionType || bulkActionType === "Bulk Action"}
+                    className="h-8 rounded-md bg-[#E31E24] hover:bg-[#B5151B] px-4 text-[12.5px] font-semibold text-white disabled:opacity-40 disabled:hover:bg-[#E31E24] disabled:cursor-not-allowed transition-all shadow-sm flex items-center justify-center min-w-[80px]"
+                  >
+                    {bulkSaving ? "Applying..." : "Apply"}
+                  </button>
+                </div>
+              </div>
 
-                    setBulkSaving(true);
-                    try {
-                      let updates: any[] = [];
-                      if (bulkActionType === "Mark active") {
-                        updates = selectedVariantIds.map((id) => ({ variantId: id, action: "restore" }));
-                      } else if (bulkActionType === "Mark inactive") {
-                        updates = selectedVariantIds.map((id) => ({ variantId: id, action: "delete" }));
-                      } else if (bulkActionType === "Stock update filtered") {
-                        if (!bulkActionValue.trim() || isNaN(parseInt(bulkActionValue, 10))) {
-                          showToast("Please enter a valid stock quantity.", "error");
-                          setBulkSaving(false);
-                          return;
-                        }
-                        updates = selectedVariantIds.map((id) => ({
-                          variantId: id,
-                          stock: parseInt(bulkActionValue, 10),
-                        }));
-                      } else if (bulkActionType === "Delete selected") {
-                        if (!window.confirm(`Delete ${selectedVariantIds.length} selected variant(s)?`)) {
-                          setBulkSaving(false);
-                          return;
-                        }
-                        updates = selectedVariantIds.map((id) => ({ variantId: id, action: "delete" }));
-                      }
-
-                      const response = await adminApi.put(`/products/${productId}/variants/bulk`, { updates });
-                      const summary = response.data.data.summary;
-                      showToast(summary.failed ? `Updated ${summary.succeeded}; ${summary.failed} failed.` : `Successfully updated ${summary.succeeded} variant(s).`, summary.failed ? "error" : "success");
-                      setSelectedVariantIds([]);
-                      setBulkActionValue("");
-                      setBulkActionType("Bulk Action");
-                      await refetch();
-                    } catch (error) {
-                      showToast(getAdminErrorMessage(error, "Bulk update failed."), "error");
-                    } finally {
-                      setBulkSaving(false);
-                    }
-                  }}
-                  disabled={bulkSaving || selectedVariantIds.length === 0}
-                  className="h-[32px] rounded-md bg-[#1A1A1A] px-4 text-[12.5px] font-bold text-white hover:bg-[#333] shadow-sm disabled:opacity-40"
-                >
-                  Apply
-                </button>
+              <div className="flex items-center gap-2.5 shrink-0 ml-auto">
                 <button
                   type="button"
                   onClick={() => {
@@ -8052,7 +8057,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                               <button
                                 key={val.id}
                                 type="button"
-                                onClick={() => toggleGenerateValue(attribute.id, val.id, !isSelected)}
+                                onClick={(e) => toggleGenerateValue(attribute.id, val.id, !isSelected, e.shiftKey)}
                                 className={cn(
                                   "group relative flex items-center justify-center rounded-lg border px-4 py-2 text-[12.5px] font-medium transition-all duration-200 select-none cursor-pointer",
                                   isSelected

@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight, Edit2, PackageOpen, Plus, Search, Trash2, Warehouse } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, AdminMultiSelect, AdminStatsGrid, AdminListToolbar, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminMultiSelect, AdminStatsGrid, AdminListToolbar, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { useAdminWarehouses, useCreateWarehouse, useUpdateWarehouse, useDeleteWarehouse, useAdminCountries } from "@/hooks/admin/useAdminHooks";
-import { getAdminErrorMessage } from "@/services/adminApi";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { State } from "country-state-city";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 
@@ -75,18 +75,76 @@ export default function WarehousesPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
-  const limit = 10;
+  const [limit, setLimit] = useState(10);
   
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<WarehouseRow | null>(null);
   const [deleting, setDeleting] = useState<WarehouseRow | null>(null);
 
-  const { data = { data: [], pagination: { total: 0, totalPages: 1 } }, isLoading } = useAdminWarehouses({ page, limit, search: debouncedSearch });
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const handleSelectAll = async (checked: boolean) => {
+    if (!checked) {
+      setSelectedIds([]);
+      return;
+    }
+    try {
+      const res = await adminApi.get("/warehouses", {
+        params: {
+          search: debouncedSearch || undefined,
+          limit: 999999,
+          ignoreMaxLimit: "true",
+        },
+      });
+      const allIds = (res.data.data ?? []).map((w: any) => w.id);
+      setSelectedIds(allIds);
+      showToast(`Selected all ${allIds.length} warehouses across all pages.`, "success");
+    } catch (err) {
+      showToast("Failed to select all warehouses.", "error");
+    }
+  };
+  const [bulkAction, setBulkAction] = useState("");
+  const [bulkLoading, setBulkLoading] = useState(false);
+
+  const { data = { data: [], pagination: { total: 0, totalPages: 1 } }, isLoading, refetch } = useAdminWarehouses({ page, limit, search: debouncedSearch });
   const { data: countries = [] } = useAdminCountries();
   
   const createMutation = useCreateWarehouse();
   const updateMutation = useUpdateWarehouse(editing?.id || "");
   const deleteMutation = useDeleteWarehouse();
+
+  const handleBulkAction = async () => {
+    if (!selectedIds.length) {
+      showToast("Select at least one warehouse first.", "error");
+      return;
+    }
+    if (!bulkAction) {
+      showToast("Select a bulk action to apply.", "error");
+      return;
+    }
+
+    setBulkLoading(true);
+    try {
+      if (bulkAction === "delete") {
+        if (!window.confirm(`Delete ${selectedIds.length} selected warehouse(s)?`)) {
+          setBulkLoading(false);
+          return;
+        }
+        await Promise.all(selectedIds.map(id => adminApi.delete(`/warehouses/${id}`)));
+        showToast(`Successfully deleted ${selectedIds.length} warehouse(s).`, "success");
+      } else {
+        const nextStatus = bulkAction === "enable" ? "ACTIVE" : "INACTIVE";
+        await Promise.all(selectedIds.map(id => adminApi.put(`/warehouses/${id}`, { status: nextStatus })));
+        showToast(`Successfully ${bulkAction}d ${selectedIds.length} warehouse(s).`, "success");
+      }
+      setSelectedIds([]);
+      setBulkAction("");
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Bulk action failed."), "error");
+    } finally {
+      setBulkLoading(false);
+    }
+  };
 
   const form = useAdminForm<WarehouseFormState>({
     initialValues: emptyForm,
@@ -252,10 +310,37 @@ export default function WarehousesPage() {
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
           <div className="overflow-hidden rounded-lg border border-[#F0F0F0]">
             <DataTable
+              title="Warehouses"
               rowKey="id"
               data={data.data}
               isLoading={isLoading}
               emptyMessage="No warehouses found."
+              enableSelection={canManage}
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
+              totalItems={data.pagination.total}
+              currentPage={page}
+              pageSize={limit}
+              totalPages={data.pagination.totalPages}
+              onPageChange={setPage}
+              onPageSizeChange={setLimit}
+              pageSizeOptions={[10, 25, 50, 100]}
+              onSelectAll={handleSelectAll}
+              renderBulkActions={(selectedIds) => (
+                <AdminBulkActionsBar
+                  selectedCount={selectedIds.length}
+                  onClear={() => setSelectedIds([])}
+                  actionType={bulkAction}
+                  onActionTypeChange={setBulkAction}
+                  actions={[
+                    { value: "enable", label: "Enable" },
+                    { value: "disable", label: "Disable" },
+                    { value: "delete", label: "Delete" }
+                  ]}
+                  onApply={handleBulkAction}
+                  applyLoading={bulkLoading}
+                />
+              )}
               columns={[
                 { key: "name", label: "Name", render: (w: any) => <span className="font-medium text-[#1A1A1A]">{w.name}</span> },
                 { key: "location", label: "Location", render: (w: any) => (

@@ -10,6 +10,7 @@ router.get("/", requirePermission("coupons.view", "coupons.manage"), couponContr
 router.post("/", requirePermission("coupons.manage"), couponController.create);
 router.put("/:id", requirePermission("coupons.manage"), couponController.update);
 router.delete("/:id", requirePermission("coupons.manage"), couponController.remove);
+router.post("/bulk", requirePermission("coupons.manage"), couponController.bulkUpdate);
 router.post("/validate", requirePermission("coupons.view", "coupons.manage"), couponController.validate);
 
 export default router;

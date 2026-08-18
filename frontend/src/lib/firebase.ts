@@ -10,15 +10,35 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-const isConfigValid = Boolean(firebaseConfig.projectId && firebaseConfig.apiKey);
+const isConfigValid = Boolean(
+  firebaseConfig.apiKey && 
+  firebaseConfig.authDomain && 
+  firebaseConfig.projectId && 
+  firebaseConfig.storageBucket && 
+  firebaseConfig.messagingSenderId && 
+  firebaseConfig.appId
+);
 
-const app = isConfigValid
-  ? (!getApps().length ? initializeApp(firebaseConfig) : getApp())
-  : null;
+let app: any = null;
+if (isConfigValid) {
+  try {
+    app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+  } catch (err) {
+    console.error("Firebase initialization failed:", err);
+  }
+} else {
+  if (typeof window !== "undefined") {
+    console.warn("Firebase configuration is missing or incomplete. Push notifications are disabled.");
+  }
+}
 
 export const requestForToken = async () => {
   if (!isConfigValid || !app) return null;
   try {
+    if (!app) {
+      console.warn("Firebase app not initialized, skipping token request.");
+      return null;
+    }
     const supported = await isSupported();
     if (!supported) return null;
 
@@ -44,8 +64,11 @@ export const requestForToken = async () => {
 };
 
 export const onMessageListener = () =>
-  new Promise((resolve) => {
-    if (!isConfigValid || !app) return;
+  new Promise((resolve, reject) => {
+    if (!isConfigValid || !app) {
+      reject(new Error("Firebase app not initialized or config invalid."));
+      return;
+    }
     isSupported().then((supported) => {
       if (supported) {
         try {
@@ -53,9 +76,13 @@ export const onMessageListener = () =>
           onMessage(messaging, (payload) => {
             resolve(payload);
           });
-        } catch (_) {}
+        } catch (err) {
+          reject(err);
+        }
+      } else {
+        reject(new Error("Messaging not supported."));
       }
-    }).catch(() => {});
+    }).catch(reject);
   });
 
 export { app };

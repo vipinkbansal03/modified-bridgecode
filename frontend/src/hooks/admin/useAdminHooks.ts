@@ -1721,6 +1721,15 @@ export const useDeleteCoupon = () => {
   });
 };
 
+export const useBulkCoupons = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { ids: string[]; action: "ENABLE" | "DISABLE" | "DELETE" }) =>
+      adminApi.post("/coupons/bulk", data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-coupons"] }),
+  });
+};
+
 // ─── Quotes ──────────────────────────────────────────────
 
 export const useAdminDiscountDashboard = () =>
@@ -2307,6 +2316,15 @@ export const useDeleteShippingZone = () => {
   });
 };
 
+export const useBulkShippingZones = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { ids: string[]; action: "ENABLE" | "DISABLE" | "DELETE" }) =>
+      adminApi.post("/shipping/zones/bulk", data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-shipping-zones"] }),
+  });
+};
+
 // ─── Shipments ──────────────────────────────────────────
 
 export const useAdminShipments = (params?: { orderId?: string; status?: string; providerId?: string; page?: number; limit?: number }) =>
@@ -2640,6 +2658,15 @@ export const useToggleShippingBox = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => adminApi.post(`/shipping/boxes/${id}/toggle`).then((r) => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-shipping-boxes"] }); },
+  });
+};
+
+export const useBulkShippingBoxes = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { ids: string[]; action: "ENABLE" | "DISABLE" | "DELETE" }) =>
+      adminApi.post("/shipping/boxes/bulk", data).then((r) => r.data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-shipping-boxes"] }); },
   });
 };

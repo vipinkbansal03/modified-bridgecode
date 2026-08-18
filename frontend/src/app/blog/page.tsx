@@ -42,9 +42,17 @@ function BlogContent() {
   const initialQuery = searchParams.get("q") || searchParams.get("search") || "";
 
   const [search, setSearch] = useState(initialQuery);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialQuery);
   const [isModalOpen, setIsModalOpen] = useState(Boolean(initialQuery));
 
-  const { data: blogs = [], isLoading, isError, refetch } = useBlogs({ search });
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const { data: blogs = [], isLoading, isError, refetch } = useBlogs({ search: debouncedSearch });
   const featuredBlog = blogs[0];
   const otherBlogs = blogs.slice(1);
 
@@ -133,6 +141,7 @@ function BlogContent() {
             open={isModalOpen}
             onClose={handleCloseModal}
             search={search}
+            debouncedSearch={debouncedSearch}
             onSearchChange={handleSearchChange}
           />
 

@@ -6,11 +6,11 @@ import { useRouter } from "next/navigation";
 import { Clock3, Eye, Filter, Pencil, Plus, Search, ShoppingCart, Trash2, Truck, Wallet } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
-import { useAdminCountries, useAdminOrders, useDeleteAdminOrder, useOrderAnalytics } from "@/hooks/admin/useAdminHooks";
-import { getAdminErrorMessage } from "@/services/adminApi";
+import { useAdminCountries, useAdminOrders, useDeleteAdminOrder, useOrderAnalytics, useUpdateOrderStatus, useUpdatePaymentStatus } from "@/hooks/admin/useAdminHooks";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
 type OrderRow = {
   id: string;
@@ -82,6 +82,87 @@ export default function OrdersPage() {
     }
   };
 
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState("");
+  const [bulkStatus, setBulkStatus] = useState("");
+  const [bulkPaymentStatus, setBulkPaymentStatus] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+
+  const updateOrderStatus = useUpdateOrderStatus();
+  const updatePaymentStatusMutation = useUpdatePaymentStatus();
+
+  const handleSelectAll = async (checked: boolean) => {
+    if (!checked) {
+      setSelectedIds([]);
+      return;
+    }
+    try {
+      const res = await adminApi.get("/orders", {
+        params: {
+          status: status || undefined,
+          paymentStatus: paymentStatus || undefined,
+          paymentMethod: paymentMethod || undefined,
+          search: debouncedSearch.trim() || undefined,
+          countryId: countryId || undefined,
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+          sortBy,
+          sortDir,
+          limit: 999999,
+          ignoreMaxLimit: "true",
+        },
+      });
+      const allIds = (res.data.data ?? []).map((o: any) => o.id);
+      setSelectedIds(allIds);
+      showToast(`Selected all ${allIds.length} orders across all pages.`, "success");
+    } catch (err) {
+      showToast("Failed to select all orders.", "error");
+    }
+  };
+
+  const handleBulkAction = async () => {
+    if (selectedIds.length === 0 || !bulkAction) return;
+
+    if (bulkAction === "delete") {
+      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected order(s)? This cannot be undone.`)) {
+        return;
+      }
+    }
+
+    setBulkSaving(true);
+    try {
+      if (bulkAction === "delete") {
+        await Promise.all(selectedIds.map((id) => deleteOrder.mutateAsync(id)));
+        showToast(`Successfully deleted ${selectedIds.length} order(s).`, "success");
+      } else if (bulkAction === "updateStatus") {
+        if (!bulkStatus) {
+          showToast("Please select an order status.", "error");
+          setBulkSaving(false);
+          return;
+        }
+        await Promise.all(selectedIds.map((id) => updateOrderStatus.mutateAsync({ id, status: bulkStatus })));
+        showToast(`Successfully updated status for ${selectedIds.length} order(s).`, "success");
+      } else if (bulkAction === "updatePayment") {
+        if (!bulkPaymentStatus) {
+          showToast("Please select a payment status.", "error");
+          setBulkSaving(false);
+          return;
+        }
+        await Promise.all(selectedIds.map((id) => updatePaymentStatusMutation.mutateAsync({ id, paymentStatus: bulkPaymentStatus })));
+        showToast(`Successfully updated payment status for ${selectedIds.length} order(s).`, "success");
+      }
+      setSelectedIds([]);
+      setBulkAction("");
+      setBulkStatus("");
+      setBulkPaymentStatus("");
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to complete bulk action."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -124,6 +205,10 @@ export default function OrdersPage() {
 
   useEffect(() => {
     setPage(1);
+  }, [debouncedSearch, status, paymentStatus, paymentMethod, countryId, dateFrom, dateTo, sortBy, sortDir, limit]);
+
+  useEffect(() => {
+    setSelectedIds([]);
   }, [debouncedSearch, status, paymentStatus, paymentMethod, countryId, dateFrom, dateTo, sortBy, sortDir, limit]);
 
   const totalRevenue = useMemo(() => Number(analytics.data?.totals?.allTimeRevenue ?? 0), [analytics.data]);
@@ -359,7 +444,77 @@ export default function OrdersPage() {
         />
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white">
-          <DataTable<OrderRow> columns={columns} data={orders} rowKey="id" isLoading={isLoading} emptyMessage="No orders yet." />
+          <DataTable<OrderRow>
+            title="Orders List"
+            columns={columns}
+            data={orders}
+            rowKey="id"
+            isLoading={isLoading}
+            emptyMessage="No orders yet."
+            enableSelection={true}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+            totalItems={pagination.total}
+            currentPage={page}
+            pageSize={limit}
+            totalPages={pagination.totalPages || 1}
+            onPageChange={setPage}
+            onPageSizeChange={setLimit}
+            pageSizeOptions={[10, 20, 50]}
+            onSelectAll={handleSelectAll}
+            renderBulkActions={(selectedIds) => (
+              <AdminBulkActionsBar
+                selectedCount={selectedIds.length}
+                onClear={() => setSelectedIds([])}
+                actionType={bulkAction}
+                onActionTypeChange={setBulkAction}
+                actions={[
+                  { value: "updateStatus", label: "Update Order Status" },
+                  { value: "updatePayment", label: "Update Payment Status" },
+                  { value: "delete", label: "Delete selected" }
+                ]}
+                onApply={handleBulkAction}
+                applyLoading={bulkSaving}
+                applyDisabled={
+                  !bulkAction || 
+                  (bulkAction === "updateStatus" && !bulkStatus) || 
+                  (bulkAction === "updatePayment" && !bulkPaymentStatus)
+                }
+                renderExtraSelectors={() => (
+                  <>
+                    {bulkAction === "updateStatus" && (
+                      <select
+                        value={bulkStatus}
+                        onChange={(e) => setBulkStatus(e.target.value)}
+                        className="h-8 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] outline-none focus:border-[#E31E24] shadow-sm"
+                      >
+                        <option value="">Choose Status</option>
+                        <option value="PENDING">Pending</option>
+                        <option value="CONFIRMED">Confirmed</option>
+                        <option value="PROCESSING">Processing</option>
+                        <option value="SHIPPED">Shipped</option>
+                        <option value="DELIVERED">Delivered</option>
+                        <option value="CANCELLED">Cancelled</option>
+                      </select>
+                    )}
+                    {bulkAction === "updatePayment" && (
+                      <select
+                        value={bulkPaymentStatus}
+                        onChange={(e) => setBulkPaymentStatus(e.target.value)}
+                        className="h-8 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] outline-none focus:border-[#E31E24] shadow-sm"
+                      >
+                        <option value="">Choose Payment Status</option>
+                        <option value="PENDING">Pending</option>
+                        <option value="PAID">Paid</option>
+                        <option value="FAILED">Failed</option>
+                        <option value="REFUNDED">Refunded</option>
+                      </select>
+                    )}
+                  </>
+                )}
+              />
+            )}
+          />
           <div className="border-t border-[#E6E6E6] px-4 py-3">
             <Pagination page={pagination.page} totalPages={pagination.totalPages || 1} onPageChange={setPage} />
           </div>

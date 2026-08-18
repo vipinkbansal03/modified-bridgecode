@@ -3,28 +3,27 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { Bell } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { requestForToken, onMessageListener } from "../../lib/firebase";
-import { apiClient as api } from "../../lib/apiClient";
-
-interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  isRead: boolean;
-  createdAt: string;
-  link?: string;
-}
+import { useRouter } from "next/navigation";
+import { useNotifications, useMarkNotificationRead, useRegisterNotificationToken } from "@/hooks/api";
 
 export function NotificationBell({ role = "customer" }: { role?: "admin" | "customer" }) {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const queryClient = useQueryClient();
+  const { data: notifications = [] } = useNotifications(role);
+  const markAsReadMutation = useMarkNotificationRead(role);
+  const registerTokenMutation = useRegisterNotificationToken(role);
+
+  const unreadCount = notifications.filter(n => !n.isRead).length;
   const [isOpen, setIsOpen] = useState(false);
-  const [permissionStatus, setPermissionStatus] = useState<NotificationPermission | "default">(() => {
+  const [permissionStatus, setPermissionStatus] = useState<NotificationPermission | "default">("default");
+  const router = useRouter();
+
+  useEffect(() => {
     if (typeof window !== "undefined" && "Notification" in window) {
-      return Notification.permission;
+      setPermissionStatus(Notification.permission);
     }
-    return "default";
-  });
+  }, []);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const initFirebase = async () => {
@@ -34,14 +33,8 @@ export function NotificationBell({ role = "customer" }: { role?: "admin" | "cust
 
     const token = await requestForToken();
     if (token) {
-      // Register token with backend
       try {
-        await api.post(`/notifications/${role}/register-token`, {
-          token,
-          deviceType: "web"
-        }, {
-          headers: { Authorization: `Bearer ${storedToken}` }
-        });
+        await registerTokenMutation.mutateAsync(token);
       } catch (err) {
         // quiet fallback if notifications token registration is unconfigured
       }
@@ -49,16 +42,8 @@ export function NotificationBell({ role = "customer" }: { role?: "admin" | "cust
   };
 
   const markAsRead = async (id: string) => {
-    const isTokenValid = (t: string | null) => t && t !== "null" && t !== "undefined";
-    const storedToken = role === "admin" ? localStorage.getItem("admin_token") : localStorage.getItem("customer_token");
-    if (!isTokenValid(storedToken)) return;
-
     try {
-      await api.patch(`/notifications/${role}/${id}/read`, {}, {
-        headers: { Authorization: `Bearer ${storedToken}` }
-      });
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
-      setUnreadCount(prev => Math.max(0, prev - 1));
+      await markAsReadMutation.mutateAsync(id);
     } catch (error) {
       // quiet fallback
     }
@@ -83,40 +68,15 @@ export function NotificationBell({ role = "customer" }: { role?: "admin" | "cust
   }, [isOpen]);
 
   useEffect(() => {
-    let isMounted = true;
-
-    const fetchUserNotifications = async () => {
-      const isTokenValid = (t: string | null) => t && t !== "null" && t !== "undefined";
-      const storedToken = role === "admin" ? localStorage.getItem("admin_token") : localStorage.getItem("customer_token");
-      if (!isTokenValid(storedToken)) return;
-      
-      try {
-        const { data } = await api.get(`/notifications/${role}/mine`, {
-          headers: { Authorization: `Bearer ${storedToken}` }
-        });
-        if (!isMounted) return;
-        const unread = (data?.data ?? []).filter((n: Notification) => !n.isRead).length;
-        setNotifications(data?.data ?? []);
-        setUnreadCount(unread);
-      } catch (error) {
-        // quiet fallback if notification service is unconfigured or returns error
-      }
-    };
-
-    fetchUserNotifications();
-
     if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
       initFirebase();
     }
 
     onMessageListener().then((_payload: any) => {
-      // Add notification to state
-      fetchUserNotifications();
+      // Invalidate query to trigger refetch
+      queryClient.invalidateQueries({ queryKey: ["notifications", role] });
     }).catch(err => console.log('failed: ', err));
 
-    return () => {
-      isMounted = false;
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
 
@@ -158,10 +118,6 @@ export function NotificationBell({ role = "customer" }: { role?: "admin" | "cust
                 const unread = notifications.filter(n => !n.isRead);
                 if (unread.length === 0) return;
                 
-                // Optimistic update
-                setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-                setUnreadCount(0);
-                
                 await Promise.all(unread.map(n => markAsRead(n.id)));
               }}
               className="text-[12px] text-[#555] hover:text-[#000]"
@@ -201,13 +157,10 @@ export function NotificationBell({ role = "customer" }: { role?: "admin" | "cust
                     onClick={async (e) => {
                       e.preventDefault();
                       if (!notif.isRead) {
-                        // Optimistic update
-                        setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, isRead: true } : n));
-                        setUnreadCount(prev => Math.max(0, prev - 1));
                         await markAsRead(notif.id);
                       }
                       if (notif.link) {
-                        window.location.href = notif.link;
+                        router.push(notif.link);
                       }
                     }}
                   >

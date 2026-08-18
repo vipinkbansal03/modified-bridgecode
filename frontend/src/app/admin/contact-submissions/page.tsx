@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useLayoutEffect } from "react";
+import { useState, useLayoutEffect, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
@@ -26,14 +26,26 @@ export default function ContactSubmissionsPage() {
   const [limit, setLimit] = useState(10);
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [type, setType] = useState<string | undefined>(undefined);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
   const { data, isLoading, refetch, isFetching } = useAdminContactSubmissions({
     page,
     limit,
-    search,
+    search: debouncedSearch,
     sortBy,
     sortDir,
     type,
@@ -91,6 +103,7 @@ export default function ContactSubmissionsPage() {
         }}
         onReset={() => {
           setSearch("");
+          setDebouncedSearch("");
           setSortBy("createdAt");
           setSortDir("desc");
           setLimit(10);

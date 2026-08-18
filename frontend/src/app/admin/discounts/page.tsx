@@ -29,6 +29,7 @@ import {
   StatusBadge,
   useToast,
   LoadingButton,
+  AdminBulkActionsBar,
 } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
@@ -520,6 +521,47 @@ export default function DiscountsPage() {
     }
   };
 
+  const [bulkAction, setBulkAction] = useState<"ENABLE" | "DISABLE" | "DELETE" | "">("");
+
+  const handleSelectAll = async (checked: boolean) => {
+    if (!checked) {
+      setSelectedIds([]);
+      return;
+    }
+    try {
+      const { adminApi } = await import("@/services/adminApi");
+      const res = await adminApi.get("/discounts", {
+        params: {
+          status: status || undefined,
+          type: typeFilter || undefined,
+          scope: scopeFilter || undefined,
+          countryId: countryFilter || undefined,
+          search: debouncedSearch.trim() || undefined,
+          sortBy,
+          sortDir,
+          limit: 999999,
+          ignoreMaxLimit: "true",
+        },
+      });
+      const allIds = (res.data.data ?? []).map((d: any) => d.id);
+      setSelectedIds(allIds);
+      showToast(`Selected all ${allIds.length} discounts across all pages.`, "success");
+    } catch (err) {
+      showToast("Failed to select all discounts.", "error");
+    }
+  };
+
+  const handleBulkAction = async () => {
+    if (!bulkAction || selectedIds.length === 0) return;
+    if (bulkAction === "DELETE") {
+      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected discount(s)? This action cannot be undone.`)) {
+        return;
+      }
+    }
+    await runBulkAction(bulkAction);
+    setBulkAction("");
+  };
+
   const handleExport = async (selectedOnly = false) => {
     try {
       const params: Record<string, unknown> = {
@@ -599,21 +641,6 @@ export default function DiscountsPage() {
   };
 
   const columns: Column<Discount>[] = [
-    {
-      key: "select",
-      label: "",
-      width: "48px",
-      render: (row) =>
-        canUpdate ? (
-          <input
-            type="checkbox"
-            checked={selectedIds.includes(row.id)}
-            onChange={() => toggleRowSelection(row.id)}
-            aria-label={`Select ${row.name}`}
-            className="h-4 w-4 cursor-pointer rounded border-[#D9D9D9] accent-[#E31E24]"
-          />
-        ) : null,
-    },
     {
       key: "name",
       label: "Rule",
@@ -1110,22 +1137,6 @@ export default function DiscountsPage() {
           }}
         />
 
-        {selectedIds.length > 0 && (
-          <div className="mt-4 rounded-xl border border-dashed border-[#E31E24]/30 bg-[#FFF5F5]/30 p-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="text-[13px] font-semibold text-[#E31E24]">{selectedIds.length} rows selected</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={() => void handleExport(true)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
-                <Download size={13} /> Export selected
-              </button>
-              <button type="button" onClick={() => setSelectedIds([])} className="text-[13px] font-medium text-[#6B6B6B] hover:text-[#E31E24] hover:underline">
-                Clear selection
-              </button>
-            </div>
-          </div>
-        )}
-
       <Modal
         open={showForm}
         onClose={resetForm}
@@ -1135,67 +1146,42 @@ export default function DiscountsPage() {
         {showForm ? discountForm : null}
       </Modal>
 
-      {canUpdate && (
-        <div className="mb-3 flex flex-col gap-2 rounded-lg border border-[#E6E6E6] bg-white px-4 py-3 md:flex-row md:items-center md:justify-between">
-          <label className="inline-flex cursor-pointer items-center gap-2 text-[13px] font-medium text-[#1A1A1A]">
-            <input
-              type="checkbox"
-              checked={selectedOnPage}
-              onChange={togglePageSelection}
-              disabled={!discounts.length}
-              className="h-4 w-4 cursor-pointer rounded border-[#D9D9D9] accent-[#E31E24] disabled:cursor-not-allowed"
-            />
-            Select visible discounts
-          </label>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[12.5px] text-[#6B6B6B]">
-              {selectedIds.length} selected
-            </span>
-            <LoadingButton
-              type="button"
-              onClick={() => runBulkAction("ENABLE")}
-              loading={bulkDiscounts.isPending}
-              loadingText="Enabling..."
-              disabled={!selectedIds.length}
-              className="rounded-md border border-[#DCEFE5] bg-[#F4FBF7] px-3 py-1.5 text-[12.5px] font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Bulk enable
-            </LoadingButton>
-            <LoadingButton
-              type="button"
-              onClick={() => runBulkAction("DISABLE")}
-              loading={bulkDiscounts.isPending}
-              loadingText="Disabling..."
-              disabled={!selectedIds.length}
-              className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] font-medium text-[#6B6B6B] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Bulk disable
-            </LoadingButton>
-            <LoadingButton
-              type="button"
-              onClick={() => setBulkDeleting(true)}
-              loading={bulkDiscounts.isPending}
-              loadingText="Deleting..."
-              disabled={!selectedIds.length}
-              className="rounded-md border border-red-100 bg-red-50 px-3 py-1.5 text-[12.5px] font-medium text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Bulk delete
-            </LoadingButton>
-          </div>
-        </div>
-      )}
-
-
-
       <div className="flex gap-6 items-start">
         {/* TABLE */}
         <div className="flex-1 min-w-0">
           <DataTable<Discount>
+            title="Discounts List"
             columns={filteredColumns}
             data={discounts}
             rowKey="id"
             isLoading={isLoading}
             emptyMessage="No discount rules found."
+            enableSelection={true}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+            totalItems={data?.pagination?.total}
+            currentPage={page}
+            pageSize={limit}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            onPageSizeChange={setLimit}
+            onSelectAll={handleSelectAll}
+            renderBulkActions={(selectedIds) => (
+              <AdminBulkActionsBar
+                selectedCount={selectedIds.length}
+                onClear={() => setSelectedIds([])}
+                actionType={bulkAction}
+                onActionTypeChange={(val) => setBulkAction(val as any)}
+                actions={[
+                  { value: "ENABLE", label: "Mark active" },
+                  { value: "DISABLE", label: "Mark inactive" },
+                  { value: "DELETE", label: "Delete selected" }
+                ]}
+                onApply={handleBulkAction}
+                applyLoading={bulkDiscounts.isPending}
+                applyDisabled={!bulkAction || selectedIds.length === 0}
+              />
+            )}
           />
         </div>
 

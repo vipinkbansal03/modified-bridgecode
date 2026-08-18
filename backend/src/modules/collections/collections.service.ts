@@ -83,7 +83,7 @@ function buildCollectionOrder(query: CollectionQuery): Prisma.CollectionOrderByW
 const collectionInclude = {
   products: { include: { product: true }, orderBy: { sortOrder: "asc" } },
   countries: { include: { country: true }, orderBy: { country: { name: "asc" } } },
-  _count: { select: { products: true } },
+  _count: { select: { products: { where: { product: { deletedAt: null } } } } },
 } satisfies Prisma.CollectionInclude;
 
 async function syncProducts(collectionId: string, productIds?: string[]) {

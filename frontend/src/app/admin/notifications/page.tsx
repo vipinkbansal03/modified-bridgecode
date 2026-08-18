@@ -1,34 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { adminApi as api } from "@/services/adminApi";
+import { useState } from "react";
 import { Search, ChevronDown, Trash2, Eye, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useAdminNotificationsHistory, useDeleteAdminNotification } from "@/hooks/api";
 
 export default function AdminNotificationsPage() {
-  const [history, setHistory] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { data: history = [], isLoading } = useAdminNotificationsHistory();
+  const deleteMutation = useDeleteAdminNotification();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [viewModal, setViewModal] = useState<any | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-
-  useEffect(() => {
-    fetchHistory();
-  }, []);
-
-  const fetchHistory = async () => {
-    try {
-      setIsLoading(true);
-      const { data } = await api.get("/notifications/admin/all", { 
-        baseURL: api.defaults.baseURL?.replace(/\/admin$/, '') 
-      });
-      setHistory(data.data || []);
-    } catch (err) {
-      console.error("Failed to fetch notifications history", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const filteredHistory = history.filter(h => {
     if (!searchQuery) return true;
@@ -59,10 +41,7 @@ export default function AdminNotificationsPage() {
     if (!confirm("Are you sure you want to delete the selected notifications?")) return;
     
     try {
-      await Promise.all(selectedIds.map(id => api.delete(`/notifications/admin/${id}`, {
-        baseURL: api.defaults.baseURL?.replace(/\/admin$/, '')
-      })));
-      setHistory(prev => prev.filter(h => !selectedIds.includes(h.id)));
+      await Promise.all(selectedIds.map(id => deleteMutation.mutateAsync(id)));
       setSelectedIds([]);
     } catch (err) {
       console.error("Failed to delete notifications", err);
@@ -73,10 +52,7 @@ export default function AdminNotificationsPage() {
   const handleDeleteSingle = async (id: string) => {
     if (!confirm("Are you sure you want to delete this notification?")) return;
     try {
-      await api.delete(`/notifications/admin/${id}`, {
-        baseURL: api.defaults.baseURL?.replace(/\/admin$/, '')
-      });
-      setHistory(prev => prev.filter(item => item.id !== id));
+      await deleteMutation.mutateAsync(id);
     } catch (err) {
       console.error("Failed to delete notification", err);
       alert("Failed to delete notification");

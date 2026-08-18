@@ -34,6 +34,7 @@ interface AdminMultiSearchableSelectProps extends Omit<
   allowSelectAll?: boolean;
   selectAllValue?: string;
   selectAllLabel?: string;
+  emptyMeansAll?: boolean;
   // Infinite scroll / paging props
   onMenuScrollToBottom?: () => void;
   isLoadingMore?: boolean;
@@ -58,6 +59,7 @@ export function AdminMultiSearchableSelect({
   allowSelectAll = false,
   selectAllValue = "__ALL__",
   selectAllLabel = "All",
+  emptyMeansAll = true,
 
   onBlur,
   disabled,
@@ -93,8 +95,9 @@ export function AdminMultiSearchableSelect({
 
   const isAllSelected =
     allowSelectAll &&
-    (selectedValues.length === 0 ||
-      (options.length > 0 && options.every((option) => selectedValues.includes(option.value))));
+    (emptyMeansAll
+      ? selectedValues.length === 0 || (options.length > 0 && options.every((option) => selectedValues.includes(option.value)))
+      : options.length > 0 && options.every((option) => selectedValues.includes(option.value)));
 
   const filteredOptions = useMemo(() => {
     if (!showSearch || !searchQuery.trim() || onSearchChange) return options;
@@ -240,25 +243,69 @@ export function AdminMultiSearchableSelect({
     };
   }, [isOpen, updateMenuPosition]);
 
-  const selectOption = (nextValue: string) => {
+  const [lastSelectedValue, setLastSelectedValue] = useState<string | null>(null);
+
+  const selectOption = (nextValue: string, isShift: boolean = false) => {
     if (allowSelectAll && nextValue === selectAllValue) {
-      onValuesChange([]);
+      if (emptyMeansAll) {
+        onValuesChange([]);
+      } else {
+        const allOptionValues = options.map((opt) => opt.value);
+        const allAreSelected = options.length > 0 && options.every((opt) => selectedValues.includes(opt.value));
+        onValuesChange(allAreSelected ? [] : allOptionValues);
+      }
+      setLastSelectedValue(null);
       return;
     }
 
     let updatedValues = [...selectedValues];
+    const isCurrentlySelected = updatedValues.includes(nextValue);
 
-    if (updatedValues.includes(nextValue)) {
-      updatedValues = updatedValues.filter((value) => value !== nextValue);
+    if (isShift && lastSelectedValue && lastSelectedValue !== selectAllValue) {
+      const lastIndex = displayedOptions.findIndex((opt) => opt.value === lastSelectedValue);
+      const nextIndex = displayedOptions.findIndex((opt) => opt.value === nextValue);
+
+      if (lastIndex !== -1 && nextIndex !== -1) {
+        const start = Math.min(lastIndex, nextIndex);
+        const end = Math.max(lastIndex, nextIndex);
+        const rangeOptions = displayedOptions.slice(start, end + 1).filter((opt) => opt.value !== selectAllValue);
+        const rangeValues = rangeOptions.map((opt) => opt.value);
+
+        if (isCurrentlySelected) {
+          updatedValues = updatedValues.filter((value) => !rangeValues.includes(value));
+        } else {
+          rangeValues.forEach((val) => {
+            if (!updatedValues.includes(val)) {
+              updatedValues.push(val);
+            }
+          });
+        }
+      } else {
+        if (isCurrentlySelected) {
+          updatedValues = updatedValues.filter((value) => value !== nextValue);
+        } else {
+          updatedValues.push(nextValue);
+        }
+      }
     } else {
-      updatedValues.push(nextValue);
+      if (isCurrentlySelected) {
+        updatedValues = updatedValues.filter((value) => value !== nextValue);
+      } else {
+        updatedValues.push(nextValue);
+      }
     }
+
+    setLastSelectedValue(nextValue);
 
     const everySelected =
       options.length > 0 &&
       options.every((option) => updatedValues.includes(option.value));
 
-    onValuesChange(everySelected ? [] : updatedValues);
+    if (emptyMeansAll) {
+      onValuesChange(everySelected ? [] : updatedValues);
+    } else {
+      onValuesChange(updatedValues);
+    }
   };
 
   useEffect(() => {
@@ -370,7 +417,7 @@ export function AdminMultiSearchableSelect({
                           role="option"
                           aria-selected={isSelected}
                           onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => selectOption(option.value)}
+                          onClick={(e) => selectOption(option.value, e.shiftKey)}
                           className={cn(
                             "flex w-full items-center px-3.5 py-2 text-left text-[13.5px] transition hover:bg-[#F7F7F7]",
                             isSelected

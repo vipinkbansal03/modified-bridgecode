@@ -32,16 +32,17 @@ export default function AdminReviewsPage() {
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingLoading, setDeletingLoading] = useState(false);
 
-  const fetchReviews = async () => {
+  const fetchReviews = async (searchQuery: string) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (search) params.set("search", search);
+      if (searchQuery) params.set("search", searchQuery);
       if (statusFilter !== "ALL") params.set("status", statusFilter);
 
       const res = await adminApi.get(`/reviews?${params.toString()}`);
@@ -56,8 +57,15 @@ export default function AdminReviewsPage() {
   };
 
   useEffect(() => {
-    fetchReviews();
-  }, [statusFilter, search]);
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    fetchReviews(debouncedSearch);
+  }, [statusFilter, debouncedSearch]);
 
   const reviewStats = useMemo(() => {
     const total = reviews.length;

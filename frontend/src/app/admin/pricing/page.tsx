@@ -34,6 +34,7 @@ import {
   StatusBadge,
   useToast,
   LoadingButton,
+  AdminBulkActionsBar,
 } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
@@ -274,7 +275,9 @@ export default function PricingPage() {
 
   const { showToast, ToastComponent } = useToast();
 
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [bulkAction, setBulkAction] = useState("");
   const [statusFilter, setStatusFilter] = useState<PricingStatusFilter>("ALL");
   const [ruleTypeFilter, setRuleTypeFilter] = useState<PricingRuleType>("ALL");
   const [countryFilter, setCountryFilter] = useState("");
@@ -287,6 +290,35 @@ export default function PricingPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const handleSelectAll = async (checked: boolean) => {
+    if (!checked) {
+      setSelectedIds([]);
+      return;
+    }
+    try {
+      const res = await adminApi.get("/pricing", {
+        params: {
+          search: search || undefined,
+          status: statusFilter === "ALL" ? undefined : statusFilter,
+          ruleType: ruleTypeFilter === "ALL" ? undefined : ruleTypeFilter,
+          countryId: countryFilter || undefined,
+          tierId: tierFilter || undefined,
+          productId: productFilter || undefined,
+          variantId: variantFilter || undefined,
+          minQuantity: minQuantityFilter || undefined,
+          sortBy,
+          sortDir,
+          limit: 999999,
+          ignoreMaxLimit: "true",
+        },
+      });
+      const allIds = (res.data.data ?? []).map((row: any) => row.id);
+      setSelectedIds(allIds);
+      showToast(`Selected all ${allIds.length} pricing rules across all pages.`, "success");
+    } catch (err) {
+      showToast("Failed to select all pricing rules.", "error");
+    }
+  };
   const [columnVisibility, setColumnVisibility] = useState(defaultColumnVisibility);
   const [showColumnPanel, setShowColumnPanel] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -302,6 +334,14 @@ export default function PricingPage() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [previewInput, setPreviewInput] = useState<PreviewFormState>(emptyPreview);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const { data: dashboardData, isLoading: dashboardLoading } = useAdminPricingDashboard();
   const { data: pricingResponse, isLoading: pricingLoading, refetch, isFetching } = useAdminPricing({
@@ -629,7 +669,7 @@ export default function PricingPage() {
 
   useEffect(() => {
     setSelectedIds([]);
-  }, [page, limit, search, statusFilter, ruleTypeFilter, countryFilter, tierFilter, productFilter, variantFilter, minQuantityFilter, sortBy, sortDir]);
+  }, [limit, search, statusFilter, ruleTypeFilter, countryFilter, tierFilter, productFilter, variantFilter, minQuantityFilter, sortBy, sortDir]);
 
   useEffect(() => {
     if (!form.values.productId) return;
@@ -1236,11 +1276,8 @@ export default function PricingPage() {
       <div className="space-y-5">
         <AdminListToolbar
           search={{
-            value: search,
-            onChange: (val) => {
-              setSearch(val);
-              setPage(1);
-            },
+            value: searchInput,
+            onChange: (val) => setSearchInput(val),
             placeholder: "Search rule, product, country, tier...",
             widthClassName: "max-w-[280px]",
           }}
@@ -1363,7 +1400,7 @@ export default function PricingPage() {
                   isLoadingMore={isFetchingNextProductsPage}
                 />
                 <AdminSelect label="Variant" value={variantFilter} onChange={(event) => { setVariantFilter(event.target.value); setPage(1); }} options={filterVariantOptions} />
-                <AdminInput label="Min Quantity" type="number" min="1" value={minQuantityFilter} onChange={(event) => { setMinQuantityFilter(event.target.value); setPage(1); }} />
+                <AdminInput label="Min Quantity" type="text" value={minQuantityFilter} onChange={(event) => { setMinQuantityFilter(event.target.value.replace(/\D/g, "")); setPage(1); }} />
                 <AdminSelect
                   label="Page Size"
                   value={String(limit)}
@@ -1382,6 +1419,7 @@ export default function PricingPage() {
             </div>
           }
           onResetFilters={() => {
+            setSearchInput("");
             setSearch("");
             setStatusFilter("ALL");
             setRuleTypeFilter("ALL");
@@ -1397,8 +1435,7 @@ export default function PricingPage() {
         />
 
           <DataTable
-            title="Pricing Rules"
-            description="Select rows for bulk actions."
+            title={bulkActionFamily === "base" ? "Base Pricing Rules" : "Override Pricing Rules"}
             columns={dataTableColumns as any}
             data={ruleRows}
             rowKey="id"
@@ -1409,101 +1446,68 @@ export default function PricingPage() {
             onSelectionChange={setSelectedIds}
             onToggleStatus={toggleStatus}
             statusLoadingId={togglingStatusId}
+            totalItems={pagination.total}
+            currentPage={page}
+            pageSize={limit}
+            totalPages={pagination.totalPages ?? 1}
+            onPageChange={setPage}
+            onPageSizeChange={setLimit}
+            pageSizeOptions={[20, 50, 100, 500]}
+            onSelectAll={handleSelectAll}
             renderBulkActions={(selectedIds) => {
               if (!canUpdate) return null;
-              return (
-                <div className="flex items-center justify-between w-full h-full relative">
-                  <div className="flex items-center gap-3">
-                    <span className="text-[13px] font-bold text-[#1A1A1A]">{selectedIds.length} selected</span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedIds([])}
-                      className="inline-flex items-center gap-1.5 rounded border border-[#E6E6E6] bg-white px-2.5 py-1 text-[11.5px] font-semibold text-[#1A1A1A] hover:bg-gray-50 hover:border-gray-300 shadow-sm transition-all"
-                    >
-                      <X size={12} /> Clear
-                    </button>
-                    <div className="h-4 w-px bg-[#E6E6E6]" />
-                    <span className="text-[12px] text-gray-500 font-medium">Bulk Actions:</span>
-                    {bulkActionFamily === "base" ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => runBulkAction("ENABLE")}
-                          className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11.5px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors shadow-sm"
-                        >
-                          Enable
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => runBulkAction("DISABLE")}
-                          className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11.5px] font-semibold text-amber-700 hover:bg-amber-100 transition-colors shadow-sm"
-                        >
-                          Disable
-                        </button>
-                      </>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => runBulkAction("DELETE")}
-                      className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-[11.5px] font-semibold text-red-700 hover:bg-red-100 transition-colors shadow-sm"
-                    >
-                      Delete
-                    </button>
-                  </div>
+              
+              const actions = [];
+              if (bulkActionFamily === "base") {
+                actions.push(
+                  { value: "enable", label: "Enable" },
+                  { value: "disable", label: "Disable" }
+                );
+              }
+              actions.push(
+                { value: "delete", label: "Delete" },
+                { value: "assignCountryTier", label: "Assign Country & Tier" }
+              );
 
-                  <div className="flex items-center gap-2.5 sm:ml-auto relative">
-                    <button
-                      type="button"
-                      onClick={() => setShowAssignDropdown(!showAssignDropdown)}
-                      className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] hover:bg-gray-50 hover:border-gray-300 flex items-center gap-1.5 shadow-sm transition-all h-[32px]"
-                    >
-                      <span>Assign Country & Tier</span>
-                      <ChevronDown size={14} className={cn("transition-transform text-gray-500", showAssignDropdown && "rotate-180")} />
-                    </button>
-                    
-                    {showAssignDropdown && (
-                      <div className="absolute right-0 top-full mt-2 w-80 rounded-lg border border-[#E6E6E6] bg-white p-4 shadow-xl z-50 animate-fade-in flex flex-col gap-3.5">
-                        <div className="flex flex-col gap-1.5">
-                          <span className="text-[12px] font-semibold text-[#1A1A1A]">Bulk Country Assign</span>
-                          <AdminSearchableSelect
-                            value={bulkCountryId}
-                            onChange={(event) => setBulkCountryId(event.target.value)}
-                            options={bulkCountryOptions}
-                            placeholder="Select country"
-                          />
+              return (
+                <AdminBulkActionsBar
+                  selectedCount={selectedIds.length}
+                  onClear={() => setSelectedIds([])}
+                  actionType={bulkAction}
+                  onActionTypeChange={setBulkAction}
+                  actions={actions}
+                  onApply={() => {
+                    if (bulkAction === "enable") runBulkAction("ENABLE");
+                    else if (bulkAction === "disable") runBulkAction("DISABLE");
+                    else if (bulkAction === "delete") runBulkAction("DELETE");
+                    else if (bulkAction === "assignCountryTier") runBulkAssign();
+                  }}
+                  applyLoading={bulkPricing.isPending}
+                  applyDisabled={bulkAction === "assignCountryTier" && !bulkCountryId && !bulkTierId}
+                  renderExtraSelectors={() => (
+                    <>
+                      {bulkAction === "assignCountryTier" && (
+                        <div className="flex items-center gap-2 max-w-sm">
+                          <div className="w-36">
+                            <AdminSearchableSelect
+                              value={bulkCountryId}
+                              onChange={(event) => setBulkCountryId(event.target.value)}
+                              options={bulkCountryOptions}
+                              placeholder="Select country"
+                            />
+                          </div>
+                          <div className="w-36">
+                            <AdminSelect
+                              value={bulkTierId}
+                              onChange={(event) => setBulkTierId(event.target.value)}
+                              options={bulkTierOptions}
+                            />
+                          </div>
                         </div>
-                        <div className="flex flex-col gap-1.5">
-                          <span className="text-[12px] font-semibold text-[#1A1A1A]">Bulk Tier Assign</span>
-                          <AdminSelect
-                            value={bulkTierId}
-                            onChange={(event) => setBulkTierId(event.target.value)}
-                            options={bulkTierOptions}
-                          />
-                        </div>
-                        <div className="flex gap-2 justify-end border-t border-[#E6E6E6] pt-3.5 mt-1">
-                          <button
-                            type="button"
-                            onClick={() => setShowAssignDropdown(false)}
-                            className="rounded-md px-3 py-1.5 text-[11.5px] font-semibold text-gray-500 hover:bg-gray-50 transition-colors"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              runBulkAssign();
-                              setShowAssignDropdown(false);
-                            }}
-                            disabled={!bulkCountryId && !bulkTierId}
-                            className="rounded-md bg-[#E31E24] px-4 py-1.5 text-[11.5px] font-bold text-white hover:bg-[#B5151B] disabled:opacity-40 transition-colors shadow-sm"
-                          >
-                            Apply Assignment
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                      )}
+                    </>
+                  )}
+                />
               );
             }}
           />
@@ -1666,16 +1670,16 @@ export default function PricingPage() {
               {form.values.ruleType === "TIER_PRICE" ? (
                 <>
                   <AdminSelect label="Tier" {...form.getFieldProps("tierId")} error={form.errors.tierId as string} options={tierOptions} />
-                  <AdminInput label="Discount %" type="number" min="0" step="0.01" {...form.getFieldProps("discountPercent")} error={form.errors.discountPercent as string} />
-                  <AdminInput label="Fixed Price" type="number" min="0" step="0.01" {...form.getFieldProps("fixedPrice")} error={form.errors.fixedPrice as string} />
+                  <AdminInput label="Discount %" type="text" {...form.getFieldProps("discountPercent")} error={form.errors.discountPercent as string} />
+                  <AdminInput label="Fixed Price" type="text" {...form.getFieldProps("fixedPrice")} error={form.errors.fixedPrice as string} />
                 </>
               ) : null}
 
               {form.values.ruleType === "MOQ_PRICE" ? (
                 <>
-                  <AdminInput label="Minimum Quantity" type="number" min="1" step="1" {...form.getFieldProps("minQuantity")} error={form.errors.minQuantity as string} />
-                  <AdminInput label="Discount %" type="number" min="0" step="0.01" {...form.getFieldProps("discountPercent")} error={form.errors.discountPercent as string} />
-                  <AdminInput label="Fixed Price" type="number" min="0" step="0.01" {...form.getFieldProps("fixedPrice")} error={form.errors.fixedPrice as string} />
+                  <AdminInput label="Minimum Quantity" type="text" {...form.getFieldProps("minQuantity")} error={form.errors.minQuantity as string} />
+                  <AdminInput label="Discount %" type="text" {...form.getFieldProps("discountPercent")} error={form.errors.discountPercent as string} />
+                  <AdminInput label="Fixed Price" type="text" {...form.getFieldProps("fixedPrice")} error={form.errors.fixedPrice as string} />
                 </>
               ) : null}
 
@@ -1686,10 +1690,10 @@ export default function PricingPage() {
                   const isDistributorRequired = currentRole === "" || currentRole === "DOCTOR_RETAILER";
                   return (
                     <>
-                      <AdminInput label="MRP" required type="number" min="0" step="0.01" {...form.getFieldProps("mrp")} error={form.errors.mrp as string} />
-                      <AdminInput label="Selling Price" required type="number" min="0" step="0.01" {...form.getFieldProps("sellingPrice")} error={form.errors.sellingPrice as string} />
-                      <AdminInput label="Dealer Price" required={isDealerRequired} type="number" min="0" step="0.01" {...form.getFieldProps("dealerPrice")} error={form.errors.dealerPrice as string} />
-                      <AdminInput label="Doctor / Retailer Price" required={isDistributorRequired} type="number" min="0" step="0.01" {...form.getFieldProps("distributorPrice")} error={form.errors.distributorPrice as string} />
+                      <AdminInput label="MRP" required type="text" {...form.getFieldProps("mrp")} error={form.errors.mrp as string} />
+                      <AdminInput label="Selling Price" required type="text" {...form.getFieldProps("sellingPrice")} error={form.errors.sellingPrice as string} />
+                      <AdminInput label="Dealer Price" required={isDealerRequired} type="text" {...form.getFieldProps("dealerPrice")} error={form.errors.dealerPrice as string} />
+                      <AdminInput label="Doctor / Retailer Price" required={isDistributorRequired} type="text" {...form.getFieldProps("distributorPrice")} error={form.errors.distributorPrice as string} />
                     </>
                   );
                 })()
@@ -1762,7 +1766,7 @@ export default function PricingPage() {
               onChange={(event) => setPreviewInput((current) => ({ ...current, tierId: event.target.value }))}
               options={tierOptions}
             />
-            <AdminInput label="Quantity" type="number" min="1" value={previewInput.quantity} onChange={(event) => setPreviewInput((current) => ({ ...current, quantity: event.target.value }))} />
+            <AdminInput label="Quantity" type="text" value={previewInput.quantity} onChange={(event) => setPreviewInput((current) => ({ ...current, quantity: event.target.value.replace(/\D/g, "") }))} />
           </div>
 
           <div className="mt-4 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">

@@ -334,9 +334,9 @@ export async function deliverOrder(id: string) {
     notificationsService.createNotification({
       title: "Order Delivered",
       message: `Your order #${order.orderNumber} has been delivered.`,
-      type: "ORDER",
+      type: "INFO",
       targetType: "SPECIFIC_CUSTOMER",
-      customerId: order.customerId,
+      customerId: order.customerId || undefined,
       link: `/account/orders/${id}`,
     }).catch(console.error);
   });

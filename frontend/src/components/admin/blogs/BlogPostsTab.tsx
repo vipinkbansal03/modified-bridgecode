@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowLeft, Edit2, Plus, Save, Trash2, Upload, X } from "lucide-react";
 import {
   AdminInput,
@@ -71,6 +71,7 @@ export function BlogPostsTab() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
 
@@ -83,7 +84,19 @@ export function BlogPostsTab() {
   const [uploading, setUploading] = useState(false);
 
   const { showToast, ToastComponent } = useToast();
-  const { data, isLoading } = useAdminBlogs({ page, limit: 20, status, search });
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
+  const { data, isLoading } = useAdminBlogs({ page, limit: 20, status, search: debouncedSearch });
   const { data: authors = [] } = useAdminBlogAuthors();
   const { data: categories = [] } = useAdminBlogCategories();
 

@@ -17,6 +17,8 @@ type CustomerProfileInput = {
   taxIdType?: string | null;
   taxIdStatus?: string;
   taxExemptCertificateUrl?: string | null;
+  customerRoleId?: string | null;
+  tierId?: string | null;
 };
 
 type CustomerListQuery = {
@@ -160,6 +162,26 @@ export async function updateCustomerProfile(id: string, data: CustomerProfileInp
   if (data.taxIdType !== undefined) next.taxIdType = data.taxIdType;
   if (data.taxIdStatus !== undefined) next.taxIdStatus = data.taxIdStatus;
   if (data.taxExemptCertificateUrl !== undefined) next.taxExemptCertificateUrl = data.taxExemptCertificateUrl;
+
+  if (data.customerRoleId !== undefined) {
+    if (data.customerRoleId) {
+      const role = await prisma.customerRole.findUnique({ where: { id: data.customerRoleId } });
+      if (!role) throw new AppError("Customer role not found.", 404);
+      if (role.status !== "ACTIVE") throw new AppError("Only active customer roles can be assigned.", 400);
+      next.customerRoleId = data.customerRoleId;
+    } else {
+      next.customerRoleId = null;
+    }
+  }
+
+  if (data.tierId !== undefined) {
+    if (data.tierId) {
+      await assertTierUsable(data.tierId);
+      next.tierId = data.tierId;
+    } else {
+      next.tierId = null;
+    }
+  }
 
   return prisma.customer.update({
     where: { id },
