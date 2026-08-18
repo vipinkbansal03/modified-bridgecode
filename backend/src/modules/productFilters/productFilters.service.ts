@@ -27,20 +27,36 @@ export interface CategoryFilterConfig {
   config: ProductFilterConfig;
 }
 
+async function cleanFiltersConfig(config: ProductFilterConfig): Promise<ProductFilterConfig> {
+  const activeAttributes = await prisma.attribute.findMany({
+    where: { status: "ACTIVE" },
+    select: { id: true },
+  });
+  const activeIds = new Set(activeAttributes.map((a) => a.id));
+  
+  return {
+    ...config,
+    attributeFilters: (config.attributeFilters ?? []).filter((af) => activeIds.has(af.attributeId)),
+  };
+}
+
 export async function getGlobalProductFiltersConfig(): Promise<ProductFilterConfig> {
   const setting = await prisma.setting.findUnique({
     where: { key: GLOBAL_SETTINGS_KEY },
   });
 
+  let config: ProductFilterConfig;
   if (!setting || !setting.value) {
-    return getDefaultConfig();
+    config = getDefaultConfig();
+  } else {
+    try {
+      config = JSON.parse(setting.value);
+    } catch {
+      config = getDefaultConfig();
+    }
   }
 
-  try {
-    return JSON.parse(setting.value);
-  } catch {
-    return getDefaultConfig();
-  }
+  return cleanFiltersConfig(config);
 }
 
 export async function updateGlobalProductFiltersConfig(config: ProductFilterConfig): Promise<ProductFilterConfig> {
@@ -74,7 +90,8 @@ export async function getCategoryProductFiltersConfig(categoryId: string): Promi
   }
 
   try {
-    return JSON.parse(setting.value);
+    const config = JSON.parse(setting.value);
+    return cleanFiltersConfig(config);
   } catch {
     return getGlobalProductFiltersConfig();
   }
@@ -113,20 +130,27 @@ export async function getAllCategoryProductFiltersConfigs(): Promise<CategoryFil
     },
   });
 
+  const activeAttributes = await prisma.attribute.findMany({
+    where: { status: "ACTIVE" },
+    select: { id: true },
+  });
+  const activeIds = new Set(activeAttributes.map((a) => a.id));
+
   return settings.map((s) => {
+    let config: ProductFilterConfig;
     try {
-      return {
-        categoryId: s.key.replace(CATEGORY_SETTINGS_PREFIX, ""),
-        categoryName: s.label?.replace("Product Filters Configuration - ", "") || "Unknown",
-        config: JSON.parse(s.value || "{}"),
-      };
+      config = JSON.parse(s.value || "{}");
     } catch {
-      return {
-        categoryId: s.key.replace(CATEGORY_SETTINGS_PREFIX, ""),
-        categoryName: s.label?.replace("Product Filters Configuration - ", "") || "Unknown",
-        config: getDefaultConfig(),
-      };
+      config = getDefaultConfig();
     }
+
+    config.attributeFilters = (config.attributeFilters ?? []).filter((af) => activeIds.has(af.attributeId));
+
+    return {
+      categoryId: s.key.replace(CATEGORY_SETTINGS_PREFIX, ""),
+      categoryName: s.label?.replace("Product Filters Configuration - ", "") || "Unknown",
+      config,
+    };
   });
 }
 
