@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Edit2, Trash2, Search, ArrowUp, ArrowDown, Globe, Link2, FolderTree, ExternalLink, X, Settings, ChevronRight } from "lucide-react";
-import { AdminInput, AdminSelect, AdminTextarea, ConfirmModal, DataTable, type Column, useToast } from "@/components/admin/AdminComponents";
+import { Plus, Edit2, Trash2, Search, ArrowUp, ArrowDown, Globe, Link2, FolderTree, ExternalLink, X, Settings, GripVertical, Check, ArrowRight, ArrowLeft } from "lucide-react";
+import { AdminInput, AdminSelect, AdminTextarea, ConfirmModal, useToast } from "@/components/admin/AdminComponents";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { useAdminCategories, useAdminCmsMenus, useAdminCmsPages, useAdminLanguages } from "@/hooks/admin/useAdminHooks";
-import { CMS_MENU_LOCATIONS, type CmsMenuCategoryGroup } from "@/lib/cmsNavigation";
+import { useAdminCategories, useAdminCmsMenus, useAdminCmsPages, useAdminLanguages, useAdminCollections, useAdminBlogs, useAdminProducts } from "@/hooks/admin/useAdminHooks";
+import { CMS_MENU_LOCATIONS } from "@/lib/cmsNavigation";
 import { adminApi } from "@/services/adminApi";
 import { cn } from "@/utils/cn";
 
@@ -23,6 +23,7 @@ const NAV_LABEL_KEYS: Record<string, string> = {
   "Become a Dealer": "ui.nav.becomeDealer",
   "Quick Order": "ui.nav.quickOrder",
 };
+
 type MenuItem = {
   id: string;
   parentId?: string | null;
@@ -33,6 +34,11 @@ type MenuItem = {
   status?: string;
   translations?: CmsTranslations;
 };
+
+interface MenuItemWithChildren extends MenuItem {
+  children: MenuItemWithChildren[];
+}
+
 type Menu = { id: string; name: string; location: string; status: string; items: MenuItem[] };
 
 function translationValue(translations: CmsTranslations | undefined, field: string, languageId: string) {
@@ -49,15 +55,268 @@ function normalizeItem(item: MenuItem): MenuItem {
   };
 }
 
+// ─── Shopify-like Link Picker Input Component ─────────────────────────────
+function LinkPickerInput({
+  label,
+  value,
+  onChange,
+  onSelectLink,
+  categories,
+  collections,
+  cmsPages,
+  blogs,
+  products,
+  placeholder = "Search or paste link"
+}: {
+  label: string;
+  value: string;
+  onChange: (val: string) => void;
+  onSelectLink: (url: string, label: string) => void;
+  categories: any[];
+  collections: any[];
+  cmsPages: any[];
+  blogs: any[];
+  products: any[];
+  placeholder?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [tab, setTab] = useState<"main" | "collections" | "categories" | "pages" | "blogs" | "products">("main");
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".link-picker-container")) {
+        setIsOpen(false);
+        setTab("main");
+      }
+    };
+    document.addEventListener("click", handleOutsideClick);
+    return () => document.removeEventListener("click", handleOutsideClick);
+  }, [isOpen]);
+
+  const filteredCollections = collections.filter(c => (c.name || "").toLowerCase().includes(search.toLowerCase()));
+  const filteredCategories = categories.filter(c => (c.name || "").toLowerCase().includes(search.toLowerCase()));
+  const filteredPages = cmsPages.filter(p => (p.title || "").toLowerCase().includes(search.toLowerCase()));
+  const filteredBlogs = blogs.filter(b => (b.name || "").toLowerCase().includes(search.toLowerCase()));
+  const filteredProducts = products.filter(p => (p.title || "").toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div className="relative link-picker-container w-full">
+      <AdminInput
+        label={label}
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          if (!isOpen) setIsOpen(true);
+        }}
+        onFocus={() => setIsOpen(true)}
+        placeholder={placeholder}
+      />
+      {isOpen && (
+        <div className="absolute left-0 right-0 z-[100] mt-1 max-h-64 overflow-y-auto rounded-lg border border-[#E6E6E6] bg-white shadow-xl flex flex-col">
+          {tab !== "main" && (
+            <div className="flex items-center gap-2 border-b border-[#E6E6E6] px-3 py-2 bg-gray-50/50">
+              <button
+                type="button"
+                onClick={() => { setTab("main"); setSearch(""); }}
+                className="text-[12px] font-semibold text-[#E31E24] hover:underline"
+              >
+                ← Back
+              </button>
+              <input
+                type="text"
+                placeholder="Search..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1 rounded border border-[#E6E6E6] px-2 py-0.5 text-xs outline-none focus:border-[#E31E24]"
+                autoFocus
+              />
+            </div>
+          )}
+          <div className="divide-y divide-[#F0F0F0]">
+            {tab === "main" && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => { onSelectLink("/", "Home page"); setIsOpen(false); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-medium text-[#1A1A1A]"
+                >
+                  🏠 Home page
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { onSelectLink("/search", "Search"); setIsOpen(false); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-medium text-[#1A1A1A]"
+                >
+                  🔍 Search page
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setTab("products"); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-medium text-[#1A1A1A] flex items-center justify-between"
+                >
+                  <span>📦 Products</span>
+                  <span className="text-[#9A9A9A] text-[10px]">▶</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setTab("collections"); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-medium text-[#1A1A1A] flex items-center justify-between"
+                >
+                  <span>📂 Collections</span>
+                  <span className="text-[#9A9A9A] text-[10px]">▶</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setTab("categories"); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-medium text-[#1A1A1A] flex items-center justify-between"
+                >
+                  <span>📁 Categories</span>
+                  <span className="text-[#9A9A9A] text-[10px]">▶</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setTab("pages"); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-medium text-[#1A1A1A] flex items-center justify-between"
+                >
+                  <span>📄 CMS Pages</span>
+                  <span className="text-[#9A9A9A] text-[10px]">▶</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setTab("blogs"); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-medium text-[#1A1A1A] flex items-center justify-between"
+                >
+                  <span>📰 Blogs</span>
+                  <span className="text-[#9A9A9A] text-[10px]">▶</span>
+                </button>
+              </>
+            )}
+            {tab === "products" && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => { onSelectLink("/products", "All Products"); setIsOpen(false); setTab("main"); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-bold text-gray-700"
+                >
+                  All Products
+                </button>
+                {filteredProducts.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => { onSelectLink(`/products/${p.slug}`, p.title); setIsOpen(false); setTab("main"); }}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] text-gray-600 truncate"
+                  >
+                    {p.title}
+                  </button>
+                ))}
+                {filteredProducts.length === 0 && (
+                  <div className="px-3 py-2 text-xs text-gray-400">No products found.</div>
+                )}
+              </>
+            )}
+            {tab === "collections" && (
+              <>
+                {filteredCollections.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => { onSelectLink(`/products?collection=${c.slug}`, c.name); setIsOpen(false); setTab("main"); }}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] text-gray-600"
+                  >
+                    {c.name}
+                  </button>
+                ))}
+                {filteredCollections.length === 0 && (
+                  <div className="px-3 py-2 text-xs text-gray-400">No collections found.</div>
+                )}
+              </>
+            )}
+            {tab === "categories" && (
+              <>
+                {filteredCategories.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => { onSelectLink(`/products?category=${c.slug}`, c.name); setIsOpen(false); setTab("main"); }}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] text-gray-600"
+                  >
+                    {c.name}
+                  </button>
+                ))}
+                {filteredCategories.length === 0 && (
+                  <div className="px-3 py-2 text-xs text-gray-400">No categories found.</div>
+                )}
+              </>
+            )}
+            {tab === "pages" && (
+              <>
+                {filteredPages.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => { onSelectLink(`/${p.slug}`, p.title); setIsOpen(false); setTab("main"); }}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] text-gray-600"
+                  >
+                    {p.title}
+                  </button>
+                ))}
+                {filteredPages.length === 0 && (
+                  <div className="px-3 py-2 text-xs text-gray-400">No pages found.</div>
+                )}
+              </>
+            )}
+            {tab === "blogs" && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => { onSelectLink("/blog", "Blog"); setIsOpen(false); setTab("main"); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-bold text-gray-700"
+                >
+                  All Blogs
+                </button>
+                {filteredBlogs.map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => { onSelectLink(`/blog/${b.slug}`, b.name); setIsOpen(false); setTab("main"); }}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] text-gray-600"
+                  >
+                    {b.name}
+                  </button>
+                ))}
+                {filteredBlogs.length === 0 && (
+                  <div className="px-3 py-2 text-xs text-gray-400">No blogs found.</div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Menus Management Page Component ──────────────────────────────────
 export default function CmsMenusPage() {
   const { data: menus, isLoading, refetch } = useAdminCmsMenus();
   const { data: languages = [] } = useAdminLanguages();
   const activeTranslationLanguages = useMemo(() => {
     return (languages as Language[]).filter((lang) => lang.isEnabled && !lang.isDefault);
   }, [languages]);
+  
   const { data: categories = [] } = useAdminCategories();
   const { data: cmsPagesResponse } = useAdminCmsPages();
   const cmsPages = cmsPagesResponse?.data ?? [];
+  const { data: collectionsResponse } = useAdminCollections({ limit: 200 });
+  const collections = collectionsResponse?.data ?? [];
+  const { data: blogsResponse } = useAdminBlogs({ limit: 200 });
+  const blogs = blogsResponse?.data ?? [];
+  const { data: productsResponse } = useAdminProducts({ limit: 200 });
+  const products = productsResponse?.data?.items ?? productsResponse?.data ?? [];
 
   const [selectedMenuId, setSelectedMenuId] = useState<string | null>(null);
   const [activeGroupFilter, setActiveGroupFilter] = useState<string>("ALL");
@@ -65,7 +324,17 @@ export default function CmsMenusPage() {
   const [newName, setNewName] = useState("");
   const [newLocation, setNewLocation] = useState<string>(CMS_MENU_LOCATIONS[0].value);
 
-  // Active Menu Item Management State
+  // Unsaved State Management
+  const [localItems, setLocalItems] = useState<MenuItem[]>([]);
+  const [deletedItemIds, setDeletedItemIds] = useState<string[]>([]);
+  const [unsavedChanges, setUnsavedChanges] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Bulk Selection States
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState<"ENABLE" | "DISABLE" | "DELETE" | "">("");
+
+  // Search & Edit Modal States
   const [itemsSearchQuery, setItemsSearchQuery] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
@@ -87,7 +356,6 @@ export default function CmsMenusPage() {
 
   const menuList: Menu[] = useMemo(() => (menus as Menu[]) ?? [], [menus]);
 
-  // Set default selected menu on load
   useEffect(() => {
     if (menuList.length > 0 && (!selectedMenuId || !menuList.some((m) => m.id === selectedMenuId))) {
       setSelectedMenuId(menuList[0].id);
@@ -102,7 +370,6 @@ export default function CmsMenusPage() {
   const [menuName, setMenuName] = useState("");
   const [menuLocation, setMenuLocation] = useState("");
   const [menuStatus, setMenuStatus] = useState("ACTIVE");
-  const [items, setItems] = useState<MenuItem[]>([]);
 
   const activeLangId = selectedTranslationLangId || (activeTranslationLanguages[0]?.id ?? "");
 
@@ -134,12 +401,16 @@ export default function CmsMenusPage() {
     }
   }, [editingItem, activeLangId]);
 
+  // Synchronize local items when switching menus
   useEffect(() => {
     if (activeMenu) {
       setMenuName(activeMenu.name);
       setMenuLocation(activeMenu.location);
       setMenuStatus(activeMenu.status ?? "ACTIVE");
-      setItems(activeMenu.items.map(normalizeItem));
+      setLocalItems(activeMenu.items.map(normalizeItem));
+      setDeletedItemIds([]);
+      setUnsavedChanges(false);
+      setSelectedIds([]);
     }
   }, [activeMenu]);
 
@@ -148,31 +419,75 @@ export default function CmsMenusPage() {
     [activeMenu]
   );
 
-  const sortedItems = useMemo(
-    () => items.slice().sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label)),
-    [items]
-  );
+  // ─── Nested Hierarchy Sorting Logic ──────────────────────────────────────
+  const treeItems = useMemo(() => {
+    const buildTree = (flatItems: MenuItem[]): MenuItemWithChildren[] => {
+      const itemMap = new Map<string, MenuItemWithChildren>();
+      const roots: MenuItemWithChildren[] = [];
+
+      flatItems.forEach((item) => {
+        itemMap.set(item.id, { ...item, children: [] });
+      });
+
+      flatItems.forEach((item) => {
+        const mapped = itemMap.get(item.id)!;
+        if (item.parentId && itemMap.has(item.parentId)) {
+          itemMap.get(item.parentId)!.children.push(mapped);
+        } else {
+          roots.push(mapped);
+        }
+      });
+
+      const sortTree = (list: MenuItemWithChildren[]) => {
+        list.sort((a, b) => a.sortOrder - b.sortOrder);
+        list.forEach((item) => sortTree(item.children));
+      };
+      sortTree(roots);
+      return roots;
+    };
+
+    const flattenTree = (
+      tree: MenuItemWithChildren[],
+      depth = 0
+    ): Array<{ item: MenuItem; depth: number }> => {
+      const result: Array<{ item: MenuItem; depth: number }> = [];
+      const traverse = (list: MenuItemWithChildren[], d: number) => {
+        list.forEach((node) => {
+          const { children, ...item } = node;
+          result.push({ item, depth: d });
+          traverse(children, d + 1);
+        });
+      };
+      traverse(tree, depth);
+      return result;
+    };
+
+    const tree = buildTree(localItems);
+    return flattenTree(tree);
+  }, [localItems]);
+
+  const filteredTreeItems = useMemo(() => {
+    if (!itemsSearchQuery.trim()) return treeItems;
+    const q = itemsSearchQuery.toLowerCase().trim();
+    return treeItems.filter(
+      (node) =>
+        node.item.label.toLowerCase().includes(q) ||
+        node.item.url.toLowerCase().includes(q)
+    );
+  }, [treeItems, itemsSearchQuery]);
 
   const parentMap = useMemo(() => {
     const map = new Map<string, string>();
-    items.forEach((item) => map.set(item.id, item.label));
+    localItems.forEach((item) => map.set(item.id, item.label));
     return map;
-  }, [items]);
-
-  const filteredItems = useMemo(() => {
-    if (!itemsSearchQuery.trim()) return sortedItems;
-    const q = itemsSearchQuery.toLowerCase().trim();
-    return sortedItems.filter(
-      (item) => item.label.toLowerCase().includes(q) || item.url.toLowerCase().includes(q)
-    );
-  }, [sortedItems, itemsSearchQuery]);
+  }, [localItems]);
 
   const parentOptions = useMemo(
     () => [
       { value: "", label: "No Parent (Top-Level Link / Column)" },
-      ...sortedItems.map((item) => ({ value: item.id, label: item.label })),
+      ...localItems.map((item) => ({ value: item.id, label: item.label })),
     ],
-    [sortedItems]
+    [localItems]
   );
 
   // Grouped Menu Tabs for Sidebar
@@ -198,6 +513,7 @@ export default function CmsMenusPage() {
     return { all: menuList.length, header, footer, offices };
   }, [menuList]);
 
+  // Create Menu location
   async function createMenu() {
     if (!newName.trim()) {
       showToast("Name is required.", "error");
@@ -217,6 +533,7 @@ export default function CmsMenusPage() {
     }
   }
 
+  // Update Location Settings
   async function saveMenuSettings() {
     if (!activeMenu || !menuName.trim() || !menuLocation.trim()) {
       showToast("Name and location key are required.", "error");
@@ -237,286 +554,256 @@ export default function CmsMenusPage() {
     }
   }
 
-  async function addItem() {
-    if (!activeMenu || !addLabel.trim()) {
+  // Add Item to Local State
+  function addItem() {
+    if (!addLabel.trim()) {
       showToast("Label is required.", "error");
       return;
     }
 
-    try {
-      const response = await adminApi.post(`/cms/menus/${activeMenu.id}/items`, {
-        label: addLabel.trim(),
-        url: addUrl.trim(),
-        parentId: addParentId || undefined,
-        openInNewTab: addOpenInNewTab === "true",
-        sortOrder: addSortOrder || items.length,
-        status: "ACTIVE",
-      });
+    const tempId = `temp-${Date.now()}`;
+    const newItem: MenuItem = {
+      id: tempId,
+      label: addLabel.trim(),
+      url: addUrl.trim(),
+      parentId: addParentId || null,
+      openInNewTab: addOpenInNewTab === "true",
+      sortOrder: addSortOrder || localItems.length,
+      status: "ACTIVE",
+    };
 
-      const createdItem = response.data.data;
-      const translationPromises = Object.entries(addTranslations)
-        .filter(([_, val]) => val.trim().length > 0)
-        .map(([langId, val]) => {
-          const staticKey = NAV_LABEL_KEYS[addLabel];
-          if (staticKey) {
-            return adminApi.put("/translations/keywords", {
-              key: staticKey,
-              languageId: langId,
-              value: val.trim(),
-            });
-          } else {
-            return adminApi.put(`/cms/translations/menuItem/${createdItem.id}/${langId}`, {
-              label: val.trim(),
-            });
-          }
-        });
+    setLocalItems((prev) => [...prev, newItem]);
+    setUnsavedChanges(true);
+    setIsAddModalOpen(false);
 
-      try {
-        if (translationPromises.length > 0) {
-          await Promise.all(translationPromises);
-        }
-      } catch {
-        showToast("Menu item added, but failed to save translations.", "error");
-      }
-
-      setItems((prev) => [...prev, normalizeItem(createdItem)]);
-      setAddLabel("");
-      setAddUrl("");
-      setAddParentId("");
-      setAddOpenInNewTab("false");
-      setAddTranslations({});
-      setIsAddModalOpen(false);
-      showToast("Menu item added.", "success");
-      refetch();
-    } catch {
-      showToast("Failed to add menu item.", "error");
-    }
+    // Reset fields
+    setAddLabel("");
+    setAddUrl("");
+    setAddParentId("");
+    setAddOpenInNewTab("false");
+    setAddTranslations({});
   }
 
+  // Close editing modal
   const closeEditModal = () => {
     setEditingItem(null);
     setSelectedTranslationLangId("");
     setActiveTranslationValue("");
   };
 
-  async function saveItem(nextItem: MenuItem) {
-    try {
-      const response = await adminApi.put(`/cms/menu-items/${nextItem.id}`, {
-        label: nextItem.label.trim(),
-        url: nextItem.url.trim(),
-        parentId: nextItem.parentId || null,
-        sortOrder: Number(nextItem.sortOrder || 0),
-        openInNewTab: Boolean(nextItem.openInNewTab),
-        status: nextItem.status ?? "ACTIVE",
-      });
-      const saved = normalizeItem(response.data.data);
-      setItems((prev) => prev.map((item) => (item.id === nextItem.id ? saved : item)));
-      closeEditModal();
-      showToast("Menu item updated.", "success");
-      refetch();
-    } catch {
-      showToast("Failed to update menu item.", "error");
-    }
+  // Save Item Details to Local State
+  function saveItem(nextItem: MenuItem) {
+    setLocalItems((prev) =>
+      prev.map((item) => (item.id === nextItem.id ? { ...nextItem } : item))
+    );
+    setUnsavedChanges(true);
+    closeEditModal();
   }
 
-  async function moveItem(index: number, direction: "up" | "down") {
-    const targetIndex = direction === "up" ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= sortedItems.length) return;
-
-    const currentItem = sortedItems[index];
-    const targetItem = sortedItems[targetIndex];
-
-    const currentSort = currentItem.sortOrder;
-    const targetSort = targetItem.sortOrder;
-
-    const newCurrentSort = targetSort === currentSort ? currentSort + (direction === "up" ? -1 : 1) : targetSort;
-    const newTargetSort = currentSort;
-
-    try {
-      await Promise.all([
-        adminApi.put(`/cms/menu-items/${currentItem.id}`, {
-          label: currentItem.label,
-          url: currentItem.url,
-          parentId: currentItem.parentId || null,
-          sortOrder: newCurrentSort,
-          openInNewTab: Boolean(currentItem.openInNewTab),
-          status: currentItem.status ?? "ACTIVE",
-        }),
-        adminApi.put(`/cms/menu-items/${targetItem.id}`, {
-          label: targetItem.label,
-          url: targetItem.url,
-          parentId: targetItem.parentId || null,
-          sortOrder: newTargetSort,
-          openInNewTab: Boolean(targetItem.openInNewTab),
-          status: targetItem.status ?? "ACTIVE",
-        }),
-      ]);
-      showToast("Item order updated.", "success");
-      refetch();
-    } catch {
-      showToast("Failed to update item order.", "error");
+  // Remove Item from Local State
+  function removeItem() {
+    if (!deleteItemId) return;
+    if (!deleteItemId.startsWith("temp-")) {
+      setDeletedItemIds((prev) => [...prev, deleteItemId]);
     }
+    setLocalItems((prev) => prev.filter((item) => item.id !== deleteItemId));
+    setUnsavedChanges(true);
+    setDeleteItemId(null);
   }
 
-  async function saveItemTranslation(itemId: string, languageId: string, value: string) {
+  // Batch Save all local modifications to server
+  async function saveMenuStructure() {
+    if (!activeMenu) return;
+    setSaving(true);
     try {
-      const itemLabel = editingItem?.id === itemId ? editingItem.label : (items.find((i) => i.id === itemId)?.label ?? "");
-      const staticKey = NAV_LABEL_KEYS[itemLabel];
-
-      const promises = [];
-      if (staticKey) {
-        promises.push(
-          adminApi.put("/translations/keywords", {
-            key: staticKey,
-            languageId,
-            value: value.trim(),
-          })
-        );
-      } else {
-        promises.push(
-          adminApi.put(`/cms/translations/menuItem/${itemId}/${languageId}`, {
-            label: value,
-          })
-        );
+      // 1. Delete marked items
+      for (const id of deletedItemIds) {
+        await adminApi.delete(`/cms/menu-items/${id}`);
       }
 
-      await Promise.all(promises);
-      showToast("Translation saved.", "success");
-      refetch();
-    } catch {
-      showToast("Failed to save translation.", "error");
-    }
-  }
+      // To map temporary ids of parent items to new database ids
+      const tempIdMap: Record<string, string> = {};
 
-  async function removeItem() {
-    if (!deleteItemId) return;
+      // 2. Iterate and process creations and updates in index order
+      for (const item of localItems) {
+        // Resolve parent ID if it references a temp ID that was just created
+        const parentId = item.parentId
+          ? (tempIdMap[item.parentId] || (item.parentId.startsWith("temp-") ? null : item.parentId))
+          : null;
 
-    try {
-      await adminApi.delete(`/cms/menu-items/${deleteItemId}`);
-      setItems((prev) => prev.filter((item) => item.id !== deleteItemId));
-      showToast("Menu item removed.", "success");
+        if (item.id.startsWith("temp-")) {
+          // Create new record
+          const response = await adminApi.post(`/cms/menus/${activeMenu.id}/items`, {
+            label: item.label.trim(),
+            url: item.url.trim(),
+            parentId,
+            openInNewTab: Boolean(item.openInNewTab),
+            sortOrder: item.sortOrder,
+            status: item.status || "ACTIVE",
+          });
+          const created = response.data.data;
+          tempIdMap[item.id] = created.id;
+        } else {
+          // Update existing record
+          await adminApi.put(`/cms/menu-items/${item.id}`, {
+            label: item.label.trim(),
+            url: item.url.trim(),
+            parentId,
+            openInNewTab: Boolean(item.openInNewTab),
+            sortOrder: item.sortOrder,
+            status: item.status || "ACTIVE",
+          });
+        }
+      }
+
+      showToast("Menu navigation saved successfully.", "success");
+      setUnsavedChanges(false);
+      setDeletedItemIds([]);
+      setSelectedIds([]);
       refetch();
-    } catch {
-      showToast("Failed to remove item.", "error");
+    } catch (error) {
+      showToast("Failed to save menu changes.", "error");
     } finally {
-      setDeleteItemId(null);
+      setSaving(false);
     }
   }
 
-  const columns: Column<MenuItem>[] = [
-    {
-      key: "label",
-      label: "Menu Label",
-      render: (row) => {
-        const isChild = Boolean(row.parentId);
-        const parentName = row.parentId ? parentMap.get(row.parentId) : null;
-        return (
-          <div className="flex items-center gap-2">
-            {isChild ? (
-              <span className="font-mono text-xs text-[#9A9A9A] pl-3">└─</span>
-            ) : (
-              <FolderTree size={14} className="text-[#E31E24] shrink-0" />
-            )}
-            <div className="flex flex-col">
-              <span className={`font-semibold text-[#1A1A1A] ${isChild ? "text-[13px]" : "text-[13.5px]"}`}>
-                {row.label}
-              </span>
-              {parentName && (
-                <span className="text-[11px] text-[#9A9A9A]">Parent: {parentName}</span>
-              )}
-            </div>
-          </div>
-        );
-      },
-    },
-    {
-      key: "url",
-      label: "Target Link / URL",
-      render: (row) => (
-        <div className="flex items-center gap-1.5 font-mono text-[12px] text-[#555]">
-          <Link2 size={12} className="text-[#9A9A9A] shrink-0" />
-          <span className="truncate max-w-[280px]">{row.url || "—"}</span>
-          {row.openInNewTab && <ExternalLink size={11} className="text-[#9A9A9A] shrink-0" />}
-        </div>
-      ),
-    },
-    {
-      key: "sortOrder",
-      label: "Order",
-      width: "130px",
-      render: (row) => {
-        const itemIdx = sortedItems.findIndex((i) => i.id === row.id);
-        return (
-          <div className="flex items-center gap-1.5">
-            <span className="inline-flex rounded border border-[#E6E6E6] bg-[#F8F8F8] px-2 py-0.5 font-mono text-[11.5px] font-semibold text-[#1A1A1A]">
-              #{row.sortOrder}
-            </span>
-            <div className="flex items-center gap-0.5">
-              <button
-                type="button"
-                disabled={itemIdx === 0}
-                onClick={() => moveItem(itemIdx, "up")}
-                className="flex h-6 w-6 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] disabled:opacity-30 disabled:hover:bg-white transition-colors"
-                title="Move item up"
-              >
-                <ArrowUp size={11} />
-              </button>
-              <button
-                type="button"
-                disabled={itemIdx === sortedItems.length - 1}
-                onClick={() => moveItem(itemIdx, "down")}
-                className="flex h-6 w-6 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] disabled:opacity-30 disabled:hover:bg-white transition-colors"
-                title="Move item down"
-              >
-                <ArrowDown size={11} />
-              </button>
-            </div>
-          </div>
-        );
-      },
-    },
-    {
-      key: "status",
-      label: "Status",
-      width: "110px",
-      render: (row) => (
-        <span
-          className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
-            row.status === "ACTIVE"
-              ? "border border-green-200 bg-green-50 text-green-700"
-              : "border border-gray-200 bg-gray-50 text-gray-500"
-          }`}
-        >
-          {row.status ?? "ACTIVE"}
-        </span>
-      ),
-    },
-    {
-      key: "actions",
-      label: "Actions",
-      width: "110px",
-      render: (row) => (
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => setEditingItem({ ...row })}
-            className="flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#1A1A1A] hover:bg-[#F5F5F5] hover:border-[#CCCCCC] transition-all"
-            title="Edit Item"
-          >
-            <Edit2 size={13} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeleteItemId(row.id)}
-            className="flex h-8 w-8 items-center justify-center rounded border border-red-200 bg-white text-red-600 hover:bg-red-50 hover:border-red-300 transition-all"
-            title="Delete Item"
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
-      ),
-    },
-  ];
+  // ─── Positional Reordering & Nesting Handlers ───────────────────────────
+  const handleMoveUp = (itemId: string) => {
+    const currentItem = localItems.find((i) => i.id === itemId);
+    if (!currentItem) return;
+
+    const siblings = localItems
+      .filter((i) => i.parentId === currentItem.parentId)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+
+    const idx = siblings.findIndex((s) => s.id === itemId);
+    if (idx <= 0) return; // Already first sibling
+
+    const prevSibling = siblings[idx - 1];
+    const currentSort = currentItem.sortOrder;
+    const prevSort = prevSibling.sortOrder;
+
+    const targetSort = currentSort === prevSort ? currentSort - 1 : prevSort;
+
+    setLocalItems((prev) =>
+      prev.map((item) => {
+        if (item.id === itemId) return { ...item, sortOrder: targetSort };
+        if (item.id === prevSibling.id) return { ...item, sortOrder: currentSort };
+        return item;
+      })
+    );
+    setUnsavedChanges(true);
+  };
+
+  const handleMoveDown = (itemId: string) => {
+    const currentItem = localItems.find((i) => i.id === itemId);
+    if (!currentItem) return;
+
+    const siblings = localItems
+      .filter((i) => i.parentId === currentItem.parentId)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+
+    const idx = siblings.findIndex((s) => s.id === itemId);
+    if (idx < 0 || idx >= siblings.length - 1) return; // Already last sibling
+
+    const nextSibling = siblings[idx + 1];
+    const currentSort = currentItem.sortOrder;
+    const nextSort = nextSibling.sortOrder;
+
+    const targetSort = currentSort === nextSort ? currentSort + 1 : nextSort;
+
+    setLocalItems((prev) =>
+      prev.map((item) => {
+        if (item.id === itemId) return { ...item, sortOrder: targetSort };
+        if (item.id === nextSibling.id) return { ...item, sortOrder: currentSort };
+        return item;
+      })
+    );
+    setUnsavedChanges(true);
+  };
+
+  const handleIndent = (itemId: string) => {
+    const idx = treeItems.findIndex((node) => node.item.id === itemId);
+    if (idx <= 0) return; // Cannot indent first item
+
+    // Set parentId to the id of the previous item in flat tree listing
+    const targetParent = treeItems[idx - 1].item;
+    
+    // Nest limit check: prevent nesting too deep (>3 levels)
+    if (treeItems[idx - 1].depth >= 2) {
+      showToast("Maximum nesting limit is 3 levels.", "warning");
+      return;
+    }
+
+    setLocalItems((prev) =>
+      prev.map((item) => {
+        if (item.id === itemId) {
+          return { ...item, parentId: targetParent.id };
+        }
+        return item;
+      })
+    );
+    setUnsavedChanges(true);
+  };
+
+  const handleOutdent = (itemId: string) => {
+    const currentItem = localItems.find((i) => i.id === itemId);
+    if (!currentItem || !currentItem.parentId) return;
+
+    const parentItem = localItems.find((i) => i.id === currentItem.parentId);
+    const grandparentId = parentItem ? parentItem.parentId : null;
+
+    setLocalItems((prev) =>
+      prev.map((item) => {
+        if (item.id === itemId) {
+          return { ...item, parentId: grandparentId };
+        }
+        return item;
+      })
+    );
+    setUnsavedChanges(true);
+  };
+
+  // ─── Bulk Action Dispatcher ──────────────────────────────────────────────
+  const handleBulkApply = () => {
+    if (!bulkAction || selectedIds.length === 0) return;
+
+    if (bulkAction === "DELETE") {
+      selectedIds.forEach((id) => {
+        if (!id.startsWith("temp-")) {
+          setDeletedItemIds((prev) => [...prev, id]);
+        }
+      });
+      setLocalItems((prev) => prev.filter((item) => !selectedIds.includes(item.id)));
+      showToast("Selected items marked for removal.", "success");
+    } else {
+      const status = bulkAction === "ENABLE" ? "ACTIVE" : "INACTIVE";
+      setLocalItems((prev) =>
+        prev.map((item) => (selectedIds.includes(item.id) ? { ...item, status } : item))
+      );
+      showToast(`Selected items marked as ${status === "ACTIVE" ? "Active" : "Inactive"}.`, "success");
+    }
+
+    setUnsavedChanges(true);
+    setSelectedIds([]);
+    setBulkAction("");
+  };
+
+  // Handle Multi-Checkbox Selection
+  const handleSelectToggle = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllToggle = () => {
+    if (selectedIds.length === filteredTreeItems.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredTreeItems.map((node) => node.item.id));
+    }
+  };
 
   return (
     <AdminLayout title="Menus" breadcrumb={[{ label: "Content" }, { label: "Menus" }]}>
@@ -535,7 +822,7 @@ export default function CmsMenusPage() {
         </button>
       </div>
 
-      {/* Social Media Quick-Access Notice Banner */}
+      {/* Notice Banner */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200/80 bg-blue-50/60 px-4 py-2.5 text-[12.5px] text-blue-900">
         <div className="flex items-center gap-2">
           <Globe size={15} className="text-blue-600 shrink-0" />
@@ -547,10 +834,7 @@ export default function CmsMenusPage() {
             .
           </span>
         </div>
-        <a
-          href="/admin/cms/footer"
-          className="shrink-0 font-semibold text-blue-700 hover:text-blue-900 text-xs hover:underline"
-        >
+        <a href="/admin/cms/footer" className="shrink-0 font-semibold text-blue-700 hover:text-blue-900 text-xs hover:underline">
           Manage Social Links →
         </a>
       </div>
@@ -573,17 +857,52 @@ export default function CmsMenusPage() {
         </div>
       )}
 
-      {/* Vertical Sidebar Sub-Tabs Layout */}
+      {/* Unsaved Changes Warning Panel */}
+      {unsavedChanges && (
+        <div className="mb-5 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 p-3 shadow-xs">
+          <div className="flex items-center gap-2 text-amber-800 text-xs font-semibold">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+            </span>
+            <span>You have unsaved changes in this menu. Remember to save changes before leaving.</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (activeMenu) {
+                  setLocalItems(activeMenu.items.map(normalizeItem));
+                  setDeletedItemIds([]);
+                  setUnsavedChanges(false);
+                  setSelectedIds([]);
+                }
+              }}
+              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Discard
+            </button>
+            <button
+              onClick={saveMenuStructure}
+              disabled={saving}
+              className="rounded-md bg-[#E31E24] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50 transition-colors"
+            >
+              {saving ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Grid View */}
       <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)] items-start">
-        {/* Sidebar Sub-Tabs Panel */}
+        {/* Sidebar Tabs List */}
         <div className="rounded-xl border border-[#E6E6E6] bg-white p-3 space-y-3 shadow-2xs">
-          {/* Top Group Category Filter Pills */}
+          {/* Group Category Filters */}
           <div className="flex flex-wrap items-center gap-1 border-b border-[#E6E6E6] pb-2.5">
             <button
               type="button"
               onClick={() => setActiveGroupFilter("ALL")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors flex items-center gap-1",
+                "rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors",
                 activeGroupFilter === "ALL" ? "bg-[#1A1A1A] text-white" : "bg-[#F2F2F2] text-[#6B6B6B] hover:bg-[#E6E6E6]"
               )}
             >
@@ -593,7 +912,7 @@ export default function CmsMenusPage() {
               type="button"
               onClick={() => setActiveGroupFilter("header")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors flex items-center gap-1",
+                "rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors",
                 activeGroupFilter === "header" ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
               )}
             >
@@ -603,7 +922,7 @@ export default function CmsMenusPage() {
               type="button"
               onClick={() => setActiveGroupFilter("footer")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors flex items-center gap-1",
+                "rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors",
                 activeGroupFilter === "footer" ? "bg-rose-600 text-white" : "bg-rose-50 text-rose-700 hover:bg-rose-100"
               )}
             >
@@ -613,7 +932,7 @@ export default function CmsMenusPage() {
               type="button"
               onClick={() => setActiveGroupFilter("offices_legal")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors flex items-center gap-1",
+                "rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors",
                 activeGroupFilter === "offices_legal" ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-800 hover:bg-amber-100"
               )}
             >
@@ -621,7 +940,7 @@ export default function CmsMenusPage() {
             </button>
           </div>
 
-          {/* Vertical Menu Location Sub-Tabs List */}
+          {/* Menus List */}
           {isLoading ? (
             <div className="py-6 text-center text-xs text-[#9A9A9A]">Loading tabs...</div>
           ) : (
@@ -663,15 +982,15 @@ export default function CmsMenusPage() {
           )}
         </div>
 
-        {/* Main View Area: Full Width Selected Menu Workspace */}
+        {/* Selected Menu Workspace */}
         {activeMenu ? (
           <div className="space-y-5">
-            <div className="rounded-xl border border-[#E6E6E6] bg-white p-6 shadow-xs">
-              {/* Header Details */}
+            {/* Top Config Card */}
+            <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-xs space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#E6E6E6] pb-4">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-[18px] font-bold text-[#1A1A1A]">{activeMenu.name}</h3>
+                    <h3 className="text-[17px] font-bold text-[#1A1A1A]">{activeMenu.name}</h3>
                     <span
                       className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
                         activeMenu.status === "ACTIVE"
@@ -686,9 +1005,7 @@ export default function CmsMenusPage() {
                     <p className="mt-1 text-[13px] text-[#6B6B6B]">{activeLocationMeta.description}</p>
                   )}
                   <div className="mt-2 flex items-center gap-2 text-xs text-[#9A9A9A]">
-                    <span className="font-mono text-[11px] text-[#9A9A9A]">Key: {activeMenu.location}</span>
-                    <span>•</span>
-                    <span className="font-semibold text-[#1A1A1A]">{items.length} item{items.length === 1 ? "" : "s"} configured</span>
+                    <span className="font-mono text-[11px] text-[#9A9A9A]">Handle: {activeMenu.location}</span>
                   </div>
                 </div>
 
@@ -702,9 +1019,8 @@ export default function CmsMenusPage() {
                 </button>
               </div>
 
-              {/* Inline Menu Settings Editor */}
               {editingMenuSettings && (
-                <div className="mt-4 grid gap-3 rounded-lg border border-[#E6E6E6] bg-[#FDFDFD] p-4 md:grid-cols-[1fr_1fr_120px_auto]">
+                <div className="grid gap-3 rounded-lg border border-[#E6E6E6] bg-[#FDFDFD] p-4 md:grid-cols-[1fr_1fr_120px_auto]">
                   <AdminInput label="Menu Display Name" value={menuName} onChange={(e) => setMenuName(e.target.value)} />
                   <AdminSelect
                     label="Location Key"
@@ -732,83 +1048,202 @@ export default function CmsMenusPage() {
                   </div>
                 </div>
               )}
+            </div>
 
-              {/* Action Toolbar */}
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="relative w-full sm:max-w-xs">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-                  <input
-                    type="text"
-                    placeholder="Search menu items..."
-                    value={itemsSearchQuery}
-                    onChange={(e) => setItemsSearchQuery(e.target.value)}
-                    className="w-full rounded-lg border border-[#E6E6E6] bg-white py-1.5 pl-8 pr-3 text-xs text-[#1A1A1A] outline-none focus:border-[#E31E24]"
-                  />
+            {/* Shopify-like Menu Items Editor Panel */}
+            <div className="rounded-xl border border-[#E6E6E6] bg-white shadow-xs flex flex-col overflow-hidden">
+              {/* Card Header & Controls */}
+              <div className="border-b border-[#E6E6E6] bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3 min-h-[56px]">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-[14px] font-bold text-[#1A1A1A]">Menu items</h4>
+                  <span className="rounded-full bg-[#EFEFEF] px-2 py-0.5 font-mono text-[10.5px] font-bold text-[#6B6B6B]">
+                    {filteredTreeItems.length}
+                  </span>
                 </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
-                  {categories.length > 0 && (
-                    <div className="w-full sm:w-48">
-                      <AdminSelect
-                        label=""
-                        value=""
-                        onChange={(e) => {
-                          const cat = categories.find((c: { id: string }) => c.id === e.target.value);
-                          if (cat) {
-                            setAddLabel(cat.name);
-                            setAddUrl(`/products?category=${cat.slug}`);
-                            setAddSortOrder(items.length);
-                            setIsAddModalOpen(true);
-                          }
-                        }}
-                        options={[
-                          { value: "", label: "⚡ Pick Category..." },
-                          ...categories.map((c: { id: string; name: string }) => ({ value: c.id, label: c.name })),
-                        ]}
-                      />
-                    </div>
-                  )}
-                  {cmsPages.length > 0 && (
-                    <div className="w-full sm:w-48">
-                      <AdminSelect
-                        label=""
-                        value=""
-                        onChange={(e) => {
-                          const page = cmsPages.find((p: { id: string }) => p.id === e.target.value);
-                          if (page) {
-                            setAddLabel(page.title);
-                            setAddUrl(`/${page.slug}`);
-                            setAddSortOrder(items.length);
-                            setIsAddModalOpen(true);
-                          }
-                        }}
-                        options={[
-                          { value: "", label: "⚡ Pick CMS Page..." },
-                          ...cmsPages.map((p: { id: string; title: string; slug: string }) => ({ value: p.id, label: p.title })),
-                        ]}
-                      />
-                    </div>
-                  )}
-
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
+                    <input
+                      type="text"
+                      placeholder="Search menu items..."
+                      value={itemsSearchQuery}
+                      onChange={(e) => setItemsSearchQuery(e.target.value)}
+                      className="rounded-lg border border-[#E6E6E6] bg-white py-1 pl-7 pr-2.5 text-xs text-[#1A1A1A] outline-none focus:border-[#E31E24] w-48"
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
                       setAddLabel("");
                       setAddUrl("");
                       setAddParentId("");
-                      setAddSortOrder(items.length);
+                      setAddSortOrder(localItems.length);
                       setIsAddModalOpen(true);
                     }}
-                    className="flex w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg bg-[#E31E24] px-4 py-2.5 sm:py-2 text-xs font-semibold text-white hover:bg-[#B5151B] transition-all shadow-xs"
+                    className="flex items-center gap-1 rounded-lg bg-[#E31E24] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#B5151B] transition-all"
                   >
-                    <Plus size={14} /> Add Menu Item
+                    <Plus size={13} />
+                    Add menu item
                   </button>
                 </div>
               </div>
 
-              {/* Menu Items Table */}
-              <div className="mt-4">
-                <DataTable columns={columns} data={filteredItems} rowKey="id" emptyMessage="No menu items configured for this location." />
+              {/* Bulk Actions Header Toolbar (Common Action Section) */}
+              <div className="border-b border-[#E6E6E6] bg-[#FDFDFD] px-4 py-2 flex items-center justify-between text-xs min-h-[44px]">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={filteredTreeItems.length > 0 && selectedIds.length === filteredTreeItems.length}
+                      onChange={handleSelectAllToggle}
+                      className="rounded border-[#CCCCCC] text-[#E31E24] focus:ring-[#E31E24] cursor-pointer"
+                    />
+                    <span className="font-medium text-[#6B6B6B]">{selectedIds.length} Selected</span>
+                  </div>
+                  {selectedIds.length > 0 && (
+                    <div className="h-4 w-px bg-[#E6E6E6]" />
+                  )}
+                  {selectedIds.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={bulkAction}
+                        onChange={(e) => setBulkAction(e.target.value as any)}
+                        className="rounded border border-[#E6E6E6] bg-white px-2 py-1 text-xs text-[#1A1A1A] focus:border-[#E31E24] outline-none cursor-pointer"
+                      >
+                        <option value="">Choose Bulk Action</option>
+                        <option value="ENABLE">Mark active</option>
+                        <option value="DISABLE">Mark inactive</option>
+                        <option value="DELETE">Delete selected</option>
+                      </select>
+                      <button
+                        onClick={handleBulkApply}
+                        className="rounded bg-[#E31E24] px-3 py-1 text-xs font-semibold text-white hover:bg-[#B5151B] transition-colors"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Shopify-like Tree Cards */}
+              <div className="divide-y divide-[#E6E6E6] bg-gray-50/20">
+                {filteredTreeItems.map((node) => {
+                  const { item, depth } = node;
+                  const isChecked = selectedIds.includes(item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      style={{ paddingLeft: `${Math.max(12, depth * 32)}px` }}
+                      className={cn(
+                        "flex items-center justify-between py-3 pr-4 hover:bg-white bg-transparent transition-colors border-l-4",
+                        depth === 1 ? "border-l-indigo-300" : depth >= 2 ? "border-l-rose-300" : "border-l-transparent"
+                      )}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {/* Drag Handle Lookalike */}
+                        <div className="text-gray-300 cursor-grab shrink-0">
+                          <GripVertical size={15} />
+                        </div>
+                        {/* Row Checkbox */}
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => handleSelectToggle(item.id)}
+                          className="rounded border-[#CCCCCC] text-[#E31E24] focus:ring-[#E31E24] cursor-pointer shrink-0"
+                        />
+                        {/* Label & URL */}
+                        <div className="min-w-0">
+                          <span className="text-[13px] font-bold text-[#1A1A1A] block truncate">
+                            {item.label}
+                          </span>
+                          <span className="text-[11px] font-mono text-gray-500 block truncate max-w-[280px]">
+                            {item.url || "/"}
+                            {item.openInNewTab && <span className="ml-1 text-[10px] bg-gray-100 text-gray-600 px-1 rounded">New Tab</span>}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Position & Action Buttons */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* Position controls */}
+                        <div className="flex items-center gap-0.5 border border-[#E6E6E6] rounded-md bg-white p-0.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOutdent(item.id)}
+                            disabled={!item.parentId}
+                            className="p-1 text-gray-500 hover:bg-gray-100 hover:text-black rounded disabled:opacity-20 transition-all"
+                            title="Outdent (Move left)"
+                          >
+                            <ArrowLeft size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleIndent(item.id)}
+                            disabled={depth >= 2}
+                            className="p-1 text-gray-500 hover:bg-gray-100 hover:text-black rounded disabled:opacity-20 transition-all"
+                            title="Indent (Move right / nest)"
+                          >
+                            <ArrowRight size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveUp(item.id)}
+                            className="p-1 text-gray-500 hover:bg-gray-100 hover:text-black rounded transition-all"
+                            title="Move up"
+                          >
+                            <ArrowUp size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveDown(item.id)}
+                            className="p-1 text-gray-500 hover:bg-gray-100 hover:text-black rounded transition-all"
+                            title="Move down"
+                          >
+                            <ArrowDown size={13} />
+                          </button>
+                        </div>
+
+                        {/* Status Badge */}
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                            item.status === "ACTIVE"
+                              ? "bg-green-50 text-green-700 border border-green-200"
+                              : "bg-gray-50 text-gray-500 border border-gray-200"
+                          }`}
+                        >
+                          {item.status || "ACTIVE"}
+                        </span>
+
+                        {/* Edit & Delete Actions */}
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setEditingItem({ ...item })}
+                            className="p-1.5 border border-[#E6E6E6] hover:bg-gray-50 text-[#1A1A1A] rounded-md transition-all"
+                            title="Edit menu item"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteItemId(item.id)}
+                            className="p-1.5 border border-red-100 hover:bg-red-50 text-red-600 rounded-md transition-all"
+                            title="Delete menu item"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {filteredTreeItems.length === 0 && (
+                  <div className="py-12 text-center text-sm text-[#6B6B6B]">
+                    No menu items configured for this location. Click "Add menu item" to start.
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -819,7 +1254,7 @@ export default function CmsMenusPage() {
         )}
       </div>
 
-      {/* Add Item Modal */}
+      {/* Add Item Modal with Shopify Link Picker */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-white p-6 shadow-xl space-y-4">
@@ -832,7 +1267,24 @@ export default function CmsMenusPage() {
 
             <div className="space-y-3">
               <AdminInput label="Item Label" value={addLabel} onChange={(e) => setAddLabel(e.target.value)} placeholder="e.g. Metal Brackets" />
-              <AdminInput label="URL / Target Link" value={addUrl} onChange={(e) => setAddUrl(e.target.value)} placeholder="/products?category=metal-brackets" />
+              
+              <LinkPickerInput
+                label="URL / Target Link"
+                value={addUrl}
+                onChange={setAddUrl}
+                onSelectLink={(url, label) => {
+                  setAddUrl(url);
+                  if (!addLabel.trim()) {
+                    setAddLabel(label);
+                  }
+                }}
+                categories={categories}
+                collections={collections}
+                cmsPages={cmsPages}
+                blogs={blogs}
+                products={products}
+              />
+
               <AdminSelect label="Parent Menu (Column Group)" value={addParentId} onChange={(e) => setAddParentId(e.target.value)} options={parentOptions} />
               <div className="grid grid-cols-2 gap-3">
                 <AdminInput label="Sort Order" type="number" value={String(addSortOrder)} onChange={(e) => setAddSortOrder(Number(e.target.value || 0))} />
@@ -903,7 +1355,7 @@ export default function CmsMenusPage() {
         </div>
       )}
 
-      {/* Edit Item Modal */}
+      {/* Edit Item Modal with Shopify Link Picker */}
       {editingItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-white p-6 shadow-xl space-y-4">
@@ -920,17 +1372,34 @@ export default function CmsMenusPage() {
                 value={editingItem.label}
                 onChange={(e) => setEditingItem({ ...editingItem, label: e.target.value })}
               />
-              <AdminInput
+              
+              <LinkPickerInput
                 label="URL / Target Link"
                 value={editingItem.url}
-                onChange={(e) => setEditingItem({ ...editingItem, url: e.target.value })}
+                onChange={(val) => setEditingItem({ ...editingItem, url: val })}
+                onSelectLink={(url, label) => {
+                  setEditingItem(prev => {
+                    if (!prev) return null;
+                    return {
+                      ...prev,
+                      url,
+                      label: prev.label ? prev.label : label
+                    };
+                  });
+                }}
+                categories={categories}
+                collections={collections}
+                cmsPages={cmsPages}
+                blogs={blogs}
+                products={products}
               />
+
               <AdminSelect
                 label="Parent Menu (Column Group)"
                 value={editingItem.parentId ?? ""}
                 onChange={(e) => setEditingItem({ ...editingItem, parentId: e.target.value || null })}
                 options={[{ value: "", label: "No Parent (Top-Level Column)" }].concat(
-                  sortedItems
+                  localItems
                     .filter((candidate) => candidate.id !== editingItem.id)
                     .map((candidate) => ({ value: candidate.id, label: candidate.label })),
                 )}
@@ -989,7 +1458,27 @@ export default function CmsMenusPage() {
                           value={loadingTranslation ? "" : activeTranslationValue}
                           onChange={(e) => setActiveTranslationValue(e.target.value)}
                           rows={1}
-                          onBlur={(e) => saveItemTranslation(editingItem.id, activeLangId, e.target.value)}
+                          onBlur={(e) => {
+                            setLocalItems(prev =>
+                              prev.map(item => {
+                                if (item.id === editingItem.id) {
+                                  const updatedTranslations = { ...item.translations };
+                                  if (!updatedTranslations.label) {
+                                    updatedTranslations.label = [];
+                                  }
+                                  const idx = updatedTranslations.label.findIndex(entry => entry.languageId === activeLangId);
+                                  if (idx >= 0) {
+                                    updatedTranslations.label[idx] = { languageId: activeLangId, value: e.target.value };
+                                  } else {
+                                    updatedTranslations.label.push({ languageId: activeLangId, value: e.target.value });
+                                  }
+                                  return { ...item, translations: updatedTranslations };
+                                }
+                                return item;
+                              })
+                            );
+                            setUnsavedChanges(true);
+                          }}
                           placeholder={loadingTranslation ? "Loading translation..." : `Enter translation for ${editingItem.label}...`}
                           disabled={loadingTranslation}
                         />
