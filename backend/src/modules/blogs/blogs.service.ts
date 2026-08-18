@@ -150,13 +150,13 @@ export async function listBlogAuthors() {
   return prisma.blogAuthor.findMany({ orderBy: { name: "asc" }, include: { _count: { select: { blogs: true } } } });
 }
 
-export async function createBlogAuthor(input: { name?: string; bio?: string | null; avatar?: string | null; userId?: string | null }) {
+export async function createBlogAuthor(input: { name?: string; bio?: string | null; userId?: string | null }) {
   const name = input.name?.trim();
   if (!name) throw new AppError("Author name is required.", 400);
-  return prisma.blogAuthor.create({ data: { name, bio: input.bio?.trim() || null, avatar: input.avatar?.trim() || null, userId: input.userId || null } });
+  return prisma.blogAuthor.create({ data: { name, bio: input.bio?.trim() || null, userId: input.userId || null } });
 }
 
-export async function updateBlogAuthor(id: string, input: { name?: string; bio?: string | null; avatar?: string | null; userId?: string | null }) {
+export async function updateBlogAuthor(id: string, input: { name?: string; bio?: string | null; userId?: string | null }) {
   const current = await prisma.blogAuthor.findUnique({ where: { id } });
   if (!current) throw new AppError("Blog author not found.", 404);
   return prisma.blogAuthor.update({
@@ -164,7 +164,6 @@ export async function updateBlogAuthor(id: string, input: { name?: string; bio?:
     data: {
       name: input.name?.trim() || current.name,
       bio: input.bio?.trim() || null,
-      avatar: input.avatar?.trim() || null,
       userId: input.userId || null,
     },
   });

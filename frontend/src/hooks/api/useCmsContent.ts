@@ -26,6 +26,7 @@ export type CmsSection = {
   subtitle?: string | null;
   description?: string | null;
   layoutType?: string | null;
+  status?: string | null;
   settingsJson?: unknown;
   sortOrder: number;
   blocks: CmsBlock[];

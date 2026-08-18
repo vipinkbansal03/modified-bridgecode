@@ -15,7 +15,7 @@ export type ApiBlog = {
   publishedAt?: string | null;
   createdAt?: string;
   tags?: string[];
-  author?: { name: string; avatar?: string | null } | null;
+  author?: { name: string } | null;
   category?: { id?: string; name: string; slug?: string } | null;
 };
 

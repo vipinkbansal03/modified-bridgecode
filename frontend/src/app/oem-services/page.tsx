@@ -1,17 +1,38 @@
 import type { Metadata } from "next";
-import { DetailPageTemplate } from "@/components/sections/detail/DetailPageTemplate";
+import { CmsDetailPageRenderer, buildFallbackDetailRender } from "@/components/cms/CmsDetailPageRenderer";
 import { ContactCTASection } from "@/components/sections/ContactCTASection";
-import { buildMetadata } from "@/lib/seo";
+import { fetchCmsPageByKey } from "@/lib/cmsPage";
+import { notFound } from "next/navigation";
+import { buildCmsMetadata } from "@/lib/seo";
 import content from "@/data/oem-services.json";
 import homeContent from "@/data/home.json";
 import type { DetailPageContent } from "@/types/common.types";
 
-export const metadata: Metadata = buildMetadata(content.seo, "/oem-services");
+export async function generateMetadata(): Promise<Metadata> {
+  const cmsPage = await fetchCmsPageByKey("oem-services");
+  if (!cmsPage) {
+    return {
+      title: "Page Not Found | Modern Orthodontics",
+      robots: { index: false, follow: false },
+    };
+  }
+  return buildCmsMetadata("oem-services", content.seo, "/oem-services");
+}
 
-export default function OemServicesPage() {
+export default async function OemServicesPage() {
+  const cmsPage = await fetchCmsPageByKey("oem-services");
+  if (!cmsPage) {
+    notFound();
+  }
+
   return (
     <>
-      <DetailPageTemplate content={content as DetailPageContent} breadcrumbLabel="OEM Services" />
+      <CmsDetailPageRenderer
+        page={cmsPage}
+        fallbackContent={content as DetailPageContent}
+        breadcrumbLabel="OEM Services"
+        fallbackRender={buildFallbackDetailRender(content as DetailPageContent, "OEM Services")}
+      />
       <ContactCTASection data={homeContent.contactCta} />
     </>
   );

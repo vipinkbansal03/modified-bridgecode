@@ -131,8 +131,8 @@ function getEditHref(gap: CoverageGap) {
     case "cms":
       if (gap.cmsEntityType === "footer") return "/admin/cms/footer";
       if (gap.cmsEntityType === "menuItem") return "/admin/cms/menus";
-      if (gap.cmsPageId) return `/admin/cms/pages/${gap.cmsPageId}`;
-      return `/admin/cms/pages/${gap.entityId}`;
+      if (gap.cmsPageId) return `/admin/cms/pages?pageId=${gap.cmsPageId}`;
+      return `/admin/cms/pages?pageId=${gap.entityId}`;
     default:
       return "#";
   }

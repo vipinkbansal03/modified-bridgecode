@@ -98,6 +98,21 @@ export async function listBanners(query: { placement?: BannerPlacement; countryI
   return banners.map(formatBannerResponse);
 }
 
+const SINGLE_SLOT_PLACEMENTS: BannerPlacement[] = ["HOMEPAGE_PROMO", "ABOUT_HERO"];
+
+function getPlacementDisplayName(placement: BannerPlacement): string {
+  switch (placement) {
+    case "HOMEPAGE_HERO":
+      return "Homepage Hero";
+    case "HOMEPAGE_PROMO":
+      return "Homepage Mid-Page Promo";
+    case "ABOUT_HERO":
+      return "About Us Hero";
+    default:
+      return String(placement).replace(/_/g, " ");
+  }
+}
+
 export async function getBanner(id: string) {
   const banner = await prisma.banner.findUnique({ where: { id }, include: bannerInclude });
   if (!banner) throw new AppError("Banner not found.", 404);
@@ -106,6 +121,20 @@ export async function getBanner(id: string) {
 
 export async function createBanner(input: BannerInput) {
   const data = normalize(input);
+
+  if (SINGLE_SLOT_PLACEMENTS.includes(data.placement)) {
+    const existingCount = await prisma.banner.count({
+      where: { placement: data.placement },
+    });
+    if (existingCount > 0) {
+      const name = getPlacementDisplayName(data.placement);
+      throw new AppError(
+        `${name} supports only a single banner. Please edit the existing banner instead of creating a duplicate.`,
+        400
+      );
+    }
+  }
+
   const { countryIds, ...bannerData } = data;
   const banner = await prisma.banner.create({
     data: {
@@ -129,9 +158,9 @@ async function ensureAtLeastOneActiveBanner(placement: BannerPlacement, deactiva
   });
 
   if (remainingActiveCount === 0) {
-    const displayName = placement === "HOMEPAGE_HERO" ? "Homepage Hero" : "Homepage Promo";
+    const displayName = getPlacementDisplayName(placement);
     throw new AppError(
-      `At least one ${displayName} banner must remain active. Please activate another ${displayName} banner before deactivating or deleting this one.`,
+      `At least one ${displayName} slide must remain active. Please activate another slide before deactivating or deleting this one.`,
       400
     );
   }
@@ -140,10 +169,27 @@ async function ensureAtLeastOneActiveBanner(placement: BannerPlacement, deactiva
 export async function updateBanner(id: string, input: BannerInput) {
   const current = await getBanner(id);
   const data = normalize(input, current as any);
+
+  if (
+    data.placement !== current.placement &&
+    SINGLE_SLOT_PLACEMENTS.includes(data.placement)
+  ) {
+    const existingCount = await prisma.banner.count({
+      where: { placement: data.placement, id: { not: id } },
+    });
+    if (existingCount > 0) {
+      const name = getPlacementDisplayName(data.placement);
+      throw new AppError(
+        `${name} supports only a single banner. Another banner already exists for this placement.`,
+        400
+      );
+    }
+  }
+
   const { countryIds, ...bannerData } = data;
 
   if (
-    (current.placement === "HOMEPAGE_HERO" || current.placement === "HOMEPAGE_PROMO") &&
+    current.placement === "HOMEPAGE_HERO" &&
     current.status &&
     (!data.status || data.placement !== current.placement)
   ) {
@@ -167,10 +213,7 @@ export async function updateBanner(id: string, input: BannerInput) {
 
 export async function deleteBanner(id: string) {
   const current = await getBanner(id);
-  if (
-    (current.placement === "HOMEPAGE_HERO" || current.placement === "HOMEPAGE_PROMO") &&
-    current.status
-  ) {
+  if (current.placement === "HOMEPAGE_HERO" && current.status) {
     await ensureAtLeastOneActiveBanner(current.placement, [id]);
   }
   await prisma.banner.delete({ where: { id } });

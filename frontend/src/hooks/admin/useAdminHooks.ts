@@ -1861,11 +1861,14 @@ export const useCreateBlog = () => {
 export const useUpdateBlog = (id?: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: unknown) =>
-      adminApi.put(`/blogs/${id}`, data).then((r) => r.data),
-    onSuccess: () => {
+    mutationFn: (data: any) => {
+      const targetId = id || data?.id;
+      return adminApi.put(`/blogs/${targetId}`, data).then((r) => r.data);
+    },
+    onSuccess: (_, variables: any) => {
+      const targetId = id || variables?.id;
       qc.invalidateQueries({ queryKey: ["admin-blogs"] });
-      qc.invalidateQueries({ queryKey: ["admin-blog", id] });
+      if (targetId) qc.invalidateQueries({ queryKey: ["admin-blog", targetId] });
     },
   });
 };

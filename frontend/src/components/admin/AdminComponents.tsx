@@ -1277,6 +1277,7 @@ export function useToast() {
 
 export { AdminListToolbar } from "@/components/admin/layout/AdminListToolbar";
 export { AdminStatsGrid } from "@/components/admin/layout/AdminStatsGrid";
+export { AdminStickySaveBar } from "@/components/admin/AdminStickySaveBar";
 export { default as LoadingButton } from "@/components/ui/LoadingSpinner/LoadingButton";
 export { default as Spinner } from "@/components/ui/LoadingSpinner/Spinner";
 

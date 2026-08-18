@@ -1,7 +1,6 @@
 "use client";
 
 import { PageHero } from "@/components/sections/detail/PageHero";
-import { SubNav } from "@/components/sections/detail/SubNav";
 import { DetailSection } from "@/components/sections/detail/DetailSection";
 import { FaqAccordion } from "@/components/sections/detail/FaqAccordion";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
@@ -114,7 +113,6 @@ export function DetailPageTemplate({ content, breadcrumbLabel }: DetailPageTempl
         heroImage={translatedContent.heroImage}
         breadcrumb={[{ label: translate("Home"), href: "/" }, { label: translate(breadcrumbLabel) }]}
       />
-      <SubNav items={translatedContent.subnav} />
       {translatedContent.sections.map((section) => (
         <DetailSection key={section.id} section={section} />
       ))}

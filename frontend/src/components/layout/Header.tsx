@@ -117,8 +117,8 @@ export function Header() {
       );
   }, [activeProductMegaUrls, dynamicMegaMenu]);
   const ctaLink = cmsMenuToLinks(cmsCtaMenu)[0];
-  const hasCmsPrimary = primaryLinks.length > 0;
-  const hasCmsCapabilities = capabilitiesLinks.length > 0;
+  const hasCmsPrimary = cmsPrimaryMenu !== undefined;
+  const hasCmsCapabilities = cmsCapabilitiesMenu !== undefined;
   const primaryNav = hasCmsPrimary ? primaryLinks : nav.primary.slice(1);
   const capabilitiesNav = hasCmsCapabilities
     ? capabilitiesLinks
@@ -333,29 +333,31 @@ export function Header() {
                 </Link>
                 <MegaMenu open={megaOpen} groups={productsMegaNav} />
               </li>
-              <li
-                className="relative shrink-0"
-                onMouseEnter={() => setCapsOpen(true)}
-                onMouseLeave={() => setCapsOpen(false)}
-              >
-                <span className="flex cursor-default items-center gap-1.5 whitespace-nowrap py-4">
-                  {t("ui.nav.capabilities")}
-                  <ChevronDown size={11} className="opacity-60" />
-                </span>
-                {capsOpen && (
-                  <div className="absolute left-0 top-full z-50 w-[260px] rounded-md border border-line bg-white p-3 shadow-[0_16px_32px_rgba(0,0,0,0.07)]">
-                    {capabilitiesNav.map((link) => (
-                      <Link
-                        key={link.label}
-                        href={link.href}
-                        className="block rounded-md px-3 py-2.5 text-[14.5px] text-ink hover:bg-grey hover:text-brand"
-                      >
-                        {label(link.label)}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </li>
+              {capabilitiesNav.length > 0 && (
+                <li
+                  className="relative shrink-0"
+                  onMouseEnter={() => setCapsOpen(true)}
+                  onMouseLeave={() => setCapsOpen(false)}
+                >
+                  <span className="flex cursor-default items-center gap-1.5 whitespace-nowrap py-4">
+                    {t("ui.nav.capabilities")}
+                    <ChevronDown size={11} className="opacity-60" />
+                  </span>
+                  {capsOpen && (
+                    <div className="absolute left-0 top-full z-50 w-[260px] rounded-md border border-line bg-white p-3 shadow-[0_16px_32px_rgba(0,0,0,0.07)]">
+                      {capabilitiesNav.map((link) => (
+                        <Link
+                          key={link.label}
+                          href={link.href}
+                          className="block rounded-md px-3 py-2.5 text-[14.5px] text-ink hover:bg-grey hover:text-brand"
+                        >
+                          {label(link.label)}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </li>
+              )}
               {primaryNav.map((link) => (
                 <li key={link.label} className="shrink-0">
                   <Link

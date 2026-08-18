@@ -49,6 +49,8 @@ function normalizeItem(item: MenuItem): MenuItem {
   };
 }
 
+const CORE_SYSTEM_PAGES = new Set(["home", "about", "contact", "products"]);
+
 export default function CmsMenusPage() {
   const { data: menus, isLoading, refetch } = useAdminCmsMenus();
   const { data: languages = [] } = useAdminLanguages();
@@ -57,7 +59,33 @@ export default function CmsMenusPage() {
   }, [languages]);
   const { data: categories = [] } = useAdminCategories();
   const { data: cmsPagesResponse } = useAdminCmsPages();
-  const cmsPages = cmsPagesResponse?.data ?? [];
+  const cmsPages = useMemo(() => {
+    const raw = cmsPagesResponse as { data?: any[] } | any[] | undefined;
+    if (Array.isArray(raw)) return raw;
+    if (raw && Array.isArray(raw.data)) return raw.data;
+    return [];
+  }, [cmsPagesResponse]);
+
+  const pageStatusMap = useMemo(() => {
+    const map = new Map<string, { status: string; title: string; pageKey: string }>();
+    cmsPages.forEach((p: any) => {
+      if (p.slug) {
+        map.set(`/${p.slug.toLowerCase().trim()}`, {
+          status: p.status ?? "ACTIVE",
+          title: p.title,
+          pageKey: p.pageKey,
+        });
+      }
+      if (p.pageKey) {
+        map.set(`/${p.pageKey.toLowerCase().trim()}`, {
+          status: p.status ?? "ACTIVE",
+          title: p.title,
+          pageKey: p.pageKey,
+        });
+      }
+    });
+    return map;
+  }, [cmsPages]);
 
   const [selectedMenuId, setSelectedMenuId] = useState<string | null>(null);
   const [activeGroupFilter, setActiveGroupFilter] = useState<string>("ALL");
@@ -478,18 +506,77 @@ export default function CmsMenusPage() {
     {
       key: "status",
       label: "Status",
-      width: "110px",
-      render: (row) => (
-        <span
-          className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
-            row.status === "ACTIVE"
-              ? "border border-green-200 bg-green-50 text-green-700"
-              : "border border-gray-200 bg-gray-50 text-gray-500"
-          }`}
-        >
-          {row.status ?? "ACTIVE"}
-        </span>
-      ),
+      render: (row) => {
+        let cleanUrl = (row.url || "").trim().toLowerCase();
+        if (cleanUrl.startsWith("https://www.modortho.com") || cleanUrl.startsWith("http://www.modortho.com")) {
+          cleanUrl = cleanUrl.replace(/^https?:\/\/(www\.)?modortho\.com/, "");
+        }
+        const pathOnly = cleanUrl.split("#")[0].replace(/\/$/, "");
+        const linkedPage = pageStatusMap.get(pathOnly) || (pathOnly === "" && pageStatusMap.get("/home"));
+        const isCorePage = linkedPage ? CORE_SYSTEM_PAGES.has(linkedPage.pageKey) : false;
+        const isMenuItemActive = (row.status ?? "ACTIVE") === "ACTIVE";
+
+        if (linkedPage && !isCorePage) {
+          const isPagePublished = linkedPage.status === "ACTIVE";
+
+          if (!isPagePublished) {
+            return (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-amber-800 uppercase select-none shadow-2xs"
+                title="Hidden from storefront navigation because the linked CMS page is unpublished in CMS → Pages."
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                <span>HIDDEN — PAGE UNPUBLISHED</span>
+              </span>
+            );
+          }
+
+          if (!isMenuItemActive) {
+            return (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-gray-500 uppercase select-none shadow-2xs"
+                title="Page is published, but hidden from navigation because menu item is set to Inactive."
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-gray-400 shrink-0" />
+                <span>HIDDEN — MENU ITEM INACTIVE</span>
+              </span>
+            );
+          }
+
+          return (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-green-700 uppercase select-none shadow-2xs"
+              title="Active and visible on storefront navigation."
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500 shrink-0" />
+              <span>ACTIVE</span>
+            </span>
+          );
+        }
+
+        // For Core system pages, external links, categories, mailto, etc.
+        if (isMenuItemActive) {
+          return (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-green-700 uppercase select-none shadow-2xs"
+              title="Active and visible in navigation."
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500 shrink-0" />
+              <span>ACTIVE</span>
+            </span>
+          );
+        }
+
+        return (
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-gray-500 uppercase select-none shadow-2xs"
+            title="Hidden from navigation because menu item is set to Inactive."
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-gray-400 shrink-0" />
+            <span>HIDDEN — MENU ITEM INACTIVE</span>
+          </span>
+        );
+      },
     },
     {
       key: "actions",

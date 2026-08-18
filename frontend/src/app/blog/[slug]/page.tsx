@@ -142,7 +142,7 @@ export default function BlogDetailPage() {
   return (
     <main className="bg-white">
       <section className="border-b border-line bg-white">
-        <Container className="py-16 lg:py-20">
+        <Container className="py-6 lg:py-[34px]">
           <div className="max-w-[760px]">
             <Link
               href="/blog"
@@ -189,7 +189,7 @@ export default function BlogDetailPage() {
         </Container>
       </section>
 
-      <section className="py-16 lg:py-20">
+      <section className="py-6 lg:py-[34px]">
         <Container>
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
             <article className="min-w-0">

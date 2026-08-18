@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Edit2, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Edit2, Plus, Save, Trash2 } from "lucide-react";
 import {
   AdminInput,
+  AdminListToolbar,
   AdminTextarea,
   ConfirmModal,
   DataTable,
@@ -11,51 +12,59 @@ import {
   useToast,
   type Column,
 } from "@/components/admin/AdminComponents";
+import { Modal } from "@/components/ui/Modal";
 import {
   useAdminBlogAuthors,
   useCreateBlogAuthor,
   useDeleteBlogAuthor,
   useUpdateBlogAuthor,
 } from "@/hooks/admin/useAdminHooks";
-import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
+import { getAdminErrorMessage } from "@/services/adminApi";
 
-type Row = {
+type AuthorRow = {
   id: string;
   name: string;
   bio?: string | null;
-  avatar?: string | null;
   _count?: { blogs: number };
 };
 
-const emptyForm = { id: "", name: "", bio: "", avatar: "" };
+const emptyForm = { id: "", name: "", bio: "" };
 
 export function BlogAuthorsTab() {
+  const [search, setSearch] = useState("");
+  const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
-  const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+
   const { showToast, ToastComponent } = useToast();
   const { data = [], isLoading } = useAdminBlogAuthors();
   const createRow = useCreateBlogAuthor();
   const updateRow = useUpdateBlogAuthor();
   const deleteRow = useDeleteBlogAuthor();
 
-  const upload = async (file?: File) => {
-    if (!file) return;
-    const payload = new FormData();
-    payload.append("entityType", "AUTHOR");
-    if (form.id) payload.append("entityId", form.id);
-    payload.append("files", file);
-    setUploading(true);
-    try {
-      const response = await adminApi.post("/media", payload);
-      const uploaded = response.data?.data?.[0];
-      if (uploaded?.url) setForm((prev) => ({ ...prev, avatar: uploaded.url }));
-      showToast("Avatar uploaded successfully.");
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Upload failed."), "error");
-    } finally {
-      setUploading(false);
-    }
+  const authors = (data as AuthorRow[]).filter((a) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return a.name.toLowerCase().includes(q) || (a.bio && a.bio.toLowerCase().includes(q));
+  });
+
+  const openNew = () => {
+    setForm(emptyForm);
+    setShowModal(true);
+  };
+
+  const openEdit = (row: AuthorRow) => {
+    setForm({
+      id: row.id,
+      name: row.name,
+      bio: row.bio ?? "",
+    });
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setForm(emptyForm);
   };
 
   const save = async (event: React.FormEvent) => {
@@ -67,79 +76,58 @@ export function BlogAuthorsTab() {
     try {
       if (form.id) {
         await updateRow.mutateAsync(form);
-        showToast("Author updated.");
+        showToast("Author updated successfully.");
       } else {
         await createRow.mutateAsync(form);
-        showToast("Author created.");
+        showToast("Author created successfully.");
       }
-      setForm(emptyForm);
+      closeModal();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to save author."), "error");
     }
   };
 
-  const startEdit = (row: Row) => {
-    setForm({
-      id: row.id,
-      name: row.name,
-      bio: row.bio ?? "",
-      avatar: row.avatar ?? "",
-    });
-  };
-
-  const columns: Column<Row>[] = [
-    {
-      key: "avatar",
-      label: "Avatar",
-      width: "60px",
-      render: (row) =>
-        row.avatar ? (
-          <img
-            src={row.avatar}
-            alt={row.name}
-            className="h-10 w-10 rounded-full object-cover border border-[#E6E6E6]"
-          />
-        ) : (
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-[12px] font-semibold text-gray-500">
-            {row.name.charAt(0).toUpperCase()}
-          </div>
-        ),
-    },
+  const columns: Column<AuthorRow>[] = [
     {
       key: "name",
       label: "Name & Bio",
       render: (row) => (
-        <div>
-          <div className="font-medium">{row.name}</div>
-          {row.bio && (
-            <div className="max-w-[420px] truncate text-[12px] text-[#9A9A9A]">
-              {row.bio}
-            </div>
+        <div className="pr-3 min-w-0">
+          <div className="font-semibold text-[#1A1A1A] text-[13.5px]">{row.name}</div>
+          {row.bio ? (
+            <div className="text-[12px] text-[#888] line-clamp-1">{row.bio}</div>
+          ) : (
+            <div className="text-[12px] text-gray-400 italic">No biography provided</div>
           )}
         </div>
       ),
     },
     {
       key: "blogs",
-      label: "Blogs Count",
-      render: (row) => row._count?.blogs ?? 0,
+      label: "Articles Written",
+      width: "160px",
+      render: (row) => (
+        <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-[11.5px] font-semibold text-gray-700">
+          {row._count?.blogs ?? 0} {row._count?.blogs === 1 ? "article" : "articles"}
+        </span>
+      ),
     },
     {
       key: "actions",
-      label: "",
+      label: "Actions",
       width: "90px",
       render: (row) => (
-        <div className="flex gap-1.5">
+        <div className="flex items-center justify-end gap-1.5">
           <button
-            onClick={() => startEdit(row)}
-            className="flex h-7 w-7 items-center justify-center rounded border hover:bg-gray-50"
+            onClick={() => openEdit(row)}
+            className="flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#555] hover:bg-gray-50 hover:text-[#1A1A1A] transition-colors"
             title="Edit Author"
           >
             <Edit2 size={13} />
           </button>
           <button
             onClick={() => setDeleting(row.id)}
-            className="flex h-7 w-7 items-center justify-center rounded border text-red-500 hover:bg-red-50"
+            className="flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] bg-white text-red-500 hover:bg-red-50 transition-colors"
             title="Delete Author"
           >
             <Trash2 size={13} />
@@ -149,105 +137,98 @@ export function BlogAuthorsTab() {
     },
   ];
 
-  const isSubmitting = createRow.isPending || updateRow.isPending;
-
   return (
     <div>
-      <form
-        onSubmit={save}
-        className="mb-6 rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-sm"
-      >
-        <h3 className="mb-4 text-[15px] font-semibold text-[#1A1A1A]">
-          {form.id ? "Edit Blog Author" : "Add New Blog Author"}
-        </h3>
-        <div className="grid gap-4 md:grid-cols-3">
-          <AdminInput
-            label="Author Name *"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="Dr. Sarah Jenkins"
-          />
-          <AdminInput
-            label="Avatar Image URL"
-            value={form.avatar}
-            onChange={(e) => setForm({ ...form, avatar: e.target.value })}
-            placeholder="https://..."
-          />
-          <div className="flex flex-col justify-end">
-            <label
-              className={`flex h-10 cursor-pointer items-center justify-center rounded-md border border-[#E6E6E6] bg-gray-50 text-[13px] font-semibold text-[#333] hover:bg-gray-100 ${
-                uploading ? "opacity-50 pointer-events-none" : ""
-              }`}
-            >
-              {uploading ? (
-                <span
-                  className="inline-block animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent w-3.5 h-3.5 mr-2"
-                  aria-hidden="true"
-                />
-              ) : (
-                <Upload size={14} className="mr-2" />
-              )}
-              {uploading ? "Uploading..." : "Upload Avatar"}
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => upload(e.target.files?.[0])}
-                disabled={uploading}
-              />
-            </label>
-          </div>
-        </div>
-
-        <AdminTextarea
-          label="Bio"
-          rows={3}
-          value={form.bio}
-          onChange={(e) => setForm({ ...form, bio: e.target.value })}
-          placeholder="Brief author biography or background..."
-          className="mt-3"
-        />
-
-        <div className="mt-4 flex items-center gap-2">
-          <LoadingButton
-            type="submit"
-            loading={isSubmitting}
-            loadingText={form.id ? "Updating..." : "Adding..."}
-            className="h-10 rounded-md bg-[#E31E24] px-5 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
-          >
-            {form.id ? "Update Author" : "Add Author"}
-          </LoadingButton>
-          {form.id && (
-            <button
-              type="button"
-              onClick={() => setForm(emptyForm)}
-              className="h-10 rounded-md border border-[#E6E6E6] px-4 text-[13px] font-medium text-[#555] hover:bg-gray-50"
-            >
-              Cancel Edit
-            </button>
-          )}
-        </div>
-      </form>
+      <AdminListToolbar
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: "Search author name or bio...",
+          widthClassName: "max-w-[320px]",
+        }}
+        primaryAction={{
+          onClick: openNew,
+          label: "Add Author",
+          icon: <Plus size={14} />,
+        }}
+      />
 
       <DataTable
+        title="Blog Authors"
+        description="Manage contributing writers and clinical author profiles."
         columns={columns}
-        data={data as Row[]}
+        data={authors}
         rowKey="id"
         isLoading={isLoading}
         emptyMessage="No blog authors found."
       />
 
+      {/* Unified Add/Edit Author Modal */}
+      <Modal
+        open={showModal}
+        onClose={closeModal}
+        panelClassName="max-w-xl max-h-[90vh] overflow-y-auto"
+      >
+        <form onSubmit={save} className="flex flex-col h-full">
+          <div className="sticky top-0 z-20 flex items-center justify-between border-b border-[#E6E6E6] bg-white px-6 py-4 shadow-xs">
+            <div>
+              <h3 className="text-[15.5px] font-bold text-ink">
+                {form.id ? "Edit Author Profile" : "Add New Blog Author"}
+              </h3>
+              <p className="text-[11.5px] text-steel-2">
+                Changes are not applied until you save.
+              </p>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={closeModal}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 text-[13px] font-semibold text-[#555] hover:bg-gray-50 transition-colors"
+              >
+                <ArrowLeft size={14} /> Back
+              </button>
+              <LoadingButton
+                type="submit"
+                loading={createRow.isPending || updateRow.isPending}
+                loadingText="Saving..."
+                className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#E31E24] px-5 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors"
+              >
+                <Save size={14} /> Save Changes
+              </LoadingButton>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-4">
+            <AdminInput
+              label="Author Full Name *"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Dr. Jane Smith"
+              required
+            />
+            <AdminTextarea
+              label="Biography"
+              rows={4}
+              value={form.bio}
+              onChange={(e) => setForm({ ...form, bio: e.target.value })}
+              placeholder="Professional qualifications, specialty, and background..."
+            />
+          </div>
+        </form>
+      </Modal>
+
+      {/* Delete Confirmation Dialog */}
       <ConfirmModal
         open={!!deleting}
         title="Delete author?"
-        message="Authors currently linked to blog posts cannot be deleted."
+        message="This will permanently delete the author profile. Articles by this author will remain, but will no longer show an author attribution."
         onCancel={() => setDeleting(null)}
         isLoading={deleteRow.isPending}
         onConfirm={async () => {
           if (!deleting) return;
           try {
             await deleteRow.mutateAsync(deleting);
-            showToast("Author deleted.");
+            showToast("Author deleted successfully.");
           } catch (error) {
             showToast(getAdminErrorMessage(error, "Failed to delete author."), "error");
           } finally {

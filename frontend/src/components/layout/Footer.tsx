@@ -213,8 +213,16 @@ export function Footer() {
   const cmsUsaOfficeColumn = cmsMenuToFooterColumns(footerUsaOfficeMenu);
   const cmsLegalColumn = cmsMenuToFooterColumns(footerLegalMenu);
 
-  const footerColumnsToRender =
-    cmsFooterColumns.length > 0 ? cmsFooterColumns : footerColumns;
+  const hasCmsFooterMenus =
+    footerAboutMenu !== undefined ||
+    footerProductsMenu !== undefined ||
+    footerCapabilitiesMenu !== undefined ||
+    footerDealersMenu !== undefined ||
+    footerResourcesMenu !== undefined;
+
+  const footerColumnsToRender = hasCmsFooterMenus
+    ? cmsFooterColumns
+    : footerColumns;
   const footerContactFallback = buildFooterContactFallback(cmsFooter);
   const footerCopyright = buildFooterCopyright(
     cmsFooter,
@@ -227,7 +235,7 @@ export function Footer() {
   const shouldShowNewsletter = cmsFooter?.newsletterEnabled ?? true;
 
   const exportLinks: FooterLink[] =
-    cmsExportColumn.links.length > 0
+    footerExportMenu !== undefined
       ? cmsExportColumn.links
       : [
           { label: "Export Enquiries", href: "/contact" },
