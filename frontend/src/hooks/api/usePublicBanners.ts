@@ -21,7 +21,8 @@ export type BannerPlacementType =
   | "HOMEPAGE_PROMO"
   | "CATEGORY_TOP"
   | "PRODUCT_TOP"
-  | "SIDEBAR";
+  | "SIDEBAR"
+  | "ABOUT_HERO";
 
 async function fetchPublicBanners(
   placement: BannerPlacementType,

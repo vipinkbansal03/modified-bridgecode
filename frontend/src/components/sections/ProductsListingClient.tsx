@@ -12,16 +12,9 @@ import { useProducts, useProductFacets, useProductFiltersConfig } from "@/hooks/
 import { useCategories } from "@/hooks/api/useCategories";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
-import { usePublicBanners } from "@/hooks/api/usePublicBanners";
-import { StorefrontBanner } from "@/components/ui/StorefrontBanner";
 import { cn } from "@/utils/cn";
 
-function CategoryTopBannerSection() {
-  const { data: banners = [] } = usePublicBanners("CATEGORY_TOP");
-  if (banners.length === 0) return null;
-  return <StorefrontBanner banner={banners[0]} className="mt-6" />;
-}
-
+import type { CmsPage } from "@/hooks/api/useCmsContent";
 
 function formatListingPrice(
   prices: Array<{ sellingPrice: number; currencySymbol?: string; currencyCode?: string }> | undefined,
@@ -35,7 +28,11 @@ function formatListingPrice(
   return `${symbol} ${Math.round(Number(match.sellingPrice)).toLocaleString()}`;
 }
 
-export function ProductsListingClient() {
+interface ProductsListingClientProps {
+  cmsPage?: CmsPage | null;
+}
+
+export function ProductsListingClient({ cmsPage }: ProductsListingClientProps) {
   const searchParams = useSearchParams();
   const categorySlug = searchParams.get("category") ?? undefined;
   const searchQuery = searchParams.get("search") ?? undefined;
@@ -73,8 +70,17 @@ export function ProductsListingClient() {
 
   const availableAttributeValues = facetRows;
 
+  // Dynamic CMS Page Content
+  const heroSection = cmsPage?.sections?.find(
+    (s) => s.sectionKey === "products.hero" || s.sectionKey.endsWith(".hero")
+  );
+  const heroBlock = heroSection?.blocks?.[0];
+
   const category = categories.find((c) => c.slug === effectiveCategory);
-  const title = category ? category.name : t("ui.products.allProducts");
+  const title = category ? category.name : heroBlock?.title || t("ui.products.allProducts");
+  const description = category
+    ? category.description
+    : heroBlock?.description || t("ui.products.description");
 
   return (
     <div className="pb-20">
@@ -93,9 +99,8 @@ export function ProductsListingClient() {
         </nav>
         <h1 className="text-[clamp(26px,3.4vw,40px)] font-bold uppercase tracking-tight text-ink">{title}</h1>
         <p className="mt-4 max-w-[880px] text-[15px] leading-relaxed text-steel">
-          {category?.description ?? t("ui.products.description")}
+          {description}
         </p>
-        <CategoryTopBannerSection />
       </Container>
 
 

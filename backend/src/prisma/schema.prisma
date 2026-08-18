@@ -1259,7 +1259,6 @@ model BlogAuthor {
   id        String   @id @default(cuid())
   name      String
   bio       String?
-  avatar    String?
   userId    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1664,6 +1663,7 @@ enum BannerPlacement {
   CATEGORY_TOP
   PRODUCT_TOP
   SIDEBAR
+  ABOUT_HERO
 }
 
 enum TranslationStatus {

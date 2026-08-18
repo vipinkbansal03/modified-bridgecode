@@ -15,7 +15,6 @@ import { BaseProductConfigurator } from "@/components/product/BaseProductConfigu
 import { BundleSection } from "@/components/sections/BundleSection";
 import { RecentlySeenSection } from "@/components/sections/RecentlySeenSection";
 import { ContactCTASection } from "@/components/sections/ContactCTASection";
-import { ProductTopBannerSection } from "@/components/sections/ProductTopBannerSection";
 import { WishlistButton } from "@/components/product/WishlistButton";
 
 import { ViewSpecsLink } from "@/components/product/ViewSpecsLink";
@@ -208,8 +207,6 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             </Link>{" "}
             / {product.title}
           </nav>
-
-          <ProductTopBannerSection />
 
           <div className="mb-6 flex items-center justify-between border-b border-line pb-3">
 

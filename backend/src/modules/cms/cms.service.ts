@@ -64,13 +64,28 @@ export async function getPage(id: string) {
   return attachPageCmsTranslations(p);
 }
 
+const SYSTEM_PAGE_KEYS = new Set([
+  "home",
+  "about",
+  "contact",
+  "products",
+]);
+
 export async function updatePage(id: string, body: Partial<PageBody>) {
-  await getPage(id);
+  const existing = await getPage(id);
+  if (SYSTEM_PAGE_KEYS.has(existing.pageKey)) {
+    if (body.status && body.status !== "ACTIVE") {
+      throw new AppError("System website pages cannot be unpublished. Use section-level controls to manage content visibility.", 400);
+    }
+  }
   return prisma.cMSPage.update({ where: { id }, data: body });
 }
 
 export async function deletePage(id: string) {
-  await getPage(id);
+  const existing = await getPage(id);
+  if (SYSTEM_PAGE_KEYS.has(existing.pageKey)) {
+    throw new AppError("System website pages cannot be deleted.", 400);
+  }
   return prisma.cMSPage.delete({ where: { id } });
 }
 
@@ -152,10 +167,21 @@ export async function getFooter() {
   return attachEntityCmsTranslations("footer", footer);
 }
 
-export async function upsertFooter(body: FooterBody) {
+export async function upsertFooter(body: FooterBody & Record<string, unknown>) {
+  const data = {
+    title: body.title,
+    description: body.description,
+    logo: body.logo,
+    address: body.address,
+    email: body.email,
+    phone: body.phone,
+    socialLinksJson: body.socialLinksJson as any,
+    newsletterEnabled: body.newsletterEnabled !== undefined ? Boolean(body.newsletterEnabled) : true,
+    status: body.status || "ACTIVE",
+  };
   const existing = await prisma.cMSFooter.findFirst();
-  if (existing) return prisma.cMSFooter.update({ where: { id: existing.id }, data: body });
-  return prisma.cMSFooter.create({ data: body });
+  if (existing) return prisma.cMSFooter.update({ where: { id: existing.id }, data });
+  return prisma.cMSFooter.create({ data });
 }
 
 async function syncHeaderProductsMegaMenu() {
@@ -400,10 +426,37 @@ export async function publicGetPageBySlug(slug: string, languageCode?: string) {
 
 export async function publicGetMenuByLocation(location: string, languageCode?: string) {
   if (location === HEADER_PRODUCTS_MEGA_LOCATION) await syncHeaderProductsMegaMenu();
-  const menu = await prisma.cMSMenu.findFirst({
-    where: { location, status: "ACTIVE" },
-    include: { items: { where: { status: "ACTIVE" }, orderBy: { sortOrder: "asc" } } },
-  });
+
+  const [menu, inactivePages] = await Promise.all([
+    prisma.cMSMenu.findFirst({
+      where: { location, status: "ACTIVE" },
+      include: { items: { where: { status: "ACTIVE" }, orderBy: { sortOrder: "asc" } } },
+    }),
+    prisma.cMSPage.findMany({
+      where: { status: "INACTIVE" },
+      select: { slug: true, pageKey: true },
+    }),
+  ]);
+
+  if (menu && inactivePages.length > 0) {
+    const inactivePaths = new Set(
+      inactivePages.flatMap((p) => [
+        `/${p.slug.toLowerCase().trim()}`,
+        `/${p.pageKey.toLowerCase().trim()}`,
+      ])
+    );
+
+    menu.items = menu.items.filter((item) => {
+      if (!item.url) return true;
+      let clean = item.url.trim().toLowerCase();
+      if (clean.startsWith("https://www.modortho.com") || clean.startsWith("http://www.modortho.com")) {
+        clean = clean.replace(/^https?:\/\/(www\.)?modortho\.com/, "");
+      }
+      const pathOnly = clean.split("#")[0].replace(/\/$/, "");
+      return !inactivePaths.has(pathOnly);
+    });
+  }
+
   return applyMenuCmsTranslation(menu, languageCode);
 }
 

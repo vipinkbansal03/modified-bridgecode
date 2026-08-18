@@ -1,10 +1,8 @@
 import { Fragment, type ReactNode } from "react";
-import { ManufacturingSection } from "@/components/sections/ManufacturingSection";
 import { DetailPageTemplate } from "@/components/sections/detail/DetailPageTemplate";
 import { DetailSection } from "@/components/sections/detail/DetailSection";
 import { FaqAccordion } from "@/components/sections/detail/FaqAccordion";
 import { PageHero } from "@/components/sections/detail/PageHero";
-import { SubNav } from "@/components/sections/detail/SubNav";
 import type { CmsBlock, CmsPage, CmsSection } from "@/hooks/api/useCmsContent";
 import type { DetailPageContent } from "@/types/common.types";
 
@@ -13,35 +11,12 @@ function sectionAnchor(section: CmsSection) {
 }
 
 function blockData(block: CmsBlock): Record<string, unknown> {
-  return typeof block.dataJson === "object" && block.dataJson !== null ? (block.dataJson as Record<string, unknown>) : {};
+  return typeof block.dataJson === "object" && block.dataJson !== null
+    ? (block.dataJson as Record<string, unknown>)
+    : {};
 }
 
-function firstTextBlock(section: CmsSection) {
-  return section.blocks.find((block) => block.blockType === "rich_text" || block.blockType === "intro") ?? section.blocks[0];
-}
-
-function buildSubnav(page: CmsPage, fallback: DetailPageContent) {
-  const heroBlock = page.sections.find((section) => section.sectionKey.endsWith(".hero"))?.blocks[0];
-  const heroData = heroBlock ? blockData(heroBlock) : {};
-  const navItems = Array.isArray(heroData.subnav) ? heroData.subnav : null;
-  if (navItems && navItems.length > 0) {
-    return navItems
-      .filter((item): item is { label: string; anchor: string } => !!item && typeof item === "object" && "label" in item && "anchor" in item)
-      .map((item) => ({ label: item.label, anchor: item.anchor }));
-  }
-
-  const derived = page.sections
-    .filter((section) => !section.sectionKey.endsWith(".hero") && !section.sectionKey.endsWith(".faqs"))
-    .map((section) => {
-      const anchor = sectionAnchor(section);
-      const title = firstTextBlock(section)?.title || section.title || anchor;
-      return { label: title, anchor };
-    });
-
-  return derived.length > 0 ? derived : fallback.subnav;
-}
-
-function buildHero(page: CmsPage, fallback: DetailPageContent, breadcrumbLabel: string) {
+function buildHero(page: CmsPage, fallback: DetailPageContent, breadcrumbLabel: string, heroImageOverride?: string) {
   const heroSection = page.sections.find((section) => section.sectionKey.endsWith(".hero"));
   const heroBlock = heroSection?.blocks[0];
   const heroData = heroBlock ? blockData(heroBlock) : {};
@@ -50,7 +25,7 @@ function buildHero(page: CmsPage, fallback: DetailPageContent, breadcrumbLabel: 
     kicker: heroBlock?.subtitle || fallback.kicker,
     title: heroBlock?.title || page.title || fallback.title,
     lede: heroBlock?.description || fallback.lede,
-    heroImage: ((heroData.image as string) || heroBlock?.image || fallback.heroImage),
+    heroImage: heroImageOverride || (heroData.image as string) || heroBlock?.image || fallback.heroImage,
     breadcrumb: [{ label: "Home", href: "/" }, { label: breadcrumbLabel }],
   };
 }
@@ -70,9 +45,13 @@ function buildFaqs(section: CmsSection, fallback: DetailPageContent) {
 function buildDetailSection(section: CmsSection, fallback: DetailPageContent) {
   const anchor = sectionAnchor(section);
   const fallbackSection = fallback.sections.find((item) => item.id === anchor);
-  const textBlocks = section.blocks.filter((block) => block.blockType === "rich_text" || block.blockType === "intro");
+  const textBlocks = section.blocks.filter(
+    (block) => block.blockType === "rich_text" || block.blockType === "intro"
+  );
   const symbolBlocks = section.blocks.filter((block) => block.blockType === "symbol");
-  const gridBlocks = section.blocks.filter((block) => !["hero", "faq", "rich_text", "intro", "form", "office", "cta"].includes(block.blockType));
+  const gridBlocks = section.blocks.filter(
+    (block) => !["hero", "faq", "rich_text", "intro", "form", "office", "cta"].includes(block.blockType)
+  );
 
   const paragraphs = textBlocks.map((block) => block.description || "").filter(Boolean);
   const heading = textBlocks[0]?.title || section.title || fallbackSection?.heading || anchor;
@@ -89,13 +68,22 @@ function buildDetailSection(section: CmsSection, fallback: DetailPageContent) {
         }))
       : fallbackSection?.capabilityGrid;
 
-  const symbolGrid = symbolBlocks.length > 0
-    ? symbolBlocks.map((block) => ({
-        icon: block.icon || "Circle",
-        title: block.title || "",
-        description: block.description || "",
-      }))
-    : fallbackSection?.symbolGrid;
+  const symbolGrid =
+    symbolBlocks.length > 0
+      ? symbolBlocks.map((block) => ({
+          icon: block.icon || "Circle",
+          title: block.title || "",
+          description: block.description || "",
+        }))
+      : fallbackSection?.symbolGrid;
+
+  const settings =
+    typeof section.settingsJson === "object" && section.settingsJson !== null
+      ? (section.settingsJson as Record<string, unknown>)
+      : {};
+
+  const calloutText = (settings.calloutText as string) || fallbackSection?.callout?.text;
+  const callout = calloutText ? { text: calloutText } : undefined;
 
   const nextSection = {
     id: anchor,
@@ -103,54 +91,53 @@ function buildDetailSection(section: CmsSection, fallback: DetailPageContent) {
     paragraphs: paragraphs.length > 0 ? paragraphs : fallbackSection?.paragraphs,
     capabilityGrid,
     symbolGrid,
-    callout: fallbackSection?.callout,
+    callout,
   };
 
-  if (!nextSection.heading && !nextSection.paragraphs?.length && !nextSection.capabilityGrid?.length && !nextSection.symbolGrid?.length) {
+  if (
+    !nextSection.heading &&
+    !nextSection.paragraphs?.length &&
+    !nextSection.capabilityGrid?.length &&
+    !nextSection.symbolGrid?.length
+  ) {
     return null;
   }
 
   return nextSection;
 }
 
-function buildManufacturingTeaser(section: CmsSection, fallback: { kicker: string; heading: string; body: string; image: string }) {
-  const block = section.blocks[0];
-  return {
-    kicker: block?.subtitle || fallback.kicker,
-    heading: block?.title || fallback.heading,
-    body: block?.description || fallback.body,
-    image: block?.image || fallback.image,
-  };
-}
-
 interface CmsDetailPageRendererProps {
   page: CmsPage | null;
   fallbackContent: DetailPageContent;
   breadcrumbLabel: string;
-  fallbackRender: ReactNode;
-  manufacturingTeaserFallback?: { kicker: string; heading: string; body: string; image: string };
+  heroImageOverride?: string;
+  fallbackRender?: ReactNode;
 }
 
 export function CmsDetailPageRenderer({
   page,
   fallbackContent,
   breadcrumbLabel,
+  heroImageOverride,
   fallbackRender,
-  manufacturingTeaserFallback,
 }: CmsDetailPageRendererProps) {
+  const fallback = fallbackRender ?? <DetailPageTemplate content={fallbackContent} breadcrumbLabel={breadcrumbLabel} />;
+
   if (!page?.sections?.length) {
-    return <>{fallbackRender}</>;
+    return <>{fallback}</>;
   }
 
-  const hero = buildHero(page, fallbackContent, breadcrumbLabel);
-  const subnav = buildSubnav(page, fallbackContent);
+  const sortedSections = [...page.sections]
+    .filter((s) => s.status !== "INACTIVE")
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 
-  const renderedSections = page.sections.map((section) => {
+  const hero = buildHero(page, fallbackContent, breadcrumbLabel, heroImageOverride);
+
+  const renderedSections = sortedSections.map((section) => {
     if (section.sectionKey.endsWith(".hero")) {
       return (
         <Fragment key={section.id}>
           <PageHero {...hero} />
-          <SubNav items={subnav} />
         </Fragment>
       );
     }
@@ -159,17 +146,13 @@ export function CmsDetailPageRenderer({
       return <FaqAccordion key={section.id} items={buildFaqs(section, fallbackContent)} />;
     }
 
-    if (manufacturingTeaserFallback && section.sectionKey === "manufacturing.teaser") {
-      return <ManufacturingSection key={section.id} data={buildManufacturingTeaser(section, manufacturingTeaserFallback)} />;
-    }
-
     const transformedSection = buildDetailSection(section, fallbackContent);
     return transformedSection ? <DetailSection key={section.id} section={transformedSection} /> : null;
   });
 
   const hasVisibleSections = renderedSections.some(Boolean);
   if (!hasVisibleSections) {
-    return <>{fallbackRender}</>;
+    return <>{fallback}</>;
   }
 
   return <>{renderedSections}</>;

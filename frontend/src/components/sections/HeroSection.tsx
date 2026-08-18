@@ -12,8 +12,8 @@ export interface HeroSlide {
   image: string;
   kicker: string;
   title: string;
-  ctaLabel: string;
-  ctaHref: string;
+  ctaLabel?: string | null;
+  ctaHref?: string | null;
 }
 
 interface HeroSectionProps {
@@ -135,9 +135,11 @@ export function HeroSection({ data }: HeroSectionProps) {
                 <h1 className="max-w-[780px] text-left text-[clamp(38px,5.5vw,72px)] font-light leading-[1.06] text-white drop-shadow-sm">
                   {slide.title}
                 </h1>
-                <div className="mt-6 flex justify-start">
-                  <PillCTA href={slide.ctaHref} label={ctaLabel} />
-                </div>
+                {slide.ctaHref && ctaLabel ? (
+                  <div className="mt-6 flex justify-start">
+                    <PillCTA href={slide.ctaHref} label={ctaLabel} />
+                  </div>
+                ) : null}
               </motion.div>
             </div>
           </Container>

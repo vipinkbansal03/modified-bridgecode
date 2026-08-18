@@ -1226,45 +1226,267 @@ async function main() {
     title: "Quality & Certifications",
     slug: "quality-certifications",
     pageKey: "quality-certifications",
-    seoTitle: "Quality & Certifications - Modern Orthodontics",
-    seoDescription: "Review the certifications, quality systems, and compliance standards behind Modern Orthodontics manufacturing.",
+    seoTitle: "Quality Certifications — Modern Orthodontics",
+    seoDescription: "ISO 13485:2016, CE marking, FDA registration and Material Safety Data Sheets for Modern Orthodontics products.",
   });
   const qualityHeroSection = await upsertSection(qualityPage.id, { sectionKey: "quality.hero", title: "Quality Hero", sortOrder: 0 });
   await clearAndAddBlocks(qualityHeroSection.id, [
     {
       blockType: "hero",
       title: "Certified to the standards global orthodontic brands require.",
-      subtitle: "Quality & Certifications",
-      description: "Our quality systems are built to support dependable manufacturing, regulatory readiness, and customer confidence.",
+      subtitle: "Quality Certifications",
+      description: "We aim to deliver a best-in-class experience — high-quality orthodontic appliances, on time, without defects and competitively priced — backed by a quality management system our team maintains and improves continuously.",
+      image: "https://images.unsplash.com/photo-1758873263563-5ba4aa330799?fm=jpg&q=80&w=1600&auto=format&fit=crop",
+      dataJson: {
+        subnav: [
+          { label: "Quality Management", anchor: "management" },
+          { label: "Our Certifications", anchor: "certifications" },
+          { label: "Product Label Symbols", anchor: "symbols" },
+          { label: "FAQs", anchor: "faqs" },
+        ],
+      },
     },
   ]);
   const qualityManagementSection = await upsertSection(qualityPage.id, { sectionKey: "quality.management", title: "Quality Management", sortOrder: 1 });
   await clearAndAddBlocks(qualityManagementSection.id, [
     {
       blockType: "rich_text",
-      title: "Quality management systems",
-      description: "Documented procedures, traceability, and inspection standards are embedded across product development and manufacturing operations.",
+      title: "Quality management system",
+      description: "Our dedicated team of professionals is trained to maintain and continually improve the effectiveness of our quality management system, while ensuring compliance with applicable standards, regulatory requirements and customer requirements. That gives our customer base the confidence that they'll receive consistently high-quality products, with individual needs and expectations met.",
+    },
+    {
+      blockType: "rich_text",
+      title: null,
+      description: "MO's quality management system is certified by Underwriters Laboratories (UL) to ISO 13485:2016. ISO standards make the development, manufacturing and supply of products more efficient, safer and cleaner, ease trade between countries, and help safeguard consumers and users of medical devices everywhere.",
     },
   ]);
   const qualityCertificationsSection = await upsertSection(qualityPage.id, { sectionKey: "quality.certifications", title: "Certifications", sortOrder: 2 });
   await clearAndAddBlocks(qualityCertificationsSection.id, [
-    { blockType: "certification", title: "ISO 13485:2016", description: "Certified quality management system for medical device manufacturing.", icon: "BadgeCheck" },
-    { blockType: "certification", title: "EU CE Marked", description: "Products compliant with European medical device requirements.", icon: "ShieldCheck" },
-    { blockType: "certification", title: "US FDA Registered", description: "Registered manufacturing operations aligned with relevant FDA requirements.", icon: "Stamp" },
-    { blockType: "certification", title: "MDSAP & CDSCO", description: "Support for multi-market compliance and Indian regulatory obligations.", icon: "Globe" },
+    {
+      blockType: "certification",
+      title: "ISO 13485:2016",
+      description: "The international standard recognised for medical device quality management systems, compatible with FDA QSR and a base for EU CE marking.",
+      icon: "BadgeCheck",
+      linkLabel: "View certificate",
+      linkUrl: "https://www.modortho.com/public/img/iso-13485-latest.pdf",
+    },
+    {
+      blockType: "certification",
+      title: "CE Mark",
+      description: "The official marking required across EU member countries, confirming our products meet essential European safety and environmental requirements.",
+      icon: "ShieldCheck",
+      linkLabel: "View certificate",
+      linkUrl: "https://www.modortho.com/public/img/ce-certificate-latest.pdf",
+    },
+    {
+      blockType: "certification",
+      title: "US FDA Registered",
+      description: "Compliant with FDA quality system regulation 21 CFR Parts 808, 812 and 820 (cGMP). Modern Orthodontics is registered with the FDA as a manufacturer.",
+      icon: "Stamp",
+      linkLabel: "View FDA registration",
+      linkUrl: "https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfRL/rl.cfm?rid=73615",
+    },
+    {
+      blockType: "certification",
+      title: "Material Safety Data Sheets",
+      description: "Full chemical identity and hazard information for every relevant material, in line with OSHA's Hazard Communication Standard.",
+      icon: "FlaskConical",
+      linkLabel: "View MSDS",
+      linkUrl: "https://www.modortho.com/material-safety-sheets",
+    },
   ]);
-  const qualitySymbolsSection = await upsertSection(qualityPage.id, { sectionKey: "quality.symbols", title: "Symbols & Labels", sortOrder: 3 });
+  const qualitySymbolsSection = await upsertSection(qualityPage.id, { sectionKey: "quality.symbols", title: "Product Label Symbols", sortOrder: 3 });
   await clearAndAddBlocks(qualitySymbolsSection.id, [
-    { blockType: "symbol", title: "Sterile / Single Use", description: "Packaging and product labeling aligned to regulated use contexts." },
-    { blockType: "symbol", title: "Lot Traceability", description: "Batch tracking supports quality assurance and post-shipment accountability." },
-    { blockType: "symbol", title: "Regulatory Markings", description: "Clear labeling for certifications, cautions, and product handling requirements." },
+    {
+      blockType: "intro",
+      title: "Product label symbols",
+      description: "A quick reference for the most common symbols you'll find on Modern Orthodontics product labels and packaging.",
+    },
+    { blockType: "symbol", title: "Catalog Number", description: "Precedes the part number of the product.", icon: "Hash" },
+    { blockType: "symbol", title: "LOT / Batch Code", description: "Precedes the lot number — used by MO for part traceability.", icon: "Layers" },
+    { blockType: "symbol", title: "Manufacturer", description: "Identifies the manufacturer, may include the date of manufacture (YYYY-MM).", icon: "Factory" },
+    { blockType: "symbol", title: "Do Not Reuse", description: "Devices marked with this symbol are intended for single use only.", icon: "Ban" },
+    { blockType: "symbol", title: "Use By", description: "The part should be used before the date next to this symbol (YYYY-MM).", icon: "Hourglass" },
+    { blockType: "symbol", title: "Consult Instructions for Use", description: "For products that include additional instructions inside the package.", icon: "BookOpen" },
+    { blockType: "symbol", title: "Keep Away From Sunlight", description: "Used on elastics — performance may reduce with sunlight exposure.", icon: "Sun" },
+    { blockType: "symbol", title: "Nickel / Chromium Warning", description: "Flags the potential for allergic reactions to these known allergens.", icon: "TriangleAlert" },
+    { blockType: "symbol", title: "Rx Only", description: "For use or distribution by orthodontic professionals only.", icon: "Stethoscope" },
   ]);
   const qualityFaqSection = await upsertSection(qualityPage.id, { sectionKey: "quality.faqs", title: "FAQs", sortOrder: 4 });
   await clearAndAddBlocks(qualityFaqSection.id, [
-    { blockType: "faq", title: "Which certifications does Modern Orthodontics hold?", description: "Key certifications include ISO 13485:2016, CE marking support, FDA registration, and other market-specific compliance programs." },
-    { blockType: "faq", title: "Can you share compliance documents with dealers or OEM customers?", description: "Yes. Relevant documentation can be shared based on the product range and commercial engagement." },
-    { blockType: "faq", title: "Do your quality systems support export programs?", description: "Yes. Our systems are built with international distribution and compliance expectations in mind." },
+    { blockType: "faq", title: "Is Modern Orthodontics ISO certified?", description: "Yes — our quality management system is certified to ISO 13485:2016 by Underwriters Laboratories (UL)." },
+    { blockType: "faq", title: "Are your products CE marked for the European market?", description: "Yes, our quality management has been certified to CE by UL, confirming compliance with European Medical Device Directives." },
+    { blockType: "faq", title: "Is Modern Orthodontics FDA registered?", description: "Yes, we're registered with the FDA as a manufacturer and compliant with 21 CFR Parts 808, 812 and 820 (cGMP)." },
+    { blockType: "faq", title: "Where can I get your Material Safety Data Sheets?", description: "You can view them directly via the MSDS link above, or email orders@modortho.com for a specific sheet." },
+    { blockType: "faq", title: "How do I read the symbols on a product label?", description: "See the Product Label Symbols reference above for the most common marks — catalogue number, lot code, use-by date and more." },
   ]);
+
+  // ── Design & Engineering Page ──────────────────────────────
+  const designPage = await upsertPage({
+    title: "Design & Engineering",
+    slug: "design-and-engineering",
+    pageKey: "design-and-engineering",
+    seoTitle: "Design & Engineering — Modern Orthodontics",
+    seoDescription: "In-house product design, CAD modelling and tooling capabilities behind every Modern Orthodontics product.",
+  });
+  const designHeroSection = await upsertSection(designPage.id, { sectionKey: "design.hero", title: "Design Hero", sortOrder: 0 });
+  await clearAndAddBlocks(designHeroSection.id, [
+    {
+      blockType: "hero",
+      title: "A complete in-house design and engineering team.",
+      subtitle: "Capabilities",
+      description: "Direct supervision over product quality and functionality starts at the design stage. Our team brings over 20 years of collective orthodontic design experience across multiple 3D modelling platforms, working under the guidance of our founder, an orthodontist with more than two decades of clinical practice.",
+      image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?fm=jpg&q=80&w=1600&auto=format&fit=crop",
+    },
+  ]);
+  const designToolingSection = await upsertSection(designPage.id, { sectionKey: "design.tooling", title: "In-House Tooling", sortOrder: 1 });
+  await clearAndAddBlocks(designToolingSection.id, [
+    {
+      blockType: "rich_text",
+      title: "In-house tooling, start to finish",
+      description: "Design and engineering is the foundation every later manufacturing step builds on. Our tool room is equipped to design and manufacture our own molds and sheet metal tools using multiple CAD platforms, so we never depend on outside vendors for mold design or tooling.",
+    },
+    {
+      blockType: "rich_text",
+      title: null,
+      description: "That in-house control is what lets a product move from paper to market quickly and at a competitive price, without losing precision along the way.",
+    },
+  ]);
+  const designCadSection = await upsertSection(designPage.id, { sectionKey: "design.cad", title: "CAD & Mold Design", sortOrder: 2 });
+  await clearAndAddBlocks(designCadSection.id, [
+    {
+      blockType: "intro",
+      title: "What modern CAD catches before a tool is cut",
+      description: "Current-generation 3D modelling software does more than draw a part — draft analysis, wall-thickness checks, undercut detection, geometry verification and parting-line recognition all happen before any metal is machined. The same software can flag sink marks, knit lines and other cosmetic defects in advance, which saves both time and tooling cost.",
+    },
+    { blockType: "capability", title: "Draft & Thickness Analysis", description: "Wall thickness and draft angles checked before a mold is ever cut.", icon: "Ruler" },
+    { blockType: "capability", title: "Undercut Detection", description: "Geometry and parting-line issues caught at the design stage, not during a failed first run.", icon: "ScanSearch" },
+    { blockType: "capability", title: "Moldability Forecasting", description: "Sink marks, knit lines and cosmetic defects predicted and designed around in advance.", icon: "Gauge" },
+  ]);
+  const designWhySection = await upsertSection(designPage.id, { sectionKey: "design.why", title: "Why This Shortens Lead Time", sortOrder: 3 });
+  await clearAndAddBlocks(designWhySection.id, [
+    {
+      blockType: "rich_text",
+      title: "Why this shortens your lead time",
+      description: "The mold design stage is usually the most time-consuming and costly part of bringing a plastic or metal-injection-molded part to production. By forecasting problems and confirming moldability upfront, revisions happen on screen instead of on a finished tool — which is a large part of why our lead times run shorter than most of the industry.",
+    },
+  ]);
+  const designFaqSection = await upsertSection(designPage.id, { sectionKey: "design.faqs", title: "FAQs", sortOrder: 4 });
+  await clearAndAddBlocks(designFaqSection.id, [
+    { blockType: "faq", title: "Does Modern Orthodontics design tools and molds in-house, or outsource them?", description: "Fully in-house. Our tool room designs and manufactures its own molds and sheet metal tools using multiple CAD platforms, so we don't depend on outside vendors for tooling." },
+    { blockType: "faq", title: "Who leads the design team?", description: "The design team works under the direct guidance of our founder, an orthodontist with more than two decades of clinical practice, alongside a design team with 20+ years of combined orthodontic design experience." },
+    { blockType: "faq", title: "How does CAD software reduce project risk before tooling starts?", description: "Modern 3D modelling tools check draft angles, wall thickness, undercuts and parting lines, and can forecast tooling problems like sink marks before a mold is cut — catching issues on screen instead of on a finished tool." },
+    { blockType: "faq", title: "Can your design team work from our own product concept?", description: "Yes — we offer concurrent engineering and design assistance from the earliest stage, which is part of why our lead times are among the shortest in the industry." },
+  ]);
+
+  // ── OEM Services Page ──────────────────────────────────────
+  const oemPage = await upsertPage({
+    title: "OEM Services",
+    slug: "oem-services",
+    pageKey: "oem-services",
+    seoTitle: "OEM Services — Modern Orthodontics",
+    seoDescription: "OEM manufacturing, assembly, inspection, custom labelling and packaging for orthodontic industry partners worldwide.",
+  });
+  const oemHeroSection = await upsertSection(oemPage.id, { sectionKey: "oem.hero", title: "OEM Hero", sortOrder: 0 });
+  await clearAndAddBlocks(oemHeroSection.id, [
+    {
+      blockType: "hero",
+      title: "A preferred OEM partner for orthodontic brands worldwide.",
+      subtitle: "Capabilities",
+      description: "We've built our OEM business on the same things our own product line is judged on: product quality, end-to-end production control, and the ability to customise to a partner's exact specification — backed by an in-house tooling facility that keeps every step under one roof.",
+      image: "https://images.unsplash.com/photo-1581093588401-fbb62a02f120?fm=jpg&q=80&w=1600&auto=format&fit=crop",
+    },
+  ]);
+  const oemOfferSection = await upsertSection(oemPage.id, { sectionKey: "oem.offer", title: "What Our OEM Service Covers", sortOrder: 1 });
+  await clearAndAddBlocks(oemOfferSection.id, [
+    {
+      blockType: "rich_text",
+      title: "What our OEM service covers",
+      description: "Our OEM work specialises in high-volume, labour-intensive operations: assembly line production, inspection, final packaging, custom labelling and shipping, all under the same roof as our own tooling facility. That single-site setup is what lets us hold consistent quality across every product we manufacture, for our own catalogue and for partner brands alike.",
+    },
+    {
+      blockType: "rich_text",
+      title: null,
+      description: "Orthodontist feedback from across the more than 40 countries we ship to has shaped that production discipline over time, and our R&D team continues working to shorten turnaround on every new OEM project.",
+    },
+  ]);
+  const oemWhySection = await upsertSection(oemPage.id, { sectionKey: "oem.why", title: "Why Partner With Us", sortOrder: 2 });
+  await clearAndAddBlocks(oemWhySection.id, [
+    { blockType: "capability", title: "Production Flexibility", description: "Direct input into production design rather than a fixed catalogue of options.", icon: "SlidersHorizontal" },
+    { blockType: "capability", title: "Direct Access to Leadership", description: "Communication with senior management, not layers of account management.", icon: "Users" },
+    { blockType: "capability", title: "Real-Time Schedule Visibility", description: "Live updates on where your production run actually stands.", icon: "Clock" },
+    { blockType: "capability", title: "Packaging Freedom", description: "Custom labelling and packaging built around your brand, not ours.", icon: "PackageOpen" },
+  ]);
+  const oemBenefitsSection = await upsertSection(oemPage.id, { sectionKey: "oem.benefits", title: "The Cost Case for Partnering", sortOrder: 3 });
+  await clearAndAddBlocks(oemBenefitsSection.id, [
+    {
+      blockType: "intro",
+      title: "The cost case for partnering with us",
+      description: "Beyond product quality, OEM partners typically see savings across several parts of their operation at once:",
+    },
+    { blockType: "capability", title: "Lower In-House Overhead", description: "Reduced or eliminated need for your own assembly and packaging staff.", icon: "Building2" },
+    { blockType: "capability", title: "Lower Warehousing Cost", description: "Less inventory sitting in your own facility waiting to be assembled.", icon: "Warehouse" },
+    { blockType: "capability", title: "Lower Transport Cost", description: "Fewer shipping legs between raw material, assembly and final delivery.", icon: "Truck" },
+    { blockType: "capability", title: "Centralised Control", description: "One manufacturing location accountable for the full production run.", icon: "ClipboardCheck" },
+  ]);
+  const oemFaqSection = await upsertSection(oemPage.id, { sectionKey: "oem.faqs", title: "FAQs", sortOrder: 4 });
+  await clearAndAddBlocks(oemFaqSection.id, [
+    { blockType: "faq", title: "How long has Modern Orthodontics worked as an OEM manufacturer?", description: "Over 20 years, alongside our own product line, specialising in high-volume orthodontic hardware production." },
+    { blockType: "faq", title: "Can OEM partners customise packaging and labelling?", description: "Yes — custom labelling, packaging and assembly are part of the core OEM service, not an add-on." },
+    { blockType: "faq", title: "Will I have a single point of contact for an OEM project?", description: "Partnering with us means direct communication with senior management and real-time visibility into your production schedule, rather than working through multiple account layers." },
+    { blockType: "faq", title: "What cost savings can an OEM partner expect?", description: "Most partners see reduced in-house assembly and warehouse staffing needs, lower transport costs from centralised production, and tighter inventory control overall." },
+  ]);
+
+  // ── Custom Packaging Page ──────────────────────────────────
+  const packagingPage = await upsertPage({
+    title: "Custom Packaging",
+    slug: "custom-packaging",
+    pageKey: "custom-packaging",
+    seoTitle: "Custom Packaging — Modern Orthodontics",
+    seoDescription: "Full and partial product assembly, welding, finishing, laser etching and custom packaging services.",
+  });
+  const packagingHeroSection = await upsertSection(packagingPage.id, { sectionKey: "packaging.hero", title: "Packaging Hero", sortOrder: 0 });
+  await clearAndAddBlocks(packagingHeroSection.id, [
+    {
+      blockType: "hero",
+      title: "A full-service assembly and packaging facility.",
+      subtitle: "Capabilities",
+      description: "From raw material coordination through final packaging and shipping, we run complete and partial product assembly under one roof — built for high-volume, labour-intensive work with assured on-time delivery.",
+      image: "https://images.unsplash.com/photo-1565793298595-6a879b1d9492?fm=jpg&q=80&w=1600&auto=format&fit=crop",
+    },
+  ]);
+  const packagingHandleSection = await upsertSection(packagingPage.id, { sectionKey: "packaging.handle", title: "What We Handle", sortOrder: 1 });
+  await clearAndAddBlocks(packagingHandleSection.id, [
+    {
+      blockType: "rich_text",
+      title: "What we handle",
+      description: "Our packaging and assembly capability covers raw material coordination, inventory management, assembly line production, inspection, final packaging and shipping — combining modern equipment with staff attention to detail to keep both cost and turnaround predictable.",
+    },
+  ]);
+  const packagingFinishingSection = await upsertSection(packagingPage.id, { sectionKey: "packaging.finishing", title: "Assembly & Finishing Services", sortOrder: 2 });
+  await clearAndAddBlocks(packagingFinishingSection.id, [
+    { blockType: "capability", title: "Tack & Custom Welding", description: "Precision welding for component assembly, including custom configurations.", icon: "Flame" },
+    { blockType: "capability", title: "Brazing", description: "Joining processes for components that need a stronger bond than welding alone.", icon: "Beaker" },
+    { blockType: "capability", title: "Color Coding", description: "Visual identification systems applied across product lines.", icon: "Palette" },
+    { blockType: "capability", title: "Finishing", description: "Surface finishing for a consistent final appearance.", icon: "Sparkles" },
+    { blockType: "capability", title: "Laser Etching & Engraving", description: "Permanent marking for traceability and branding.", icon: "Zap" },
+    { blockType: "capability", title: "Inspection, Sorting & Rework", description: "Detailed process analysis to catch and correct non-conforming parts before they ship.", icon: "SearchCheck" },
+  ]);
+  const packagingBenefitsSection = await upsertSection(packagingPage.id, { sectionKey: "packaging.benefits", title: "What Partnering Saves You", sortOrder: 3 });
+  await clearAndAddBlocks(packagingBenefitsSection.id, [
+    { blockType: "capability", title: "Lower Staffing Overhead", description: "Reduced need for in-house assembly and packaging teams.", icon: "Building2" },
+    { blockType: "capability", title: "Lower Warehousing Cost", description: "Less space tied up holding partially assembled inventory.", icon: "Warehouse" },
+    { blockType: "capability", title: "Lower Transport Cost", description: "Fewer shipping legs between assembly and final delivery.", icon: "Truck" },
+    { blockType: "capability", title: "Centralised Control", description: "One location accountable for the full assembly and packaging run.", icon: "ClipboardCheck" },
+  ]);
+  const packagingFaqSection = await upsertSection(packagingPage.id, { sectionKey: "packaging.faqs", title: "FAQs", sortOrder: 4 });
+  await clearAndAddBlocks(packagingFaqSection.id, [
+    { blockType: "faq", title: "Does Modern Orthodontics offer full or partial product assembly?", description: "Both — our facility is built for complete and partial product assembly depending on what a project needs." },
+    { blockType: "faq", title: "What finishing services are available alongside packaging?", description: "Tack and custom welding, brazing, colour coding, surface finishing, laser etching and engraving, plus inspection, sorting and rework." },
+    { blockType: "faq", title: "Can packaging be customised for our brand?", description: "Yes, custom labelling and packaging are part of the standard assembly and packaging service." },
+    { blockType: "faq", title: "What cost savings come from outsourcing assembly and packaging to MO?", description: "Most partners reduce in-house assembly and packaging staffing, cut warehousing and transport costs, and gain centralised inventory control." },
+  ]);
+
 
   const existingFooter = await prisma.cMSFooter.findFirst();
   if (existingFooter) {
@@ -1696,7 +1918,7 @@ async function main() {
   console.log(`   Admin login: admin@modortho.com / Admin@1234`);
   console.log(`   Roles created: Super Admin, Admin, Staff`);
   console.log(`   Sample products: Elfin Bondable Molar Tube, NiTi Wire Product`);
-  console.log(`   CMS pages seeded: home, about, manufacturing, contact, products, quality-certifications`);
+  console.log(`   CMS pages seeded: home, about, manufacturing, contact, products, quality-certifications, design-and-engineering, oem-services, custom-packaging`);
   console.log(`   Settings seeded: ${defaultSettings.length} default keys across all groups`);
 }
 

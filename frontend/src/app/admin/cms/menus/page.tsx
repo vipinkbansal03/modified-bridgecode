@@ -162,6 +162,13 @@ function LinkPickerInput({
                 </button>
                 <button
                   type="button"
+                  onMouseDown={(e) => { e.preventDefault(); onSelectLink("/products?collection=all", "All Products"); setIsOpen(false); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-medium text-[#1A1A1A]"
+                >
+                  🛍️ All Products
+                </button>
+                <button
+                  type="button"
                   onMouseDown={(e) => { e.preventDefault(); setTab("collections"); }}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F5F5] font-medium text-[#1A1A1A] flex items-center justify-between"
                 >
@@ -301,6 +308,7 @@ function LinkPickerInput({
 }
 
 // ─── Main Menus Management Page Component ──────────────────────────────────
+const CORE_SYSTEM_PAGES = new Set(["home", "about", "contact", "products"]);
 export default function CmsMenusPage() {
   const { data: menus, isLoading, refetch } = useAdminCmsMenus();
   const { data: languages = [] } = useAdminLanguages();
@@ -310,7 +318,13 @@ export default function CmsMenusPage() {
   
   const { data: categories = [] } = useAdminCategories();
   const { data: cmsPagesResponse } = useAdminCmsPages();
-  const cmsPages = cmsPagesResponse?.data ?? [];
+  const cmsPages = useMemo(() => {
+    const raw = cmsPagesResponse as { data?: any[] } | any[] | undefined;
+    if (Array.isArray(raw)) return raw;
+    if (raw && Array.isArray(raw.data)) return raw.data;
+    return [];
+  }, [cmsPagesResponse]);
+
   const { data: collectionsResponse } = useAdminCollections({ limit: 200 });
   const collections = collectionsResponse?.data ?? [];
   const { data: blogsResponse } = useAdminBlogs({ limit: 200 });
@@ -318,7 +332,27 @@ export default function CmsMenusPage() {
   const { data: productsResponse } = useAdminProducts({ limit: 200 });
   const products = productsResponse?.data?.items ?? productsResponse?.data ?? [];
 
-  // selectedMenuId === null means we are in the main list view of all menus.
+  const pageStatusMap = useMemo(() => {
+    const map = new Map<string, { status: string; title: string; pageKey: string }>();
+    cmsPages.forEach((p: any) => {
+      if (p.slug) {
+        map.set(`/${p.slug.toLowerCase().trim()}`, {
+          status: p.status ?? "ACTIVE",
+          title: p.title,
+          pageKey: p.pageKey,
+        });
+      }
+      if (p.pageKey) {
+        map.set(`/${p.pageKey.toLowerCase().trim()}`, {
+          status: p.status ?? "ACTIVE",
+          title: p.title,
+          pageKey: p.pageKey,
+        });
+      }
+    });
+    return map;
+  }, [cmsPages]);
+
   const [selectedMenuId, setSelectedMenuId] = useState<string | null>(null);
 
   // Unsaved State Management
@@ -811,6 +845,7 @@ export default function CmsMenusPage() {
               </button>
             </div>
           </div>
+
 
           {/* Shopify Unsaved Changes Black Banner */}
           {unsavedChanges && (

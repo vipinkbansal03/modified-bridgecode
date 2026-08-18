@@ -51,6 +51,15 @@ Organize files properly into `components/`, `pages/`, `layouts/`, `hooks/`, `ser
 Every task/PR must:
 - Pass TypeScript checks with zero errors (`tsc --noEmit`).
 - Pass ESLint checks with zero warnings.
-- Pass production build (`npm run build`).
+- Comply with the Validation Rule:
+  * Do not run `npm run build` after every small change.
+  * Use the lightest appropriate validation for the change:
+    - CSS/style-only changes → manually verify the affected UI.
+    - Small UI/component changes → manually verify + `npx tsc --noEmit` when TypeScript/JSX is affected.
+    - Shared component, API, routing, or architectural changes → run `npx tsc --noEmit` and relevant functional checks.
+    - Major refactors or changes affecting build-time/server-side behavior → run `npm run build`.
+    - Run the full production build before completing a major feature/module migration or before deployment/merge validation.
+  * Avoid running a full production build unnecessarily after minor CSS, layout, text, or isolated UI changes.
 - Remove console logs, unused imports, and dead code.
 - Handle loading, empty, success, and error states.
+

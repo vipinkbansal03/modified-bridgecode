@@ -49,32 +49,19 @@ const ContactCTASection = dynamic(
   { ssr: true }
 );
 
-export const revalidate = 300;
-
+import { fetchCmsPageByKey } from "@/lib/cmsPage";
 
 const staticLocations = homeContent.locations as { subtitle: string; pins: LocationPin[] };
-
-
-async function fetchCmsHomePage(): Promise<CmsPage | null> {
-  try {
-    const apiBase = process.env.API_BASE_URL ?? "http://localhost:4000";
-    const language = (await cookies()).get("language")?.value;
-    const query = language ? `?lang=${encodeURIComponent(language)}` : "";
-    const res = await fetch(`${apiBase}/api/cms/pages/key/home${query}`, { next: { revalidate: 300 } });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json.data ?? null;
-  } catch {
-    return null;
-  }
-}
 
 async function fetchHomepageHeroBanners(countryCode?: string): Promise<HeroSlide[]> {
   try {
     const apiBase = process.env.API_BASE_URL ?? "http://localhost:4000";
     const params = new URLSearchParams({ placement: "HOMEPAGE_HERO" });
     if (countryCode) params.set("countryCode", countryCode);
-    const res = await fetch(`${apiBase}/api/banners?${params.toString()}`, { next: { revalidate: 300 } });
+    const res = await fetch(`${apiBase}/api/banners?${params.toString()}`, {
+      cache: "no-store",
+      next: { revalidate: 0 },
+    });
     if (!res.ok) return [];
     const json = await res.json();
     const banners = (json.data ?? []) as { image: string; title: string; linkText?: string | null; linkUrl?: string | null }[];
@@ -82,8 +69,8 @@ async function fetchHomepageHeroBanners(countryCode?: string): Promise<HeroSlide
       image: banner.image,
       kicker: "Modern Orthodontics",
       title: banner.title,
-      ctaLabel: banner.linkText || "Explore",
-      ctaHref: banner.linkUrl || "/products",
+      ctaLabel: banner.linkText?.trim() || null,
+      ctaHref: banner.linkUrl?.trim() || null,
     }));
   } catch {
     return [];
@@ -93,11 +80,8 @@ async function fetchHomepageHeroBanners(countryCode?: string): Promise<HeroSlide
 function renderCmsHomeSection(section: CmsSection, bannerSlides: HeroSlide[]) {
   if (section.sectionKey === "home.hero") {
     const heroData = { slides: bannerSlides };
-    return [
-      <HeroSection key="home.hero" data={heroData} />,
-    ];
+    return [<HeroSection key="home.hero" data={heroData} />];
   }
-
 
   if (section.sectionKey === "home.about") {
     const transformed = transformAboutIntro(section);
@@ -146,9 +130,7 @@ function renderCmsHomeSection(section: CmsSection, bannerSlides: HeroSlide[]) {
         }
       : homeContent.contactCta;
 
-    return [
-      <ContactCTASection key="home.contactCta" data={contactCtaData} />,
-    ];
+    return [<ContactCTASection key="home.contactCta" data={contactCtaData} />];
   }
 
   return [];
@@ -156,11 +138,15 @@ function renderCmsHomeSection(section: CmsSection, bannerSlides: HeroSlide[]) {
 
 export default async function HomePage() {
   const cookieStore = await cookies();
-  const cms = await fetchCmsHomePage();
+  const cms = await fetchCmsPageByKey("home");
   const bannerSlides = await fetchHomepageHeroBanners(cookieStore.get("country")?.value ?? "IN");
 
   if (cms?.sections?.length) {
-    const renderedSections = cms.sections.flatMap((section) => renderCmsHomeSection(section, bannerSlides));
+    const sortedSections = [...cms.sections]
+      .filter((section) => section.status !== "INACTIVE")
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
+    const renderedSections = sortedSections.flatMap((section) => renderCmsHomeSection(section, bannerSlides));
     if (renderedSections.length > 0) {
       return (
         <>

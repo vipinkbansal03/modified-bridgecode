@@ -3,12 +3,20 @@ import { CmsDetailPageRenderer, buildFallbackDetailRender } from "@/components/c
 import { ManufacturingSection } from "@/components/sections/ManufacturingSection";
 import { ContactCTASection } from "@/components/sections/ContactCTASection";
 import { fetchCmsPageByKey } from "@/lib/cmsPage";
+import { notFound } from "next/navigation";
 import { buildCmsMetadata } from "@/lib/seo";
 import manufacturingContent from "@/data/manufacturing-services.json";
 import homeContent from "@/data/home.json";
 import type { DetailPageContent } from "@/types/common.types";
 
 export async function generateMetadata(): Promise<Metadata> {
+  const cmsPage = await fetchCmsPageByKey("manufacturing");
+  if (!cmsPage) {
+    return {
+      title: "Page Not Found | Modern Orthodontics",
+      robots: { index: false, follow: false },
+    };
+  }
   return buildCmsMetadata("manufacturing", manufacturingContent.seo, "/manufacturing-services");
 }
 
@@ -21,6 +29,9 @@ const manufacturingTeaser = {
 
 export default async function ManufacturingServicesPage() {
   const cmsPage = await fetchCmsPageByKey("manufacturing");
+  if (!cmsPage) {
+    notFound();
+  }
 
   return (
     <>
@@ -34,7 +45,6 @@ export default async function ManufacturingServicesPage() {
             {buildFallbackDetailRender(manufacturingContent as DetailPageContent, "Manufacturing Services")}
           </>
         }
-        manufacturingTeaserFallback={manufacturingTeaser}
       />
       <ContactCTASection data={homeContent.contactCta} />
     </>

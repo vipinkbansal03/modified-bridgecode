@@ -1,75 +1,21 @@
 "use client";
 
-import { useLayoutEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, useToast, LoadingButton } from "@/components/admin/AdminComponents";
-import { useCreateCmsPage } from "@/hooks/admin/useAdminHooks";
 
-function slugify(s: string) {
-  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
-
-export default function CmsPageCreatePage() {
-  const { hasPermission, isLoading: authLoading } = useAdminAuth();
+export default function CreatePageRedirect() {
   const router = useRouter();
-  const { showToast } = useToast();
-  const createPage = useCreateCmsPage();
 
-  useLayoutEffect(() => {
-    if (!authLoading && !hasPermission("cms.create")) {
-      router.replace("/admin/cms/pages");
-    }
-  }, [authLoading, hasPermission, router]);
-
-  const [form, setForm] = useState({ title: "", slug: "", pageKey: "", status: "ACTIVE", seoTitle: "", seoDescription: "" });
-
-  if (authLoading || !hasPermission("cms.create")) {
-    return null;
-  }
-
-  function set(k: string, v: string) {
-    setForm((f) => {
-      const next = { ...f, [k]: v };
-      if (k === "title") { next.slug = slugify(v); next.pageKey = slugify(v); }
-      return next;
-    });
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      const p = await createPage.mutateAsync(form);
-      showToast("Page created.", "success");
-      router.push(`/admin/cms/pages/${(p as { id: string }).id}`);
-    } catch {
-      showToast("Failed to create page.", "error");
-    }
-  }
+  useEffect(() => {
+    router.replace("/admin/cms/pages");
+  }, [router]);
 
   return (
-    <AdminLayout title="Create Page" breadcrumb={[{ label: "Content" }, { label: "Pages", href: "/admin/cms/pages" }, { label: "Create" }]}>
-      <form onSubmit={handleSubmit} className="max-w-2xl space-y-5">
-        <AdminInput label="Title" value={form.title} onChange={(e) => set("title", e.target.value)} required placeholder="e.g. Homepage" />
-        <AdminInput label="Slug" value={form.slug} onChange={(e) => set("slug", e.target.value)} required placeholder="e.g. home" />
-        <AdminInput label="Page Key" value={form.pageKey} onChange={(e) => set("pageKey", e.target.value)} required placeholder="e.g. home (unique identifier)" />
-        <AdminSelect label="Status" value={form.status} onChange={(e) => set("status", e.target.value)} options={[{ value: "ACTIVE", label: "Active" }, { value: "DRAFT", label: "Draft" }, { value: "INACTIVE", label: "Inactive" }]} />
-        <AdminInput label="SEO Title" value={form.seoTitle} onChange={(e) => set("seoTitle", e.target.value)} placeholder="Leave blank to use page title" />
-        <AdminInput label="SEO Description" value={form.seoDescription} onChange={(e) => set("seoDescription", e.target.value)} placeholder="Meta description" />
-
-        <div className="flex gap-3 pt-2">
-          <LoadingButton
-            type="submit"
-            loading={createPage.isPending}
-            loadingText="Creating…"
-            className="bg-brand text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-brand/90 transition-colors"
-          >
-            Create Page
-          </LoadingButton>
-          <button type="button" onClick={() => router.back()} className="px-6 py-2.5 rounded-lg text-sm font-medium border border-gray-200 hover:bg-gray-50 transition-colors">Cancel</button>
-        </div>
-      </form>
-    </AdminLayout>
+    <div className="flex h-screen items-center justify-center bg-[#F8F8F8]">
+      <div className="flex items-center gap-3 text-sm text-[#6B6B6B]">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
+        <span>Redirecting to CMS Overview...</span>
+      </div>
+    </div>
   );
 }

@@ -17,6 +17,7 @@ import {
   buildFooterCopyright,
   buildFooterNewsletterText,
   cmsMenuToFooterColumns,
+  parseFooterSocialLinks,
 } from "@/lib/cmsNavigation";
 import {
   COMPANY_ADDRESS,
@@ -213,8 +214,16 @@ export function Footer() {
   const cmsUsaOfficeColumn = cmsMenuToFooterColumns(footerUsaOfficeMenu);
   const cmsLegalColumn = cmsMenuToFooterColumns(footerLegalMenu);
 
-  const footerColumnsToRender =
-    cmsFooterColumns.length > 0 ? cmsFooterColumns : footerColumns;
+  const hasCmsFooterMenus =
+    footerAboutMenu !== undefined ||
+    footerProductsMenu !== undefined ||
+    footerCapabilitiesMenu !== undefined ||
+    footerDealersMenu !== undefined ||
+    footerResourcesMenu !== undefined;
+
+  const footerColumnsToRender = hasCmsFooterMenus
+    ? cmsFooterColumns
+    : footerColumns;
   const footerContactFallback = buildFooterContactFallback(cmsFooter);
   const footerCopyright = buildFooterCopyright(
     cmsFooter,
@@ -227,7 +236,7 @@ export function Footer() {
   const shouldShowNewsletter = cmsFooter?.newsletterEnabled ?? true;
 
   const exportLinks: FooterLink[] =
-    cmsExportColumn.links.length > 0
+    footerExportMenu !== undefined
       ? cmsExportColumn.links
       : [
           { label: "Export Enquiries", href: "/contact" },
@@ -471,7 +480,10 @@ export function Footer() {
         <div className="flex flex-wrap items-start justify-between gap-9 border-t border-white/20 pt-4">
           <div>
             <SocialLinks
-              social={trackingSettings?.social}
+              social={{
+                ...parseFooterSocialLinks(cmsFooter?.socialLinksJson),
+                ...(trackingSettings?.social ? Object.fromEntries(Object.entries(trackingSettings.social).filter(([_, v]) => Boolean(v))) : {})
+              }}
               className="mb-2.5 flex gap-5 space-x-0"
               linkClassName="text-white hover:text-white/80"
             />
