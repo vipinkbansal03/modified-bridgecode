@@ -37,5 +37,22 @@ export { useBlogs } from "./useBlogs";
 export { useTestimonials } from "./useTestimonials";
 
 export { useWishlist, useWishlistCount, useToggleWishlist, useAddWishlist, useRemoveWishlist } from "./useWishlist";
-export { useNotifications, useMarkNotificationRead, useRegisterNotificationToken, useAdminNotificationsHistory, useDeleteAdminNotification } from "./useNotifications";
+export {
+  useNotifications,
+  useMarkNotificationRead,
+  useRegisterNotificationToken,
+  useAdminNotificationsHistory,
+  useDeleteAdminNotification,
+  useNotificationConfigs,
+  useUpdateNotificationConfig,
+  useNotificationManagerSettings,
+  useUpdateNotificationManagerSettings,
+  useNotificationTemplates,
+  useApprovedWhatsAppTemplates,
+  useUpdateNotificationTemplate,
+  useNotificationLogs,
+  useDeleteNotificationLog,
+  useBulkDeleteNotificationLogs,
+  useNotificationRolesList
+} from "./useNotifications";
 export type { Notification } from "./useNotifications";

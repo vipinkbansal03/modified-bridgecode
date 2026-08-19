@@ -1875,3 +1875,96 @@ model DeviceToken {
   @@map("device_tokens")
 }
 
+model NotificationConfig {
+  id              String   @id @default(cuid())
+  type            String   @unique
+  name            String
+  isEnabled       Boolean  @default(true)
+  targetRoles     String[]
+  channels        Json
+  rolePermissions Json?
+  filters         Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("notification_configs")
+}
+
+model NotificationTemplate {
+  id               String   @id @default(cuid())
+  type             String
+  channel          String
+  subject          String?  @default("")
+  message          String   @db.Text
+  variables        String[]
+  whatsappTemplate Json?
+  role             String   @default("GLOBAL")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([type, channel, role])
+  @@map("notification_templates")
+}
+
+model NotificationLog {
+  id                  String    @id @default(cuid())
+  type                String
+  channel             String
+  to                  String
+  subject             String?   @default("")
+  message             String    @db.Text
+  status              String    @default("QUEUED")
+  provider            String?   @default("")
+  providerReferenceId String?   @default("")
+  jobId               String?   @default("")
+  errorMessage        String?   @db.Text
+  metadata            Json?
+  sentAt              DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@map("notification_logs")
+}
+
+model NotificationManagerSettings {
+  id                  String   @id @default(cuid())
+  key                 String   @unique @default("GLOBAL")
+  masterEnabled       Boolean  @default(true)
+  channelAvailability Json
+  rolePermissions     Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("notification_manager_settings")
+}
+
+model WhatsAppTemplate {
+  id                String    @id @default(cuid())
+  name              String
+  language          String
+  category          String
+  subCategory       String?   @default("")
+  status            String    @default("APPROVED")
+  payload           Json?
+  providerTemplateId String?  @default("")
+  lastSyncedAt      DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([name, language])
+  @@map("whatsapp_templates")
+}
+
+model EmailLayout {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  headerHtml  String   @db.Text
+  footerHtml  String   @db.Text
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("email_layouts")
+}
+
+

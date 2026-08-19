@@ -3,12 +3,14 @@ import app from "./app";
 import { connectDB, prisma } from "./config/database";
 import { logger } from "./config/logger";
 import { initScheduledSync } from "./modules/currencies/currencies.scheduler";
+import { notificationsService } from "./modules/notifications/notifications.service";
 
 const PORT = parseInt(process.env.PORT || "4000", 10);
 
 async function main() {
   await connectDB();
   await initScheduledSync();
+  await notificationsService.initNotificationSystem();
 
   try {
     const { initializeApp } = await import("firebase-admin/app");

@@ -95,7 +95,16 @@ export const sidebarSections: SidebarSection[] = [
       { label: "Inquiries", href: "/admin/contact-submissions", icon: MessageSquare, permission: "contactSubmissions.view" },
       { label: "Newsletter", href: "/admin/newsletter", icon: Newspaper, permission: "contactSubmissions.view" },
       { label: "Roles & Permissions", href: "/admin/roles", icon: Shield, permission: "roles.view" },
-      { label: "Push Notifications", href: "/admin/notifications", icon: Bell, permission: "customers.view" },
+      {
+        label: "Notifications",
+        icon: Bell,
+        permission: "customers.view",
+        subItems: [
+          { label: "History Logs", href: "/admin/notifications" },
+          { label: "Routing Rules", href: "/admin/notifications/manager" },
+          { label: "Message Templates", href: "/admin/notifications/templates" },
+        ],
+      },
     ],
   },
   {
