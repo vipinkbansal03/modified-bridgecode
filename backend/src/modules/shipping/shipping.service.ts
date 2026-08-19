@@ -401,7 +401,7 @@ export async function getAvailableProviders(countryCode: string, orderTotal: num
   estimatedDays: string | null;
 }[]> {
   const country = await prisma.country.findUnique({ where: { code: countryCode } });
-  if (!country) return [];
+  if (!country || country.status === "INACTIVE") return [];
 
   const zones = await prisma.shippingZone.findMany({
     where: { countries: { some: { countryId: country.id } }, status: "ACTIVE", provider: { isEnabled: true } },
@@ -439,7 +439,7 @@ export async function calculateShipping(countryCode: string, orderTotal: number)
   message?: string;
 }> {
   const country = await prisma.country.findUnique({ where: { code: countryCode } });
-  if (!country) {
+  if (!country || country.status === "INACTIVE") {
     return {
       available: false,
       charge: 0,

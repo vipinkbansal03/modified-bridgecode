@@ -173,7 +173,7 @@ export async function confirmUpload(mediaId: string) {
     data: { status: "UPLOADED" },
   });
 
-  if (media.entityType === "PRODUCT" && media.entityId) {
+  if (media.entityType === "PRODUCT" && media.entityId && media.purpose !== "PACKAGE") {
     const existing = await prisma.productMedia.findFirst({
       where: { productId: media.entityId, url: media.url }
     });
@@ -227,7 +227,7 @@ export async function uploadMedia(
     ),
   );
 
-  if (entityType === "PRODUCT" && entityId) {
+  if (entityType === "PRODUCT" && entityId && purpose !== "PACKAGE") {
     await prisma.productMedia.createMany({
       data: createdMedia.map(m => ({
         productId: entityId,

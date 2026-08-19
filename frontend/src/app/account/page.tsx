@@ -99,13 +99,13 @@ export default function AccountPage() {
     setReorderingId(order.id);
     try {
       const cartItems = order.items
-        .filter((item) => item.product?.id && item.variant?.id)
+        .filter((item) => item.product?.id)
         .map((item) => ({
-          variantId: item.variant!.id,
+          variantId: item.variant?.id ?? item.product!.id,
           productId: item.product!.id,
           productSlug: item.product!.slug,
           productTitle: item.product!.title,
-          variantTitle: item.variant!.title,
+          variantTitle: item.variant?.title ?? "",
           sku: item.sku,
           quantity: item.quantity,
           unitPrice: Number(item.unitPrice),

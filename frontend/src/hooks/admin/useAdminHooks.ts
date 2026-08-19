@@ -99,7 +99,16 @@ export const useDeleteProduct = () => {
   return useMutation({
     mutationFn: (id: string) =>
       adminApi.delete(`/products/${id}`).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+      qc.invalidateQueries({ queryKey: ["admin-products-infinite"] });
+      qc.invalidateQueries({ queryKey: ["admin-inventory"] });
+      qc.invalidateQueries({ queryKey: ["admin-inventory-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["admin-inventory-alerts"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+    },
   });
 };
 
@@ -108,7 +117,16 @@ export const useDuplicateProduct = () => {
   return useMutation({
     mutationFn: (id: string) =>
       adminApi.post(`/products/${id}/duplicate`).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+      qc.invalidateQueries({ queryKey: ["admin-products-infinite"] });
+      qc.invalidateQueries({ queryKey: ["admin-inventory"] });
+      qc.invalidateQueries({ queryKey: ["admin-inventory-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["admin-inventory-alerts"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+    },
   });
 };
 
@@ -117,7 +135,16 @@ export const useArchiveProduct = () => {
   return useMutation({
     mutationFn: (id: string) =>
       adminApi.post(`/products/${id}/archive`).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+      qc.invalidateQueries({ queryKey: ["admin-products-infinite"] });
+      qc.invalidateQueries({ queryKey: ["admin-inventory"] });
+      qc.invalidateQueries({ queryKey: ["admin-inventory-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["admin-inventory-alerts"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+    },
   });
 };
 
@@ -126,7 +153,16 @@ export const useRestoreProduct = () => {
   return useMutation({
     mutationFn: (id: string) =>
       adminApi.post(`/products/${id}/restore`).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-products"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+      qc.invalidateQueries({ queryKey: ["admin-products-infinite"] });
+      qc.invalidateQueries({ queryKey: ["admin-inventory"] });
+      qc.invalidateQueries({ queryKey: ["admin-inventory-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["admin-inventory-alerts"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+    },
   });
 };
 
@@ -160,6 +196,12 @@ export const useBulkUpdateProducts = () => {
       qc.invalidateQueries({ queryKey: ["admin-products-infinite"] });
       qc.invalidateQueries({ queryKey: ["admin-product-variants"] });
       qc.invalidateQueries({ queryKey: ["admin-product-countries"] });
+      qc.invalidateQueries({ queryKey: ["admin-inventory"] });
+      qc.invalidateQueries({ queryKey: ["admin-inventory-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["admin-inventory-alerts"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
     },
   });
 };

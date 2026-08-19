@@ -118,7 +118,6 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
   const tabs = [
     { id: "features", label: "Features", icon: CheckCircle2 },
     { id: "description", label: "Description", icon: FileText },
-    { id: "packaging", label: "Packaging", icon: Box },
     { id: "specs", label: "Key Specifications", icon: Layers },
     { id: "usage", label: "Direction To Use", icon: Stethoscope },
     { id: "additional", label: "Additional Info", icon: Info },
@@ -215,54 +214,6 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
           </div>
         )}
 
-        {/* 3. PACKAGING TAB */}
-        {activeTab === "packaging" && (
-          <div className="space-y-4">
-            <h3 className="text-[16px] font-bold text-[#1A1A1A]">Commercial Packages & Packaging Details</h3>
-            {displayedPackages.length > 0 ? (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {displayedPackages.map((pkg) => {
-                  const hasImage = Boolean(pkg.image && pkg.image.trim());
-                  return (
-                    <div key={pkg.id} className="group flex flex-row items-center border border-gray-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden w-full h-28">
-                      {/* Left Image / Placeholder */}
-                      <div className="relative w-32 h-28 bg-gray-50 overflow-hidden border-r border-gray-100 shrink-0">
-                        {hasImage ? (
-                          <img
-                            src={pkg.image!}
-                            alt={pkg.title}
-                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-gray-50/50">
-                            <Box size={32} className="text-gray-300 stroke-[1.5]" />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Right Body / Content */}
-                      <div className="p-4 flex flex-col justify-center flex-grow min-w-0">
-                        {/* Header Row */}
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#FDE8E8] text-[#EF4444]">
-                            <Box size={14} className="stroke-[2]" />
-                          </div>
-                          <h4 className="font-semibold text-gray-900 text-sm md:text-base truncate">{pkg.title}</h4>
-                        </div>
-                        {/* Description */}
-                        <p className="text-xs md:text-sm text-gray-500 mt-1 leading-relaxed line-clamp-2">
-                          {pkg.description || "Available packaging option for commercial and clinical use."}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-[13.5px] text-[#6B7280]">No packaging options available for this product.</p>
-            )}
-          </div>
-        )}
 
         {/* 4. KEY SPECIFICATIONS TAB */}
         {activeTab === "specs" && (

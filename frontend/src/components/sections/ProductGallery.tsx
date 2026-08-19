@@ -56,7 +56,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
       <div className="custom-scrollbar-x order-2 flex gap-2.5 overflow-x-auto pb-2 sm:order-1 sm:flex-col sm:gap-3.5 sm:overflow-visible sm:pb-0">
         {safeImages.map((img: string, i: number) => (
           <button
-            key={img}
+            key={`${img}-${i}`}
             type="button"
             onClick={() => setIndex(i)}
             className={cn(

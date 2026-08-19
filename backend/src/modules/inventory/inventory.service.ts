@@ -623,7 +623,10 @@ export async function setVariantStock(
 
 export async function getLowStockAlerts() {
   return prisma.inventory.findMany({
-    where: { OR: [{ status: "LOW_STOCK" }, { status: "OUT_OF_STOCK" }] },
+    where: {
+      OR: [{ status: "LOW_STOCK" }, { status: "OUT_OF_STOCK" }],
+      product: { deletedAt: null },
+    },
     include: { product: { select: { id: true, title: true, sku: true } }, variant: { include: { product: { select: { id: true, title: true } } } } },
     orderBy: [{ updatedAt: "desc" }],
   });

@@ -38,9 +38,11 @@ import {
   useAdminWarehouses,
   useAdminTiers,
   useUpdateProductFilterVisibility,
+  useReorderAttributeValues,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { cn } from "@/utils/cn";
+import { SortableList } from "@/components/admin/SortableList";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   filterTranslationLanguages,
@@ -66,7 +68,6 @@ const ALL_TABS: TabConfig[] = [
   { id: 0, label: "Basic Info" },
   { id: 1, label: "Product Info" },
   { id: 2, label: "Media" },
-  { id: 3, label: "Packages" },
   { id: 4, label: "Variants", permission: "variants.view" },
   { id: 5, label: "Pricing", permission: "pricing.view" },
   { id: 6, label: "Inventory", permission: "inventory.view" },
@@ -244,12 +245,14 @@ function ProductBaseInventoryEditor({
   onSaved,
   notify,
   disabled = false,
+  hasVariants = false,
 }: {
   productId: string;
   inventory?: NonNullable<VariantRow["inventories"]>[number] | null;
   onSaved: () => Promise<unknown>;
   notify: (message: string, type?: "success" | "error") => void;
   disabled?: boolean;
+  hasVariants?: boolean;
 }) {
   const [stock, setStock] = useState(inventory?.stock ?? 0);
   const [reservedStock, setReservedStock] = useState(inventory?.reservedStock ?? 0);
@@ -275,6 +278,11 @@ function ProductBaseInventoryEditor({
 
   return (
     <div className="rounded-lg border border-[#E6E6E6] bg-white p-4">
+      {hasVariants && (
+        <div className="mb-3 rounded border border-amber-200 bg-amber-50 p-2.5 text-[12px] text-amber-800 font-semibold">
+          This product has variants enabled. Base inventory is managed at the variant level below.
+        </div>
+      )}
       <div className="mb-4">
         <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">Product Base Inventory</h4>
         <p className="mt-1 text-[12px] text-[#6B6B6B]">This inventory is inherited by newly generated variants when no country-specific override applies.</p>
@@ -1788,6 +1796,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const assignProductAttributes = useAssignProductAttributes(productId);
   const removeProductAttribute = useRemoveProductAttribute(productId);
   const updateProductFilterVisibility = useUpdateProductFilterVisibility(productId);
+  const reorderAttributeValues = useReorderAttributeValues();
 
   const translationLanguages = useMemo(() => filterTranslationLanguages(languages), [languages]);
   const activeTranslationLang = translationLanguages.find((lang) => lang.id === translationLanguageId) ?? translationLanguages[0];
@@ -2547,7 +2556,34 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const tierRows = useMemo(() => tiers as TierRow[], [tiers]);
   const countryRows = useMemo(() => countries as { id: string; name: string; code: string }[], [countries]);
   const tierPricingRows = useMemo(() => tierPricingRules as PricingRuleRow[], [tierPricingRules]);
-  const moqPricingRows = useMemo(() => moqPricingRules as PricingRuleRow[], [tierPricingRules]);
+  const moqPricingRows = useMemo(() => moqPricingRules as PricingRuleRow[], [moqPricingRules]);
+
+  const resetTierRuleDraft = () => {
+    setTierRuleDraft({
+      ...emptyRuleDraft,
+      countryIds: countryRows.map((c) => c.id),
+    });
+  };
+
+  const resetMoqRuleDraft = () => {
+    setMoqRuleDraft({
+      ...emptyRuleDraft,
+      countryIds: countryRows.map((c) => c.id),
+    });
+  };
+
+  useEffect(() => {
+    if (countryRows.length > 0) {
+      setTierRuleDraft((d) => ({
+        ...d,
+        countryIds: d.countryIds?.length ? d.countryIds : countryRows.map((c) => c.id),
+      }));
+      setMoqRuleDraft((d) => ({
+        ...d,
+        countryIds: d.countryIds?.length ? d.countryIds : countryRows.map((c) => c.id),
+      }));
+    }
+  }, [countryRows]);
 
   const form = useAdminForm<ProductEditorFormValues>({
     enableReinitialize: true,
@@ -2850,7 +2886,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
   const packageCols: Column<PackageRow>[] = [
     { key: "title", label: "Package" },
-    { key: "slug", label: "Slug" },
     { key: "sortOrder", label: "Sort", render: (row) => row.sortOrder ?? 0 },
     { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status || "ACTIVE"} /> },
     {
@@ -3324,7 +3359,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           createdCount++;
         }
       }
-      setTierRuleDraft(emptyRuleDraft);
+      resetTierRuleDraft();
       showToast(`${createdCount} Tier pricing rule(s) created.`);
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to create tier pricing rule."), "error");
@@ -3348,7 +3383,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           createdCount++;
         }
       }
-      setMoqRuleDraft(emptyRuleDraft);
+      resetMoqRuleDraft();
       showToast(`${createdCount} MOQ pricing rule(s) created.`);
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to create MOQ pricing rule."), "error");
@@ -3400,6 +3435,19 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
   const clearAllNewMappingValues = () => {
     setNewMappingValueIds([]);
+  };
+
+  const handleReorderValues = async (nextValues: any[]) => {
+    if (!selectedMappingAttributeId) return;
+    try {
+      await reorderAttributeValues.mutateAsync({
+        attributeId: selectedMappingAttributeId,
+        items: nextValues.map((v, idx) => ({ id: v.id, sortOrder: idx })),
+      });
+      showToast("Attribute values order updated.");
+    } catch (err) {
+      showToast(getAdminErrorMessage(err, "Failed to update values order."), "error");
+    }
   };
 
   const handleAddProductAttribute = async () => {
@@ -3612,7 +3660,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     try {
       const results = await uploadMediaFiles([file], {
         entityType: "PRODUCT",
-        entityId: productId && productId !== "new" ? productId : undefined
+        entityId: productId && productId !== "new" ? productId : undefined,
+        purpose: "PACKAGE"
       });
       
       const uploaded = results[0];
@@ -3677,9 +3726,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             entityId: productId && productId !== "new" ? productId : undefined
           });
           const mediaIds = results.map(r => r.mediaId).filter(Boolean);
-          if (mediaIds.length > 0) {
+          // Only link manually if the product is new or has no ID yet, as the backend already auto-links existing products
+          const needsManualLink = !productId || productId === "new";
+          if (mediaIds.length > 0 && needsManualLink) {
             await adminApi.post(`/products/${productId}/media`, { mediaIds });
-          } else if (results.length > 0) {
+          } else if (results.length > 0 && needsManualLink) {
             // Fallback for purely local that didn't return mediaIds (though uploadMediaFiles should)
             const formData = new FormData();
             batch.forEach((file) => formData.append("files", file));
@@ -4777,6 +4828,19 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               emptyMessage="No clinical guidelines added yet."
             />
 
+            <AdminSectionTable
+              title="Packages"
+              description="Packages are separate commercial offerings of the same product."
+              addButtonLabel="Add Package"
+              onAdd={() => openPackageModal()}
+              columns={packageCols}
+              data={packageRows}
+              rowKey="id"
+              onRowClick={(row) => openPackageModal(row)}
+              rowTooltip="Click row or edit icon to edit package"
+              emptyMessage="No packages added yet."
+            />
+
             {/* Synced Info Notice */}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/70 p-4 text-[13px] text-blue-900">
               <div className="flex items-center gap-3">
@@ -5108,22 +5172,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 3 && (
-          <div className="p-6 space-y-4">
-            <AdminSectionTable
-              title="Packages"
-              description="Packages are separate commercial offerings of the same product."
-              addButtonLabel="Add Package"
-              onAdd={() => openPackageModal()}
-              columns={packageCols}
-              data={packageRows}
-              rowKey="id"
-              onRowClick={(row) => openPackageModal(row)}
-              rowTooltip="Click row or edit icon to edit package"
-              emptyMessage="No packages added yet."
-            />
-          </div>
-        )}
 
 
 
@@ -6662,6 +6710,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     placeholder="Select countries"
                     allowSelectAll
                     selectAllLabel="All countries"
+                    emptyMeansAll={false}
                   />
                   <AdminMultiSearchableSelect
                     label="Variants"
@@ -6708,6 +6757,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     placeholder="Select countries"
                     allowSelectAll
                     selectAllLabel="All countries"
+                    emptyMeansAll={false}
                   />
                   <AdminMultiSearchableSelect
                     label="Variants"
@@ -6757,7 +6807,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     inventory={baseInventory}
                     onSaved={refetch}
                     notify={showToast}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || product?.hasVariants}
+                    hasVariants={product?.hasVariants}
                   />
                 );
               })()}
@@ -6957,12 +7008,20 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                         </tr>
                       ) : (
                         paginatedVariantGroups.map((group: any, index: number) => {
+                          const isBaseProductRowDisabled = product?.hasVariants && group.variantId === null;
                           return (
-                            <tr key={group.variantId} className="hover:bg-[#FAFAFA] align-middle">
+                            <tr
+                              key={group.variantId}
+                              className={cn(
+                                "hover:bg-[#FAFAFA] align-middle transition-colors",
+                                isBaseProductRowDisabled && "opacity-50 bg-gray-50/75 cursor-not-allowed select-none"
+                              )}
+                            >
                               <td className="px-4 py-3 text-center border-b border-[#E6E6E6] align-middle">
                                 <input
                                   type="checkbox"
                                   checked={group.inventories.every((inv: any) => selectedInvIds.includes(inv.id))}
+                                  disabled={isBaseProductRowDisabled}
                                   onChange={(e: any) => {
                                     const isShift = e.nativeEvent?.shiftKey;
                                     const isChecked = e.target.checked;
@@ -6988,11 +7047,18 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                     }
                                     lastSelectedGroupIndexRef.current = index;
                                   }}
-                                  className="h-4 w-4 accent-[#E31E24]"
+                                  className="h-4 w-4 accent-[#E31E24] disabled:opacity-50 disabled:cursor-not-allowed"
                                 />
                               </td>
                               <td className="px-4 py-3 font-medium text-[#1A1A1A] border-b border-[#E6E6E6] border-r border-[#E6E6E6] align-middle">
-                                <div className="font-semibold text-[#1A1A1A]">{group.variantTitle}</div>
+                                <div className="font-semibold text-[#1A1A1A]">
+                                  {group.variantTitle}
+                                  {isBaseProductRowDisabled && (
+                                    <span className="ml-2 inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-inset ring-amber-600/20">
+                                      Inherited (Variants Active)
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="text-[11.5px] text-[#9A9A9A] mt-0.5">{group.variantSku ? `(${group.variantSku})` : ""}</div>
                               </td>
                               <td className="p-0 text-[#6B6B6B] border-b border-[#E6E6E6] align-middle">
@@ -7020,8 +7086,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                         type="number"
                                         min="0"
                                         defaultValue={stockLevel}
-                                        disabled={isReadOnly}
-                                        className="w-20 rounded border border-[#E6E6E6] px-2 py-0.5 text-center text-[12.5px] outline-none focus:border-[#E31E24]"
+                                        disabled={isReadOnly || isBaseProductRowDisabled}
+                                        className="w-20 rounded border border-[#E6E6E6] px-2 py-0.5 text-center text-[12.5px] outline-none focus:border-[#E31E24] disabled:bg-gray-100 disabled:cursor-not-allowed"
                                         onBlur={async (e) => {
                                           const nextStock = parseInt(e.target.value);
                                           if (isNaN(nextStock) || nextStock < 0) return;
@@ -7091,6 +7157,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                       {inventory.isOverride ? (
                                         <button
                                           type="button"
+                                          disabled={isReadOnly || isBaseProductRowDisabled}
                                           onClick={async () => {
                                             // Safety Check removed per user request: allow deletion even if stock exists.
                                             if (!window.confirm(`Delete assignment for ${inventory.warehouseName}?`)) return;
@@ -7102,7 +7169,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                               showToast(err?.response?.data?.error || "Error removing assignment.", "error");
                                             }
                                           }}
-                                          className="rounded border border-[#F2C9C9] p-1 text-red-600 hover:bg-red-50"
+                                          className="rounded border border-[#F2C9C9] p-1 text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
                                           title="Remove Assignment"
                                         >
                                           <Trash2 size={13} />
@@ -7644,18 +7711,32 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                           </span>
                         </div>
 
-                        <div className="space-y-1.5">
-                          {selectedAttributeValues.map((value) => (
-                            <label key={value.id} className="flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[12.5px]">
-                              <input
-                                type="checkbox"
-                                checked={newMappingValueIds.includes(value.id)}
-                                onChange={() => toggleNewMappingValue(value.id)}
-                                className="h-4 w-4 accent-[#E31E24]"
-                              />
-                              {value.value}
-                            </label>
-                          ))}
+                        <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
+                          <SortableList
+                            className="w-full min-w-0"
+                            rowWidthClassName="w-full min-w-0"
+                            contentClassName="flex-1 min-w-0"
+                            items={selectedAttributeValues}
+                            onReorder={handleReorderValues}
+                            renderItem={(value) => (
+                              <label className="flex flex-1 items-center justify-between gap-2 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[12.5px] cursor-grab active:cursor-grabbing hover:bg-gray-50/50">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={newMappingValueIds.includes(value.id)}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      toggleNewMappingValue(value.id);
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="h-4 w-4 accent-[#E31E24] cursor-pointer"
+                                  />
+                                  <span className="font-medium text-[#1A1A1A]">{value.value}</span>
+                                </div>
+                                <span className="text-[10px] text-gray-400 select-none">Drag to reorder</span>
+                              </label>
+                            )}
+                          />
                         </div>
 
                         <button
@@ -7917,7 +7998,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
       {generateVariantOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="flex h-[92vh] w-full max-w-[1360px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div className="flex h-full max-h-[90vh] w-full max-w-[920px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="shrink-0 border-b border-[#E6E6E6] px-6 py-5 sm:px-7">
               <div className="flex items-start justify-between gap-4">
               <div>
