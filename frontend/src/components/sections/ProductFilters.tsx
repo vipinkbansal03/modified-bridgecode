@@ -75,6 +75,14 @@ export function ProductFilters({ value, onChange, availableAttributeValues = [],
       }
       const existing = group.options.find((o) => o.value === row.value);
       if (!existing) {
+        if (hasConfigFilters) {
+          const configFilter = filterConfig?.attributeFilters.find((af) => af.attributeName === attrName);
+          if (configFilter && configFilter.allowedValueIds && configFilter.allowedValueIds.length > 0 && row.attributeValueId) {
+            if (!configFilter.allowedValueIds.includes(row.attributeValueId)) {
+              continue;
+            }
+          }
+        }
         group.options.push({
           value: row.value,
           attributeValueId: row.attributeValueId,

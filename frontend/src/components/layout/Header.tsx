@@ -129,7 +129,7 @@ export function Header() {
     ? dynamicMegaMenu
     : productMegaGroups.length > 0
     ? productMegaGroups
-    : nav.productMegaMenu;
+    : [];
   const ctaLabel = ctaLink?.label || label(nav.ctaLabel);
   const ctaHref = ctaLink?.href || nav.ctaHref;
   const mobileLinks = [
@@ -329,7 +329,7 @@ export function Header() {
                   className="flex items-center gap-1.5 whitespace-nowrap py-4"
                 >
                   {t("ui.nav.products")}
-                  <ChevronDown size={11} className="opacity-60" />
+                  {productsMegaNav.length > 0 && <ChevronDown size={11} className="opacity-60" />}
                 </Link>
                 <MegaMenu open={megaOpen} groups={productsMegaNav} />
               </li>

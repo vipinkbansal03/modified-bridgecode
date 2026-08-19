@@ -68,7 +68,6 @@ const ALL_TABS: TabConfig[] = [
   { id: 0, label: "Basic Info" },
   { id: 1, label: "Product Info" },
   { id: 2, label: "Media" },
-  { id: 3, label: "Packages" },
   { id: 4, label: "Variants", permission: "variants.view" },
   { id: 5, label: "Pricing", permission: "pricing.view" },
   { id: 6, label: "Inventory", permission: "inventory.view" },
@@ -2887,7 +2886,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
   const packageCols: Column<PackageRow>[] = [
     { key: "title", label: "Package" },
-    { key: "slug", label: "Slug" },
     { key: "sortOrder", label: "Sort", render: (row) => row.sortOrder ?? 0 },
     { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status || "ACTIVE"} /> },
     {
@@ -3662,7 +3660,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     try {
       const results = await uploadMediaFiles([file], {
         entityType: "PRODUCT",
-        entityId: productId && productId !== "new" ? productId : undefined
+        entityId: productId && productId !== "new" ? productId : undefined,
+        purpose: "PACKAGE"
       });
       
       const uploaded = results[0];
@@ -4829,6 +4828,19 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               emptyMessage="No clinical guidelines added yet."
             />
 
+            <AdminSectionTable
+              title="Packages"
+              description="Packages are separate commercial offerings of the same product."
+              addButtonLabel="Add Package"
+              onAdd={() => openPackageModal()}
+              columns={packageCols}
+              data={packageRows}
+              rowKey="id"
+              onRowClick={(row) => openPackageModal(row)}
+              rowTooltip="Click row or edit icon to edit package"
+              emptyMessage="No packages added yet."
+            />
+
             {/* Synced Info Notice */}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/70 p-4 text-[13px] text-blue-900">
               <div className="flex items-center gap-3">
@@ -5160,22 +5172,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 3 && (
-          <div className="p-6 space-y-4">
-            <AdminSectionTable
-              title="Packages"
-              description="Packages are separate commercial offerings of the same product."
-              addButtonLabel="Add Package"
-              onAdd={() => openPackageModal()}
-              columns={packageCols}
-              data={packageRows}
-              rowKey="id"
-              onRowClick={(row) => openPackageModal(row)}
-              rowTooltip="Click row or edit icon to edit package"
-              emptyMessage="No packages added yet."
-            />
-          </div>
-        )}
 
 
 
@@ -8002,7 +7998,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
       {generateVariantOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="flex h-[92vh] w-full max-w-[1360px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div className="flex h-full max-h-[90vh] w-full max-w-[920px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="shrink-0 border-b border-[#E6E6E6] px-6 py-5 sm:px-7">
               <div className="flex items-start justify-between gap-4">
               <div>
