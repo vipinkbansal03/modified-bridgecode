@@ -17,8 +17,20 @@ export type TrackingSettings = {
   cookies: { enabled: boolean; bannerTitle: string; bannerDescription: string; privacyPolicyUrl: string };
   whatsapp: { number: string | null; defaultMessage: string | null; floatingButtonEnabled: boolean };
   social: { facebook: string | null; instagram: string | null; linkedin: string | null; youtube: string | null; twitter: string | null; pinterest: string | null };
-  seo: { defaultTitle: string; defaultDescription: string; defaultKeywords: string | null; ogTitle: string | null; ogDescription: string | null; ogImage: string | null; twitterImage: string | null; canonicalDomain: string | null };
-  general: { siteName: string; siteUrl: string | null; logoUrl: string | null; logoAlt?: string | null; mobileLogoUrl?: string | null; faviconUrl: string | null };
+  general: {
+    siteName: string;
+    siteUrl: string | null;
+    companyName?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    address?: string | null;
+    logoUrl: string | null;
+    logoAlt?: string | null;
+    mobileLogoUrl?: string | null;
+    faviconUrl: string | null;
+    defaultCurrency?: string | null;
+    timezone?: string | null;
+  };
 };
 
 let cachedSettings: TrackingSettings | null = null;

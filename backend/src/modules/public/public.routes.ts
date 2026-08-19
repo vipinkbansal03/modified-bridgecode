@@ -14,6 +14,7 @@ const formLimiter = rateLimit({
 });
 
 // ─── CMS public endpoints ─────────────────────────────────
+router.get("/cms/pages", CMS.publicPagesList);
 router.get("/cms/pages/key/:pageKey", CMS.publicPageByKey);
 router.get("/cms/pages/:slug", CMS.publicPageBySlug);
 router.get("/cms/menus/:location", CMS.publicMenu);

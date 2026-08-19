@@ -108,7 +108,8 @@ function enabled(map: Map<string, { value: string; isEnabled: boolean; isSecret:
   const s = map.get(key);
   if (!s) return false;
   if (s.value === "true") return true;
-  return s.isEnabled;
+  if (s.value === "false") return false;
+  return Boolean(s.isEnabled);
 }
 
 function str(map: Map<string, { value: string; isEnabled: boolean; isSecret: boolean }>, key: string): string | null {
@@ -291,10 +292,16 @@ export async function getPublicTrackingSettings(countryCode?: string) {
     general: {
       siteName: val(m, "general.site_name") || "Modern Orthodontics",
       siteUrl: str(m, "general.site_url"),
+      companyName: val(m, "general.company_name") || "Modern Orthodontics Pvt Ltd",
+      email: str(m, "general.email") || "orders@modortho.com",
+      phone: str(m, "general.phone") || "+91 161 2432024",
+      address: str(m, "general.address") || "2024, Gobind Nagar, Circuit House Road, Ludhiana 141001, India",
       logoUrl: str(m, "general.logo"),
       logoAlt: str(m, "general.logo_alt"),
       mobileLogoUrl: str(m, "general.mobile_logo"),
       faviconUrl: str(m, "general.favicon"),
+      defaultCurrency: str(m, "general.default_currency") || "INR",
+      timezone: str(m, "general.timezone") || "Asia/Kolkata",
     },
   };
 }

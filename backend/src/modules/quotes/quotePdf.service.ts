@@ -14,9 +14,18 @@ function textValue(value: unknown) {
   return String(value);
 }
 
-function formatDate(date: Date | string | null) {
+function formatDate(date: Date | string | null, timeZone = "Asia/Kolkata") {
   if (!date) return "-";
-  return new Intl.DateTimeFormat("en-IN", { year: "numeric", month: "short", day: "2-digit" }).format(new Date(date));
+  try {
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone,
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    }).format(new Date(date));
+  } catch {
+    return new Intl.DateTimeFormat("en-IN", { year: "numeric", month: "short", day: "2-digit" }).format(new Date(date));
+  }
 }
 
 function addRightAmount(doc: PdfDoc, label: string, amount: string, y: number, bold = false) {
@@ -43,10 +52,12 @@ export async function generateQuotePdf(quoteId: string): Promise<Buffer> {
   });
   if (!quote) throw new AppError("Quote not found.", 404);
 
-  const [siteNameSetting, siteUrlSetting] = await Promise.all([
+  const [siteNameSetting, siteUrlSetting, timezoneSetting] = await Promise.all([
     getSettingValue("general.site_name").catch(() => ""),
     getSettingValue("general.site_url").catch(() => ""),
+    getSettingValue("general.timezone").catch(() => "Asia/Kolkata"),
   ]);
+  const timezone = timezoneSetting || "Asia/Kolkata";
   const storeName = process.env.STORE_NAME || siteNameSetting || "Modern Orthodontics";
   const storeAddress = process.env.STORE_ADDRESS || "";
   const storeEmail = process.env.STORE_EMAIL || process.env.EMAIL_FROM || "info@modernortho.com";
@@ -73,9 +84,9 @@ export async function generateQuotePdf(quoteId: string): Promise<Buffer> {
     doc.font("Helvetica-Bold").fontSize(22).fillColor("#E31E24").text("QUOTATION", 360, 50, { width: 180, align: "right" });
     doc.font("Helvetica").fontSize(9).fillColor("#111111");
     doc.text(`Quote #: ${quote.quoteNumber}`, 360, 78, { width: 180, align: "right" });
-    doc.text(`Date: ${formatDate(quote.createdAt)}`, 360, 92, { width: 180, align: "right" });
+    doc.text(`Date: ${formatDate(quote.createdAt, timezone)}`, 360, 92, { width: 180, align: "right" });
     if (quote.expiresAt) {
-      doc.text(`Valid Until: ${formatDate(quote.expiresAt)}`, 360, 106, { width: 180, align: "right" });
+      doc.text(`Valid Until: ${formatDate(quote.expiresAt, timezone)}`, 360, 106, { width: 180, align: "right" });
     }
     doc.text(`Status: ${quote.status}`, 360, 120, { width: 180, align: "right" });
 

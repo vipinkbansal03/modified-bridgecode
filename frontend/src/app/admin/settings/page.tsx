@@ -15,7 +15,7 @@ import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { Logo } from "@/components/ui/Logo";
 import { cn } from "@/utils/cn";
 import { uploadMediaFiles } from "@/utils/uploadMedia";
-import { useAdminCountries } from "@/hooks/admin/useAdminHooks";
+import { useAdminCountries, useAdminCmsPages } from "@/hooks/admin/useAdminHooks";
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
@@ -286,6 +286,41 @@ export default function SettingsPage() {
       }
     }
   }, [countries, selectedCountryCode]);
+
+  const { data: cmsPagesResponse } = useAdminCmsPages();
+
+  const privacyPageOptions = useMemo(() => {
+    const defaultPages = [
+      { label: "Privacy Policy", value: "/privacy-policy" },
+      { label: "Terms & Conditions", value: "/terms-and-conditions" },
+      { label: "Home", value: "/" },
+      { label: "About Us", value: "/about" },
+      { label: "Contact Us", value: "/contact" },
+      { label: "Quality & Certifications", value: "/quality-certifications" },
+      { label: "Manufacturing Services", value: "/manufacturing-services" },
+      { label: "OEM Services", value: "/oem-services" },
+      { label: "Design & Engineering", value: "/design-and-engineering" },
+      { label: "Custom Packaging", value: "/custom-packaging" },
+      { label: "Products Catalog", value: "/products" },
+    ];
+
+    const raw = cmsPagesResponse as { data?: any[] } | any[] | undefined;
+    const cmsPagesArray = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.data) ? raw.data : []);
+
+    const cmsList = cmsPagesArray
+      .filter((p: any) => p && p.slug && p.title)
+      .map((p: any) => ({
+        label: p.title || p.slug,
+        value: p.slug.startsWith("/") ? p.slug : `/${p.slug}`,
+      }));
+
+    const map = new Map<string, string>();
+    [...defaultPages, ...cmsList].forEach((opt) => {
+      if (!map.has(opt.value)) map.set(opt.value, opt.label);
+    });
+
+    return Array.from(map.entries()).map(([value, label]) => ({ label, value }));
+  }, [cmsPagesResponse]);
 
   const [settings, setSettings] = useState<SettingMap>({});
   const [loginSlides, setLoginSlides] = useState<LoginSlide[]>(DEFAULT_LOGIN_SLIDES);
@@ -565,112 +600,181 @@ export default function SettingsPage() {
 
             {/* ── General ── */}
             {activeTab === "general" && (
-              <div className="space-y-4">
-                <FieldRow label="Website Name"><AdminInput value={g("general.site_name")} onChange={(e) => set("general.site_name", e.target.value)} placeholder="Modern Orthodontics" /></FieldRow>
-                <FieldRow label="Website URL"><AdminInput value={g("general.site_url")} onChange={(e) => set("general.site_url", e.target.value)} placeholder="https://modortho.com" /></FieldRow>
-                <FieldRow label="Company Name"><AdminInput value={g("general.company_name")} onChange={(e) => set("general.company_name", e.target.value)} /></FieldRow>
-                <FieldRow label="Contact Email"><AdminInput type="email" value={g("general.email")} onChange={(e) => set("general.email", e.target.value)} /></FieldRow>
-                <FieldRow label="Phone"><AdminInput value={g("general.phone")} onChange={(e) => set("general.phone", e.target.value)} /></FieldRow>
-                <FieldRow label="Address"><AdminTextarea value={g("general.address")} onChange={(e) => set("general.address", e.target.value)} rows={2} /></FieldRow>
+              <div className="space-y-6">
+                <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
+                  Manage core website identity, canonical domain URL, brand logos, favicon, and customer support contact details.
+                </div>
 
-                {/* ── Logo & Branding Section ── */}
-                <div className="my-6 rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5 space-y-4">
-                  <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
-                    <div>
-                      <h4 className="text-[14.5px] font-bold text-[#1A1A1A]">Storefront Logo & Branding</h4>
-                      <p className="text-[12px] text-[#6B7280]">Manage desktop and mobile header logos, alt text, and fallback behavior.</p>
-                    </div>
-                    {(g("general.logo") || g("general.mobile_logo")) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          set("general.logo", "");
-                          set("general.mobile_logo", "");
-                          showToast("Logo reset to static SVG/text fallback.", "info");
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-[#E5E7EB] bg-white px-3 py-1.5 text-xs font-semibold text-[#E31E24] shadow-2xs hover:bg-[#FEF2F2]"
-                      >
-                        <RefreshCw size={13} /> Reset to Default Fallback
-                      </button>
-                    )}
+                {/* Card 1: Storefront Identity & Branding */}
+                <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-xs space-y-5">
+                  <div className="border-b border-[#E5E7EB] pb-3">
+                    <h3 className="text-[15px] font-bold text-[#1A1A1A]">
+                      Storefront Identity & Branding
+                    </h3>
+                    <p className="text-[12px] text-[#6B7280]">
+                      Configure public website identity, canonical URLs, header/footer logos, and browser favicon.
+                    </p>
                   </div>
 
-                  {isLogoDirty ? (
-                    <div className="flex items-center gap-2 rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3.5 py-2 text-xs text-[#92400E]">
-                      <AlertCircle size={15} className="shrink-0 text-[#D97706]" />
-                      <span>Unsaved logo changes. Click <strong>Save Settings</strong> at the top right to publish your changes live to the website.</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 rounded-md border border-[#BBF7D0] bg-[#F0FDF4] px-3.5 py-2 text-xs text-[#166534]">
-                      <CheckCircle2 size={15} className="shrink-0 text-[#16A34A]" />
-                      <span>Storefront logo settings are saved and active on the website.</span>
-                    </div>
-                  )}
-
-                  {/* Logo Live Previews */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-                    <div className="rounded-lg border border-[#E5E7EB] bg-white p-3.5 shadow-2xs">
-                      <span className="block text-[11px] font-semibold uppercase tracking-wider text-[#6B7280] mb-2">Desktop Header Preview</span>
-                      <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-[#D1D5DB] bg-[#FAFAFA] p-2">
-                        <Logo src={g("general.logo")} alt={g("general.logo_alt") || g("general.site_name")} />
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg border border-[#E5E7EB] bg-white p-3.5 shadow-2xs">
-                      <span className="block text-[11px] font-semibold uppercase tracking-wider text-[#6B7280] mb-2">Mobile Header Preview</span>
-                      <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-[#D1D5DB] bg-[#FAFAFA] p-2">
-                        <Logo src={g("general.logo")} mobileSrc={g("general.mobile_logo")} alt={g("general.logo_alt") || g("general.site_name")} isMobile />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Desktop Logo Upload & Input */}
-                  <FieldRow label="Desktop Logo URL" hint="Full URL or /uploads/... path">
-                    <div className="flex items-center gap-2">
-                      <AdminInput
-                        value={g("general.logo")}
-                        onChange={(e) => set("general.logo", e.target.value)}
-                        placeholder="e.g. /uploads/modortho/branding/logo.png"
-                      />
-                      <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-xs font-semibold text-[#374151] shadow-2xs hover:bg-[#F9FAFB]">
-                        <Upload size={14} />
-                        <span>{uploadingKey === "general.logo" ? "Uploading…" : "Upload"}</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => void handleSettingImageUpload("general.logo", e)}
-                          disabled={Boolean(uploadingKey)}
-                        />
-                      </label>
-                    </div>
-                  </FieldRow>
-
-                  {/* Logo Alt Text */}
-                  <FieldRow label="Logo Alt Text" hint="Alternative text for accessibility & SEO">
+                  <FieldRow label="Website Name" hint="Live browser tab title suffix, OpenGraph site identity, and brand alt text">
                     <AdminInput
-                      value={g("general.logo_alt")}
-                      onChange={(e) => set("general.logo_alt", e.target.value)}
+                      value={g("general.site_name")}
+                      onChange={(e) => set("general.site_name", e.target.value)}
                       placeholder="Modern Orthodontics"
                     />
                   </FieldRow>
 
-                  {/* Mobile Logo Upload & Input */}
-                  <FieldRow label="Mobile Logo URL (Optional)" hint="Leave blank to use desktop logo on mobile header">
-                    <div className="flex items-center gap-2">
+                  <FieldRow label="Website URL" hint="Canonical site address for sitemaps and share links">
+                    <AdminInput
+                      value={g("general.site_url")}
+                      onChange={(e) => set("general.site_url", e.target.value)}
+                      placeholder="https://modortho.com"
+                    />
+                  </FieldRow>
+
+                  {/* ── Logo & Branding Section ── */}
+                  <div className="rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-5 space-y-4">
+                    <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
+                      <div>
+                        <h4 className="text-[14px] font-bold text-[#1A1A1A]">Header & Footer Brand Logos</h4>
+                        <p className="text-[12px] text-[#6B7280]">Manage desktop and mobile logos rendered across the storefront.</p>
+                      </div>
+                      {(g("general.logo") || g("general.mobile_logo")) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            set("general.logo", "");
+                            set("general.mobile_logo", "");
+                            showToast("Logo reset to static SVG/text fallback.", "info");
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-[#E5E7EB] bg-white px-3 py-1.5 text-xs font-semibold text-[#E31E24] shadow-2xs hover:bg-[#FEF2F2]"
+                        >
+                          <RefreshCw size={13} /> Reset to Default Fallback
+                        </button>
+                      )}
+                    </div>
+
+                    {isLogoDirty ? (
+                      <div className="flex items-center gap-2 rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3.5 py-2 text-xs text-[#92400E]">
+                        <AlertCircle size={15} className="shrink-0 text-[#D97706]" />
+                        <span>Unsaved logo changes. Click <strong>Save Settings</strong> at the top right to publish your changes live to the website.</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 rounded-md border border-[#BBF7D0] bg-[#F0FDF4] px-3.5 py-2 text-xs text-[#166534]">
+                        <CheckCircle2 size={15} className="shrink-0 text-[#16A34A]" />
+                        <span>Storefront logo settings are saved and active on the website.</span>
+                      </div>
+                    )}
+
+                    {/* Logo Live Previews */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                      <div className="rounded-lg border border-[#E5E7EB] bg-white p-3.5 shadow-2xs">
+                        <span className="block text-[11px] font-semibold uppercase tracking-wider text-[#6B7280] mb-2">Desktop Header Preview</span>
+                        <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-[#D1D5DB] bg-[#FAFAFA] p-2">
+                          <Logo src={g("general.logo")} alt={g("general.logo_alt") || g("general.site_name")} />
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border border-[#E5E7EB] bg-white p-3.5 shadow-2xs">
+                        <span className="block text-[11px] font-semibold uppercase tracking-wider text-[#6B7280] mb-2">Mobile Header Preview</span>
+                        <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-[#D1D5DB] bg-[#FAFAFA] p-2">
+                          <Logo src={g("general.logo")} mobileSrc={g("general.mobile_logo")} alt={g("general.logo_alt") || g("general.site_name")} isMobile />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Desktop Logo Upload & Input */}
+                    <FieldRow label="Desktop Logo URL" hint="Full URL or /uploads/... path">
+                      <div className="flex items-center gap-2">
+                        <AdminInput
+                          value={g("general.logo")}
+                          onChange={(e) => set("general.logo", e.target.value)}
+                          placeholder="e.g. /uploads/modortho/branding/logo.png"
+                        />
+                        <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-xs font-semibold text-[#374151] shadow-2xs hover:bg-[#F9FAFB]">
+                          <Upload size={14} />
+                          <span>{uploadingKey === "general.logo" ? "Uploading…" : "Upload"}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => void handleSettingImageUpload("general.logo", e)}
+                            disabled={Boolean(uploadingKey)}
+                          />
+                        </label>
+                      </div>
+                    </FieldRow>
+
+                    {/* Logo Alt Text */}
+                    <FieldRow label="Logo Alt Text" hint="Alternative text for accessibility & SEO">
                       <AdminInput
-                        value={g("general.mobile_logo")}
-                        onChange={(e) => set("general.mobile_logo", e.target.value)}
-                        placeholder="e.g. /uploads/modortho/branding/mobile-logo.png"
+                        value={g("general.logo_alt")}
+                        onChange={(e) => set("general.logo_alt", e.target.value)}
+                        placeholder="Modern Orthodontics"
                       />
+                    </FieldRow>
+
+                    {/* Mobile Logo Upload & Input */}
+                    <FieldRow label="Mobile Logo URL (Optional)" hint="Leave blank to use desktop logo on mobile header">
+                      <div className="flex items-center gap-2">
+                        <AdminInput
+                          value={g("general.mobile_logo")}
+                          onChange={(e) => set("general.mobile_logo", e.target.value)}
+                          placeholder="e.g. /uploads/modortho/branding/mobile-logo.png"
+                        />
+                        <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-xs font-semibold text-[#374151] shadow-2xs hover:bg-[#F9FAFB]">
+                          <Upload size={14} />
+                          <span>{uploadingKey === "general.mobile_logo" ? "Uploading…" : "Upload"}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => void handleSettingImageUpload("general.mobile_logo", e)}
+                            disabled={Boolean(uploadingKey)}
+                          />
+                        </label>
+                      </div>
+                    </FieldRow>
+                  </div>
+
+                  {/* Favicon URL */}
+                  <FieldRow label="Favicon URL" hint="Browser tab icon image (.ico, .png, .svg). When blank, defaults to standard red MO icon.">
+                    <div className="flex items-center gap-3">
+                      {g("general.favicon") ? (
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-1.5 shadow-2xs" title="Custom Favicon Preview">
+                          <img src={g("general.favicon")} alt="Favicon Preview" className="h-full w-full object-contain" />
+                        </div>
+                      ) : (
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#E31E24] text-white font-bold text-xs shadow-2xs select-none" title="Default System Favicon (MO)">
+                          MO
+                        </div>
+                      )}
+                      <AdminInput
+                        value={g("general.favicon")}
+                        onChange={(e) => set("general.favicon", e.target.value)}
+                        placeholder="Default: Standard MO Icon (/icon)"
+                      />
+                      {g("general.favicon") && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            set("general.favicon", "");
+                            showToast("Favicon reset to default MO icon.", "info");
+                          }}
+                          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#E5E7EB] bg-white px-2.5 py-2 text-xs font-semibold text-[#E31E24] shadow-2xs hover:bg-[#FEF2F2]"
+                          title="Reset to default MO icon"
+                        >
+                          <RefreshCw size={13} />
+                        </button>
+                      )}
                       <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-xs font-semibold text-[#374151] shadow-2xs hover:bg-[#F9FAFB]">
                         <Upload size={14} />
-                        <span>{uploadingKey === "general.mobile_logo" ? "Uploading…" : "Upload"}</span>
+                        <span>{uploadingKey === "general.favicon" ? "Uploading…" : "Upload"}</span>
                         <input
                           type="file"
-                          accept="image/*"
+                          accept="image/*,.ico"
                           className="hidden"
-                          onChange={(e) => void handleSettingImageUpload("general.mobile_logo", e)}
+                          onChange={(e) => void handleSettingImageUpload("general.favicon", e)}
                           disabled={Boolean(uploadingKey)}
                         />
                       </label>
@@ -678,21 +782,90 @@ export default function SettingsPage() {
                   </FieldRow>
                 </div>
 
-                <FieldRow label="Favicon URL"><AdminInput value={g("general.favicon")} onChange={(e) => set("general.favicon", e.target.value)} /></FieldRow>
-                <FieldRow label="Default Currency">
-                  <AdminSelect value={g("general.default_currency")} onChange={(e) => set("general.default_currency", e.target.value)}
-                    options={[{ value: "INR", label: "INR — Indian Rupee" }, { value: "USD", label: "USD — US Dollar" }, { value: "EUR", label: "EUR — Euro" }, { value: "GBP", label: "GBP — British Pound" }]} />
-                </FieldRow>
-                <FieldRow label="Timezone">
-                  <AdminSelect value={g("general.timezone")} onChange={(e) => set("general.timezone", e.target.value)}
-                    options={[{ value: "Asia/Kolkata", label: "Asia/Kolkata (IST)" }, { value: "UTC", label: "UTC" }, { value: "America/New_York", label: "America/New_York (EST)" }]} />
-                </FieldRow>
+                {/* Card 2: Corporate & Contact Details */}
+                <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-xs space-y-4">
+                  <div className="border-b border-[#E5E7EB] pb-3">
+                    <h3 className="text-[15px] font-bold text-[#1A1A1A]">
+                      Corporate & Contact Details
+                    </h3>
+                    <p className="text-[12px] text-[#6B7280]">
+                      Global corporate headquarters contact details. Automatically displayed on the Contact Us page (<span className="font-mono text-[11px]">/contact</span>), Storefront Footer, and generated Invoice/Quote PDFs.
+                    </p>
+                  </div>
+
+                  <FieldRow label="Company Legal Name" hint="Corporate entity name displayed in invoices, receipts, and legal copyright">
+                    <AdminInput
+                      value={g("general.company_name")}
+                      onChange={(e) => set("general.company_name", e.target.value)}
+                      placeholder="Modern Orthodontics Pvt Ltd"
+                    />
+                  </FieldRow>
+
+                  <FieldRow label="Primary Contact Email" hint="Default email for inquiries and customer contact">
+                    <AdminInput
+                      type="email"
+                      value={g("general.email")}
+                      onChange={(e) => set("general.email", e.target.value)}
+                      placeholder="orders@modortho.com"
+                    />
+                  </FieldRow>
+
+                  <FieldRow label="Primary Contact Phone" hint="Main corporate phone number">
+                    <AdminInput
+                      value={g("general.phone")}
+                      onChange={(e) => set("general.phone", e.target.value)}
+                      placeholder="+91 161 2432024"
+                    />
+                  </FieldRow>
+
+                  <FieldRow label="Registered Company Address" hint="Official headquarters address">
+                    <AdminTextarea
+                      value={g("general.address")}
+                      onChange={(e) => set("general.address", e.target.value)}
+                      rows={2}
+                      placeholder="2024, Gobind Nagar, Circuit House Road, Ludhiana 141001, India"
+                    />
+                  </FieldRow>
+                </div>
+
+                {/* Card 3: System Timezone & Localization */}
+                <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-xs space-y-4">
+                  <div className="border-b border-[#E5E7EB] pb-3">
+                    <h3 className="text-[15px] font-bold text-[#1A1A1A]">
+                      System Timezone & Localization
+                    </h3>
+                    <p className="text-[12px] text-[#6B7280]">
+                      Server timezone for timestamps, scheduling, activity logs, and financial exports.
+                    </p>
+                  </div>
+
+                  <FieldRow label="System Timezone" hint="Server operating timezone for admin logs and scheduling">
+                    <AdminSelect
+                      value={g("general.timezone")}
+                      onChange={(e) => set("general.timezone", e.target.value)}
+                      options={[
+                        { value: "Asia/Kolkata", label: "Asia/Kolkata (IST — UTC+5:30)" },
+                        { value: "UTC", label: "UTC (Coordinated Universal Time)" },
+                        { value: "America/New_York", label: "America/New_York (EST — UTC-5:00)" },
+                        { value: "Europe/London", label: "Europe/London (GMT/BST)" },
+                      ]}
+                    />
+                  </FieldRow>
+
+                  <div className="rounded-lg border border-gray-100 bg-[#F9FAFB] p-3 text-[12px] text-[#6B7280]">
+                    💡 Regional currencies, live exchange rates, and base currencies are managed under <Link href="/admin/currencies" className="font-medium text-[#0F6CBD] underline hover:text-[#0c4a80]">Admin → Currencies</Link>. Default storefront countries and mappings are managed under <Link href="/admin/countries" className="font-medium text-[#0F6CBD] underline hover:text-[#0c4a80]">Admin → Countries</Link>.
+                  </div>
+                </div>
               </div>
             )}
 
             {/* ── SEO ── */}
             {activeTab === "seo" && (
               <div>
+                <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
+                  Configure global search engine optimization (SEO), OpenGraph social preview cards, XML sitemaps, and robots.txt crawling rules.
+                </div>
+
                 <FieldRow label="Default Meta Title" hint="Shown in browser tab and search results"><AdminInput value={g("seo.default_title")} onChange={(e) => set("seo.default_title", e.target.value)} /></FieldRow>
                 <FieldRow label="Default Meta Description"><AdminTextarea value={g("seo.default_description")} onChange={(e) => set("seo.default_description", e.target.value)} rows={3} /></FieldRow>
                 <FieldRow label="Default Keywords"><AdminInput value={g("seo.default_keywords")} onChange={(e) => set("seo.default_keywords", e.target.value)} placeholder="orthodontic, brackets, wires" /></FieldRow>
@@ -707,16 +880,50 @@ export default function SettingsPage() {
                 <div className="mt-4 border-t border-[#F4F4F4] pt-4">
                   <div className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">Sitemap Configuration</div>
                   {([
-                    { key: "seo.sitemap_include_products",   label: "Include Products" },
-                    { key: "seo.sitemap_include_categories", label: "Include Categories" },
-                    { key: "seo.sitemap_include_blogs",      label: "Include Blogs" },
-                    { key: "seo.sitemap_include_cms_pages",  label: "Include CMS Pages" },
-                  ] as const).map((item) => (
-                    <div key={item.key} className="flex items-center justify-between py-2.5 border-b border-[#F4F4F4] last:border-0">
-                      <span className="text-[13.5px] text-[#444]">{item.label}</span>
-                      <Toggle value={b(item.key)} onChange={(v) => tog(item.key, v)} />
-                    </div>
-                  ))}
+                    {
+                      key: "seo.sitemap_include_products",
+                      label: "Include Products",
+                      hint: "Adds all active product detail URLs (/products/:slug) to /sitemap.xml for Google indexing.",
+                    },
+                    {
+                      key: "seo.sitemap_include_categories",
+                      label: "Include Categories",
+                      hint: "Adds public catalog category collection URLs (/products?category=:slug) to the sitemap.",
+                    },
+                    {
+                      key: "seo.sitemap_include_blogs",
+                      label: "Include Blogs",
+                      hint: "Adds all published articles and educational blogs (/blog/:slug) to the sitemap.",
+                    },
+                    {
+                      key: "seo.sitemap_include_cms_pages",
+                      label: "Include CMS Pages",
+                      hint: "Adds all active CMS pages (/about, /contact, /quality-certifications, etc.) to the sitemap.",
+                    },
+                  ] as const).map((item) => {
+                    const isEnabled = b(item.key);
+                    return (
+                      <div key={item.key} className="flex items-center justify-between py-3 border-b border-[#F4F4F4] last:border-0">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[13.5px] font-medium text-[#1A1A1A]">{item.label}</span>
+                            <span
+                              className={cn(
+                                "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
+                                isEnabled
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  : "bg-gray-100 text-gray-600 border border-gray-200"
+                              )}
+                            >
+                              {isEnabled ? "Included in /sitemap.xml" : "Excluded from sitemap"}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-[12px] text-[#6B7280]">{item.hint}</p>
+                        </div>
+                        <Toggle value={isEnabled} onChange={(v) => tog(item.key, v)} />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -724,6 +931,10 @@ export default function SettingsPage() {
             {/* ── Analytics ── */}
             {activeTab === "analytics" && (
               <div className="space-y-5">
+                <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
+                  Connect Google Analytics, GTM, Clarity, and Hotjar to track website visitors, view behavior heatmaps, and monitor customer traffic.
+                </div>
+
                 <IntegrationCard title="Google Analytics 4" subtitle="Track page views, events, and conversions" enabled={b("analytics.ga4_enabled")} onToggle={(v) => tog("analytics.ga4_enabled", v)}>
                   <AdminInput label="Measurement ID" value={g("analytics.ga4_measurement_id")} onChange={(e) => set("analytics.ga4_measurement_id", e.target.value)} placeholder="G-XXXXXXXXXX" />
                 </IntegrationCard>
@@ -749,6 +960,10 @@ export default function SettingsPage() {
             {/* ── Pixels ── */}
             {activeTab === "pixels" && (
               <div className="space-y-5">
+                <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
+                  Connect ad tracking pixels (Meta, LinkedIn, Twitter/X, TikTok, Pinterest) to measure ad conversions and run retargeting campaigns.
+                </div>
+
                 <IntegrationCard title="Meta (Facebook) Pixel" subtitle="Track website visitors for retargeting and ad conversion" enabled={b("pixels.meta_pixel_enabled")} onToggle={(v) => tog("pixels.meta_pixel_enabled", v)}>
                   <AdminInput label="Pixel ID" value={g("pixels.meta_pixel_id")} onChange={(e) => set("pixels.meta_pixel_id", e.target.value)} placeholder="123456789012345" />
                 </IntegrationCard>
@@ -782,6 +997,10 @@ export default function SettingsPage() {
             {/* ── Social Media ── */}
             {activeTab === "social" && (
               <div>
+                <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
+                  Connect official brand social channels (Facebook, Instagram, LinkedIn, YouTube, X, Pinterest) per country with automatic global fallback.
+                </div>
+
                 {countries.length > 0 && (
                   <div className="mb-6 space-y-4">
                     {defaultCountry && (
@@ -837,7 +1056,10 @@ export default function SettingsPage() {
             {/* ── Verification ── */}
             {activeTab === "verification" && (
               <div>
-                <p className="mb-4 text-[13px] text-[#8B8B8B]">These values are injected as <code className="bg-gray-100 px-1 rounded text-[11px]">&lt;meta&gt;</code> tags automatically into every page.</p>
+                <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
+                  Prove domain ownership to search engines and platforms (Google Search Console, Bing, Facebook, Pinterest) to activate indexing and security.
+                </div>
+
                 <FieldRow label="Google Search Console" hint="google-site-verification content value">
                   <AdminInput value={g("verification.google")} onChange={(e) => set("verification.google", e.target.value)} placeholder="xxxxxxxxxxxxx" />
                 </FieldRow>
@@ -859,13 +1081,14 @@ export default function SettingsPage() {
             {/* ── Custom Scripts ── */}
             {activeTab === "scripts" && (
               <div>
-                <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] text-amber-700">
-                  Scripts are injected as-is on every page. Only add code from trusted sources.
+                <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
+                  Paste custom JavaScript codes or third-party widgets (such as Live Chat, A/B testing, or surveys) to inject them into the website.
                 </div>
-                <FieldRow label="Header Scripts" hint="Injected via next/script afterInteractive strategy">
+
+                <FieldRow label="Header Scripts" hint="Injected into page header (afterInteractive) — best for A/B testing & custom tracking">
                   <AdminTextarea value={g("scripts.header")} onChange={(e) => set("scripts.header", e.target.value)} rows={8} placeholder="// e.g. custom pixels, A/B testing, Optimize" />
                 </FieldRow>
-                <FieldRow label="Footer Scripts" hint="Injected lazily (lazyOnload) — good for chat widgets">
+                <FieldRow label="Footer Scripts" hint="Injected at page bottom (lazyOnload) — best for Live Chat & Support widgets">
                   <AdminTextarea value={g("scripts.footer")} onChange={(e) => set("scripts.footer", e.target.value)} rows={8} placeholder="// e.g. live chat, support widgets" />
                 </FieldRow>
               </div>
@@ -874,6 +1097,10 @@ export default function SettingsPage() {
             {/* ── Cookie Consent ── */}
             {activeTab === "cookies" && (
               <div>
+                <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
+                  Enable a GDPR & CCPA compliant cookie notice for visitors. If a visitor clicks Reject, analytics and tracking scripts are automatically blocked.
+                </div>
+
                 <FieldRow label="Enable Cookie Banner">
                   <div className="flex items-center gap-3">
                     <Toggle value={b("cookies.enabled")} onChange={(v) => tog("cookies.enabled", v)} />
@@ -886,8 +1113,12 @@ export default function SettingsPage() {
                 <FieldRow label="Banner Description">
                   <AdminTextarea value={g("cookies.banner_description")} onChange={(e) => set("cookies.banner_description", e.target.value)} rows={3} />
                 </FieldRow>
-                <FieldRow label="Privacy Policy URL">
-                  <AdminInput value={g("cookies.privacy_policy_url")} onChange={(e) => set("cookies.privacy_policy_url", e.target.value)} placeholder="/privacy-policy" />
+                <FieldRow label="Privacy Policy Page" hint="Select the legal privacy page linked inside the banner">
+                  <AdminSelect
+                    value={g("cookies.privacy_policy_url") || "/privacy-policy"}
+                    onChange={(e) => set("cookies.privacy_policy_url", e.target.value)}
+                    options={privacyPageOptions}
+                  />
                 </FieldRow>
               </div>
             )}
@@ -1104,17 +1335,35 @@ export default function SettingsPage() {
             {/* ── WhatsApp ── */}
             {activeTab === "whatsapp" && (
               <div>
+                <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
+                  Enable a floating WhatsApp chat button on the website to let prospective doctors and distributors contact your sales team directly.
+                </div>
+
                 <FieldRow label="Show Floating Button">
                   <div className="flex items-center gap-3">
                     <Toggle value={b("whatsapp.floating_button_enabled")} onChange={(v) => tog("whatsapp.floating_button_enabled", v)} />
-                    <span className="text-[13px] text-[#6B6B6B]">{b("whatsapp.floating_button_enabled") ? "Green button visible on all pages" : "Button hidden"}</span>
+                    <span className="text-[13px] text-[#6B6B6B]">
+                      {b("whatsapp.floating_button_enabled")
+                        ? g("whatsapp.number").trim()
+                          ? "Green button visible on all pages"
+                          : "Enabled (requires Business Mobile Number below to display)"
+                        : "Button hidden"}
+                    </span>
                   </div>
                 </FieldRow>
-                <FieldRow label="WhatsApp Number" hint="Include country code, digits only. E.g. 919876543210">
+
+                {b("whatsapp.floating_button_enabled") && !g("whatsapp.number").trim() && (
+                  <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-[12.5px] leading-relaxed text-amber-800 flex items-center gap-2">
+                    <AlertCircle size={15} className="shrink-0 text-amber-600" />
+                    <span>Please enter your <strong>Business Mobile Number</strong> below so the button knows which phone receives customer chats.</span>
+                  </div>
+                )}
+
+                <FieldRow label="Business Mobile Number" hint="Enter phone number with country code (e.g. 919876543210). Customers will chat directly with this number.">
                   <AdminInput value={g("whatsapp.number")} onChange={(e) => set("whatsapp.number", e.target.value)} placeholder="919876543210" />
                 </FieldRow>
-                <FieldRow label="Default Message" hint="Pre-filled message when visitor opens WhatsApp">
-                  <AdminTextarea value={g("whatsapp.default_message")} onChange={(e) => set("whatsapp.default_message", e.target.value)} rows={2} />
+                <FieldRow label="Default Chat Greeting" hint="Optional pre-filled message that appears in the customer's chat box when they click the button">
+                  <AdminTextarea value={g("whatsapp.default_message")} onChange={(e) => set("whatsapp.default_message", e.target.value)} rows={2} placeholder="Hi Modern Orthodontics, I would like to inquire about your products." />
                 </FieldRow>
               </div>
             )}
@@ -1122,7 +1371,10 @@ export default function SettingsPage() {
             {/* ── Email / SMTP ── */}
             {activeTab === "email" && (
               <div>
-                <p className="mb-4 text-[13px] text-[#8B8B8B]">Used for transactional emails. SMTP password is AES-256-GCM encrypted at rest — never exposed to the frontend.</p>
+                <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
+                  Configure outgoing mail server (SMTP) credentials for automated transactional emails (order invoices, RFQs, notifications). Passwords are encrypted at rest.
+                </div>
+
                 <FieldRow label="SMTP Host">
                   <AdminInput value={g("email.smtp_host")} onChange={(e) => set("email.smtp_host", e.target.value)} placeholder="smtp.gmail.com" />
                 </FieldRow>
@@ -1147,7 +1399,10 @@ export default function SettingsPage() {
             {/* ── Tax & Compliance ── */}
             {activeTab === "tax" && (
               <div>
-                <p className="mb-4 text-[13px] text-[#8B8B8B]">Manage corporate tax registration numbers and fulfillment warehouse origin details.</p>
+                <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
+                  Manage seller legal identity, corporate GSTIN / IEC registrations, and fulfillment warehouse state for dynamic tax invoices.
+                </div>
+
                 <FieldRow label="Seller Legal Name">
                   <AdminInput value={g("tax.seller_name")} onChange={(e) => set("tax.seller_name", e.target.value)} placeholder="Modern Orthodontics Pvt Ltd" />
                 </FieldRow>

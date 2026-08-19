@@ -125,6 +125,10 @@ export const deleteMenuItem = asyncHandler(async (req: AuthRequest, res: Respons
 
 // ─── Public ───────────────────────────────────────────────────────────────────
 
+export const publicPagesList = asyncHandler(async (_req: AuthRequest, res: Response) =>
+  ApiResponse.success(res, "Public pages.", await S.listPublicPages())
+);
+
 export const publicPageByKey = asyncHandler(async (req: AuthRequest, res: Response) =>
   ApiResponse.success(res, "Page.", await S.publicGetPageByKey(String(req.params.pageKey), getRequestedLanguage(req)))
 );

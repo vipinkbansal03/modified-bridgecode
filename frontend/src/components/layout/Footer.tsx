@@ -245,14 +245,18 @@ export function Footer() {
           { label: "Compliance Documents", href: "/quality-certifications" },
         ];
 
+  const globalEmail = trackingSettings?.general?.email || ORDERS_EMAIL;
+  const globalPhone = trackingSettings?.general?.phone || INDIA_PHONE;
+  const globalAddress = trackingSettings?.general?.address || COMPANY_ADDRESS;
+
   const indiaOfficeLinks: FooterLink[] =
     cmsIndiaOfficeColumn.links.length > 0
       ? cmsIndiaOfficeColumn.links
       : [
-          { label: ORDERS_EMAIL, href: `mailto:${ORDERS_EMAIL}` },
+          { label: globalEmail, href: `mailto:${globalEmail}` },
           { label: INFO_EMAIL, href: `mailto:${INFO_EMAIL}` },
-          { label: INDIA_PHONE, href: "" },
-          { label: COMPANY_ADDRESS, href: "" },
+          { label: globalPhone, href: "" },
+          { label: globalAddress, href: "" },
         ];
 
   const usaOfficeLinks: FooterLink[] =
@@ -427,30 +431,6 @@ export function Footer() {
               {indiaOfficeLinks.map((item, index) =>
                 renderFooterItem(item, `footer-india-${index}`),
               )}
-              {!cmsIndiaOfficeColumn.links.length &&
-                footerContactFallback.email &&
-                footerContactFallback.email !== ORDERS_EMAIL &&
-                renderFooterItem(
-                  {
-                    label: footerContactFallback.email,
-                    href: `mailto:${footerContactFallback.email}`,
-                  },
-                  "footer-india-fallback-email",
-                )}
-              {!cmsIndiaOfficeColumn.links.length &&
-                footerContactFallback.phone &&
-                footerContactFallback.phone !== INDIA_PHONE &&
-                renderFooterItem(
-                  { label: footerContactFallback.phone, href: "" },
-                  "footer-india-fallback-phone",
-                )}
-              {!cmsIndiaOfficeColumn.links.length &&
-                footerContactFallback.address &&
-                footerContactFallback.address !== COMPANY_ADDRESS &&
-                renderFooterItem(
-                  { label: footerContactFallback.address, href: "" },
-                  "footer-india-fallback-address",
-                )}
             </div>
           </div>
 

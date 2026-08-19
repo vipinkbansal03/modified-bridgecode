@@ -38,6 +38,18 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     setScriptsReady(true);
   }, []);
 
+  useEffect(() => {
+    if (settings?.general?.faviconUrl) {
+      let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
+      if (!link) {
+        link = document.createElement("link");
+        link.rel = "shortcut icon";
+        document.head.appendChild(link);
+      }
+      link.href = settings.general.faviconUrl;
+    }
+  }, [settings?.general?.faviconUrl]);
+
   function accept() {
     localStorage.setItem(COOKIE_KEY, "accepted");
     setConsent(true);
@@ -186,22 +198,31 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
               m.content='${s.verification.bing}';document.head.appendChild(m);
             `}</Script>
           )}
+          {s.verification.pinterest && (
+            <Script id="verify-pinterest" strategy="afterInteractive">{`
+              var m=document.createElement('meta');m.name='p:domain_verify';
+              m.content='${s.verification.pinterest}';document.head.appendChild(m);
+            `}</Script>
+          )}
           {s.verification.facebookDomain && (
             <Script id="verify-fb" strategy="afterInteractive">{`
               var m=document.createElement('meta');m.name='facebook-domain-verification';
               m.content='${s.verification.facebookDomain}';document.head.appendChild(m);
             `}</Script>
           )}
-
-          {/* Custom header scripts */}
-          {s.scripts.header && (
-            <Script id="custom-header" strategy="afterInteractive">{s.scripts.header}</Script>
+          {s.verification.custom && (
+            <Script id="verify-custom" strategy="afterInteractive">{`
+              try {
+                var range = document.createRange();
+                var fragment = range.createContextualFragment(\`${s.verification.custom.replace(/`/g, "\\`")}\`);
+                document.head.appendChild(fragment);
+              } catch(e) {}
+            `}</Script>
           )}
 
-          {/* Custom footer scripts */}
-          {s.scripts.footer && (
-            <Script id="custom-footer" strategy="lazyOnload">{s.scripts.footer}</Script>
-          )}
+          {/* Custom header & footer scripts */}
+          {s.scripts.header && <InjectCustomScript code={s.scripts.header} location="head" />}
+          {s.scripts.footer && <InjectCustomScript code={s.scripts.footer} location="body" />}
         </>
       )}
 
@@ -269,4 +290,56 @@ function WhatsAppButton({ number, message }: { number: string; message: string }
       <MessageCircle size={26} className="text-white" fill="white" />
     </a>
   );
+}
+
+// ─── Custom Script Execution Helper ───────────────────────────────────────────
+
+function InjectCustomScript({ code, location }: { code: string; location: "head" | "body" }) {
+  useEffect(() => {
+    if (!code || !code.trim()) return;
+    const trimmed = code.trim();
+    const targetParent = location === "head" ? document.head : document.body;
+
+    if (trimmed.startsWith("<")) {
+      const temp = document.createElement("div");
+      temp.innerHTML = trimmed;
+      const injectedElements: HTMLElement[] = [];
+
+      Array.from(temp.childNodes).forEach((node) => {
+        if (node.nodeName === "SCRIPT") {
+          const oldScript = node as HTMLScriptElement;
+          const newScript = document.createElement("script");
+          Array.from(oldScript.attributes).forEach((attr) => {
+            newScript.setAttribute(attr.name, attr.value);
+          });
+          newScript.textContent = oldScript.textContent;
+          targetParent.appendChild(newScript);
+          injectedElements.push(newScript);
+        } else if (node instanceof HTMLElement) {
+          targetParent.appendChild(node);
+          injectedElements.push(node);
+        }
+      });
+
+      return () => {
+        injectedElements.forEach((el) => {
+          try {
+            el.remove();
+          } catch {}
+        });
+      };
+    } else {
+      const script = document.createElement("script");
+      script.type = "text/javascript";
+      script.textContent = trimmed;
+      targetParent.appendChild(script);
+      return () => {
+        try {
+          script.remove();
+        } catch {}
+      };
+    }
+  }, [code, location]);
+
+  return null;
 }

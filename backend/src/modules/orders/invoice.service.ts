@@ -14,8 +14,33 @@ function textValue(value: unknown) {
   return String(value);
 }
 
-function formatDate(date: Date) {
-  return new Intl.DateTimeFormat("en-IN", { year: "numeric", month: "short", day: "2-digit" }).format(date);
+function formatDate(date: Date, timeZone = "Asia/Kolkata") {
+  try {
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone,
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    }).format(new Date(date));
+  } catch {
+    return new Intl.DateTimeFormat("en-IN", { year: "numeric", month: "short", day: "2-digit" }).format(new Date(date));
+  }
+}
+
+function formatDateTime(date: Date, timeZone = "Asia/Kolkata") {
+  try {
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone,
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date(date));
+  } catch {
+    return formatDate(date, timeZone);
+  }
 }
 
 function shippingAddressLines(address: unknown): string[] {
@@ -128,14 +153,17 @@ export async function generateInvoice(orderId: string): Promise<GeneratedInvoice
   });
   if (!order) throw new AppError("Order not found.", 404);
 
-  const [siteNameSetting, siteUrlSetting, sellerName, sellerIec, sellerGstinSetting, companyAddressSetting] = await Promise.all([
+  const [siteNameSetting, siteUrlSetting, sellerName, sellerIec, sellerGstinSetting, companyAddressSetting, timezoneSetting] = await Promise.all([
     getSettingValue("general.site_name").catch(() => ""),
     getSettingValue("general.site_url").catch(() => ""),
     getSettingValue("tax.seller_name").catch(() => "Modern Orthodontics Pvt Ltd"),
     getSettingValue("tax.seller_iec").catch(() => ""),
     getSettingValue("tax.seller_gstin").catch(() => ""),
     getSettingValue("general.address").catch(() => "Ludhiana, Punjab, India"),
+    getSettingValue("general.timezone").catch(() => "Asia/Kolkata"),
   ]);
+
+  const timezone = timezoneSetting || "Asia/Kolkata";
 
   const shipFromState = order.warehouse?.state || "Punjab";
   const sellerGstin = order.warehouse?.gstin || sellerGstinSetting || "";
@@ -270,11 +298,11 @@ export async function generateInvoice(orderId: string): Promise<GeneratedInvoice
 
     // Left block
     doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0f172a").text("Order Number: " + order.orderNumber, 62, metaCardY + 9);
-    doc.text("Order Date: " + formatDate(order.createdAt), 62, metaCardY + 23);
+    doc.text("Order Date: " + formatDate(order.createdAt, timezone), 62, metaCardY + 23);
 
     // Right block
     doc.text("Invoice Number: " + invoiceNumber, 315, metaCardY + 9);
-    doc.text("Invoice Date: " + formatDate(order.createdAt), 315, metaCardY + 23);
+    doc.text("Invoice Date: " + formatDate(order.createdAt, timezone), 315, metaCardY + 23);
 
     let tableY = metaCardY + 54;
 
@@ -497,7 +525,7 @@ export async function generateInvoice(orderId: string): Promise<GeneratedInvoice
 
     // Col 2
     doc.font("Helvetica-Bold").fontSize(7.5).fillColor("#64748b").text("Date & Time:", 205, y + 6);
-    doc.font("Helvetica").fontSize(8.5).fillColor("#0f172a").text(formatDate(order.createdAt), 205, y + 18, { width: 110 });
+    doc.font("Helvetica").fontSize(8).fillColor("#0f172a").text(formatDateTime(order.createdAt, timezone), 205, y + 18, { width: 112 });
 
     // Col 3
     doc.font("Helvetica-Bold").fontSize(7.5).fillColor("#64748b").text("Invoice Value:", 325, y + 6);

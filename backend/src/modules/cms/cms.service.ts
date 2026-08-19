@@ -51,6 +51,14 @@ export async function listPages(query: { page?: string; limit?: string; status?:
   return { data, total, page, limit };
 }
 
+export async function listPublicPages() {
+  return prisma.cMSPage.findMany({
+    where: { status: "ACTIVE" },
+    select: { id: true, pageKey: true, slug: true, title: true, updatedAt: true },
+    orderBy: { updatedAt: "desc" },
+  });
+}
+
 export async function createPage(body: PageBody) {
   return prisma.cMSPage.create({ data: body });
 }

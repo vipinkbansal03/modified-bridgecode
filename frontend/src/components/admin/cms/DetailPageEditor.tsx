@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, type DragEvent } from "react";
 import Link from "next/link";
-import { ExternalLink, Info, RotateCcw } from "lucide-react";
+import { ArrowRight, Building2, ExternalLink, Info, Mail, MapPin, Phone, RotateCcw } from "lucide-react";
 import { CmsSectionCard } from "./CmsSectionCard";
 import { CmsHeroForm, type CmsHeroValues } from "./CmsHeroForm";
 import { CmsRichTextSectionForm, type CmsRichTextSectionValues } from "./CmsRichTextSectionForm";
@@ -13,6 +13,7 @@ import { AdminInput, AdminTextarea } from "@/components/admin/AdminComponents";
 import { AdminStickySaveBar } from "@/components/admin/AdminStickySaveBar";
 import { useToast } from "@/components/admin/AdminComponents";
 import { adminApi } from "@/services/adminApi";
+import { useTrackingSettings } from "@/hooks/api/useTrackingSettings";
 import { getDetailPageConfig, type DetailPageConfig, type DetailPageSectionDef } from "@/config/detailPageConfigs";
 
 type Block = {
@@ -58,6 +59,7 @@ interface DetailPageEditorProps {
 
 export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPageEditorProps) {
   const { showToast } = useToast();
+  const { data: trackingSettings } = useTrackingSettings();
   const [isSaving, setIsSaving] = useState(false);
 
   const config = useMemo(() => {
@@ -773,17 +775,60 @@ export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPa
         )}
 
         {secDef.type === "cards" && secState.cards && (
-          <CmsCardRepeater
-            values={secState.cards}
-            onChange={(next) =>
-              setSectionStates((prev) => ({
-                ...prev,
-                [key]: { ...prev[key], cards: next },
-              }))
-            }
-            headingLabel="Section Heading"
-            config={secDef.cardConfig}
-          />
+          <div>
+            {page.pageKey === "contact" && secDef.key === "offices" && (
+              <div className="mb-5 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-100 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
+                      <Building2 size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-[13.5px] font-bold text-blue-950">
+                        Primary Corporate Office (Live Global Sync)
+                      </h4>
+                      <p className="text-[11.5px] text-blue-800/80">
+                        Automatically populated from <strong>Settings → General</strong> on the live Contact page.
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    href="/admin/settings"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-[11.5px] font-semibold text-blue-900 shadow-2xs hover:bg-blue-50 transition-colors shrink-0"
+                  >
+                    Edit in General Settings <ArrowRight size={12} />
+                  </Link>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 text-[12px]">
+                  <div className="flex items-center gap-2 text-slate-700">
+                    <Mail size={13} className="text-blue-600 shrink-0" />
+                    <span className="truncate font-medium">{trackingSettings?.general?.email || "orders@modortho.com"}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-700">
+                    <Phone size={13} className="text-blue-600 shrink-0" />
+                    <span className="truncate font-medium">{trackingSettings?.general?.phone || "+91-98765-43210999"}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-700">
+                    <MapPin size={13} className="text-blue-600 shrink-0" />
+                    <span className="truncate font-medium">{trackingSettings?.general?.address || "Ludhiana, Punjab, India"}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <CmsCardRepeater
+              values={secState.cards}
+              onChange={(next) =>
+                setSectionStates((prev) => ({
+                  ...prev,
+                  [key]: { ...prev[key], cards: next },
+                }))
+              }
+              headingLabel="Section Heading"
+              config={secDef.cardConfig}
+            />
+          </div>
         )}
 
         {secDef.type === "symbols" && secState.symbols && (

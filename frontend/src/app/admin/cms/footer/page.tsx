@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
+  Building2,
   ExternalLink,
   Globe,
   ImageIcon,
@@ -153,9 +154,6 @@ export default function CmsFooterPage() {
     return (
       (form.title ?? "").trim() !== (footer.title ?? "").trim() ||
       (form.description ?? "").trim() !== (footer.description ?? "").trim() ||
-      (form.email ?? "").trim() !== (footer.email ?? "").trim() ||
-      (form.phone ?? "").trim() !== (footer.phone ?? "").trim() ||
-      (form.address ?? "").trim() !== (footer.address ?? "").trim() ||
       (form.logo ?? "").trim() !== (footer.logo ?? "").trim() ||
       Boolean(form.newsletterEnabled) !== (footer.newsletterEnabled ?? true) ||
       (form.status ?? "ACTIVE") !== (footer.status ?? "ACTIVE") ||
@@ -674,39 +672,30 @@ export default function CmsFooterPage() {
               </div>
             </div>
 
-            {/* Card 3: Fallback Contact Details */}
-            <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-xs">
-              <div className="mb-4 border-b border-gray-100 pb-3">
-                <h3 className="text-[15px] font-bold text-[#1A1A1A]">
-                  Fallback Contact & Office Information
-                </h3>
-                <p className="text-[12px] text-gray-500">
-                  These values serve as standard fallback contact info for office columns and contact notices if no custom menu links are specified.
-                </p>
-              </div>
-
-              <div className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <AdminInput
-                    label="Fallback Contact Email"
-                    value={form.email}
-                    onChange={(e) => setField("email", e.target.value)}
-                    placeholder="orders@modortho.com"
-                  />
-                  <AdminInput
-                    label="Fallback Contact Phone"
-                    value={form.phone}
-                    onChange={(e) => setField("phone", e.target.value)}
-                    placeholder="1800 890 8022"
-                  />
+            {/* Card 3: Company Contact Notice */}
+            <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-lg bg-blue-100 p-2 text-blue-700">
+                    <Building2 size={16} />
+                  </div>
+                  <div>
+                    <h4 className="text-[13.5px] font-bold text-blue-950">
+                      Company Contact & Legal Address
+                    </h4>
+                    <p className="text-[12px] text-blue-800/80 mt-0.5">
+                      Global company contact details (email, phone, and address) are managed centrally in <strong>Settings → General</strong>. Footer navigation columns are managed in <strong>CMS Menus</strong>.
+                    </p>
+                  </div>
                 </div>
-                <AdminTextarea
-                  label="Fallback Company Address"
-                  value={form.address}
-                  onChange={(e) => setField("address", e.target.value)}
-                  placeholder="2024, Gobind Nagar, Circuit House Road, Ludhiana 141001, India"
-                  rows={2}
-                />
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link
+                    href="/admin/settings"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-blue-900 hover:bg-blue-50 transition-colors shadow-2xs"
+                  >
+                    Open General Settings <ArrowRight size={13} />
+                  </Link>
+                </div>
               </div>
             </div>
 
