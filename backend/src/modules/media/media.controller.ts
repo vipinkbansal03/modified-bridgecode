@@ -50,8 +50,7 @@ export const confirm = asyncHandler(async (req: AuthRequest, res: Response) => {
 });
 
 export const config = asyncHandler(async (req: AuthRequest, res: Response) => {
-  // If we have AWS credentials, we can use S3. Otherwise use LOCAL.
-  const storageProvider = process.env.AWS_ACCESS_KEY_ID ? "S3" : "LOCAL";
+  const storageProvider = process.env.AWS_REGION && process.env.AWS_S3_BUCKET ? "S3" : "LOCAL";
   return ApiResponse.success(res, "Media config.", { storageProvider });
 });
 

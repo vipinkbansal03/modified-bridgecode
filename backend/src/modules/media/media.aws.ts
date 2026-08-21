@@ -3,17 +3,20 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const s3Client = new S3Client({
   region: process.env.AWS_REGION || "us-east-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "dummy-key",
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "dummy-secret",
-  },
 });
 
-const BUCKET_NAME = process.env.AWS_S3_BUCKET || "modortho-media-staging";
+const BUCKET_NAME = process.env.AWS_S3_BUCKET;
+
+function getBucketName() {
+  if (!BUCKET_NAME) {
+    throw new Error("AWS_S3_BUCKET is required for S3 media uploads.");
+  }
+  return BUCKET_NAME;
+}
 
 export async function generatePresignedUploadUrl(key: string, contentType: string) {
   const command = new PutObjectCommand({
-    Bucket: BUCKET_NAME,
+    Bucket: getBucketName(),
     Key: key,
     ContentType: contentType,
   });
@@ -25,7 +28,7 @@ export async function generatePresignedUploadUrl(key: string, contentType: strin
 
 export async function createMultipartUpload(key: string, contentType: string) {
   const command = new CreateMultipartUploadCommand({
-    Bucket: BUCKET_NAME,
+    Bucket: getBucketName(),
     Key: key,
     ContentType: contentType,
   });
@@ -35,7 +38,7 @@ export async function createMultipartUpload(key: string, contentType: string) {
 
 export async function generatePresignedPartUrl(key: string, uploadId: string, partNumber: number) {
   const command = new UploadPartCommand({
-    Bucket: BUCKET_NAME,
+    Bucket: getBucketName(),
     Key: key,
     UploadId: uploadId,
     PartNumber: partNumber,
@@ -46,7 +49,7 @@ export async function generatePresignedPartUrl(key: string, uploadId: string, pa
 
 export async function completeMultipartUpload(key: string, uploadId: string, parts: { ETag: string; PartNumber: number }[]) {
   const command = new CompleteMultipartUploadCommand({
-    Bucket: BUCKET_NAME,
+    Bucket: getBucketName(),
     Key: key,
     UploadId: uploadId,
     MultipartUpload: {
