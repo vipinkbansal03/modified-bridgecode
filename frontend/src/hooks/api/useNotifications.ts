@@ -91,6 +91,36 @@ export function useDeleteAdminNotification() {
   });
 }
 
+export function useDeleteCustomerNotification() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("customer_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await apiClient.delete(`/notifications/customer/${id}`, { headers });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications", "customer"] });
+    },
+  });
+}
+
+export function useBulkDeleteCustomerNotifications() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("customer_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await apiClient.post("/notifications/customer/bulk-delete", { ids }, { headers });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications", "customer"] });
+    },
+  });
+}
+
 export function useNotificationConfigs() {
   return useQuery({
     queryKey: ["notification-configs"],
@@ -215,6 +245,7 @@ export function useDeleteNotificationLog() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notification-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications", "admin"] });
     },
   });
 }
@@ -230,6 +261,7 @@ export function useBulkDeleteNotificationLogs() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notification-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications", "admin"] });
     },
   });
 }

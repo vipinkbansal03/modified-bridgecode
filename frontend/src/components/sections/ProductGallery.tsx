@@ -74,7 +74,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
       </div>
 
       {/* Main Image Box */}
-      <div className="relative order-1 flex min-h-[280px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-4 sm:order-2 sm:min-h-[360px] lg:min-h-[440px]">
+      <div className="relative order-1 flex min-h-[220px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-4 sm:order-2 sm:min-h-[280px] lg:min-h-[320px]">
         {/* Previous Arrow */}
         {safeImages.length > 1 && (
           <button
@@ -96,7 +96,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") setZoomed(true);
           }}
-          className="relative h-[260px] w-[84%] cursor-zoom-in sm:h-[340px] lg:h-[400px] lg:w-[80%]"
+          className="relative h-[200px] w-[84%] cursor-zoom-in sm:h-[260px] lg:h-[300px] lg:w-[80%]"
         >
           {safeImages[index]?.startsWith("data:") ? (
             <img src={safeImages[index]} alt={title} className="h-full w-full object-contain transition-all duration-300" />

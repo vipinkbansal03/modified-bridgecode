@@ -20,9 +20,7 @@ import { apiClient } from "@/lib/apiClient";
 const CHANNELS = [
   { value: "email", label: "Email", icon: Mail },
   { value: "whatsapp", label: "WhatsApp", icon: Smartphone },
-  { value: "sms", label: "SMS", icon: MessageSquare },
   { value: "push", label: "Push", icon: Bell },
-  { value: "in_app", label: "App", icon: Bell },
 ];
 
 const PREVIEW_MOCKS: Record<string, string> = {

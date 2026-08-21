@@ -220,7 +220,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           </div>
 
           {/* Top Fold: Gallery Left, Header & Description Right */}
-          <div className="grid grid-cols-1 gap-8 border-b border-line pb-8 sm:grid-cols-[1.1fr_1fr]">
+          <div className="grid grid-cols-1 gap-8 border-b border-line pb-8 sm:grid-cols-[1.1fr_1fr] items-start">
             <ProductGallery images={product.images} title={product.title} />
 
             <div>

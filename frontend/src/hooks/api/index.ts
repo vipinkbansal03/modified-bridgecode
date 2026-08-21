@@ -43,6 +43,8 @@ export {
   useRegisterNotificationToken,
   useAdminNotificationsHistory,
   useDeleteAdminNotification,
+  useDeleteCustomerNotification,
+  useBulkDeleteCustomerNotifications,
   useNotificationConfigs,
   useUpdateNotificationConfig,
   useNotificationManagerSettings,

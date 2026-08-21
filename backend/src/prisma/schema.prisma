@@ -1432,6 +1432,7 @@ model Discount {
   status          Status               @default(ACTIVE)
   tierId          String?
   minQuantity     Int?
+  maxQuantity     Int?
   discountPercent Decimal?             @db.Decimal(5, 2)
   fixedAmount     Decimal?             @db.Decimal(12, 2)
   countries       DiscountCountry[]

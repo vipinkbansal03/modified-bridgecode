@@ -3,15 +3,14 @@
 import { useState } from "react";
 import { Search, Trash2, Eye, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useToast } from "@/components/admin/AdminComponents";
 import { useNotificationLogs, useDeleteNotificationLog, useBulkDeleteNotificationLogs } from "@/hooks/api";
 
 const CHANNELS = [
   { value: "all", label: "All Channels" },
   { value: "email", label: "Email" },
   { value: "whatsapp", label: "WhatsApp" },
-  { value: "sms", label: "SMS" },
   { value: "push", label: "Push Notification" },
-  { value: "in_app", label: "In-App/Panel" },
 ];
 
 const STATUSES = [
@@ -28,6 +27,7 @@ export default function AdminNotificationsPage() {
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
+  const { showToast, ToastComponent } = useToast();
 
   const { data, isLoading } = useNotificationLogs({
     page,
@@ -66,8 +66,9 @@ export default function AdminNotificationsPage() {
     try {
       await bulkDeleteMutation.mutateAsync(selectedIds);
       setSelectedIds([]);
+      showToast(`${selectedIds.length} notification log(s) deleted successfully.`, "success");
     } catch (err) {
-      console.error("Failed to delete notifications", err);
+      showToast("Failed to delete selected notifications.", "error");
     }
   };
 
@@ -75,8 +76,9 @@ export default function AdminNotificationsPage() {
     if (!confirm("Are you sure you want to delete this notification log?")) return;
     try {
       await deleteMutation.mutateAsync(id);
+      showToast("Notification log deleted successfully.", "success");
     } catch (err) {
-      console.error("Failed to delete notification", err);
+      showToast("Failed to delete notification log.", "error");
     }
   };
 
@@ -116,6 +118,7 @@ export default function AdminNotificationsPage() {
 
   return (
     <AdminLayout title="Notifications" breadcrumb={[{ label: "Notifications" }]}>
+      {ToastComponent}
       <div className="bg-white min-h-[calc(100vh-64px)] rounded-tl-lg overflow-hidden flex flex-col p-6 bg-[#FDFDFD]">
         
         <div className="mb-6 flex justify-between items-center">

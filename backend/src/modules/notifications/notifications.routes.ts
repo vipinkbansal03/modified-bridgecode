@@ -9,6 +9,8 @@ const router = Router();
 router.post('/customer/register-token', protectCustomer, notificationsController.registerCustomerToken);
 router.get('/customer/mine', protectCustomer, notificationsController.getMyCustomerNotifications);
 router.patch('/customer/:id/read', protectCustomer, notificationsController.markAsRead);
+router.delete('/customer/:id', protectCustomer, notificationsController.deleteCustomerNotification);
+router.post('/customer/bulk-delete', protectCustomer, notificationsController.bulkDeleteCustomerNotifications);
 
 // ----- Admin Public & Personal Routes -----
 router.post('/admin/register-token', protect, notificationsController.registerAdminToken);

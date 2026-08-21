@@ -12,6 +12,7 @@ type DiscountInput = {
   status?: Status;
   tierId?: string | null;
   minQuantity?: number | string | null;
+  maxQuantity?: number | string | null;
   discountPercent?: number | string | null;
   fixedAmount?: number | string | null;
   countryIds?: string[];
@@ -173,6 +174,7 @@ async function normalizeDiscountInput(input: DiscountInput, partial = false) {
 
   const tierId = blankToNull(input.tierId) as string | null;
   const minQuantity = intOrNull(input.minQuantity, "Minimum quantity");
+  const maxQuantity = intOrNull(input.maxQuantity, "Maximum quantity");
   const discountPercent = decimalOrNull(input.discountPercent, "Discount percent");
   const fixedAmount = decimalOrNull(input.fixedAmount, "Fixed amount");
   const startDate = dateOrNull(input.startDate, "Start date");
@@ -190,6 +192,9 @@ async function normalizeDiscountInput(input: DiscountInput, partial = false) {
   if (discountPercent !== null && discountPercent.gt(100)) {
     throw new AppError("Discount percent cannot exceed 100.", 400);
   }
+  if (minQuantity !== null && maxQuantity !== null && maxQuantity < minQuantity) {
+    throw new AppError("Maximum quantity cannot be less than minimum quantity.", 400);
+  }
 
   const countryIds = Array.isArray(input.countryIds) ? input.countryIds : [];
   const productIds = Array.isArray(input.productIds) ? input.productIds : [];
@@ -206,6 +211,7 @@ async function normalizeDiscountInput(input: DiscountInput, partial = false) {
   if (type === "TIER") {
     if (!tierId) throw new AppError("Tier discounts require a tier.", 400);
     if (minQuantity !== null) throw new AppError("Tier discounts cannot set minimum quantity.", 400);
+    if (maxQuantity !== null) throw new AppError("Tier discounts cannot set maximum quantity.", 400);
   }
   if (type === "MOQ") {
     if (minQuantity === null) throw new AppError("MOQ discounts require minimum quantity.", 400);
@@ -214,6 +220,7 @@ async function normalizeDiscountInput(input: DiscountInput, partial = false) {
   if (type === "PROMOTIONAL") {
     if (tierId) throw new AppError("Promotional discounts cannot be tied to a tier.", 400);
     if (minQuantity !== null) throw new AppError("Promotional discounts cannot set minimum quantity.", 400);
+    if (maxQuantity !== null) throw new AppError("Promotional discounts cannot set maximum quantity.", 400);
     if (!(await supportsPromotionalDiscountType())) {
       throw new AppError("Promotional discounts are not available until the database enum migration is applied.", 409);
     }
@@ -233,6 +240,7 @@ async function normalizeDiscountInput(input: DiscountInput, partial = false) {
     ...(input.status !== undefined ? { status: input.status } : {}),
     tierId,
     minQuantity,
+    maxQuantity,
     discountPercent,
     fixedAmount,
     startDate,

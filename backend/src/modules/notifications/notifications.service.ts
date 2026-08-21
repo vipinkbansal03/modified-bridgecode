@@ -299,7 +299,7 @@ export class NotificationsService {
       const globalAvailability = (settings?.channelAvailability || { sms: true, whatsapp: true, email: true, push: true, inApp: true }) as Record<string, boolean>;
 
       const activeChannels: string[] = [];
-      const possibleChannels = ["sms", "whatsapp", "email", "push", "in_app"];
+      const possibleChannels = ["whatsapp", "email", "push"];
       for (const ch of possibleChannels) {
         const mappedKey = ch === "in_app" ? "inApp" : ch;
         if (channelsConfig[mappedKey] !== false && globalAvailability[mappedKey] !== false) {
@@ -331,6 +331,8 @@ export class NotificationsService {
           for (const phone of finalPhones) {
             await this.sendNotification("whatsapp", phone, message, {
               whatsappTemplate: template.whatsappTemplate,
+              variables: template.variables,
+              payload,
               metadata: { eventType, phone },
             });
           }

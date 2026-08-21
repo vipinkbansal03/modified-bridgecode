@@ -28,9 +28,11 @@ import {
   useAdminProductAttributes,
   useAdminProductTierPricing,
   useCreateProductTierPricing,
+  useUpdateProductTierPricing,
   useDeleteProductTierPricing,
   useAdminProductMoqPricing,
   useCreateProductMoqPricing,
+  useUpdateProductMoqPricing,
   useDeleteProductMoqPricing,
   useAssignProductAttributes,
   useRemoveProductAttribute,
@@ -442,6 +444,7 @@ type PricingRuleRow = {
 };
 
 type RuleDraft = {
+  id?: string;
   tierId: string;
   countryId: string;
   variantId: string;
@@ -1005,6 +1008,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const lastSelectedVariantIndexRef = useRef<number | null>(null);
   const [tierRuleDraft, setTierRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
   const [moqRuleDraft, setMoqRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
+  const [editingTierRuleId, setEditingTierRuleId] = useState<string | null>(null);
+  const [editingMoqRuleId, setEditingMoqRuleId] = useState<string | null>(null);
   const [countryPriceModalOpen, setCountryPriceModalOpen] = useState(false);
   const [warehouseAssignModalOpen, setWarehouseAssignModalOpen] = useState(false);
   const [warehouseAssignSelections, setWarehouseAssignSelections] = useState<Record<string, boolean>>({});
@@ -1791,8 +1796,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const updateVariantCountries = useUpdateVariantCountries(productId, variantCountryModalVariant?.id);
   const createTierPricing = useCreateProductTierPricing(productId);
   const deleteTierPricing = useDeleteProductTierPricing(productId);
+  const updateTierPricing = useUpdateProductTierPricing(productId);
   const createMoqPricing = useCreateProductMoqPricing(productId);
   const deleteMoqPricing = useDeleteProductMoqPricing(productId);
+  const updateMoqPricing = useUpdateProductMoqPricing(productId);
   const assignProductAttributes = useAssignProductAttributes(productId);
   const removeProductAttribute = useRemoveProductAttribute(productId);
   const updateProductFilterVisibility = useUpdateProductFilterVisibility(productId);
@@ -2563,6 +2570,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       ...emptyRuleDraft,
       countryIds: countryRows.map((c) => c.id),
     });
+    setEditingTierRuleId(null);
   };
 
   const resetMoqRuleDraft = () => {
@@ -3366,6 +3374,38 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   };
 
+  const handleEditTierRuleClick = (rule: any) => {
+    setEditingTierRuleId(rule.id);
+    setTierRuleDraft({
+      tierId: rule.tierId || rule.tier?.id || "",
+      countryId: rule.countryId || rule.country?.id || "",
+      variantId: rule.variantId || rule.variant?.id || "",
+      countryIds: rule.countryId || rule.country?.id ? [rule.countryId || rule.country?.id] : [],
+      variantIds: rule.variantId || rule.variant?.id ? [rule.variantId || rule.variant?.id] : [""],
+      minQuantity: "10",
+      maxQuantity: "",
+      mode: rule.discountPercent !== null && rule.discountPercent !== undefined ? "discount" : "fixed",
+      discountPercent: rule.discountPercent ? rule.discountPercent.toString() : "",
+      fixedPrice: rule.fixedPrice ? rule.fixedPrice.toString() : "",
+    });
+  };
+
+  const handleUpdateTierRule = async () => {
+    if (!editingTierRuleId) return;
+
+    try {
+      const payload = buildRulePayload(tierRuleDraft, false);
+      await updateTierPricing.mutateAsync({
+        id: editingTierRuleId,
+        ...payload,
+      });
+      resetTierRuleDraft();
+      showToast("Tier pricing rule updated.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to update tier pricing rule."), "error");
+    }
+  };
+
   const handleCreateMoqRule = async () => {
     const countriesToApply = moqRuleDraft.countryIds?.length ? moqRuleDraft.countryIds : [moqRuleDraft.countryId].filter(Boolean);
     const variantsToApply = moqRuleDraft.variantIds?.length ? moqRuleDraft.variantIds : [moqRuleDraft.variantId];
@@ -3387,6 +3427,38 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       showToast(`${createdCount} MOQ pricing rule(s) created.`);
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to create MOQ pricing rule."), "error");
+    }
+  };
+
+  const handleEditMoqRuleClick = (rule: any) => {
+    setEditingMoqRuleId(rule.id);
+    setMoqRuleDraft({
+      tierId: "",
+      countryId: rule.countryId || rule.country?.id || "",
+      variantId: rule.variantId || rule.variant?.id || "",
+      countryIds: rule.countryId || rule.country?.id ? [rule.countryId || rule.country?.id] : [],
+      variantIds: rule.variantId || rule.variant?.id ? [rule.variantId || rule.variant?.id] : [""],
+      minQuantity: rule.minQuantity ? rule.minQuantity.toString() : "10",
+      maxQuantity: rule.maxQuantity ? rule.maxQuantity.toString() : "",
+      mode: rule.discountPercent !== null && rule.discountPercent !== undefined ? "discount" : "fixed",
+      discountPercent: rule.discountPercent ? rule.discountPercent.toString() : "",
+      fixedPrice: rule.fixedPrice ? rule.fixedPrice.toString() : "",
+    });
+  };
+
+  const handleUpdateMoqRule = async () => {
+    if (!editingMoqRuleId) return;
+
+    try {
+      const payload = buildRulePayload(moqRuleDraft, true);
+      await updateMoqPricing.mutateAsync({
+        id: editingMoqRuleId,
+        ...payload,
+      });
+      resetMoqRuleDraft();
+      showToast("MOQ pricing rule updated.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to update MOQ pricing rule."), "error");
     }
   };
 
@@ -6700,7 +6772,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Tier Pricing</h3>
                   <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Create product or variant-specific tier rules. Checkout pricing resolver is a later step.</p>
                 </div>
-                <div className="grid gap-3 lg:grid-cols-6">
+                <div className={`grid gap-3 ${variantRows.length > 0 ? "lg:grid-cols-6" : "lg:grid-cols-5"}`}>
                   <AdminSelect label="Tier" value={tierRuleDraft.tierId} onChange={(e) => setTierRuleDraft((d) => ({ ...d, tierId: e.target.value }))} options={[{ value: "", label: "Select tier" }, ...tierRows.map((tier) => ({ value: tier.id, label: tier.name }))]} />
                   <AdminMultiSearchableSelect
                     label="Countries"
@@ -6712,18 +6784,27 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     selectAllLabel="All countries"
                     emptyMeansAll={false}
                   />
-                  <AdminMultiSearchableSelect
-                    label="Variants"
-                    values={tierRuleDraft.variantIds ?? (tierRuleDraft.variantId ? [tierRuleDraft.variantId] : [])}
-                    onValuesChange={(values) => setTierRuleDraft((d) => ({ ...d, variantIds: values, variantId: values[0] ?? "" }))}
-                    options={[{ value: "", label: "All Variants" }, ...variantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]}
-                    placeholder="Select variants"
-                    isInfinite={true}
-                  />
+                  {variantRows.length > 0 && (
+                    <AdminMultiSearchableSelect
+                      label="Variants"
+                      values={tierRuleDraft.variantIds ?? (tierRuleDraft.variantId ? [tierRuleDraft.variantId] : [])}
+                      onValuesChange={(values) => setTierRuleDraft((d) => ({ ...d, variantIds: values, variantId: values[0] ?? "" }))}
+                      options={[{ value: "", label: "All Variants" }, ...variantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]}
+                      placeholder="Select variants"
+                      isInfinite={true}
+                    />
+                  )}
                   <AdminSelect label="Mode" value={tierRuleDraft.mode} onChange={(e) => setTierRuleDraft((d) => ({ ...d, mode: e.target.value as "discount" | "fixed" }))} options={[{ value: "discount", label: "% Discount" }, { value: "fixed", label: "Fixed Price" }]} />
                   <AdminInput label={tierRuleDraft.mode === "discount" ? "Discount %" : "Fixed Price"} type="number" min={0} step="0.01" value={tierRuleDraft.mode === "discount" ? tierRuleDraft.discountPercent : tierRuleDraft.fixedPrice} onChange={(e) => setTierRuleDraft((d) => ({ ...d, [d.mode === "discount" ? "discountPercent" : "fixedPrice"]: e.target.value }))} />
-                  <div className="flex items-end">
-                    <button type="button" onClick={handleCreateTierRule} disabled={createTierPricing.isPending} className="w-full rounded-md bg-[#E31E24] px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">Add Rule</button>
+                  <div className="flex items-end gap-2">
+                    {editingTierRuleId ? (
+                      <>
+                        <button type="button" onClick={handleUpdateTierRule} disabled={updateTierPricing.isPending} className="w-full rounded-md bg-[#E31E24] px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">Update</button>
+                        <button type="button" onClick={resetTierRuleDraft} className="w-full rounded-md border border-[#E6E6E6] bg-white px-4 py-2.5 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">Cancel</button>
+                      </>
+                    ) : (
+                      <button type="button" onClick={handleCreateTierRule} disabled={createTierPricing.isPending} className="w-full rounded-md bg-[#E31E24] px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">Add Rule</button>
+                    )}
                   </div>
                 </div>
                 <div className="mt-4 divide-y divide-[#E6E6E6] rounded-md border border-[#E6E6E6]">
@@ -6735,6 +6816,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       <span className="text-[#6B6B6B]">{rule.country ? `${rule.country.name} (${rule.country.code})` : "Country"}</span>
                       <span className="text-[#6B6B6B]">{rule.variant ? rule.variant.title : "All Variants"}</span>
                       <span className="ml-auto font-semibold text-[#1A1A1A]">{rule.discountPercent ? `${rule.discountPercent}% off` : `${rule.fixedPrice} fixed`}</span>
+                      <button type="button" onClick={() => handleEditTierRuleClick(rule)} className="rounded border border-[#E6E6E6] px-2 py-1 text-gray-600 hover:bg-gray-50"><Pencil size={13} /></button>
                       <button type="button" onClick={() => handleDeleteTierRule(rule.id)} className="rounded border border-[#F2C9C9] px-2 py-1 text-red-600 hover:bg-red-50"><Trash2 size={13} /></button>
                     </div>
                   ))}
@@ -6748,7 +6830,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   <h3 className="text-[14px] font-semibold text-[#1A1A1A]">MOQ Pricing</h3>
                   <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Create quantity price-break rules. Existing variant MOQ remains a minimum-quantity gate only.</p>
                 </div>
-                <div className="grid gap-3 lg:grid-cols-7">
+                <div className={`grid gap-3 ${variantRows.length > 0 ? "lg:grid-cols-7" : "lg:grid-cols-6"}`}>
                   <AdminMultiSearchableSelect
                     label="Countries"
                     values={moqRuleDraft.countryIds ?? (moqRuleDraft.countryId ? [moqRuleDraft.countryId] : [])}
@@ -6759,20 +6841,29 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     selectAllLabel="All countries"
                     emptyMeansAll={false}
                   />
-                  <AdminMultiSearchableSelect
-                    label="Variants"
-                    values={moqRuleDraft.variantIds ?? (moqRuleDraft.variantId ? [moqRuleDraft.variantId] : [])}
-                    onValuesChange={(values) => setMoqRuleDraft((d) => ({ ...d, variantIds: values, variantId: values[0] ?? "" }))}
-                    options={[{ value: "", label: "All Variants" }, ...variantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]}
-                    placeholder="Select variants"
-                    isInfinite={true}
-                  />
+                  {variantRows.length > 0 && (
+                    <AdminMultiSearchableSelect
+                      label="Variants"
+                      values={moqRuleDraft.variantIds ?? (moqRuleDraft.variantId ? [moqRuleDraft.variantId] : [])}
+                      onValuesChange={(values) => setMoqRuleDraft((d) => ({ ...d, variantIds: values, variantId: values[0] ?? "" }))}
+                      options={[{ value: "", label: "All Variants" }, ...variantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]}
+                      placeholder="Select variants"
+                      isInfinite={true}
+                    />
+                  )}
                   <AdminInput label="Min Qty" type="number" min={1} value={moqRuleDraft.minQuantity} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, minQuantity: e.target.value }))} />
                   <AdminInput label="Max Qty" type="number" min={1} placeholder="None" value={moqRuleDraft.maxQuantity} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, maxQuantity: e.target.value }))} />
                   <AdminSelect label="Mode" value={moqRuleDraft.mode} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, mode: e.target.value as "discount" | "fixed" }))} options={[{ value: "discount", label: "% Discount" }, { value: "fixed", label: "Fixed Price" }]} />
                   <AdminInput label={moqRuleDraft.mode === "discount" ? "Discount %" : "Fixed Price"} type="number" min={0} step="0.01" value={moqRuleDraft.mode === "discount" ? moqRuleDraft.discountPercent : moqRuleDraft.fixedPrice} onChange={(e) => setMoqRuleDraft((d) => ({ ...d, [d.mode === "discount" ? "discountPercent" : "fixedPrice"]: e.target.value }))} />
-                  <div className="flex items-end">
-                    <button type="button" onClick={handleCreateMoqRule} disabled={createMoqPricing.isPending} className="w-full rounded-md bg-[#E31E24] px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">Add Rule</button>
+                  <div className="flex items-end gap-2">
+                    {editingMoqRuleId ? (
+                      <>
+                        <button type="button" onClick={handleUpdateMoqRule} disabled={updateMoqPricing.isPending} className="w-full rounded-md bg-[#E31E24] px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">Update</button>
+                        <button type="button" onClick={resetMoqRuleDraft} className="w-full rounded-md border border-[#E6E6E6] bg-white px-4 py-2.5 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]">Cancel</button>
+                      </>
+                    ) : (
+                      <button type="button" onClick={handleCreateMoqRule} disabled={createMoqPricing.isPending} className="w-full rounded-md bg-[#E31E24] px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">Add Rule</button>
+                    )}
                   </div>
                 </div>
                 <div className="mt-4 divide-y divide-[#E6E6E6] rounded-md border border-[#E6E6E6]">
@@ -6784,6 +6875,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       <span className="text-[#6B6B6B]">{rule.country ? `${rule.country.name} (${rule.country.code})` : "Country"}</span>
                       <span className="text-[#6B6B6B]">{rule.variant ? rule.variant.title : "All Variants"}</span>
                       <span className="ml-auto font-semibold text-[#1A1A1A]">{rule.discountPercent ? `${rule.discountPercent}% off` : `${rule.fixedPrice} fixed`}</span>
+                      <button type="button" onClick={() => handleEditMoqRuleClick(rule)} className="rounded border border-[#E6E6E6] px-2 py-1 text-gray-600 hover:bg-gray-50"><Pencil size={13} /></button>
                       <button type="button" onClick={() => handleDeleteMoqRule(rule.id)} className="rounded border border-[#F2C9C9] px-2 py-1 text-red-600 hover:bg-red-50"><Trash2 size={13} /></button>
                     </div>
                   ))}

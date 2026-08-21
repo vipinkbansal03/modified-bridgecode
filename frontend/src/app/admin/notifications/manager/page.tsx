@@ -12,11 +12,9 @@ import {
 import { Mail, MessageSquare, Smartphone, Bell, Save, Check, Pencil, Users } from "lucide-react";
 
 const CHANNEL_OPTIONS = [
-  { key: "inApp", label: "App", hint: "Inside the panel notification area", icon: Bell },
   { key: "whatsapp", label: "WhatsApp", hint: "Short direct message on WhatsApp", icon: Smartphone },
   { key: "email", label: "Email", hint: "Formal message with subject and details", icon: Mail },
   { key: "push", label: "Push", hint: "Browser or device notification", icon: Bell },
-  { key: "sms", label: "SMS", hint: "Compact phone text delivery", icon: MessageSquare },
 ];
 
 export default function NotificationManagerPage() {
@@ -318,7 +316,7 @@ export default function NotificationManagerPage() {
                     </div>
                     <p className="text-[11px] text-[#6B6B6B] mb-4">Choose which channels are available for the {role} role.</p>
                     <div className="flex gap-2">
-                      {["whatsapp", "email", "sms"].map((ch) => {
+                      {["whatsapp", "email"].map((ch) => {
                         const active = currentChs[ch] === true;
                         return (
                           <button
@@ -370,11 +368,9 @@ export default function NotificationManagerPage() {
                   <tr className="bg-[#FAFAFA] border-b border-[#E6E6E6]">
                     <th className="px-6 py-3.5 text-[10px] font-bold text-[#9A9A9A] uppercase tracking-wider">Notification</th>
                     <th className="px-6 py-3.5 text-[10px] font-bold text-[#9A9A9A] uppercase tracking-wider">Status</th>
-                    <th className="px-4 py-3.5 text-[10px] font-bold text-[#9A9A9A] uppercase tracking-wider text-center">App</th>
                     <th className="px-4 py-3.5 text-[10px] font-bold text-[#9A9A9A] uppercase tracking-wider text-center">WhatsApp</th>
                     <th className="px-4 py-3.5 text-[10px] font-bold text-[#9A9A9A] uppercase tracking-wider text-center">Email</th>
                     <th className="px-4 py-3.5 text-[10px] font-bold text-[#9A9A9A] uppercase tracking-wider text-center">Push</th>
-                    <th className="px-4 py-3.5 text-[10px] font-bold text-[#9A9A9A] uppercase tracking-wider text-center">SMS</th>
                     <th className="px-6 py-3.5 text-[10px] font-bold text-[#9A9A9A] uppercase tracking-wider">Send To</th>
                     <th className="px-6 py-3.5 text-[10px] font-bold text-[#9A9A9A] uppercase tracking-wider text-center">Actions</th>
                   </tr>
@@ -412,14 +408,6 @@ export default function NotificationManagerPage() {
                           <td className="px-4 py-4 text-center">
                             <input
                               type="checkbox"
-                              checked={channels.inApp !== false}
-                              onChange={() => handleCheckboxToggle(config, "inApp", channels.inApp !== false)}
-                              className="rounded border-[#cccccc] text-[#1A1A1A] focus:ring-0 cursor-pointer"
-                            />
-                          </td>
-                          <td className="px-4 py-4 text-center">
-                            <input
-                              type="checkbox"
                               checked={channels.whatsapp === true}
                               onChange={() => handleCheckboxToggle(config, "whatsapp", channels.whatsapp === true)}
                               className="rounded border-[#cccccc] text-[#1A1A1A] focus:ring-0 cursor-pointer"
@@ -438,14 +426,6 @@ export default function NotificationManagerPage() {
                               type="checkbox"
                               checked={channels.push === true}
                               onChange={() => handleCheckboxToggle(config, "push", channels.push === true)}
-                              className="rounded border-[#cccccc] text-[#1A1A1A] focus:ring-0 cursor-pointer"
-                            />
-                          </td>
-                          <td className="px-4 py-4 text-center">
-                            <input
-                              type="checkbox"
-                              checked={channels.sms === true}
-                              onChange={() => handleCheckboxToggle(config, "sms", channels.sms === true)}
                               className="rounded border-[#cccccc] text-[#1A1A1A] focus:ring-0 cursor-pointer"
                             />
                           </td>

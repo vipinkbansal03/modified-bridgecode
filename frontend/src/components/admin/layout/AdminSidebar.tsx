@@ -158,8 +158,7 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
                         {isFolderExpanded && (
                           <div className="bg-black/20 py-1 ml-5 border-l border-white/5 pl-2 space-y-[1px]">
                             {item.subItems.map((sub) => {
-                              const subActive =
-                                pathname === sub.href || pathname.startsWith(sub.href);
+                              const subActive = pathname === sub.href;
                               return (
                                 <Link
                                   key={sub.href}

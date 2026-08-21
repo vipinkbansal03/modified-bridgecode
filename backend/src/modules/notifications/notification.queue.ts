@@ -6,6 +6,7 @@ import { getApps } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
 import { notificationManagerService } from "./notificationManager.service";
 import nodemailer from "nodemailer";
+import { getSettingValue } from "../settings/settings.service";
 
 const QUEUE_NAME = "notification";
 
@@ -23,28 +24,35 @@ export const notificationQueue = new Queue(QUEUE_NAME, {
 });
 
 // SMTP Transporter Helper
-let transporter: any = null;
-const getSmtpTransporter = () => {
-  if (transporter) return transporter;
+const getSmtpTransporter = async () => {
+  const emailEnabled = await getSettingValue("email.enabled");
+  if (emailEnabled === "false") {
+    logger.info("SMTP email notifications are explicitly disabled in settings.");
+    return null;
+  }
 
-  const host = process.env.SMTP_HOST || "localhost";
-  const port = Number(process.env.SMTP_PORT) || 587;
-  const user = process.env.SMTP_USER || "";
-  const pass = process.env.SMTP_PASS || "";
+  const dbHost = await getSettingValue("email.smtp_host");
+  const dbPort = await getSettingValue("email.smtp_port");
+  const dbUser = await getSettingValue("email.smtp_user");
+  const dbPass = await getSettingValue("email.smtp_password");
+
+  const host = dbHost || process.env.SMTP_HOST || "localhost";
+  const port = Number(dbPort || process.env.SMTP_PORT) || 587;
+  const user = dbUser || process.env.SMTP_USER || "";
+  const pass = dbPass || process.env.SMTP_PASS || "";
 
   if (!user || !pass) {
     logger.warn("SMTP credentials not fully configured, emails will be printed to console log.");
     return null;
   }
 
-  transporter = nodemailer.createTransport({
+  return nodemailer.createTransport({
     host,
     port,
     secure: port === 465,
     auth: { user, pass },
     tls: { rejectUnauthorized: false },
   });
-  return transporter;
 };
 
 export const notificationWorker = new Worker(
@@ -69,11 +77,17 @@ export const notificationWorker = new Worker(
       if (type === "email") {
         const subject = options.subject || "Notification";
         const html = await notificationManagerService.compileEmail(message);
-        const smtp = getSmtpTransporter();
+        const smtp = await getSmtpTransporter();
 
         if (smtp) {
-          const from = process.env.EMAIL_FROM || "orders@modortho.com";
-          const mailOptions = { from, to, subject, html };
+          const fromEmail = (await getSettingValue("email.from_email")) || process.env.EMAIL_FROM || "orders@modortho.com";
+          const fromName = (await getSettingValue("email.from_name")) || process.env.FROM_NAME || "Modern Orthodontics";
+          const mailOptions = {
+            from: `"${fromName}" <${fromEmail}>`,
+            to,
+            subject,
+            html
+          };
           const info = await smtp.sendMail(mailOptions);
           providerName = "nodemailer";
           providerReferenceId = info.messageId;
@@ -81,10 +95,26 @@ export const notificationWorker = new Worker(
           logger.info(`[SMTP MOCK] Sending email to ${to} | Subject: ${subject} | Body: ${message}`);
         }
       } else if (type === "whatsapp") {
-        // Mock Vonage/Meta WhatsApp send
-        providerName = "whatsapp-mock";
-        providerReferenceId = `wa_${Date.now()}`;
-        logger.info(`[WHATSAPP MOCK] Sending template to ${to} | Template: ${options.whatsappTemplate?.name || "none"} | Message: ${message}`);
+        const waTemplate = options.whatsappTemplate;
+        const variables = options.variables || [];
+        const payloadData = options.payload || {};
+
+        if (waTemplate && waTemplate.name) {
+          const { sendTataTemplateMessage } = await import("./tataProvider");
+          const result = await sendTataTemplateMessage(
+            to,
+            waTemplate.name,
+            waTemplate.language || "en",
+            variables,
+            payloadData
+          );
+          providerName = result.provider;
+          providerReferenceId = (result.response as any)?.messages?.[0]?.id || `wa_${Date.now()}`;
+        } else {
+          providerName = "whatsapp-mock";
+          providerReferenceId = `wa_${Date.now()}`;
+          logger.info(`[WHATSAPP MOCK] No template configured. Mapped message: ${message}`);
+        }
       } else if (type === "sms") {
         // Mock SMS provider send
         providerName = "sms-mock";

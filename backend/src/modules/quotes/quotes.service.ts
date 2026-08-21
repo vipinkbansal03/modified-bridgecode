@@ -347,6 +347,18 @@ export async function convertToOrder(quoteId: string) {
   });
 
   await prisma.quote.update({ where: { id: quoteId }, data: { status: "CONVERTED", convertedOrderId: order.id } });
+
+  import("../notifications/notifications.service").then(async ({ notificationsService }) => {
+    const currency = await prisma.currency.findUnique({ where: { id: order.currencyId } });
+    notificationsService.dispatchNotification("ORDER_PLACED", {
+      order_number: order.orderNumber,
+      customer_name: order.customerName,
+      currency: currency?.code || "INR",
+      order_total: String(order.total),
+      customerId: order.customerId || undefined,
+    }).catch(console.error);
+  });
+
   void sendQuoteConvertedEmail({
     customerEmail: quote.customerEmail,
     customerName: quote.customerName,

@@ -112,6 +112,47 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
         </div>
       </div>
 
+      {((apiProduct.moqPricing && apiProduct.moqPricing.length > 0) || 
+        (apiProduct.tierPricing && apiProduct.tierPricing.length > 0)) && (
+        <div className="rounded-lg border border-line bg-offwhite p-4">
+          <h4 className="mb-2 text-[12px] font-bold uppercase tracking-wider text-steel-2">Available Discounts</h4>
+          <div className="space-y-3">
+            {apiProduct.tierPricing && apiProduct.tierPricing.length > 0 && (
+              <div className="space-y-1">
+                <span className="text-[11px] font-semibold text-steel block">Tier Pricing</span>
+                <div className="grid grid-cols-1 gap-1 text-[12.5px]">
+                  {apiProduct.tierPricing.map((tp) => (
+                    <div key={tp.id} className="flex justify-between border-b border-line/50 pb-1">
+                      <span className="text-steel">{tp.tier.name}</span>
+                      <strong className="text-[#15803D]">
+                        {tp.discountPercent ? `${tp.discountPercent}% off` : formatMoney(basePrice.currencySymbol, tp.fixedPrice || 0)}
+                      </strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {apiProduct.moqPricing && apiProduct.moqPricing.length > 0 && (
+              <div className="space-y-1">
+                <span className="text-[11px] font-semibold text-steel block">Volume MOQ Pricing</span>
+                <div className="space-y-1 text-[12.5px]">
+                  {apiProduct.moqPricing.map((mp) => (
+                    <div key={mp.id} className="flex justify-between border-b border-line/50 pb-1">
+                      <span className="text-steel">
+                        {mp.maxQuantity ? `${mp.minQuantity} - ${mp.maxQuantity} units` : `${mp.minQuantity}+ units`}
+                      </span>
+                      <strong className="text-[#15803D]">
+                        {mp.discountPercent ? `${mp.discountPercent}% off` : formatMoney(basePrice.currencySymbol, mp.fixedPrice || 0)}
+                      </strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-3">
         <button
           onClick={() => handleAddToCart(false)}

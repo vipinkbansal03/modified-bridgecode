@@ -73,6 +73,39 @@ export const deleteNotification = asyncHandler(async (req: AuthRequest, res: Res
   return ApiResponse.success(res, 'Notification deleted');
 });
 
+export const deleteCustomerNotification = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
+  if (!req.customer?.id) throw new AppError('Unauthorized', 401);
+  const notification = await prisma.notification.findUnique({
+    where: { id: req.params.id },
+  });
+  if (!notification) throw new AppError('Notification not found', 404);
+  if (notification.customerId !== req.customer.id && notification.targetType !== 'ALL_CUSTOMERS') {
+    throw new AppError('Unauthorized', 403);
+  }
+  await notificationsService.deleteNotification(req.params.id);
+  return ApiResponse.success(res, 'Notification deleted');
+});
+
+export const bulkDeleteCustomerNotifications = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
+  if (!req.customer?.id) throw new AppError('Unauthorized', 401);
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new AppError('IDs array is required', 400);
+  }
+  const notifications = await prisma.notification.findMany({
+    where: { id: { in: ids } },
+  });
+  for (const n of notifications) {
+    if (n.customerId !== req.customer.id && n.targetType !== 'ALL_CUSTOMERS') {
+      throw new AppError('Unauthorized', 403);
+    }
+  }
+  await prisma.notification.deleteMany({
+    where: { id: { in: ids } },
+  });
+  return ApiResponse.success(res, 'Notifications deleted');
+});
+
 // --- New Admin Configuration & Log Controllers ---
 
 export const listNotificationConfigs = asyncHandler(async (req: AuthRequest, res: Response) => {

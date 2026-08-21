@@ -557,6 +557,7 @@ export default function CheckoutPage() {
         originalUnitPrice: number;
         discountedUnitPrice: number;
         quantity: number;
+        discountPercent?: number | null;
       }
     >();
 
@@ -569,6 +570,7 @@ export default function CheckoutPage() {
         originalUnitPrice: discount.amountBefore ?? 0,
         discountedUnitPrice: discount.amountAfter ?? 0,
         quantity: 0,
+        discountPercent: discount.discountPercent,
       };
 
       existing.amount += discount.discountAmount;
@@ -577,6 +579,8 @@ export default function CheckoutPage() {
         existing.originalUnitPrice = discount.amountBefore;
       if (discount.amountAfter)
         existing.discountedUnitPrice = discount.amountAfter;
+      if (discount.discountPercent)
+        existing.discountPercent = discount.discountPercent;
 
       map.set(key, existing);
     }
@@ -1494,9 +1498,7 @@ export default function CheckoutPage() {
                   const estimatedItem = estimate?.items?.find(
                     (ei) => ei.variantId === item.variantId,
                   );
-                  const displayUnitPrice = estimatedItem
-                    ? estimatedItem.unitPrice
-                    : item.unitPrice;
+                  const displayUnitPrice = estimatedItem ? estimatedItem.unitPrice : item.unitPrice;
                   const displayCurrencySymbol =
                     estimate?.currency?.symbol ?? item.currencySymbol;
                   const hasError =
@@ -1650,6 +1652,7 @@ export default function CheckoutPage() {
                             >
                               <span className="text-[#2A6A40]/90 font-medium">
                                 {discount.label}
+                                {discount.discountPercent ? ` (${discount.discountPercent}% off)` : ""}
                               </span>
                               <span className="text-[#2A6A40]/90 font-semibold">
                                 -
@@ -2012,6 +2015,7 @@ export default function CheckoutPage() {
                   >
                     <div className="font-semibold text-[#2A6A40] text-[13px]">
                       {discount.label}
+                      {discount.discountPercent ? ` (${discount.discountPercent}% off)` : ""}
                     </div>
 
                     <div className="flex justify-between text-[12.5px] text-steel">

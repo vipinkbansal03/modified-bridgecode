@@ -138,6 +138,19 @@ export interface ApiProductDetail extends Omit<ApiProductSummary, "images"> {
   lowestPrice?: ApiProductPrice[];
   inventory?: ApiVariantInventory | null;
   warehouseInventories?: { warehouseId: string | null; available: number; status: string }[];
+  moqPricing?: Array<{
+    id: string;
+    minQuantity: number;
+    maxQuantity: number | null;
+    discountPercent: number | null;
+    fixedPrice: number | null;
+  }>;
+  tierPricing?: Array<{
+    id: string;
+    tier: { id: string; name: string };
+    discountPercent: number | null;
+    fixedPrice: number | null;
+  }>;
 }
 
 export interface ApiSearchResult {

@@ -269,7 +269,9 @@ export async function estimateCustomerOrder(
 
   const automaticDiscounts = calculation.orderItems.flatMap((item) =>
     item.resolvedPrice.appliedDiscounts
-      .filter((entry) => entry.type === "PROMOTIONAL_DISCOUNT")
+      .filter((entry) =>
+        ["PROMOTIONAL_DISCOUNT", "MOQ_PRICE", "TIER_PRICE"].includes(entry.type),
+      )
       .map((entry) => ({
         variantId: item.variant?.id ?? null,
         sku: item.variant?.sku ?? item.product.sku,
@@ -381,26 +383,35 @@ export async function estimateCustomerOrder(
     couponDiscount: calculation.discount,
     automaticDiscount,
     automaticDiscounts,
-    items: calculation.orderItems.map((item) => ({
-      variantId: item.variant?.id ?? null,
-      sku: item.variant?.sku ?? item.product.sku,
-      title: item.variant?.title ?? item.product.title,
-      quantity: item.quantity,
-      basePrice: item.resolvedPrice.basePrice,
-      unitPrice: item.unitPrice,
-      lineSubtotal: item.total,
-      appliedDiscounts: item.resolvedPrice.appliedDiscounts.filter(
-        (entry) => entry.type !== "BASE_PRICE" && entry.type !== "TAX",
-      ),
-      appliedTaxes: item.resolvedPrice.appliedDiscounts
-        .filter((entry) => entry.type === "TAX")
-        .map((entry) => ({
-          label: taxLabel,
-          taxPercent: entry.taxPercent,
-          taxAmount: entry.taxAmount,
-          isSpecific: !!entry.isSpecific,
-        })),
-    })),
+    items: calculation.orderItems.map((item) => {
+      const basePriceLayer = item.resolvedPrice.appliedDiscounts.find(
+        (d) => d.type === "BASE_PRICE",
+      );
+      const originalPrice = basePriceLayer
+        ? basePriceLayer.amountAfter
+        : item.resolvedPrice.basePrice;
+
+      return {
+        variantId: item.variant?.id ?? null,
+        sku: item.variant?.sku ?? item.product.sku,
+        title: item.variant?.title ?? item.product.title,
+        quantity: item.quantity,
+        basePrice: originalPrice,
+        unitPrice: item.unitPrice,
+        lineSubtotal: item.total,
+        appliedDiscounts: item.resolvedPrice.appliedDiscounts.filter(
+          (entry) => entry.type !== "BASE_PRICE" && entry.type !== "TAX",
+        ),
+        appliedTaxes: item.resolvedPrice.appliedDiscounts
+          .filter((entry) => entry.type === "TAX")
+          .map((entry) => ({
+            label: taxLabel,
+            taxPercent: entry.taxPercent,
+            taxAmount: entry.taxAmount,
+            isSpecific: !!entry.isSpecific,
+          })),
+      };
+    }),
     total: calculation.total,
     currency: calculation.orderItems[0]?.resolvedPrice.currency,
     taxBreakdown: customerTaxBreakdown,
@@ -589,6 +600,14 @@ export async function createCustomerOrder(
       type: "ORDER",
       targetType: "ALL_ADMINS",
       link: `/admin/orders/${createdOrder.id}`,
+    }).catch(console.error);
+
+    notificationsService.dispatchNotification("ORDER_PLACED", {
+      order_number: createdOrder.orderNumber,
+      customer_name: createdOrder.customerName,
+      currency: createdOrder.currency?.code || "INR",
+      order_total: String(createdOrder.total),
+      customerId: createdOrder.customerId || undefined,
     }).catch(console.error);
   });
 
