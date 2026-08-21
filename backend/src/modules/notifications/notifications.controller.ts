@@ -145,11 +145,21 @@ export const getNotificationManagerSettings = asyncHandler(async (req: AuthReque
       },
     });
   }
-  return ApiResponse.success(res, 'Notification manager settings fetched', settings);
+
+  const layout = await prisma.emailLayout.findFirst({
+    where: { isDefault: true },
+  });
+
+  const responseData = {
+    ...settings,
+    emailLayouts: layout ? { headerHtml: layout.headerHtml, footerHtml: layout.footerHtml } : null,
+  };
+
+  return ApiResponse.success(res, 'Notification manager settings fetched', responseData);
 });
 
 export const updateNotificationManagerSettings = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { masterEnabled, channelAvailability, rolePermissions } = req.body;
+  const { masterEnabled, channelAvailability, rolePermissions, emailLayouts } = req.body;
 
   const settings = await prisma.notificationManagerSettings.update({
     where: { key: 'GLOBAL' },
@@ -159,6 +169,16 @@ export const updateNotificationManagerSettings = asyncHandler(async (req: AuthRe
       rolePermissions: rolePermissions || {},
     },
   });
+
+  if (emailLayouts) {
+    const { headerHtml, footerHtml } = emailLayouts;
+    await prisma.emailLayout.upsert({
+      where: { name: 'DEFAULT' },
+      update: { headerHtml, footerHtml },
+      create: { name: 'DEFAULT', headerHtml, footerHtml, isDefault: true }
+    });
+  }
+
   return ApiResponse.success(res, 'Notification settings updated', settings);
 });
 

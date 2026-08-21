@@ -61,8 +61,49 @@ export default function TemplateManagerPage() {
   const [footerHtml, setFooterHtml] = useState("");
   const [savingLayout, setSavingLayout] = useState(false);
 
+  const [useHtmlMode, setUseHtmlMode] = useState(false);
+  const [headerTitle, setHeaderTitle] = useState("Modern Orthodontics");
+  const [headerBg, setHeaderBg] = useState("#1a1a1a");
+  const [headerTextColor, setHeaderTextColor] = useState("#ffffff");
+  const [footerText, setFooterText] = useState("Modern Orthodontics B2B Platform");
+  const [footerBg, setFooterBg] = useState("#f9f9f9");
+  const [footerTextColor, setFooterTextColor] = useState("#6b6b6b");
+
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+
+  const parseLayout = (header: string, footer: string) => {
+    let hTitle = "Modern Orthodontics";
+    let hBg = "#1a1a1a";
+    let hTextColor = "#ffffff";
+    let fText = "Modern Orthodontics B2B Platform";
+    let fBg = "#f9f9f9";
+    let fTextColor = "#6b6b6b";
+
+    try {
+      const titleMatch = header.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+      if (titleMatch) hTitle = titleMatch[1].trim();
+
+      const textColMatch = header.match(/color:\s*(#[a-fA-F0-9]{3,8}|[a-zA-Z]+)/i);
+      if (textColMatch) hTextColor = textColMatch[1].trim();
+
+      const bgMatch = header.match(/background-color:\s*(#[a-fA-F0-9]{3,8}|[a-zA-Z]+)/i);
+      if (bgMatch) hBg = bgMatch[1].trim();
+
+      const footerTextMatch = footer.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+      if (footerTextMatch) fText = footerTextMatch[1].trim();
+
+      const footerBgMatch = footer.match(/background-color:\s*(#[a-fA-F0-9]{3,8}|[a-zA-Z]+)/i);
+      if (footerBgMatch) fBg = footerBgMatch[1].trim();
+
+      const footerTextColorMatch = footer.match(/color:\s*(#[a-fA-F0-9]{3,8}|[a-zA-Z]+)/i);
+      if (footerTextColorMatch) fTextColor = footerTextColorMatch[1].trim();
+    } catch (e) {
+      console.error("Error parsing email layout HTML:", e);
+    }
+
+    return { headerTitle: hTitle, headerBg: hBg, headerTextColor: hTextColor, footerText: fText, footerBg: fBg, footerTextColor: fTextColor };
+  };
 
   // Load layout on email layout tab activation
   useEffect(() => {
@@ -75,20 +116,39 @@ export default function TemplateManagerPage() {
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null;
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      setHeaderHtml(
-        `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e6e6e6; border-radius: 8px; overflow: hidden;">
+      const res = await apiClient.get("/notifications/admin/manager-settings", { headers });
+      const layouts = res.data?.data?.emailLayouts;
+      
+      let header = "";
+      let footer = "";
+
+      if (layouts?.headerHtml && layouts?.footerHtml) {
+        header = layouts.headerHtml;
+        footer = layouts.footerHtml;
+      } else {
+        header = `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e6e6e6; border-radius: 8px; overflow: hidden;">
   <div style="background-color: #1a1a1a; padding: 24px; text-align: center;">
     <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 500;">Modern Orthodontics</h1>
   </div>
-  <div style="padding: 32px 24px; background-color: #ffffff; color: #333333; line-height: 1.6; font-size: 14px;">`
-      );
-      setFooterHtml(
-        `  </div>
+  <div style="padding: 32px 24px; background-color: #ffffff; color: #333333; line-height: 1.6; font-size: 14px;">`;
+        footer = `  </div>
   <div style="background-color: #f9f9f9; padding: 20px 24px; border-top: 1px solid #e6e6e6; text-align: center; font-size: 12px; color: #6b6b6b;">
     <p style="margin: 0 0 8px 0;">Modern Orthodontics B2B Platform</p>
   </div>
-</div>`
-      );
+</div>`;
+      }
+
+      setHeaderHtml(header);
+      setFooterHtml(footer);
+
+      // Parse fields for Easy Mode
+      const parsed = parseLayout(header, footer);
+      setHeaderTitle(parsed.headerTitle);
+      setHeaderBg(parsed.headerBg);
+      setHeaderTextColor(parsed.headerTextColor);
+      setFooterText(parsed.footerText);
+      setFooterBg(parsed.footerBg);
+      setFooterTextColor(parsed.footerTextColor);
     } catch (err) {
       console.error(err);
     }
@@ -97,12 +157,32 @@ export default function TemplateManagerPage() {
   const handleSaveEmailLayout = async () => {
     setSavingLayout(true);
     try {
+      let finalHeader = headerHtml;
+      let finalFooter = footerHtml;
+
+      if (!useHtmlMode) {
+        // Generate from visual states
+        finalHeader = `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e6e6e6; border-radius: 8px; overflow: hidden;">
+  <div style="background-color: ${headerBg}; padding: 24px; text-align: center;">
+    <h1 style="color: ${headerTextColor}; margin: 0; font-size: 20px; font-weight: 500;">${headerTitle}</h1>
+  </div>
+  <div style="padding: 32px 24px; background-color: #ffffff; color: #333333; line-height: 1.6; font-size: 14px;">`;
+
+        finalFooter = `  </div>
+  <div style="background-color: ${footerBg}; padding: 20px 24px; border-top: 1px solid #e6e6e6; text-align: center; font-size: 12px; color: ${footerTextColor};">
+    <p style="margin: 0 0 8px 0;">${footerText}</p>
+  </div>
+</div>`;
+        setHeaderHtml(finalHeader);
+        setFooterHtml(finalFooter);
+      }
+
       const token = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null;
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       await apiClient.patch(
         "/notifications/admin/manager-settings",
         {
-          emailLayouts: { headerHtml, footerHtml },
+          emailLayouts: { headerHtml: finalHeader, footerHtml: finalFooter },
         },
         { headers }
       );
@@ -457,28 +537,143 @@ export default function TemplateManagerPage() {
         ) : (
           /* Email layout configuration editor */
           <div className="border border-[#E6E6E6] bg-white rounded-lg p-6 space-y-5 shadow-sm">
-            <div className="border-b border-[#E6E6E6] pb-3">
-              <h3 className="text-[14px] font-bold text-[#1A1A1A]">Static Layout (Header & Footer) Wrapper</h3>
-              <p className="text-[12px] text-[#6B6B6B] mt-1">Define the surrounding HTML tags. Wording inside templates will be placed directly in the body wrapper.</p>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-[#E6E6E6] pb-4 gap-4">
+              <div>
+                <h3 className="text-[14px] font-bold text-[#1A1A1A]">Static Layout (Header & Footer) Wrapper</h3>
+                <p className="text-[12px] text-[#6B6B6B] mt-0.5">Configure the global wrapper, colors, logo text, and footer for all store emails.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUseHtmlMode(!useHtmlMode)}
+                className="px-3.5 py-2 border border-[#E6E6E6] hover:bg-[#FAFAFA] rounded text-[11px] font-bold uppercase tracking-wider text-[#6B6B6B] transition-colors whitespace-nowrap self-stretch sm:self-auto text-center"
+              >
+                {useHtmlMode ? "Switch to Easy Mode (Form)" : "Switch to Advanced HTML Mode"}
+              </button>
             </div>
 
-            <div className="space-y-4">
-              <AdminTextarea
-                label="Fixed Header HTML"
-                value={headerHtml}
-                onChange={(e) => setHeaderHtml(e.target.value)}
-                rows={10}
-                className="font-mono text-[12px]"
-              />
+            {useHtmlMode ? (
+              <div className="space-y-4">
+                <AdminTextarea
+                  label="Fixed Header HTML"
+                  value={headerHtml}
+                  onChange={(e) => setHeaderHtml(e.target.value)}
+                  rows={10}
+                  className="font-mono text-[12px]"
+                />
 
-              <AdminTextarea
-                label="Fixed Footer HTML"
-                value={footerHtml}
-                onChange={(e) => setFooterHtml(e.target.value)}
-                rows={10}
-                className="font-mono text-[12px]"
-              />
-            </div>
+                <AdminTextarea
+                  label="Fixed Footer HTML"
+                  value={footerHtml}
+                  onChange={(e) => setFooterHtml(e.target.value)}
+                  rows={10}
+                  className="font-mono text-[12px]"
+                />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Header Configuration */}
+                <div className="space-y-4 border border-[#E6E6E6] rounded-lg p-5 bg-[#FCFCFC]">
+                  <h4 className="text-[12.5px] font-bold text-[#1A1A1A] uppercase tracking-wider border-b border-[#E6E6E6] pb-2">Header Options</h4>
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1.5">Header Brand / Logo Title</label>
+                    <input
+                      type="text"
+                      value={headerTitle}
+                      onChange={(e) => setHeaderTitle(e.target.value)}
+                      className="w-full px-3 py-2 text-[13px] border border-[#E6E6E6] rounded focus:outline-none focus:border-[#1A1A1A]"
+                      placeholder="e.g. Modern Orthodontics"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1.5">Header Background Color</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="color"
+                          value={headerBg}
+                          onChange={(e) => setHeaderBg(e.target.value)}
+                          className="w-8.5 h-8.5 p-0.5 rounded border border-[#E6E6E6] cursor-pointer"
+                        />
+                        <input
+                          type="text"
+                          value={headerBg}
+                          onChange={(e) => setHeaderBg(e.target.value)}
+                          className="flex-1 px-2.5 py-1 text-[12px] border border-[#E6E6E6] rounded focus:outline-none text-center font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1.5">Header Title Color</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="color"
+                          value={headerTextColor}
+                          onChange={(e) => setHeaderTextColor(e.target.value)}
+                          className="w-8.5 h-8.5 p-0.5 rounded border border-[#E6E6E6] cursor-pointer"
+                        />
+                        <input
+                          type="text"
+                          value={headerTextColor}
+                          onChange={(e) => setHeaderTextColor(e.target.value)}
+                          className="flex-1 px-2.5 py-1 text-[12px] border border-[#E6E6E6] rounded focus:outline-none text-center font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Configuration */}
+                <div className="space-y-4 border border-[#E6E6E6] rounded-lg p-5 bg-[#FCFCFC]">
+                  <h4 className="text-[12.5px] font-bold text-[#1A1A1A] uppercase tracking-wider border-b border-[#E6E6E6] pb-2">Footer Options</h4>
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1.5">Footer Copyright Wording</label>
+                    <input
+                      type="text"
+                      value={footerText}
+                      onChange={(e) => setFooterText(e.target.value)}
+                      className="w-full px-3 py-2 text-[13px] border border-[#E6E6E6] rounded focus:outline-none focus:border-[#1A1A1A]"
+                      placeholder="e.g. Modern Orthodontics B2B Platform"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1.5">Footer Background Color</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="color"
+                          value={footerBg}
+                          onChange={(e) => setFooterBg(e.target.value)}
+                          className="w-8.5 h-8.5 p-0.5 rounded border border-[#E6E6E6] cursor-pointer"
+                        />
+                        <input
+                          type="text"
+                          value={footerBg}
+                          onChange={(e) => setFooterBg(e.target.value)}
+                          className="flex-1 px-2.5 py-1 text-[12px] border border-[#E6E6E6] rounded focus:outline-none text-center font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1.5">Footer Text Color</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="color"
+                          value={footerTextColor}
+                          onChange={(e) => setFooterTextColor(e.target.value)}
+                          className="w-8.5 h-8.5 p-0.5 rounded border border-[#E6E6E6] cursor-pointer"
+                        />
+                        <input
+                          type="text"
+                          value={footerTextColor}
+                          onChange={(e) => setFooterTextColor(e.target.value)}
+                          className="flex-1 px-2.5 py-1 text-[12px] border border-[#E6E6E6] rounded focus:outline-none text-center font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-end pt-3">
               <button
