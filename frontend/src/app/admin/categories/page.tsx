@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import * as Yup from "yup";
-import { Archive, CheckCircle2, Copy, Download, FolderTree, GitFork, Image as ImageIcon, Layers, Pencil, Plus, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
+import { Archive, AlertCircle, CheckCircle2, Copy, Download, FolderTree, GitFork, Image as ImageIcon, Layers, Pencil, Plus, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, AdminTextarea, AdminRichTextEditor, ConfirmModal, StatCard, StatusBadge, toastMessages, useToast, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, AdminTextarea, AdminRichTextEditor, ConfirmModal, StatCard, StatusBadge, toastMessages, useToast, LoadingButton, AdminBulkActionsBar, DataTable, TableStatusAction } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import {
   filterTranslationLanguages,
@@ -77,10 +77,20 @@ type SpreadsheetPreview = {
   sampleRows: Array<Record<string, unknown>>;
 };
 
+import { CATEGORY_DESCRIPTION_MAX_LENGTH } from "@/constants/category.constants";
+import { stripHtmlTags } from "@/utils/sanitize";
+
 const schema = Yup.object({
   name: Yup.string().trim().required("Name is required"),
   slug: Yup.string().trim().required("Slug is required"),
-  description: Yup.string(),
+  description: Yup.string().test(
+    "max-description-chars",
+    `Category description cannot exceed ${CATEGORY_DESCRIPTION_MAX_LENGTH} characters`,
+    (val) => {
+      if (!val) return true;
+      return stripHtmlTags(val).length <= CATEGORY_DESCRIPTION_MAX_LENGTH;
+    }
+  ),
   seoTitle: Yup.string(),
   seoDescription: Yup.string(),
   image: Yup.string(),
@@ -475,6 +485,152 @@ export default function CategoriesPage() {
     form.reset();
   };
 
+  const toggleStatus = async (category: CategoryRow) => {
+    if (!canUpdate) {
+      showToast("You do not have permission to update categories.", "error");
+      return;
+    }
+    const nextStatus = category.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    try {
+      await updateCategory.mutateAsync({ id: category.id, status: nextStatus });
+      showToast(`Category marked ${nextStatus.toLowerCase()}.`);
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to update category status."), "error");
+    }
+  };
+
+  const runBulk = async (action: string) => {
+    if (selectedIds.length === 0) return;
+
+    if (action === "delete") {
+      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected category(ies)? This action cannot be undone.`)) {
+        return;
+      }
+    }
+
+    setBulkSaving(true);
+    setBulkAction(action);
+    try {
+      if (action === "delete") {
+        await Promise.all(selectedIds.map((id) => deleteCategory.mutateAsync(id)));
+        showToast(`Successfully deleted ${selectedIds.length} category(ies).`);
+      } else if (action === "activate") {
+        await Promise.all(selectedIds.map((id) => updateCategory.mutateAsync({ id, status: "ACTIVE" })));
+        showToast(`Successfully activated ${selectedIds.length} category(ies).`);
+      } else if (action === "deactivate") {
+        await Promise.all(selectedIds.map((id) => updateCategory.mutateAsync({ id, status: "INACTIVE" })));
+        showToast(`Successfully deactivated ${selectedIds.length} category(ies).`);
+      }
+      setSelectedIds([]);
+      setBulkAction("");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to complete bulk action."), "error");
+    } finally {
+      setBulkSaving(false);
+      setBulkAction("");
+    }
+  };
+
+  const columns = useMemo(
+    () => [
+      {
+        key: "preview",
+        label: "PREVIEW",
+        width: "76px",
+        render: (row: CategoryRow) => (
+          <div className="flex h-10 w-14 items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
+            {row.image ? (
+              <img src={row.image} alt={row.name} className="h-full w-full object-cover" />
+            ) : (
+              <ImageIcon size={18} className="text-[#9A9A9A]" />
+            )}
+          </div>
+        ),
+      },
+      {
+        key: "title",
+        label: "TITLE & SLUG",
+        width: "auto",
+        render: (row: CategoryRow) => (
+          <div className="flex min-w-0 items-center gap-2" style={{ paddingLeft: `${Math.min(row.depth, 4) * 14}px` }}>
+            <div className="min-w-0 space-y-0.5">
+              <div className="truncate text-[13.5px] font-semibold text-[#1A1A1A]">{row.name}</div>
+              <div className="flex items-center gap-2 text-[11.5px] text-[#888]">
+                <code className="font-mono text-[#6B6B6B]">/{row.slug}</code>
+                {row.parent && <span className="text-gray-400">• Child of {row.parent.name}</span>}
+              </div>
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: "products",
+        label: "PRODUCTS",
+        width: "120px",
+        render: (row: CategoryRow) => (
+          <span className="text-[12.5px] font-medium text-[#555]">
+            {row._count.products} {row._count.products === 1 ? "product" : "products"}
+          </span>
+        ),
+      },
+      {
+        key: "status",
+        label: "STATUS",
+        width: "110px",
+      },
+      {
+        key: "actions",
+        label: "ACTIONS",
+        width: "140px",
+        render: (row: CategoryRow) => (
+          <div className="flex items-center justify-end gap-1.5">
+            {canCreate && (
+              <button
+                type="button"
+                onClick={() => handleDuplicate(row.id)}
+                className="flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#555] hover:bg-gray-50 hover:text-[#1A1A1A] transition-colors"
+                title="Duplicate category"
+              >
+                <Copy size={13} />
+              </button>
+            )}
+            {canUpdate && (
+              <button
+                type="button"
+                onClick={() => handleArchiveToggle(row)}
+                className="flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#555] hover:bg-gray-50 hover:text-[#1A1A1A] transition-colors"
+                title={row.status === "ACTIVE" ? "Archive category" : "Restore category"}
+              >
+                {row.status === "ACTIVE" ? <Archive size={13} /> : <RotateCcw size={13} />}
+              </button>
+            )}
+            {canUpdate && (
+              <button
+                type="button"
+                onClick={() => openEditor(row)}
+                className="flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#555] hover:bg-gray-50 hover:text-[#1A1A1A] transition-colors"
+                title="Edit category"
+              >
+                <Pencil size={13} />
+              </button>
+            )}
+            {canDelete && (
+              <button
+                type="button"
+                onClick={() => setDeleting(row.id)}
+                className="flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] bg-white text-red-500 hover:bg-red-50 transition-colors"
+                title="Delete category"
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
+        ),
+      },
+    ],
+    [canCreate, canUpdate, canDelete, handleDuplicate, handleArchiveToggle, openEditor],
+  );
+
   return (
     <AdminLayout title="Categories" breadcrumb={[{ label: "Categories" }]}>
       <AdminStatsGrid
@@ -527,19 +683,36 @@ export default function CategoriesPage() {
           type="file"
           accept=".xlsx,.xls,.csv"
           className="hidden"
-          onChange={(event) => {
+      onChange={(event) => {
             void handleImportFile(event.target.files?.[0] || undefined);
             event.currentTarget.value = "";
           }}
         />
-
       <Modal
         open={showEditor}
         onClose={closeEditor}
         title={editing ? `Edit Category: ${editing.name}` : "Category Editor"}
-        panelClassName="max-w-5xl max-h-[calc(100vh-2rem)] overflow-y-auto"
+        panelClassName="max-w-5xl max-h-[85vh]"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button type="button" onClick={closeEditor} className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors">
+              Cancel
+            </button>
+            {(!editing || categoryEditorTab === "content") && (
+              <LoadingButton
+                type="submit"
+                form="category-edit-form"
+                loading={form.isSubmitting}
+                loadingText="Saving..."
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+              >
+                {editing ? "Update category" : "Create category"}
+              </LoadingButton>
+            )}
+          </div>
+        }
       >
-        <form onSubmit={form.handleSubmit} className="space-y-6 p-6">
+        <form id="category-edit-form" onSubmit={form.handleSubmit} className="space-y-6 p-6">
           {editing && (
             <div className="flex justify-start">
               <TranslationModeBar
@@ -552,7 +725,15 @@ export default function CategoriesPage() {
             </div>
           )}
 
-          {form.status && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">{form.status}</div>}
+          {form.status && (
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700 flex items-start gap-2.5">
+              <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-red-800">Unable to save category</p>
+                <p className="mt-0.5">{form.status}</p>
+              </div>
+            </div>
+          )}
 
           {(!editing || categoryEditorTab === "content") && (
             <div className="space-y-4">
@@ -572,7 +753,11 @@ export default function CategoriesPage() {
                 label="Description"
                 value={form.values.description}
                 onChange={(val) => form.setFieldValue("description", val)}
-                mediaContext={{ entityType: "CATEGORY", entityId: editing?.id ? String(editing.id) : undefined }}
+                maxLength={CATEGORY_DESCRIPTION_MAX_LENGTH}
+                showCharCount={true}
+                hideImageUpload={true}
+                compact={true}
+                error={form.errors.description as string}
               />
               <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
                 <h4 className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">SEO</h4>
@@ -677,20 +862,22 @@ export default function CategoriesPage() {
                     </div>
                   )}
                 </section>
-              ) : (
-                <div className="rounded-md border border-[#E6E6E6] bg-[#F8F8F8] px-3 py-2 text-[13px] text-[#6B6B6B]">
-                  Country Availability appears after creation. New categories are not enabled in any country by default.
-                </div>
-              )}
+              ) : null}
             </div>
           )}
 
           {editing && categoryEditorTab === "translations" && (
-            translationLanguages.length === 0 ? (
-              <NoTranslationLanguagesMessage />
-            ) : activeTranslationLang ? (
-              <div className="space-y-4">
-                <TranslationEditorBanner language={activeTranslationLang} />
+            activeTranslationLang ? (
+              <div className="space-y-4 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
+                <div className="border-b border-[#E6E6E6] pb-3">
+                  <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">
+                    Editing {activeTranslationLang.name} Translation
+                  </h4>
+                  <p className="mt-0.5 text-[12px] text-[#6B6B6B]">
+                    Values save automatically on blur. English reference values are shown above each field.
+                  </p>
+                </div>
+
                 {(() => {
                   const translation = editing.translations?.find((item) => item.languageId === activeTranslationLang.id);
                   return (
@@ -706,6 +893,7 @@ export default function CategoriesPage() {
                         key={`description-${activeTranslationLang.id}-${translation?.description ?? ""}`}
                         label="Description"
                         rows={2}
+                        maxLength={CATEGORY_DESCRIPTION_MAX_LENGTH}
                         defaultValue={translation?.description || ""}
                         englishReference={editing.description || ""}
                         onSave={(value) => saveCategoryTranslation(editing.id, activeTranslationLang.id, "description", value)}
@@ -716,20 +904,6 @@ export default function CategoriesPage() {
               </div>
             ) : null
           )}
-
-          <div className="flex gap-2.5 justify-end">
-            {(!editing || categoryEditorTab === "content") && (
-              <LoadingButton
-                type="submit"
-                loading={form.isSubmitting}
-                loadingText="Saving..."
-                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-              >
-                {editing ? "Update category" : "Create category"}
-              </LoadingButton>
-            )}
-            <button type="button" onClick={closeEditor} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] hover:bg-[#F2F2F2]">Cancel</button>
-          </div>
         </form>
       </Modal>
 
@@ -737,14 +911,38 @@ export default function CategoriesPage() {
         open={showCreateModal}
         onClose={closeCreateModal}
         title="Add Category"
-        panelClassName="max-w-4xl max-h-[calc(100vh-2.5rem)] overflow-y-auto"
+        panelClassName="max-w-4xl max-h-[85vh]"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button type="button" onClick={closeCreateModal} className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors">
+              Cancel
+            </button>
+            <LoadingButton
+              type="submit"
+              form="category-create-form"
+              loading={form.isSubmitting}
+              loadingText="Creating..."
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+            >
+              Create category
+            </LoadingButton>
+          </div>
+        }
       >
-        <form onSubmit={form.handleSubmit} className="space-y-5 p-6">
+        <form id="category-create-form" onSubmit={form.handleSubmit} className="space-y-5 p-6">
           <p className="text-[13px] leading-5 text-[#6B6B6B]">
             Create the category now. Country availability and translation work can be refined after saving.
           </p>
 
-          {form.status && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">{form.status}</div>}
+          {form.status && (
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-[13px] text-red-700 flex items-start gap-2.5">
+              <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-red-800">Unable to save category</p>
+                <p className="mt-0.5">{form.status}</p>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
@@ -780,7 +978,16 @@ export default function CategoriesPage() {
               />
             </div>
 
-            <AdminTextarea label="Description" rows={3} {...form.getFieldProps("description")} />
+            <AdminRichTextEditor
+              label="Description"
+              value={form.values.description}
+              onChange={(val) => form.setFieldValue("description", val)}
+              maxLength={CATEGORY_DESCRIPTION_MAX_LENGTH}
+              showCharCount={true}
+              hideImageUpload={true}
+              compact={true}
+              error={form.errors.description as string}
+            />
 
             <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
               <h4 className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">SEO</h4>
@@ -803,169 +1010,60 @@ export default function CategoriesPage() {
               </div>
             </div>
           </div>
-
-          <div className="flex gap-2.5 justify-end">
-            <button type="button" onClick={closeCreateModal} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] hover:bg-[#F2F2F2]">
-              Cancel
-            </button>
-            <LoadingButton
-              type="submit"
-              loading={form.isSubmitting}
-              loadingText="Creating..."
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-            >
-              Create category
-            </LoadingButton>
-          </div>
         </form>
       </Modal>
 
-      {isLoading ? (
-        <div className="space-y-3">{[...Array(4)].map((_, index) => <div key={index} className="h-20 animate-pulse rounded-lg bg-[#E6E6E6]" />)}</div>
-      ) : rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-[#E6E6E6] py-12 text-center text-[13.5px] text-[#9A9A9A]">No categories yet.</div>
-      ) : (
-        <div className="rounded-lg border border-[#E6E6E6] bg-white">
-          <div className="border-b border-[#E6E6E6] bg-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 min-h-[56px] transition-all rounded-t-lg">
-            <div className="flex flex-wrap items-center gap-3 w-full">
-              <span className="text-[13px] font-bold text-[#1A1A1A]">Categories List</span>
-              <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">
-                {rows.length} {rows.length === 1 ? "category" : "categories"}
-              </span>
-              
-              <div className="flex items-center gap-2 border-l border-[#E6E6E6] pl-3 ml-2 flex-wrap">
-                <AdminBulkActionsBar
-                  selectedCount={selectedIds.length}
-                  onClear={() => setSelectedIds([])}
-                  actionType={bulkAction}
-                  onActionTypeChange={setBulkAction}
-                  actions={[
-                    { value: "activate", label: "Mark active" },
-                    { value: "deactivate", label: "Mark inactive" },
-                    { value: "delete", label: "Delete selected" }
-                  ]}
-                  onApply={handleBulkAction}
-                  applyLoading={bulkSaving}
-                  applyDisabled={!bulkAction || selectedIds.length === 0}
-                />
-              </div>
-            </div>
+      <DataTable
+        title="Categories List"
+        columns={columns}
+        data={rows}
+        rowKey="id"
+        isLoading={isLoading}
+        emptyMessage="No categories found."
+        enableSelection={true}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
+        enableReorder={canUpdate && !search && !statusFilter}
+        onReorder={handleReorder}
+        disabledReorder={reorderCategories.isPending}
+        onToggleStatus={toggleStatus}
+        statusLoadingId={updateCategory.isPending ? ((updateCategory.variables as any)?.id ?? null) : null}
+        renderBulkActions={(selectedIds) => (
+          <div className="flex items-center gap-3 w-full">
+            <span className="text-[13px] font-bold text-[#1A1A1A]">{selectedIds.length} selected</span>
+            <button
+              type="button"
+              onClick={() => setSelectedIds([])}
+              className="inline-flex items-center gap-1.5 rounded border border-[#E6E6E6] bg-white px-2.5 py-1 text-[11.5px] font-semibold text-[#1A1A1A] hover:bg-gray-50 hover:border-gray-300 shadow-xs transition-all"
+            >
+              <X size={12} /> Clear
+            </button>
+            <div className="h-4 w-px bg-[#E6E6E6]" />
+            <span className="text-[12px] text-gray-500 font-medium">Bulk Actions:</span>
+            <LoadingButton
+              onClick={() => runBulk("activate")}
+              loading={bulkSaving && bulkAction === "activate"}
+              className="rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors shadow-2xs"
+            >
+              Enable
+            </LoadingButton>
+            <LoadingButton
+              onClick={() => runBulk("deactivate")}
+              loading={bulkSaving && bulkAction === "deactivate"}
+              className="rounded border border-amber-200 bg-amber-50 px-2.5 py-1 text-[12px] font-semibold text-amber-700 hover:bg-amber-100 transition-colors shadow-2xs"
+            >
+              Disable
+            </LoadingButton>
+            <LoadingButton
+              onClick={() => runBulk("delete")}
+              loading={bulkSaving && bulkAction === "delete"}
+              className="rounded border border-red-200 bg-red-50 px-2.5 py-1 text-[12px] font-semibold text-red-700 hover:bg-red-100 transition-colors shadow-2xs"
+            >
+              Delete
+            </LoadingButton>
           </div>
-          <div className="p-3">
-            <div className="mb-2 hidden items-center gap-2 px-3 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A] md:flex">
-              <span className="w-6 shrink-0" />
-              <div className={`${categoryGridClass} min-w-0 flex-1 pr-3`}>
-                <div className="flex items-center justify-center">
-                  <input
-                    type="checkbox"
-                    checked={rows.length > 0 && selectedIds.length === rows.length}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedIds(rows.map(r => r.id));
-                      } else {
-                        setSelectedIds([]);
-                      }
-                    }}
-                    className="h-4 w-4 accent-[#E31E24]"
-                  />
-                </div>
-                <span>Name</span>
-                <span>Slug</span>
-                <span>Products</span>
-                <span>Status</span>
-                <span className="text-right">Actions</span>
-              </div>
-            </div>
-            <SortableList
-              className="w-full min-w-0"
-              items={rows}
-              onReorder={handleReorder}
-              disabled={!canUpdate}
-              handleAriaLabel="Drag category to reorder"
-              rowWidthClassName="w-full min-w-0"
-              contentClassName="flex-1 min-w-0 w-full py-2 pr-3"
-              renderItem={(category) => (
-                <div className={categoryGridClass}>
-                  <div className="flex items-center justify-center">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(category.id)}
-                      onChange={(e) => {
-                        const isShiftPressed = (e.nativeEvent as any).shiftKey;
-                        const isSelected = selectedIds.includes(category.id);
-
-                        if (isShiftPressed && lastSelectedId !== null) {
-                          const prevIndex = rows.findIndex(r => r.id === lastSelectedId);
-                          const currIndex = rows.findIndex(r => r.id === category.id);
-                          if (prevIndex !== -1 && currIndex !== -1) {
-                            const start = Math.min(prevIndex, currIndex);
-                            const end = Math.max(prevIndex, currIndex);
-                            const rangeIds = rows.slice(start, end + 1).map(r => r.id);
-                            if (!isSelected) {
-                              setSelectedIds(prev => Array.from(new Set([...prev, ...rangeIds])));
-                            } else {
-                              setSelectedIds(prev => prev.filter(id => !rangeIds.includes(id)));
-                            }
-                            setLastSelectedId(category.id);
-                            return;
-                          }
-                        }
-
-                        if (e.target.checked) {
-                          setSelectedIds(prev => [...prev, category.id]);
-                        } else {
-                          setSelectedIds(prev => prev.filter(id => id !== category.id));
-                        }
-                        setLastSelectedId(category.id);
-                      }}
-                      className="h-4 w-4 accent-[#E31E24]"
-                    />
-                  </div>
-                  <div className="flex min-w-0 items-center gap-2" style={{ paddingLeft: `${Math.min(category.depth, 4) * 14}px` }}>
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
-                      {category.image ? <img src={category.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={16} className="text-[#9A9A9A]" />}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="truncate text-[14px] font-semibold text-[#1A1A1A]">{category.name}</div>
-                      {category.parent && <div className="text-[12px] text-[#9A9A9A]">Child of {category.parent.name}</div>}
-                    </div>
-                  </div>
-                <span className="truncate font-mono text-[12px] text-[#6B6B6B]">{category.slug}</span>
-                <span className="text-[13px] text-[#1A1A1A]">{category._count.products}</span>
-                <StatusBadge status={category.status} />
-                <div className="flex gap-1.5 md:justify-end">
-                  {canCreate && (
-                    <button type="button" onClick={() => handleDuplicate(category.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Duplicate category">
-                      <Copy size={13} />
-                    </button>
-                  )}
-                  {canUpdate && (
-                    <button
-                      type="button"
-                      onClick={() => handleArchiveToggle(category)}
-                      className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-                      title={category.status === "ACTIVE" ? "Archive category" : "Restore category"}
-                    >
-                      {category.status === "ACTIVE" ? <Archive size={13} /> : <RotateCcw size={13} />}
-                    </button>
-                  )}
-                  {canUpdate && (
-                    <button type="button" onClick={() => openEditor(category)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Edit category">
-                      <Pencil size={13} />
-                    </button>
-                  )}
-                  {canDelete && (
-                    <button type="button" onClick={() => setDeleting(category.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50" title="Delete category">
-                      <Trash2 size={13} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          />
-        </div>
-      </div>
-      )}
+        )}
+      />
 
       <ConfirmModal
         open={!!deleting}

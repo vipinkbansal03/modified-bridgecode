@@ -2,6 +2,33 @@ import { Prisma, Status } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { AppError, slugify } from "../../utils/apiResponse";
 import { readSpreadsheetRows, writeSpreadsheetBuffer } from "../../utils/spreadsheet";
+import { CATEGORY_DESCRIPTION_MAX_LENGTH } from "../../constants/category.constants";
+
+export function getMeaningfulTextLength(html: string | null | undefined): number {
+  if (!html) return 0;
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .trim().length;
+}
+
+export function assertValidDescriptionLength(description: string | null | undefined) {
+  if (!description) return;
+  const length = getMeaningfulTextLength(description);
+  if (length > CATEGORY_DESCRIPTION_MAX_LENGTH) {
+    throw new AppError(
+      `Category description cannot exceed ${CATEGORY_DESCRIPTION_MAX_LENGTH} characters. Current text length: ${length} characters.`,
+      400,
+    );
+  }
+}
 
 const categoryInclude = {
   parent: { select: { id: true, name: true, slug: true } },
@@ -163,6 +190,7 @@ function cleanCategoryData(data: CategoryInput, id?: string): Prisma.CategoryUnc
 
 export async function createCategory(data: CategoryInput & { name: string }) {
   if (!data.name?.trim()) throw new AppError("Category name is required.", 400);
+  if (data.description !== undefined) assertValidDescriptionLength(data.description);
   const slug = slugify(data.slug?.trim() || data.name);
   if (!slug) throw new AppError("Category slug is required.", 400);
   await assertUniqueSlug(slug);
@@ -179,6 +207,7 @@ export async function createCategory(data: CategoryInput & { name: string }) {
 
 export async function updateCategory(id: string, data: CategoryInput) {
   const current = await getCategory(id);
+  if (data.description !== undefined) assertValidDescriptionLength(data.description);
   const slug = data.slug !== undefined || data.name !== undefined ? slugify(data.slug?.trim() || data.name || "") : undefined;
   if (slug !== undefined) {
     if (!slug) throw new AppError("Category slug is required.", 400);
@@ -195,14 +224,20 @@ export async function updateCategory(id: string, data: CategoryInput) {
 }
 
 export async function deleteCategory(id: string) {
-  await getCategory(id);
+  const current = await getCategory(id);
   const [productCount, childCount] = await Promise.all([
     prisma.product.count({ where: { categoryId: id, deletedAt: null } }),
     prisma.category.count({ where: { parentId: id, deletedAt: null } }),
   ]);
   if (productCount > 0) throw new AppError("Cannot delete a category that is used by products.", 400);
   if (childCount > 0) throw new AppError("Cannot delete a category that still has child categories.", 400);
-  return prisma.category.update({ where: { id }, data: { deletedAt: new Date() } });
+  return prisma.category.update({
+    where: { id },
+    data: {
+      deletedAt: new Date(),
+      slug: `${current.slug}-deleted-${Date.now()}`,
+    },
+  });
 }
 
 export async function archiveCategory(id: string) {
@@ -211,9 +246,20 @@ export async function archiveCategory(id: string) {
 }
 
 export async function restoreCategory(id: string) {
-  await getCategory(id);
+  const current = await prisma.category.findFirst({ where: { id } });
+  if (!current) throw new AppError("Category not found.", 404);
+
+  const baseSlug = current.slug.replace(/-deleted-\d+$/, "");
+  const slugConflict = await prisma.category.findFirst({
+    where: { slug: baseSlug, deletedAt: null, id: { not: id } },
+  });
+  const finalSlug = slugConflict ? `${baseSlug}-restored-${Date.now()}` : baseSlug;
+
   return prisma.$transaction(async (tx) => {
-    const category = await tx.category.update({ where: { id }, data: { status: "ACTIVE", deletedAt: null } });
+    const category = await tx.category.update({
+      where: { id },
+      data: { status: "ACTIVE", deletedAt: null, slug: finalSlug },
+    });
     await syncActiveCategoryVisibility(tx, category.id, category.status);
     return category;
   });
@@ -356,6 +402,16 @@ async function previewCategoryRows(rows: Record<string, string>[]) {
   for (const [index, row] of parsed.entries()) {
     const rowNumber = index + 2;
     if (!row.name) issues.push({ row: rowNumber, field: "name", message: "Name is required." });
+    if (row.description) {
+      const descLen = getMeaningfulTextLength(row.description);
+      if (descLen > CATEGORY_DESCRIPTION_MAX_LENGTH) {
+        issues.push({
+          row: rowNumber,
+          field: "description",
+          message: `Category description cannot exceed ${CATEGORY_DESCRIPTION_MAX_LENGTH} characters. Current length: ${descLen} characters.`,
+        });
+      }
+    }
     if (row.status && !["ACTIVE", "INACTIVE"].includes(row.status)) {
       issues.push({ row: rowNumber, field: "status", message: "Status must be ACTIVE or INACTIVE." });
     }

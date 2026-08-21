@@ -2,57 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
-@font-face {
-  font-family: "Cabinet Grotesk";
-  src: url("../assets/CabinetGrotesk_Complete/Fonts/OTF/CabinetGrotesk-Regular.otf") format("opentype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Cabinet Grotesk";
-  src: url("../assets/CabinetGrotesk_Complete/Fonts/OTF/CabinetGrotesk-Medium.otf") format("opentype");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Cabinet Grotesk";
-  src: url("../assets/CabinetGrotesk_Complete/Fonts/OTF/CabinetGrotesk-Medium.otf") format("opentype");
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Cabinet Grotesk";
-  src: url("../assets/CabinetGrotesk_Complete/Fonts/OTF/CabinetGrotesk-Bold.otf") format("opentype");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Cabinet Grotesk";
-  src: url("../assets/CabinetGrotesk_Complete/Fonts/OTF/CabinetGrotesk-Extrabold.otf") format("opentype");
-  font-weight: 800;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Cabinet Grotesk";
-  src: url("../assets/CabinetGrotesk_Complete/Fonts/OTF/CabinetGrotesk-Black.otf") format("opentype");
-  font-weight: 900;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
-  --font-body: "Inter";
-  --font-heading: "Cabinet Grotesk";
+  --font-body: var(--font-jost), "Jost", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-heading: var(--font-jost), "Jost", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-admin: var(--font-inter), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --ink: #1a1a1a;
   --steel: #6b6b6b;
   --steel-2: #9a9a9a;
@@ -71,9 +24,36 @@ html {
 body {
   color: var(--ink);
   background: #ffffff;
-  font-family: var(--font-body), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-body);
   font-feature-settings: "kern";
+  font-optical-sizing: auto;
   -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Admin Panel Typography Scope (Preserves Inter for /admin/*) ─── */
+.admin-scope {
+  --font-body: var(--font-inter), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-heading: var(--font-inter), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.admin-scope h1,
+.admin-scope h2,
+.admin-scope h3,
+.admin-scope h4,
+.admin-scope h5,
+.admin-scope h6,
+.admin-scope p,
+.admin-scope span,
+.admin-scope a,
+.admin-scope button,
+.admin-scope input,
+.admin-scope textarea,
+.admin-scope label,
+.admin-scope table,
+.admin-scope th,
+.admin-scope td {
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 /* Global elegant scrollbar styling across all pages & scrollable elements */

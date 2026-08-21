@@ -11,6 +11,7 @@ import { PincodeSearch } from "./PincodeSearch";
 import { SavedAddresses } from "./SavedAddresses";
 import { EmptyAddresses } from "./EmptyAddresses";
 import { useDeliveryAddress } from "@/contexts/DeliveryAddressContext";
+import { useToast } from "@/components/ui/ToastProvider";
 
 interface DeliveryAddressModalProps {
   open: boolean;
@@ -21,6 +22,7 @@ export function DeliveryAddressModal({
   open,
   onClose,
 }: DeliveryAddressModalProps) {
+  const { showToast } = useToast();
   const { data: addresses = [], isLoading } = useCustomerAddresses(); 
 
   const { selectedAddress, setSelectedAddress } = useDeliveryAddress();
@@ -58,7 +60,7 @@ export function DeliveryAddressModal({
 
   const handleCurrentLocation = () => {
     if (!navigator.geolocation) {
-      alert("Geolocation is not supported by your browser.");
+      showToast("Geolocation is not supported by your browser.", "warning");
       return;
     }
 
@@ -114,14 +116,14 @@ export function DeliveryAddressModal({
           onClose();
         } catch (error) {
           console.error("Reverse geocoding error:", error);
-          alert("Failed to resolve your coordinates to a location.");
+          showToast("Failed to resolve your coordinates to a location.", "error");
         } finally {
           setDetecting(false);
         }
       },
       (error) => {
         console.error("Geolocation error:", error);
-        alert("Unable to retrieve your location. Please check your browser permission settings.");
+        showToast("Unable to retrieve your location. Please check your browser permission settings.", "warning");
         setDetecting(false);
       }
     );

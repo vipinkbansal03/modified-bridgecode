@@ -6,7 +6,7 @@ import { adminApi } from "@/services/adminApi";
 import { Star, CheckCircle2, XCircle, Trash2, Search, Filter, MessageSquare, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { StatCard, AdminStatsGrid, AdminListToolbar, ConfirmModal, LoadingButton } from "@/components/admin/AdminComponents";
+import { StatCard, AdminStatsGrid, AdminListToolbar, ConfirmModal, LoadingButton, useToast } from "@/components/admin/AdminComponents";
 
 interface ReviewItem {
   id: string;
@@ -25,6 +25,7 @@ interface ReviewItem {
 }
 
 export default function AdminReviewsPage() {
+  const { showToast } = useToast();
   const { hasPermission } = useAdminAuth();
   const canUpdate = hasPermission("reviews.update");
   const canDelete = hasPermission("reviews.delete");
@@ -65,13 +66,19 @@ export default function AdminReviewsPage() {
 
   useEffect(() => {
     fetchReviews(debouncedSearch);
-  }, [statusFilter, debouncedSearch]);
+  }, [debouncedSearch, statusFilter]);
 
   const reviewStats = useMemo(() => {
     const total = reviews.length;
     const approved = reviews.filter((r) => r.status === "APPROVED").length;
     const pending = reviews.filter((r) => r.status === "PENDING").length;
-    const avgScore = total > 0 ? (reviews.reduce((sum, r) => sum + r.ratingOverall, 0) / total).toFixed(1) : "0.0";
+    const avgScore =
+      total > 0
+        ? (
+            reviews.reduce((acc, r) => acc + (r.ratingOverall || 5), 0) /
+            total
+          ).toFixed(1)
+        : "0.0";
     return { total, approved, pending, avgScore };
   }, [reviews]);
 
@@ -86,7 +93,7 @@ export default function AdminReviewsPage() {
       }
     } catch (err) {
       console.error("Failed to update status", err);
-      alert("Failed to update status.");
+      showToast("Failed to update status.", "error");
     } finally {
       setUpdatingId(null);
     }
@@ -102,7 +109,7 @@ export default function AdminReviewsPage() {
       }
     } catch (err) {
       console.error("Failed to delete review", err);
-      alert("Failed to delete review.");
+      showToast("Failed to delete review.", "error");
     } finally {
       setDeletingLoading(false);
       setDeletingId(null);

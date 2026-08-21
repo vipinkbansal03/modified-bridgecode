@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminTextarea, AdminSelect, useToast, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminTextarea, AdminSelect, useToast, LoadingButton, AdminStickySaveBar } from "@/components/admin/AdminComponents";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { Logo } from "@/components/ui/Logo";
 import { cn } from "@/utils/cn";
@@ -264,6 +264,23 @@ export default function SettingsPage() {
   const canUpdate = hasPermission("settings.update");
 
   const [activeTab, setActiveTab] = useState("general");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", tabId);
+      window.history.replaceState({}, "", url.toString());
+    }
+    if (containerRef.current) {
+      const scrollParent = containerRef.current.closest("main");
+      if (scrollParent) {
+        scrollParent.scrollTop = 0;
+      }
+    }
+  };
+
   const { data: countries = [] } = useAdminCountries();
   const defaultCountry = countries.find((c: any) => c.isDefault);
   const [selectedCountryCode, setSelectedCountryCode] = useState("");
@@ -544,18 +561,18 @@ export default function SettingsPage() {
   return (
     <AdminLayout title="Website Settings" breadcrumb={[{ label: "Settings" }]}>
       {ToastComponent}
-      <div className="flex gap-6">
+      <div ref={containerRef} className="flex items-start gap-6">
 
         {/* ── Sidebar ── */}
-        <aside className="w-[200px] flex-none">
-          <nav className="space-y-0.5 sticky top-24">
+        <aside className="w-[200px] flex-none sticky top-0">
+          <nav className="space-y-0.5">
             {TABS.map((tab) => {
               const Icon = tab.icon;
               return (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                <button key={tab.id} onClick={() => handleTabChange(tab.id)}
                   className={cn(
                     "w-full flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-[13px] font-medium text-left transition-colors",
-                    activeTab === tab.id ? "bg-[#E31E24] text-white" : "text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A]"
+                    activeTab === tab.id ? "bg-[#E31E24] text-white shadow-xs" : "text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A]"
                   )}>
                   <Icon size={14} className="flex-none" />{tab.label}
                 </button>
@@ -566,35 +583,19 @@ export default function SettingsPage() {
 
         {/* ── Content ── */}
         <div className="flex-1 min-w-0">
-          <div className="sticky -top-6 z-20 mb-5 flex items-center justify-between rounded-b-xl border border-t-0 border-[#E6E6E6] bg-white/95 px-4 py-3 shadow-[0_14px_35px_rgba(227,30,36,0.10)] backdrop-blur before:absolute before:left-0 before:top-0 before:h-[3px] before:w-full before:bg-[#E31E24] relative">
-            <div>
-              <h2 className="text-[15px] font-semibold text-[#1A1A1A]">{TABS.find((t) => t.id === activeTab)?.label}</h2>
-              {canUpdate ? (
-                <p className="mt-0.5 text-[11.5px] text-[#8B8B8B]">Changes are not applied until you save.</p>
-              ) : (
-                <p className="mt-0.5 text-[11.5px] text-amber-600 font-medium">Read-only mode. You do not have permissions to edit store settings.</p>
-              )}
-            </div>
-            {canUpdate && (
-              <div className="flex items-center gap-3">
-                {isDirty && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 border border-amber-200 shadow-2xs">
-                    <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                    Unsaved Changes
-                  </span>
-                )}
-                <LoadingButton
-                  onClick={handleSave}
-                  loading={saving}
-                  loadingText="Saving…"
-                  className="flex items-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white shadow-[0_8px_20px_rgba(227,30,36,0.28)] transition-colors hover:bg-[#B5151B]"
-                >
-                  <Save size={13} />
-                  Save Settings
-                </LoadingButton>
-              </div>
-            )}
-          </div>
+          <AdminStickySaveBar
+            title={TABS.find((t) => t.id === activeTab)?.label}
+            subtitle={canUpdate ? "Changes are not applied until you save." : undefined}
+            isReadOnly={!canUpdate}
+            readOnlyMessage="Read-only mode. You do not have permissions to edit store settings."
+            isDirty={isDirty}
+            saving={saving}
+            savingText="Saving…"
+            saveLabel="Save Settings"
+            onSave={handleSave}
+            showSave={canUpdate}
+            stickyOffsetClass="-top-5 sm:-top-6"
+          />
 
           <fieldset disabled={!canUpdate} className="rounded-xl border border-[#E6E6E6] bg-white p-6 disabled:opacity-90">
 

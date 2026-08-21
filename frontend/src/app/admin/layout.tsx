@@ -5,7 +5,9 @@ export default function AdminRootLayout({ children }: { children: React.ReactNod
   return (
     <AdminAuthProvider>
       <AdminToastProvider>
-        {children}
+        <div className="admin-scope min-h-screen">
+          {children}
+        </div>
       </AdminToastProvider>
     </AdminAuthProvider>
   );

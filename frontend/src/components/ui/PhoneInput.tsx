@@ -16,6 +16,7 @@ interface PhoneInputFieldProps {
   placeholder?: string;
   disabled?: boolean;
   countryKey?: string;
+  className?: string;
 }
 
 export default function PhoneInputField({
@@ -27,18 +28,19 @@ export default function PhoneInputField({
   defaultCountry = "IN",
   placeholder = "Mobile",
   disabled,
-  countryKey
+  countryKey,
+  className = "",
 }: PhoneInputFieldProps) {
   const showError = Boolean((touched || Boolean(value && value.length > 0)) && error);
 
   return (
     <div>
       <div
-        className={`flex h-9 overflow-hidden rounded-md border bg-[#EEF4FF] transition-colors ${
+        className={`flex h-10 sm:h-9 overflow-hidden rounded-md border bg-[#EEF4FF] transition-colors ${
           showError
             ? "border-[#E31E24]"
             : "border-[#E0E0E0] focus-within:border-[#E31E24]"
-        }`}
+        } ${className}`}
       >
         <span className="flex w-10 shrink-0 items-center justify-center border-r border-[#E0E0E0] bg-white/65 text-[#6B6B6B]">
           <Smartphone size={14} />
@@ -57,7 +59,7 @@ export default function PhoneInputField({
           className="flex flex-1 items-center"
           numberInputProps={{
             className:
-              "h-full w-full bg-transparent px-2 text-[12.5px] text-[#1A1A1A] outline-none placeholder:text-[#8A8A8A]",
+              "h-full w-full bg-transparent px-2 text-[16px] sm:text-[12.5px] text-[#1A1A1A] outline-none placeholder:text-[#8A8A8A]",
           }}
         />
       </div>

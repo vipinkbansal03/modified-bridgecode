@@ -27,6 +27,7 @@ export function DealerInquiryForm() {
           id="companyName"
           name="companyName"
           label="Company Name"
+          placeholder="Clinic / dealership name"
           value={formik.values.companyName}
           onChange={formik.handleChange}
           onBlur={formik.handleBlur}
@@ -37,6 +38,7 @@ export function DealerInquiryForm() {
           id="contactPerson"
           name="contactPerson"
           label="Contact Person"
+          placeholder="Your full name"
           value={formik.values.contactPerson}
           onChange={formik.handleChange}
           onBlur={formik.handleBlur}
@@ -51,6 +53,7 @@ export function DealerInquiryForm() {
           name="email"
           type="email"
           label="Email"
+          placeholder="you@dealership.com"
           value={formik.values.email}
           onChange={formik.handleChange}
           onBlur={formik.handleBlur}
@@ -61,6 +64,7 @@ export function DealerInquiryForm() {
           id="phone"
           name="phone"
           label="Phone"
+          placeholder="+91 98765 43210"
           value={formik.values.phone}
           onChange={formik.handleChange}
           onBlur={formik.handleBlur}
@@ -99,6 +103,7 @@ export function DealerInquiryForm() {
           id="city"
           name="city"
           label="City"
+          placeholder="Your city"
           value={formik.values.city}
           onChange={formik.handleChange}
           onBlur={formik.handleBlur}
@@ -109,6 +114,7 @@ export function DealerInquiryForm() {
           id="state"
           name="state"
           label="State"
+          placeholder="Your state"
           value={formik.values.state}
           onChange={formik.handleChange}
           onBlur={formik.handleBlur}
