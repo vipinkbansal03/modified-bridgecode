@@ -8018,22 +8018,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             <div className="flex-1 overflow-y-auto px-6 py-5 sm:px-7">
               <div className="space-y-5">
 
-            {packageRows.length > 0 && (
-              <div className="mb-5 rounded-lg border border-[#E6E6E6] p-4">
-                <div className="mb-2 text-[13px] font-medium text-[#1A1A1A]">Packages</div>
-                <div className="flex flex-wrap gap-2">
-                  {packageRows.map((pkg) => {
-                    const checked = generatePackageIds.includes(pkg.id);
-                    return (
-                      <label key={pkg.id} className={cn("flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-[12px]", checked ? "border-[#E31E24] bg-red-50 text-[#B5151B]" : "border-[#E6E6E6] bg-white text-[#6B6B6B]")}>
-                        <input type="checkbox" checked={checked} onChange={(e) => toggleGeneratePackage(pkg.id, e.target.checked)} className="rounded" />
-                        {pkg.title}
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+
 
             <div className="mb-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-[12.5px] leading-5 text-blue-800">
               New variants inherit the product-level base inventory and every country inventory override configured in the Inventory tab.
@@ -8215,7 +8200,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {packageRows.length > 0 && <AdminSelect label="Package" value={manualVariantPackageId} onChange={(e) => setManualVariantPackageId(e.target.value)} options={packageOptions} />}
               <AdminInput label="SKU" value={manualVariantSku} onChange={(e) => setManualVariantSku(e.target.value)} placeholder="Optional custom SKU" />
               <AdminInput label="MOQ" type="number" min={1} value={manualVariantMoq} onChange={(e) => setManualVariantMoq(Math.max(1, Number(e.target.value) || 1))} />
             </div>
@@ -8486,7 +8470,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             {editVariantSubTab === "general" && (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {packageRows.length > 0 && <AdminSelect label="Package" value={editVariantPackageId} onChange={(e) => setEditVariantPackageId(e.target.value)} options={[{ value: "", label: "No package" }, ...packageOptions.slice(1)]} />}
                   <AdminSelect label="Status" value={editVariantStatus} onChange={(e) => setEditVariantStatus(e.target.value)} options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]} />
                   <AdminInput label="Variant Title" value={editVariantTitle} onChange={(e) => setEditVariantTitle(e.target.value)} placeholder="Optional custom title" />
                   <AdminInput label="SKU" value={editVariantSku} onChange={(e) => setEditVariantSku(e.target.value)} placeholder="Variant SKU" />
