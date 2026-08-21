@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ImageOff } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { Button } from "@/components/ui/Button";
 import type { ProductDetail } from "@/types/product.types";
@@ -24,8 +24,12 @@ export function BundleSection({ product }: BundleSectionProps) {
           <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
             {items.map((item) => (
               <Link key={item.slug} href={`/products/${item.slug}`} className="min-h-[145px] rounded-md border border-line bg-offwhite p-3.5 transition hover:border-steel-2">
-                <div className="relative mb-2.5 h-[78px] w-full overflow-hidden rounded bg-grey">
-                  <Image src={item.image} alt={item.title} fill className="object-cover" sizes="200px" />
+                <div className="relative mb-2.5 h-[78px] w-full overflow-hidden rounded bg-grey flex items-center justify-center">
+                  {item.image && typeof item.image === "string" && item.image.trim() !== "" ? (
+                    <Image src={item.image} alt={item.title} fill className="object-cover" sizes="200px" />
+                  ) : (
+                    <ImageOff size={20} className="text-steel-2/60" />
+                  )}
                 </div>
                 <h5 className="text-[13.5px] font-medium leading-snug text-ink">{item.title}</h5>
               </Link>

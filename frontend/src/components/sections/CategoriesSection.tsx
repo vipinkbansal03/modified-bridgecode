@@ -57,7 +57,7 @@ export function CategoriesSection() {
               <Reveal key={cat.slug} delay={i * 0.04}>
                 <CategoryCard
                   title={cat.title}
-                  image={CATEGORY_STOCK_IMAGES[cat.slug] ?? cat.image ?? ""}
+                  image={CATEGORY_STOCK_IMAGES[cat.slug] || cat.image || null}
                   slug={cat.slug}
                   productCount={cat.productCount}
                   meta={view === "doctor" ? (cat.doctorMeta ?? "") : (cat.dealerMeta ?? "")}
