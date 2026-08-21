@@ -269,6 +269,10 @@ export default function TranslationsPage() {
 
   return (
     <AdminLayout title="Translations" breadcrumb={[{ label: "Translations" }]}>
+      <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
+        Monitor multilingual translation coverage across products, categories, CMS pages, and UI labels. Edit missing translations in-place, import/export CSV spreadsheets, or configure languages.
+      </div>
+
       <div className="mb-5 flex w-full rounded-lg border border-[#E6E6E6] bg-white p-1 sm:inline-flex sm:w-auto">
         <button
           type="button"

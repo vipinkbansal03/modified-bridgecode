@@ -26,7 +26,11 @@ const CATEGORY_STOCK_IMAGES: Record<string, string> = {
 export function CategoriesSection() {
   const { t } = useStaticTranslations();
   const { data: categories, isLoading } = useCategories();
-  const [view, setView] = useState<"doctor" | "dealer">("doctor");
+  const [view] = useState<"doctor" | "dealer">("doctor");
+
+  if (!isLoading && (!categories || categories.length === 0)) {
+    return null;
+  }
 
   return (
     <section id="categories" className="border-t border-line py-6 lg:py-[34px]">

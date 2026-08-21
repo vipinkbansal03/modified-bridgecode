@@ -35,3 +35,9 @@ export function recordProductView(slug: string) {
   entries.unshift({ slug, viewedAt: Date.now() });
   writeStorage(entries);
 }
+
+export function removeRecentlySeenSlug(slug: string) {
+  const entries = readStorage().filter((e) => e.slug !== slug);
+  writeStorage(entries);
+}
+

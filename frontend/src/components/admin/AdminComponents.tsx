@@ -356,7 +356,7 @@ export function DataTable<T>({
                       );
 
                       return (
-                        <td key={String(col.key)} className="px-4 py-3 text-[13.5px] text-[#1A1A1A]">
+                        <td key={String(col.key)} className="px-4 py-3 text-[13.5px] text-[#1A1A1A]" style={col.width ? { width: col.width } : undefined}>
                           {cellContent}
                         </td>
                       );
@@ -408,14 +408,18 @@ export function TableStatusAction({
       disabled={loading}
       title={tooltip}
       className={cn(
-        "inline-flex items-center gap-1.5 focus:outline-none transition-all",
-        loading ? "opacity-75 cursor-not-allowed" : "cursor-pointer hover:opacity-80"
+        "relative inline-flex items-center justify-center focus:outline-none transition-opacity",
+        loading ? "opacity-75 cursor-wait" : "cursor-pointer hover:opacity-85"
       )}
     >
-      <StatusBadge status={isCurrentlyActive ? "ACTIVE" : "INACTIVE"} />
-      {loading && (
-        <span className="inline-block animate-spin rounded-full border border-gray-300 border-t-[#E31E24] w-3 h-3 flex-none" aria-hidden="true" />
-      )}
+      <span className="relative inline-flex items-center justify-center">
+        <StatusBadge status={isCurrentlyActive ? "ACTIVE" : "INACTIVE"} />
+        {loading && (
+          <span className="absolute inset-0 flex items-center justify-center rounded-full bg-white/70 backdrop-blur-[0.5px]">
+            <span className="inline-block animate-spin rounded-full border border-gray-400 border-t-[#E31E24] w-3 h-3" aria-hidden="true" />
+          </span>
+        )}
+      </span>
     </button>
   );
 }
@@ -540,7 +544,7 @@ const STATUS_STYLES: Record<string, string> = {
 export function StatusBadge({ status }: { status: string }) {
   const style = STATUS_STYLES[status] || "bg-gray-50 text-gray-600 border-gray-200";
   return (
-    <span className={cn("inline-flex w-fit shrink-0 items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium", style)}>
+    <span className={cn("inline-flex min-w-[70px] shrink-0 items-center justify-center text-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium", style)}>
       {status.replace(/_/g, " ")}
     </span>
   );
@@ -1110,6 +1114,8 @@ function sanitizeRichText(html: string) {
   return doc.body.innerHTML;
 }
 
+import { stripHtmlTags } from "@/utils/sanitize";
+
 interface AdminRichTextEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -1118,6 +1124,10 @@ interface AdminRichTextEditorProps {
   error?: string;
   label?: string;
   mediaContext?: { entityType: string; entityId?: string };
+  maxLength?: number;
+  showCharCount?: boolean;
+  hideImageUpload?: boolean;
+  compact?: boolean;
 }
 
 export function AdminRichTextEditor({
@@ -1128,12 +1138,23 @@ export function AdminRichTextEditor({
   error,
   label,
   mediaContext,
+  maxLength,
+  showCharCount,
+  hideImageUpload,
+  compact,
 }: AdminRichTextEditorProps) {
+  const { showToast } = useSharedToast();
   const editorRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const savedRangeRef = useRef<Range | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [uploadingImg, setUploadingImg] = useState(false);
+
+  const plainText = stripHtmlTags(value);
+  const charCount = plainText.length;
+  const isOverLimit = Boolean(maxLength && charCount > maxLength);
+  const isAtLimit = Boolean(maxLength && charCount >= maxLength && !isOverLimit);
+  const [hitLimitShake, setHitLimitShake] = useState(false);
 
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
@@ -1235,6 +1256,34 @@ export function AdminRichTextEditor({
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!maxLength) return;
+    if (
+      e.ctrlKey ||
+      e.metaKey ||
+      e.altKey ||
+      e.key === "Backspace" ||
+      e.key === "Delete" ||
+      e.key === "ArrowLeft" ||
+      e.key === "ArrowRight" ||
+      e.key === "ArrowUp" ||
+      e.key === "ArrowDown" ||
+      e.key === "Tab" ||
+      e.key === "Escape" ||
+      e.key === "Home" ||
+      e.key === "End"
+    ) {
+      return;
+    }
+    const selection = typeof window !== "undefined" ? window.getSelection() : null;
+    const hasSelection = selection && !selection.isCollapsed && selection.toString().length > 0;
+    if (!hasSelection && charCount >= maxLength && (e.key.length === 1 || e.key === "Enter")) {
+      e.preventDefault();
+      setHitLimitShake(true);
+      setTimeout(() => setHitLimitShake(false), 1000);
+    }
+  };
+
   const handleInsertImageFile = async (file: File) => {
     setUploadingImg(true);
     try {
@@ -1249,20 +1298,32 @@ export function AdminRichTextEditor({
         const cleanImgHtml = `<span class="img-wrapper relative inline-block my-2 mr-3 align-bottom group select-none" contenteditable="false"><img src="${url}" alt="Product Image" class="max-h-48 max-w-full w-auto inline-block rounded-lg border border-[#E5E7EB] bg-white p-1.5 shadow-2xs" /><button type="button" class="img-delete-btn absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white text-[11px] font-bold shadow-md hover:bg-[#B5151B] transition-transform hover:scale-110 cursor-pointer" title="Remove image">✕</button></span><p><br></p>`;
         insertHtmlAtSavedCursor(cleanImgHtml);
       } else {
-        alert("Failed to get uploaded media URL.");
+        showToast("Failed to get uploaded media URL.", "error");
       }
     } catch (err) {
       console.error("Image upload failed", err);
-      alert("Image upload failed. Please make sure you are logged in.");
+      showToast("Image upload failed. Please make sure you are logged in.", "error");
     } finally {
       setUploadingImg(false);
     }
   };
 
+  const isMinimal = Boolean(hideImageUpload || compact);
+
   return (
     <div className="space-y-1.5">
       {label && <label className="block text-[13px] font-medium text-[#1A1A1A]">{label}</label>}
-      <div className={cn("rounded-md border bg-white", error ? "border-red-400" : "border-[#E6E6E6] focus-within:border-[#E31E24]", className)}>
+      <div
+        className={cn(
+          "rounded-md border bg-white transition-colors",
+          error || isOverLimit
+            ? "border-red-400"
+            : isAtLimit
+              ? "border-amber-400"
+              : "border-[#E6E6E6] focus-within:border-[#E31E24]",
+          className
+        )}
+      >
         <div className="flex flex-wrap gap-1 border-b border-[#E6E6E6] bg-[#FAFAFA] px-2 py-2">
           <button type="button" title="Bold" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("bold")}>
             B
@@ -1283,63 +1344,67 @@ export function AdminRichTextEditor({
             Link
           </button>
 
-          {/* Direct Image Upload Button in Editor Toolbar */}
-          <button
-            type="button"
-            title="Attach/Insert Image"
-            className="flex items-center gap-1 rounded bg-[#E31E24]/10 px-2 py-1 text-[12px] font-bold text-[#E31E24] hover:bg-[#E31E24]/20"
-            onClick={() => {
-              saveCursorLocation();
-              fileInputRef.current?.click();
-            }}
-            disabled={uploadingImg}
-          >
-            🖼️ {uploadingImg ? "Uploading..." : "Image"}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleInsertImageFile(file);
-              e.target.value = "";
-            }}
-          />
-          <button type="button" title="Unordered list" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("insertUnorderedList")}>
-            • List
-          </button>
-          <button type="button" title="Ordered list" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("insertOrderedList")}>
-            1. List
-          </button>
-          <button type="button" title="Blockquote" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "blockquote")}>
-            {"\""}
-          </button>
-          <button type="button" title="Code block" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "pre")}>
-            {'</>'}
-          </button>
-          <button type="button" title="Heading 2" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "h2")}>
-            H2
-          </button>
-          <button type="button" title="Heading 3" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "h3")}>
-            H3
-          </button>
-          <button type="button" title="Align left" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("justifyLeft")}>
-            L
-          </button>
-          <button type="button" title="Align center" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("justifyCenter")}>
-            C
-          </button>
-          <button type="button" title="Align right" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("justifyRight")}>
-            R
-          </button>
-          <button type="button" title="Undo" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("undo")}>
-            ↺
-          </button>
-          <button type="button" title="Redo" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("redo")}>
-            ↻
-          </button>
+          {!isMinimal && (
+            <>
+              <button
+                type="button"
+                title="Attach/Insert Image"
+                className="flex items-center gap-1 rounded bg-[#E31E24]/10 px-2 py-1 text-[12px] font-bold text-[#E31E24] hover:bg-[#E31E24]/20"
+                onClick={() => {
+                  saveCursorLocation();
+                  fileInputRef.current?.click();
+                }}
+                disabled={uploadingImg}
+              >
+                🖼️ {uploadingImg ? "Uploading..." : "Image"}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleInsertImageFile(file);
+                  e.target.value = "";
+                }}
+              />
+              <button type="button" title="Unordered list" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("insertUnorderedList")}>
+                • List
+              </button>
+              <button type="button" title="Ordered list" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("insertOrderedList")}>
+                1. List
+              </button>
+              <button type="button" title="Blockquote" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "blockquote")}>
+                {"\""}
+              </button>
+              <button type="button" title="Code block" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "pre")}>
+                {'</>'}
+              </button>
+              <button type="button" title="Heading 2" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "h2")}>
+                H2
+              </button>
+              <button type="button" title="Heading 3" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "h3")}>
+                H3
+              </button>
+              <button type="button" title="Align left" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("justifyLeft")}>
+                L
+              </button>
+              <button type="button" title="Align center" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("justifyCenter")}>
+                C
+              </button>
+              <button type="button" title="Align right" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("justifyRight")}>
+                R
+              </button>
+              <button type="button" title="Undo" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("undo")}>
+                ↺
+              </button>
+              <button type="button" title="Redo" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("redo")}>
+                ↻
+              </button>
+            </>
+          )}
+
           <button type="button" title="Remove formatting" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("removeFormat")}>
             Clear
           </button>
@@ -1355,6 +1420,7 @@ export function AdminRichTextEditor({
             aria-multiline="true"
             suppressContentEditableWarning
             onClick={handleEditorClick}
+            onKeyDown={handleKeyDown}
             onInput={() => {
               saveCursorLocation();
               updateValue();
@@ -1371,6 +1437,38 @@ export function AdminRichTextEditor({
           />
         </div>
       </div>
+      {(showCharCount || maxLength) && (
+        <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11.5px] pt-1">
+          <div className="flex items-center gap-1.5">
+            {isOverLimit ? (
+              <span className="inline-flex items-center gap-1 rounded bg-red-50 px-2 py-0.5 font-semibold text-red-700 border border-red-200">
+                ⚠️ Limit exceeded by {charCount - (maxLength ?? 0)} characters. Please shorten text before saving.
+              </span>
+            ) : isAtLimit ? (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 font-semibold text-amber-800 border border-amber-200 transition-all",
+                  hitLimitShake && "ring-2 ring-amber-400 font-bold scale-[1.02]"
+                )}
+              >
+                ⚠️ Maximum limit reached ({maxLength}/{maxLength} chars). Further typing is blocked.
+              </span>
+            ) : (
+              <span className="text-[#888]">
+                {maxLength ? `${maxLength - charCount} characters remaining` : "Introductory text (plain text counted)"}
+              </span>
+            )}
+          </div>
+          <span
+            className={cn(
+              "font-medium shrink-0",
+              isOverLimit ? "font-bold text-red-600" : isAtLimit ? "font-bold text-amber-700" : "text-[#666]"
+            )}
+          >
+            {charCount} {maxLength ? `/ ${maxLength}` : ""} characters
+          </span>
+        </div>
+      )}
       {error && <p className="text-[12px] text-red-500">{error}</p>}
     </div>
   );

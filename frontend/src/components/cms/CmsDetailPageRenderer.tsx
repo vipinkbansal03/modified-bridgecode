@@ -133,8 +133,12 @@ export function CmsDetailPageRenderer({
 
   const hero = buildHero(page, fallbackContent, breadcrumbLabel, heroImageOverride);
 
+  let hasRenderedHero = false;
+
   const renderedSections = sortedSections.map((section) => {
     if (section.sectionKey.endsWith(".hero")) {
+      if (hasRenderedHero) return null;
+      hasRenderedHero = true;
       return (
         <Fragment key={section.id}>
           <PageHero {...hero} />
@@ -149,6 +153,14 @@ export function CmsDetailPageRenderer({
     const transformedSection = buildDetailSection(section, fallbackContent);
     return transformedSection ? <DetailSection key={section.id} section={transformedSection} /> : null;
   });
+
+  if (!hasRenderedHero) {
+    renderedSections.unshift(
+      <Fragment key="page-hero">
+        <PageHero {...hero} />
+      </Fragment>
+    );
+  }
 
   const hasVisibleSections = renderedSections.some(Boolean);
   if (!hasVisibleSections) {

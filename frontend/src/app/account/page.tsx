@@ -33,6 +33,7 @@ import QuoteHistory from "./QuoteHistory";
 import { useCart } from "@/contexts/CartContext";
 import EditProfileModal from "./EditProfileModal";
 import AddressModal from "./AddressModal";
+import { useToast } from "@/components/ui/ToastProvider";
 
 function formatPhone(phone?: string | null) {
   if (!phone) return "Not added";
@@ -78,6 +79,7 @@ function canDownloadInvoice(order: CustomerOrderSummary) {
 
 export default function AccountPage() {
   const router = useRouter();
+  const { showToast } = useToast();
   const { currentCustomer, isLoading, logout, setCustomer } = useCustomerAuth();
   const [orders, setOrders] = useState<CustomerOrderSummary[]>([]);
   const [quotes, setQuotes] = useState<CustomerQuoteSummary[]>([]);
@@ -115,7 +117,7 @@ export default function AccountPage() {
         }));
 
       if (cartItems.length === 0) {
-        alert("The items in this order are no longer available for purchase.");
+        showToast("The items in this order are no longer available for purchase.", "warning");
         return;
       }
 

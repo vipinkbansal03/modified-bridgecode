@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { Search, ChevronDown, Trash2, Eye, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { useToast } from "@/components/admin/AdminComponents";
 import { useAdminNotificationsHistory, useDeleteAdminNotification } from "@/hooks/api";
 
 export default function AdminNotificationsPage() {
+  const { showToast } = useToast();
   const { data: history = [], isLoading } = useAdminNotificationsHistory();
   const deleteMutation = useDeleteAdminNotification();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -45,7 +47,7 @@ export default function AdminNotificationsPage() {
       setSelectedIds([]);
     } catch (err) {
       console.error("Failed to delete notifications", err);
-      alert("Failed to delete some notifications");
+      showToast("Failed to delete some notifications", "error");
     }
   };
 
@@ -55,7 +57,7 @@ export default function AdminNotificationsPage() {
       await deleteMutation.mutateAsync(id);
     } catch (err) {
       console.error("Failed to delete notification", err);
-      alert("Failed to delete notification");
+      showToast("Failed to delete notification", "error");
     }
   };
 

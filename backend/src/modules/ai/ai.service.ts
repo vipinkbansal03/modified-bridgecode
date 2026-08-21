@@ -154,8 +154,28 @@ async function translateJson<T extends Record<string, unknown>>({
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new AppError(`AI request failed: ${body || response.statusText}`, 502);
+    let friendlyMessage = `AI request failed (${response.statusText || response.status})`;
+    try {
+      const errJson = (await response.json()) as { error?: { message?: string; code?: string; type?: string } };
+      const code = errJson?.error?.code || errJson?.error?.type;
+      const msg = errJson?.error?.message;
+
+      if (code === "insufficient_quota") {
+        friendlyMessage = "OpenAI API quota exceeded. Please add billing credits at platform.openai.com/account/billing.";
+      } else if (code === "invalid_api_key" || response.status === 401) {
+        friendlyMessage = "Invalid OpenAI API key. Please check your OPENAI_API_KEY in backend/.env.";
+      } else if (code === "rate_limit_exceeded" || response.status === 429) {
+        friendlyMessage = "OpenAI rate limit reached. Please wait a moment and try again.";
+      } else if (msg) {
+        friendlyMessage = msg;
+      }
+    } catch {
+      try {
+        const body = await response.text();
+        if (body) friendlyMessage = body;
+      } catch {}
+    }
+    throw new AppError(friendlyMessage, 502);
   }
 
   const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
@@ -169,10 +189,10 @@ async function translateJson<T extends Record<string, unknown>>({
     throw new AppError("AI response was not valid JSON.", 502);
   }
 
-  const output: Record<string, string> = {};
+  const output: Record<string, unknown> = {};
   for (const key of requiredKeys) {
     const value = parsed[key];
-    output[key] = typeof value === "string" ? value : "";
+    output[key] = value !== undefined ? value : "";
   }
 
   return output as T;

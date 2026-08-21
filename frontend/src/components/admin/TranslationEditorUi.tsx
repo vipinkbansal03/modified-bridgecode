@@ -131,6 +131,7 @@ export function TranslationBlurField({
   englishReference,
   onSave,
   disabled = false,
+  maxLength,
 }: {
   label: string;
   rows?: number;
@@ -138,33 +139,61 @@ export function TranslationBlurField({
   englishReference?: string | null;
   onSave: (value: string) => Promise<void>;
   disabled?: boolean;
+  maxLength?: number;
 }) {
   const { showToast } = useToast();
+  const [currentVal, setCurrentVal] = useState(defaultValue);
   const cleanEnglish = stripHtml(englishReference);
+
+  useEffect(() => {
+    setCurrentVal(defaultValue);
+  }, [defaultValue]);
+
+  const charCount = stripHtml(currentVal).length;
+  const isOverLimit = Boolean(maxLength && charCount > maxLength);
+  const isAtLimit = Boolean(maxLength && charCount >= maxLength && !isOverLimit);
 
   return (
     <div className="space-y-1">
       <AdminTextarea
         label={label}
         rows={rows}
-        defaultValue={defaultValue}
+        value={currentVal}
         placeholder={cleanEnglish}
         disabled={disabled}
-        onBlur={async (e) => {
-          const value = e.currentTarget.value.trim();
-          const saved = defaultValue.trim();
+        onChange={(e) => setCurrentVal(e.target.value)}
+        onBlur={async () => {
+          const value = currentVal.trim();
+          const saved = (defaultValue || "").trim();
           if (value === saved) {
-            showToast(toastMessages.noChanges, "info");
+            return;
+          }
+          if (maxLength && stripHtml(value).length > maxLength) {
+            showToast(`Translation description cannot exceed ${maxLength} characters.`, "error");
             return;
           }
           await onSave(value);
         }}
       />
-      {cleanEnglish && (
-        <p className="text-[11.5px] text-[#9A9A9A] line-clamp-2">
-          English: <span className="text-[#6B6B6B]">{cleanEnglish}</span>
-        </p>
-      )}
+      <div className="flex flex-wrap items-center justify-between gap-1 text-[11.5px] text-[#9A9A9A]">
+        {cleanEnglish ? (
+          <p className="line-clamp-2 max-w-[70%]">
+            English: <span className="text-[#6B6B6B]">{cleanEnglish}</span>
+          </p>
+        ) : <div />}
+        {maxLength ? (
+          <div className="flex items-center gap-1.5">
+            {isOverLimit ? (
+              <span className="font-semibold text-red-600">⚠️ Limit exceeded</span>
+            ) : isAtLimit ? (
+              <span className="font-semibold text-amber-700">⚠️ Limit reached</span>
+            ) : null}
+            <span className={cn(isOverLimit ? "font-bold text-red-600" : isAtLimit ? "font-bold text-amber-700" : "text-[#888]")}>
+              {charCount} / {maxLength} chars
+            </span>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -175,12 +204,14 @@ export function TranslationRichTextField({
   englishReference,
   onSave,
   disabled = false,
+  maxLength,
 }: {
   label: string;
   defaultValue: string;
   englishReference?: string | null;
   onSave: (value: string) => Promise<void>;
   disabled?: boolean;
+  maxLength?: number;
 }) {
   const { showToast } = useToast();
   const [value, setValue] = useState(defaultValue || "");
@@ -191,11 +222,17 @@ export function TranslationRichTextField({
   }, [defaultValue]);
 
   const cleanEnglish = stripHtml(englishReference);
+  const charCount = stripHtml(value).length;
+  const isOverLimit = Boolean(maxLength && charCount > maxLength);
 
   const handleSave = async () => {
     const trimmed = value.trim();
     if (trimmed === (defaultValue || "").trim()) {
       showToast(toastMessages.noChanges, "info");
+      return;
+    }
+    if (maxLength && stripHtml(trimmed).length > maxLength) {
+      showToast(`Translation description cannot exceed ${maxLength} characters.`, "error");
       return;
     }
     setSaving(true);
@@ -213,7 +250,7 @@ export function TranslationRichTextField({
         <button
           type="button"
           onClick={handleSave}
-          disabled={disabled || saving}
+          disabled={disabled || saving || isOverLimit}
           className="rounded-md bg-[#E31E24] px-3.5 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
         >
           {saving ? "Saving..." : "Save Translation"}
@@ -225,6 +262,10 @@ export function TranslationRichTextField({
         onChange={setValue}
         placeholder="Enter translated description..."
         className="min-h-[220px]"
+        maxLength={maxLength}
+        showCharCount={!!maxLength}
+        hideImageUpload={true}
+        compact={true}
       />
       {cleanEnglish && (
         <p className="text-[11.5px] text-[#9A9A9A] line-clamp-3">

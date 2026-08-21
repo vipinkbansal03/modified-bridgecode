@@ -33,15 +33,41 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+// ─── Custom API Error Class ───────────────────────────────
+export class ApiError extends Error {
+  status?: number;
+  data?: unknown;
+  code?: string;
+  response?: AxiosError["response"];
+
+  constructor(
+    message: string,
+    status?: number,
+    data?: unknown,
+    response?: AxiosError["response"],
+    code?: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.data = data;
+    this.response = response;
+    this.code = code;
+  }
+}
+
 // ─── Response interceptor — normalise errors ──────────────
 apiClient.interceptors.response.use(
   (res) => res,
   (err: AxiosError<{ message?: string; errors?: unknown[] }>) => {
+    const status = err.response?.status;
     const message =
       err.response?.data?.message ||
       err.message ||
       "Something went wrong. Please try again.";
-    return Promise.reject(new Error(message));
+    return Promise.reject(
+      new ApiError(message, status, err.response?.data, err.response, err.code),
+    );
   },
 );
 

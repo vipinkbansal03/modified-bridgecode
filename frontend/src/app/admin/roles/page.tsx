@@ -179,7 +179,7 @@ export default function RolesPage() {
 
   const handleSave = async () => {
     if (!roleName.trim()) {
-      alert("Please enter a role name.");
+      showToast("Please enter a role name.", "error");
       return;
     }
 

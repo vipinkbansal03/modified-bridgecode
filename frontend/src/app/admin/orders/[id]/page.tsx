@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Download, Truck, Package, ExternalLink, RotateCw, Eye, Pencil } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { StatusBadge, AdminSelect, AdminInput } from "@/components/admin/AdminComponents";
+import { StatusBadge, AdminSelect, AdminInput, useToast } from "@/components/admin/AdminComponents";
 import {
   useAdminOrder,
   useUpdateOrderStatus,
@@ -116,6 +116,7 @@ interface OrderDetail {
 }
 
 export default function OrderDetailPage() {
+  const { showToast } = useToast();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -193,7 +194,7 @@ export default function OrderDetailPage() {
       link.remove();
       URL.revokeObjectURL(url);
     } catch (error) {
-      alert(getAdminErrorMessage(error, "Invoice generation failed"));
+      showToast(getAdminErrorMessage(error, "Invoice generation failed"), "error");
     } finally {
       setIsDownloadingInvoice(false);
     }
@@ -233,7 +234,7 @@ export default function OrderDetailPage() {
   function handleTrackShipment(shipmentId: string) {
     trackShipment(shipmentId, {
       onSuccess: () => {
-        alert("Tracking updated — refresh page to see latest events.");
+        showToast("Tracking updated — refresh page to see latest events.", "info");
       },
     });
   }
@@ -243,13 +244,13 @@ export default function OrderDetailPage() {
     cancelShipment(shipmentId, {
       onSuccess: (result: { success?: boolean; message?: string }) => {
         if (result?.success === false) {
-          alert(`Cancel failed: ${result.message ?? "Unknown error"}`);
+          showToast(`Cancel failed: ${result.message ?? "Unknown error"}`, "error");
         } else {
-          alert("Shipment cancelled.");
+          showToast("Shipment cancelled.", "success");
         }
       },
       onError: (error: Error) => {
-        alert(`Cancel failed: ${error.message}`);
+        showToast(`Cancel failed: ${error.message}`, "error");
       },
     });
   }

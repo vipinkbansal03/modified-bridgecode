@@ -29,6 +29,18 @@ export function HeroSection({ data }: HeroSectionProps) {
   const [isPaused, setIsPaused] = useState(false);
   const pauseTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Touch gesture refs
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+  const touchTimeRef = useRef<number>(0);
+
+  // Cleanup pause timer on component unmount
+  useEffect(() => {
+    return () => {
+      if (pauseTimerRef.current) clearTimeout(pauseTimerRef.current);
+    };
+  }, []);
+
   // Auto-slide effect with pause support
   useEffect(() => {
     if (isPaused || slides.length <= 1) return;
@@ -61,19 +73,65 @@ export function HeroSection({ data }: HeroSectionProps) {
     }, 7000);
   }, []);
 
+  // Touch gesture handlers (swipe left -> next, swipe right -> prev)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (slides.length <= 1) return;
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+    touchTimeRef.current = Date.now();
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    // If vertical scroll is dominant, let the browser handle natural vertical scroll
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    const deltaX = e.touches[0].clientX - touchStartXRef.current;
+    const deltaY = e.touches[0].clientY - touchStartYRef.current;
+    if (Math.abs(deltaY) > Math.abs(deltaX)) {
+      return;
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const deltaX = touchEndX - touchStartXRef.current;
+    const deltaY = touchEndY - touchStartYRef.current;
+    const elapsedTime = Date.now() - touchTimeRef.current;
+
+    // Reset touch coordinates
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+
+    // Trigger swipe if horizontal displacement is >= 40px, predominantly horizontal, and reasonably quick
+    if (
+      Math.abs(deltaX) >= 40 &&
+      Math.abs(deltaX) > Math.abs(deltaY) * 1.2 &&
+      elapsedTime < 700
+    ) {
+      if (deltaX < 0) {
+        // Swiped left -> Next slide
+        go(1);
+      } else {
+        // Swiped right -> Previous slide
+        go(-1);
+      }
+    }
+  };
+
   if (!slides || slides.length === 0) {
     return (
-      <section className="relative flex h-[calc(100vh-80px)] min-h-[460px] max-h-[700px] items-center overflow-hidden bg-gradient-to-br from-[#0F2D52] via-[#1A1A1A] to-[#0D0D0D] sm:h-[420px]">
-        <Container className="relative flex h-full flex-col justify-center items-start py-12">
-          <div className="flex w-full max-w-[820px] flex-col justify-center text-left">
+      <section className="relative flex h-[calc(100dvh-64px)] xl:h-[calc(100dvh-130px)] xl:min-h-[580px] xl:max-h-[760px] items-center overflow-hidden bg-gradient-to-br from-[#0F2D52] via-[#1A1A1A] to-[#0D0D0D]">
+        <Container className="relative flex h-full flex-col justify-end md:justify-center items-start pb-16 sm:pb-14 pt-8">
+          <div className="flex w-full max-w-[820px] flex-col justify-end text-left">
             <span className="mb-3.5 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3.5 py-1 text-[12px] font-semibold tracking-wider uppercase text-white backdrop-blur-sm shadow-xs">
               <span className="h-1.5 w-1.5 rounded-full bg-brand" />
               Modern Orthodontics
             </span>
-            <h1 className="max-w-[780px] text-left text-[clamp(36px,5vw,64px)] font-light leading-[1.08] text-white drop-shadow-sm">
+            <h1 className="max-w-[780px] text-left text-[clamp(32px,7.5vw,46px)] sm:text-[clamp(36px,5vw,64px)] xl:text-[clamp(48px,5.5vw,72px)] font-light leading-[1.08] text-white drop-shadow-sm">
               Engineering precision orthodontic hardware, since 1994.
             </h1>
-            <p className="mt-4 max-w-[620px] text-[16px] text-white/80 leading-relaxed">
+            <p className="mt-4 max-w-[620px] text-[15px] sm:text-[16px] text-white/80 leading-relaxed">
               Global manufacturer of premium orthodontic brackets, molar tubes, archwires, and OEM solutions.
             </p>
             <div className="mt-6 flex justify-start">
@@ -91,9 +149,12 @@ export function HeroSection({ data }: HeroSectionProps) {
 
   return (
     <section
-      className="relative h-[calc(100vh-80px)] min-h-[460px] max-h-[700px] overflow-hidden sm:h-[420px]"
+      className="relative h-[calc(100dvh-64px)] xl:h-[calc(100dvh-130px)] xl:min-h-[580px] xl:max-h-[760px] overflow-hidden select-none touch-pan-y"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
 
       <AnimatePresence initial={false}>
@@ -114,14 +175,14 @@ export function HeroSection({ data }: HeroSectionProps) {
               fetchPriority={index === 0 ? "high" : "auto"}
               sizes="100vw"
               quality={90}
-              className="object-cover"
+              className="object-cover object-center"
             />
             {/* Vibrant, high-contrast gradient overlay ensuring crystal-clear text readability */}
-            <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/55 to-black/25" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-black/20" />
+            <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/20" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
           </div>
-          <Container className="relative flex h-full flex-col justify-end md:justify-center items-start py-12">
-            <div className="flex min-h-[200px] w-full max-w-[820px] flex-col justify-center text-left">
+          <Container className="relative flex h-full flex-col justify-end md:justify-center items-start pb-16 sm:pb-14 pt-8">
+            <div className="flex w-full max-w-[820px] flex-col justify-end text-left">
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -132,7 +193,7 @@ export function HeroSection({ data }: HeroSectionProps) {
                   <span className="h-1.5 w-1.5 rounded-full bg-brand" />
                   {kicker}
                 </span>
-                <h1 className="max-w-[780px] text-left text-[clamp(38px,5.5vw,72px)] font-light leading-[1.06] text-white drop-shadow-sm">
+                <h1 className="max-w-[780px] text-left text-[clamp(32px,7.5vw,46px)] sm:text-[clamp(38px,5vw,56px)] xl:text-[clamp(48px,5.5vw,72px)] font-light leading-[1.08] text-white drop-shadow-sm">
                   {slide.title}
                 </h1>
                 {slide.ctaHref && ctaLabel ? (
@@ -146,13 +207,17 @@ export function HeroSection({ data }: HeroSectionProps) {
         </motion.div>
       </AnimatePresence>
 
-      <div className="absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3.5 sm:left-auto sm:right-10 sm:translate-x-0">
-        <div className="flex gap-2">
+      <div className="absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3.5 sm:left-auto sm:right-10 sm:translate-x-0 pointer-events-auto">
+        <div className="flex gap-2 items-center">
           {slides.map((_, i) => (
             <button
               key={i}
+              type="button"
               aria-label={t("ui.common.goToSlide", { number: i + 1 })}
-              onClick={() => goToSlide(i)}
+              onClick={(e) => {
+                e.stopPropagation();
+                goToSlide(i);
+              }}
               className={`h-2 rounded-full bg-white transition-all duration-300 ${
                 i === index ? "w-6 bg-white" : "w-2 bg-white/40 hover:bg-white/70"
               }`}
@@ -160,16 +225,24 @@ export function HeroSection({ data }: HeroSectionProps) {
           ))}
         </div>
         <button
+          type="button"
           aria-label={t("ui.common.previousSlide")}
-          onClick={() => go(-1)}
+          onClick={(e) => {
+            e.stopPropagation();
+            go(-1);
+          }}
           className="hidden sm:flex h-9.5 w-9.5 items-center justify-center rounded-full border border-white/40 text-white transition-colors hover:border-white hover:bg-white/10"
         >
           <ChevronLeft size={14} />
         </button>
 
         <button
+          type="button"
           aria-label={t("ui.common.nextSlide")}
-          onClick={() => go(1)}
+          onClick={(e) => {
+            e.stopPropagation();
+            go(1);
+          }}
           className="hidden sm:flex h-9.5 w-9.5 items-center justify-center rounded-full border border-white/40 text-white transition-colors hover:border-white hover:bg-white/10"
         >
           <ChevronRight size={14} />

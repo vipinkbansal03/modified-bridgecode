@@ -88,14 +88,14 @@ function IconInput({
   return (
     <div>
       <div
-        className={`flex h-9 overflow-hidden rounded-md border bg-[#EEF4FF] transition-colors ${showError ? "border-[#E31E24]" : "border-[#E0E0E0] focus-within:border-[#E31E24]"} ${className}`}
+        className={`flex h-10 sm:h-9 overflow-hidden rounded-md border bg-[#EEF4FF] transition-colors ${showError ? "border-[#E31E24]" : "border-[#E0E0E0] focus-within:border-[#E31E24]"} ${className}`}
       >
         <span className="flex w-10 shrink-0 items-center justify-center border-r border-[#E0E0E0] bg-white/65 text-[#6B6B6B]">
           {icon}
         </span>
         <input
           {...props}
-          className="min-w-0 flex-1 bg-transparent px-3 text-[12.5px] text-[#1A1A1A] outline-none placeholder:text-[#8A8A8A]"
+          className="min-w-0 flex-1 bg-transparent px-3 text-[16px] sm:text-[12.5px] text-[#1A1A1A] outline-none placeholder:text-[#8A8A8A]"
         />
       </div>
       {showError && (
@@ -119,14 +119,14 @@ function RadioOption({
   onChange: React.ChangeEventHandler<HTMLInputElement>;
 }) {
   return (
-    <label className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#1A1A1A] cursor-pointer">
+    <label className="inline-flex items-center gap-2 text-[12.5px] sm:text-[12px] font-medium text-[#1A1A1A] cursor-pointer select-none">
       <input
         type="radio"
         name={name}
         value={value}
         checked={checked}
         onChange={onChange}
-        className="h-3.5 w-3.5 accent-[#E31E24]"
+        className="h-4 w-4 sm:h-3.5 sm:w-3.5 accent-[#E31E24] cursor-pointer shrink-0"
       />
       {label}
     </label>
@@ -249,37 +249,37 @@ export default function RegisterPage() {
   }, [formik.values.country, activeCountries]);
 
   return (
-    <main className="grid h-svh grid-cols-1 overflow-hidden bg-white lg:grid-cols-[minmax(0,1.05fr)_minmax(620px,0.95fr)]">
-      <section className="relative hidden h-svh overflow-hidden lg:block">
+    <main className="grid min-h-screen grid-cols-1 bg-white lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1.3fr)]">
+      <section className="relative sticky top-0 hidden h-screen overflow-hidden lg:block">
         <div
           className="absolute inset-0 bg-cover bg-center"
           style={{ backgroundImage: "url('/auth/login2.jpg')" }}
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/35 to-black/75" />
-        <div className="absolute bottom-20 left-9 max-w-[520px] text-white">
-          <div className="mb-7 inline-flex items-center gap-2 rounded-full bg-black/35 px-4 py-2 text-[12px] font-medium backdrop-blur-md">
+        <div className="absolute bottom-16 left-8 right-8 max-w-[500px] text-white">
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-black/35 px-4 py-1.5 text-[12px] font-medium backdrop-blur-md">
             <span className="h-2 w-2 rounded-full bg-emerald-400" />
             Fast account setup
           </div>
-          <p className="text-[18px] italic leading-8 text-white/95">
+          <p className="text-[17px] xl:text-[18px] italic leading-relaxed text-white/95">
             &quot;Create your customer profile once, then order, quote, and
             manage purchases from one place.&quot;
           </p>
-          <p className="mt-5 text-[13px] font-semibold text-white">
+          <p className="mt-4 text-[13px] font-semibold text-white">
             Modern Orthodontics
           </p>
-          <p className="mt-1 text-[12px] text-white/65">B2B customer portal</p>
+          <p className="mt-0.5 text-[12px] text-white/65">B2B customer portal</p>
         </div>
       </section>
 
-      <section className="relative flex h-svh items-start justify-center overflow-hidden bg-white px-5 py-4 sm:px-10">
-        <div className="w-full max-w-[640px] pt-4">
-          <div className="mb-4 flex items-start justify-between gap-4">
-            <div>
-              <h1 className="font-serif text-[30px] font-semibold leading-tight text-[#111]">
+      <section className="relative flex min-h-screen min-h-[100dvh] w-full items-start justify-center bg-white px-4 pt-6 pb-12 sm:px-8 sm:py-10 md:px-10 lg:px-12">
+        <div className="w-full max-w-[620px]">
+          <div className="mb-5 flex flex-col-reverse gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <h1 className="font-serif text-[24px] sm:text-[28px] lg:text-[30px] font-semibold leading-tight text-[#111]">
                 Create customer account
               </h1>
-              <p className="mt-1.5 text-[13px] text-[#8A8A8A]">
+              <p className="mt-1 text-[12.5px] sm:text-[13px] text-[#8A8A8A] leading-normal">
                 Register as a doctor / retailer or dealer to access the Modern
                 Orthodontics portal.
               </p>
@@ -287,9 +287,9 @@ export default function RegisterPage() {
             <button
               type="button"
               onClick={() => router.back()}
-              className="inline-flex h-8 shrink-0 items-center gap-2 rounded-md border border-[#E0E0E0] bg-white px-3 text-[12.5px] text-[#555] shadow-sm transition-colors hover:border-[#BBBBBB] hover:text-[#1A1A1A]"
+              className="inline-flex h-8 self-start shrink-0 items-center gap-1.5 rounded-md border border-[#E0E0E0] bg-white px-3 text-[12px] text-[#555] shadow-2xs transition-colors hover:border-[#BBBBBB] hover:text-[#1A1A1A]"
             >
-              <ArrowLeft size={14} />
+              <ArrowLeft size={13} />
               Back
             </button>
           </div>
@@ -297,7 +297,7 @@ export default function RegisterPage() {
           <form
             onSubmit={formik.handleSubmit}
             noValidate
-            className="space-y-2.5"
+            className="space-y-3"
           >
             {formik.status && (
               <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
@@ -305,25 +305,27 @@ export default function RegisterPage() {
               </div>
             )}
 
-            <div className="flex flex-wrap items-center justify-center gap-7 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] px-4 py-2 text-[13px]">
-              <span className="font-semibold text-[#1A1A1A]">Register as</span>
-              <RadioOption
-                name="customerType"
-                value="DOCTOR"
-                label="Doctor / Retailer"
-                checked={formik.values.customerType === "DOCTOR"}
-                onChange={formik.handleChange}
-              />
-              <RadioOption
-                name="customerType"
-                value="DEALER"
-                label="Dealer"
-                checked={formik.values.customerType === "DEALER"}
-                onChange={formik.handleChange}
-              />
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 sm:gap-6 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] px-4 py-2.5 text-[13px]">
+              <span className="font-semibold text-[#1A1A1A] text-[12.5px] sm:text-[13px]">Register as</span>
+              <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+                <RadioOption
+                  name="customerType"
+                  value="DOCTOR"
+                  label="Doctor / Retailer"
+                  checked={formik.values.customerType === "DOCTOR"}
+                  onChange={formik.handleChange}
+                />
+                <RadioOption
+                  name="customerType"
+                  value="DEALER"
+                  label="Dealer"
+                  checked={formik.values.customerType === "DEALER"}
+                  onChange={formik.handleChange}
+                />
+              </div>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <IconInput
                 icon={<User size={14} />}
                 name="name"
@@ -408,7 +410,7 @@ export default function RegisterPage() {
                 touched={formik.touched.state}
               />
               <div>
-                <div className="flex h-9 overflow-hidden rounded-md border border-[#E0E0E0] bg-[#EEF4FF] transition-colors focus-within:border-[#E31E24]">
+                <div className="flex h-10 sm:h-9 overflow-hidden rounded-md border border-[#E0E0E0] bg-[#EEF4FF] transition-colors focus-within:border-[#E31E24]">
                   <span className="flex w-10 shrink-0 items-center justify-center border-r border-[#E0E0E0] bg-white/65 text-[#6B6B6B]">
                     <MapPin size={14} />
                   </span>
@@ -424,7 +426,7 @@ export default function RegisterPage() {
                       }
                     }}
                     onBlur={formik.handleBlur}
-                    className="min-w-0 flex-1 bg-transparent px-3 text-[12.5px] text-[#1A1A1A] outline-none"
+                    className="min-w-0 flex-1 bg-transparent px-3 text-[16px] sm:text-[12.5px] text-[#1A1A1A] outline-none cursor-pointer"
                   >
                     {activeCountries.map((c) => (
                       <option key={c.code || c.name} value={c.name}>
@@ -454,13 +456,13 @@ export default function RegisterPage() {
                 error={formik.errors.website}
                 touched={formik.touched.website}
               />
-              <div className="flex h-9 overflow-hidden rounded-md border border-[#E0E0E0] bg-[#EEF4FF] transition-colors focus-within:border-[#E31E24]">
+              <div className="flex h-10 sm:h-9 overflow-hidden rounded-md border border-[#E0E0E0] bg-[#EEF4FF] transition-colors focus-within:border-[#E31E24]">
                 <select
                   name="taxIdType"
                   value={formik.values.taxIdType || "GSTIN"}
                   onChange={formik.handleChange}
                   onBlur={formik.handleBlur}
-                  className="bg-transparent border-r border-[#E0E0E0] px-2 text-[12px] text-[#6B6B6B] outline-none"
+                  className="bg-transparent border-r border-[#E0E0E0] px-2 text-[13px] sm:text-[12px] text-[#6B6B6B] outline-none cursor-pointer shrink-0"
                 >
                   <option value="GSTIN">GSTIN (IN)</option>
                   <option value="VAT">VAT ID (EU)</option>
@@ -474,7 +476,7 @@ export default function RegisterPage() {
                   value={formik.values.taxId || ""}
                   onChange={formik.handleChange}
                   onBlur={formik.handleBlur}
-                  className="min-w-0 flex-1 bg-transparent px-3 text-[12.5px] text-[#1A1A1A] outline-none placeholder:text-[#8A8A8A]"
+                  className="min-w-0 flex-1 bg-transparent px-3 text-[16px] sm:text-[12.5px] text-[#1A1A1A] outline-none placeholder:text-[#8A8A8A]"
                 />
               </div>
               <div className="relative">
@@ -492,7 +494,7 @@ export default function RegisterPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((value) => !value)}
-                  className="absolute right-3 top-[10px] text-[#8A8A8A] hover:text-[#1A1A1A]"
+                  className="absolute right-3 top-[11px] sm:top-[9px] text-[#8A8A8A] hover:text-[#1A1A1A]"
                 >
                   {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
@@ -512,7 +514,7 @@ export default function RegisterPage() {
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword((value) => !value)}
-                  className="absolute right-3 top-[10px] text-[#8A8A8A] hover:text-[#1A1A1A]"
+                  className="absolute right-3 top-[11px] sm:top-[9px] text-[#8A8A8A] hover:text-[#1A1A1A]"
                 >
                   {showConfirmPassword ? (
                     <EyeOff size={14} />
@@ -523,14 +525,14 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {/* Preferred Prescription */}
-              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] px-2 py-2.5">
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3">
                 <p className="mb-2 text-[12px] font-semibold text-[#1A1A1A]">
                   Preferred prescription
                 </p>
 
-                <div className="flex flex-wrap gap-x-5 gap-y-2">
+                <div className="flex flex-wrap gap-x-4 gap-y-2">
                   <RadioOption
                     name="preferredPrescription"
                     value="MBT"
@@ -557,21 +559,21 @@ export default function RegisterPage() {
                 {formik.values.preferredPrescription === "OTHER" && (
                   <input
                     name="preferredPrescriptionOther"
-                    placeholder="Other"
+                    placeholder="Specify other prescription"
                     value={formik.values.preferredPrescriptionOther}
                     onChange={formik.handleChange}
-                    className="mt-2 h-9 w-full rounded-md border border-[#E0E0E0] bg-white px-3 text-[12.5px] outline-none transition-colors placeholder:text-[#9A9A9A] focus:border-[#E31E24]"
+                    className="mt-2.5 h-10 sm:h-9 w-full rounded-md border border-[#E0E0E0] bg-white px-3 text-[16px] sm:text-[12.5px] outline-none transition-colors placeholder:text-[#9A9A9A] focus:border-[#E31E24]"
                   />
                 )}
               </div>
 
               {/* Preferred Slot */}
-              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] px-2 py-2.5">
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3">
                 <p className="mb-2 text-[12px] font-semibold text-[#1A1A1A]">
                   Preferred slot
                 </p>
 
-                <div className="flex flex-wrap gap-x-5 gap-y-2">
+                <div className="flex flex-wrap gap-x-4 gap-y-2">
                   <RadioOption
                     name="preferredSlot"
                     value="022"
@@ -590,12 +592,12 @@ export default function RegisterPage() {
               </div>
 
               {/* Current Practice */}
-              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] px-2 py-2.5">
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3">
                 <p className="mb-2 text-[12px] font-semibold text-[#1A1A1A]">
                   Current practice
                 </p>
 
-                <div className="flex flex-wrap gap-x-5 gap-y-2">
+                <div className="flex flex-wrap gap-x-4 gap-y-2">
                   <RadioOption
                     name="currentPractice"
                     value="STUDENT"
@@ -622,21 +624,21 @@ export default function RegisterPage() {
                 {formik.values.currentPractice === "OTHER" && (
                   <input
                     name="currentPracticeOther"
-                    placeholder="Other"
+                    placeholder="Specify other practice"
                     value={formik.values.currentPracticeOther}
                     onChange={formik.handleChange}
-                    className="mt-2 h-9 w-full rounded-md border border-[#E0E0E0] bg-white px-3 text-[12.5px] outline-none transition-colors placeholder:text-[#9A9A9A] focus:border-[#E31E24]"
+                    className="mt-2.5 h-10 sm:h-9 w-full rounded-md border border-[#E0E0E0] bg-white px-3 text-[16px] sm:text-[12.5px] outline-none transition-colors placeholder:text-[#9A9A9A] focus:border-[#E31E24]"
                   />
                 )}
               </div>
 
               {/* Using Modern Products */}
-              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] px-2 py-2.5">
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3">
                 <p className="mb-2 text-[12px] font-semibold text-[#1A1A1A]">
-                  Already Using Modern Orthodontics products?
+                  Already using Modern products?
                 </p>
 
-                <div className="flex flex-wrap gap-x-5 gap-y-2">
+                <div className="flex flex-wrap gap-x-4 gap-y-2">
                   <RadioOption
                     name="usingModernProducts"
                     value="YES"
@@ -654,64 +656,63 @@ export default function RegisterPage() {
                 </div>
               </div>
             </div>
-            <div className="flex flex-col pt-1">
-              <div>
-                <label className="inline-flex items-start gap-2 text-[12px] text-[#1A1A1A] cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    name="subscribeNewsletter"
-                    checked={formik.values.subscribeNewsletter}
-                    onChange={formik.handleChange}
-                    onBlur={formik.handleBlur}
-                    className="mt-0.5 h-4 w-4 accent-[#E31E24]"
-                  />
-                  <span>
-                    Get the latest product updates, promotions, and news.
-                  </span>
-                </label>
-              </div>
-              
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <label className="inline-flex items-center gap-2 text-[12px] text-[#1A1A1A] select-none">
+
+            <div className="space-y-3 pt-2">
+              <label className="flex items-start gap-2.5 text-[12.5px] text-[#1A1A1A] cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  name="subscribeNewsletter"
+                  checked={formik.values.subscribeNewsletter}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#E31E24] cursor-pointer"
+                />
+                <span className="leading-snug">
+                  Get the latest product updates, promotions, and news.
+                </span>
+              </label>
+
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pt-1">
+                <div className="min-w-0 flex-1">
+                  <label className="flex items-start gap-2.5 text-[12.5px] text-[#1A1A1A] cursor-pointer select-none">
                     <input
                       type="checkbox"
                       name="termsAccepted"
                       checked={formik.values.termsAccepted}
                       onChange={formik.handleChange}
                       onBlur={formik.handleBlur}
-                      className="h-4 w-4 accent-[#E31E24]"
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-[#E31E24] cursor-pointer"
                     />
-                    <span>
+                    <span className="leading-snug">
                       I have read and agree to the{" "}
                       <Link
                         href="/terms-and-conditions"
-                        className="text-[#E31E24] hover:underline"
+                        className="text-[#E31E24] hover:underline font-medium"
                       >
                         Terms and Conditions
                       </Link>
                       .
                     </span>
                   </label>
-                {formik.touched.termsAccepted &&
-                  formik.errors.termsAccepted && (
-                    <p className="ml-6 mt-1 text-[11px] leading-none text-[#E31E24]">
+                  {formik.touched.termsAccepted && formik.errors.termsAccepted && (
+                    <p className="ml-6.5 mt-1 text-[11.5px] text-[#E31E24]">
                       {formik.errors.termsAccepted}
                     </p>
                   )}
-              </div>
-              <button
-                type="submit"
-                disabled={formik.isSubmitting}
-                className="inline-flex h-10 min-w-[180px] items-center justify-center gap-2 rounded-md bg-[#E31E24] px-8 text-[13px] font-semibold text-white transition-colors hover:bg-[#B5151B] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <KeyRound size={14} />
-                {formik.isSubmitting ? "REGISTERING..." : "REGISTER"}
-              </button>
-            </div>
-          </div>
+                </div>
 
-            <p className="text-center text-[12.5px] text-[#8A8A8A]">
+                <button
+                  type="submit"
+                  disabled={formik.isSubmitting}
+                  className="inline-flex h-11 sm:h-10 w-full sm:w-auto sm:min-w-[200px] shrink-0 items-center justify-center gap-2 rounded-md bg-[#E31E24] px-6 text-[13.5px] font-semibold text-white transition-colors hover:bg-[#B5151B] disabled:cursor-not-allowed disabled:opacity-60 shadow-xs"
+                >
+                  <KeyRound size={15} />
+                  {formik.isSubmitting ? "REGISTERING..." : "REGISTER"}
+                </button>
+              </div>
+            </div>
+
+            <p className="pt-2 text-center text-[12.5px] text-[#8A8A8A]">
               Already have an account?{" "}
               <Link
                 href={`/login?returnTo=${encodeURIComponent(returnTo)}`}

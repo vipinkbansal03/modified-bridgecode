@@ -19,23 +19,37 @@ export interface CategoryCardProps {
 
 export function CategoryCard({ title, image, slug, productCount, meta }: CategoryCardProps) {
   const [imageError, setImageError] = useState(false);
-  const validImage = typeof image === "string" && image.trim() !== "" && !imageError ? image.trim() : null;
+
+  const rawImage = image?.trim() || null;
+  let imageSrc: string | null = null;
+  if (rawImage && !imageError) {
+    if (rawImage.startsWith("data:")) {
+      imageSrc = rawImage;
+    } else {
+      let trimmed = rawImage.replace(/^http:\/\/(?:localhost|127\.0\.0\.1):4000(\/uploads\/)/i, "$1");
+      if (trimmed.startsWith("/") || trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+        imageSrc = trimmed;
+      } else {
+        imageSrc = `/${trimmed}`;
+      }
+    }
+  }
 
   return (
     <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.2, ease: "easeOut" }}>
       <Link href={`/products?category=${slug}`} className="block">
         <Card>
           <div className="relative h-[190px] w-full overflow-hidden bg-grey flex items-center justify-center">
-            {validImage ? (
-              validImage.startsWith("data:") ? (
+            {imageSrc ? (
+              imageSrc.startsWith("data:") ? (
                 <img
-                  src={validImage}
+                  src={imageSrc}
                   alt={title}
                   className="h-full w-full object-cover"
                 />
               ) : (
                 <Image
-                  src={validImage}
+                  src={imageSrc}
                   alt={title}
                   fill
                   className="object-cover"
@@ -53,7 +67,7 @@ export function CategoryCard({ title, image, slug, productCount, meta }: Categor
           <div className="px-5 py-4.5">
             {typeof productCount === "number" && (
               <span className="mb-1.5 block text-[11.5px] uppercase tracking-wide text-steel-2">
-                {productCount} SKUs
+                {productCount} {productCount === 1 ? "SKU" : "SKUs"}
               </span>
             )}
             <h4 className="text-[16.5px] font-medium text-ink">{title}</h4>
