@@ -420,11 +420,12 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   }, []);
 
   useEffect(() => {
-    const previewItems = currentCustomer
-      ? apiProduct.variants.map((v) => ({ variantId: v.id, quantity: v.id === currentVariant?.id ? quantity : 1 }))
-      : currentVariant && quantity >= 1
+    const previewItems =
+      currentVariant && quantity >= 1
         ? [{ variantId: currentVariant.id, quantity }]
-        : [];
+        : !apiProduct.hasVariants && quantity >= 1
+          ? [{ variantId: apiProduct.id, quantity }]
+          : [];
 
     if (!previewItems.length) {
       setPreviewPriceMap({});

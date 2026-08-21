@@ -12,10 +12,11 @@ interface ModalProps {
   onClose: () => void;
   title?: string;
   children: ReactNode;
+  footer?: ReactNode;
   panelClassName?: string;
 }
 
-export function Modal({ open, onClose, title, children, panelClassName }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, panelClassName }: ModalProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -74,9 +75,14 @@ export function Modal({ open, onClose, title, children, panelClassName }: ModalP
                 </button>
               </div>
             )}
-            <div className="overflow-y-auto overflow-x-hidden relative flex-1">
+            <div className="overflow-y-auto overflow-x-hidden relative flex-1 min-h-0">
               {children}
             </div>
+            {footer && (
+              <div className="flex items-center justify-end gap-3 border-t border-[#E5E7EB] bg-[#FAFAFA] px-6 py-3.5 shrink-0">
+                {footer}
+              </div>
+            )}
           </motion.div>
         </motion.div>
       )}

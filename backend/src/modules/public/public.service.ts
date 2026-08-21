@@ -486,72 +486,69 @@ export async function previewPublicProductPrices(
   const requestedVariantIds = Array.from(
     new Set(processedItems.map((item) => item.actualVariantId).filter(Boolean) as string[]),
   );
-  const variants = await prisma.productVariant.findMany({
-    where: {
-      id: { in: requestedVariantIds },
-      productId: product.id,
-      status: "ACTIVE",
-      countries: { some: { countryId: country.id, enabled: true } },
-    },
-    select: { id: true, productId: true },
-  });
-
-  if (variants.length !== requestedVariantIds.length) {
-    throw new AppError(
-      "One or more requested variants are not available for this product or country.",
-      400,
-    );
-  }
+  const variants = requestedVariantIds.length > 0
+    ? await prisma.productVariant.findMany({
+        where: {
+          id: { in: requestedVariantIds },
+          productId: product.id,
+          status: "ACTIVE",
+          countries: { some: { countryId: country.id, enabled: true } },
+        },
+        select: { id: true, productId: true },
+      })
+    : [];
 
   const variantById = new Map(variants.map((variant) => [variant.id, variant]));
 
-  return Promise.all(
+  const results = await Promise.all(
     processedItems.map(async (item) => {
       if (!Number.isInteger(item.quantity) || item.quantity < 1) {
-        throw new AppError("Preview quantity must be at least 1.", 400);
+        return null;
+      }
+
+      if (product.hasVariants && (!item.actualVariantId || !variantById.has(item.actualVariantId))) {
+        return null;
       }
 
       const variant = item.actualVariantId ? variantById.get(item.actualVariantId) : null;
-      if (item.actualVariantId && !variant)
-        throw new AppError(
-          "One or more requested variants are not available for this product or country.",
-          400,
-        );
 
-      await assertSellableInCountry({
-        countryId: country.id,
-        productId: product.id,
-        variantId: variant?.id ?? null,
-      });
+      try {
+        await assertSellableInCountry({
+          countryId: country.id,
+          productId: product.id,
+          variantId: variant?.id ?? null,
+        });
 
-      const resolved = await resolvePrice({
-        productId: product.id,
-        variantId: variant?.id ?? null,
-        countryId: country.id,
-        customerId: customerId ?? undefined,
-        quantity: item.quantity,
-      });
+        const resolved = await resolvePrice({
+          productId: product.id,
+          variantId: variant?.id ?? null,
+          countryId: country.id,
+          customerId: customerId ?? undefined,
+          quantity: item.quantity,
+        });
 
-      if (resolved.finalPrice <= 0 || resolved.basePrice <= 0) {
-        throw new AppError(
-          "Price Upon Request items cannot be purchased via standard checkout.",
-          400,
-        );
+        if (resolved.finalPrice <= 0 || resolved.basePrice <= 0) {
+          return null;
+        }
+
+        return {
+          variantId: item.variantId,
+          quantity: item.quantity,
+          unitPrice: resolved.finalPrice,
+          basePrice: resolved.basePrice,
+          priceBeforeTax: resolved.priceBeforeTax,
+          taxAmount: resolved.taxAmount,
+          currency: resolved.currency,
+          appliedDiscounts: resolved.appliedDiscounts,
+          landedCost: resolved.landedCost,
+        };
+      } catch {
+        return null;
       }
-
-      return {
-        variantId: item.variantId,
-        quantity: item.quantity,
-        unitPrice: resolved.finalPrice,
-        basePrice: resolved.basePrice,
-        priceBeforeTax: resolved.priceBeforeTax,
-        taxAmount: resolved.taxAmount,
-        currency: resolved.currency,
-        appliedDiscounts: resolved.appliedDiscounts,
-        landedCost: resolved.landedCost,
-      };
     }),
   );
+
+  return results.filter(Boolean);
 }
 
 // ─── Categories ───────────────────────────────────────────

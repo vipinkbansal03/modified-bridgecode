@@ -8,7 +8,7 @@
  *
  * Run: npx tsx src/scripts/repair-abc-product.ts
  */
-import "dotenv/config";
+import "../config/env";
 import { PrismaClient } from "@prisma/client";
 import { generateVariants } from "../modules/products/products.service";
 

@@ -1,8 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown } from "lucide-react";
-import { cn } from "@/utils/cn";
+import { Accordion, type AccordionItemData } from "@/components/ui/Accordion";
 import type { ProductDetail } from "@/types/product.types";
 import { ORDERS_EMAIL } from "@/utils/constants";
 
@@ -15,10 +13,9 @@ function RichText({ html }: { html: string }) {
 }
 
 export function ProductInfoAccordion({ product }: ProductInfoAccordionProps) {
-  const [openIndex, setOpenIndex] = useState<number | null>(0);
-
-  const panels = [
+  const items: AccordionItemData[] = [
     {
+      id: "highlights",
       title: "Highlights",
       content: (
         <ul className="space-y-3">
@@ -31,6 +28,7 @@ export function ProductInfoAccordion({ product }: ProductInfoAccordionProps) {
       ),
     },
     {
+      id: "technical-specs",
       title: "Technical Specifications",
       content: (
         <table className="w-full border-collapse">
@@ -46,6 +44,7 @@ export function ProductInfoAccordion({ product }: ProductInfoAccordionProps) {
       ),
     },
     {
+      id: "warranty",
       title: "Warranty",
       content: (
         <ul className="space-y-3">
@@ -68,6 +67,7 @@ export function ProductInfoAccordion({ product }: ProductInfoAccordionProps) {
       ),
     },
     {
+      id: "primary-features",
       title: "Primary Features",
       content: (
         <ul className="space-y-3">
@@ -82,22 +82,14 @@ export function ProductInfoAccordion({ product }: ProductInfoAccordionProps) {
   ];
 
   return (
-    <div className="mt-9 border-t border-line">
-      {panels.map((panel, i) => {
-        const open = openIndex === i;
-        return (
-          <div key={panel.title} className="border-b border-line">
-            <button
-              onClick={() => setOpenIndex(open ? null : i)}
-              className="flex w-full items-center justify-between gap-5 py-6 text-left text-base font-medium text-ink"
-            >
-              <span>{panel.title}</span>
-              <ChevronDown size={16} className={cn("flex-none text-steel transition-transform duration-200", open && "rotate-180 text-brand")} />
-            </button>
-            {open && <div className="max-w-[600px] pb-6">{panel.content}</div>}
-          </div>
-        );
-      })}
+    <div className="mt-9">
+      <Accordion
+        items={items}
+        defaultOpenIndex={0}
+        variant="clean"
+        headerClassName="py-5 sm:py-6 text-base font-medium text-ink"
+        contentClassName="max-w-[600px] pb-6"
+      />
     </div>
   );
 }

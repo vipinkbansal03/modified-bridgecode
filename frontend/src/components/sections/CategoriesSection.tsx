@@ -26,7 +26,11 @@ const CATEGORY_STOCK_IMAGES: Record<string, string> = {
 export function CategoriesSection() {
   const { t } = useStaticTranslations();
   const { data: categories, isLoading } = useCategories();
-  const [view, setView] = useState<"doctor" | "dealer">("doctor");
+  const [view] = useState<"doctor" | "dealer">("doctor");
+
+  if (!isLoading && (!categories || categories.length === 0)) {
+    return null;
+  }
 
   return (
     <section id="categories" className="border-t border-line py-6 lg:py-[34px]">
@@ -57,7 +61,7 @@ export function CategoriesSection() {
               <Reveal key={cat.slug} delay={i * 0.04}>
                 <CategoryCard
                   title={cat.title}
-                  image={CATEGORY_STOCK_IMAGES[cat.slug] ?? cat.image ?? ""}
+                  image={CATEGORY_STOCK_IMAGES[cat.slug] || cat.image || null}
                   slug={cat.slug}
                   productCount={cat.productCount}
                   meta={view === "doctor" ? (cat.doctorMeta ?? "") : (cat.dealerMeta ?? "")}

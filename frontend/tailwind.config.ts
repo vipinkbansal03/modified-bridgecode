@@ -22,6 +22,8 @@ const config: Config = {
       fontFamily: {
         sans: ["var(--font-body)", "-apple-system", "sans-serif"],
         heading: ["var(--font-heading)", "var(--font-body)", "-apple-system", "sans-serif"],
+        jost: ["var(--font-jost)", "sans-serif"],
+        inter: ["var(--font-inter)", "sans-serif"],
       },
       maxWidth: {
         wrap: "1320px",

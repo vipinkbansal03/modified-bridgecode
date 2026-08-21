@@ -3,7 +3,6 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import path from "path";
-import "dotenv/config";
 
 import { errorMiddleware } from "./middleware/error.middleware";
 import { logger } from "./config/logger";

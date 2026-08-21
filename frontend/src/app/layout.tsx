@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Jost } from "next/font/google";
 import { AppShell } from "@/components/layout/AppShell";
 import { ReactQueryProvider } from "@/lib/reactQueryProvider";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
@@ -23,6 +23,13 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
+const jost = Jost({
+  subsets: ["latin"],
+  weight: ["100", "200", "300", "400", "500", "600", "700", "800", "900"],
+  display: "swap",
+  variable: "--font-jost",
+});
+
 export async function generateMetadata(): Promise<Metadata> {
   return buildCmsMetadata("home", seoData.home, "/");
 }
@@ -33,7 +40,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.variable} data-scroll-behavior="smooth">
+    <html lang="en" className={`${inter.variable} ${jost.variable}`} data-scroll-behavior="smooth">
       <body className={`${inter.className} font-sans text-ink antialiased`}>
         <ReactQueryProvider>
           <LanguageProvider>

@@ -198,6 +198,12 @@ export function useRecentlySeenProducts(slugs: string[]) {
       queryFn: () => fetchProduct(slug, selectedLanguage, selectedCountryCode),
       enabled: Boolean(slug),
       staleTime: STALE.medium,
+      retry: (failureCount: number, error: any) => {
+        const status = error?.status ?? error?.response?.status;
+        const msg = String(error?.message ?? "");
+        if (status === 404 || msg.toLowerCase().includes("not found")) return false;
+        return failureCount < 2;
+      },
     })),
   });
 }

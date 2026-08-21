@@ -4,6 +4,7 @@ import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
 import { generateProductContent } from "../ai/ai.service";
 import { getTranslationCoverage } from "./translationCoverage.service";
+import { CATEGORY_DESCRIPTION_MAX_LENGTH } from "../../constants/category.constants";
 
 type ProductTranslationInput = {
   title?: string | null;
@@ -271,6 +272,21 @@ export async function upsertCategoryTranslation(
   languageId: string,
   data: CategoryTranslationInput,
 ) {
+  if (data.description) {
+    const plainText = data.description
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+      .replace(/<[^>]*>/g, "")
+      .replace(/&nbsp;/gi, " ")
+      .trim();
+    if (plainText.length > CATEGORY_DESCRIPTION_MAX_LENGTH) {
+      throw new AppError(
+        `Category translation description cannot exceed ${CATEGORY_DESCRIPTION_MAX_LENGTH} characters.`,
+        400,
+      );
+    }
+  }
+
   const [category, language] = await Promise.all([
     prisma.category.findUnique({
       where: { id: categoryId },

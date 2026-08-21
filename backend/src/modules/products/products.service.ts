@@ -781,8 +781,15 @@ export async function updateShippingInfo(id: string, data: ShippingInfoInput) {
 // ─── Soft delete ─────────────────────────────────────────
 
 export async function deleteProduct(id: string) {
-  await getProduct(id);
-  return prisma.product.update({ where: { id }, data: { deletedAt: new Date() } });
+  const current = await getProduct(id);
+  return prisma.product.update({
+    where: { id },
+    data: {
+      deletedAt: new Date(),
+      slug: `${current.slug}-deleted-${Date.now()}`,
+      ...(current.sku ? { sku: `${current.sku}-deleted-${Date.now()}` } : {}),
+    },
+  });
 }
 
 export async function archiveProduct(id: string) {
@@ -791,10 +798,30 @@ export async function archiveProduct(id: string) {
 }
 
 export async function restoreProduct(id: string) {
-  const existing = await getProduct(id);
+  const current = await prisma.product.findFirst({ where: { id } });
+  if (!current) throw new AppError("Product not found.", 404);
+
+  const baseSlug = current.slug.replace(/-deleted-\d+(-\d+)?$/, "");
+  const baseSku = current.sku ? current.sku.replace(/-deleted-\d+(-\d+)?$/, "") : null;
+
+  const slugConflict = await prisma.product.findFirst({
+    where: { slug: baseSlug, deletedAt: null, id: { not: id } },
+  });
+  const finalSlug = slugConflict ? `${baseSlug}-restored-${Date.now()}` : baseSlug;
+
+  const skuConflict = baseSku
+    ? await prisma.product.findFirst({
+        where: { sku: baseSku, deletedAt: null, id: { not: id } },
+      })
+    : null;
+  const finalSku = skuConflict ? `${baseSku}-restored-${Date.now()}` : baseSku;
+
   return prisma.$transaction(async (tx) => {
-    const product = await tx.product.update({ where: { id }, data: { status: "ACTIVE", deletedAt: null } });
-    await syncStorefrontVisibility(tx, product.id, product.status, existing.status);
+    const product = await tx.product.update({
+      where: { id },
+      data: { status: "ACTIVE", deletedAt: null, slug: finalSlug, sku: finalSku },
+    });
+    await syncStorefrontVisibility(tx, product.id, product.status, current.status);
     return product;
   });
 }
@@ -1045,8 +1072,23 @@ export async function bulkUpdateProducts(data: {
         order: { status: { not: "CANCELLED" } },
       },
     });
-    if (activeOrderItemCount > 0) throw new AppError("Cannot delete selected products because active orders reference them.", 400);
-    await prisma.product.updateMany({ where: { id: { in: ids } }, data: { deletedAt: new Date() } });
+    const productsToDelete = await prisma.product.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, slug: true, sku: true },
+    });
+    const timestamp = Date.now();
+    await prisma.$transaction(
+      productsToDelete.map((p, idx) =>
+        prisma.product.update({
+          where: { id: p.id },
+          data: {
+            deletedAt: new Date(),
+            slug: `${p.slug}-deleted-${timestamp}-${idx}`,
+            ...(p.sku ? { sku: `${p.sku}-deleted-${timestamp}-${idx}` } : {}),
+          },
+        }),
+      ),
+    );
     return { updated: ids.length };
   }
 

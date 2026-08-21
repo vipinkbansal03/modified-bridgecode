@@ -12,6 +12,7 @@ import { apiClient } from "@/lib/apiClient";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
 import { useCountries } from "@/hooks/api/useCurrencies";
 import { fetchPublicPaymentMethods } from "@/services/customerApi";
+import { toast } from "react-toastify";
 
 export interface CartItem {
   variantId: string;
@@ -376,7 +377,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const addItem = (item: CartItem) => {
     if (!item.unitPrice || item.unitPrice <= 0 || item.priceUnavailable) {
       if (typeof window !== "undefined") {
-        alert("This item requires a custom quote for your selected country.");
+        toast.warning("This item requires a custom quote for your selected country.");
       }
       return;
     }
@@ -386,7 +387,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const addItems = (incomingItems: CartItem[]) => {
     const valid = incomingItems.filter((i) => i.unitPrice && i.unitPrice > 0 && !i.priceUnavailable);
     if (valid.length < incomingItems.length && typeof window !== "undefined") {
-      alert("This item requires a custom quote for your selected country.");
+      toast.warning("This item requires a custom quote for your selected country.");
     }
     if (!valid.length) return;
     setItems((current) => mergeCartItems(current, valid));

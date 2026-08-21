@@ -4,9 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Container } from "@/components/ui/Container";
 import { useRecentlySeenProducts } from "@/hooks/api/useProducts";
-import { getRecentlySeenSlugs, recordProductView } from "@/lib/recentlySeen";
+import { getRecentlySeenSlugs, recordProductView, removeRecentlySeenSlug } from "@/lib/recentlySeen";
 import type { ApiProductDetail } from "@/types/api.types";
 
 interface RecentlySeenSectionProps {
@@ -20,6 +21,7 @@ function getProductImage(product: ApiProductDetail) {
 }
 
 export function RecentlySeenSection({ currentSlug }: RecentlySeenSectionProps) {
+  const queryClient = useQueryClient();
   const viewportRef = useRef<HTMLDivElement>(null);
   const [slugs, setSlugs] = useState<string[]>([]);
   const scrollBy = (delta: number) => viewportRef.current?.scrollBy({ left: delta, behavior: "smooth" });
@@ -30,6 +32,31 @@ export function RecentlySeenSection({ currentSlug }: RecentlySeenSectionProps) {
   }, [currentSlug]);
 
   const queries = useRecentlySeenProducts(slugs);
+
+  // Auto-prune any nonexistent (404) product slugs from localStorage, state, and query cache
+  useEffect(() => {
+    const invalidSlugs: string[] = [];
+    queries.forEach((q, index) => {
+      if (!q.isError) return;
+      const err = q.error as any;
+      const status = err?.status ?? err?.response?.status;
+      const msg = String(err?.message ?? "");
+      const is404 = status === 404 || msg.toLowerCase().includes("not found");
+
+      if (is404 && slugs[index] && !invalidSlugs.includes(slugs[index])) {
+        invalidSlugs.push(slugs[index]);
+      }
+    });
+
+    if (invalidSlugs.length > 0) {
+      invalidSlugs.forEach((slug) => {
+        removeRecentlySeenSlug(slug);
+        queryClient.removeQueries({ queryKey: ["products", "detail", slug], exact: false });
+      });
+      setSlugs((prev) => prev.filter((s) => !invalidSlugs.includes(s)));
+    }
+  }, [queries, slugs, queryClient]);
+
   const products = useMemo(
     () =>
       slugs
