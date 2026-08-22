@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
 import { decrementVariantStock } from "../inventory/inventory.service";
+import { reserveOrderInventory, releaseOrderReservation } from "../inventory/inventoryReservation.service";
 import { assertSellableInCountry } from "../countries/countryAvailability.service";
 import { resolvePrice } from "../pricing/priceResolver.service";
 import { calculateRequiredShipping } from "../shipping/shipping.service";
@@ -499,6 +500,10 @@ export async function createCustomerOrder(
         status: "PENDING",
         paymentStatus: "PENDING",
         paymentMethod: CUSTOMER_CHECKOUT_PAYMENT_METHOD,
+        paymentExpiresAt: new Date(
+          Date.now() +
+            parseInt(process.env.ORDER_PAYMENT_RESERVATION_MINUTES || "4", 10) * 60 * 1000,
+        ),
         shippingProvider: shipping.provider,
         shippingZoneId: shipping.zoneId,
         shippingBoxId: packaging.box?.id ?? null,
@@ -550,26 +555,8 @@ export async function createCustomerOrder(
       },
     });
 
-    for (const item of orderItems) {
-      if (!item.inventoryId) continue;
-      const inv = await tx.inventory.findUnique({ where: { id: item.inventoryId } });
-      if (!inv) continue;
-      const nextStock = inv.stock - item.quantity;
-      await tx.inventory.update({
-        where: { id: item.inventoryId },
-        data: { stock: nextStock }
-      });
-      await tx.inventoryAdjustment.create({
-        data: {
-          inventoryId: item.inventoryId,
-          variantId: item.variant?.id ?? null,
-          previousQty: inv.stock,
-          newQty: nextStock,
-          reason: "customer_order",
-          adjustedBy: `customer:${customer.id};order:${order.id}`,
-        }
-      });
-    }
+    // Reserve inventory for this pending order (physical stock stays unchanged)
+    await reserveOrderInventory(order.id, tx);
 
     if (couponValidation) {
       await tx.coupon.update({
@@ -668,6 +655,20 @@ export async function createRazorpayOrder(customerId: string, orderId: string) {
       },
     });
 
+    // Record PaymentTransaction attempt
+    await prisma.paymentTransaction.create({
+      data: {
+        orderId: order.id,
+        paymentMethod: "RAZORPAY",
+        provider: "RAZORPAY",
+        gatewayOrderId: rzpOrder.id,
+        status: "PENDING",
+        amount: order.total,
+        currency: rzpOrder.currency ?? order.currency?.code ?? "INR",
+        metadata: { receipt: order.orderNumber },
+      },
+    });
+
     return {
       razorpayOrderId: rzpOrder.id,
       amount: amountInPaise,
@@ -714,8 +715,27 @@ export async function verifyRazorpayPayment(
       where: { id: order.id },
       data: { paymentStatus: "FAILED" },
     });
+
+    await prisma.paymentTransaction.updateMany({
+      where: { gatewayOrderId: payload.razorpay_order_id },
+      data: {
+        status: "FAILED",
+        errorMessage: "Invalid payment signature verification failed.",
+      },
+    });
+
     throw new AppError("Invalid payment signature verification failed.", 400);
   }
+
+  // Update PaymentTransaction to SUCCESS
+  await prisma.paymentTransaction.updateMany({
+    where: { gatewayOrderId: payload.razorpay_order_id },
+    data: {
+      status: "SUCCESS",
+      gatewayPaymentId: payload.razorpay_payment_id,
+      gatewaySignature: payload.razorpay_signature,
+    },
+  });
 
   const updatedOrder = await prisma.order.update({
     where: { id: order.id },
@@ -736,41 +756,7 @@ export async function verifyRazorpayPayment(
 }
 
 export async function releaseStock(orderId: string) {
-  return prisma.$transaction(async (tx) => {
-    const order = await tx.order.findUnique({
-      where: { id: orderId },
-      include: { items: true },
-    });
-    if (!order || !order.warehouseId) return;
-
-    for (const item of order.items) {
-      if (!item.variantId) continue;
-      
-      const inv = await tx.inventory.findFirst({
-        where: { variantId: item.variantId, warehouseId: order.warehouseId },
-      });
-      if (!inv) continue;
-
-      const updated = await tx.$executeRaw`
-        UPDATE "inventory"
-        SET stock = stock + ${item.quantity}
-        WHERE id = ${inv.id}
-      `;
-
-      if (updated > 0) {
-        await tx.inventoryAdjustment.create({
-          data: {
-            inventoryId: inv.id,
-            variantId: item.variantId,
-            previousQty: inv.stock,
-            newQty: inv.stock + item.quantity,
-            adjustedBy: `system:release_stock;order:${order.id}`,
-            reason: "order_cancelled",
-          }
-        });
-      }
-    }
-  });
+  return releaseOrderReservation(orderId);
 }
 
 

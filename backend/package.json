@@ -18,7 +18,8 @@
     "prisma:studio": "prisma studio --schema src/prisma/schema.prisma",
     "prisma:seed": "ts-node src/prisma/seed.ts",
     "db:repair-menus": "ts-node src/scripts/repairMenus.ts",
-    "verify:product-architecture": "ts-node-dev --exit-child --transpile-only src/prisma/verify-product-architecture.ts"
+    "verify:product-architecture": "ts-node-dev --exit-child --transpile-only src/prisma/verify-product-architecture.ts",
+    "test:inventory-phase1": "ts-node src/scripts/test-inventory-phase1.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1104.0",

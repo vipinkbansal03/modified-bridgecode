@@ -38,6 +38,20 @@ export class RazorpayStrategy implements PaymentStrategy {
       },
     });
 
+    // Record PaymentTransaction attempt
+    await prisma.paymentTransaction.create({
+      data: {
+        orderId: order.id,
+        paymentMethod: "RAZORPAY",
+        provider: "RAZORPAY",
+        gatewayOrderId: rzpOrder.id,
+        status: "PENDING",
+        amount: order.total,
+        currency: rzpOrder.currency ?? order.currency?.code ?? "INR",
+        metadata: { receipt: order.orderNumber },
+      },
+    });
+
     return {
       paymentId: rzpOrder.id,
       type: PaymentMethodType.SDK_MODAL,
@@ -79,8 +93,27 @@ export class RazorpayStrategy implements PaymentStrategy {
         where: { id: order.id },
         data: { paymentStatus: "FAILED" },
       });
+
+      await prisma.paymentTransaction.updateMany({
+        where: { gatewayOrderId: razorpay_order_id },
+        data: {
+          status: "FAILED",
+          errorMessage: "Invalid payment signature verification failed.",
+        },
+      });
+
       throw new AppError("Invalid payment signature verification failed.", 400);
     }
+
+    // Update PaymentTransaction to SUCCESS
+    await prisma.paymentTransaction.updateMany({
+      where: { gatewayOrderId: razorpay_order_id },
+      data: {
+        status: "SUCCESS",
+        gatewayPaymentId: razorpay_payment_id,
+        gatewaySignature: razorpay_signature,
+      },
+    });
 
     const updatedOrder = await prisma.order.update({
       where: { id: order.id },
