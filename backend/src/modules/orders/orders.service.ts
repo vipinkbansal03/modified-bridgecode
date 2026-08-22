@@ -2,9 +2,8 @@ import { prisma } from "../../config/database";
 import type { Prisma } from "@prisma/client";
 import { AppError, getPagination } from "../../utils/apiResponse";
 import { assertActiveCountry, assertSellableInCountry } from "../countries/countryAvailability.service";
-import { decrementVariantStock } from "../inventory/inventory.service";
 import { resolvePrice } from "../pricing/priceResolver.service";
-import { releaseStock } from "../customerOrders/customerOrders.service";
+import { reserveOrderInventory, commitOrderReservation, releaseOrderReservation } from "../inventory/inventoryReservation.service";
 
 export async function getAnalytics() {
   const twelveMonthsAgo = new Date();
@@ -253,6 +252,8 @@ export async function createAdminOrder(input: {
     include: { items: { include: { product: true, variant: true } }, country: true, currency: true },
   });
 
+  await reserveOrderInventory(order.id);
+
   import("../notifications/notifications.service").then(({ notificationsService }) => {
     notificationsService.dispatchNotification("ORDER_PLACED", {
       order_number: order.orderNumber,
@@ -272,8 +273,10 @@ export const updateStatus = async (id: string, status: string) => {
   
   const updated = await prisma.order.update({ where: { id }, data: { status: status as never } });
   
-  if (status === "CANCELLED" && existing.status !== "CANCELLED") {
-    await releaseStock(id);
+  if (status === "SHIPPED" && existing.status !== "SHIPPED") {
+    await commitOrderReservation(id);
+  } else if (status === "CANCELLED" && existing.status !== "CANCELLED") {
+    await releaseOrderReservation(id);
   }
 
   if (existing.status !== status) {
@@ -326,6 +329,8 @@ export const updateShipping = (id: string, data: { shippingProvider?: string; tr
 
 export async function shipOrder(id: string, data: { shippingProvider: string; trackingNumber: string }) {
   const order = await getOrder(id);
+  await commitOrderReservation(id);
+
   const updated = await prisma.order.update({
     where: { id },
     data: {
@@ -354,17 +359,7 @@ export async function deliverOrder(id: string) {
     return order;
   }
 
-  await Promise.all(
-    (order.items ?? [])
-      .filter((item: any) => item.variantId)
-      .map((item: any) =>
-        decrementVariantStock(item.variantId!, item.quantity, order.countryId, {
-          reason: "order_delivered",
-          adjustedBy: `system:${id}`,
-        })
-      )
-  );
-
+  // Delivery performs ZERO inventory mutation (stock is committed upon shipment)
   const updated = await prisma.order.update({
     where: { id },
     data: { status: "DELIVERED" },

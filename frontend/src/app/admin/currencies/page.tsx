@@ -958,6 +958,17 @@ export default function CurrenciesPage() {
                   Base currency
                 </label>
               </div>
+
+              {form.values.isBase && (
+                <div className="col-span-full rounded-lg border border-amber-200 bg-amber-50 p-3.5 text-amber-900">
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-amber-600 text-[15px] font-bold">⚠️</span>
+                    <div className="text-[12px] leading-relaxed text-amber-800">
+                      <strong className="font-semibold text-amber-900">Base Currency Impact Notice:</strong> Product base prices across the catalog are entered and stored in the Base Currency. Changing the global base currency does not automatically convert stored product prices. After changing the base currency, review product catalog prices and click <strong>Sync Rates</strong> to update exchange rates for all countries.
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between gap-3 border-t border-[#E6E6E6] pt-4">

@@ -14,6 +14,7 @@ import { Modal } from "@/components/ui/Modal";
 import { uploadMediaFiles } from "@/utils/uploadMedia";
 import { BulkVariantImportWizard } from "@/components/admin/products/BulkVariantImportWizard";
 import { ProductPaymentOverridesTab } from "@/components/admin/products/ProductPaymentOverridesTab";
+import { RefreshButton } from "@/components/admin/RefreshButton";
 import {
   useAdminProduct,
   useUpdateProduct,
@@ -41,6 +42,7 @@ import {
   useAdminTiers,
   useUpdateProductFilterVisibility,
   useReorderAttributeValues,
+  useAdminCurrencies,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { cn } from "@/utils/cn";
@@ -1058,7 +1060,21 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
   const { showToast, ToastComponent } = useToast();
 
-  const { data: product, isLoading, refetch } = useAdminProduct(productId);
+  const { data: product, isLoading, isFetching, refetch } = useAdminProduct(productId);
+  const { data: adminCurrencies = [] } = useAdminCurrencies();
+  const baseCurrency = useMemo(() => {
+    const list = Array.isArray(adminCurrencies) ? adminCurrencies : [];
+    return (
+      list.find((c: any) => c.isBase) ||
+      list.find((c: any) => c.code === "USD") || {
+        name: "US Dollar",
+        code: "USD",
+        symbol: "$",
+        exchangeRate: 1,
+        isBase: true,
+      }
+    );
+  }, [adminCurrencies]);
 
   useEffect(() => {
     if (previewMediaIndex === null) return;
@@ -1779,11 +1795,23 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   };
 
-  const { data: productCountries = [], isLoading: countriesLoading } = useAdminProductCountries(productId);
-  const { data: variantCountries = [], isLoading: variantCountriesLoading } = useAdminVariantCountries(productId, editingVariant?.id || variantCountryModalVariant?.id);
-  const { data: productAttributeMappings = [], isLoading: productAttributesLoading } = useAdminProductAttributes(productId);
-  const { data: tierPricingRules = [] } = useAdminProductTierPricing(productId);
-  const { data: moqPricingRules = [] } = useAdminProductMoqPricing(productId);
+  const { data: productCountries = [], isLoading: countriesLoading, isFetching: countriesFetching, refetch: refetchCountries } = useAdminProductCountries(productId);
+  const { data: variantCountries = [], isLoading: variantCountriesLoading, isFetching: variantCountriesFetching, refetch: refetchVariantCountries } = useAdminVariantCountries(productId, editingVariant?.id || variantCountryModalVariant?.id);
+  const { data: productAttributeMappings = [], isLoading: productAttributesLoading, isFetching: productAttributesFetching, refetch: refetchProductAttributes } = useAdminProductAttributes(productId);
+  const { data: tierPricingRules = [], isLoading: tierPricingLoading, isFetching: tierPricingFetching, refetch: refetchTierPricing } = useAdminProductTierPricing(productId);
+  const { data: moqPricingRules = [], isLoading: moqPricingLoading, isFetching: moqPricingFetching, refetch: refetchMoqPricing } = useAdminProductMoqPricing(productId);
+
+  const isRefreshingProduct = isFetching || countriesFetching || productAttributesFetching || tierPricingFetching || moqPricingFetching;
+
+  const handleRefreshAll = useCallback(async () => {
+    await Promise.all([
+      refetch(),
+      refetchCountries(),
+      refetchProductAttributes(),
+      refetchTierPricing(),
+      refetchMoqPricing(),
+    ]);
+  }, [refetch, refetchCountries, refetchProductAttributes, refetchTierPricing, refetchMoqPricing]);
   const { data: categories = [] } = useAdminCategories();
   const { data: attributes = [] } = useAdminAttributes();
   const { data: countries = [] } = useAdminCountries();
@@ -4736,6 +4764,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             </LoadingButton>
           ) : null}
 
+          <RefreshButton onRefresh={handleRefreshAll} isRefreshing={isRefreshingProduct} className="shrink-0" />
+
           <button
             type="button"
             onClick={() => router.push("/admin/products")}
@@ -5614,6 +5644,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 >
                   Clear Filters
                 </button>
+                <RefreshButton onRefresh={handleRefreshAll} isRefreshing={isRefreshingProduct} className="shrink-0" />
               </div>
             </div>
 
@@ -5915,6 +5946,39 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
         {activeTab === 5 && (
           <div className="space-y-6 p-6">
+            {/* Global Base Currency Informational Card */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-[#E0E7FF] bg-[#F8FAFC] p-3.5 shadow-sm">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#EEF2FF] text-[#4F46E5]">
+                  <Globe2 size={18} />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[13px] font-semibold text-[#1E293B]">
+                      Base Currency:
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-md bg-[#EFF6FF] border border-[#BFDBFE] px-2 py-0.5 text-[12px] font-bold text-[#1D4ED8]">
+                      {baseCurrency.name} ({baseCurrency.code} {baseCurrency.symbol})
+                    </span>
+                    <span className="rounded bg-[#E2E8F0] px-1.5 py-0.5 text-[10px] font-bold text-[#475569]">
+                      SYSTEM BASE
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[12px] text-[#64748B]">
+                    Prices are entered in the system base currency ({baseCurrency.code} {baseCurrency.symbol}). Country-specific prices are generated using active exchange rates.
+                  </p>
+                </div>
+              </div>
+              <a
+                href="/admin/currencies"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-[#4F46E5] hover:text-[#3730A3] hover:underline whitespace-nowrap self-start sm:self-center"
+              >
+                Manage Currency Settings <ChevronRight size={14} />
+              </a>
+            </div>
+
             <div className="flex flex-wrap gap-1 rounded-lg border border-[#E6E6E6] bg-white p-1 max-w-max">
               {[
                 { key: "base", label: "Base Prices" },
@@ -6081,6 +6145,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                         >
                           Clear Filters
                         </button>
+                        <RefreshButton onRefresh={handleRefreshAll} isRefreshing={isRefreshingProduct} className="shrink-0" />
                       </div>
                     </div>
 
@@ -6439,6 +6504,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     >
                       Clear Filters
                     </button>
+                    <RefreshButton onRefresh={handleRefreshAll} isRefreshing={isRefreshingProduct} className="shrink-0" />
                   </div>
                 </div>
 
@@ -6768,9 +6834,12 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
             {pricingSubTab === "tier" && (
               <section className="rounded-lg border border-[#E6E6E6] bg-white p-4">
-                <div className="mb-4">
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Tier Pricing</h3>
-                  <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Create product or variant-specific tier rules. Checkout pricing resolver is a later step.</p>
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Tier Pricing</h3>
+                    <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Create product or variant-specific tier rules. Checkout pricing resolver is a later step.</p>
+                  </div>
+                  <RefreshButton onRefresh={handleRefreshAll} isRefreshing={isRefreshingProduct} className="shrink-0" />
                 </div>
                 <div className={`grid gap-3 ${variantRows.length > 0 ? "lg:grid-cols-6" : "lg:grid-cols-5"}`}>
                   <AdminSelect label="Tier" value={tierRuleDraft.tierId} onChange={(e) => setTierRuleDraft((d) => ({ ...d, tierId: e.target.value }))} options={[{ value: "", label: "Select tier" }, ...tierRows.map((tier) => ({ value: tier.id, label: tier.name }))]} />
@@ -6826,9 +6895,12 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
             {pricingSubTab === "moq" && (
               <section className="rounded-lg border border-[#E6E6E6] bg-white p-4">
-                <div className="mb-4">
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">MOQ Pricing</h3>
-                  <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Create quantity price-break rules. Existing variant MOQ remains a minimum-quantity gate only.</p>
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-[14px] font-semibold text-[#1A1A1A]">MOQ Pricing</h3>
+                    <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Create quantity price-break rules. Existing variant MOQ remains a minimum-quantity gate only.</p>
+                  </div>
+                  <RefreshButton onRefresh={handleRefreshAll} isRefreshing={isRefreshingProduct} className="shrink-0" />
                 </div>
                 <div className={`grid gap-3 ${variantRows.length > 0 ? "lg:grid-cols-7" : "lg:grid-cols-6"}`}>
                   <AdminMultiSearchableSelect
@@ -6887,7 +6959,13 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
         {activeTab === 6 && (
           <div className="p-6">
-            <h3 className="mb-4 text-[14px] font-semibold text-[#1A1A1A]">Inventory</h3>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Inventory</h3>
+                <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Product and variant warehouse inventory levels.</p>
+              </div>
+              <RefreshButton onRefresh={handleRefreshAll} isRefreshing={isRefreshingProduct} className="shrink-0" />
+            </div>
             <div className="mb-5">
               {(() => {
                 const productLevelInventories = ((product?.inventories ?? []) as NonNullable<VariantRow["inventories"]>).filter((inventory) => !inventory.variantId);
@@ -7009,6 +7087,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     >
                       Clear Filters
                     </button>
+                    <RefreshButton onRefresh={handleRefreshAll} isRefreshing={isRefreshingProduct} className="shrink-0" />
                   </div>
                 </div>
 
@@ -7630,6 +7709,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   Mapping attributes here defines which values are valid for this product. Future variant generation uses these mapped attributes by default; products with no mappings can still use the global catalog.
                 </p>
               </div>
+              <RefreshButton onRefresh={handleRefreshAll} isRefreshing={isRefreshingProduct} className="shrink-0" />
             </div>
 
             <div className={cn("grid gap-4", canManageAttributes ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-1")}>
@@ -7866,6 +7946,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 <span className="text-[12px] text-[#9A9A9A]">
                   {(productCountries as CountryAvailability[]).filter((c) => c.status === "ACTIVE").filter((country) => countryOverrides[country.id] ?? country.enabled).length} enabled
                 </span>
+                <RefreshButton onRefresh={handleRefreshAll} isRefreshing={isRefreshingProduct} className="shrink-0" />
                 <button
                   type="button"
                   onClick={saveCountryAvailability}
@@ -9161,45 +9242,63 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         panelClassName="max-w-3xl"
       >
         <div className="space-y-5 p-6">
-          <p className="text-[13px] leading-relaxed text-[#6B6B6B]">
-            Enter the base product prices once, and country prices will be generated automatically using the configured exchange rates. Set variant overrides below if needed.
-          </p>
+          <div className="rounded-lg border border-[#E0E7FF] bg-[#F8FAFC] p-3.5 flex items-start gap-3">
+            <Info size={18} className="text-[#4F46E5] shrink-0 mt-0.5" />
+            <div className="text-[12.5px] text-[#334155] leading-relaxed">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-[#1E293B]">
+                  Base Currency: {baseCurrency.name} ({baseCurrency.code} {baseCurrency.symbol})
+                </span>
+                <a
+                  href="/admin/currencies"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11.5px] font-semibold text-[#4F46E5] hover:underline inline-flex items-center gap-0.5"
+                >
+                  Manage Currencies ↗
+                </a>
+              </div>
+              <p className="mt-0.5 text-[#64748B]">
+                Enter base prices below in <strong>{baseCurrency.code} ({baseCurrency.symbol})</strong>. Country prices will be generated automatically using configured exchange rates. Set variant overrides below if needed.
+              </p>
+            </div>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <AdminInput
-              label="Base MRP"
+              label={`Base MRP (${baseCurrency.code} ${baseCurrency.symbol})`}
               type="number"
               min="0"
               step="0.01"
               value={countryPriceMRP}
               onChange={(event) => setCountryPriceMRP(event.target.value)}
-              placeholder="Enter base MRP"
+              placeholder={`Enter base MRP in ${baseCurrency.code}`}
             />
             <AdminInput
-              label="Base Selling Price (optional)"
+              label={`Base Selling Price (optional) (${baseCurrency.code} ${baseCurrency.symbol})`}
               type="number"
               min="0"
               step="0.01"
               value={countryPriceSellingPrice}
               onChange={(event) => setCountryPriceSellingPrice(event.target.value)}
-              placeholder="Same as MRP"
+              placeholder={`Same as MRP (${baseCurrency.code})`}
             />
             <AdminInput
-              label="Base Dealer Price (optional)"
+              label={`Base Dealer Price (optional) (${baseCurrency.code} ${baseCurrency.symbol})`}
               type="number"
               min="0"
               step="0.01"
               value={countryPriceDealerPrice}
               onChange={(event) => setCountryPriceDealerPrice(event.target.value)}
-              placeholder="Not set"
+              placeholder={`Not set (${baseCurrency.code})`}
             />
             <AdminInput
-              label="Base Doctor / Retailer Price (optional)"
+              label={`Base Doctor / Retailer Price (optional) (${baseCurrency.code} ${baseCurrency.symbol})`}
               type="number"
               min="0"
               step="0.01"
               value={countryPriceDistributorPrice}
               onChange={(event) => setCountryPriceDistributorPrice(event.target.value)}
-              placeholder="Not set"
+              placeholder={`Not set (${baseCurrency.code})`}
             />
           </div>
 
@@ -9207,7 +9306,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             <div className="space-y-3 pt-1">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-[13px] font-semibold text-[#1A1A1A]">
-                  Per-variant overrides
+                  Per-variant overrides ({baseCurrency.code})
                 </span>
                 <button
                   type="button"
@@ -9244,10 +9343,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   <thead className="sticky top-0 bg-[#F7F7F7] text-[12px] text-[#6B6B6B] shadow-sm">
                     <tr>
                       <th className="px-3.5 py-2.5 text-left font-medium">Variant</th>
-                      <th className="px-3.5 py-2.5 text-right font-medium">MRP</th>
-                      <th className="px-3.5 py-2.5 text-right font-medium">Selling Price</th>
-                      <th className="px-3.5 py-2.5 text-right font-medium">Dealer Price</th>
-                      <th className="px-3.5 py-2.5 text-right font-medium">Doctor Price</th>
+                      <th className="px-3.5 py-2.5 text-right font-medium">MRP ({baseCurrency.code})</th>
+                      <th className="px-3.5 py-2.5 text-right font-medium">Selling Price ({baseCurrency.code})</th>
+                      <th className="px-3.5 py-2.5 text-right font-medium">Dealer Price ({baseCurrency.code})</th>
+                      <th className="px-3.5 py-2.5 text-right font-medium">Doctor Price ({baseCurrency.code})</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#F0F0F0]">
@@ -9595,8 +9694,17 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           <div className="w-[480px] rounded-xl bg-white p-6 shadow-2xl">
             <h2 className="mb-4 text-lg font-semibold text-[#1A1A1A]">Bulk Update Prices</h2>
             <p className="mb-6 text-[13px] text-[#6B6B6B]">
-              Enter the base prices for the selected {selectedVariantIds.length} variant(s).<br/>
-              They will be automatically converted for your selected countries. Leave fields blank to keep current values.
+              {bulkPriceUpdateModalContext === "variants" ? (
+                <>
+                  Enter the base prices in <strong>{baseCurrency.name} ({baseCurrency.code} {baseCurrency.symbol})</strong> for the selected {selectedVariantIds.length} variant(s).<br/>
+                  They will be automatically converted for your selected countries using active exchange rates. Leave fields blank to keep current values.
+                </>
+              ) : (
+                <>
+                  Enter the prices for the selected {bulkPriceUpdateModalContext === "base" ? selectedPriceIds.length : selectedVPIds.length} price row(s).<br/>
+                  Leave fields blank to keep current values.
+                </>
+              )}
             </p>
 
             {bulkPriceUpdateModalContext === "variants" && (
@@ -9762,7 +9870,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             }}>
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div>
-                  <label className="mb-1.5 block text-[12px] font-medium text-[#1A1A1A]">MRP</label>
+                  <label className="mb-1.5 block text-[12px] font-medium text-[#1A1A1A]">
+                    MRP {bulkPriceUpdateModalContext === "variants" ? `(${baseCurrency.code} ${baseCurrency.symbol})` : ""}
+                  </label>
                   <input
                     type="number"
                     step="0.01"
@@ -9774,7 +9884,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-[12px] font-medium text-[#1A1A1A]">Selling Price</label>
+                  <label className="mb-1.5 block text-[12px] font-medium text-[#1A1A1A]">
+                    Selling Price {bulkPriceUpdateModalContext === "variants" ? `(${baseCurrency.code} ${baseCurrency.symbol})` : ""}
+                  </label>
                   <input
                     type="number"
                     step="0.01"
@@ -9786,7 +9898,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-[12px] font-medium text-[#1A1A1A]">Dealer Price</label>
+                  <label className="mb-1.5 block text-[12px] font-medium text-[#1A1A1A]">
+                    Dealer Price {bulkPriceUpdateModalContext === "variants" ? `(${baseCurrency.code} ${baseCurrency.symbol})` : ""}
+                  </label>
                   <input
                     type="number"
                     step="0.01"
@@ -9798,7 +9912,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-[12px] font-medium text-[#1A1A1A]">Doctor / Retailer Price</label>
+                  <label className="mb-1.5 block text-[12px] font-medium text-[#1A1A1A]">
+                    Doctor / Retailer Price {bulkPriceUpdateModalContext === "variants" ? `(${baseCurrency.code} ${baseCurrency.symbol})` : ""}
+                  </label>
                   <input
                     type="number"
                     step="0.01"

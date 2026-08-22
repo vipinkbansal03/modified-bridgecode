@@ -27,6 +27,6 @@ redis.on("connect", () => {
   logger.info(`Redis client connected to ${REDIS_HOST}:${REDIS_PORT}`);
 });
 
-redis.on("error", (err) => {
+redis.on("error", (err: Error) => {
   logger.error("Redis client connection error", err);
 });

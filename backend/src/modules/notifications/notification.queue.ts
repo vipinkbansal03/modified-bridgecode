@@ -1,4 +1,4 @@
-import { Queue, Worker } from "bullmq";
+import { Queue, Worker, Job } from "bullmq";
 import { redis } from "../../config/redis";
 import { logger } from "../../config/logger";
 import { prisma } from "../../config/database";
@@ -57,7 +57,7 @@ const getSmtpTransporter = async () => {
 
 export const notificationWorker = new Worker(
   QUEUE_NAME,
-  async (job) => {
+  async (job: Job) => {
     const { type, to, message, options = {} } = job.data;
     const logId = options.notificationLogId || "";
 
