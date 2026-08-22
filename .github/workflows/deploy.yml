@@ -1,0 +1,160 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - staging
+      - live
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ==========================================
+      # STAGING
+      # ==========================================
+      - name: Deploy Staging
+        if: github.ref_name == 'staging'
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          command_timeout: 45m
+
+          script: |
+            set -eo pipefail
+
+            export NVM_DIR="$HOME/.nvm"
+
+            if [ -s "$NVM_DIR/nvm.sh" ]; then
+              . "$NVM_DIR/nvm.sh"
+            else
+              echo "NVM not found: $NVM_DIR/nvm.sh"
+              exit 1
+            fi
+
+            nvm use default
+
+            echo "Node: $(node -v)"
+            echo "NPM: $(npm -v)"
+            echo "PM2: $(pm2 -v)"
+
+            echo "Starting staging deployment..."
+
+            # Update repository
+            cd /var/www/staging
+
+            git fetch origin
+            git checkout staging
+            git reset --hard origin/staging
+
+            # Backend
+            cd /var/www/staging/backend
+
+            test -f .env.staging
+            APP_ENV=staging NODE_ENV=production DOTENV_CONFIG_PATH=.env.staging npm ci
+
+            npm run env:check:staging
+            npm run db:generate:staging
+            npm run db:migrate:deploy:staging
+            npm run build:staging
+
+            # Frontend
+            cd /var/www/staging/frontend
+
+            npm ci
+            npm run env:check:staging
+
+            rm -rf .next
+
+            NODE_OPTIONS="--max-old-space-size=3072" \
+              npm run build:staging
+
+            # Reload staging apps
+            pm2 reload /var/www/ecosystem.config.js \
+              --only modern-backend-staging,modern-frontend-staging \
+              --update-env
+
+            pm2 save
+
+            echo "Staging deployment completed successfully."
+
+
+      # ==========================================
+      # PRODUCTION
+      # ==========================================
+      - name: Deploy Production
+        if: github.ref_name == 'live'
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          command_timeout: 45m
+
+          script: |
+            set -eo pipefail
+
+            export NVM_DIR="$HOME/.nvm"
+
+            if [ -s "$NVM_DIR/nvm.sh" ]; then
+              . "$NVM_DIR/nvm.sh"
+            else
+              echo "NVM not found: $NVM_DIR/nvm.sh"
+              exit 1
+            fi
+
+            nvm use default
+
+            echo "Node: $(node -v)"
+            echo "NPM: $(npm -v)"
+            echo "PM2: $(pm2 -v)"
+
+            echo "Starting production deployment..."
+
+            # Update repository
+            cd /var/www/html
+
+            git fetch origin
+            git checkout live
+            git reset --hard origin/live
+
+            # Backend
+            cd /var/www/html/backend
+
+            test -f .env.production
+            APP_ENV=production NODE_ENV=production DOTENV_CONFIG_PATH=.env.production npm ci
+
+            npm run env:check:production
+            npm run db:generate:production
+            npm run db:migrate:deploy:production
+            npm run build:production
+
+            # Frontend
+            cd /var/www/html/frontend
+
+            npm ci
+            npm run env:check:production
+
+            rm -rf .next
+
+            NODE_OPTIONS="--max-old-space-size=3072" \
+              npm run build:production
+
+            # Reload production apps
+            pm2 reload /var/www/ecosystem.config.js \
+              --only modern-backend,modern-frontend \
+              --update-env
+
+            pm2 save
+
+            echo "Production deployment completed successfully."

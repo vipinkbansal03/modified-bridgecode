@@ -240,13 +240,35 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
   "whatsapp.number":                  { group: "whatsapp", type: "string" },
   "whatsapp.default_message":         { group: "whatsapp", type: "string" },
   "whatsapp.floating_button_enabled": { group: "whatsapp", type: "boolean" },
+  "whatsapp.enabled":                 { group: "whatsapp", type: "boolean" },
+  "whatsapp.tata_base_url":           { group: "whatsapp", type: "string" },
+  "whatsapp.tata_sender":            { group: "whatsapp", type: "string" },
+  "whatsapp.tata_bearer_token":       { group: "whatsapp", type: "secret", isSecret: true },
   // Email
+  "email.enabled":       { group: "email", type: "boolean" },
   "email.smtp_host":     { group: "email", type: "string" },
   "email.smtp_port":     { group: "email", type: "string" },
   "email.smtp_user":     { group: "email", type: "string" },
   "email.smtp_password": { group: "email", type: "secret", isSecret: true },
   "email.from_name":     { group: "email", type: "string" },
   "email.from_email":    { group: "email", type: "string" },
+  // SMS Settings
+  "sms.enabled":             { group: "sms", type: "boolean" },
+  "sms.provider":            { group: "sms", type: "string" },
+  "sms.twilio_account_sid":  { group: "sms", type: "string" },
+  "sms.twilio_auth_token":   { group: "sms", type: "secret", isSecret: true },
+  "sms.twilio_phone":        { group: "sms", type: "string" },
+  // Payments
+  "payment.razorpay_enabled":    { group: "payments", type: "boolean" },
+  "payment.razorpay_key_id":     { group: "payments", type: "string" },
+  "payment.razorpay_key_secret": { group: "payments", type: "secret", isSecret: true },
+  // Uploads
+  "uploads.cloudinary_enabled":    { group: "uploads", type: "boolean" },
+  "uploads.cloudinary_cloud_name": { group: "uploads", type: "string" },
+  "uploads.cloudinary_api_key":     { group: "uploads", type: "string" },
+  "uploads.cloudinary_api_secret":  { group: "uploads", type: "secret", isSecret: true },
+  // Redis Cache
+  "redis.enabled": { group: "redis", type: "boolean" },
 };
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -1366,6 +1388,31 @@ export default function SettingsPage() {
                 <FieldRow label="Default Chat Greeting" hint="Optional pre-filled message that appears in the customer's chat box when they click the button">
                   <AdminTextarea value={g("whatsapp.default_message")} onChange={(e) => set("whatsapp.default_message", e.target.value)} rows={2} placeholder="Hi Modern Orthodontics, I would like to inquire about your products." />
                 </FieldRow>
+
+                <div className="mt-8 pt-6 border-t border-[#E6E6E6]">
+                  <h3 className="text-[14.5px] font-semibold text-[#1A1A1A] mb-4">WhatsApp Notification Service Settings (Tata BSP)</h3>
+                  
+                  <FieldRow label="Enable WhatsApp Notifications">
+                    <div className="flex items-center gap-3">
+                      <Toggle value={b("whatsapp.enabled")} onChange={(v) => tog("whatsapp.enabled", v)} />
+                      <span className="text-[13px] text-[#6B6B6B]">
+                        {b("whatsapp.enabled") ? "Active (Sends transaction alerts via Tata Telecom BSP)" : "Disabled"}
+                      </span>
+                    </div>
+                  </FieldRow>
+
+                  <FieldRow label="Tata Base URL">
+                    <AdminInput value={g("whatsapp.tata_base_url")} onChange={(e) => set("whatsapp.tata_base_url", e.target.value)} placeholder="https://wb.omni.tatatelebusiness.com" />
+                  </FieldRow>
+
+                  <FieldRow label="Tata Sender / Bot ID">
+                    <AdminInput value={g("whatsapp.tata_sender")} onChange={(e) => set("whatsapp.tata_sender", e.target.value)} placeholder="1073459305848682" />
+                  </FieldRow>
+
+                  <FieldRow label="Tata Bearer Token">
+                    <SecretInput value={g("whatsapp.tata_bearer_token")} onChange={(v) => set("whatsapp.tata_bearer_token", v)} />
+                  </FieldRow>
+                </div>
               </div>
             )}
 
@@ -1375,6 +1422,15 @@ export default function SettingsPage() {
                 <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
                   Configure outgoing mail server (SMTP) credentials for automated transactional emails (order invoices, RFQs, notifications). Passwords are encrypted at rest.
                 </div>
+
+                <FieldRow label="Enable Automated Emails">
+                  <div className="flex items-center gap-3">
+                    <Toggle value={b("email.enabled")} onChange={(v) => tog("email.enabled", v)} />
+                    <span className="text-[13px] text-[#6B6B6B]">
+                      {b("email.enabled") ? "Active (Emails will be sent using SMTP host below)" : "Disabled"}
+                    </span>
+                  </div>
+                </FieldRow>
 
                 <FieldRow label="SMTP Host">
                   <AdminInput value={g("email.smtp_host")} onChange={(e) => set("email.smtp_host", e.target.value)} placeholder="smtp.gmail.com" />

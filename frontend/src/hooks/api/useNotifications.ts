@@ -90,3 +90,192 @@ export function useDeleteAdminNotification() {
     },
   });
 }
+
+export function useDeleteCustomerNotification() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("customer_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await apiClient.delete(`/notifications/customer/${id}`, { headers });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications", "customer"] });
+    },
+  });
+}
+
+export function useBulkDeleteCustomerNotifications() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("customer_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await apiClient.post("/notifications/customer/bulk-delete", { ids }, { headers });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications", "customer"] });
+    },
+  });
+}
+
+export function useNotificationConfigs() {
+  return useQuery({
+    queryKey: ["notification-configs"],
+    queryFn: async () => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await apiClient.get("/notifications/admin/configs", { headers });
+      return res.data?.data ?? [];
+    },
+    enabled: typeof window !== "undefined" && !!localStorage.getItem("admin_token"),
+  });
+}
+
+export function useUpdateNotificationConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await apiClient.patch(`/notifications/admin/configs/${id}`, data, { headers });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notification-configs"] });
+    },
+  });
+}
+
+export function useNotificationManagerSettings() {
+  return useQuery({
+    queryKey: ["notification-manager-settings"],
+    queryFn: async () => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await apiClient.get("/notifications/admin/manager-settings", { headers });
+      return res.data?.data ?? null;
+    },
+    enabled: typeof window !== "undefined" && !!localStorage.getItem("admin_token"),
+  });
+}
+
+export function useUpdateNotificationManagerSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: any) => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await apiClient.patch("/notifications/admin/manager-settings", data, { headers });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notification-manager-settings"] });
+    },
+  });
+}
+
+export function useNotificationTemplates() {
+  return useQuery({
+    queryKey: ["notification-templates"],
+    queryFn: async () => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await apiClient.get("/notifications/admin/templates", { headers });
+      return res.data?.data ?? [];
+    },
+    enabled: typeof window !== "undefined" && !!localStorage.getItem("admin_token"),
+  });
+}
+
+export function useApprovedWhatsAppTemplates() {
+  return useQuery({
+    queryKey: ["approved-whatsapp-templates"],
+    queryFn: async () => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await apiClient.get("/notifications/admin/templates/whatsapp-approved", { headers });
+      return res.data?.data ?? [];
+    },
+    enabled: typeof window !== "undefined" && !!localStorage.getItem("admin_token"),
+  });
+}
+
+export function useUpdateNotificationTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ type, channel, data }: { type: string; channel: string; data: any }) => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await apiClient.put(`/notifications/admin/templates/${type}/${channel}`, data, { headers });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notification-templates"] });
+    },
+  });
+}
+
+export function useNotificationLogs(params: { page: number; limit: number; search: string; status: string; channel: string }) {
+  return useQuery({
+    queryKey: ["notification-logs", params],
+    queryFn: async () => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await apiClient.get("/notifications/admin/logs", {
+        headers,
+        params,
+      });
+      return res.data?.data ?? { total: 0, items: [] };
+    },
+    enabled: typeof window !== "undefined" && !!localStorage.getItem("admin_token"),
+  });
+}
+
+export function useDeleteNotificationLog() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await apiClient.delete(`/notifications/admin/logs/${id}`, { headers });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notification-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications", "admin"] });
+    },
+  });
+}
+
+export function useBulkDeleteNotificationLogs() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await apiClient.post("/notifications/admin/logs/bulk-delete", { ids }, { headers });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notification-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications", "admin"] });
+    },
+  });
+}
+
+export function useNotificationRolesList() {
+  return useQuery({
+    queryKey: ["notification-roles-list"],
+    queryFn: async () => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await apiClient.get("/notifications/admin/roles-list", { headers });
+      return res.data?.data ?? [];
+    },
+    enabled: typeof window !== "undefined" && !!localStorage.getItem("admin_token"),
+  });
+}
+

@@ -95,7 +95,16 @@ export const sidebarSections: SidebarSection[] = [
       { label: "Inquiries", href: "/admin/contact-submissions", icon: MessageSquare, permission: "contactSubmissions.view" },
       { label: "Newsletter", href: "/admin/newsletter", icon: Newspaper, permission: "contactSubmissions.view" },
       { label: "Roles & Permissions", href: "/admin/roles", icon: Shield, permission: "roles.view" },
-      { label: "Push Notifications", href: "/admin/notifications", icon: Bell, permission: "customers.view" },
+      {
+        label: "Notifications",
+        icon: Bell,
+        permission: "customers.view",
+        subItems: [
+          { label: "History Logs", href: "/admin/notifications" },
+          { label: "Routing Rules", href: "/admin/notifications/manager" },
+          { label: "Message Templates", href: "/admin/notifications/templates" },
+        ],
+      },
     ],
   },
   {
@@ -139,6 +148,7 @@ export const sidebarSections: SidebarSection[] = [
       { label: "Translations", href: "/admin/translations", icon: Languages, permission: "translations.view" },
       { label: "AI Tools", href: "/admin/ai-tools", icon: Sparkles, permission: "ai.view" },
       { label: "Payments", href: "/admin/payments", icon: CreditCard, permission: "payments.view" },
+      { label: "Configuration", href: "/admin/configuration", icon: Sliders, permission: "settings.view" },
       { label: "Settings", href: "/admin/settings", icon: Settings, permission: "settings.view" },
     ],
   },

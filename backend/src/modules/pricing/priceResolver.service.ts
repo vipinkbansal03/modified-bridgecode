@@ -127,6 +127,8 @@ type PromotionalDiscount = {
   countries: { id: string }[];
   discountPercent: Prisma.Decimal | null;
   fixedAmount: Prisma.Decimal | null;
+  minQuantity: number | null;
+  maxQuantity: number | null;
   createdAt: Date;
 };
 
@@ -231,6 +233,7 @@ async function findPromotionalDiscounts(
         { OR: [{ countries: { some: { countryId: input.countryId } } }, { countries: { none: {} } }] },
         { OR: [{ startDate: null }, { startDate: { lte: now } }] },
         { OR: [{ endDate: null }, { endDate: { gte: startOfCurrentDay } }] },
+        ...(type === "MOQ" ? [{ OR: [{ maxQuantity: null }, { maxQuantity: { gte: input.quantity } }] }] : []),
       ],
     },
     include: {
@@ -380,6 +383,10 @@ async function findMoqRule(input: ResolvePriceInput) {
       variantId: input.variantId,
       countryId: input.countryId,
       minQuantity: { lte: input.quantity },
+      OR: [
+        { maxQuantity: null },
+        { maxQuantity: { gte: input.quantity } }
+      ]
     });
   }
 
@@ -388,6 +395,10 @@ async function findMoqRule(input: ResolvePriceInput) {
     variantId: null,
     countryId: input.countryId,
     minQuantity: { lte: input.quantity },
+    OR: [
+      { maxQuantity: null },
+      { maxQuantity: { gte: input.quantity } }
+    ]
   });
 
   for (const where of lookups) {
@@ -443,59 +454,88 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
     layers.push(appliedRolePrice.layer);
   }
 
-  if (pricingContext.tierId && pricingContext.tierEligibleForCountry) {
-    const tierRule = await findTierRule(input, pricingContext.tierId);
+  const priceBeforeDiscounts = currentPrice;
 
-    if (tierRule) {
-      const applied = applyRule(currentPrice, tierRule, "TIER_PRICE", `${tierRule.tier.name} tier pricing`);
-      currentPrice = applied.nextPrice;
-      layers.push(applied.layer);
-    }
-  }
+  // 1. Fetch all candidate rules and promotional discounts
+  const tierRule = (pricingContext.tierId && pricingContext.tierEligibleForCountry)
+    ? await findTierRule(input, pricingContext.tierId)
+    : null;
 
   const moqRule = await findMoqRule(input);
-
-  if (moqRule) {
-    const applied = applyRule(currentPrice, moqRule, "MOQ_PRICE", `${moqRule.minQuantity}+ unit MOQ pricing`);
-    currentPrice = applied.nextPrice;
-    layers.push(applied.layer);
-  }
-  const resolvedTierPrice = currentPrice;
 
   const promotionalTierDiscount = selectBestPromotionalDiscount(
     pricingContext.tierId && pricingContext.tierEligibleForCountry
       ? await findPromotionalDiscounts(input, "TIER", product?.categoryId ?? null, productCollectionIds, pricingContext.tierId)
       : [],
-    currentPrice
+    priceBeforeDiscounts
   );
-  if (promotionalTierDiscount) {
-    const applied = applyPromotionalDiscount(currentPrice, promotionalTierDiscount.discount);
-    if (promotionalTierDiscount.warning) applied.layer.warning = promotionalTierDiscount.warning;
-    currentPrice = applied.nextPrice;
-    layers.push(applied.layer);
-  }
 
   const promotionalMoqDiscount = selectBestPromotionalDiscount(
     await findPromotionalDiscounts(input, "MOQ", product?.categoryId ?? null, productCollectionIds),
-    currentPrice
+    priceBeforeDiscounts
   );
+
+  // 2. Evaluate each discount candidate separately on the base price to find the single maximum discount
+  let tierRuleSavings = 0;
+  let tierRuleApplied: any = null;
+  if (tierRule) {
+    tierRuleApplied = applyRule(priceBeforeDiscounts, tierRule, "TIER_PRICE", `${tierRule.tier.name} tier pricing`);
+    tierRuleSavings = priceBeforeDiscounts - tierRuleApplied.nextPrice;
+  }
+
+  let moqRuleSavings = 0;
+  let moqRuleApplied: any = null;
+  if (moqRule) {
+    moqRuleApplied = applyRule(priceBeforeDiscounts, moqRule, "MOQ_PRICE", `${moqRule.minQuantity}+ unit MOQ pricing`);
+    moqRuleSavings = priceBeforeDiscounts - moqRuleApplied.nextPrice;
+  }
+
+  let promotionalTierSavings = 0;
+  let promotionalTierApplied: any = null;
+  if (promotionalTierDiscount) {
+    promotionalTierApplied = applyPromotionalDiscount(priceBeforeDiscounts, promotionalTierDiscount.discount);
+    if (promotionalTierDiscount.warning) promotionalTierApplied.layer.warning = promotionalTierDiscount.warning;
+    promotionalTierSavings = priceBeforeDiscounts - promotionalTierApplied.nextPrice;
+  }
+
+  let promotionalMoqSavings = 0;
+  let promotionalMoqApplied: any = null;
   if (promotionalMoqDiscount) {
-    const applied = applyPromotionalDiscount(currentPrice, promotionalMoqDiscount.discount);
-    if (promotionalMoqDiscount.warning) applied.layer.warning = promotionalMoqDiscount.warning;
-    currentPrice = applied.nextPrice;
-    layers.push(applied.layer);
+    promotionalMoqApplied = applyPromotionalDiscount(priceBeforeDiscounts, promotionalMoqDiscount.discount);
+    if (promotionalMoqDiscount.warning) promotionalMoqApplied.layer.warning = promotionalMoqDiscount.warning;
+    promotionalMoqSavings = priceBeforeDiscounts - promotionalMoqApplied.nextPrice;
   }
 
   const openPromotionalDiscount = selectBestPromotionalDiscount(
     await findPromotionalDiscounts(input, "PROMOTIONAL", product?.categoryId ?? null, productCollectionIds),
-    currentPrice
+    priceBeforeDiscounts
   );
+  let openPromotionalSavings = 0;
+  let openPromotionalApplied: any = null;
   if (openPromotionalDiscount) {
-    const applied = applyPromotionalDiscount(currentPrice, openPromotionalDiscount.discount);
-    if (openPromotionalDiscount.warning) applied.layer.warning = openPromotionalDiscount.warning;
-    currentPrice = applied.nextPrice;
-    layers.push(applied.layer);
+    openPromotionalApplied = applyPromotionalDiscount(priceBeforeDiscounts, openPromotionalDiscount.discount);
+    if (openPromotionalDiscount.warning) openPromotionalApplied.layer.warning = openPromotionalDiscount.warning;
+    openPromotionalSavings = priceBeforeDiscounts - openPromotionalApplied.nextPrice;
   }
+
+  // 3. Compare all candidates and apply only the single winning discount
+  const candidates = [
+    { name: "tierRule", savings: tierRuleSavings, applied: tierRuleApplied },
+    { name: "moqRule", savings: moqRuleSavings, applied: moqRuleApplied },
+    { name: "promotionalTier", savings: promotionalTierSavings, applied: promotionalTierApplied },
+    { name: "promotionalMoq", savings: promotionalMoqSavings, applied: promotionalMoqApplied },
+    { name: "openPromotional", savings: openPromotionalSavings, applied: openPromotionalApplied },
+  ];
+
+  const winner = candidates.reduce((best, current) => {
+    return current.savings > best.savings ? current : best;
+  }, { name: "none", savings: 0, applied: null });
+
+  if (winner.savings > 0 && winner.applied) {
+    currentPrice = winner.applied.nextPrice;
+    layers.push(winner.applied.layer);
+  }
+  const resolvedTierPrice = currentPrice;
 
   // Extension point: code-based coupons can append another PROMOTIONAL_DISCOUNT layer after automatic discounts.
   const priceBeforeTax = roundMoney(currentPrice);

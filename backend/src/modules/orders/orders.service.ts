@@ -218,7 +218,7 @@ export async function createAdminOrder(input: {
   const customerEmail = customer?.email ?? input.customerEmail?.trim();
   if (!customerName || !customerEmail) throw new AppError("Customer name and email are required.", 400);
 
-  const created = await prisma.order.create({
+  const order = await prisma.order.create({
     data: {
       orderNumber: generateOrderNumber(),
       customerId: customer?.id ?? null,
@@ -252,12 +252,23 @@ export async function createAdminOrder(input: {
     include: { items: { include: { product: true, variant: true } }, country: true, currency: true },
   });
 
-  await reserveOrderInventory(created.id);
-  return created;
+  await reserveOrderInventory(order.id);
+
+  import("../notifications/notifications.service").then(({ notificationsService }) => {
+    notificationsService.dispatchNotification("ORDER_PLACED", {
+      order_number: order.orderNumber,
+      customer_name: order.customerName,
+      currency: order.currency?.code || "INR",
+      order_total: String(order.total),
+      customerId: order.customerId || undefined,
+    }).catch(console.error);
+  });
+
+  return order;
 }
 
 export const updateStatus = async (id: string, status: string) => {
-  const existing = await prisma.order.findUnique({ where: { id } });
+  const existing = await prisma.order.findUnique({ where: { id }, include: { country: true, currency: true } });
   if (!existing) throw new AppError("Order not found.", 404);
   
   const updated = await prisma.order.update({ where: { id }, data: { status: status as never } });
@@ -270,20 +281,49 @@ export const updateStatus = async (id: string, status: string) => {
 
   if (existing.status !== status) {
     import("../notifications/notifications.service").then(({ notificationsService }) => {
-      notificationsService.createNotification({
-        title: "Order Status Updated",
-        message: `Your order #${existing.orderNumber} is now ${status}.`,
-        type: "ORDER",
-        targetType: "SPECIFIC_CUSTOMER",
-        customerId: existing.customerId || undefined,
-        link: `/account/orders/${id}`,
+      if (status === "SHIPPED") {
+        notificationsService.dispatchNotification("ORDER_SHIPPED", {
+          order_number: existing.orderNumber,
+          customer_name: existing.customerName,
+          carrier_name: existing.shippingProvider || "Courier Partner",
+          tracking_number: existing.trackingNumber || "N/A",
+          customerId: existing.customerId || undefined,
+        }).catch(console.error);
+      } else {
+        notificationsService.createNotification({
+          title: "Order Status Updated",
+          message: `Your order #${existing.orderNumber} is now ${status}.`,
+          type: "ORDER",
+          targetType: "SPECIFIC_CUSTOMER",
+          customerId: existing.customerId || undefined,
+          link: `/account/orders/${id}`,
+        }).catch(console.error);
+      }
+    });
+  }
+
+  return updated;
+};
+export const updatePaymentStatus = async (id: string, paymentStatus: string) => {
+  const order = await prisma.order.findUnique({ where: { id }, include: { country: true, currency: true } });
+  if (!order) throw new AppError("Order not found.", 404);
+
+  const updated = await prisma.order.update({ where: { id }, data: { paymentStatus: paymentStatus as never } });
+
+  if (paymentStatus === "PAID") {
+    import("../notifications/notifications.service").then(({ notificationsService }) => {
+      notificationsService.dispatchNotification("PAYMENT_SUCCESS", {
+        order_number: order.orderNumber,
+        customer_name: order.customerName,
+        currency: order.currency?.code || "INR",
+        order_total: String(order.total),
+        customerId: order.customerId || undefined,
       }).catch(console.error);
     });
   }
 
   return updated;
 };
-export const updatePaymentStatus = (id: string, paymentStatus: string) => prisma.order.update({ where: { id }, data: { paymentStatus: paymentStatus as never } });
 export const updateShipping = (id: string, data: { shippingProvider?: string; trackingNumber?: string }) =>
   prisma.order.update({ where: { id }, data });
 
@@ -301,13 +341,12 @@ export async function shipOrder(id: string, data: { shippingProvider: string; tr
   });
 
   import("../notifications/notifications.service").then(({ notificationsService }) => {
-    notificationsService.createNotification({
-      title: "Order Shipped",
-      message: `Your order #${order.orderNumber} has been shipped via ${data.shippingProvider} (Tracking: ${data.trackingNumber}).`,
-      type: "ORDER",
-      targetType: "SPECIFIC_CUSTOMER",
+    notificationsService.dispatchNotification("ORDER_SHIPPED", {
+      order_number: order.orderNumber,
+      customer_name: order.customerName,
+      carrier_name: data.shippingProvider,
+      tracking_number: data.trackingNumber,
       customerId: order.customerId || undefined,
-      link: `/account/orders/${id}`,
     }).catch(console.error);
   });
 

@@ -310,12 +310,134 @@ export async function publicGetProduct(
         where: { variantId: null, OR: [{ countryId: country.id }, { countryId: null }] },
         orderBy: [{ countryId: "desc" }],
       },
+      moqPricing: {
+        where: { countryId: country.id, variantId: null },
+        orderBy: { minQuantity: "asc" },
+      },
+      tierPricing: {
+        where: { countryId: country.id, variantId: null },
+        include: { tier: true },
+      },
     },
   });
 
   if (!product || (product.hasVariants && product.variants.length === 0))
     throw new AppError("Product not found.", 404);
-  return toPublicProductDetail(product, country.id);
+
+  const now = new Date();
+  const startOfCurrentDay = new Date(now);
+  startOfCurrentDay.setUTCHours(0, 0, 0, 0);
+
+  const productCollections = await prisma.product.findUnique({
+    where: { id: product.id },
+    select: { collections: { select: { collectionId: true } } },
+  });
+  const collectionIds = productCollections?.collections.map((c) => c.collectionId) ?? [];
+
+  const scopeFilters: Prisma.DiscountWhereInput[] = [
+    { products: { some: { productId: product.id } } },
+    { products: { none: {} }, collections: { none: {} }, categories: { none: {} } },
+  ];
+  if (collectionIds.length) {
+    scopeFilters.push({ collections: { some: { collectionId: { in: collectionIds } } } });
+  }
+  if (product.categoryId) {
+    scopeFilters.push({ categories: { some: { categoryId: product.categoryId } } });
+  }
+
+  const promoDiscounts = await prisma.discount.findMany({
+    where: {
+      type: { in: ["TIER", "MOQ"] },
+      status: "ACTIVE",
+      OR: scopeFilters,
+      AND: [
+        { OR: [{ countries: { some: { countryId: country.id } } }, { countries: { none: {} } }] },
+        { OR: [{ startDate: null }, { startDate: { lte: now } }] },
+        { OR: [{ endDate: null }, { endDate: { gte: startOfCurrentDay } }] },
+      ],
+    },
+    include: {
+      tier: true,
+    },
+  });
+
+  const baseMoqPricing = product.moqPricing.map((m) => ({
+    id: m.id,
+    minQuantity: m.minQuantity,
+    maxQuantity: m.maxQuantity,
+    discountPercent: m.discountPercent != null ? Number(m.discountPercent) : null,
+    fixedPrice: m.fixedPrice != null ? Number(m.fixedPrice) : null,
+  }));
+
+  const promoMoqPricing = promoDiscounts
+    .filter((d) => d.type === "MOQ")
+    .map((d) => ({
+      id: d.id,
+      minQuantity: d.minQuantity || 1,
+      maxQuantity: d.maxQuantity || null,
+      discountPercent: d.discountPercent != null ? Number(d.discountPercent) : null,
+      fixedPrice: d.fixedAmount != null ? Number(d.fixedAmount) : null,
+    }));
+
+  const allMoqPricing = [...baseMoqPricing, ...promoMoqPricing];
+  const moqGroups: Record<string, typeof allMoqPricing> = {};
+  for (const mp of allMoqPricing) {
+    const key = `${mp.minQuantity}_${mp.maxQuantity ?? "null"}`;
+    if (!moqGroups[key]) moqGroups[key] = [];
+    moqGroups[key].push(mp);
+  }
+  const finalMoqPricing = Object.values(moqGroups).map((group) => {
+    return group.sort((a, b) => {
+      const aPct = a.discountPercent ?? 0;
+      const bPct = b.discountPercent ?? 0;
+      if (bPct !== aPct) return bPct - aPct;
+      const aFixed = a.fixedPrice ?? Infinity;
+      const bFixed = b.fixedPrice ?? Infinity;
+      return aFixed - bFixed;
+    })[0];
+  }).sort((a, b) => a.minQuantity - b.minQuantity);
+
+  const baseTierPricing = product.tierPricing.map((t) => ({
+    id: t.id,
+    tier: { id: t.tier.id, name: t.tier.name },
+    discountPercent: t.discountPercent != null ? Number(t.discountPercent) : null,
+    fixedPrice: t.fixedPrice != null ? Number(t.fixedPrice) : null,
+  }));
+
+  const promoTierPricing = promoDiscounts
+    .filter((d) => d.type === "TIER" && d.tier)
+    .map((d) => ({
+      id: d.id,
+      tier: { id: d.tier!.id, name: d.tier!.name },
+      discountPercent: d.discountPercent != null ? Number(d.discountPercent) : null,
+      fixedPrice: d.fixedAmount != null ? Number(d.fixedAmount) : null,
+    }));
+
+  const allTierPricing = [...baseTierPricing, ...promoTierPricing];
+  const tierGroups: Record<string, typeof allTierPricing> = {};
+  for (const tp of allTierPricing) {
+    const key = tp.tier.id;
+    if (!tierGroups[key]) tierGroups[key] = [];
+    tierGroups[key].push(tp);
+  }
+  const finalTierPricing = Object.values(tierGroups).map((group) => {
+    return group.sort((a, b) => {
+      const aPct = a.discountPercent ?? 0;
+      const bPct = b.discountPercent ?? 0;
+      if (bPct !== aPct) return bPct - aPct;
+      const aFixed = a.fixedPrice ?? Infinity;
+      const bFixed = b.fixedPrice ?? Infinity;
+      return aFixed - bFixed;
+    })[0];
+  });
+
+  const mergedProduct = {
+    ...product,
+    moqPricing: finalMoqPricing,
+    tierPricing: finalTierPricing,
+  };
+
+  return toPublicProductDetail(mergedProduct as any, country.id);
 }
 
 export async function previewPublicProductPrices(
@@ -1260,6 +1382,19 @@ type PublicProductDetailRecord = {
   primaryFeatures?: Prisma.JsonValue | null;
   additionalInfo?: Prisma.JsonValue | null;
   _count?: { variants: number };
+  moqPricing?: Array<{
+    id: string;
+    minQuantity: number;
+    maxQuantity: number | null;
+    discountPercent: Prisma.Decimal | number | null;
+    fixedPrice: Prisma.Decimal | number | null;
+  }>;
+  tierPricing?: Array<{
+    id: string;
+    tier: { id: string; name: string };
+    discountPercent: Prisma.Decimal | number | null;
+    fixedPrice: Prisma.Decimal | number | null;
+  }>;
   translations?: ProductTranslationSnapshot[];
 };
 
@@ -1576,6 +1711,19 @@ async function toPublicProductDetail(
       (p.prices ?? []) as unknown as PriceRecord[],
       p.variants.map((v) => (v.prices ?? []) as unknown as PriceRecord[]),
     ),
+    moqPricing: (p as any).moqPricing?.map((m: any) => ({
+      id: m.id,
+      minQuantity: m.minQuantity,
+      maxQuantity: m.maxQuantity,
+      discountPercent: m.discountPercent != null ? Number(m.discountPercent) : null,
+      fixedPrice: m.fixedPrice != null ? Number(m.fixedPrice) : null,
+    })) ?? [],
+    tierPricing: (p as any).tierPricing?.map((t: any) => ({
+      id: t.id,
+      tier: { id: t.tier.id, name: t.tier.name },
+      discountPercent: t.discountPercent != null ? Number(t.discountPercent) : null,
+      fixedPrice: t.fixedPrice != null ? Number(t.fixedPrice) : null,
+    })) ?? [],
   };
 }
 

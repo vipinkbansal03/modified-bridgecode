@@ -69,6 +69,7 @@ type Discount = {
   tierId: string | null;
   tier?: Related | null;
   minQuantity: number | null;
+  maxQuantity: number | null;
   discountPercent: string | number | null;
   fixedAmount: string | number | null;
   countryId: string | null;
@@ -94,6 +95,7 @@ type FormState = {
   status: "ACTIVE" | "INACTIVE";
   tierId: string;
   minQuantity: string;
+  maxQuantity: string;
   valueType: "PERCENT" | "FIXED";
   discountPercent: string;
   fixedAmount: string;
@@ -131,6 +133,7 @@ const blankForm: FormState = {
   status: "ACTIVE",
   tierId: "",
   minQuantity: "",
+  maxQuantity: "",
   valueType: "PERCENT",
   discountPercent: "",
   fixedAmount: "",
@@ -185,6 +188,7 @@ function toForm(discount: Discount): FormState {
     status: discount.status === "INACTIVE" ? "INACTIVE" : "ACTIVE",
     tierId: discount.tierId ?? "",
     minQuantity: discount.minQuantity ? String(discount.minQuantity) : "",
+    maxQuantity: discount.maxQuantity ? String(discount.maxQuantity) : "",
     valueType: discount.discountPercent != null ? "PERCENT" : "FIXED",
     discountPercent:
       discount.discountPercent != null ? String(discount.discountPercent) : "",
@@ -292,6 +296,11 @@ export default function DiscountsPage() {
       if (!values.type) errors.type = "Type is required.";
       if (values.type === "TIER" && !values.tierId) errors.tierId = "Tier is required.";
       if (values.type === "MOQ" && !values.minQuantity) errors.minQuantity = "Minimum quantity is required.";
+      if (values.type === "MOQ" && values.minQuantity && values.maxQuantity) {
+        if (Number(values.maxQuantity) < Number(values.minQuantity)) {
+          errors.maxQuantity = "Maximum quantity cannot be less than minimum quantity.";
+        }
+      }
       if (values.valueType === "PERCENT" && !values.discountPercent) errors.discountPercent = "Percentage is required.";
       if (values.valueType === "FIXED" && !values.fixedAmount) errors.fixedAmount = "Fixed amount is required.";
       if (values.scope === "PRODUCT" && values.productIds.length === 0) errors.productIds = "Select at least one product.";
@@ -306,6 +315,7 @@ export default function DiscountsPage() {
         status: values.status,
         tierId: values.type === "TIER" ? values.tierId || null : null,
         minQuantity: values.type === "MOQ" ? values.minQuantity : null,
+        maxQuantity: values.type === "MOQ" ? values.maxQuantity || null : null,
         discountPercent: values.valueType === "PERCENT" ? values.discountPercent : null,
         fixedAmount: values.valueType === "FIXED" ? values.fixedAmount : null,
         countryIds: values.countryIds,
@@ -424,11 +434,15 @@ export default function DiscountsPage() {
 
   const setField = (key: keyof FormState, value: string) => {
     const next = { ...form.values, [key]: value };
-    if (key === "type" && value === "TIER") next.minQuantity = "";
+    if (key === "type" && value === "TIER") {
+      next.minQuantity = "";
+      next.maxQuantity = "";
+    }
     if (key === "type" && value === "MOQ") next.tierId = "";
     if (key === "type" && value === "PROMOTIONAL") {
       next.tierId = "";
       next.minQuantity = "";
+      next.maxQuantity = "";
     }
     if (key === "valueType" && value === "PERCENT") next.fixedAmount = "";
     if (key === "valueType" && value === "FIXED") next.discountPercent = "";
@@ -688,7 +702,9 @@ export default function DiscountsPage() {
           {row.type === "TIER"
             ? (row.tier?.name ?? "Tier required")
             : row.type === "MOQ"
-              ? `${row.minQuantity}+ units`
+              ? row.maxQuantity
+                ? `${row.minQuantity} - ${row.maxQuantity} units`
+                : `${row.minQuantity}+ units`
               : "No minimum condition"}
         </div>
       ),
@@ -839,13 +855,22 @@ export default function DiscountsPage() {
               options={options.tiers}
             />
           ) : form.values.type === "MOQ" ? (
-            <AdminInput
-              label="Minimum Quantity"
-              type="text"
-              inputMode="numeric"
-              {...form.getFieldProps("minQuantity")}
-              error={form.errors.minQuantity as string}
-            />
+            <div className="grid grid-cols-2 gap-4">
+              <AdminInput
+                label="Minimum Quantity"
+                type="text"
+                inputMode="numeric"
+                {...form.getFieldProps("minQuantity")}
+                error={form.errors.minQuantity as string}
+              />
+              <AdminInput
+                label="Maximum Quantity (Optional)"
+                type="text"
+                inputMode="numeric"
+                {...form.getFieldProps("maxQuantity")}
+                error={form.errors.maxQuantity as string}
+              />
+            </div>
           ) : (
             <div className="rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3.5 py-2.5 text-[13px] text-[#6B6B6B]">
               Open promotions apply by scope, country, and active date window.
