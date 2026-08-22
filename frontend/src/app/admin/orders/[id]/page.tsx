@@ -557,7 +557,7 @@ export default function OrderDetailPage() {
                   label="Packaging"
                   value={
                     <>
-                      {order.shippingBox?.name ?? order.shippingBoxName ?? "Standard box"} ·{" "}
+                      {getPackagingSummary(order)} ·{" "}
                       {Number(order.packageWeight ?? 0).toFixed(3)} kg ·{" "}
                       {order.shippingBox
                         ? `${order.shippingBox.length}×${order.shippingBox.width}×${order.shippingBox.height} cm`
@@ -573,6 +573,21 @@ export default function OrderDetailPage() {
       </div>
     </AdminLayout>
   );
+}
+
+function getPackagingSummary(order: OrderDetail) {
+  const orderBoxes = (order as any).orderBoxes;
+  if (orderBoxes && orderBoxes.length > 0) {
+    const counts: Record<string, number> = {};
+    orderBoxes.forEach((b: any) => {
+      const name = b.boxName || "Standard box";
+      counts[name] = (counts[name] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([name, count]) => `${count}x ${name}`)
+      .join(", ");
+  }
+  return order.shippingBox?.name ?? order.shippingBoxName ?? "Standard box";
 }
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {

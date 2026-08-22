@@ -77,6 +77,20 @@ function canDownloadInvoice(order: CustomerOrderSummary) {
   return order.status !== "CANCELLED" && order.status !== "REJECTED";
 }
 
+function getPackagingSummary(order: CustomerOrderSummary) {
+  if (order.orderBoxes && order.orderBoxes.length > 0) {
+    const counts: Record<string, number> = {};
+    order.orderBoxes.forEach((b: any) => {
+      const name = b.boxName || "Standard box";
+      counts[name] = (counts[name] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([name, count]) => `${count}x ${name}`)
+      .join(", ");
+  }
+  return order.shippingBox?.name ?? order.shippingBoxName ?? "Standard box";
+}
+
 export default function AccountPage() {
   const router = useRouter();
   const { showToast } = useToast();
@@ -548,7 +562,7 @@ export default function AccountPage() {
                                 <div className="flex justify-between">
                                   <span className="text-steel">Packaging</span>
                                   <strong className="text-ink">
-                                    {order.shippingBox?.name ?? order.shippingBoxName ?? "Standard box"} ·{" "}
+                                    {getPackagingSummary(order)} ·{" "}
                                     {Number(order.packageWeight ?? 0).toFixed(3)} kg
                                   </strong>
                                 </div>

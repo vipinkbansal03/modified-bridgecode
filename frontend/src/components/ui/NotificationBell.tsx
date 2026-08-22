@@ -2,17 +2,19 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { Bell } from "lucide-react";
+import { Bell, Trash2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { requestForToken, onMessageListener } from "../../lib/firebase";
 import { useRouter } from "next/navigation";
-import { useNotifications, useMarkNotificationRead, useRegisterNotificationToken } from "@/hooks/api";
+import { useNotifications, useMarkNotificationRead, useRegisterNotificationToken, useDeleteAdminNotification, useDeleteCustomerNotification } from "@/hooks/api";
 
 export function NotificationBell({ role = "customer" }: { role?: "admin" | "customer" }) {
   const queryClient = useQueryClient();
   const { data: notifications = [] } = useNotifications(role);
   const markAsReadMutation = useMarkNotificationRead(role);
   const registerTokenMutation = useRegisterNotificationToken(role);
+  const deleteAdminMutation = useDeleteAdminNotification();
+  const deleteCustomerMutation = useDeleteCustomerNotification();
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
   const [isOpen, setIsOpen] = useState(false);
@@ -49,6 +51,19 @@ export function NotificationBell({ role = "customer" }: { role?: "admin" | "cust
     }
   };
 
+  const deleteNotification = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      if (role === "admin") {
+        await deleteAdminMutation.mutateAsync(id);
+      } else {
+        await deleteCustomerMutation.mutateAsync(id);
+      }
+    } catch (error) {
+      // quiet fallback
+    }
+  };
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -68,7 +83,7 @@ export function NotificationBell({ role = "customer" }: { role?: "admin" | "cust
   }, [isOpen]);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+    if (typeof window !== "undefined" && "Notification" in window) {
       initFirebase();
     }
 
@@ -126,22 +141,7 @@ export function NotificationBell({ role = "customer" }: { role?: "admin" | "cust
             </button>
           </div>
           
-          {permissionStatus !== "granted" && permissionStatus !== "denied" && (
-            <div className="p-3 bg-[#f8f9fa] border-b border-[#e0e0e0] flex justify-between items-center">
-              <p className="text-[12px] text-[#555]">Get live updates</p>
-              <button 
-                onClick={async () => {
-                  await initFirebase();
-                  if ("Notification" in window) {
-                    setPermissionStatus(Notification.permission);
-                  }
-                }}
-                className="text-[11px] font-semibold px-2 py-1 bg-[#0056b3] text-white rounded hover:bg-[#004494] transition"
-              >
-                Enable
-              </button>
-            </div>
-          )}
+
 
           <div className="max-h-[350px] overflow-y-auto">
             {notifications.length === 0 ? (
@@ -164,10 +164,10 @@ export function NotificationBell({ role = "customer" }: { role?: "admin" | "cust
                       }
                     }}
                   >
-                    <p className={`text-[13px] ${notif.isRead ? 'font-medium text-[#333]' : 'font-bold text-[#000]'} mb-1`}>
+                    <p className={`text-[13px] ${notif.isRead ? 'font-medium text-[#333]' : 'font-bold text-[#000]'} mb-1 break-words`}>
                       {notif.title}
                     </p>
-                    <p className="text-[12px] text-[#888] leading-relaxed">
+                    <p className="text-[12px] text-[#888] leading-relaxed break-words">
                       {notif.message}
                     </p>
                   </li>

@@ -6,6 +6,7 @@ import { useToast } from "@/components/ui/ToastProvider";
 import { ShoppingBag } from "lucide-react";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
 import { useCart } from "@/contexts/CartContext";
+import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { StockBadge } from "./StockBadge";
 import { QuantityInput } from "./QuantityInput";
 import type { ApiProductDetail } from "@/types/api.types";
@@ -29,12 +30,43 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
   const router = useRouter();
   const { showToast } = useToast();
   const { addItem } = useCart();
+  const { currentCustomer } = useCustomerAuth();
 
   const [quantity, setQuantity] = useState(1);
   const [isAdding, setIsAdding] = useState(false);
 
   // For a base product, we use the first price from apiProduct.prices (which should be for the current region)
   const basePrice = apiProduct.prices?.[0];
+
+  const getTierDiscountPercent = (tp: any) => {
+    if (tp.discountPercent != null) return tp.discountPercent;
+    if (tp.fixedPrice != null && basePrice?.mrp) {
+      return Math.round(((basePrice.mrp - tp.fixedPrice) / basePrice.mrp) * 100);
+    }
+    return 0;
+  };
+
+  const getMoqDiscountPercent = (mp: any) => {
+    if (mp.discountPercent != null) return mp.discountPercent;
+    if (mp.fixedPrice != null && basePrice?.mrp) {
+      return Math.round(((basePrice.mrp - mp.fixedPrice) / basePrice.mrp) * 100);
+    }
+    return 0;
+  };
+
+  const customerTierId = currentCustomer?.tierId;
+  const currentTierPricing = apiProduct.tierPricing?.find(
+    (tp) => tp.tier.id === customerTierId
+  );
+  const currentTierDiscount = currentTierPricing ? getTierDiscountPercent(currentTierPricing) : 0;
+
+  const visibleTierPricing = (apiProduct.tierPricing || []).filter(
+    (tp) => getTierDiscountPercent(tp) > currentTierDiscount
+  );
+
+  const visibleMoqPricing = (apiProduct.moqPricing || []).filter(
+    (mp) => getMoqDiscountPercent(mp) > currentTierDiscount
+  );
   
   if (!basePrice) {
     return (
@@ -112,16 +144,16 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
         </div>
       </div>
 
-      {((apiProduct.moqPricing && apiProduct.moqPricing.length > 0) || 
-        (apiProduct.tierPricing && apiProduct.tierPricing.length > 0)) && (
+      {((visibleMoqPricing && visibleMoqPricing.length > 0) || 
+        (visibleTierPricing && visibleTierPricing.length > 0)) && (
         <div className="rounded-lg border border-line bg-offwhite p-4">
           <h4 className="mb-2 text-[12px] font-bold uppercase tracking-wider text-steel-2">Available Discounts</h4>
           <div className="space-y-3">
-            {apiProduct.tierPricing && apiProduct.tierPricing.length > 0 && (
+            {visibleTierPricing && visibleTierPricing.length > 0 && (
               <div className="space-y-1">
                 <span className="text-[11px] font-semibold text-steel block">Tier Pricing</span>
                 <div className="grid grid-cols-1 gap-1 text-[12.5px]">
-                  {apiProduct.tierPricing.map((tp) => (
+                  {visibleTierPricing.map((tp) => (
                     <div key={tp.id} className="flex justify-between border-b border-line/50 pb-1">
                       <span className="text-steel">{tp.tier.name}</span>
                       <strong className="text-[#15803D]">
@@ -132,11 +164,11 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
                 </div>
               </div>
             )}
-            {apiProduct.moqPricing && apiProduct.moqPricing.length > 0 && (
+            {visibleMoqPricing && visibleMoqPricing.length > 0 && (
               <div className="space-y-1">
                 <span className="text-[11px] font-semibold text-steel block">Volume MOQ Pricing</span>
                 <div className="space-y-1 text-[12.5px]">
-                  {apiProduct.moqPricing.map((mp) => (
+                  {visibleMoqPricing.map((mp) => (
                     <div key={mp.id} className="flex justify-between border-b border-line/50 pb-1">
                       <span className="text-steel">
                         {mp.maxQuantity ? `${mp.minQuantity} - ${mp.maxQuantity} units` : `${mp.minQuantity}+ units`}

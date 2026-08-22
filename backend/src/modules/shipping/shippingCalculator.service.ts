@@ -184,6 +184,21 @@ export async function calculateShipment(
   const itemDetails: CalculatorResult["items"] = [];
   const packs: CalculatorBoxPack[] = [];
 
+  const unitsToPack: {
+    productId: string;
+    title: string;
+    weight: number;
+    length: number;
+    width: number;
+    height: number;
+    volume: number;
+    shippingClass: string | null;
+    fragile: boolean;
+    hazardous: boolean;
+    candidates: typeof boxes;
+    dims: any;
+  }[] = [];
+
   for (const item of items) {
     const product = await getProductShippingInfo(item.productId);
     const qty = Math.max(1, item.quantity);
@@ -214,51 +229,82 @@ export async function calculateShipment(
     }
 
     for (let i = 0; i < qty; i++) {
-      const usable = packs.filter(
-        (pack) =>
-          pack.weight + dims.weight <= pack.maxWeight &&
-          pack.volume + dims.length * dims.width * dims.height <= pack.length * pack.width * pack.height &&
-          fitsInBox(pack, dims),
-      );
-      const existing = usable.sort((a, b) => a.length * a.width * a.height - b.length * b.width * b.height)[0];
+      unitsToPack.push({
+        productId: product.id,
+        title: product.title,
+        weight: dims.weight,
+        length: dims.length,
+        width: dims.width,
+        height: dims.height,
+        volume: dims.length * dims.width * dims.height,
+        shippingClass: dims.shippingClass,
+        fragile: dims.fragile,
+        hazardous: dims.hazardous,
+        candidates,
+        dims,
+      });
+    }
+  }
 
-      const pack = existing ?? (() => {
-        const box = candidates[0];
-        const created: CalculatorBoxPack = {
-          boxId: box.id,
-          name: box.name,
-          length: box.length,
-          width: box.width,
-          height: box.height,
-          maxWeight: box.maxWeight,
-          weight: 0,
-          volume: 0,
-          units: [],
-        };
-        packs.push(created);
-        return created;
-      })();
+  // Sort units by volume descending (FFD)
+  unitsToPack.sort((a, b) => b.volume - a.volume);
 
-      pack.weight += dims.weight;
-      pack.volume += dims.length * dims.width * dims.height;
+  // Pack each unit
+  for (let uIdx = 0; uIdx < unitsToPack.length; uIdx++) {
+    const unit = unitsToPack[uIdx];
 
-      const existingUnit = pack.units.find((u) => u.productId === product.id);
-      if (existingUnit) {
-        existingUnit.quantity += 1;
-      } else {
-        pack.units.push({
-          productId: product.id,
-          title: product.title,
-          quantity: 1,
-          weight: dims.weight,
-          length: dims.length,
-          width: dims.width,
-          height: dims.height,
-          shippingClass: dims.shippingClass,
-          fragile: dims.fragile,
-          hazardous: dims.hazardous,
-        });
-      }
+    const usable = packs.filter(
+      (pack) =>
+        pack.weight + unit.weight <= pack.maxWeight &&
+        pack.volume + unit.volume <= pack.length * pack.width * pack.height &&
+        fitsInBox(pack, unit.dims),
+    );
+    const existing = usable.sort((a, b) => a.length * a.width * a.height - b.length * b.width * b.height)[0];
+
+    const pack = existing ?? (() => {
+      const remainingUnits = unitsToPack.slice(uIdx);
+      const remainingVolume = remainingUnits.reduce((sum, u) => sum + u.volume, 0);
+      const remainingWeight = remainingUnits.reduce((sum, u) => sum + u.weight, 0);
+
+      // Choose smallest candidate box that fits all remaining, or the largest candidate box
+      const chosenBox = unit.candidates.find(
+        (box) => box.length * box.width * box.height >= remainingVolume && box.maxWeight >= remainingWeight
+      ) ?? unit.candidates[unit.candidates.length - 1];
+
+      const created: CalculatorBoxPack = {
+        boxId: chosenBox.id,
+        name: chosenBox.name,
+        length: chosenBox.length,
+        width: chosenBox.width,
+        height: chosenBox.height,
+        maxWeight: chosenBox.maxWeight,
+        weight: 0,
+        volume: 0,
+        units: [],
+      };
+      packs.push(created);
+      return created;
+    })();
+
+    pack.weight += unit.weight;
+    pack.volume += unit.volume;
+
+    const existingUnit = pack.units.find((u) => u.productId === unit.productId);
+    if (existingUnit) {
+      existingUnit.quantity += 1;
+    } else {
+      pack.units.push({
+        productId: unit.productId,
+        title: unit.title,
+        quantity: 1,
+        weight: unit.weight,
+        length: unit.length,
+        width: unit.width,
+        height: unit.height,
+        shippingClass: unit.shippingClass,
+        fragile: unit.fragile,
+        hazardous: unit.hazardous,
+      });
     }
   }
 

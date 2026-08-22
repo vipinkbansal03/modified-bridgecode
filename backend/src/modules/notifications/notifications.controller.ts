@@ -78,7 +78,9 @@ export const deleteCustomerNotification = asyncHandler(async (req: CustomerAuthR
   const notification = await prisma.notification.findUnique({
     where: { id: req.params.id },
   });
-  if (!notification) throw new AppError('Notification not found', 404);
+  if (!notification) {
+    return ApiResponse.success(res, 'Notification deleted');
+  }
   if (notification.customerId !== req.customer.id && notification.targetType !== 'ALL_CUSTOMERS') {
     throw new AppError('Unauthorized', 403);
   }
@@ -282,7 +284,21 @@ export const listNotifications = asyncHandler(async (req: AuthRequest, res: Resp
 
 export const deleteLog = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
-  await prisma.notificationLog.delete({ where: { id } });
+  const log = await prisma.notificationLog.findUnique({ where: { id } });
+  if (log) {
+    await prisma.notification.deleteMany({
+      where: {
+        title: log.subject || undefined,
+        message: log.message,
+        OR: [
+          { userId: log.to },
+          { customerId: log.to },
+          { targetType: "ALL_ADMINS" }
+        ]
+      }
+    });
+    await prisma.notificationLog.delete({ where: { id } });
+  }
   return ApiResponse.success(res, 'Log deleted successfully');
 });
 
@@ -291,6 +307,25 @@ export const bulkDeleteLogs = asyncHandler(async (req: AuthRequest, res: Respons
   if (!Array.isArray(ids) || ids.length === 0) {
     throw new AppError('IDs array is required', 400);
   }
+  
+  const logs = await prisma.notificationLog.findMany({
+    where: { id: { in: ids } }
+  });
+  
+  for (const log of logs) {
+    await prisma.notification.deleteMany({
+      where: {
+        title: log.subject || undefined,
+        message: log.message,
+        OR: [
+          { userId: log.to },
+          { customerId: log.to },
+          { targetType: "ALL_ADMINS" }
+        ]
+      }
+    });
+  }
+
   await prisma.notificationLog.deleteMany({
     where: { id: { in: ids } },
   });

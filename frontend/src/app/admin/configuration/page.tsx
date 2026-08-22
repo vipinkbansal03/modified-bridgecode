@@ -3,26 +3,12 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Sliders, MessageCircle, Mail, MessageSquare, CreditCard, Upload, Database,
-  CheckCircle2, AlertCircle, Eye, EyeOff, Save, RefreshCw, Lock,
-} from "lucide-react";
+import { Eye, EyeOff, Save, RefreshCw } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { cn } from "@/utils/cn";
-
-// ─── Tab definitions ──────────────────────────────────────────────────────────
-
-const TABS = [
-  { id: "whatsapp", label: "WhatsApp",          icon: MessageCircle },
-  { id: "email",    label: "Email / SMTP",      icon: Mail },
-  { id: "sms",      label: "SMS Settings",      icon: MessageSquare },
-  { id: "payment",  label: "Payment Gateway",   icon: CreditCard },
-  { id: "uploads",  label: "File Uploads",      icon: Upload },
-  { id: "redis",    label: "Redis & Cache",     icon: Database },
-];
 
 type Setting = { id: string; key: string; value: string; group: string; label?: string | null; type: string; isSecret: boolean; isEnabled: boolean };
 type SettingMap = Record<string, string>;
@@ -39,20 +25,39 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
   );
 }
 
-function SecretInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+function SecretInput({ label, value, onChange, placeholder }: { label?: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   const [show, setShow] = useState(false);
   return (
-    <div className="relative">
-      <input
-        type={show ? "text" : "password"}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder ?? "Leave blank to keep existing value"}
-        className="w-full rounded-lg border border-[#E6E6E6] px-3 py-2 pr-10 text-[13.5px] focus:outline-none focus:ring-1 focus:ring-[#E31E24]"
-      />
-      <button type="button" onClick={() => setShow((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700">
-        {show ? <EyeOff size={14} /> : <Eye size={14} />}
-      </button>
+    <div className="space-y-1.5 w-full">
+      {label && (
+        <label className="block text-[13px] font-medium text-[#1A1A1A]">
+          {label}
+        </label>
+      )}
+      <div className="relative">
+        <input
+          type={show ? "text" : "password"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder ?? "Leave blank to keep existing value"}
+          className="w-full rounded-lg border border-[#E6E6E6] px-3 py-2 pr-10 text-[13.5px] focus:outline-none focus:ring-1 focus:ring-[#E31E24]"
+        />
+        <button type="button" onClick={() => setShow((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700">
+          {show ? <EyeOff size={14} /> : <Eye size={14} />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SwitchRow({ label, hint, value, onChange }: { label: string; hint?: string; value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4 h-full">
+      <div>
+        <div className="text-[13px] font-semibold text-[#1A1A1A]">{label}</div>
+        {hint && <div className="mt-0.5 text-[11px] text-[#6B6B6B] leading-normal">{hint}</div>}
+      </div>
+      <Toggle value={value} onChange={onChange} />
     </div>
   );
 }
@@ -72,6 +77,7 @@ function FieldRow({ label, hint, children }: { label: string; hint?: string; chi
 // ─── Settings key metadata ────────────────────────────────────────────────────
 
 const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: boolean }> = {
+
   // WhatsApp
   "whatsapp.enabled":                 { group: "whatsapp", type: "boolean" },
   "whatsapp.tata_base_url":           { group: "whatsapp", type: "string" },
@@ -87,12 +93,7 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
   "email.from_name":     { group: "email", type: "string" },
   "email.from_email":    { group: "email", type: "string" },
 
-  // SMS Settings
-  "sms.enabled":             { group: "sms", type: "boolean" },
-  "sms.provider":            { group: "sms", type: "string" },
-  "sms.twilio_account_sid":  { group: "sms", type: "string" },
-  "sms.twilio_auth_token":   { group: "sms", type: "secret", isSecret: true },
-  "sms.twilio_phone":        { group: "sms", type: "string" },
+
 
   // Payments
   "payment.razorpay_enabled":    { group: "payments", type: "boolean" },
@@ -107,6 +108,20 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
 
   // Redis Cache
   "redis.enabled": { group: "redis", type: "boolean" },
+
+  // WhatsApp Toggles & Providers
+  "whatsapp.provider":                { group: "whatsapp", type: "string" },
+  "whatsapp.tata_api_key":            { group: "whatsapp", type: "secret", isSecret: true },
+  "whatsapp.tata_api_secret":         { group: "whatsapp", type: "secret", isSecret: true },
+  "whatsapp.tata_bot_id":             { group: "whatsapp", type: "string" },
+
+
+
+  // Notification settings
+  "notifications.masterEnabled":      { group: "notifications", type: "boolean" },
+  "notifications.whatsapp":           { group: "notifications", type: "boolean" },
+  "notifications.email":              { group: "notifications", type: "boolean" },
+  "notifications.push":               { group: "notifications", type: "boolean" },
 };
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -123,7 +138,6 @@ export default function ConfigurationPage() {
 
   const canUpdate = hasPermission("settings.update");
 
-  const [activeTab, setActiveTab] = useState("whatsapp");
   const [settings, setSettings] = useState<SettingMap>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -222,250 +236,159 @@ export default function ConfigurationPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-[250px_1fr] gap-6 items-start">
-          {/* Navigation Sidebar */}
-          <div className="rounded-xl border border-[#E6E6E6] bg-white p-2 shadow-xs space-y-1">
-            {TABS.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors",
-                    isActive
-                      ? "bg-[#E31E24]/10 text-[#E31E24]"
-                      : "text-[#555] hover:bg-gray-50 hover:text-black"
-                  )}
-                >
-                  <Icon size={16} className={cn("shrink-0", isActive ? "text-[#E31E24]" : "text-gray-400")} />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
+        <div className="w-full space-y-6">
+          {loading ? (
+            <div className="flex h-48 items-center justify-center rounded-xl border border-[#E6E6E6] bg-white">
+              <div className="flex items-center gap-2 text-[14px] text-gray-500">
+                <RefreshCw size={16} className="animate-spin" />
+                Loading settings...
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* ── WhatsApp Settings ── */}
+              <div className="rounded-xl border border-[#E6E6E6] bg-white p-6 shadow-xs space-y-6">
+                <div className="pb-3 border-b border-[#F4F4F4]">
+                  <h2 className="text-[15px] font-bold text-[#1A1A1A]">WhatsApp Settings</h2>
+                  <p className="text-[12px] text-gray-500 mt-1">Manage global WhatsApp service provider and activation.</p>
+                </div>
 
-          {/* Form Content Area */}
-          <div className="space-y-6">
-            {loading ? (
-              <div className="flex h-48 items-center justify-center rounded-xl border border-[#E6E6E6] bg-white">
-                <div className="flex items-center gap-2 text-[14px] text-gray-500">
-                  <RefreshCw size={16} className="animate-spin" />
-                  Loading settings...
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+                  <AdminSelect
+                    label="SELECT WHATSAPP SERVICE"
+                    value={g("whatsapp.provider")}
+                    onChange={(e) => set("whatsapp.provider", e.target.value)}
+                    options={[
+                      { value: "tata", label: "Tata" },
+                    ]}
+                  />
+                  <SwitchRow label="Enable WhatsApp Service" hint="Turn WhatsApp sending on or off for the whole platform." value={b("whatsapp.enabled")} onChange={(v) => tog("whatsapp.enabled", v)} />
+                  <div className="md:col-span-2">
+                    <AdminInput label="TATA WHATSAPP SENDER" value={g("whatsapp.tata_sender")} onChange={(e) => set("whatsapp.tata_sender", e.target.value)} placeholder="9240213800" />
+                  </div>
                 </div>
               </div>
-            ) : (
+
+              {/* ── Tata WhatsApp Integration ── */}
               <div className="rounded-xl border border-[#E6E6E6] bg-white p-6 shadow-xs space-y-6">
-                
-                {/* ── WhatsApp Tab ── */}
-                {activeTab === "whatsapp" && (
-                  <div>
-                    <div className="mb-6 pb-3 border-b border-[#F4F4F4]">
-                      <h2 className="text-[15px] font-bold text-[#1A1A1A]">WhatsApp Integration Settings</h2>
-                      <p className="text-[12px] text-gray-500 mt-1">Configure the Tata BSP details for sending outbound alerts.</p>
-                    </div>
+                <div className="pb-3 border-b border-[#F4F4F4]">
+                  <h2 className="text-[15px] font-bold text-[#1A1A1A]">Tata WhatsApp Integration</h2>
+                  <p className="text-[12px] text-gray-500 mt-1">Configure Tata Tele Business API key credentials.</p>
+                </div>
 
-                    <FieldRow label="Enable WhatsApp Alerts" hint="Activate system alerts via WhatsApp">
-                      <div className="flex items-center gap-3">
-                        <Toggle value={b("whatsapp.enabled")} onChange={(v) => tog("whatsapp.enabled", v)} />
-                        <span className="text-[13px] text-[#6B6B6B]">
-                          {b("whatsapp.enabled") ? "Active" : "Disabled"}
-                        </span>
-                      </div>
-                    </FieldRow>
-
-                    <FieldRow label="Tata Base URL" hint="Tata Tele Business API endpoint URL">
-                      <AdminInput value={g("whatsapp.tata_base_url")} onChange={(e) => set("whatsapp.tata_base_url", e.target.value)} placeholder="https://wb.omni.tatatelebusiness.com" />
-                    </FieldRow>
-
-                    <FieldRow label="Tata Sender / Bot ID" hint="Your configured WhatsApp Business Number ID">
-                      <AdminInput value={g("whatsapp.tata_sender")} onChange={(e) => set("whatsapp.tata_sender", e.target.value)} placeholder="1073459305848682" />
-                    </FieldRow>
-
-                    <FieldRow label="Tata Bearer Token" hint="Bearer Authentication token token for API calls">
-                      <SecretInput value={g("whatsapp.tata_bearer_token")} onChange={(v) => set("whatsapp.tata_bearer_token", v)} />
-                    </FieldRow>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+                  <AdminInput label="TATA BASE URL" value={g("whatsapp.tata_base_url")} onChange={(e) => set("whatsapp.tata_base_url", e.target.value)} placeholder="https://wb.omni.tatatelebusiness.com" />
+                  <AdminInput label="TATA BOT ID" value={g("whatsapp.tata_bot_id")} onChange={(e) => set("whatsapp.tata_bot_id", e.target.value)} />
+                  
+                  <SecretInput label="TATA BEARER TOKEN" value={g("whatsapp.tata_bearer_token")} onChange={(v) => set("whatsapp.tata_bearer_token", v)} />
+                  <AdminInput label="TATA API KEY" value={g("whatsapp.tata_api_key")} onChange={(e) => set("whatsapp.tata_api_key", e.target.value)} />
+                  
+                  <div className="md:col-span-2">
+                    <SecretInput label="TATA API SECRET" value={g("whatsapp.tata_api_secret")} onChange={(v) => set("whatsapp.tata_api_secret", v)} />
                   </div>
-                )}
-
-                {/* ── Email Tab ── */}
-                {activeTab === "email" && (
-                  <div>
-                    <div className="mb-6 pb-3 border-b border-[#F4F4F4]">
-                      <h2 className="text-[15px] font-bold text-[#1A1A1A]">Email & SMTP Gateway Settings</h2>
-                      <p className="text-[12px] text-gray-500 mt-1">Configure SMTP credentials for outgoing invoices and receipts.</p>
-                    </div>
-
-                    <FieldRow label="Enable Automated Emails" hint="Send transaction emails automatically">
-                      <div className="flex items-center gap-3">
-                        <Toggle value={b("email.enabled")} onChange={(v) => tog("email.enabled", v)} />
-                        <span className="text-[13px] text-[#6B6B6B]">
-                          {b("email.enabled") ? "Active" : "Disabled"}
-                        </span>
-                      </div>
-                    </FieldRow>
-
-                    <FieldRow label="SMTP Host" hint="Host address of mail server">
-                      <AdminInput value={g("email.smtp_host")} onChange={(e) => set("email.smtp_host", e.target.value)} placeholder="smtp.gmail.com" />
-                    </FieldRow>
-
-                    <FieldRow label="SMTP Port" hint="Port code (e.g. 587 or 465)">
-                      <AdminInput value={g("email.smtp_port")} onChange={(e) => set("email.smtp_port", e.target.value)} placeholder="587" />
-                    </FieldRow>
-
-                    <FieldRow label="SMTP Username" hint="Usually email ID of account">
-                      <AdminInput value={g("email.smtp_user")} onChange={(e) => set("email.smtp_user", e.target.value)} placeholder="username@gmail.com" />
-                    </FieldRow>
-
-                    <FieldRow label="SMTP Password" hint="App-specific credentials string">
-                      <SecretInput value={g("email.smtp_password")} onChange={(v) => set("email.smtp_password", v)} />
-                    </FieldRow>
-
-                    <FieldRow label="From Display Name" hint="Sender name shown to customer">
-                      <AdminInput value={g("email.from_name")} onChange={(e) => set("email.from_name", e.target.value)} placeholder="Modern Orthodontics" />
-                    </FieldRow>
-
-                    <FieldRow label="From Email Address" hint="Sender email address shown to customer">
-                      <AdminInput type="email" value={g("email.from_email")} onChange={(e) => set("email.from_email", e.target.value)} placeholder="noreply@modortho.com" />
-                    </FieldRow>
-                  </div>
-                )}
-
-                {/* ── SMS Tab ── */}
-                {activeTab === "sms" && (
-                  <div>
-                    <div className="mb-6 pb-3 border-b border-[#F4F4F4]">
-                      <h2 className="text-[15px] font-bold text-[#1A1A1A]">SMS Gateway Settings</h2>
-                      <p className="text-[12px] text-gray-500 mt-1">Configure Twilio gateway options for SMS delivery channels.</p>
-                    </div>
-
-                    <FieldRow label="Enable SMS Channel" hint="Turn SMS delivery on/off">
-                      <div className="flex items-center gap-3">
-                        <Toggle value={b("sms.enabled")} onChange={(v) => tog("sms.enabled", v)} />
-                        <span className="text-[13px] text-[#6B6B6B]">
-                          {b("sms.enabled") ? "Active" : "Disabled"}
-                        </span>
-                      </div>
-                    </FieldRow>
-
-                    <FieldRow label="SMS Provider" hint="Delivery provider strategy">
-                      <AdminSelect
-                        value={g("sms.provider")}
-                        onChange={(e) => set("sms.provider", e.target.value)}
-                        options={[
-                          { value: "twilio", label: "Twilio Strategy" },
-                        ]}
-                      />
-                    </FieldRow>
-
-                    <FieldRow label="Twilio Account SID" hint="Twilio console project identifier">
-                      <AdminInput value={g("sms.twilio_account_sid")} onChange={(e) => set("sms.twilio_account_sid", e.target.value)} />
-                    </FieldRow>
-
-                    <FieldRow label="Twilio Auth Token" hint="Twilio api authorization token">
-                      <SecretInput value={g("sms.twilio_auth_token")} onChange={(v) => set("sms.twilio_auth_token", v)} />
-                    </FieldRow>
-
-                    <FieldRow label="Twilio Phone Number" hint="Outbound virtual number with country code">
-                      <AdminInput value={g("sms.twilio_phone")} onChange={(e) => set("sms.twilio_phone", e.target.value)} placeholder="+1234567890" />
-                    </FieldRow>
-                  </div>
-                )}
-
-                {/* ── Payments Tab ── */}
-                {activeTab === "payment" && (
-                  <div>
-                    <div className="mb-6 pb-3 border-b border-[#F4F4F4]">
-                      <h2 className="text-[15px] font-bold text-[#1A1A1A]">Payment Gateway Credentials</h2>
-                      <p className="text-[12px] text-gray-500 mt-1">Manage public/private keys for checkout page integration.</p>
-                    </div>
-
-                    <FieldRow label="Enable Razorpay Checkout" hint="Accept payments via Razorpay">
-                      <div className="flex items-center gap-3">
-                        <Toggle value={b("payment.razorpay_enabled")} onChange={(v) => tog("payment.razorpay_enabled", v)} />
-                        <span className="text-[13px] text-[#6B6B6B]">
-                          {b("payment.razorpay_enabled") ? "Active" : "Disabled"}
-                        </span>
-                      </div>
-                    </FieldRow>
-
-                    <FieldRow label="Razorpay Key ID" hint="API public key client identifier">
-                      <AdminInput value={g("payment.razorpay_key_id")} onChange={(e) => set("payment.razorpay_key_id", e.target.value)} />
-                    </FieldRow>
-
-                    <FieldRow label="Razorpay Key Secret" hint="API secret key for checksum validation">
-                      <SecretInput value={g("payment.razorpay_key_secret")} onChange={(v) => set("payment.razorpay_key_secret", v)} />
-                    </FieldRow>
-                  </div>
-                )}
-
-                {/* ── File Uploads Tab ── */}
-                {activeTab === "uploads" && (
-                  <div>
-                    <div className="mb-6 pb-3 border-b border-[#F4F4F4]">
-                      <h2 className="text-[15px] font-bold text-[#1A1A1A]">Cloud Media Upload Settings</h2>
-                      <p className="text-[12px] text-gray-500 mt-1">Configure Cloudinary API keys for hosting banner images and catalog files.</p>
-                    </div>
-
-                    <FieldRow label="Enable Cloudinary hosting" hint="If disabled, local storage fallback will be active">
-                      <div className="flex items-center gap-3">
-                        <Toggle value={b("uploads.cloudinary_enabled")} onChange={(v) => tog("uploads.cloudinary_enabled", v)} />
-                        <span className="text-[13px] text-[#6B6B6B]">
-                          {b("uploads.cloudinary_enabled") ? "Active" : "Disabled"}
-                        </span>
-                      </div>
-                    </FieldRow>
-
-                    <FieldRow label="Cloud Name" hint="Your Cloudinary unique account namespace">
-                      <AdminInput value={g("uploads.cloudinary_cloud_name")} onChange={(e) => set("uploads.cloudinary_cloud_name", e.target.value)} />
-                    </FieldRow>
-
-                    <FieldRow label="API Key" hint="Media console integration client key">
-                      <AdminInput value={g("uploads.cloudinary_api_key")} onChange={(e) => set("uploads.cloudinary_api_key", e.target.value)} />
-                    </FieldRow>
-
-                    <FieldRow label="API Secret" hint="Media console signature validation credentials">
-                      <SecretInput value={g("uploads.cloudinary_api_secret")} onChange={(v) => set("uploads.cloudinary_api_secret", v)} />
-                    </FieldRow>
-                  </div>
-                )}
-
-                {/* ── Redis Tab ── */}
-                {activeTab === "redis" && (
-                  <div>
-                    <div className="mb-6 pb-3 border-b border-[#F4F4F4]">
-                      <h2 className="text-[15px] font-bold text-[#1A1A1A]">Redis Configuration & Cache</h2>
-                      <p className="text-[12px] text-gray-500 mt-1">Control in-memory database configuration and back-end caches.</p>
-                    </div>
-
-                    <FieldRow label="Enable Redis Cache" hint="Speeds up product routing and CMS queries">
-                      <div className="flex items-center gap-3">
-                        <Toggle value={b("redis.enabled")} onChange={(v) => tog("redis.enabled", v)} />
-                        <span className="text-[13px] text-[#6B6B6B]">
-                          {b("redis.enabled") ? "Active" : "Disabled"}
-                        </span>
-                      </div>
-                    </FieldRow>
-
-                    <FieldRow label="Cache Clear Actions" hint="Force refresh catalog and routing memory caches.">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          showToast("Backend cache reset signal dispatched.", "success");
-                        }}
-                        className="rounded-lg border border-[#E31E24] px-4 py-2 text-[12.5px] font-medium text-[#E31E24] hover:bg-[#E31E24]/5"
-                      >
-                        Reset Backend Cache
-                      </button>
-                    </FieldRow>
-                  </div>
-                )}
-
+                </div>
               </div>
-            )}
-          </div>
+
+              {/* ── Email Settings ── */}
+              <div className="rounded-xl border border-[#E6E6E6] bg-white p-6 shadow-xs space-y-6">
+                <div className="pb-3 border-b border-[#F4F4F4]">
+                  <h2 className="text-[15px] font-bold text-[#1A1A1A]">Email Settings</h2>
+                  <p className="text-[12px] text-gray-500 mt-1">SMTP credentials and mailing service options.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+                  <AdminInput label="SMTP HOST" value={g("email.smtp_host")} onChange={(e) => set("email.smtp_host", e.target.value)} placeholder="smtp.gmail.com" />
+                  <AdminInput label="SMTP PORT" type="text" value={g("email.smtp_port")} onChange={(e) => set("email.smtp_port", e.target.value)} placeholder="587" />
+                  
+                  <AdminInput label="EMAIL ADDRESS" value={g("email.smtp_user")} onChange={(e) => set("email.smtp_user", e.target.value)} placeholder="username@gmail.com" />
+                  <SecretInput label="EMAIL PASSWORD" value={g("email.smtp_password")} onChange={(v) => set("email.smtp_password", v)} />
+                  
+                  <div className="md:col-span-2">
+                    <SwitchRow label="Enable Email Service" hint="Use this to pause or resume email sending without removing your SMTP details." value={b("email.enabled")} onChange={(v) => tog("email.enabled", v)} />
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Payment Settings ── */}
+              <div className="rounded-xl border border-[#E6E6E6] bg-white p-6 shadow-xs space-y-6">
+                <div className="pb-3 border-b border-[#F4F4F4]">
+                  <h2 className="text-[15px] font-bold text-[#1A1A1A]">Payment Settings</h2>
+                  <p className="text-[12px] text-gray-500 mt-1">Razorpay Key configuration credentials.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+                  <AdminInput label="RAZORPAY KEY ID" value={g("payment.razorpay_key_id")} onChange={(e) => set("payment.razorpay_key_id", e.target.value)} />
+                  <SecretInput label="RAZORPAY SECRET" value={g("payment.razorpay_key_secret")} onChange={(v) => set("payment.razorpay_key_secret", v)} />
+                </div>
+              </div>
+
+              {/* ── Redis / Cache Settings ── */}
+              <div className="rounded-xl border border-[#E6E6E6] bg-white p-6 shadow-xs space-y-6">
+                <div className="pb-3 border-b border-[#F4F4F4]">
+                  <h2 className="text-[15px] font-bold text-[#1A1A1A]">Redis / Cache Settings</h2>
+                  <p className="text-[12px] text-gray-500 mt-1">Toggle cache state parameters.</p>
+                </div>
+
+                <SwitchRow label="Enable Redis Cache" hint="Turn cache-backed helpers on or off from the admin panel." value={b("redis.enabled")} onChange={(v) => tog("redis.enabled", v)} />
+              </div>
+
+              {/* ── Cache Control ── */}
+              <div className="rounded-xl border border-[#E6E6E6] bg-white p-6 shadow-xs space-y-6">
+                <div className="pb-3 border-b border-[#F4F4F4]">
+                  <h2 className="text-[15px] font-bold text-[#1A1A1A]">Cache Control</h2>
+                  <p className="text-[12px] text-gray-500 mt-1">Clear CMS page cache, system settings cache, and notification manager cache. Use this after content updates if the website still shows stale data.</p>
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      showToast("Backend cache reset signal dispatched.", "success");
+                    }}
+                    className="rounded-lg border border-[#E31E24] px-4 py-2 text-[12.5px] font-medium text-[#E31E24] hover:bg-[#E31E24]/5"
+                  >
+                    Reset Backend Cache
+                  </button>
+                </div>
+              </div>
+
+              {/* ── File Upload Settings ── */}
+              <div className="rounded-xl border border-[#E6E6E6] bg-white p-6 shadow-xs space-y-6">
+                <div className="pb-3 border-b border-[#F4F4F4]">
+                  <h2 className="text-[15px] font-bold text-[#1A1A1A]">File Upload Settings</h2>
+                  <p className="text-[12px] text-gray-500 mt-1">Cloud storage and hosting configuration.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+                  <AdminInput label="CLOUD NAME" value={g("uploads.cloudinary_cloud_name")} onChange={(e) => set("uploads.cloudinary_cloud_name", e.target.value)} />
+                  <AdminInput label="API KEY" value={g("uploads.cloudinary_api_key")} onChange={(e) => set("uploads.cloudinary_api_key", e.target.value)} />
+                  
+                  <SecretInput label="API SECRET" value={g("uploads.cloudinary_api_secret")} onChange={(v) => set("uploads.cloudinary_api_secret", v)} />
+                  <SwitchRow label="Enable Cloud Upload Service" hint="If turned off, uploads will use the local storage fallback." value={b("uploads.cloudinary_enabled")} onChange={(v) => tog("uploads.cloudinary_enabled", v)} />
+                </div>
+              </div>
+
+              {/* ── Notification Settings ── */}
+              <div className="rounded-xl border border-[#E6E6E6] bg-white p-6 shadow-xs space-y-6">
+                <div className="pb-3 border-b border-[#F4F4F4]">
+                  <h2 className="text-[15px] font-bold text-[#1A1A1A]">Notification Settings</h2>
+                  <p className="text-[12px] text-gray-500 mt-1">Manage notification delivery status per channel.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="md:col-span-2">
+                    <SwitchRow label="Enable Notifications" hint="Pause or resume all notification delivery from one switch." value={b("notifications.masterEnabled")} onChange={(v) => tog("notifications.masterEnabled", v)} />
+                  </div>
+                  <SwitchRow label="Enable WhatsApp Notifications" hint="Turn this delivery channel on or off across the system." value={b("notifications.whatsapp")} onChange={(v) => tog("notifications.whatsapp", v)} />
+                  <SwitchRow label="Enable Email Notifications" hint="Turn this delivery channel on or off across the system." value={b("notifications.email")} onChange={(v) => tog("notifications.email", v)} />
+                  
+                  <div className="md:col-span-2">
+                    <SwitchRow label="Enable Push Notifications" hint="Turn this delivery channel on or off across the system." value={b("notifications.push")} onChange={(v) => tog("notifications.push", v)} />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </AdminLayout>

@@ -1029,39 +1029,19 @@ export default function CategoriesPage() {
         onToggleStatus={toggleStatus}
         statusLoadingId={updateCategory.isPending ? ((updateCategory.variables as any)?.id ?? null) : null}
         renderBulkActions={(selectedIds) => (
-          <div className="flex items-center gap-3 w-full">
-            <span className="text-[13px] font-bold text-[#1A1A1A]">{selectedIds.length} selected</span>
-            <button
-              type="button"
-              onClick={() => setSelectedIds([])}
-              className="inline-flex items-center gap-1.5 rounded border border-[#E6E6E6] bg-white px-2.5 py-1 text-[11.5px] font-semibold text-[#1A1A1A] hover:bg-gray-50 hover:border-gray-300 shadow-xs transition-all"
-            >
-              <X size={12} /> Clear
-            </button>
-            <div className="h-4 w-px bg-[#E6E6E6]" />
-            <span className="text-[12px] text-gray-500 font-medium">Bulk Actions:</span>
-            <LoadingButton
-              onClick={() => runBulk("activate")}
-              loading={bulkSaving && bulkAction === "activate"}
-              className="rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors shadow-2xs"
-            >
-              Enable
-            </LoadingButton>
-            <LoadingButton
-              onClick={() => runBulk("deactivate")}
-              loading={bulkSaving && bulkAction === "deactivate"}
-              className="rounded border border-amber-200 bg-amber-50 px-2.5 py-1 text-[12px] font-semibold text-amber-700 hover:bg-amber-100 transition-colors shadow-2xs"
-            >
-              Disable
-            </LoadingButton>
-            <LoadingButton
-              onClick={() => runBulk("delete")}
-              loading={bulkSaving && bulkAction === "delete"}
-              className="rounded border border-red-200 bg-red-50 px-2.5 py-1 text-[12px] font-semibold text-red-700 hover:bg-red-100 transition-colors shadow-2xs"
-            >
-              Delete
-            </LoadingButton>
-          </div>
+          <AdminBulkActionsBar
+            selectedCount={selectedIds.length}
+            onClear={() => setSelectedIds([])}
+            actionType={bulkAction}
+            onActionTypeChange={setBulkAction}
+            actions={[
+              { value: "activate", label: "Enable" },
+              { value: "deactivate", label: "Disable" },
+              { value: "delete", label: "Delete" },
+            ]}
+            onApply={() => runBulk(bulkAction)}
+            applyLoading={bulkSaving}
+          />
         )}
       />
 

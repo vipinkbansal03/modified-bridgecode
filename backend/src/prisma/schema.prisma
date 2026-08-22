@@ -1940,17 +1940,28 @@ model NotificationManagerSettings {
 }
 
 model WhatsAppTemplate {
-  id                String    @id @default(cuid())
-  name              String
-  language          String
-  category          String
-  subCategory       String?   @default("")
-  status            String    @default("APPROVED")
-  payload           Json?
-  providerTemplateId String?  @default("")
-  lastSyncedAt      DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                    String    @id @default(cuid())
+  name                  String
+  language              String
+  category              String
+  subCategory           String?   @default("")
+  messageSendTtlSeconds Int?
+  status                String    @default("PENDING")
+  payload               Json?
+  builderState          Json?
+  providerResponse      Json?
+  providerTemplateId    String?   @default("")
+  syncPayload           Json?
+  syncMessage           String    @default("")
+  lastSubmittedAt       DateTime?
+  lastSyncedAt          DateTime?
+  lastTestSentAt        DateTime?
+  archivedAt            DateTime?
+  archivedBy            String?
+  createdBy             String?
+  updatedBy             String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   @@unique([name, language])
   @@map("whatsapp_templates")
