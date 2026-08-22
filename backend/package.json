@@ -31,7 +31,10 @@
     "prisma:seed": "ts-node src/prisma/seed.ts",
     "db:repair-menus": "ts-node src/scripts/repairMenus.ts",
     "verify:product-architecture": "ts-node-dev --exit-child --transpile-only src/prisma/verify-product-architecture.ts",
-    "test:inventory-phase1": "ts-node src/scripts/test-inventory-phase1.ts"
+    "test:inventory-phase1": "ts-node src/scripts/test-inventory-phase1.ts",
+    "test:inventory-warehouse": "ts-node src/scripts/test-inventory-warehouse.ts",
+    "test:payment-lifecycle": "ts-node src/scripts/test-payment-lifecycle.ts",
+    "test:customer-tracking": "ts-node src/scripts/test-customer-tracking.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1104.0",

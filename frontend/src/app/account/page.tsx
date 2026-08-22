@@ -5,11 +5,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronDown,
+  CreditCard,
   Download,
   Home,
   PackageCheck,
   Pencil,
   Plus,
+  Truck,
   UserRound,
 } from "lucide-react";
 import { Container } from "@/components/ui/Container";
@@ -576,7 +578,23 @@ export default function AccountPage() {
                                 </strong>
                               </div>
                             </div>
-                            <div className="mt-4 flex justify-end gap-2">
+                            <div className="mt-4 flex flex-wrap justify-end items-center gap-2">
+                              <Link
+                                href={`/account/orders/${order.id}`}
+                                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line bg-white px-3.5 text-[13px] font-semibold text-ink hover:bg-grey hover:text-brand shadow-sm transition-colors"
+                              >
+                                <Truck size={14} className="text-brand" />
+                                Track Order
+                              </Link>
+                              {order.paymentStatus === "PENDING" && order.status === "PENDING" && (
+                                <Link
+                                  href={`/orders/${order.id}/pay`}
+                                  className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#2A6A40] px-3.5 text-[13px] font-semibold text-white hover:bg-[#225533] shadow-sm transition-colors"
+                                >
+                                  <CreditCard size={14} />
+                                  Pay Now
+                                </Link>
+                              )}
                               {canDownloadInvoice(order) ? (
                                 <button
                                   type="button"

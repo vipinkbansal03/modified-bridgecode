@@ -17,6 +17,7 @@ async function withTx<T>(
 
 /**
  * Finds the matching inventory record for an order item by variant/product and warehouse.
+ * Strictly scopes to (variantId, warehouseId) or (variantId, warehouseId = null) without unscoped fallbacks.
  */
 async function findItemInventory(
   tx: Prisma.TransactionClient,
@@ -24,26 +25,24 @@ async function findItemInventory(
 ) {
   if (item.variantId) {
     if (item.warehouseId) {
-      const inv = await tx.inventory.findFirst({
+      return tx.inventory.findFirst({
         where: { variantId: item.variantId, warehouseId: item.warehouseId },
       });
-      if (inv) return inv;
     }
-    // Fallback: any inventory for this variant
+    // Strict Base Inventory lookup (warehouseId = null)
     return tx.inventory.findFirst({
-      where: { variantId: item.variantId },
+      where: { variantId: item.variantId, warehouseId: null },
     });
   }
 
   // Product-level inventory without variant
   if (item.warehouseId) {
-    const inv = await tx.inventory.findFirst({
+    return tx.inventory.findFirst({
       where: { productId: item.productId, variantId: null, warehouseId: item.warehouseId },
     });
-    if (inv) return inv;
   }
   return tx.inventory.findFirst({
-    where: { productId: item.productId, variantId: null },
+    where: { productId: item.productId, variantId: null, warehouseId: null },
   });
 }
 

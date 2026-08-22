@@ -4,6 +4,7 @@ import { connectDB, prisma } from "./config/database";
 import { logger } from "./config/logger";
 import { initScheduledSync } from "./modules/currencies/currencies.scheduler";
 import { notificationsService } from "./modules/notifications/notifications.service";
+import { initPaymentExpirationWorker } from "./modules/payment/paymentExpiration.scheduler";
 
 const PORT = parseInt(process.env.PORT || "4000", 10);
 
@@ -11,6 +12,7 @@ async function main() {
   await connectDB();
   await initScheduledSync();
   await notificationsService.initNotificationSystem();
+  initPaymentExpirationWorker();
 
   try {
     const { initializeApp } = await import("firebase-admin/app");

@@ -756,19 +756,41 @@ export async function trackShipmentFromProvider(id: string) {
   );
 
   if (result.updates?.length) {
-    const latest = result.updates[0];
     await prisma.shipment.update({ where: { id }, data: { status: result.status as never } });
-    await prisma.shipmentEvent.createMany({
-      data: result.updates.map((u) => ({
-        shipmentId: id,
-        status: u.status as never,
-        location: u.location ?? null,
-        description: u.description ?? null,
-        timestamp: new Date(u.timestamp),
-        raw: u as unknown as Prisma.InputJsonValue,
-      })),
-      skipDuplicates: true,
+
+    // Deduplicate against existing events for this shipment
+    const existingEvents = await prisma.shipmentEvent.findMany({
+      where: { shipmentId: id },
+      select: { status: true, timestamp: true, location: true },
     });
+
+    const existingSet = new Set(
+      existingEvents.map(
+        (e) => `${e.status}|${e.timestamp.getTime()}|${(e.location || "").toLowerCase().trim()}`
+      )
+    );
+
+    const newEvents = result.updates.filter((u) => {
+      const uTime = new Date(u.timestamp).getTime();
+      const uLoc = (u.location || "").toLowerCase().trim();
+      const key = `${u.status}|${uTime}|${uLoc}`;
+      if (existingSet.has(key)) return false;
+      existingSet.add(key);
+      return true;
+    });
+
+    if (newEvents.length > 0) {
+      await prisma.shipmentEvent.createMany({
+        data: newEvents.map((u) => ({
+          shipmentId: id,
+          status: u.status as never,
+          location: u.location ?? null,
+          description: u.description ?? null,
+          timestamp: new Date(u.timestamp),
+          raw: u as unknown as Prisma.InputJsonValue,
+        })),
+      });
+    }
   }
 
   return result;

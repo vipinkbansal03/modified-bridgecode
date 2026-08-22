@@ -9,6 +9,8 @@ import { calculateRequiredShipping } from "../shipping/shipping.service";
 import { calculateShipment } from "../shipping/shippingCalculator.service";
 import { validateCoupon } from "../coupons/coupons.service";
 import type { CreateCustomerOrderInput } from "./customerOrders.validation";
+import { initiatePaymentForOrder, verifyPaymentForOrder } from "../payment/paymentMethods.service";
+import { reconcilePaymentFailure, getPaymentSession } from "../payment/paymentReconciliation.service";
 
 function generateOrderNumber() {
   const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -640,67 +642,16 @@ export async function assertCustomerInvoiceAccess(
 }
 
 export async function createRazorpayOrder(customerId: string, orderId: string) {
-  const order = await prisma.order.findFirst({
-    where: { id: orderId, customerId },
-    include: { currency: true, country: true },
-  });
-  if (!order) throw new AppError("Order not found.", 404);
-  if (order.paymentStatus === "PAID")
-    throw new AppError("Order is already paid.", 400);
-
-  const keyId = process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
-  if (!keyId || !keySecret)
-    throw new AppError("Razorpay credentials are not configured.", 500);
-
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Razorpay = require("razorpay");
-  const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret });
-  const amountInPaise = Math.round(Number(order.total) * 100);
-
-  try {
-    const rzpOrder = await razorpay.orders.create({
-      amount: amountInPaise,
-      currency: order.currency?.code ?? "INR",
-      receipt: order.orderNumber,
-      notes: { orderId: order.id, customerId },
-    });
-
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        paymentId: rzpOrder.id,
-        paymentMethod: "RAZORPAY",
-      },
-    });
-
-    // Record PaymentTransaction attempt
-    await prisma.paymentTransaction.create({
-      data: {
-        orderId: order.id,
-        paymentMethod: "RAZORPAY",
-        provider: "RAZORPAY",
-        gatewayOrderId: rzpOrder.id,
-        status: "PENDING",
-        amount: order.total,
-        currency: rzpOrder.currency ?? order.currency?.code ?? "INR",
-        metadata: { receipt: order.orderNumber },
-      },
-    });
-
-    return {
-      razorpayOrderId: rzpOrder.id,
-      amount: amountInPaise,
-      currency: rzpOrder.currency,
-      keyId,
-      orderNumber: order.orderNumber,
-    };
-  } catch (error) {
-    console.error("========== RAZORPAY ERROR ==========");
-    console.error(error);
-    console.error("====================================");
-    throw error;
-  }
+  const result = await initiatePaymentForOrder(customerId, orderId, "RAZORPAY");
+  const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+  return {
+    razorpayOrderId: result.paymentId,
+    amount: (result.sdkPayload?.amount as number) || Math.round(Number(order.total) * 100),
+    currency: (result.sdkPayload?.currency as string) || "INR",
+    keyId: (result.sdkPayload?.key as string) || process.env.RAZORPAY_KEY_ID || "",
+    orderNumber: order.orderNumber,
+    sdkPayload: result.sdkPayload,
+  };
 }
 
 export async function verifyRazorpayPayment(
@@ -712,70 +663,211 @@ export async function verifyRazorpayPayment(
     razorpay_signature: string;
   },
 ) {
-  const order = await prisma.order.findFirst({
-    where: { id: orderId, customerId },
+  const result = await verifyPaymentForOrder(customerId, orderId, "RAZORPAY", payload);
+  return result.order;
+}
+
+export async function recordClientPaymentFailure(
+  customerId: string,
+  orderId: string,
+  payload: {
+    gatewayOrderId?: string;
+    errorCode?: string;
+    errorMessage?: string;
+  },
+) {
+  const result = await reconcilePaymentFailure({
+    orderId,
+    gatewayOrderId: payload.gatewayOrderId,
+    errorCode: payload.errorCode,
+    errorMessage: payload.errorMessage,
+    provider: "RAZORPAY",
   });
-  if (!order) throw new AppError("Order not found.", 404);
+  return result;
+}
 
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
-  if (!keySecret)
-    throw new AppError("Razorpay credentials are not configured.", 500);
-
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const crypto = require("crypto");
-  const body = `${payload.razorpay_order_id}|${payload.razorpay_payment_id}`;
-  const expectedSignature = crypto
-    .createHmac("sha256", keySecret)
-    .update(body)
-    .digest("hex");
-
-  if (expectedSignature !== payload.razorpay_signature) {
-    await prisma.order.update({
-      where: { id: order.id },
-      data: { paymentStatus: "FAILED" },
-    });
-
-    await prisma.paymentTransaction.updateMany({
-      where: { gatewayOrderId: payload.razorpay_order_id },
-      data: {
-        status: "FAILED",
-        errorMessage: "Invalid payment signature verification failed.",
-      },
-    });
-
-    throw new AppError("Invalid payment signature verification failed.", 400);
-  }
-
-  // Update PaymentTransaction to SUCCESS
-  await prisma.paymentTransaction.updateMany({
-    where: { gatewayOrderId: payload.razorpay_order_id },
-    data: {
-      status: "SUCCESS",
-      gatewayPaymentId: payload.razorpay_payment_id,
-      gatewaySignature: payload.razorpay_signature,
-    },
-  });
-
-  const updatedOrder = await prisma.order.update({
-    where: { id: order.id },
-    data: {
-      paymentStatus: "PAID",
-      status: "PROCESSING",
-      paymentMethod: "RAZORPAY",
-      paymentId: payload.razorpay_payment_id,
-    },
-    include: {
-      items: { include: { product: true, variant: true } },
-      country: true,
-      currency: true,
-    },
-  });
-
-  return updatedOrder;
+export async function getPaymentSessionForCustomer(customerId: string, orderId: string) {
+  return getPaymentSession(customerId, orderId);
 }
 
 export async function releaseStock(orderId: string) {
   return releaseOrderReservation(orderId);
+}
+
+export interface CustomerTrackingItem {
+  orderItemId: string;
+  title: string;
+  variantTitle: string | null;
+  sku: string | null;
+  quantity: number;
+}
+
+export interface CustomerTrackingEvent {
+  id: string;
+  status: import("@prisma/client").ShipmentStatus;
+  statusLabel: string;
+  location: string | null;
+  description: string | null;
+  timestamp: string;
+}
+
+export interface CustomerTrackingShipment {
+  shipmentId: string;
+  status: import("@prisma/client").ShipmentStatus;
+  statusLabel: string;
+  provider: {
+    name: string;
+    displayName: string;
+  };
+  trackingNumber: string | null;
+  awbNumber: string | null;
+  trackingUrl: string | null;
+  labelUrl: string | null;
+  estimatedDelivery: string | null;
+  lastUpdatedAt: string;
+  items: CustomerTrackingItem[];
+  events: CustomerTrackingEvent[];
+}
+
+export interface CustomerOrderTrackingResponse {
+  orderId: string;
+  orderNumber: string;
+  orderStatus: import("@prisma/client").OrderStatus;
+  createdAt: string;
+  isMultiShipment: boolean;
+  shipments: CustomerTrackingShipment[];
+}
+
+export function getShipmentStatusLabel(status: import("@prisma/client").ShipmentStatus): string {
+  switch (status) {
+    case "CREATED":
+      return "Order Confirmed";
+    case "LABEL_GENERATED":
+      return "Shipment Prepared";
+    case "PICKED_UP":
+      return "Picked Up";
+    case "IN_TRANSIT":
+      return "In Transit";
+    case "OUT_FOR_DELIVERY":
+      return "Out for Delivery";
+    case "DELIVERED":
+      return "Delivered";
+    case "FAILED":
+      return "Delivery Exception";
+    case "RETURNED":
+      return "Returned";
+    case "CANCELLED":
+      return "Cancelled";
+    default:
+      return String(status);
+  }
+}
+
+export function buildTrackingUrl(
+  templateUrl: string | null | undefined,
+  trackingNumber: string | null | undefined,
+  awbNumber: string | null | undefined
+): string | null {
+  const code = trackingNumber || awbNumber;
+  if (!templateUrl || !code) return null;
+  return templateUrl.replace(/\{tracking\}/gi, encodeURIComponent(code));
+}
+
+export async function getCustomerOrderTracking(
+  customerId: string,
+  orderId: string
+): Promise<CustomerOrderTrackingResponse> {
+  const order = await prisma.order.findFirst({
+    where: { id: orderId, customerId },
+    include: {
+      items: {
+        include: {
+          variant: true,
+          product: true,
+        },
+      },
+      shipments: {
+        include: {
+          provider: true,
+          events: {
+            orderBy: { timestamp: "asc" },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+
+  if (!order) {
+    throw new AppError("Order not found.", 404);
+  }
+
+  const isMultiShipment = order.shipments.length > 1;
+
+  const mappedShipments: CustomerTrackingShipment[] = order.shipments.map((shipment) => {
+    let shipmentItems = order.items;
+    if (isMultiShipment) {
+      shipmentItems = order.items.filter((item) => {
+        if (shipment.warehouseId) {
+          return item.warehouseId === shipment.warehouseId;
+        }
+        return item.warehouseId === null;
+      });
+    }
+
+    const items: CustomerTrackingItem[] = shipmentItems.map((item) => ({
+      orderItemId: item.id,
+      title: item.title,
+      variantTitle: item.variant?.title ?? null,
+      sku: item.sku ?? item.variant?.sku ?? null,
+      quantity: item.quantity,
+    }));
+
+    const events: CustomerTrackingEvent[] = shipment.events.map((e) => ({
+      id: e.id,
+      status: e.status,
+      statusLabel: getShipmentStatusLabel(e.status),
+      location: e.location ?? null,
+      description: e.description ?? null,
+      timestamp: e.timestamp.toISOString(),
+    }));
+
+    const trackingNumber = shipment.trackingNumber ?? null;
+    const awbNumber = shipment.awbNumber ?? null;
+    const trackingUrl = buildTrackingUrl(shipment.provider.trackingUrl, trackingNumber, awbNumber);
+
+    const latestEvent = shipment.events.length > 0 ? shipment.events[shipment.events.length - 1] : null;
+    const lastUpdatedAt = latestEvent
+      ? latestEvent.timestamp.toISOString()
+      : shipment.updatedAt.toISOString();
+
+    return {
+      shipmentId: shipment.id,
+      status: shipment.status,
+      statusLabel: getShipmentStatusLabel(shipment.status),
+      provider: {
+        name: shipment.provider.name,
+        displayName: shipment.provider.displayName,
+      },
+      trackingNumber,
+      awbNumber,
+      trackingUrl,
+      labelUrl: shipment.labelUrl ?? null,
+      estimatedDelivery: shipment.estimatedDelivery ?? null,
+      lastUpdatedAt,
+      items,
+      events,
+    };
+  });
+
+  return {
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    orderStatus: order.status,
+    createdAt: order.createdAt.toISOString(),
+    isMultiShipment,
+    shipments: mappedShipments,
+  };
 }
 
 

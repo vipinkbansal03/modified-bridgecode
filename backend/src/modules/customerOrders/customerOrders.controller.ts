@@ -59,3 +59,29 @@ export const verifyRazorpayPayment = asyncHandler(async (req: CustomerAuthReques
   });
   return ApiResponse.success(res, "Payment verified successfully.", order);
 });
+
+export const getPaymentSession = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
+  if (!req.customer) throw new AppError("Customer authentication required.", 401);
+  const orderId = String(req.params.id);
+  const session = await CustomerOrdersService.getPaymentSessionForCustomer(req.customer.id, orderId);
+  return ApiResponse.success(res, "Payment session retrieved.", session);
+});
+
+export const recordFailure = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
+  if (!req.customer) throw new AppError("Customer authentication required.", 401);
+  const orderId = String(req.params.id);
+  const { gatewayOrderId, errorCode, errorMessage } = req.body;
+  const result = await CustomerOrdersService.recordClientPaymentFailure(req.customer.id, orderId, {
+    gatewayOrderId,
+    errorCode,
+    errorMessage,
+  });
+  return ApiResponse.success(res, "Payment failure recorded.", result);
+});
+
+export const getTracking = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
+  if (!req.customer) throw new AppError("Customer authentication required.", 401);
+  const orderId = String(req.params.id);
+  const tracking = await CustomerOrdersService.getCustomerOrderTracking(req.customer.id, orderId);
+  return ApiResponse.success(res, "Order tracking retrieved.", tracking);
+});

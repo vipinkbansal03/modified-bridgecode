@@ -4,6 +4,8 @@ import { AppError, getPagination } from "../../utils/apiResponse";
 import { assertActiveCountry, assertSellableInCountry } from "../countries/countryAvailability.service";
 import { resolvePrice } from "../pricing/priceResolver.service";
 import { sendQuoteConvertedEmail, sendQuoteSentEmail } from "../../utils/email";
+import { reserveOrderInventory } from "../inventory/inventoryReservation.service";
+import { resolveItemFulfillmentWarehouse } from "../warehouse/warehouseResolver.service";
 
 export async function listQuotes(query: { page?: string; limit?: string; status?: string; search?: string; sortBy?: string; sortDir?: string }) {
   const { page, limit, skip } = getPagination(query);
@@ -51,7 +53,16 @@ function generateQuoteNumber() {
 }
 
 export async function getQuote(id: string) {
-  const q = await prisma.quote.findUnique({ where: { id }, include: { items: { include: { product: true, variant: true } }, country: true, currency: true, internalNotes: { include: { user: { select: { name: true } } } } } });
+  const q = await prisma.quote.findUnique({
+    where: { id },
+    include: {
+      items: { include: { product: true, variant: true } },
+      country: true,
+      currency: true,
+      customer: { include: { addresses: true } },
+      internalNotes: { include: { user: { select: { name: true } } } },
+    },
+  });
   if (!q) throw new AppError("Quote not found.", 404);
   return q;
 }
@@ -325,28 +336,75 @@ export async function convertToOrder(quoteId: string) {
     throw new AppError("Quote already converted.", 400);
   }
 
-  const orderNumber = `ORD-${Date.now()}`;
-  const order = await prisma.order.create({
-    data: {
-      orderNumber,
-      customerId: quote.customerId,
-      customerName: quote.customerName,
-      customerEmail: quote.customerEmail,
-      customerPhone: quote.customerPhone || "",
-      companyName: quote.companyName,
-      shippingAddress: (quote.shippingAddress as never) ?? {},
-      countryId: quote.countryId,
-      currencyId: quote.currencyId,
-      subtotal: quote.subtotal,
-      discount: quote.discount,
-      shippingCharge: quote.shippingCharge,
-      total: quote.total,
-      fromQuoteId: quote.id,
-      items: { create: quote.items.map(i => ({ productId: i.productId, variantId: i.variantId, title: i.title, sku: i.sku, quantity: i.quantity, unitPrice: i.unitPrice, total: i.total })) },
-    },
-  });
+  const shippingAddressObj = (quote.shippingAddress || {}) as Record<string, any>;
+  const destinationState = (shippingAddressObj.state as string) || (quote.customer as any)?.addresses?.[0]?.state || null;
+  const destinationCountryCode = quote.country?.code || null;
+  const destinationCountryId = quote.countryId;
 
-  await prisma.quote.update({ where: { id: quoteId }, data: { status: "CONVERTED", convertedOrderId: order.id } });
+  // Resolve warehouse for each quote item using standard ranking
+  const resolvedItems = await Promise.all(
+    quote.items.map(async (i) => {
+      const resolvedWarehouse = await resolveItemFulfillmentWarehouse(prisma, {
+        productId: i.productId,
+        variantId: i.variantId ?? null,
+        quantity: i.quantity,
+        explicitWarehouseId: undefined, // auto-resolve using quote destination
+        destinationState,
+        destinationCountryCode,
+        destinationCountryId,
+      });
+
+      return {
+        ...i,
+        warehouseId: resolvedWarehouse.warehouseId,
+      };
+    })
+  );
+
+  const orderNumber = `ORD-${Date.now()}`;
+
+  const order = await prisma.$transaction(async (tx) => {
+    const createdOrder = await tx.order.create({
+      data: {
+        orderNumber,
+        customerId: quote.customerId,
+        customerName: quote.customerName,
+        customerEmail: quote.customerEmail,
+        customerPhone: quote.customerPhone || "",
+        companyName: quote.companyName,
+        shippingAddress: (quote.shippingAddress as never) ?? {},
+        countryId: quote.countryId,
+        currencyId: quote.currencyId,
+        subtotal: quote.subtotal,
+        discount: quote.discount,
+        shippingCharge: quote.shippingCharge,
+        total: quote.total,
+        fromQuoteId: quote.id,
+        items: {
+          create: resolvedItems.map((i) => ({
+            productId: i.productId,
+            variantId: i.variantId,
+            title: i.title,
+            sku: i.sku,
+            quantity: i.quantity,
+            unitPrice: i.unitPrice,
+            total: i.total,
+            warehouseId: i.warehouseId,
+          })),
+        },
+      },
+      include: { items: true, country: true, currency: true },
+    });
+
+    await tx.quote.update({
+      where: { id: quoteId },
+      data: { status: "CONVERTED", convertedOrderId: createdOrder.id },
+    });
+
+    await reserveOrderInventory(createdOrder.id, tx);
+
+    return createdOrder;
+  });
 
   import("../notifications/notifications.service").then(async ({ notificationsService }) => {
     const currency = await prisma.currency.findUnique({ where: { id: order.currencyId } });

@@ -3,13 +3,24 @@ import crypto from "crypto";
 import Stripe from "stripe";
 import { prisma } from "../../config/database";
 import { logger } from "../../config/logger";
+import { reconcilePaymentSuccess, reconcilePaymentFailure } from "../payment/paymentReconciliation.service";
 
 // ─── Razorpay ────────────────────────────────────────────
 
 export async function razorpayWebhook(req: Request, res: Response): Promise<void> {
-  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  let secret = process.env.RAZORPAY_WEBHOOK_SECRET;
   if (!secret) {
-    res.status(500).json({ error: "Webhook secret not configured." });
+    const pm = await prisma.paymentMethod.findUnique({
+      where: { code: "RAZORPAY" },
+      include: { configs: true },
+    });
+    if (pm) {
+      secret = pm.configs.find((c) => c.configKey === "RAZORPAY_WEBHOOK_SECRET")?.configValue;
+    }
+  }
+
+  if (!secret) {
+    res.status(500).json({ error: "Razorpay webhook secret is not configured." });
     return;
   }
 
@@ -26,22 +37,56 @@ export async function razorpayWebhook(req: Request, res: Response): Promise<void
     return;
   }
 
-  const event = req.body as { event: string; payload: { payment: { entity: { id: string; order_id: string; status: string } } } };
+  const event = req.body as {
+    event: string;
+    payload: {
+      payment?: {
+        entity?: {
+          id: string;
+          order_id: string;
+          status: string;
+          error_code?: string;
+          error_description?: string;
+        };
+      };
+      order?: {
+        entity?: {
+          id: string;
+          status: string;
+        };
+      };
+    };
+  };
 
   try {
-    if (event.event === "payment.captured") {
-      const paymentId = event.payload.payment.entity.id;
-      await prisma.order.updateMany({
-        where: { paymentId: event.payload.payment.entity.order_id },
-        data: { paymentStatus: "PAID", paymentId },
-      });
-      logger.info(`Razorpay: payment captured for order ${event.payload.payment.entity.order_id}`);
+    const paymentEntity = event.payload?.payment?.entity;
+    const orderEntity = event.payload?.order?.entity;
+    const gatewayOrderId = paymentEntity?.order_id || orderEntity?.id;
+    const paymentId = paymentEntity?.id || "";
+
+    if (event.event === "payment.captured" || event.event === "order.paid") {
+      if (gatewayOrderId) {
+        await reconcilePaymentSuccess({
+          gatewayOrderId,
+          gatewayPaymentId: paymentId || `pay_captured_${Date.now()}`,
+          provider: "RAZORPAY",
+          metadata: { webhookEvent: event.event, payload: event.payload },
+        });
+        logger.info(`Razorpay Webhook: payment captured for gateway order ${gatewayOrderId}`);
+      }
     } else if (event.event === "payment.failed") {
-      await prisma.order.updateMany({
-        where: { paymentId: event.payload.payment.entity.order_id },
-        data: { paymentStatus: "FAILED" },
-      });
+      if (gatewayOrderId) {
+        await reconcilePaymentFailure({
+          gatewayOrderId,
+          gatewayPaymentId: paymentId,
+          errorCode: paymentEntity?.error_code,
+          errorMessage: paymentEntity?.error_description || "Razorpay webhook reported payment failure.",
+          provider: "RAZORPAY",
+        });
+        logger.info(`Razorpay Webhook: payment failed for gateway order ${gatewayOrderId}`);
+      }
     }
+
     res.json({ received: true });
   } catch (err) {
     logger.error("Razorpay webhook error:", err);

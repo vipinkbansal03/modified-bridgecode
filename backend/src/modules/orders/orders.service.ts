@@ -4,6 +4,7 @@ import { AppError, getPagination } from "../../utils/apiResponse";
 import { assertActiveCountry, assertSellableInCountry } from "../countries/countryAvailability.service";
 import { resolvePrice } from "../pricing/priceResolver.service";
 import { reserveOrderInventory, commitOrderReservation, releaseOrderReservation } from "../inventory/inventoryReservation.service";
+import { resolveItemFulfillmentWarehouse } from "../warehouse/warehouseResolver.service";
 
 export async function getAnalytics() {
   const twelveMonthsAgo = new Date();
@@ -123,7 +124,19 @@ export async function listOrders(query: {
 }
 
 export async function getOrder(id: string) {
-  const o = await prisma.order.findUnique({ where: { id }, include: { items: { include: { product: true, variant: true, warehouse: true as any } }, country: true, currency: true, coupon: true, shippingZone: { include: { provider: true, countries: { include: { country: true } } } }, shippingBox: true, orderBoxes: true } });
+  const o = await prisma.order.findUnique({
+    where: { id },
+    include: {
+      items: { include: { product: true, variant: true, warehouse: true as any } },
+      country: true,
+      currency: true,
+      coupon: true,
+      shippingZone: { include: { provider: true, countries: { include: { country: true } } } },
+      shippingBox: true,
+      orderBoxes: true,
+      paymentTransactions: { orderBy: { attemptNumber: "desc" } },
+    },
+  });
   if (!o) throw new AppError("Order not found.", 404);
   return o;
 }
@@ -145,12 +158,18 @@ export async function createAdminOrder(input: {
   shippingCharge?: number | string | null;
   discount?: number | string | null;
   notes?: string | null;
-  items: { productId: string; variantId?: string | null; quantity: number | string; overridePrice?: number | string | null }[];
+  items: {
+    productId: string;
+    variantId?: string | null;
+    quantity: number | string;
+    overridePrice?: number | string | null;
+    warehouseId?: string | null;
+  }[];
 }) {
   if (!Array.isArray(input.items) || input.items.length === 0) throw new AppError("Add at least one order item.", 400);
 
   const customer = input.customerId
-    ? await prisma.customer.findUnique({ where: { id: input.customerId, deletedAt: null }, include: { defaultCountry: true } })
+    ? await prisma.customer.findUnique({ where: { id: input.customerId, deletedAt: null }, include: { defaultCountry: true, addresses: true } })
     : null;
   if (input.customerId && !customer) throw new AppError("Customer not found.", 404);
 
@@ -173,6 +192,11 @@ export async function createAdminOrder(input: {
   if (!fallbackCountryId) throw new AppError("Country is required for manual order pricing.", 400);
   const country = await assertActiveCountry(fallbackCountryId);
 
+  const shippingAddressObj = (input.shippingAddress || {}) as Record<string, any>;
+  const destinationState = (shippingAddressObj.state as string) || customer?.addresses?.[0]?.state || null;
+  const destinationCountryCode = country.code;
+  const destinationCountryId = country.id;
+
   const orderItems = await Promise.all(input.items.map(async (item) => {
     const product = productMap.get(item.productId);
     if (!product) throw new AppError("Product not found.", 400);
@@ -182,9 +206,19 @@ export async function createAdminOrder(input: {
 
     const quantity = Number(item.quantity);
     if (!Number.isInteger(quantity) || quantity < 1) throw new AppError("Quantity must be at least 1.", 400);
-    const stockRecord = variant?.inventories.find((inventory) => inventory.countryId === country.id) ?? variant?.inventories.find((inventory) => inventory.countryId === null);
-    const availableStock = stockRecord ? Math.max(0, stockRecord.stock - stockRecord.reservedStock) : null;
-    if (availableStock !== null && availableStock < quantity) throw new AppError(`Insufficient stock for ${variant?.sku ?? variant?.title}.`, 400);
+
+    // Resolve warehouse according to the three-state rule:
+    // string -> explicit physical, null -> explicit base, undefined -> auto-resolve
+    const resolvedWarehouse = await resolveItemFulfillmentWarehouse(prisma, {
+      productId: product.id,
+      variantId: variant?.id ?? null,
+      quantity,
+      explicitWarehouseId: item.warehouseId,
+      destinationState,
+      destinationCountryCode,
+      destinationCountryId,
+    });
+
     await assertSellableInCountry({
       countryId: country.id,
       productId: product.id,
@@ -204,6 +238,7 @@ export async function createAdminOrder(input: {
       quantity,
       unitPrice,
       total: unitPrice * quantity,
+      warehouseId: resolvedWarehouse.warehouseId,
     };
   }));
 
@@ -246,6 +281,7 @@ export async function createAdminOrder(input: {
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           total: item.total,
+          warehouseId: item.warehouseId,
         })),
       },
     },

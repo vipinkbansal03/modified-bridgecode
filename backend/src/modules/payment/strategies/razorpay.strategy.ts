@@ -4,6 +4,7 @@ import { PaymentMethodType } from "@prisma/client";
 import { prisma } from "../../../config/database";
 import { AppError } from "../../../utils/apiResponse";
 import { PaymentInitiateResult, PaymentStrategy, PaymentVerifyResult } from "../types/payment.types";
+import { reconcilePaymentSuccess, reconcilePaymentFailure } from "../paymentReconciliation.service";
 
 export class RazorpayStrategy implements PaymentStrategy {
   readonly code = "RAZORPAY";
@@ -23,11 +24,23 @@ export class RazorpayStrategy implements PaymentStrategy {
 
     const amountInPaise = Math.round(Number(order.total) * 100);
 
+    // Compute next sequential attempt number
+    const lastAttempt = await prisma.paymentTransaction.findFirst({
+      where: { orderId: order.id },
+      orderBy: { attemptNumber: "desc" },
+    });
+    const attemptNumber = (lastAttempt?.attemptNumber ?? 0) + 1;
+    const receipt = attemptNumber > 1 ? `${order.orderNumber}-A${attemptNumber}` : order.orderNumber;
+
     const rzpOrder = await rzp.orders.create({
       amount: amountInPaise,
       currency: order.currency?.code ?? "INR",
-      receipt: order.orderNumber,
-      notes: { orderId: order.id, customerId: order.customerId },
+      receipt,
+      notes: {
+        orderId: order.id,
+        customerId: order.customerId ?? "",
+        attemptNumber: String(attemptNumber),
+      },
     });
 
     await prisma.order.update({
@@ -42,13 +55,14 @@ export class RazorpayStrategy implements PaymentStrategy {
     await prisma.paymentTransaction.create({
       data: {
         orderId: order.id,
+        attemptNumber,
         paymentMethod: "RAZORPAY",
         provider: "RAZORPAY",
         gatewayOrderId: rzpOrder.id,
         status: "PENDING",
         amount: order.total,
         currency: rzpOrder.currency ?? order.currency?.code ?? "INR",
-        metadata: { receipt: order.orderNumber },
+        metadata: { receipt, attemptNumber },
       },
     });
 
@@ -61,7 +75,7 @@ export class RazorpayStrategy implements PaymentStrategy {
         amount: amountInPaise,
         currency: rzpOrder.currency,
         name: "Modern Orthodontics",
-        description: `Order #${order.orderNumber}`,
+        description: `Order #${order.orderNumber} (Attempt #${attemptNumber})`,
         order_id: rzpOrder.id,
         prefill: {
           name: order.customerName,
@@ -89,45 +103,23 @@ export class RazorpayStrategy implements PaymentStrategy {
       .digest("hex");
 
     if (expectedSignature !== razorpay_signature) {
-      await prisma.order.update({
-        where: { id: order.id },
-        data: { paymentStatus: "FAILED" },
-      });
-
-      await prisma.paymentTransaction.updateMany({
-        where: { gatewayOrderId: razorpay_order_id },
-        data: {
-          status: "FAILED",
-          errorMessage: "Invalid payment signature verification failed.",
-        },
+      await reconcilePaymentFailure({
+        orderId: order.id,
+        gatewayOrderId: razorpay_order_id,
+        gatewayPaymentId: razorpay_payment_id,
+        errorCode: "SIGNATURE_MISMATCH",
+        errorMessage: "Invalid payment signature verification failed.",
       });
 
       throw new AppError("Invalid payment signature verification failed.", 400);
     }
 
-    // Update PaymentTransaction to SUCCESS
-    await prisma.paymentTransaction.updateMany({
-      where: { gatewayOrderId: razorpay_order_id },
-      data: {
-        status: "SUCCESS",
-        gatewayPaymentId: razorpay_payment_id,
-        gatewaySignature: razorpay_signature,
-      },
-    });
-
-    const updatedOrder = await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        paymentStatus: "PAID",
-        status: "PROCESSING",
-        paymentMethod: "RAZORPAY",
-        paymentId: razorpay_payment_id,
-      },
-      include: {
-        items: { include: { product: true, variant: true } },
-        country: true,
-        currency: true,
-      },
+    const { order: updatedOrder } = await reconcilePaymentSuccess({
+      orderId: order.id,
+      gatewayOrderId: razorpay_order_id,
+      gatewayPaymentId: razorpay_payment_id,
+      gatewaySignature: razorpay_signature,
+      provider: "RAZORPAY",
     });
 
     return {

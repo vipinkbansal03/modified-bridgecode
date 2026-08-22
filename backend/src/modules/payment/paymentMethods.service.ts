@@ -2,6 +2,7 @@ import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
 import { PaymentGatewayRegistry } from "./paymentGatewayRegistry";
 import { resolveCartPaymentMethods } from "./paymentOverrides.service";
+import { expireOrderAndReleaseStock } from "./paymentReconciliation.service";
 
 export async function getAvailablePaymentMethodsForCountry(countryCode?: string) {
   const code = (countryCode || "IN").trim().toUpperCase();
@@ -153,6 +154,20 @@ export async function initiatePaymentForOrder(
   });
 
   if (!order) throw new AppError("Order not found.", 404);
+
+  if (order.paymentStatus === "PAID") {
+    throw new AppError("Order is already paid.", 400);
+  }
+
+  if (order.status === "CANCELLED") {
+    throw new AppError("Order has been cancelled.", 400);
+  }
+
+  // Lazy check expiry
+  if (order.paymentExpiresAt && order.paymentExpiresAt < new Date()) {
+    await expireOrderAndReleaseStock(order.id);
+    throw new AppError("Payment window has expired. Reserved inventory has been released.", 400);
+  }
 
   // Validate that the payment method is supported for all items in this order
   const cartItems = order.items

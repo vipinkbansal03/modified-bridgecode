@@ -37,8 +37,23 @@ const PAYMENT_STATUS_OPTIONS = [
   { value: "REFUNDED", label: "Refunded" },
 ];
 
-const TABS = ["Overview", "Items", "Shipping"] as const;
+const TABS = ["Overview", "Items", "Shipping", "Payments"] as const;
 type Tab = (typeof TABS)[number];
+
+interface PaymentTransactionDetail {
+  id: string;
+  attemptNumber: number;
+  paymentMethod: string;
+  provider: string | null;
+  gatewayOrderId: string | null;
+  gatewayPaymentId: string | null;
+  status: string;
+  amount: number;
+  currency: string;
+  errorMessage: string | null;
+  errorCode: string | null;
+  createdAt: string;
+}
 
 interface OrderItem {
   id: string;
@@ -113,6 +128,7 @@ interface OrderDetail {
   createdAt: string;
   updatedAt: string;
   items: OrderItem[];
+  paymentTransactions?: PaymentTransactionDetail[];
 }
 
 export default function OrderDetailPage() {
@@ -503,6 +519,70 @@ export default function OrderDetailPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {activeTab === "Payments" && (
+            <div className="space-y-4">
+              {order.paymentTransactions && order.paymentTransactions.length > 0 ? (
+                <div className="rounded-lg border border-[#E6E6E6] bg-white overflow-hidden">
+                  <div className="border-b border-[#E6E6E6] px-5 py-3.5 flex items-center justify-between">
+                    <h3 className="text-[14px] font-semibold text-[#111]">
+                      Payment Attempt History ({order.paymentTransactions.length})
+                    </h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-[13px]">
+                      <thead className="border-b border-[#E6E6E6] bg-[#FAFAFA] text-[11.5px] uppercase font-semibold text-[#777]">
+                        <tr>
+                          <th className="px-4 py-3">Attempt</th>
+                          <th className="px-4 py-3">Provider</th>
+                          <th className="px-4 py-3">Gateway Order ID</th>
+                          <th className="px-4 py-3">Gateway Payment ID</th>
+                          <th className="px-4 py-3">Status</th>
+                          <th className="px-4 py-3">Amount</th>
+                          <th className="px-4 py-3">Error / Reason</th>
+                          <th className="px-4 py-3">Time</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E6E6E6]">
+                        {order.paymentTransactions.map((tx) => (
+                          <tr key={tx.id} className="hover:bg-[#F9F9F9]">
+                            <td className="px-4 py-3 font-semibold text-[#111]">
+                              #{tx.attemptNumber}
+                            </td>
+                            <td className="px-4 py-3 font-medium text-[#444]">
+                              {tx.provider || tx.paymentMethod}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-[12px] text-[#333]">
+                              {tx.gatewayOrderId || "—"}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-[12px] text-brand">
+                              {tx.gatewayPaymentId || "—"}
+                            </td>
+                            <td className="px-4 py-3">
+                              <StatusBadge status={tx.status} />
+                            </td>
+                            <td className="px-4 py-3 font-semibold text-[#111]">
+                              {tx.currency} {Number(tx.amount).toFixed(2)}
+                            </td>
+                            <td className="px-4 py-3 text-[12px] text-[#888] max-w-[200px] truncate">
+                              {tx.errorMessage || tx.errorCode || "—"}
+                            </td>
+                            <td className="px-4 py-3 text-[12px] text-[#666]">
+                              {new Date(tx.createdAt).toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-[#E6E6E6] bg-white p-8 text-center text-[14px] text-[#777]">
+                  No payment attempts recorded for this order yet.
+                </div>
+              )}
             </div>
           )}
         </div>

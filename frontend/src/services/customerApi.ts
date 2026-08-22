@@ -128,6 +128,8 @@ export interface CustomerOrderSummary {
   paymentStatus: string;
   paymentMethod?: string | null;
   paymentId?: string | null;
+  paymentExpiresAt?: string | null;
+  secondsRemaining?: number;
   subtotal: string | number;
   taxAmount?: string | number;
   discount?: string | number;
@@ -355,6 +357,7 @@ export interface RazorpayOrderResponse {
   currency: string;
   keyId: string;
   orderNumber: string;
+  sdkPayload?: Record<string, unknown>;
 }
 
 export interface AvailablePaymentMethod {
@@ -434,11 +437,66 @@ export async function verifyRazorpayPayment(
     razorpay_signature: string;
   },
 ) {
-  const res = await customerApi.post(
-    `/orders/${orderId}/verify-razorpay`,
-    payload,
-  );
+  const res = await customerApi.post(`/orders/${orderId}/verify-razorpay`, payload);
   return res.data.data as CustomerOrderSummary;
+}
+
+export interface CustomerPaymentSession {
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone?: string | null;
+  status: string;
+  paymentStatus: string;
+  paymentMethod?: string | null;
+  subtotal: number;
+  shippingCharge: number;
+  discount: number;
+  taxAmount: number;
+  total: number;
+  currency: string;
+  currencySymbol: string;
+  paymentExpiresAt?: string | null;
+  secondsRemaining: number;
+  isRetryable: boolean;
+  isExpired: boolean;
+  latestTransaction?: {
+    id: string;
+    attemptNumber: number;
+    gatewayOrderId?: string | null;
+    gatewayPaymentId?: string | null;
+    status: string;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+    createdAt: string;
+  } | null;
+  items: Array<{
+    id: string;
+    title: string;
+    sku?: string | null;
+    quantity: number;
+    unitPrice: number;
+    total: number;
+    warehouseId?: string | null;
+  }>;
+}
+
+export async function fetchCustomerPaymentSession(orderId: string): Promise<CustomerPaymentSession> {
+  const res = await customerApi.get(`/orders/${orderId}/payment-session`);
+  return res.data.data as CustomerPaymentSession;
+}
+
+export async function recordCustomerPaymentFailure(
+  orderId: string,
+  payload: {
+    gatewayOrderId?: string;
+    errorCode?: string;
+    errorMessage?: string;
+  },
+) {
+  const res = await customerApi.post(`/orders/${orderId}/payment/failure`, payload);
+  return res.data.data;
 }
 
 export async function updateCustomerProfile(data: {
@@ -568,5 +626,55 @@ export async function getWishlistCount(): Promise<{ count: number }> {
 
 export async function syncWishlist(productIds: string[]): Promise<WishlistItem[]> {
   const res = await customerApi.post("/wishlist/sync", { productIds });
+  return res.data.data;
+}
+
+// ─── Tracking API ──────────────────────────────────────────
+export interface CustomerTrackingItem {
+  orderItemId: string;
+  title: string;
+  variantTitle: string | null;
+  sku: string | null;
+  quantity: number;
+}
+
+export interface CustomerTrackingEvent {
+  id: string;
+  status: string;
+  statusLabel: string;
+  location: string | null;
+  description: string | null;
+  timestamp: string;
+}
+
+export interface CustomerTrackingShipment {
+  shipmentId: string;
+  status: string;
+  statusLabel: string;
+  provider: {
+    name: string;
+    displayName: string;
+  };
+  trackingNumber: string | null;
+  awbNumber: string | null;
+  trackingUrl: string | null;
+  labelUrl: string | null;
+  estimatedDelivery: string | null;
+  lastUpdatedAt: string;
+  items: CustomerTrackingItem[];
+  events: CustomerTrackingEvent[];
+}
+
+export interface CustomerOrderTrackingResponse {
+  orderId: string;
+  orderNumber: string;
+  orderStatus: string;
+  createdAt: string;
+  isMultiShipment: boolean;
+  shipments: CustomerTrackingShipment[];
+}
+
+export async function fetchCustomerOrderTracking(orderId: string): Promise<CustomerOrderTrackingResponse> {
+  const res = await customerApi.get(`/orders/${orderId}/tracking`);
   return res.data.data;
 }

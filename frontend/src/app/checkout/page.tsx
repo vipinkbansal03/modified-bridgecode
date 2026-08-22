@@ -33,6 +33,7 @@ import {
   initiateCustomerPayment,
   verifyCustomerPayment,
   validateCustomerAddress,
+  fetchCustomerPaymentSession,
   type AvailablePaymentMethod,
   type AvailableShippingOption,
   type CouponValidationResult,
@@ -41,7 +42,8 @@ import {
   type CustomerOrderSummary,
   type ShippingEstimate,
 } from "@/services/customerApi";
-import { RazorpayPaymentButton } from "@/components/checkout/RazorpayPaymentButton";
+import { RazorpayPaymentButton, launchRazorpayModal } from "@/components/checkout/RazorpayPaymentButton";
+import { PaymentCountdownTimer } from "@/components/checkout/PaymentCountdownTimer";
 import { AddressValidationDialog } from "@/components/ui/delivery/AddressValidationDialog";
 
 const DEMO_PAYMENT_LABEL = "Pay on Delivery";
@@ -320,6 +322,45 @@ export default function CheckoutPage() {
       }
     }
   }, [form.countryCode, revalidateCart]);
+
+  // Periodic status reconciliation while order is pending payment
+  useEffect(() => {
+    if (!pendingOrder) return;
+    let isCancelled = false;
+
+    const reconcilePendingSession = async () => {
+      try {
+        const session = await fetchCustomerPaymentSession(pendingOrder.id);
+        if (isCancelled) return;
+
+        if (session.paymentStatus === "PAID") {
+          setPendingOrder(null);
+          setOrder({
+            id: session.orderId,
+            orderNumber: session.orderNumber,
+            status: session.status,
+            paymentStatus: session.paymentStatus,
+            total: session.total,
+            createdAt: new Date().toISOString(),
+            items: session.items,
+          } as any);
+          clearCart();
+        } else if (session.isExpired || session.status === "CANCELLED" || session.secondsRemaining <= 0) {
+          setError("Payment window has expired. Reserved warehouse inventory has been released.");
+          setPendingOrder(null);
+        }
+      } catch (err) {
+        // Silently keep current state if network glitch
+      }
+    };
+
+    // Reconcile every 10 seconds while pending
+    const interval = setInterval(reconcilePendingSession, 10000);
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+    };
+  }, [pendingOrder, clearCart]);
 
   const taxIdConfig = useMemo(() => {
     const countryUpper = form.countryCode.trim().toUpperCase();
@@ -873,8 +914,28 @@ export default function CheckoutPage() {
         selectedMethod?.type === "SDK_MODAL" ||
         selectedPaymentCode === "RAZORPAY"
       ) {
-        await initiateCustomerPayment(created.id, selectedPaymentCode);
+        const paymentRes = await initiateCustomerPayment(created.id, selectedPaymentCode);
         setPendingOrder(created);
+        if (paymentRes.sdkPayload) {
+          await launchRazorpayModal({
+            orderId: created.id,
+            customerName: form.fullName,
+            customerEmail: currentCustomer?.email || "",
+            customerPhone: form.phone,
+            sdkPayload: paymentRes.sdkPayload,
+            onSuccess: (verified) => {
+              setPendingOrder(null);
+              setOrder(verified);
+              clearCart();
+            },
+            onError: (errMsg) => {
+              setError(errMsg);
+            },
+            onDismiss: () => {
+              // Preserve pending order for retry & countdown
+            },
+          });
+        }
       } else {
         setOrder(created);
         clearCart();
@@ -1904,21 +1965,36 @@ export default function CheckoutPage() {
 
               {pendingOrder ? (
                 <div className="mt-5 space-y-3">
-                  <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-xs text-green-800 text-center">
-                    Order #{pendingOrder.orderNumber} created! Click below to
-                    complete your payment.
+                  <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-xs text-blue-900 text-center">
+                    Order #{pendingOrder.orderNumber} created! Complete your payment before the reservation expires.
                   </div>
+                  <PaymentCountdownTimer
+                    expiresAt={pendingOrder.paymentExpiresAt}
+                    initialSecondsRemaining={pendingOrder.secondsRemaining}
+                    onExpire={() => {
+                      setError("Payment window has expired. Reserved inventory has been released.");
+                      setPendingOrder(null);
+                    }}
+                  />
                   <RazorpayPaymentButton
                     orderId={pendingOrder.id}
                     customerName={form.fullName}
                     customerEmail={currentCustomer?.email ?? ""}
                     customerPhone={form.phone}
+                    buttonText="Retry Payment with Razorpay"
                     onSuccess={(updated) => {
                       setOrder(updated);
                       setPendingOrder(null);
                       clearCart();
                     }}
-                    onError={(errMsg) => setError(errMsg)}
+                    onError={(errMsg) => {
+                      if (errMsg.toLowerCase().includes("expired") || errMsg.toLowerCase().includes("cancelled")) {
+                        setError("Payment window has expired. Reserved inventory has been released.");
+                        setPendingOrder(null);
+                      } else {
+                        setError(errMsg);
+                      }
+                    }}
                   />
                 </div>
               ) : (
