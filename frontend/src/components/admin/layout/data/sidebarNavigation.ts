@@ -103,6 +103,7 @@ export const sidebarSections: SidebarSection[] = [
           { label: "History Logs", href: "/admin/notifications" },
           { label: "Routing Rules", href: "/admin/notifications/manager" },
           { label: "Message Templates", href: "/admin/notifications/templates" },
+          { label: "WhatsApp Templates", href: "/admin/whatsapp/templates" },
         ],
       },
     ],

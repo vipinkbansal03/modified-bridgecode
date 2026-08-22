@@ -38,6 +38,7 @@ import contactSubmissionRoutes from "./modules/contactSubmissions/contactSubmiss
 import { publicRouter as newsletterPublicRoutes, adminRouter as newsletterAdminRoutes } from "./modules/newsletter/newsletter.routes";
 import orderRoutes from "./modules/orders/orders.routes";
 import notificationsRoutes from "./modules/notifications/notifications.routes";
+import whatsappRoutes from "./modules/whatsappAdmin/whatsappAdmin.routes";
 import shippingRoutes from "./modules/shipping/shipping.routes";
 import publicShippingRoutes from "./modules/shipping/publicShipping.routes";
 import shippingBoxRoutes from "./modules/shippingBoxes/shippingBoxes.routes";
@@ -144,6 +145,7 @@ app.use(`${API}/blogs`, blogRoutes);
 app.use(`${API}/banners`, bannerRoutes);
 app.use(`${API}/reviews`, reviewRoutes);
 app.use("/api/notifications", notificationsRoutes);
+app.use(`${API}/whatsapp`, whatsappRoutes);
 app.use("/api/customer/auth", customerAuthRoutes);
 app.use("/api/newsletter", newsletterPublicRoutes);
 app.use("/api/customer/addresses", customerAddressRoutes);

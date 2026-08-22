@@ -149,6 +149,7 @@ export interface CustomerOrderSummary {
   country?: { id: string; name: string; code: string };
   shippingAddress?: CustomerOrderAddressPayload;
   items: CustomerOrderLineItem[];
+  orderBoxes?: any[];
 }
 
 export interface CustomerQuoteItem {

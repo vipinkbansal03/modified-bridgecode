@@ -206,6 +206,9 @@ export default function TemplateManagerPage() {
 
   const filteredTemplates = useMemo(() => {
     return templates.filter((t: any) => {
+      if (t.channel === "sms" || t.channel === "in_app" || t.channel === "inApp") {
+        return false;
+      }
       const matchesType = filterType === "all" || t.type === filterType;
       const matchesChannel = filterChannel === "all" || t.channel === filterChannel;
       return matchesType && matchesChannel;
@@ -299,7 +302,7 @@ export default function TemplateManagerPage() {
             </div>
             <div className="bg-[#1E3E39] border border-[#2A524C] px-5 py-3 rounded text-center min-w-[100px]">
               <div className="text-[10px] text-[#A6C4BF] font-bold uppercase tracking-wider">Channels</div>
-              <div className="text-[20px] font-bold mt-0.5">5</div>
+              <div className="text-[20px] font-bold mt-0.5">3</div>
             </div>
           </div>
         </div>
@@ -509,7 +512,7 @@ export default function TemplateManagerPage() {
                 <div className="border border-[#E6E6E6] bg-white rounded-lg p-4 space-y-3 shadow-sm text-[12px]">
                   <div className="flex items-center gap-1.5 font-bold text-[#1A1A1A]">
                     <Smartphone className="w-4 h-4 text-[#E31E24]" />
-                    WhatsApp & SMS tips
+                    WhatsApp tips
                   </div>
                   <p className="text-[#6B6B6B] leading-relaxed">Keep phone-delivered templates short. Put the most important action in the first line.</p>
                 </div>
@@ -527,7 +530,7 @@ export default function TemplateManagerPage() {
                     <Info className="w-4 h-4 text-[#E31E24]" />
                     System note
                   </div>
-                  <p className="text-[#6B6B6B] leading-relaxed">Push and In-App notifications usually work best with shorter titles and one clear action sentence.</p>
+                  <p className="text-[#6B6B6B] leading-relaxed">Push notifications usually work best with shorter titles and one clear action sentence.</p>
                 </div>
               </div>
 
