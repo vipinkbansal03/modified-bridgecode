@@ -212,11 +212,23 @@ async function main() {
   });
 
   // ─── Super admin user ───────────────────────────────────
-  const password = await bcrypt.hash("Admin@1234", 12);
+  const appEnv = (process.env.APP_ENV || process.env.NODE_ENV || "development").toLowerCase();
+  const isDeployedSeed = appEnv === "production" || appEnv === "staging";
+  const adminEmail = process.env.SEED_ADMIN_EMAIL?.trim() || (isDeployedSeed ? "" : "admin@modortho.com");
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD?.trim() || (isDeployedSeed ? "" : "Admin@1234");
+
+  if (!adminEmail) {
+    throw new Error("SEED_ADMIN_EMAIL is required when seeding staging or production.");
+  }
+  if (!adminPassword || adminPassword.length < 12) {
+    throw new Error("SEED_ADMIN_PASSWORD must be at least 12 characters when seeding staging or production.");
+  }
+
+  const password = await bcrypt.hash(adminPassword, 12);
   await prisma.user.upsert({
-    where: { email: "admin@modortho.com" },
+    where: { email: adminEmail },
     update: {},
-    create: { name: "Super Admin", email: "admin@modortho.com", password, roleId: superAdminRole.id },
+    create: { name: "Super Admin", email: adminEmail, password, roleId: superAdminRole.id },
   });
 
   // ─── Base currency ──────────────────────────────────────
@@ -1916,7 +1928,7 @@ async function main() {
   }
 
   console.log(`✅ Seed complete.`);
-  console.log(`   Admin login: admin@modortho.com / Admin@1234`);
+  console.log(`   Admin login: ${adminEmail}`);
   console.log(`   Roles created: Super Admin, Admin, Staff`);
   console.log(`   Sample products: Elfin Bondable Molar Tube, NiTi Wire Product`);
   console.log(`   CMS pages seeded: home, about, manufacturing, contact, products, quality-certifications, design-and-engineering, oem-services, custom-packaging`);
