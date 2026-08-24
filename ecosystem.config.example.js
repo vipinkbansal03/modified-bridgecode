@@ -3,8 +3,8 @@ module.exports = {
     {
       name: "modern-backend",
       cwd: "/var/www/html/backend",
-      script: "dist/server.js",
-      interpreter: "node",
+      script: "npm",
+      args: "run start:production",
       env: {
         NODE_ENV: "production",
         APP_ENV: "production",
@@ -26,8 +26,8 @@ module.exports = {
     {
       name: "modern-backend-staging",
       cwd: "/var/www/staging/backend",
-      script: "dist/server.js",
-      interpreter: "node",
+      script: "npm",
+      args: "run start:staging",
       env: {
         NODE_ENV: "production",
         APP_ENV: "staging",

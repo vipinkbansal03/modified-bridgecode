@@ -65,7 +65,6 @@ jobs:
             npm run env:check:staging
             npm run db:generate:staging
             npm run db:migrate:deploy:staging
-            npm run build:staging
 
             # Frontend
             cd /var/www/staging/frontend
@@ -137,7 +136,6 @@ jobs:
             npm run env:check:production
             npm run db:generate:production
             npm run db:migrate:deploy:production
-            npm run build:production
 
             # Frontend
             cd /var/www/html/frontend
