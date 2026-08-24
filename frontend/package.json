@@ -9,11 +9,11 @@
     "env:check:production": "APP_ENV=production DOTENV_CONFIG_PATH=.env.production node scripts/env-check.cjs check",
     "env:info:staging": "APP_ENV=staging DOTENV_CONFIG_PATH=.env.staging node scripts/env-check.cjs info",
     "env:info:production": "APP_ENV=production DOTENV_CONFIG_PATH=.env.production node scripts/env-check.cjs info",
-    "build:staging": "npm run env:check:staging && DOTENV_CONFIG_PATH=.env.staging DOTENV_CONFIG_OVERRIDE=true DOTENV_CONFIG_QUIET=true node -r dotenv/config --max-old-space-size=4096 node_modules/next/dist/bin/next build --webpack",
-    "build:production": "npm run env:check:production && DOTENV_CONFIG_PATH=.env.production DOTENV_CONFIG_OVERRIDE=true DOTENV_CONFIG_QUIET=true node -r dotenv/config --max-old-space-size=4096 node_modules/next/dist/bin/next build --webpack",
+    "build:staging": "npm run env:check:staging && DOTENV_CONFIG_PATH=.env.staging DOTENV_CONFIG_OVERRIDE=true DOTENV_CONFIG_QUIET=true node --require=dotenv/config --max-old-space-size=4096 node_modules/next/dist/bin/next build --webpack",
+    "build:production": "npm run env:check:production && DOTENV_CONFIG_PATH=.env.production DOTENV_CONFIG_OVERRIDE=true DOTENV_CONFIG_QUIET=true node --require=dotenv/config --max-old-space-size=4096 node_modules/next/dist/bin/next build --webpack",
     "start": "next start",
-    "start:staging": "APP_ENV=staging DOTENV_CONFIG_PATH=.env.staging DOTENV_CONFIG_OVERRIDE=true DOTENV_CONFIG_QUIET=true node -r dotenv/config node_modules/next/dist/bin/next start -p 4000",
-    "start:production": "APP_ENV=production DOTENV_CONFIG_PATH=.env.production DOTENV_CONFIG_OVERRIDE=true DOTENV_CONFIG_QUIET=true node -r dotenv/config node_modules/next/dist/bin/next start -p 3000",
+    "start:staging": "APP_ENV=staging DOTENV_CONFIG_PATH=.env.staging DOTENV_CONFIG_OVERRIDE=true DOTENV_CONFIG_QUIET=true node --require=dotenv/config node_modules/next/dist/bin/next start -p 4000",
+    "start:production": "APP_ENV=production DOTENV_CONFIG_PATH=.env.production DOTENV_CONFIG_OVERRIDE=true DOTENV_CONFIG_QUIET=true node --require=dotenv/config node_modules/next/dist/bin/next start -p 3000",
     "lint": "eslint ."
   },
   "dependencies": {

@@ -1,3 +1,4 @@
+require("./load-env.cjs");
 const { PrismaClient } = require("@prisma/client");
 const { createWarehouse, updateWarehouse } = require("../src/modules/warehouse/warehouse.service");
 const { calculateCustomerOrder } = require("../src/modules/customerOrders/customerOrders.service");

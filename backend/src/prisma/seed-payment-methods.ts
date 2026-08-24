@@ -1,3 +1,4 @@
+import "../config/env";
 import { PrismaClient, PaymentMethodType } from "@prisma/client";
 
 const prisma = new PrismaClient();

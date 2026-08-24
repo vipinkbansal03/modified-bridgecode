@@ -35,16 +35,11 @@ function validate() {
   const siteUrl = required("NEXT_PUBLIC_SITE_URL", errors);
 
   if (isDeployed) {
-    const expectedApiHost = required("EXPECTED_API_HOST", errors);
-    const expectedSiteHost = required("EXPECTED_SITE_HOST", errors);
-    for (const [name, value] of [
-      ["BACKEND_URL", backendUrl],
-      ["NEXT_PUBLIC_API_URL", publicApiUrl],
-      ["API_BASE_URL", apiBaseUrl],
-    ]) {
-      if (host(value) !== expectedApiHost) errors.push(`${name} host must be ${expectedApiHost} for ${appEnv}`);
-    }
-    if (host(siteUrl) !== expectedSiteHost) errors.push(`NEXT_PUBLIC_SITE_URL host must be ${expectedSiteHost} for ${appEnv}`);
+    const backendHost = host(backendUrl);
+    if (!backendHost) errors.push(`BACKEND_URL must be a valid URL for ${appEnv}`);
+    if (host(publicApiUrl) !== backendHost) errors.push(`NEXT_PUBLIC_API_URL host must match BACKEND_URL host for ${appEnv}`);
+    if (host(apiBaseUrl) !== backendHost) errors.push(`API_BASE_URL host must match BACKEND_URL host for ${appEnv}`);
+    if (!host(siteUrl)) errors.push(`NEXT_PUBLIC_SITE_URL must be a valid URL for ${appEnv}`);
   }
 
   if (errors.length > 0) {

@@ -1,3 +1,4 @@
+import "../../config/env";
 import { PrismaClient, NotificationType, NotificationTarget } from "@prisma/client";
 import { getApps } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";

@@ -83,9 +83,7 @@ export function validateBackendEnv() {
     requireValue("APP_ENV", errors);
     requireValue("AWS_REGION", errors);
     const bucket = requireValue("AWS_S3_BUCKET", errors);
-    const expectedDatabaseName = requireValue("EXPECTED_DATABASE_NAME", errors);
-    const expectedS3Bucket = requireValue("EXPECTED_S3_BUCKET", errors);
-    const expectedFrontendHost = requireValue("EXPECTED_FRONTEND_HOST", errors);
+    const bucketEnv = requireValue("AWS_S3_BUCKET_ENV", errors);
     requireValue("SETTINGS_ENCRYPTION_KEY", errors);
 
     if (nodeEnv !== "production") errors.push("NODE_ENV must be production for deployed environments");
@@ -94,29 +92,27 @@ export function validateBackendEnv() {
     if (port && port !== expectedPort) errors.push(`PORT must be ${expectedPort} for ${appEnv}`);
 
     const databaseName = getDatabaseName(databaseUrl);
+    const expectedDatabaseName = appEnv === "production" ? "modern_prod" : "modern_staging";
+    if (!databaseName) errors.push("DATABASE_URL must be a valid PostgreSQL URL");
     if (databaseName && expectedDatabaseName && databaseName !== expectedDatabaseName) {
       errors.push(`DATABASE_URL database must be ${expectedDatabaseName} for ${appEnv}`);
     }
 
-    if (bucket && expectedS3Bucket && bucket !== expectedS3Bucket) {
-      errors.push(`AWS_S3_BUCKET must match EXPECTED_S3_BUCKET for ${appEnv}`);
+    if (bucket && bucketEnv && bucketEnv !== appEnv) {
+      errors.push(`AWS_S3_BUCKET_ENV must be ${appEnv} for ${appEnv}`);
     }
 
     const frontendHost = getHost(frontendUrl);
-    if (frontendHost && expectedFrontendHost && frontendHost !== expectedFrontendHost) {
-      errors.push(`FRONTEND_URL host must be ${expectedFrontendHost} for ${appEnv}`);
-    }
-
+    if (!frontendHost) errors.push("FRONTEND_URL must be a valid URL");
     for (const name of ["CUSTOMER_PASSWORD_RESET_URL", "STRIPE_SUCCESS_URL", "STRIPE_CANCEL_URL", "STORE_URL"]) {
       const value = process.env[name]?.trim();
-      if (value && getHost(value) !== expectedFrontendHost) {
-        errors.push(`${name} host must be ${expectedFrontendHost} for ${appEnv}`);
+      if (value && frontendHost && getHost(value) !== frontendHost) {
+        errors.push(`${name} host must match FRONTEND_URL host for ${appEnv}`);
       }
     }
   }
 
   assertPair("RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", errors);
-  assertPair("STRIPE_PUBLISHABLE_KEY", "STRIPE_SECRET_KEY", errors);
   assertPair("SANDBOX_API_KEY", "SANDBOX_API_SECRET", errors);
 
   if (errors.length > 0) {
@@ -128,7 +124,7 @@ export function validateBackendEnv() {
     nodeEnv,
     port,
     databaseName: getDatabaseName(databaseUrl),
-    databaseHost: databaseUrl ? new URL(databaseUrl).hostname : "",
+    databaseHost: getHost(databaseUrl),
     awsRegion: process.env.AWS_REGION || "",
     s3Bucket: process.env.AWS_S3_BUCKET || "",
     frontendUrl,

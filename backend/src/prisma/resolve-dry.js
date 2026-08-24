@@ -1,3 +1,4 @@
+require("../../scripts/load-env.cjs");
 const { resolvePrice } = require("../../dist/modules/pricing/priceResolver.service");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();

@@ -1,3 +1,4 @@
+import "../config/env";
 import { AttributeRole, AttributeStatus, PaymentMethodType, Prisma, PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { ensureAllWorldCountriesSeeded } from "../modules/countries/countries.service";
