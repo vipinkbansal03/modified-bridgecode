@@ -692,11 +692,26 @@ export async function updateShipment(id: string, input: {
   if (!existing) throw new AppError("Shipment not found.", 404);
 
   const data: Prisma.ShipmentUncheckedUpdateInput = {};
-  if (input.trackingNumber !== undefined) data.trackingNumber = input.trackingNumber?.trim() || null;
+  if (input.trackingNumber !== undefined) {
+    data.trackingNumber = input.trackingNumber?.trim() || null;
+    data.status = "LABEL_GENERATED";
+  }
   if (input.awbNumber !== undefined) data.awbNumber = input.awbNumber?.trim() || null;
   if (input.estimatedDelivery !== undefined) data.estimatedDelivery = input.estimatedDelivery?.trim() || null;
   if (input.shippingCharge !== undefined) data.shippingCharge = input.shippingCharge != null ? Number(input.shippingCharge) : null;
   if (input.notes !== undefined) data.notes = input.notes?.trim() || null;
+
+  if (input.trackingNumber !== undefined && input.trackingNumber?.trim()) {
+    await prisma.shipmentEvent.deleteMany({ where: { shipmentId: id } });
+    await prisma.shipmentEvent.create({
+      data: {
+        shipmentId: id,
+        status: "LABEL_GENERATED",
+        location: "Warehouse",
+        description: `Tracking details updated by administrator. Tracking Number: ${input.trackingNumber}.`,
+      },
+    });
+  }
 
   return prisma.shipment.update({ where: { id }, data, select: SHIPMENT_SELECT });
 }

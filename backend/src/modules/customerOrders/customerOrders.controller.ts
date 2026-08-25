@@ -85,3 +85,14 @@ export const getTracking = asyncHandler(async (req: CustomerAuthRequest, res: Re
   const tracking = await CustomerOrdersService.getCustomerOrderTracking(req.customer.id, orderId);
   return ApiResponse.success(res, "Order tracking retrieved.", tracking);
 });
+
+export const cancelOrder = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
+  if (!req.customer) throw new AppError("Customer authentication required.", 401);
+  const orderId = String(req.params.id);
+  const { reason, refundDetails } = req.body;
+  const result = await CustomerOrdersService.cancelCustomerOrder(req.customer.id, orderId, {
+    reason,
+    refundDetails,
+  });
+  return ApiResponse.success(res, "Order cancelled successfully.", result);
+});

@@ -14,5 +14,6 @@ router.get("/:id/tracking", C.getTracking);
 router.post("/:id/payment/failure", C.recordFailure);
 router.post("/:id/razorpay-order", C.createRazorpayOrder);
 router.post("/:id/verify-razorpay", C.verifyRazorpayPayment);
+router.post("/:id/cancel", C.cancelOrder);
 
 export default router;

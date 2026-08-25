@@ -24,3 +24,9 @@ export const deleteOne = asyncHandler(async (req: AuthRequest, res: Response) =>
   await S.deleteOrder(String(req.params.id));
   return ApiResponse.success(res, "Order deleted.");
 });
+
+export const refundCancelledOrder = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { refundMethod, transactionReference } = req.body;
+  const result = await S.refundCancelledOrder(String(req.params.id), refundMethod, transactionReference);
+  return ApiResponse.success(res, "Cancelled order refund processed successfully.", result);
+});

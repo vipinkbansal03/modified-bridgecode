@@ -5,6 +5,7 @@ import { assertActiveCountry, assertSellableInCountry } from "../countries/count
 import { resolvePrice } from "../pricing/priceResolver.service";
 import { reserveOrderInventory, commitOrderReservation, releaseOrderReservation } from "../inventory/inventoryReservation.service";
 import { resolveItemFulfillmentWarehouse } from "../warehouse/warehouseResolver.service";
+import Razorpay from "razorpay";
 
 export async function getAnalytics() {
   const twelveMonthsAgo = new Date();
@@ -135,6 +136,7 @@ export async function getOrder(id: string) {
       shippingBox: true,
       orderBoxes: true,
       paymentTransactions: { orderBy: { attemptNumber: "desc" } },
+      returns: { include: { items: true } },
     },
   });
   if (!o) throw new AppError("Order not found.", 404);
@@ -365,6 +367,11 @@ export const updateShipping = (id: string, data: { shippingProvider?: string; tr
 
 export async function shipOrder(id: string, data: { shippingProvider: string; trackingNumber: string }) {
   const order = await getOrder(id);
+
+  if (order.paymentMethod === "RAZORPAY" && order.paymentStatus !== "PAID") {
+    throw new AppError("Cannot ship. Payment must be PAID for online prepaid orders.", 400);
+  }
+
   await commitOrderReservation(id);
 
   const updated = await prisma.order.update({
@@ -375,6 +382,55 @@ export async function shipOrder(id: string, data: { shippingProvider: string; tr
       trackingNumber: data.trackingNumber,
     },
   });
+
+  const shipments = await prisma.shipment.findMany({
+    where: { orderId: id },
+  });
+
+  if (shipments.length > 0) {
+    for (const shipment of shipments) {
+      await prisma.shipment.update({
+        where: { id: shipment.id },
+        data: {
+          status: "LABEL_GENERATED",
+          trackingNumber: data.trackingNumber,
+          awbNumber: data.trackingNumber,
+        },
+      });
+
+      await prisma.shipmentEvent.create({
+        data: {
+          shipmentId: shipment.id,
+          status: "LABEL_GENERATED",
+          location: "Warehouse",
+          description: `Shipment marked as shipped via ${data.shippingProvider} with tracking number ${data.trackingNumber}.`,
+        },
+      });
+    }
+  } else {
+    const provider = await prisma.shippingProvider.findFirst({
+      where: { displayName: data.shippingProvider },
+    }) || await prisma.shippingProvider.findFirst();
+
+    if (provider) {
+      await prisma.shipment.create({
+        data: {
+          orderId: id,
+          providerId: provider.id,
+          status: "LABEL_GENERATED",
+          trackingNumber: data.trackingNumber,
+          awbNumber: data.trackingNumber,
+          events: {
+            create: {
+              status: "LABEL_GENERATED",
+              location: "Warehouse",
+              description: `Shipment created and marked as shipped via ${data.shippingProvider} with tracking number ${data.trackingNumber}.`,
+            },
+          },
+        },
+      });
+    }
+  }
 
   import("../notifications/notifications.service").then(({ notificationsService }) => {
     notificationsService.dispatchNotification("ORDER_SHIPPED", {
@@ -395,11 +451,47 @@ export async function deliverOrder(id: string) {
     return order;
   }
 
-  // Delivery performs ZERO inventory mutation (stock is committed upon shipment)
+  if (order.paymentMethod === "RAZORPAY" && order.paymentStatus !== "PAID") {
+    throw new AppError("Cannot deliver. Payment must be PAID for online prepaid orders.", 400);
+  }
+
+  const nextPaymentStatus = order.paymentMethod === "PAY_ON_DELIVERY" && order.paymentStatus === "PENDING"
+    ? "PAID"
+    : undefined;
+
   const updated = await prisma.order.update({
     where: { id },
-    data: { status: "DELIVERED" },
+    data: { 
+      status: "DELIVERED",
+      ...(nextPaymentStatus && { paymentStatus: nextPaymentStatus }),
+    },
   });
+
+  const shipments = await prisma.shipment.findMany({
+    where: { orderId: id },
+  });
+
+  if (shipments.length > 0) {
+    for (const shipment of shipments) {
+      await prisma.shipment.update({
+        where: { id: shipment.id },
+        data: { status: "DELIVERED" },
+      });
+
+      await prisma.shipmentEvent.deleteMany({
+        where: { shipmentId: shipment.id },
+      });
+
+      await prisma.shipmentEvent.create({
+        data: {
+          shipmentId: shipment.id,
+          status: "DELIVERED",
+          location: "Destination",
+          description: "Shipment delivered successfully. Signed by recipient.",
+        },
+      });
+    }
+  }
 
   import("../notifications/notifications.service").then(({ notificationsService }) => {
     notificationsService.createNotification({
@@ -419,3 +511,69 @@ export const deleteOrder = async (id: string) => {
   await prisma.orderItem.deleteMany({ where: { orderId: id } });
   return prisma.order.delete({ where: { id } });
 };
+
+export async function refundCancelledOrder(
+  orderId: string,
+  refundMethod: "RAZORPAY" | "MANUAL",
+  transactionReference?: string
+) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+  });
+
+  if (!order) throw new AppError("Order not found.", 404);
+  if (order.status !== "CANCELLED") {
+    throw new AppError("Only cancelled orders can be refunded.", 400);
+  }
+  if (order.paymentStatus !== "PAID") {
+    throw new AppError("Only paid orders can be refunded.", 400);
+  }
+
+  if (refundMethod === "RAZORPAY") {
+    const transaction = await prisma.paymentTransaction.findFirst({
+      where: { orderId, status: "SUCCESS" },
+      orderBy: { attemptNumber: "desc" },
+    });
+    if (!transaction || !transaction.gatewayPaymentId) {
+      throw new AppError("No successful online payment transaction found for this order. Please process refund manually.", 400);
+    }
+
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!keyId || !keySecret) {
+      throw new AppError("Razorpay credentials are not configured.", 500);
+    }
+
+    const rzp = new Razorpay({
+      key_id: keyId,
+      key_secret: keySecret,
+    });
+
+    try {
+      const amountInPaise = Math.round(Number(order.total) * 100);
+      await rzp.payments.refund(transaction.gatewayPaymentId, {
+        amount: amountInPaise,
+        notes: {
+          orderId,
+          type: "CANCEL_REFUND",
+        },
+      });
+    } catch (err: any) {
+      throw new AppError(`Razorpay Refund failed: ${err.message || err.description || err}`, 400);
+    }
+  } else {
+    if (!transactionReference?.trim()) {
+      throw new AppError("Manual Transfer Reference / UTR Number is required for manual refund.", 400);
+    }
+  }
+
+  const updatedOrder = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      paymentStatus: "REFUNDED",
+      cancelTransactionReference: transactionReference || "RAZORPAY_REFUND",
+    } as any,
+  });
+
+  return updatedOrder;
+}

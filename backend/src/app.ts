@@ -58,6 +58,7 @@ import publicBannerRoutes from "./modules/banners/publicBanners.routes";
 
 import reviewRoutes from "./modules/reviews/reviews.routes";
 import paymentMethodsRoutes from "./modules/payment/paymentMethods.routes";
+import { customerRouter as orderReturnCustomerRoutes, adminRouter as orderReturnAdminRoutes } from "./modules/orderReturns/orderReturns.routes";
 
 const app = express();
 
@@ -127,6 +128,7 @@ app.use(`${API}/quotes`, quoteRoutes);
 app.use(`${API}/contact-submissions`, contactSubmissionRoutes);
 app.use(`${API}/newsletter`, newsletterAdminRoutes);
 app.use(`${API}/orders`, orderRoutes);
+app.use(`${API}/order-returns`, orderReturnAdminRoutes);
 app.use(`${API}/customers`, customerRoutes);
 app.use(`${API}/customer-roles`, customerRoleRoutes);
 app.use(`${API}/tiers`, tierRoutes);
@@ -158,6 +160,7 @@ app.use("/api/shipping", publicShippingRoutes);
 app.use("/api/coupons", publicCouponRoutes);
 app.use("/api/blogs", publicBlogRoutes);
 app.use("/api/banners", publicBannerRoutes);
+app.use("/api/customer/order-returns", orderReturnCustomerRoutes);
 
 // ─── 404 ─────────────────────────────────────────────────
 app.use((_req, res) => {

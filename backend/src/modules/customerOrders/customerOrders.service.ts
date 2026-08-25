@@ -736,6 +736,15 @@ export interface CustomerOrderTrackingResponse {
   createdAt: string;
   isMultiShipment: boolean;
   shipments: CustomerTrackingShipment[];
+  returns?: any[];
+  paymentMethod?: string | null;
+  paymentStatus?: string;
+  isReturnable?: boolean;
+  returnWindowDays?: number;
+  deliveryDate?: string | null;
+  cancelReason?: string | null;
+  cancelRefundDetails?: string | null;
+  cancelTransactionReference?: string | null;
 }
 
 export function getShipmentStatusLabel(status: import("@prisma/client").ShipmentStatus): string {
@@ -786,6 +795,15 @@ export async function getCustomerOrderTracking(
           product: true,
         },
       },
+      returns: {
+        include: {
+          items: {
+            include: {
+              orderItem: true,
+            },
+          },
+        },
+      },
       shipments: {
         include: {
           provider: true,
@@ -800,6 +818,71 @@ export async function getCustomerOrderTracking(
 
   if (!order) {
     throw new AppError("Order not found.", 404);
+  }
+
+  // Simulation: Progress shipment status on each get tracking fetch for testing in local environment
+  for (const shipment of order.shipments) {
+    if (shipment.trackingNumber && shipment.status !== "DELIVERED" && shipment.status !== "CANCELLED" && shipment.status !== "FAILED") {
+      let nextStatus: import("@prisma/client").ShipmentStatus | null = null;
+      let eventDesc = "";
+      let eventLoc = "";
+
+      if (shipment.status === "CREATED") {
+        nextStatus = "LABEL_GENERATED";
+        eventDesc = "Shipment label generated and package is ready for pickup.";
+        eventLoc = "Delhi Warehouse";
+      } else if (shipment.status === "LABEL_GENERATED") {
+        nextStatus = "PICKED_UP";
+        eventDesc = "Package has been picked up by the courier partner.";
+        eventLoc = "Delhi Hub";
+      } else if (shipment.status === "PICKED_UP") {
+        nextStatus = "IN_TRANSIT";
+        eventDesc = "Shipment in transit. Arrived at the destination sorting facility.";
+        eventLoc = "Jaipur Sorting Center";
+      } else if (shipment.status === "IN_TRANSIT") {
+        nextStatus = "OUT_FOR_DELIVERY";
+        eventDesc = "Package is out for delivery with the courier agent.";
+        eventLoc = "Jaipur Sector 5";
+      } else if (shipment.status === "OUT_FOR_DELIVERY") {
+        nextStatus = "DELIVERED";
+        eventDesc = "Shipment delivered successfully. Signed by recipient.";
+        eventLoc = "Jaipur Destination";
+      }
+
+      if (nextStatus) {
+        await prisma.shipment.update({
+          where: { id: shipment.id },
+          data: { status: nextStatus },
+        });
+
+        const newEvent = await prisma.shipmentEvent.create({
+          data: {
+            shipmentId: shipment.id,
+            status: nextStatus,
+            location: eventLoc,
+            description: eventDesc,
+          },
+        });
+
+        if (nextStatus === "DELIVERED") {
+          const nextPaymentStatus = order.paymentMethod === "PAY_ON_DELIVERY" ? "PAID" : undefined;
+          await prisma.order.update({
+            where: { id: order.id },
+            data: { 
+              status: "DELIVERED",
+              ...(nextPaymentStatus && { paymentStatus: nextPaymentStatus }),
+            },
+          });
+          order.status = "DELIVERED";
+        }
+
+        // Update in-memory objects to return the single new status and event immediately
+        shipment.status = nextStatus;
+        shipment.events.push(newEvent);
+        
+        break; // Only progress exactly ONE step per API call
+      }
+    }
   }
 
   const isMultiShipment = order.shipments.length > 1;
@@ -860,6 +943,43 @@ export async function getCustomerOrderTracking(
     };
   });
 
+  // Calculate delivery date
+  const latestDeliveryEvent = await prisma.shipmentEvent.findFirst({
+    where: {
+      shipment: { orderId: order.id },
+      status: "DELIVERED",
+    },
+    orderBy: { timestamp: "desc" },
+  });
+  const deliveryDate = latestDeliveryEvent?.timestamp || (order.status === "DELIVERED" || order.status === "RETURNED" ? order.updatedAt : null);
+
+  // Fetch return window days setting
+  const returnWindowSetting = await prisma.setting.findUnique({
+    where: { key: "return_window_days" },
+  });
+  const returnWindowDays = returnWindowSetting ? parseInt(returnWindowSetting.value, 10) : 7;
+
+  let isReturnable = false;
+  if (order.status === "DELIVERED" || order.status === "RETURNED" || order.status === "RETURN_REQUESTED") {
+    if (deliveryDate) {
+      const now = new Date();
+      const diffTime = Math.abs(now.getTime() - deliveryDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays <= returnWindowDays) {
+        // Check if there is any returnable quantity left
+        let totalOrderedQty = order.items.reduce((sum, item) => sum + item.quantity, 0);
+        let totalReturnedQty = order.returns
+          .filter((ret) => ret.status !== "REJECTED" && ret.status !== ("CANCELLED" as any))
+          .reduce((sum, ret) => {
+            return sum + ret.items.reduce((itemSum, item) => itemSum + item.quantity, 0);
+          }, 0);
+        if (totalOrderedQty > totalReturnedQty) {
+          isReturnable = true;
+        }
+      }
+    }
+  }
+
   return {
     orderId: order.id,
     orderNumber: order.orderNumber,
@@ -867,7 +987,62 @@ export async function getCustomerOrderTracking(
     createdAt: order.createdAt.toISOString(),
     isMultiShipment,
     shipments: mappedShipments,
+    returns: order.returns,
+    paymentMethod: order.paymentMethod,
+    paymentStatus: order.paymentStatus,
+    isReturnable,
+    returnWindowDays,
+    deliveryDate: deliveryDate ? deliveryDate.toISOString() : null,
+    cancelReason: (order as any).cancelReason || null,
+    cancelRefundDetails: (order as any).cancelRefundDetails || null,
+    cancelTransactionReference: (order as any).cancelTransactionReference || null,
   };
+}
+
+export async function cancelCustomerOrder(
+  customerId: string,
+  orderId: string,
+  input: { reason: string; refundDetails?: string }
+) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+  });
+
+  if (!order) throw new AppError("Order not found.", 404);
+  if (order.customerId !== customerId) throw new AppError("Access denied.", 403);
+
+  const cancellableStatuses = ["PENDING", "CONFIRMED", "PROCESSING"];
+  if (!cancellableStatuses.includes(order.status)) {
+    throw new AppError(`Order cannot be cancelled as it is already ${order.status.toLowerCase()}.`, 400);
+  }
+
+  if (order.paymentStatus === "PAID" && !input.refundDetails?.trim()) {
+    throw new AppError("Refund details are required for prepaid orders.", 400);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await releaseOrderReservation(orderId, tx);
+
+    await tx.order.update({
+      where: { id: orderId },
+      data: {
+        status: "CANCELLED",
+        cancelReason: input.reason,
+        cancelRefundDetails: input.refundDetails || null,
+      } as any,
+    });
+  });
+
+  import("../notifications/notifications.service").then(({ notificationsService }) => {
+    notificationsService.createNotification({
+      title: "Order Cancelled by Customer",
+      message: `Customer cancelled order #${order.orderNumber}. Reason: ${input.reason}`,
+      type: "ORDER",
+      targetType: "ALL_ADMINS",
+    }).catch(console.error);
+  });
+
+  return { success: true };
 }
 
 
