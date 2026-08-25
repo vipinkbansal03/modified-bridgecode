@@ -16,5 +16,6 @@ router.put("/:id/shipping", requirePermission("orders.manage"), C.updateShipping
 router.post("/:id/ship", requirePermission("orders.manage"), C.ship);
 router.post("/:id/deliver", requirePermission("orders.manage"), C.deliver);
 router.delete("/:id", requirePermission("orders.delete", "orders.manage"), C.deleteOne);
+router.post("/:id/refund-cancelled", requirePermission("orders.manage"), C.refundCancelledOrder);
 
 export default router;

@@ -28,6 +28,7 @@ import {
   Users,
   Warehouse,
   Bell,
+  RotateCw,
 } from "lucide-react";
 
 export interface SidebarSubItem {
@@ -62,6 +63,7 @@ export const sidebarSections: SidebarSection[] = [
     items: [
       { label: "Orders", href: "/admin/orders", icon: ShoppingCart, permission: "orders.view" },
       { label: "Quote Requests", href: "/admin/quotes", icon: FileText, permission: "quotes.view" },
+      { label: "Returns & Refunds", href: "/admin/returns", icon: RotateCw, permission: "orders.view" },
       { label: "Products", href: "/admin/products", icon: Package, permission: "products.view" },
       { label: "Inventory", href: "/admin/inventory", icon: Warehouse, permission: "inventory.view" },
       { label: "Warehouses", href: "/admin/warehouses", icon: Map, permission: "inventory.manage" },

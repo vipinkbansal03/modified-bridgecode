@@ -670,12 +670,84 @@ export interface CustomerOrderTrackingResponse {
   orderId: string;
   orderNumber: string;
   orderStatus: string;
+  paymentMethod: string;
+  paymentStatus?: string;
   createdAt: string;
   isMultiShipment: boolean;
   shipments: CustomerTrackingShipment[];
+  returns?: {
+    id: string;
+    status: string;
+    reason: string;
+    notes: string | null;
+    adminNotes: string | null;
+    refundDetails: string | null;
+    transactionReference: string | null;
+    refundAmount: number | string;
+    createdAt: string;
+    attachmentUrls: string[];
+    items: {
+      id: string;
+      orderItemId: string;
+      quantity: number;
+      orderItem: {
+        title: string;
+        sku: string | null;
+      };
+    }[];
+  }[];
+  isReturnable?: boolean;
+  returnWindowDays?: number;
+  deliveryDate?: string | null;
+  cancelReason?: string | null;
+  cancelRefundDetails?: string | null;
+  cancelTransactionReference?: string | null;
 }
 
 export async function fetchCustomerOrderTracking(orderId: string): Promise<CustomerOrderTrackingResponse> {
   const res = await customerApi.get(`/orders/${orderId}/tracking`);
+  return res.data.data;
+}
+
+export interface CustomerReturnRequestPayload {
+  orderId: string;
+  reason: string;
+  notes?: string;
+  refundDetails?: string;
+  attachments?: File[];
+  items: { orderItemId: string; quantity: number }[];
+}
+
+export async function submitCustomerReturnRequest(payload: CustomerReturnRequestPayload) {
+  const formData = new FormData();
+  formData.append("orderId", payload.orderId);
+  formData.append("reason", payload.reason);
+  if (payload.notes) formData.append("notes", payload.notes);
+  if (payload.refundDetails) formData.append("refundDetails", payload.refundDetails);
+  if (payload.attachments && payload.attachments.length > 0) {
+    payload.attachments.forEach((file) => {
+      formData.append("attachments", file);
+    });
+  }
+  formData.append("items", JSON.stringify(payload.items));
+
+  const res = await customerApi.post("/order-returns", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data.data;
+}
+
+export async function listCustomerReturns() {
+  const res = await customerApi.get("/order-returns");
+  return res.data.data;
+}
+
+export async function cancelCustomerReturnRequest(returnId: string) {
+  const res = await customerApi.post(`/order-returns/${returnId}/cancel`);
+  return res.data.data;
+}
+
+export async function cancelCustomerOrder(orderId: string, payload: { reason: string; refundDetails?: string }) {
+  const res = await customerApi.post(`/orders/${orderId}/cancel`, payload);
   return res.data.data;
 }

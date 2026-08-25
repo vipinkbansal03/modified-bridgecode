@@ -13,6 +13,8 @@ import {
   Plus,
   Truck,
   UserRound,
+  RotateCcw,
+  X,
 } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { Button } from "@/components/ui/Button";
@@ -245,6 +247,9 @@ export default function AccountPage() {
           <div className="flex flex-wrap gap-3 mt-4 sm:mt-0">
             <Button href="/account/notifications" variant="outline">
               Notifications
+            </Button>
+            <Button href="/account/returns" variant="outline">
+              Returns & Refunds
             </Button>
             <Button href="/products" variant="outline">
               Continue shopping
@@ -600,6 +605,24 @@ export default function AccountPage() {
                                 <Truck size={14} className="text-brand" />
                                 Track Order
                               </Link>
+                              {["PENDING", "CONFIRMED", "PROCESSING"].includes(order.status) && (
+                                <Link
+                                  href={`/account/orders/${order.id}?cancel=true`}
+                                  className="inline-flex h-9 items-center gap-1.5 rounded-md border border-rose-200 bg-rose-50 px-3.5 text-[13px] font-semibold text-rose-600 hover:bg-rose-100 shadow-sm transition-colors"
+                                >
+                                  <X size={14} className="text-rose-600" />
+                                  Cancel Order
+                                </Link>
+                              )}
+                              {(order.status === "DELIVERED" || order.status === "RETURNED") && (
+                                <Link
+                                  href={`/account/orders/${order.id}?return=true`}
+                                  className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line bg-white px-3.5 text-[13px] font-semibold text-rose-600 hover:bg-rose-50 shadow-sm transition-colors"
+                                >
+                                  <RotateCcw size={14} className="text-rose-600" />
+                                  Return Order
+                                </Link>
+                              )}
                               {order.paymentStatus === "PENDING" && order.status === "PENDING" && (
                                 <Link
                                   href={`/orders/${order.id}/pay`}

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, Download, Truck, Package, ExternalLink, RotateCw, Eye, Pencil } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { StatusBadge, AdminSelect, AdminInput, useToast } from "@/components/admin/AdminComponents";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useAdminOrder,
   useUpdateOrderStatus,
@@ -18,8 +19,12 @@ import {
   useDeleteShipment,
   useTrackShipment,
   useCancelShipment,
+  useUpdateShipment,
+  useUpdateShipmentStatus,
+  useRefundCancelledOrder,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
+import { Modal } from "@/components/ui/Modal";
 
 const ORDER_STATUS_OPTIONS = [
   { value: "PENDING", label: "Pending" },
@@ -27,6 +32,8 @@ const ORDER_STATUS_OPTIONS = [
   { value: "PROCESSING", label: "Processing" },
   { value: "SHIPPED", label: "Shipped" },
   { value: "DELIVERED", label: "Delivered" },
+  { value: "RETURN_REQUESTED", label: "Return Requested" },
+  { value: "RETURNED", label: "Returned" },
   { value: "CANCELLED", label: "Cancelled" },
 ];
 
@@ -129,6 +136,10 @@ interface OrderDetail {
   updatedAt: string;
   items: OrderItem[];
   paymentTransactions?: PaymentTransactionDetail[];
+  returns?: { id: string; status: string; reason: string; refundAmount: number | string }[];
+  cancelReason?: string | null;
+  cancelRefundDetails?: string | null;
+  cancelTransactionReference?: string | null;
 }
 
 export default function OrderDetailPage() {
@@ -162,6 +173,98 @@ export default function OrderDetailPage() {
   const { mutate: deleteShipment, isPending: deletingShipment } = useDeleteShipment();
   const { mutate: trackShipment, isPending: tracking } = useTrackShipment();
   const { mutate: cancelShipment, isPending: cancelling } = useCancelShipment();
+  const qc = useQueryClient();
+  const { mutate: updateShipment, isPending: updatingShipment } = useUpdateShipment();
+  const { mutate: updateShipmentStatus, isPending: updatingShipmentStatus } = useUpdateShipmentStatus();
+
+  const { mutate: refundCancelledOrder, isPending: refundingCancelled } = useRefundCancelledOrder();
+  const [cancelRefundMethod, setCancelRefundMethod] = useState<"RAZORPAY" | "MANUAL">("RAZORPAY");
+  const [cancelTransactionReference, setCancelTransactionReference] = useState("");
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    onConfirm: (() => void) | null;
+    isAlertOnly?: boolean;
+  }>({
+    open: false,
+    title: "",
+    message: "",
+    onConfirm: null,
+    isAlertOnly: false,
+  });
+
+  const [editingShipmentId, setEditingShipmentId] = useState<string | null>(null);
+  const [editTrackingNumber, setEditTrackingNumber] = useState("");
+  const [editStatus, setEditStatus] = useState("");
+
+  function handleUpdateShipment(shipmentId: string) {
+    updateShipment(
+      { id: shipmentId, trackingNumber: editTrackingNumber, awbNumber: editTrackingNumber },
+      {
+        onSuccess: () => {
+          updateShipmentStatus(
+            { id: shipmentId, status: editStatus },
+            {
+              onSuccess: () => {
+                setEditingShipmentId(null);
+                showToast("Shipment updated successfully.", "success");
+                qc.invalidateQueries({ queryKey: ["admin-order", id] });
+                qc.invalidateQueries({ queryKey: ["admin-order-shipments", id] });
+              },
+              onError: (err) => {
+                showToast(getAdminErrorMessage(err, "Failed to update shipment status"), "error");
+              },
+            }
+          );
+        },
+        onError: (err) => {
+          showToast(getAdminErrorMessage(err, "Failed to update shipment details"), "error");
+        },
+      }
+    );
+  }
+
+  const handleProcessRefundCancelledOrder = () => {
+    if (!order) return;
+    if (cancelRefundMethod === "MANUAL" && !cancelTransactionReference.trim()) {
+      setConfirmModal({
+        open: true,
+        title: "Validation Error",
+        message: "Please enter the manual transfer transaction reference / UTR number.",
+        onConfirm: () => setConfirmModal((prev) => ({ ...prev, open: false })),
+        isAlertOnly: true,
+      });
+      return;
+    }
+
+    setConfirmModal({
+      open: true,
+      title: "Confirm Cancellation Refund",
+      message: `Are you sure you want to process the refund for this cancelled order using the ${
+        cancelRefundMethod === "RAZORPAY" ? "Razorpay Automatic Refund API" : "Offline Manual Transfer"
+      } method?`,
+      onConfirm: () => {
+        setConfirmModal((prev) => ({ ...prev, open: false }));
+        refundCancelledOrder(
+          {
+            id: order.id,
+            refundMethod: cancelRefundMethod,
+            transactionReference: cancelRefundMethod === "MANUAL" ? cancelTransactionReference.trim() : undefined,
+          },
+          {
+            onSuccess: () => {
+              showToast("Cancelled order refund processed successfully.", "success");
+              setCancelTransactionReference("");
+            },
+            onError: (err) => {
+              showToast(getAdminErrorMessage(err, "Failed to process cancellation refund."), "error");
+            },
+          }
+        );
+      },
+    });
+  };
 
   const [showNewShipment, setShowNewShipment] = useState(false);
   const [newShipmentProvider, setNewShipmentProvider] = useState("");
@@ -346,6 +449,142 @@ export default function OrderDetailPage() {
         <div className="lg:col-span-2">
           {activeTab === "Overview" && (
             <div className="space-y-5">
+              {order.status === "CANCELLED" && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50/50 p-5 space-y-4 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 shrink-0 bg-rose-100 p-1.5 rounded-full text-rose-700">
+                      <Package size={16} className="text-rose-600" />
+                    </div>
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <strong className="font-semibold block text-[15px] text-rose-900">
+                          Cancellation details
+                        </strong>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
+                          order.paymentStatus === "REFUNDED" ? "bg-emerald-100 text-emerald-800" :
+                          order.paymentStatus === "PAID" ? "bg-amber-100 text-amber-800 animate-pulse" :
+                          "bg-grey text-steel"
+                        }`}>
+                          {order.paymentStatus === "REFUNDED" ? "Refunded" :
+                           order.paymentStatus === "PAID" ? "Refund Pending" :
+                           "No Refund Needed"}
+                        </span>
+                      </div>
+                      
+                      {order.cancelReason && (
+                        <p className="text-[13px] text-rose-800 leading-normal">
+                          <span className="font-bold">Cancellation Reason:</span> {order.cancelReason}
+                        </p>
+                      )}
+
+                      {order.cancelRefundDetails && (
+                        <div className="bg-white border border-rose-200/60 p-3 rounded text-[13px] text-rose-950 font-medium">
+                          <span className="font-bold text-rose-900 block mb-0.5">Customer Refund Details:</span>
+                          {order.cancelRefundDetails}
+                        </div>
+                      )}
+
+                      {order.paymentStatus === "REFUNDED" && order.cancelTransactionReference && (
+                        <div className="bg-emerald-50 border border-emerald-200/60 p-3 rounded text-[13px] text-emerald-950 font-bold">
+                          <span className="font-bold text-emerald-900 block mb-0.5">Refund Transaction Ref / UTR Number:</span>
+                          {order.cancelTransactionReference}
+                        </div>
+                      )}
+
+                      {order.paymentStatus === "PAID" && (
+                        <div className="border-t border-rose-200/60 pt-4 mt-3 space-y-3">
+                          <span className="font-bold text-[13.5px] text-rose-900 block">Process Refund:</span>
+                          
+                          {(order.paymentProvider === "RAZORPAY" || order.paymentMethod?.toUpperCase().includes("RAZORPAY")) ? (
+                            <div className="flex gap-4 mb-2">
+                              <label className="flex items-center gap-1.5 text-[13px] font-medium text-ink cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="adminCancelRefundMethod"
+                                  checked={cancelRefundMethod === "RAZORPAY"}
+                                  onChange={() => setCancelRefundMethod("RAZORPAY")}
+                                  className="h-4 w-4 text-brand focus:ring-brand"
+                                />
+                                Razorpay Automatic Refund API
+                              </label>
+                              <label className="flex items-center gap-1.5 text-[13px] font-medium text-ink cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="adminCancelRefundMethod"
+                                  checked={cancelRefundMethod === "MANUAL"}
+                                  onChange={() => setCancelRefundMethod("MANUAL")}
+                                  className="h-4 w-4 text-brand focus:ring-brand"
+                                />
+                                Offline Manual Transfer (UPI/Bank)
+                              </label>
+                            </div>
+                          ) : (
+                            <p className="text-[12.5px] text-rose-800">
+                              Payment was made offline or via manual COD. Processing refund via Offline Manual Transfer.
+                            </p>
+                          )}
+
+                          {cancelRefundMethod === "MANUAL" && (
+                            <div className="space-y-1">
+                              <label className="text-[12px] font-semibold text-ink block">Manual Transfer Ref / UTR Number:</label>
+                              <input
+                                type="text"
+                                value={cancelTransactionReference}
+                                onChange={(e) => setCancelTransactionReference(e.target.value)}
+                                placeholder="UTR1234567890"
+                                className="w-full max-w-md rounded border border-line bg-white px-3 py-2 text-[13px] text-ink focus:border-brand focus:outline-none"
+                              />
+                            </div>
+                          )}
+
+                          <button
+                            type="button"
+                            disabled={refundingCancelled}
+                            onClick={handleProcessRefundCancelledOrder}
+                            className="inline-flex h-9 items-center justify-center rounded bg-emerald-600 px-4 text-[12.5px] font-semibold text-white hover:bg-emerald-700 transition shadow-sm disabled:opacity-60"
+                          >
+                            {refundingCancelled ? "Processing..." : "Process Cancelled Order Refund"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {order.returns && order.returns.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-4 text-[13.5px] text-amber-900 shadow-sm flex items-start gap-3">
+                  <div className="mt-0.5 shrink-0 bg-amber-100 p-1.5 rounded-full text-amber-700">
+                    <RotateCw className="animate-spin-slow" size={16} />
+                  </div>
+                  <div className="flex-1">
+                    <strong className="font-semibold block text-[14px] text-amber-900">
+                      Active Return Requests ({order.returns.length})
+                    </strong>
+                    <div className="mt-2 space-y-2">
+                      {order.returns.map((ret) => (
+                        <div key={ret.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-amber-200/50 pt-2 first:border-t-0 first:pt-0">
+                          <div>
+                            <span className="font-medium text-amber-900">Reason: {ret.reason}</span>
+                            <span className="mx-2 text-amber-400">|</span>
+                            <span className="text-amber-800">Refund amount: {order.currency.symbol}{Number(ret.refundAmount).toFixed(2)}</span>
+                            <span className="mx-2 text-amber-400">|</span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">
+                              {ret.status}
+                            </span>
+                          </div>
+                          <Link
+                            href={`/admin/returns/${ret.id}`}
+                            className="text-brand hover:underline font-semibold text-[13px]"
+                          >
+                            Process Return &rarr;
+                          </Link>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
               {isEdit && (
                 <>
                   <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-3">
@@ -504,21 +743,82 @@ export default function OrderDetailPage() {
                   )}
                 </div>
               )}
-              {shipments.map((s) => (
-                <div key={s.id} className="rounded-lg border border-[#E6E6E6] bg-white overflow-hidden">
-                  <div className="flex justify-between border-b border-[#E6E6E6] px-5 py-3.5">
-                    <div className="flex items-center gap-3">
-                      <Truck size={15} />
-                      <span className="text-[14px] font-semibold">{s.provider?.displayName ?? "Shipping"}</span>
-                      <StatusBadge status={s.status} />
+              {shipments.map((s) => {
+                const isEditing = editingShipmentId === s.id;
+                return (
+                  <div key={s.id} className="rounded-lg border border-[#E6E6E6] bg-white overflow-hidden">
+                    <div className="flex justify-between border-b border-[#E6E6E6] px-5 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <Truck size={15} />
+                        <span className="text-[14px] font-semibold">{s.provider?.displayName ?? "Shipping"}</span>
+                        <StatusBadge status={s.status} />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {!isEditing && (
+                          <button
+                            onClick={() => {
+                              setEditingShipmentId(s.id);
+                              setEditTrackingNumber(s.trackingNumber || "");
+                              setEditStatus(s.status);
+                            }}
+                            className="p-1 text-[#6B6B6B] hover:text-[#111] hover:bg-[#F0F0F0] rounded transition"
+                            title="Edit Shipment"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="px-5 py-4 space-y-2">
+                      {isEditing ? (
+                        <div className="space-y-3">
+                          <AdminInput
+                            label="Tracking Number"
+                            value={editTrackingNumber}
+                            onChange={(e) => setEditTrackingNumber(e.target.value)}
+                            placeholder="Enter tracking number"
+                          />
+                          <AdminSelect
+                            label="Shipment Status"
+                            options={[
+                              { value: "CREATED", label: "Created" },
+                              { value: "LABEL_GENERATED", label: "Label Generated" },
+                              { value: "PICKED_UP", label: "Picked Up" },
+                              { value: "IN_TRANSIT", label: "In Transit" },
+                              { value: "OUT_FOR_DELIVERY", label: "Out For Delivery" },
+                              { value: "DELIVERED", label: "Delivered" },
+                              { value: "FAILED", label: "Failed" },
+                              { value: "CANCELLED", label: "Cancelled" },
+                            ]}
+                            value={editStatus}
+                            onChange={(e) => setEditStatus(e.target.value)}
+                          />
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              onClick={() => handleUpdateShipment(s.id)}
+                              disabled={updatingShipment || updatingShipmentStatus}
+                              className="rounded-md bg-[#111] px-3 py-1.5 text-[12px] font-medium text-white disabled:opacity-50"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingShipmentId(null)}
+                              className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12px] font-medium text-[#111]"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {s.trackingNumber && <InfoRow label="Tracking #" value={s.trackingNumber} />}
+                          {s.labelUrl && <a href={s.labelUrl} target="_blank" className="text-brand text-[13px] hover:underline">View Label</a>}
+                        </>
+                      )}
                     </div>
                   </div>
-                  <div className="px-5 py-4 space-y-2">
-                    {s.trackingNumber && <InfoRow label="Tracking #" value={s.trackingNumber} />}
-                    {s.labelUrl && <a href={s.labelUrl} target="_blank" className="text-brand text-[13px] hover:underline">View Label</a>}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -651,6 +951,43 @@ export default function OrderDetailPage() {
           )}
         </div>
       </div>
+      <Modal
+        open={confirmModal.open}
+        onClose={() => setConfirmModal((prev) => ({ ...prev, open: false }))}
+        title={confirmModal.title}
+        footer={
+          confirmModal.isAlertOnly ? (
+            <button
+              type="button"
+              onClick={() => setConfirmModal((prev) => ({ ...prev, open: false }))}
+              className="inline-flex h-9 items-center justify-center rounded-md bg-[#111] px-4 text-[12.5px] font-semibold text-white hover:bg-[#222] transition shadow-sm"
+            >
+              OK
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setConfirmModal((prev) => ({ ...prev, open: false }))}
+                className="inline-flex h-9 items-center justify-center rounded-md border border-line bg-white px-4 text-[12.5px] font-semibold text-ink hover:bg-grey transition shadow-sm"
+              >
+                No, Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmModal.onConfirm || undefined}
+                className="inline-flex h-9 items-center justify-center rounded-md bg-[#111] px-4 text-[12.5px] font-semibold text-white hover:bg-[#222] transition shadow-sm"
+              >
+                Yes, Confirm
+              </button>
+            </>
+          )
+        }
+      >
+        <div className="p-6 text-[13.5px] text-[#444] leading-relaxed">
+          {confirmModal.message}
+        </div>
+      </Modal>
     </AdminLayout>
   );
 }

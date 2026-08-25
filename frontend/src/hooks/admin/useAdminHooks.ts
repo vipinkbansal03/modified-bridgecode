@@ -2260,6 +2260,7 @@ export const useShipOrder = () => {
     onSuccess: (_d, { id }) => {
       qc.invalidateQueries({ queryKey: ["admin-orders"] });
       qc.invalidateQueries({ queryKey: ["admin-order", id] });
+      qc.invalidateQueries({ queryKey: ["admin-order-shipments", id] });
     },
   });
 };
@@ -2271,6 +2272,7 @@ export const useDeliverOrder = () => {
     onSuccess: (_d, id) => {
       qc.invalidateQueries({ queryKey: ["admin-orders"] });
       qc.invalidateQueries({ queryKey: ["admin-order", id] });
+      qc.invalidateQueries({ queryKey: ["admin-order-shipments", id] });
     },
   });
 };
@@ -2408,6 +2410,7 @@ export const useUpdateShipment = () => {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["admin-shipments"] });
       qc.invalidateQueries({ queryKey: ["admin-shipment", vars.id] });
+      qc.invalidateQueries({ queryKey: ["admin-order-shipments"] });
     },
   });
 };
@@ -2420,6 +2423,7 @@ export const useUpdateShipmentStatus = () => {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["admin-shipments"] });
       qc.invalidateQueries({ queryKey: ["admin-shipment", vars.id] });
+      qc.invalidateQueries({ queryKey: ["admin-order-shipments"] });
     },
   });
 };
@@ -2787,8 +2791,77 @@ export const useUpdateSubscriberStatus = () => {
       adminApi
         .patch(`/newsletter/subscribers/${id}/status`, { status })
         .then((r) => r.data),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["admin-newsletter-subscribers"] }),
+  });
+};
+
+export const useAdminOrderReturns = (query: Record<string, unknown> = {}) =>
+  useQuery({
+    queryKey: ["admin-order-returns", query],
+    queryFn: () => adminApi.get("/order-returns", { params: query }).then((r) => r.data),
+  });
+
+export const useAdminOrderReturn = (id: string) =>
+  useQuery({
+    queryKey: ["admin-order-return", id],
+    queryFn: () => adminApi.get(`/order-returns/${id}`).then((r) => r.data.data),
+    enabled: !!id,
+  });
+
+export const useUpdateOrderReturnStatus = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      status,
+      adminNotes,
+      refundMethod,
+      transactionReference,
+    }: {
+      id: string;
+      status: string;
+      adminNotes?: string;
+      refundMethod?: string;
+      transactionReference?: string;
+    }) =>
+      adminApi
+        .put(`/order-returns/${id}/status`, {
+          status,
+          adminNotes,
+          refundMethod,
+          transactionReference,
+        })
+        .then((r) => r.data),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["admin-order-returns"] });
+      qc.invalidateQueries({ queryKey: ["admin-order-return", vars.id] });
+      qc.invalidateQueries({ queryKey: ["admin-orders"] });
+      qc.invalidateQueries({ queryKey: ["admin-order"] });
+    },
+  });
+};
+
+export const useRefundCancelledOrder = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      refundMethod,
+      transactionReference,
+    }: {
+      id: string;
+      refundMethod: "RAZORPAY" | "MANUAL";
+      transactionReference?: string;
+    }) =>
+      adminApi
+        .post(`/orders/${id}/refund-cancelled`, {
+          refundMethod,
+          transactionReference,
+        })
+        .then((r) => r.data),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["admin-orders"] });
+      qc.invalidateQueries({ queryKey: ["admin-order", vars.id] });
+    },
   });
 };
 
