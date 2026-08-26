@@ -15,7 +15,8 @@ router.put("/:id/payment-status", requirePermission("orders.manage"), C.updatePa
 router.put("/:id/shipping", requirePermission("orders.manage"), C.updateShipping);
 router.post("/:id/ship", requirePermission("orders.manage"), C.ship);
 router.post("/:id/deliver", requirePermission("orders.manage"), C.deliver);
-router.delete("/:id", requirePermission("orders.delete", "orders.manage"), C.deleteOne);
 router.post("/:id/refund-cancelled", requirePermission("orders.manage"), C.refundCancelledOrder);
+router.delete("/:id/permanent", requirePermission("orders.manage"), C.permanentDelete);
+router.delete("/:id", requirePermission("orders.manage"), C.softDelete);
 
 export default router;

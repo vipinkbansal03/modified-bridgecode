@@ -225,11 +225,17 @@ async function main() {
   }
 
   const password = await bcrypt.hash(adminPassword, 12);
-  await prisma.user.upsert({
-    where: { email: adminEmail },
-    update: {},
-    create: { name: "Super Admin", email: adminEmail, password, roleId: superAdminRole.id },
-  });
+  let adminUser = await prisma.user.findFirst({ where: { email: adminEmail, deletedAt: null } });
+  if (!adminUser) {
+    adminUser = await prisma.user.create({
+      data: { name: "Super Admin", email: adminEmail, password, roleId: superAdminRole.id },
+    });
+  } else {
+    adminUser = await prisma.user.update({
+      where: { id: adminUser.id },
+      data: { roleId: superAdminRole.id },
+    });
+  }
 
   // ─── Base currency ──────────────────────────────────────
   const usd = await prisma.currency.upsert({
@@ -464,17 +470,29 @@ async function main() {
     create: { key: "DEALER", name: "Dealer / B2B Wholesale", description: "B2B wholesale dealers and distributors", status: "ACTIVE", sortOrder: 3 },
   });
 
-  const molarTubeCategory = await prisma.category.upsert({
-    where: { slug: "molar-tubes" },
-    update: { name: "Molar Tubes", status: "ACTIVE" },
-    create: { name: "Molar Tubes", slug: "molar-tubes", description: "Bondable and weldable molar tubes.", status: "ACTIVE", sortOrder: 1 },
-  });
+  let molarTubeCategory = await prisma.category.findFirst({ where: { slug: "molar-tubes", deletedAt: null } });
+  if (!molarTubeCategory) {
+    molarTubeCategory = await prisma.category.create({
+      data: { name: "Molar Tubes", slug: "molar-tubes", description: "Bondable and weldable molar tubes.", status: "ACTIVE", sortOrder: 1 },
+    });
+  } else {
+    molarTubeCategory = await prisma.category.update({
+      where: { id: molarTubeCategory.id },
+      data: { name: "Molar Tubes", status: "ACTIVE" },
+    });
+  }
 
-  const nitiCategory = await prisma.category.upsert({
-    where: { slug: "niti-wires" },
-    update: { name: "NiTi Wires", status: "ACTIVE" },
-    create: { name: "NiTi Wires", slug: "niti-wires", description: "Nickel titanium archwires.", status: "ACTIVE", sortOrder: 2 },
-  });
+  let nitiCategory = await prisma.category.findFirst({ where: { slug: "niti-wires", deletedAt: null } });
+  if (!nitiCategory) {
+    nitiCategory = await prisma.category.create({
+      data: { name: "NiTi Wires", slug: "niti-wires", description: "Nickel titanium archwires.", status: "ACTIVE", sortOrder: 2 },
+    });
+  } else {
+    nitiCategory = await prisma.category.update({
+      where: { id: nitiCategory.id },
+      data: { name: "NiTi Wires", status: "ACTIVE" },
+    });
+  }
 
   const attributeCatalog = [
     {
@@ -721,44 +739,31 @@ async function main() {
     return variant;
   }
 
-  const elfinProduct = await prisma.product.upsert({
-    where: { slug: "elfin-bondable-molar-tube" },
-    update: {
-      title: "Elfin Bondable Molar Tube",
-      shortDescription: "Bondable molar tube system with package-level commercial variants.",
-      description: "Commercially packaged molar tube product with prescription, slot, hook and wire-size configuration dimensions.",
-      categoryId: molarTubeCategory.id,
-      sku: "ELFIN-MT",
-      productCode: "MT-ELFIN-BOND",
-      hsnCode: "9021.10",
-      brand: "Modern Orthodontics",
-      status: "ACTIVE",
-      hasVariants: true,
-      isFeatured: true,
-      defaultCountryId: (await prisma.country.findUniqueOrThrow({ where: { code: "IN" } })).id,
-      defaultCurrencyId: inr.id,
-      seoTitle: "Elfin Bondable Molar Tube",
-      seoDescription: "Package-aware molar tube catalog with sellable SKU variants.",
-    },
-    create: {
-      title: "Elfin Bondable Molar Tube",
-      slug: "elfin-bondable-molar-tube",
-      shortDescription: "Bondable molar tube system with package-level commercial variants.",
-      description: "Commercially packaged molar tube product with prescription, slot, hook and wire-size configuration dimensions.",
-      categoryId: molarTubeCategory.id,
-      sku: "ELFIN-MT",
-      productCode: "MT-ELFIN-BOND",
-      hsnCode: "9021.10",
-      brand: "Modern Orthodontics",
-      status: "ACTIVE",
-      hasVariants: true,
-      isFeatured: true,
-      defaultCountryId: (await prisma.country.findUniqueOrThrow({ where: { code: "IN" } })).id,
-      defaultCurrencyId: inr.id,
-      seoTitle: "Elfin Bondable Molar Tube",
-      seoDescription: "Package-aware molar tube catalog with sellable SKU variants.",
-    },
-  });
+  const elfinData = {
+    title: "Elfin Bondable Molar Tube",
+    slug: "elfin-bondable-molar-tube",
+    shortDescription: "Bondable molar tube system with package-level commercial variants.",
+    description: "Commercially packaged molar tube product with prescription, slot, hook and wire-size configuration dimensions.",
+    categoryId: molarTubeCategory.id,
+    sku: "ELFIN-MT",
+    productCode: "MT-ELFIN-BOND",
+    hsnCode: "9021.10",
+    brand: "Modern Orthodontics",
+    status: "ACTIVE" as const,
+    hasVariants: true,
+    isFeatured: true,
+    defaultCountryId: (await prisma.country.findUniqueOrThrow({ where: { code: "IN" } })).id,
+    defaultCurrencyId: inr.id,
+    seoTitle: "Elfin Bondable Molar Tube",
+    seoDescription: "Package-aware molar tube catalog with sellable SKU variants.",
+  };
+
+  let elfinProduct = await prisma.product.findFirst({ where: { slug: "elfin-bondable-molar-tube", deletedAt: null } });
+  if (!elfinProduct) {
+    elfinProduct = await prisma.product.create({ data: elfinData });
+  } else {
+    elfinProduct = await prisma.product.update({ where: { id: elfinProduct.id }, data: elfinData });
+  }
 
   await resetProduct(elfinProduct.id);
 
@@ -845,42 +850,30 @@ async function main() {
     ],
   });
 
-  const nitiProduct = await prisma.product.upsert({
-    where: { slug: "niti-wire-product" },
-    update: {
-      title: "NiTi Wire Product",
-      shortDescription: "NiTi wire program configured by size, arch and pack size.",
-      description: "Nickel titanium wire product with selected size, arch and pack-size variants.",
-      categoryId: nitiCategory.id,
-      sku: "NITI-WIRE",
-      productCode: "NITI-WIRE-01",
-      hsnCode: "9018.49",
-      brand: "Modern Orthodontics",
-      status: "ACTIVE",
-      hasVariants: true,
-      defaultCountryId: (await prisma.country.findUniqueOrThrow({ where: { code: "IN" } })).id,
-      defaultCurrencyId: inr.id,
-      seoTitle: "NiTi Wire Product",
-      seoDescription: "NiTi wire variant model using allowed attribute values.",
-    },
-    create: {
-      title: "NiTi Wire Product",
-      slug: "niti-wire-product",
-      shortDescription: "NiTi wire program configured by size, arch and pack size.",
-      description: "Nickel titanium wire product with selected size, arch and pack-size variants.",
-      categoryId: nitiCategory.id,
-      sku: "NITI-WIRE",
-      productCode: "NITI-WIRE-01",
-      hsnCode: "9018.49",
-      brand: "Modern Orthodontics",
-      status: "ACTIVE",
-      hasVariants: true,
-      defaultCountryId: (await prisma.country.findUniqueOrThrow({ where: { code: "IN" } })).id,
-      defaultCurrencyId: inr.id,
-      seoTitle: "NiTi Wire Product",
-      seoDescription: "NiTi wire variant model using allowed attribute values.",
-    },
-  });
+  const nitiData = {
+    title: "NiTi Wire Product",
+    slug: "niti-wire-product",
+    shortDescription: "NiTi wire program configured by size, arch and pack size.",
+    description: "Nickel titanium wire product with selected size, arch and pack-size variants.",
+    categoryId: nitiCategory.id,
+    sku: "NITI-WIRE",
+    productCode: "NITI-WIRE-01",
+    hsnCode: "9018.49",
+    brand: "Modern Orthodontics",
+    status: "ACTIVE" as const,
+    hasVariants: true,
+    defaultCountryId: (await prisma.country.findUniqueOrThrow({ where: { code: "IN" } })).id,
+    defaultCurrencyId: inr.id,
+    seoTitle: "NiTi Wire Product",
+    seoDescription: "NiTi wire variant model using allowed attribute values.",
+  };
+
+  let nitiProduct = await prisma.product.findFirst({ where: { slug: "niti-wire-product", deletedAt: null } });
+  if (!nitiProduct) {
+    nitiProduct = await prisma.product.create({ data: nitiData });
+  } else {
+    nitiProduct = await prisma.product.update({ where: { id: nitiProduct.id }, data: nitiData });
+  }
 
   await resetProduct(nitiProduct.id);
 

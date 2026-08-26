@@ -3,18 +3,18 @@
 import Link from "next/link";
 import { useState, useMemo, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Archive, CheckCircle2, Copy, Edit2, Eye, FileText, Image as ImageIcon, Layers, RotateCcw, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, Copy, Edit2, Eye, EyeOff, FileText, Image as ImageIcon, Layers, Trash2, XCircle } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, AdminStatsGrid, Column, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminStatsGrid, Column, AdminDeleteModal, DataTable, Pagination, StatCard, StatusBadge, useToast, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { ProductEditor } from "@/components/admin/products/ProductEditor";
 import {
   useAdminVariants,
-  useArchiveVariant,
   useDeleteVariant,
+  usePermanentDeleteVariant,
   useDuplicateVariant,
-  useRestoreVariant,
+  useUpdateVariant,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
@@ -75,6 +75,7 @@ function VariantsList() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
   const handleSelectAll = async (checked: boolean) => {
     if (!checked) {
@@ -104,31 +105,20 @@ function VariantsList() {
     if (selectedIds.length === 0 || !bulkAction) return;
 
     if (bulkAction === "delete") {
-      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected variant(s)? This action cannot be undone.`)) {
-        return;
-      }
+      setShowBulkDeleteModal(true);
+      return;
     }
 
     setBulkSaving(true);
     try {
-      if (bulkAction === "delete") {
+      if (bulkAction === "activate") {
         await Promise.all(
           selectedIds.map((id) => {
             const variant = variants.find((v) => v.id === id);
-            return deleteVariant.mutateAsync({
+            return updateVariant.mutateAsync({
               productId: variant?.product.id ?? "",
               variantId: id,
-            });
-          })
-        );
-        showToast(`Successfully deleted ${selectedIds.length} variant(s).`, "success");
-      } else if (bulkAction === "activate") {
-        await Promise.all(
-          selectedIds.map((id) => {
-            const variant = variants.find((v) => v.id === id);
-            return restoreVariant.mutateAsync({
-              productId: variant?.product.id ?? "",
-              variantId: id,
+              data: { status: "ACTIVE" },
             });
           })
         );
@@ -137,9 +127,10 @@ function VariantsList() {
         await Promise.all(
           selectedIds.map((id) => {
             const variant = variants.find((v) => v.id === id);
-            return archiveVariant.mutateAsync({
+            return updateVariant.mutateAsync({
               productId: variant?.product.id ?? "",
               variantId: id,
+              data: { status: "INACTIVE" },
             });
           })
         );
@@ -192,10 +183,10 @@ function VariantsList() {
     };
   }, [totalVariantData, activeVariantData, draftVariantData, inactiveVariantData]);
 
-  const archiveVariant = useArchiveVariant();
-  const restoreVariant = useRestoreVariant();
+  const updateVariant = useUpdateVariant();
   const duplicateVariant = useDuplicateVariant();
   const deleteVariant = useDeleteVariant();
+  const permanentDeleteVariant = usePermanentDeleteVariant();
 
   const variants: VariantRow[] = data?.data ?? [];
 
@@ -208,15 +199,15 @@ function VariantsList() {
     }
   };
 
-  const handleArchiveToggle = async (row: VariantRow) => {
+  const handleStatusToggle = async (row: VariantRow) => {
     try {
-      if (row.status !== "ACTIVE") {
-        await restoreVariant.mutateAsync({ productId: row.product.id, variantId: row.id });
-        showToast("Variant restored.");
-      } else {
-        await archiveVariant.mutateAsync({ productId: row.product.id, variantId: row.id });
-        showToast("Variant archived.");
-      }
+      const nextStatus = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+      await updateVariant.mutateAsync({
+        productId: row.product.id,
+        variantId: row.id,
+        data: { status: nextStatus },
+      });
+      showToast(`Variant ${nextStatus === "ACTIVE" ? "activated" : "deactivated"}.`);
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to update variant status."), "error");
     }
@@ -226,10 +217,21 @@ function VariantsList() {
     if (!deleting) return;
     try {
       await deleteVariant.mutateAsync({ productId: deleting.product.id, variantId: deleting.id });
-      showToast("Variant deleted.");
+      showToast("Variant soft-deleted.");
       setDeleting(null);
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to delete variant."), "error");
+    }
+  };
+
+  const handlePermanentDelete = async () => {
+    if (!deleting) return;
+    try {
+      await permanentDeleteVariant.mutateAsync({ productId: deleting.product.id, variantId: deleting.id });
+      showToast("Variant permanently deleted from database.");
+      setDeleting(null);
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to permanently delete variant."), "error");
     }
   };
 
@@ -345,12 +347,12 @@ function VariantsList() {
           {canUpdate && (
             <button
               type="button"
-              onClick={() => handleArchiveToggle(row)}
+              onClick={() => handleStatusToggle(row)}
               className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
-              title={row.status === "ACTIVE" ? "Archive variant" : "Restore variant"}
-              disabled={archiveVariant.isPending || restoreVariant.isPending}
+              title={row.status === "ACTIVE" ? "Deactivate variant" : "Activate variant"}
+              disabled={updateVariant.isPending}
             >
-              {row.status === "ACTIVE" ? <Archive size={15} /> : <RotateCcw size={15} />}
+              {row.status === "ACTIVE" ? <EyeOff size={15} /> : <Eye size={15} />}
             </button>
           )}
           {canDelete && (
@@ -469,12 +471,70 @@ function VariantsList() {
         />
       </div>
 
-      <ConfirmModal
+      <AdminDeleteModal
         open={!!deleting}
-        title="Delete variant?"
-        message={deleting ? `This will soft-delete "${deleting.title}" from the active variant list.` : ""}
-        onConfirm={handleDelete}
-        onCancel={() => setDeleting(null)}
+        onClose={() => setDeleting(null)}
+        itemName={deleting?.title}
+        itemType="Variant"
+        onSoftDelete={handleDelete}
+        onPermanentDelete={handlePermanentDelete}
+        isSoftDeleting={deleteVariant.isPending}
+        isPermanentDeleting={permanentDeleteVariant.isPending}
+      />
+
+      <AdminDeleteModal
+        open={showBulkDeleteModal}
+        onClose={() => setShowBulkDeleteModal(false)}
+        itemName={`${selectedIds.length} selected variants`}
+        itemType="Variants (Bulk)"
+        onSoftDelete={async () => {
+          setBulkSaving(true);
+          try {
+            await Promise.all(
+              selectedIds.map((id) => {
+                const variant = variants.find((v) => v.id === id);
+                return deleteVariant.mutateAsync({
+                  productId: variant?.product.id ?? "",
+                  variantId: id,
+                });
+              })
+            );
+            showToast(`Successfully soft-deleted ${selectedIds.length} variant(s).`, "success");
+            setSelectedIds([]);
+            setBulkAction("");
+            setShowBulkDeleteModal(false);
+          } catch (error) {
+            showToast(getAdminErrorMessage(error, "Failed to complete bulk delete."), "error");
+          } finally {
+            setBulkSaving(false);
+          }
+        }}
+        onPermanentDelete={async () => {
+          setBulkSaving(true);
+          try {
+            await Promise.all(
+              selectedIds.map((id) => {
+                const variant = variants.find((v) => v.id === id);
+                return permanentDeleteVariant.mutateAsync({
+                  productId: variant?.product.id ?? "",
+                  variantId: id,
+                });
+              })
+            );
+            showToast(`Successfully permanently deleted ${selectedIds.length} variant(s).`, "success");
+            setSelectedIds([]);
+            setBulkAction("");
+            setShowBulkDeleteModal(false);
+          } catch (error) {
+            showToast(getAdminErrorMessage(error, "Failed to complete bulk permanent delete."), "error");
+          } finally {
+            setBulkSaving(false);
+          }
+        }}
+        isSoftDeleting={bulkSaving && deleteVariant.isPending}
+        isPermanentDeleting={bulkSaving && permanentDeleteVariant.isPending}
+        softDeleteDescription={`Hides the ${selectedIds.length} selected variants from the active catalog while safely retaining order and quote history.`}
+        permanentDeleteDescription={`Physically purges the ${selectedIds.length} selected variants from the database. Any variant referenced in existing orders or quotes will be blocked.`}
       />
 
       {activeProductId && activeVariantId && (

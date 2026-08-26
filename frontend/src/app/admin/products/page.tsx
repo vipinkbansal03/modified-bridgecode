@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { AdminListToolbar, AdminStatsGrid, Column, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, LoadingButton, AdminBulkActionsBar, AdminMultiSelect } from "@/components/admin/AdminComponents";
+import { AdminListToolbar, AdminStatsGrid, Column, AdminDeleteModal, DataTable, Pagination, StatCard, StatusBadge, useToast, LoadingButton, AdminBulkActionsBar, AdminMultiSelect } from "@/components/admin/AdminComponents";
 import { RefreshButton } from "@/components/admin/RefreshButton";
 import { toSortOrderPayload } from "@/components/admin/SortableList";
 import { Modal } from "@/components/ui/Modal";
@@ -14,12 +14,11 @@ import {
   useAdminCollections,
   useAdminCountries,
   useAdminProducts,
-  useArchiveProduct,
   useBulkUpdateProducts,
   useDuplicateProduct,
   useDeleteProduct,
+  usePermanentDeleteProduct,
   useReorderProducts,
-  useRestoreProduct,
   useAdminWarehouses,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
@@ -47,7 +46,7 @@ interface ProductRow {
   createdAt: string;
 }
 
-type BulkAction = "enable" | "disable" | "archive" | "restore" | "assignCategory" | "assignCountries" | "assignCollections" | "assignWarehouse" | "delete";
+type BulkAction = "enable" | "disable" | "assignCategory" | "assignCountries" | "assignCollections" | "assignWarehouse" | "delete";
 
 type ColumnKey = "image" | "name" | "sku" | "brand" | "category" | "status" | "countries" | "inventory" | "price" | "updated" | "actions";
 
@@ -190,11 +189,11 @@ export default function AdminProductsPage() {
   const { data: warehouses = [] } = useAdminWarehouses({ limit: 30 });
   const { data: collectionsData } = useAdminCollections({ limit: 200 });
   const deleteMutation = useDeleteProduct();
+  const permanentDeleteMutation = usePermanentDeleteProduct();
   const duplicateMutation = useDuplicateProduct();
-  const archiveMutation = useArchiveProduct();
-  const restoreMutation = useRestoreProduct();
   const reorderProducts = useReorderProducts();
   const bulkUpdate = useBulkUpdateProducts();
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
   const products = useMemo(() => (data?.data ?? []) as ProductRow[], [data?.data]);
 
@@ -334,16 +333,6 @@ export default function AdminProductsPage() {
                 <Copy size={13} />
               </button>
             )}
-            {canUpdate && (
-              <button
-                type="button"
-                onClick={() => handleArchiveToggle(product)}
-                className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-                title={product.status === "ARCHIVED" ? "Restore product" : "Archive product"}
-              >
-                {product.status === "ARCHIVED" ? <RotateCcw size={13} /> : <Archive size={13} />}
-              </button>
-            )}
             <Link
               href={`/admin/products/${product.id}/edit`}
               className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
@@ -364,14 +353,32 @@ export default function AdminProductsPage() {
     return cols;
   }, [visibleColumns, canUpdate, canDelete]);
 
+  const deletingProduct = useMemo(() => {
+    if (!deleting) return null;
+    return products.find((p) => p.id === deleting) || null;
+  }, [deleting, products]);
+
   const handleDelete = async () => {
     if (!deleting) return;
     try {
       await deleteMutation.mutateAsync(deleting);
       setSelectedIds((current) => current.filter((id) => id !== deleting));
-      showToast("Product deleted.");
+      showToast("Product soft-deleted.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to delete product."), "error");
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handlePermanentDelete = async () => {
+    if (!deleting) return;
+    try {
+      await permanentDeleteMutation.mutateAsync(deleting);
+      setSelectedIds((current) => current.filter((id) => id !== deleting));
+      showToast("Product permanently deleted from database.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to permanently delete product."), "error");
     } finally {
       setDeleting(null);
     }
@@ -383,20 +390,6 @@ export default function AdminProductsPage() {
       showToast("Product duplicated.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to duplicate product."), "error");
-    }
-  };
-
-  const handleArchiveToggle = async (product: ProductRow) => {
-    try {
-      if (product.status === "ARCHIVED") {
-        await restoreMutation.mutateAsync(product.id);
-        showToast("Product restored.");
-      } else {
-        await archiveMutation.mutateAsync(product.id);
-        showToast("Product archived.");
-      }
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to update product status."), "error");
     }
   };
 
@@ -435,6 +428,10 @@ export default function AdminProductsPage() {
 
   const handleBulkAction = async () => {
     if (bulkAction === "assignWarehouse") return;
+    if (bulkAction === "delete") {
+      setShowBulkDeleteModal(true);
+      return;
+    }
     try {
       await bulkUpdate.mutateAsync({
         ids: selectedIds,
@@ -584,7 +581,9 @@ export default function AdminProductsPage() {
             label: "Import Excel",
           }}
           refresh={{
-            onRefresh: refetch,
+            onRefresh: () => {
+              void refetch().then(() => showToast("Products refreshed."));
+            },
             isRefreshing: isFetching,
           }}
           primaryAction={canCreate ? { href: "/admin/products/create", label: "New Product" } : undefined}
@@ -716,8 +715,6 @@ export default function AdminProductsPage() {
             actions={[
               { value: "enable", label: "Enable" },
               { value: "disable", label: "Disable" },
-              { value: "archive", label: "Archive" },
-              { value: "restore", label: "Restore" },
               { value: "assignCategory", label: "Assign category" },
               { value: "assignCountries", label: "Enable countries" },
               { value: "assignCollections", label: "Assign collections" },
@@ -821,13 +818,51 @@ export default function AdminProductsPage() {
         </div>
       </Modal>
 
-      <ConfirmModal
+      <AdminDeleteModal
         open={!!deleting}
-        title="Delete product?"
-        message="This will soft-delete the product. It will be blocked if active orders reference it."
-        onConfirm={handleDelete}
-        onCancel={() => setDeleting(null)}
-        isLoading={deleteMutation.isPending}
+        onClose={() => setDeleting(null)}
+        itemName={deletingProduct?.title}
+        itemType="Product"
+        onSoftDelete={handleDelete}
+        onPermanentDelete={handlePermanentDelete}
+        isSoftDeleting={deleteMutation.isPending}
+        isPermanentDeleting={permanentDeleteMutation.isPending}
+      />
+
+      <AdminDeleteModal
+        open={showBulkDeleteModal}
+        onClose={() => setShowBulkDeleteModal(false)}
+        itemName={`${selectedIds.length} selected products`}
+        itemType="Products (Bulk)"
+        onSoftDelete={async () => {
+          try {
+            await bulkUpdate.mutateAsync({
+              ids: selectedIds,
+              action: "delete",
+            });
+            showToast(`Successfully soft-deleted ${selectedIds.length} product(s).`);
+            setSelectedIds([]);
+            setShowBulkDeleteModal(false);
+            refetch();
+          } catch (error) {
+            showToast(getAdminErrorMessage(error, "Bulk delete failed."), "error");
+          }
+        }}
+        onPermanentDelete={async () => {
+          try {
+            await Promise.all(selectedIds.map((id) => permanentDeleteMutation.mutateAsync(id)));
+            showToast(`Successfully permanently deleted ${selectedIds.length} product(s).`);
+            setSelectedIds([]);
+            setShowBulkDeleteModal(false);
+            refetch();
+          } catch (error) {
+            showToast(getAdminErrorMessage(error, "Bulk permanent delete failed."), "error");
+          }
+        }}
+        isSoftDeleting={bulkUpdate.isPending}
+        isPermanentDeleting={permanentDeleteMutation.isPending}
+        softDeleteDescription={`Hides the ${selectedIds.length} selected products from the storefront catalog while preserving all order history, quotes, and reports.`}
+        permanentDeleteDescription={`Physically purges the ${selectedIds.length} selected products from the database. Any product with existing order or quote lines will be blocked.`}
       />
 
       <Modal

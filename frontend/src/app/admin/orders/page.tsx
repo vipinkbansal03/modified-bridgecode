@@ -6,10 +6,10 @@ import { useRouter } from "next/navigation";
 import { Clock3, Eye, Filter, Pencil, Plus, Search, ShoppingCart, Trash2, Truck, Wallet } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column, AdminBulkActionsBar, ConfirmModal } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
-import { useAdminCountries, useAdminOrders, useDeleteAdminOrder, useOrderAnalytics, useUpdateOrderStatus, useUpdatePaymentStatus } from "@/hooks/admin/useAdminHooks";
+import { useAdminCountries, useAdminOrders, useAdminProducts, useOrderAnalytics, useUpdateOrderStatus, useUpdatePaymentStatus, useDeleteOrder, usePermanentDeleteOrder } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
 type OrderRow = {
@@ -28,6 +28,8 @@ type OrderRow = {
   createdAt: string;
   updatedAt?: string;
   _count?: { items?: number };
+  deletedAt?: string | null;
+  isTest?: boolean;
 };
 
 type OrderListResponse = {
@@ -65,31 +67,22 @@ export default function OrdersPage() {
 
   const canCreate = hasPermission("orders.create");
   const canUpdate = hasPermission("orders.update");
-  const canDelete = hasPermission("orders.delete");
+  const canDelete = hasPermission("orders.delete") || hasPermission("orders.manage");
   const { showToast } = useToast();
-  const deleteOrder = useDeleteAdminOrder();
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const updateOrderStatus = useUpdateOrderStatus();
+  const updatePaymentStatusMutation = useUpdatePaymentStatus();
+  const deleteOrderMutation = useDeleteOrder();
+  const permanentDeleteOrderMutation = usePermanentDeleteOrder();
 
-  const handleDelete = async () => {
-    if (!deletingId) return;
-    try {
-      await deleteOrder.mutateAsync(deletingId);
-      showToast("Order deleted successfully.");
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to delete order."), "error");
-    } finally {
-      setDeletingId(null);
-    }
-  };
+  const [softDeleteTarget, setSoftDeleteTarget] = useState<OrderRow | null>(null);
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<OrderRow | null>(null);
+  const [deletedView, setDeletedView] = useState<"active" | "deleted">("active");
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState("");
   const [bulkStatus, setBulkStatus] = useState("");
   const [bulkPaymentStatus, setBulkPaymentStatus] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
-
-  const updateOrderStatus = useUpdateOrderStatus();
-  const updatePaymentStatusMutation = useUpdatePaymentStatus();
 
   const handleSelectAll = async (checked: boolean) => {
     if (!checked) {
@@ -108,6 +101,7 @@ export default function OrdersPage() {
           dateTo: dateTo || undefined,
           sortBy,
           sortDir,
+          deleted: deletedView === "deleted" ? "true" : undefined,
           limit: 999999,
           ignoreMaxLimit: "true",
         },
@@ -123,18 +117,9 @@ export default function OrdersPage() {
   const handleBulkAction = async () => {
     if (selectedIds.length === 0 || !bulkAction) return;
 
-    if (bulkAction === "delete") {
-      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected order(s)? This cannot be undone.`)) {
-        return;
-      }
-    }
-
     setBulkSaving(true);
     try {
-      if (bulkAction === "delete") {
-        await Promise.all(selectedIds.map((id) => deleteOrder.mutateAsync(id)));
-        showToast(`Successfully deleted ${selectedIds.length} order(s).`, "success");
-      } else if (bulkAction === "updateStatus") {
+      if (bulkAction === "updateStatus") {
         if (!bulkStatus) {
           showToast("Please select an order status.", "error");
           setBulkSaving(false);
@@ -169,6 +154,7 @@ export default function OrdersPage() {
   const [paymentStatus, setPaymentStatus] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
   const [countryId, setCountryId] = useState("");
+  const [productId, setProductId] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
@@ -176,6 +162,15 @@ export default function OrdersPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
+
+  const { data: productsData } = useAdminProducts({ limit: 1000, sortBy: "title", sortDir: "asc" });
+  const productOptions = useMemo(() => {
+    const productList = ((productsData as any)?.data ?? []) as any[];
+    return productList.map((product) => ({
+      value: product.id,
+      label: `${product.title}${product.productCode ? ` (${product.productCode})` : product.sku ? ` (${product.sku})` : ""}`,
+    }));
+  }, [productsData]);
 
   const { data, isLoading, refetch, isFetching } = useAdminOrders({
     page,
@@ -185,10 +180,12 @@ export default function OrdersPage() {
     paymentMethod: paymentMethod || undefined,
     search: debouncedSearch.trim() || undefined,
     countryId: countryId || undefined,
+    productId: productId || undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
     sortBy,
     sortDir,
+    deleted: deletedView === "deleted" ? "true" : undefined,
   });
   const { data: countries = [] } = useAdminCountries();
   const analytics = useOrderAnalytics();
@@ -205,11 +202,11 @@ export default function OrdersPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, status, paymentStatus, paymentMethod, countryId, dateFrom, dateTo, sortBy, sortDir, limit]);
+  }, [debouncedSearch, status, paymentStatus, paymentMethod, countryId, productId, dateFrom, dateTo, sortBy, sortDir, limit]);
 
   useEffect(() => {
     setSelectedIds([]);
-  }, [debouncedSearch, status, paymentStatus, paymentMethod, countryId, dateFrom, dateTo, sortBy, sortDir, limit]);
+  }, [debouncedSearch, status, paymentStatus, paymentMethod, countryId, productId, dateFrom, dateTo, sortBy, sortDir, limit]);
 
   const totalRevenue = useMemo(() => Number(analytics.data?.totals?.allTimeRevenue ?? 0), [analytics.data]);
 
@@ -220,6 +217,7 @@ export default function OrdersPage() {
     setPaymentStatus("");
     setPaymentMethod("");
     setCountryId("");
+    setProductId("");
     setDateFrom("");
     setDateTo("");
     setSortBy("createdAt");
@@ -262,7 +260,7 @@ export default function OrdersPage() {
     {
       key: "actions",
       label: "Actions",
-      width: "120px",
+      width: "160px",
       render: (row) => (
         <div className="flex items-center gap-1.5">
           <Link
@@ -272,7 +270,7 @@ export default function OrdersPage() {
           >
             <Eye size={13} />
           </Link>
-          {canUpdate && (
+          {canUpdate && !row.deletedAt && (
             <Link
               href={`/admin/orders/${row.id}?mode=edit`}
               className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
@@ -281,23 +279,40 @@ export default function OrdersPage() {
               <Pencil size={13} />
             </Link>
           )}
-          {canDelete && (
+          {!row.deletedAt && (
+            <Link
+              href={`/admin/orders/${row.id}?mode=edit`}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+              title="Shipping"
+            >
+              <Truck size={13} />
+            </Link>
+          )}
+          {canDelete && !row.deletedAt && (
             <button
               type="button"
-              onClick={() => setDeletingId(row.id)}
-              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50 hover:border-red-200"
-              title="Delete order"
+              onClick={() => setSoftDeleteTarget(row)}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-600 hover:bg-red-50"
+              title="Soft-delete order"
             >
               <Trash2 size={13} />
             </button>
           )}
-          <Link
-            href={`/admin/orders/${row.id}?mode=edit`}
-            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-            title="Shipping"
-          >
-            <Truck size={13} />
-          </Link>
+          {row.deletedAt && (
+            <span className="rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+              Soft-deleted
+            </span>
+          )}
+          {canDelete && row.deletedAt && row.isTest && (
+            <button
+              type="button"
+              onClick={() => setPermanentDeleteTarget(row)}
+              className="flex h-7 px-2 items-center justify-center rounded border border-red-200 bg-red-50 text-[11px] font-medium text-red-600 hover:bg-red-100"
+              title="Permanently delete test order"
+            >
+              Delete Permanently
+            </button>
+          )}
         </div>
       ),
     },
@@ -330,16 +345,42 @@ export default function OrdersPage() {
           filters={{
             showFilters,
             onToggle: () => setShowFilters((prev) => !prev),
-            activeCount: [status, paymentStatus, paymentMethod, countryId, dateFrom, dateTo].filter(Boolean).length,
+            activeCount: [status, paymentStatus, paymentMethod, countryId, productId, dateFrom, dateTo].filter(Boolean).length,
           }}
           refresh={{
-            onRefresh: refetch,
+            onRefresh: () => {
+              void refetch().then(() => showToast("Orders refreshed."));
+            },
             isRefreshing: isFetching,
           }}
           primaryAction={canCreate ? { href: "/admin/orders/create", label: "Create Order" } : undefined}
           onResetFilters={resetFilters}
           filterPanel={
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <AdminSelect
+                label="Order View"
+                value={deletedView}
+                onChange={(event) => {
+                  setDeletedView(event.target.value as "active" | "deleted");
+                  setPage(1);
+                }}
+                options={[
+                  { value: "active", label: "Active Orders" },
+                  { value: "deleted", label: "Soft-Deleted Orders" },
+                ]}
+              />
+              <AdminMultiSearchableSelect
+                label="Product"
+                values={productId ? productId.split(",").filter(Boolean) : []}
+                onValuesChange={(values) => {
+                  setProductId(values.join(","));
+                  setPage(1);
+                }}
+                options={productOptions}
+                placeholder="Select products"
+                allowSelectAll
+                selectAllLabel="All products"
+              />
               <AdminSelect
                 label="Status"
                 value={status}
@@ -445,12 +486,12 @@ export default function OrdersPage() {
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white">
           <DataTable<OrderRow>
-            title="Orders List"
+            title={deletedView === "deleted" ? "Soft-Deleted Orders" : "Orders List"}
             columns={columns}
             data={orders}
             rowKey="id"
             isLoading={isLoading}
-            emptyMessage="No orders yet."
+            emptyMessage={deletedView === "deleted" ? "No soft-deleted orders." : "No orders yet."}
             enableSelection={true}
             selectedIds={selectedIds}
             onSelectionChange={setSelectedIds}
@@ -471,7 +512,6 @@ export default function OrdersPage() {
                 actions={[
                   { value: "updateStatus", label: "Update Order Status" },
                   { value: "updatePayment", label: "Update Payment Status" },
-                  { value: "delete", label: "Delete selected" }
                 ]}
                 onApply={handleBulkAction}
                 applyLoading={bulkSaving}
@@ -522,13 +562,45 @@ export default function OrdersPage() {
       </div>
 
       <ConfirmModal
-        open={!!deletingId}
-        onCancel={() => setDeletingId(null)}
-        onConfirm={handleDelete}
-        title="Delete Order"
-        message="Are you sure you want to permanently delete this order? This action cannot be undone."
-        isLoading={deleteOrder.isPending}
-        danger
+        open={!!softDeleteTarget}
+        title="Soft-Delete Order"
+        message={`Are you sure you want to soft-delete order #${softDeleteTarget?.orderNumber}? It will be hidden from the active orders list, but historical customer records and invoices will remain intact.`}
+        confirmText="Soft-Delete Order"
+        danger={true}
+        isLoading={deleteOrderMutation.isPending}
+        onCancel={() => setSoftDeleteTarget(null)}
+        onConfirm={async () => {
+          if (!softDeleteTarget) return;
+          try {
+            await deleteOrderMutation.mutateAsync(softDeleteTarget.id);
+            showToast("Order soft-deleted successfully.", "success");
+            setSoftDeleteTarget(null);
+            refetch();
+          } catch (err) {
+            showToast(getAdminErrorMessage(err, "Failed to soft-delete order."), "error");
+          }
+        }}
+      />
+
+      <ConfirmModal
+        open={!!permanentDeleteTarget}
+        title="Permanently Delete Test Order"
+        message={`Are you sure you want to PERMANENTLY delete Test Order #${permanentDeleteTarget?.orderNumber}? This will completely remove the order and release any reserved inventory. This action cannot be undone.`}
+        confirmText="Permanently Delete"
+        danger={true}
+        isLoading={permanentDeleteOrderMutation.isPending}
+        onCancel={() => setPermanentDeleteTarget(null)}
+        onConfirm={async () => {
+          if (!permanentDeleteTarget) return;
+          try {
+            await permanentDeleteOrderMutation.mutateAsync(permanentDeleteTarget.id);
+            showToast("Test order permanently deleted successfully.", "success");
+            setPermanentDeleteTarget(null);
+            refetch();
+          } catch (err) {
+            showToast(getAdminErrorMessage(err, "Failed to permanently delete order."), "error");
+          }
+        }}
       />
     </AdminLayout>
   );

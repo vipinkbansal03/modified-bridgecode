@@ -41,7 +41,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} ${jost.variable}`} data-scroll-behavior="smooth">
-      <body className={`${inter.className} font-sans text-ink antialiased`}>
+      <body className="font-sans antialiased">
         <ReactQueryProvider>
           <LanguageProvider>
             <CurrencyProvider>

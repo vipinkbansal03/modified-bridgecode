@@ -43,19 +43,27 @@ async function runPaymentLifecycleTests() {
     });
   }
 
-  const customer = await prisma.customer.upsert({
-    where: { email: "payment_test_user@modernortho.com" },
-    update: { status: "ACTIVE" },
-    create: {
-      email: "payment_test_user@modernortho.com",
-      passwordHash: "dummy",
-      firstName: "Dr. Payment",
-      lastName: "Tester",
-      phone: "+919999988888",
-      defaultCountryId: country.id,
-      status: "ACTIVE",
-    },
+  let customer = await prisma.customer.findFirst({
+    where: { email: "payment_test_user@modernortho.com", deletedAt: null },
   });
+  if (!customer) {
+    customer = await prisma.customer.create({
+      data: {
+        email: "payment_test_user@modernortho.com",
+        passwordHash: "dummy",
+        firstName: "Dr. Payment",
+        lastName: "Tester",
+        phone: "+919999988888",
+        defaultCountryId: country.id,
+        status: "ACTIVE",
+      },
+    });
+  } else {
+    customer = await prisma.customer.update({
+      where: { id: customer.id },
+      data: { status: "ACTIVE" },
+    });
+  }
 
   // Create physical warehouses
   const warehouseDelhi = await prisma.warehouse.create({

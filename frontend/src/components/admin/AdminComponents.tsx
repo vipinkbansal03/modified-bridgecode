@@ -623,6 +623,222 @@ export function ConfirmModal({
   );
 }
 
+// ─── AdminDeleteModal ───────────────────────────────────────
+
+export interface AdminDeleteModalProps {
+  open: boolean;
+  onClose: () => void;
+  itemName?: string;
+  itemType?: string;
+  onSoftDelete: () => Promise<void> | void;
+  onPermanentDelete?: () => Promise<void> | void;
+  isSoftDeleting?: boolean;
+  isPermanentDeleting?: boolean;
+  isLoading?: boolean;
+  softDeleteDescription?: string;
+  permanentDeleteDescription?: string;
+  warningMessage?: string;
+}
+
+export function AdminDeleteModal({
+  open,
+  onClose,
+  itemName,
+  itemType = "item",
+  onSoftDelete,
+  onPermanentDelete,
+  isSoftDeleting = false,
+  isPermanentDeleting = false,
+  isLoading = false,
+  softDeleteDescription,
+  permanentDeleteDescription,
+  warningMessage,
+}: AdminDeleteModalProps) {
+  const [deleteType, setDeleteType] = useState<"soft" | "permanent">("soft");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMounted(true), 0);
+    return () => {
+      clearTimeout(timer);
+      setMounted(false);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      setDeleteType("soft");
+    }
+  }, [open]);
+
+  if (!open || !mounted) return null;
+
+  const activeLoading = isSoftDeleting || isPermanentDeleting || isLoading;
+
+  const handleConfirm = async () => {
+    if (deleteType === "soft") {
+      await onSoftDelete();
+    } else if (onPermanentDelete) {
+      await onPermanentDelete();
+    }
+  };
+
+  const displayName = itemName ? `"${itemName}"` : itemType.toLowerCase();
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-[500px] rounded-2xl bg-white p-6 shadow-2xl animate-fade-in border border-[#E6E6E6]">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 pb-3 border-b border-[#F0F0F0]">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-50 text-red-600">
+              <AlertTriangle size={20} />
+            </div>
+            <div>
+              <h3 className="text-[16px] font-bold text-[#1A1A1A]">
+                Delete {itemType}
+              </h3>
+              {itemName ? (
+                <p className="text-[13px] font-medium text-[#6B6B6B] truncate max-w-[340px]">
+                  Target: <span className="font-semibold text-[#1A1A1A]">{itemName}</span>
+                </p>
+              ) : null}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={activeLoading}
+            className="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-40"
+          >
+            <span className="sr-only">Close</span>
+            ✕
+          </button>
+        </div>
+
+        {/* Description / Warning */}
+        <div className="py-3">
+          <p className="text-[13px] leading-5 text-[#6B6B6B]">
+            {warningMessage || `Choose the deletion method for this ${itemType.toLowerCase()}. Soft Delete is recommended for maintaining catalog and historical integrity.`}
+          </p>
+        </div>
+
+        {/* Options */}
+        <div className="space-y-3">
+          {/* Option 1: Soft Delete (Default / Recommended) */}
+          <div
+            onClick={() => !activeLoading && setDeleteType("soft")}
+            className={`cursor-pointer rounded-xl border p-3.5 transition-all ${
+              deleteType === "soft"
+                ? "border-[#1A1A1A] bg-neutral-50/80 ring-1 ring-[#1A1A1A]"
+                : "border-[#E6E6E6] bg-white hover:border-neutral-300 hover:bg-neutral-50/40"
+            } ${activeLoading ? "pointer-events-none opacity-60" : ""}`}
+          >
+            <div className="flex items-start gap-3">
+              <div className="pt-0.5">
+                <div
+                  className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                    deleteType === "soft"
+                      ? "border-[#1A1A1A] bg-[#1A1A1A]"
+                      : "border-neutral-300 bg-white"
+                  }`}
+                >
+                  {deleteType === "soft" && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[13.5px] font-semibold text-[#1A1A1A]">
+                    Soft Delete (Archive)
+                  </span>
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
+                    Recommended
+                  </span>
+                </div>
+                <p className="mt-1 text-[12px] leading-relaxed text-[#6B6B6B]">
+                  {softDeleteDescription || `Hides ${displayName} from the active storefront and admin catalog while safely retaining historical orders, quotes, and reports.`}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Option 2: Permanent Delete (Hard Delete) - Rendered if onPermanentDelete exists */}
+          {onPermanentDelete ? (
+            <div
+              onClick={() => !activeLoading && setDeleteType("permanent")}
+              className={`cursor-pointer rounded-xl border p-3.5 transition-all ${
+                deleteType === "permanent"
+                  ? "border-red-500 bg-red-50/50 ring-1 ring-red-500"
+                  : "border-[#E6E6E6] bg-white hover:border-red-200 hover:bg-red-50/20"
+              } ${activeLoading ? "pointer-events-none opacity-60" : ""}`}
+            >
+              <div className="flex items-start gap-3">
+                <div className="pt-0.5">
+                  <div
+                    className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                      deleteType === "permanent"
+                        ? "border-red-600 bg-red-600"
+                        : "border-neutral-300 bg-white"
+                    }`}
+                  >
+                    {deleteType === "permanent" && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[13.5px] font-semibold text-red-700">
+                      Permanent Delete (Hard Delete)
+                    </span>
+                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-800 border border-red-200">
+                      Irreversible
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[12px] leading-relaxed text-[#6B6B6B]">
+                    {permanentDeleteDescription || `Physically removes ${displayName} from the database. Blocked by system guards if orders or dependencies reference it.`}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Footer Actions */}
+        <div className="flex items-center justify-end gap-2.5 pt-4 mt-4 border-t border-[#F0F0F0]">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={activeLoading}
+            className="rounded-lg border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={activeLoading}
+            className={cn(
+              "rounded-lg px-4 py-2 text-[13px] font-semibold text-white transition-colors shadow-2xs disabled:opacity-50 flex items-center justify-center gap-2",
+              deleteType === "soft"
+                ? "bg-[#1A1A1A] hover:bg-neutral-800"
+                : "bg-[#E31E24] hover:bg-[#B5151B]"
+            )}
+          >
+            {activeLoading ? (
+              <>
+                <span className="inline-block animate-spin rounded-full border-2 border-white border-t-transparent w-3.5 h-3.5" aria-hidden="true" />
+                <span>{deleteType === "soft" ? "Archiving..." : "Deleting permanently..."}</span>
+              </>
+            ) : (
+              deleteType === "soft" ? `Soft Delete ${itemType}` : `Permanently Delete ${itemType}`
+            )}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // ─── AdminInput ───────────────────────────────────────────
 
 interface AdminInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -1537,6 +1753,7 @@ export { AdminStickySaveBar } from "@/components/admin/AdminStickySaveBar";
 export { default as LoadingButton } from "@/components/ui/LoadingSpinner/LoadingButton";
 export { default as Spinner } from "@/components/ui/LoadingSpinner/Spinner";
 export { AdminBulkActionsBar } from "./AdminBulkActionsBar";
+export { RefreshButton } from "@/components/admin/RefreshButton";
 
 
 

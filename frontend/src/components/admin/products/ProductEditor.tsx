@@ -7,7 +7,7 @@ import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import * as Yup from "yup";
 import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search, ChevronRight, ChevronLeft, ChevronDown, Eye, ZoomIn, CheckSquare, Square, Check, FolderUp, Image as ImageIcon, Loader2, Box, Package, Info } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, AdminMultiSelect, StatusBadge, useToast, ConfirmModal, DataTable, AdminSectionTable, Column, toastMessages, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, AdminMultiSelect, StatusBadge, useToast, ConfirmModal, AdminDeleteModal, DataTable, AdminSectionTable, Column, toastMessages, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
@@ -658,6 +658,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [uploadingPackageImage, setUploadingPackageImage] = useState(false);
   const [packageSortOrder, setPackageSortOrder] = useState(0);
   const [packageStatus, setPackageStatus] = useState("ACTIVE");
+
+  const [deletingInventoryAssignment, setDeletingInventoryAssignment] = useState<{ id: string; warehouseName: string } | null>(null);
+  const [showBulkDeleteInventoryModal, setShowBulkDeleteInventoryModal] = useState(false);
+  const [deletingPriceId, setDeletingPriceId] = useState<string | null>(null);
+  const [deletingBulkPrices, setDeletingBulkPrices] = useState(false);
+  const [deletingBulkVariantPrices, setDeletingBulkVariantPrices] = useState(false);
+  const [deletingAllBasePrices, setDeletingAllBasePrices] = useState(false);
+  const [deletingBulkVariantsModal, setDeletingBulkVariantsModal] = useState(false);
 
   // Modals state for Product Info tab sections
   const [featureModalOpen, setFeatureModalOpen] = useState(false);
@@ -1449,11 +1457,16 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   };
 
-  const handleDeleteProductPrice = async (priceId: string) => {
-    if (!window.confirm("Are you sure you want to delete this country price?")) return;
+  const handleDeleteProductPrice = (priceId: string) => {
+    setDeletingPriceId(priceId);
+  };
+
+  const confirmDeleteProductPrice = async () => {
+    if (!deletingPriceId) return;
     try {
-      await adminApi.delete(`/pricing/${priceId}`);
+      await adminApi.delete(`/pricing/${deletingPriceId}`);
       showToast("Price deleted successfully.");
+      setDeletingPriceId(null);
       refetch();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to delete price."), "error");
@@ -1523,15 +1536,19 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   };
 
-  const handleBulkDeletePrices = async () => {
+  const handleBulkDeletePrices = () => {
     if (!selectedPriceIds.length) return;
-    if (!window.confirm(`Are you sure you want to delete the selected ${selectedPriceIds.length} base price(s)?`)) return;
+    setDeletingBulkPrices(true);
+  };
+
+  const confirmBulkDeletePrices = async () => {
     try {
       await Promise.all(
         selectedPriceIds.map((id) => adminApi.delete(`/pricing/${id}`))
       );
       showToast(`${selectedPriceIds.length} price(s) deleted successfully.`);
       setSelectedPriceIds([]);
+      setDeletingBulkPrices(false);
       refetch();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to delete selected prices."), "error");
@@ -1550,12 +1567,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     setBulkSaving(true);
     try {
       if (priceBulkActionType === "Delete selected") {
-        if (!window.confirm(`Delete ${selectedPriceIds.length} selected price(s)?`)) {
-          setBulkSaving(false);
-          return;
-        }
-        await Promise.all(selectedPriceIds.map((id) => adminApi.delete(`/pricing/${id}`)));
-        showToast(`Successfully deleted ${selectedPriceIds.length} price(s).`, "success");
+        setDeletingBulkPrices(true);
+        setBulkSaving(false);
+        return;
       } else {
         const payload: any = {};
         if (priceBulkActionType === "Mark active") {
@@ -1578,6 +1592,20 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   };
 
+  const confirmBulkDeleteVariantPrices = async () => {
+    try {
+      const overridesToDelete = selectedVPIds.filter((id) => !id.startsWith("base-"));
+      await Promise.all(overridesToDelete.map((id) => adminApi.delete(`/pricing/${id}`)));
+      showToast(`Successfully deleted ${overridesToDelete.length} variant price(s). (Base prices ignored)`, "success");
+      setSelectedVPIds([]);
+      setVpBulkActionType("Bulk Action");
+      setDeletingBulkVariantPrices(false);
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to delete variant prices."), "error");
+    }
+  };
+
   const handleVPBulkApplyAction = async () => {
     if (!selectedVPIds.length) {
       showToast("Please select at least one variant price row.", "error");
@@ -1590,13 +1618,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     setBulkSaving(true);
     try {
       if (vpBulkActionType === "Delete selected") {
-        if (!window.confirm(`Delete ${selectedVPIds.length} selected variant price override(s)?`)) {
-          setBulkSaving(false);
-          return;
-        }
-        const overridesToDelete = selectedVPIds.filter(id => !id.startsWith("base-"));
-        await Promise.all(overridesToDelete.map((id) => adminApi.delete(`/pricing/${id}`)));
-        showToast(`Successfully deleted ${overridesToDelete.length} variant price(s). (Base prices ignored)`, "success");
+        setDeletingBulkVariantPrices(true);
+        setBulkSaving(false);
+        return;
       } else {
         const payload: any = {};
         if (vpBulkActionType === "Mark active") {
@@ -1720,16 +1744,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           return;
         }
 
-        // Safety Check removed per user request: allow deletion even if stock exists.
-
-        if (!window.confirm(`Delete ${assignmentsToDelete.length} selected warehouse assignment(s)?`)) {
-          setBulkSaving(false);
-          return;
-        }
-        await Promise.all(
-          assignmentsToDelete.map((inv) => adminApi.delete(`/inventory/${inv.id}`))
-        );
-        showToast(`Successfully deleted ${assignmentsToDelete.length} warehouse assignment(s).`, "success");
+        setShowBulkDeleteInventoryModal(true);
+        setBulkSaving(false);
+        return;
       } else if (invBulkActionType === "Assign to new warehouse") {
         setWarehouseAssignSelections({});
         setWarehouseAssignStocks({});
@@ -1780,15 +1797,53 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   };
 
-  const handleDeleteAllBasePrices = async () => {
+  const confirmBulkDeleteInventory = async () => {
+    const assignmentsToDelete = paginatedVariantInventories.filter(
+      (inv: any) => selectedInvIds.includes(inv.id) && inv.isOverride
+    );
+    if (!assignmentsToDelete.length) return;
+    setBulkSaving(true);
+    try {
+      await Promise.all(
+        assignmentsToDelete.map((inv) => adminApi.delete(`/inventory/${inv.id}`))
+      );
+      showToast(`Successfully deleted ${assignmentsToDelete.length} warehouse assignment(s).`, "success");
+      setSelectedInvIds([]);
+      setInvBulkActionType("Bulk Action");
+      setShowBulkDeleteInventoryModal(false);
+      await refetch();
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || err?.response?.data?.message || "Error removing assignments.", "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  const confirmDeleteInventoryAssignment = async () => {
+    if (!deletingInventoryAssignment) return;
+    try {
+      await adminApi.delete(`/inventory/${deletingInventoryAssignment.id}`);
+      showToast("Assignment removed.", "success");
+      setDeletingInventoryAssignment(null);
+      await refetch();
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || err?.response?.data?.message || "Error removing assignment.", "error");
+    }
+  };
+
+  const handleDeleteAllBasePrices = () => {
     if (!productBasePrices.length) return;
-    if (!window.confirm(`Are you sure you want to delete ALL ${productBasePrices.length} country base price(s) for this product?`)) return;
+    setDeletingAllBasePrices(true);
+  };
+
+  const confirmDeleteAllBasePrices = async () => {
     try {
       await Promise.all(
         productBasePrices.map((p: any) => adminApi.delete(`/pricing/${p.id}`))
       );
       showToast(`All ${productBasePrices.length} base price(s) deleted successfully.`);
       setSelectedPriceIds([]);
+      setDeletingAllBasePrices(false);
       refetch();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to delete base prices."), "error");
@@ -3344,12 +3399,15 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   };
 
-  const handleBulkDeleteVariants = async () => {
+  const handleBulkDeleteVariants = () => {
     if (!selectedVariantIds.length) {
       showToast("Select at least one variant.", "error");
       return;
     }
-    if (!window.confirm(`Delete ${selectedVariantIds.length} selected variant${selectedVariantIds.length === 1 ? "" : "s"}?`)) return;
+    setDeletingBulkVariantsModal(true);
+  };
+
+  const confirmBulkDeleteVariants = async () => {
     setBulkSaving(true);
     try {
       const response = await adminApi.put(`/products/${productId}/variants/bulk`, {
@@ -3358,6 +3416,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       const summary = response.data.data.summary as { succeeded: number; failed: number };
       showToast(summary.failed ? `Deleted ${summary.succeeded}; ${summary.failed} failed.` : `${summary.succeeded} variant${summary.succeeded === 1 ? "" : "s"} deleted.`, summary.failed ? "error" : "success");
       setSelectedVariantIds([]);
+      setDeletingBulkVariantsModal(false);
       await refetch();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Bulk delete failed."), "error");
@@ -5584,9 +5643,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       try {
                         let updates: any[] = [];
                         if (bulkActionType === "Mark active") {
-                          updates = selectedVariantIds.map((id) => ({ variantId: id, action: "restore" }));
+                          updates = selectedVariantIds.map((id) => ({ variantId: id, action: "active" }));
                         } else if (bulkActionType === "Mark inactive") {
-                          updates = selectedVariantIds.map((id) => ({ variantId: id, action: "delete" }));
+                          updates = selectedVariantIds.map((id) => ({ variantId: id, action: "inactive" }));
                         } else if (bulkActionType === "Stock update filtered") {
                           if (!bulkActionValue.trim() || isNaN(parseInt(bulkActionValue, 10))) {
                             showToast("Please enter a valid stock quantity.", "error");
@@ -5598,11 +5657,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                             stock: parseInt(bulkActionValue, 10),
                           }));
                         } else if (bulkActionType === "Delete selected") {
-                          if (!window.confirm(`Delete ${selectedVariantIds.length} selected variant(s)?`)) {
-                            setBulkSaving(false);
-                            return;
-                          }
-                          updates = selectedVariantIds.map((id) => ({ variantId: id, action: "delete" }));
+                          setDeletingBulkVariantsModal(true);
+                          setBulkSaving(false);
+                          return;
                         }
 
                         const response = await adminApi.put(`/products/${productId}/variants/bulk`, { updates });
@@ -7329,16 +7386,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                         <button
                                           type="button"
                                           disabled={isReadOnly || isBaseProductRowDisabled}
-                                          onClick={async () => {
-                                            // Safety Check removed per user request: allow deletion even if stock exists.
-                                            if (!window.confirm(`Delete assignment for ${inventory.warehouseName}?`)) return;
-                                            try {
-                                              await adminApi.delete(`/inventory/${inventory.id}`);
-                                              showToast("Assignment removed.");
-                                              refetch();
-                                            } catch (err: any) {
-                                              showToast(err?.response?.data?.error || "Error removing assignment.", "error");
-                                            }
+                                          onClick={() => {
+                                            setDeletingInventoryAssignment({
+                                              id: inventory.id,
+                                              warehouseName: inventory.warehouseName || "warehouse",
+                                            });
                                           }}
                                           className="rounded border border-[#F2C9C9] p-1 text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
                                           title="Remove Assignment"
@@ -9177,6 +9229,62 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         message={deletingVariant ? `This will soft delete "${deletingVariant.title}" and remove it from the active variant list.` : ""}
         onConfirm={() => deletingVariant && handleDeleteVariant(deletingVariant.id)}
         onCancel={() => setDeletingVariant(null)}
+      />
+
+      <ConfirmModal
+        open={!!deletingInventoryAssignment}
+        title="Remove warehouse assignment?"
+        message={deletingInventoryAssignment ? `This will unassign and remove the stock allocation for ${deletingInventoryAssignment.warehouseName}.` : ""}
+        onConfirm={confirmDeleteInventoryAssignment}
+        onCancel={() => setDeletingInventoryAssignment(null)}
+      />
+
+      <ConfirmModal
+        open={showBulkDeleteInventoryModal}
+        title="Delete selected warehouse assignments?"
+        message={`This will remove ${selectedInvIds.length} selected warehouse stock allocation(s).`}
+        onConfirm={confirmBulkDeleteInventory}
+        onCancel={() => setShowBulkDeleteInventoryModal(false)}
+      />
+
+      <ConfirmModal
+        open={!!deletingPriceId}
+        title="Delete this country price?"
+        message="This will remove the base pricing for this country."
+        onConfirm={confirmDeleteProductPrice}
+        onCancel={() => setDeletingPriceId(null)}
+      />
+
+      <ConfirmModal
+        open={deletingBulkPrices}
+        title="Delete selected base prices?"
+        message={`This will remove ${selectedPriceIds.length} selected country base price(s).`}
+        onConfirm={confirmBulkDeletePrices}
+        onCancel={() => setDeletingBulkPrices(false)}
+      />
+
+      <ConfirmModal
+        open={deletingBulkVariantPrices}
+        title="Delete selected variant price overrides?"
+        message={`This will remove ${selectedVPIds.length} selected variant price override(s). Base prices will remain intact.`}
+        onConfirm={confirmBulkDeleteVariantPrices}
+        onCancel={() => setDeletingBulkVariantPrices(false)}
+      />
+
+      <ConfirmModal
+        open={deletingAllBasePrices}
+        title="Delete all country base prices?"
+        message={`Are you sure you want to delete ALL ${productBasePrices.length} country base price(s) for this product?`}
+        onConfirm={confirmDeleteAllBasePrices}
+        onCancel={() => setDeletingAllBasePrices(false)}
+      />
+
+      <ConfirmModal
+        open={deletingBulkVariantsModal}
+        title="Delete selected variants?"
+        message={`This will soft-delete ${selectedVariantIds.length} selected variant(s) and remove them from the active list.`}
+        onConfirm={confirmBulkDeleteVariants}
+        onCancel={() => setDeletingBulkVariantsModal(false)}
       />
 
       <Modal

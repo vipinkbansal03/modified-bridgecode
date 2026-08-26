@@ -1749,8 +1749,8 @@ function toPublicCategory(c: {
 }
 
 export async function getProductReviews(slug: string) {
-  const product = await prisma.product.findUnique({
-    where: { slug },
+  const product = await prisma.product.findFirst({
+    where: { slug, deletedAt: null },
     select: { id: true },
   });
 
@@ -1788,8 +1788,8 @@ export async function submitProductReview(
     feedbackText?: string;
   }
 ) {
-  const product = await prisma.product.findUnique({
-    where: { slug },
+  const product = await prisma.product.findFirst({
+    where: { slug, deletedAt: null },
     select: { id: true },
   });
 
@@ -1832,8 +1832,8 @@ export async function getProductWarehouses(
   countryCode: string,
   state: string | undefined
 ) {
-  const product = await prisma.product.findUnique({
-    where: { slug },
+  const product = await prisma.product.findFirst({
+    where: { slug, deletedAt: null },
     select: { id: true },
   });
   if (!product) throw new AppError("Product not found", 404);

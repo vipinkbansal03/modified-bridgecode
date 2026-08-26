@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Clock3, Download, Filter, History, Layers, Search, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, Pagination, StatCard, StatusBadge, useToast, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, Pagination, StatCard, StatusBadge, useToast, AdminBulkActionsBar, AdminDeleteModal, DataTable } from "@/components/admin/AdminComponents";
+import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { RefreshButton } from "@/components/admin/RefreshButton";
 import { Modal } from "@/components/ui/Modal";
 import {
@@ -17,6 +18,8 @@ import {
   useBulkUpdateInventory,
   useUpdateInventory,
   useAdminWarehouses,
+  useAdminProducts,
+  useAdminVariants,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
@@ -149,6 +152,8 @@ export default function InventoryPage() {
   const [lastSelectedGroupId, setLastSelectedGroupId] = useState<string | null>(null);
   const [limit, setLimit] = useState(20);
   const [warehouseFilterId, setWarehouseFilterId] = useState("");
+  const [productFilterId, setProductFilterId] = useState("");
+  const [variantFilterId, setVariantFilterId] = useState("");
   const [visibleColumns, setVisibleColumns] = useState<Record<InventoryColumnKey, boolean>>(DEFAULT_COLUMNS);
   const [columnsReady, setColumnsReady] = useState(false);
   const [historyRow, setHistoryRow] = useState<InventoryRow | null>(null);
@@ -168,8 +173,29 @@ export default function InventoryPage() {
   const [warehouseAssignSelections, setWarehouseAssignSelections] = useState<Record<string, boolean>>({});
   const [warehouseAssignStocks, setWarehouseAssignStocks] = useState<Record<string, string>>({});
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [unassignTarget, setUnassignTarget] = useState<InventoryRow | null>(null);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
   const { showToast, ToastComponent } = useToast();
+
+  const { data: productsData } = useAdminProducts({ limit: 1000, sortBy: "title", sortDir: "asc" });
+  const { data: variantsData } = useAdminVariants({ limit: 1000, productId: productFilterId || undefined, sortBy: "title", sortDir: "asc" });
+
+  const productOptions = useMemo(() => {
+    const list = ((productsData as any)?.data ?? []) as any[];
+    return list.map((p) => ({
+      value: p.id,
+      label: `${p.title}${p.productCode ? ` (${p.productCode})` : p.sku ? ` (${p.sku})` : ""}`,
+    }));
+  }, [productsData]);
+
+  const variantOptions = useMemo(() => {
+    const list = ((variantsData as any)?.data ?? []) as any[];
+    return list.map((v) => ({
+      value: v.id,
+      label: `${v.title || v.sku || "Variant"}${v.product?.title ? ` - ${v.product.title}` : ""}${v.sku ? ` (${v.sku})` : ""}`,
+    }));
+  }, [variantsData]);
 
   useEffect(() => {
     try {
@@ -196,7 +222,7 @@ export default function InventoryPage() {
 
   useEffect(() => {
     setSelectedIds([]);
-  }, [search, status, sortBy, sortDir, warehouseFilterId]);
+  }, [search, status, sortBy, sortDir, warehouseFilterId, productFilterId, variantFilterId]);
 
   const inventoryQuery = useAdminInventory({
     page,
@@ -206,6 +232,8 @@ export default function InventoryPage() {
     sortBy,
     sortDir,
     warehouseId: warehouseFilterId || undefined,
+    productId: productFilterId || undefined,
+    variantId: variantFilterId || undefined,
   });
   const { data, isLoading, refetch, isFetching } = inventoryQuery;
   const dashboard = useAdminInventoryDashboard();
@@ -237,56 +265,7 @@ export default function InventoryPage() {
 
   const allVisibleSelected = rows.length > 0 && rows.every((row) => selectedIds.includes(row.id));
   const selectedCount = selectedIds.length;
-
-  const visibleColumnEntries = useMemo(
-    () =>
-      [
-        { key: "warehouse" as const, label: "Warehouse", width: "150px" },
-        { key: "reserved" as const, label: "Reserved Stock", width: "120px" },
-        { key: "threshold" as const, label: "Low Stock At", width: "120px" },
-        { key: "status" as const, label: "Status", width: "120px" },
-        { key: "updated" as const, label: "Updated Date", width: "140px" },
-      ].filter((column) => visibleColumns[column.key]),
-    [visibleColumns],
-  );
-
-  const gridTemplateColumns = useMemo(() => {
-    const widths = ["36px", "minmax(270px, 1fr)", "130px", "110px", "120px", ...visibleColumnEntries.map((column) => column.width), "150px"];
-    return widths.join(" ");
-  }, [visibleColumnEntries]);
-
   const totalPages = data?.pagination?.totalPages || 1;
-
-  const toggleSelected = (id: string) => {
-    setSelectedIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
-  };
-
-  const toggleVisible = async () => {
-    const visibleIds = rows.map((row) => row.id);
-    const isAllVisibleSelected = visibleIds.every((id) => selectedIds.includes(id));
-    if (isAllVisibleSelected) {
-      setSelectedIds([]);
-    } else {
-      try {
-        const res = await adminApi.get("/inventory", {
-          params: {
-            search: search || undefined,
-            status: status || undefined,
-            sortBy,
-            sortDir,
-            warehouseId: warehouseFilterId || undefined,
-            limit: 999999,
-            ignoreMaxLimit: "true",
-          },
-        });
-        const allIds = (res.data.data ?? []).map((row: any) => row.id);
-        setSelectedIds(allIds);
-        showToast(`Selected all ${allIds.length} inventory items across all pages.`, "success");
-      } catch (err) {
-        showToast("Failed to select all inventory items.", "error");
-      }
-    }
-  };
 
   const handleInlineUpdate = async (row: InventoryRow, payload: { stock?: number; lowStockThreshold?: number }) => {
     try {
@@ -296,6 +275,165 @@ export default function InventoryPage() {
       showToast(getAdminErrorMessage(error, "Failed to update inventory."), "error");
     }
   };
+
+  const columns = useMemo(() => {
+    const cols: Array<{
+      key: string;
+      label: string;
+      width?: string;
+      render: (row: InventoryRow) => React.ReactNode;
+    }> = [
+      {
+        key: "product",
+        label: "Product / Variant",
+        width: "280px",
+        render: (row) => (
+          <div className="py-0.5 min-w-0">
+            <div className="font-semibold text-[#1A1A1A] leading-snug">
+              {row.product?.title || "Unknown product"}
+            </div>
+            <div className="mt-0.5 text-[12px] text-[#6B6B6B] leading-snug">
+              {row.variant?.title || (row.variantId ? row.product?.brand : "Main Stock")}
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: "sku",
+        label: "SKU",
+        width: "180px",
+        render: (row) => (
+          <div className="space-y-0.5 min-w-0">
+            <div className="font-mono text-[12.5px] text-[#444] break-all font-medium leading-snug">
+              {row.variant?.sku || row.product?.sku || "—"}
+            </div>
+            <div className="text-[11px] text-[#9A9A9A]">
+              {row.product?.brand || "Modern Orthodontics"}
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: "stock",
+        label: "Stock",
+        width: "80px",
+        render: (row) => <span className="font-semibold text-[#1A1A1A]">{tinyNumber(row.stock)}</span>,
+      },
+      {
+        key: "available",
+        label: "Available",
+        width: "90px",
+        render: (row) => {
+          const availableStock = Math.max(0, row.stock - row.reservedStock);
+          return <span className="font-semibold text-emerald-700">{tinyNumber(availableStock)}</span>;
+        },
+      },
+    ];
+
+    if (visibleColumns.warehouse) {
+      cols.push({
+        key: "warehouse",
+        label: "Warehouse",
+        width: "180px",
+        render: (row) => {
+          const warehouseLabel = row.warehouse
+            ? `${row.warehouse.name}${row.warehouse.state ? ` (${row.warehouse.state})` : ""}`
+            : "Base / Default";
+          return <span className="text-[13px] text-[#555] leading-snug block">{warehouseLabel}</span>;
+        },
+      });
+    }
+
+    if (visibleColumns.reserved) {
+      cols.push({
+        key: "reserved",
+        label: "Reserved Stock",
+        width: "100px",
+        render: (row) => <span className="text-[13px] text-[#6B6B6B]">{tinyNumber(row.reservedStock)}</span>,
+      });
+    }
+
+    if (visibleColumns.threshold) {
+      cols.push({
+        key: "threshold",
+        label: "Low Stock At",
+        width: "110px",
+        render: (row) =>
+          canUpdate ? (
+            <input
+              type="text"
+              defaultValue={row.lowStockThreshold}
+              className="w-20 rounded border border-[#E6E6E6] px-2 py-1 text-center text-[12.5px] outline-none focus:border-[#E31E24]"
+              onChange={(e) => {
+                e.target.value = e.target.value.replace(/\D/g, "");
+              }}
+              onBlur={(e) => {
+                const nextVal = Number(e.target.value);
+                if (!Number.isInteger(nextVal) || nextVal < 0 || nextVal === row.lowStockThreshold) return;
+                void handleInlineUpdate(row, { lowStockThreshold: nextVal });
+              }}
+            />
+          ) : (
+            <span className="text-[13px] text-[#555]">{row.lowStockThreshold}</span>
+          ),
+      });
+    }
+
+    if (visibleColumns.status) {
+      cols.push({
+        key: "status",
+        label: "Status",
+        width: "110px",
+        render: (row) => <StatusBadge status={row.status} />,
+      });
+    }
+
+    if (visibleColumns.updated) {
+      cols.push({
+        key: "updated",
+        label: "Updated Date",
+        width: "110px",
+        render: (row) => (
+          <span className="text-[12.5px] text-[#6B6B6B]">
+            {new Date(row.updatedAt).toLocaleDateString()}
+          </span>
+        ),
+      });
+    }
+
+    cols.push({
+      key: "actions",
+      label: "Actions",
+      width: "140px",
+      render: (row) => (
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setHistoryRow(row)}
+            disabled={!row.variantId}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12px] font-semibold text-[#444] hover:border-[#E31E24] hover:text-[#E31E24] hover:bg-[#FFF7F7] disabled:opacity-40 disabled:hover:border-[#E6E6E6] disabled:hover:bg-white disabled:hover:text-[#444] shadow-xs transition-colors whitespace-nowrap"
+            title="Stock History"
+          >
+            <History size={13} /> History
+          </button>
+          {row.warehouseId ? (
+            <button
+              type="button"
+              onClick={() => setUnassignTarget(row)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:border-[#E31E24] hover:text-[#E31E24] hover:bg-[#FFF7F7] shadow-xs transition-colors flex-shrink-0"
+              title="Unassign Warehouse"
+            >
+              <Trash2 size={13} />
+            </button>
+          ) : (
+            <div className="w-8 flex-shrink-0" />
+          )}
+        </div>
+      ),
+    });
+
+    return cols;
+  }, [visibleColumns, canUpdate]);
 
   const exportInventory = async (selectedOnly = false) => {
     try {
@@ -403,21 +541,8 @@ export default function InventoryPage() {
         return;
       }
     } else if (bulkAction === "delete") {
-      // Deleting assignments
-      if (!window.confirm(`Delete ${selectedIds.length} selected warehouse assignment(s)?`)) {
-        return;
-      }
-      try {
-        await Promise.all(selectedIds.map(id => adminApi.delete(`/inventory/${id}`)));
-        setSelectedIds([]);
-        setBulkAction("");
-        showToast(`Successfully deleted ${selectedIds.length} warehouse assignment(s).`, "success");
-        refetch();
-        return;
-      } catch (error) {
-        showToast(getAdminErrorMessage(error, "Failed to delete warehouse assignments."), "error");
-        return;
-      }
+      setShowBulkDeleteModal(true);
+      return;
     } else {
       showToast("Select a bulk action to apply.", "error");
       return;
@@ -528,7 +653,7 @@ export default function InventoryPage() {
         filters={{
           showFilters,
           onToggle: () => setShowFilters(!showFilters),
-          activeCount: [status, warehouseFilterId, sortBy !== "updatedAt" ? sortBy : ""].filter(Boolean).length,
+          activeCount: [status, warehouseFilterId, productFilterId, variantFilterId, sortBy !== "updatedAt" ? sortBy : ""].filter(Boolean).length,
         }}
         columns={{
           visibleColumns,
@@ -554,59 +679,93 @@ export default function InventoryPage() {
         onResetFilters={() => {
           setStatus("");
           setWarehouseFilterId("");
+          setProductFilterId("");
+          setVariantFilterId("");
           setSortBy("updatedAt");
           setSortDir("desc");
           setPage(1);
         }}
         filterPanel={
-          <div className="flex flex-wrap items-center gap-3">
-            <select
-              value={status}
-              onChange={(event) => {
-                setStatus(event.target.value);
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <AdminMultiSearchableSelect
+              label="Product"
+              values={productFilterId ? productFilterId.split(",").filter(Boolean) : []}
+              onValuesChange={(vals) => {
+                setProductFilterId(vals.join(","));
+                setVariantFilterId("");
                 setPage(1);
               }}
-              className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
-            >
-              <option value="">All Status</option>
-              <option value="IN_STOCK">In Stock</option>
-              <option value="LOW_STOCK">Low Stock</option>
-              <option value="OUT_OF_STOCK">Out of Stock</option>
-              <option value="BACKORDER">Backorder</option>
-            </select>
-            <select
+              options={productOptions}
+              placeholder="Select products"
+              allowSelectAll
+              selectAllLabel="All products"
+            />
+            <AdminMultiSearchableSelect
+              label="Variant"
+              values={variantFilterId ? variantFilterId.split(",").filter(Boolean) : []}
+              onValuesChange={(vals) => {
+                setVariantFilterId(vals.join(","));
+                setPage(1);
+              }}
+              options={variantOptions}
+              placeholder="Select variants"
+              allowSelectAll
+              selectAllLabel="All variants"
+            />
+            <AdminSelect
+              label="Warehouse"
               value={warehouseFilterId}
               onChange={(event) => {
                 setWarehouseFilterId(event.target.value);
                 setPage(1);
               }}
-              className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
-            >
-              <option value="">All Warehouses</option>
-              {warehouses.map((w: any) => (
-                <option key={w.id} value={w.id}>
-                  {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
-                </option>
-              ))}
-            </select>
-            <select
+              options={[
+                { value: "", label: "All Warehouses" },
+                ...warehouses.map((w: any) => ({
+                  value: w.id,
+                  label: `${w.name}${w.state ? ` (${w.state})` : ""}${w.country?.code ? ` [${w.country.code}]` : ""}`,
+                })),
+              ]}
+            />
+            <AdminSelect
+              label="Status"
+              value={status}
+              onChange={(event) => {
+                setStatus(event.target.value);
+                setPage(1);
+              }}
+              options={[
+                { value: "", label: "All Status" },
+                { value: "IN_STOCK", label: "In Stock" },
+                { value: "LOW_STOCK", label: "Low Stock" },
+                { value: "OUT_OF_STOCK", label: "Out of Stock" },
+                { value: "BACKORDER", label: "Backorder" },
+              ]}
+            />
+            <AdminSelect
+              label="Sort By"
               value={sortBy}
               onChange={(event) => setSortBy(event.target.value)}
-              className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
-            >
-              <option value="updatedAt">Updated Date</option>
-              <option value="product">Product</option>
-              <option value="variant">Variant</option>
-              <option value="sku">SKU</option>
-              <option value="stock">Stock</option>
-              <option value="reservedStock">Reserved Stock</option>
-              <option value="lowStockThreshold">Low Stock Threshold</option>
-              <option value="status">Status</option>
-            </select>
-            <select value={sortDir} onChange={(event) => setSortDir(event.target.value as "asc" | "desc")} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]">
-              <option value="desc">Descending</option>
-              <option value="asc">Ascending</option>
-            </select>
+              options={[
+                { value: "updatedAt", label: "Updated Date" },
+                { value: "product", label: "Product" },
+                { value: "variant", label: "Variant" },
+                { value: "sku", label: "SKU" },
+                { value: "stock", label: "Stock" },
+                { value: "reservedStock", label: "Reserved Stock" },
+                { value: "lowStockThreshold", label: "Low Stock Threshold" },
+                { value: "status", label: "Status" },
+              ]}
+            />
+            <AdminSelect
+              label="Sort Direction"
+              value={sortDir}
+              onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+              options={[
+                { value: "desc", label: "Descending" },
+                { value: "asc", label: "Ascending" },
+              ]}
+            />
           </div>
         }
       />
@@ -709,333 +868,118 @@ export default function InventoryPage() {
       )}
 
       {activeTab === "levels" && (
-        <>
-          <div className="mb-4 flex flex-col xl:flex-row xl:items-center justify-between gap-3 rounded-lg border border-[#E6E6E6] bg-white p-3.5 shadow-sm min-h-[58px]">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-[13px] font-semibold text-[#1A1A1A]">List</span>
+        <DataTable<InventoryRow>
+          columns={columns}
+          data={rows}
+          rowKey="id"
+          isLoading={isLoading}
+          emptyMessage="No inventory records found."
+          enableSelection={canUpdate}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          totalItems={data?.pagination?.total ?? 0}
+          currentPage={page}
+          pageSize={limit}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setLimit(size);
+            setPage(1);
+          }}
+          pageSizeOptions={[20, 50, 100, 500]}
+          onSelectAll={async (checked) => {
+            if (checked) {
+              const visibleIds = rows.map((row) => row.id);
+              try {
+                const res = await adminApi.get("/inventory", {
+                  params: {
+                    search: search || undefined,
+                    status: status || undefined,
+                    sortBy,
+                    sortDir,
+                    warehouseId: warehouseFilterId || undefined,
+                    productId: productFilterId || undefined,
+                    variantId: variantFilterId || undefined,
+                    limit: 999999,
+                    ignoreMaxLimit: "true",
+                  },
+                });
+                const allIds = (res.data.data ?? []).map((row: any) => row.id);
+                setSelectedIds(allIds);
+                showToast(`Selected all ${allIds.length} inventory items across all pages.`, "success");
+              } catch {
+                setSelectedIds(visibleIds);
+              }
+            } else {
+              setSelectedIds([]);
+            }
+          }}
+          renderBulkActions={(selectedIds) => (
+            <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center justify-center rounded-full bg-[#FEF2F2] border border-red-100 px-2.5 py-0.5 text-[11.5px] font-semibold text-red-600 min-w-[84px]">
-                {selectedCount} selected
+                {selectedIds.length} selected
               </span>
-              <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">
-                Showing {data?.data?.length === 0 ? 0 : (page - 1) * limit + 1}-{Math.min(page * limit, data?.pagination?.total ?? 0)} of {data?.pagination?.total ?? 0}
-              </span>
-              <div className="flex items-center gap-1">
-                <select
-                  value={limit}
-                  onChange={(e) => {
-                    setLimit(Number(e.target.value));
-                    setPage(1);
-                  }}
-                  className="rounded-md border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] text-[#1A1A1A] outline-none"
-                >
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                  <option value={500}>500</option>
-                </select>
-              </div>
-              <div className="flex items-center gap-1.5 ml-2">
-                <button
-                  type="button"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="rounded-md border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] hover:bg-[#F5F5F5] disabled:opacity-40"
-                >
-                  Prev
-                </button>
-                <span className="text-[12px] text-[#1A1A1A] font-semibold">{page}/{totalPages}</span>
-                <button
-                  type="button"
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="rounded-md border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] hover:bg-[#F5F5F5] disabled:opacity-40"
-                >
-                  Next
-                </button>
-              </div>
+              <select
+                value={bulkAction}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setBulkAction(val);
+                  if (val === "warehouse") {
+                    setWarehouseAssignSelections({});
+                    setWarehouseAssignStocks({});
+                    setWarehouseAssignModalOpen(true);
+                  }
+                }}
+                className="h-8 rounded-md border border-[#D1D5DB] bg-white px-3 text-[12.5px] text-[#1F2937] outline-none focus:border-[#E31E24] cursor-pointer"
+              >
+                <option value="">Choose Bulk Action</option>
+                <option value="stock">Update stock</option>
+                <option value="threshold">Update low stock threshold</option>
+                <option value="warehouse">Assign warehouse</option>
+                <option value="delete">Delete selected</option>
+              </select>
 
-              <div className="flex items-center gap-2 border-l border-[#E6E6E6] pl-3 ml-2">
-                <select
-                  value={bulkAction}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setBulkAction(val);
-                    if (val === "warehouse") {
-                      setWarehouseAssignSelections({});
-                      setWarehouseAssignStocks({});
-                      setWarehouseAssignModalOpen(true);
-                    }
-                  }}
-                  className="h-8 rounded-md border border-[#D1D5DB] bg-white px-3 text-[12.5px] text-[#1F2937] outline-none focus:border-[#E31E24] cursor-pointer"
-                >
-                  <option value="">Choose Bulk Action</option>
-                  <option value="stock">Update stock</option>
-                  <option value="threshold">Update low stock threshold</option>
-                  <option value="warehouse">Assign warehouse</option>
-                  <option value="delete">Delete selected</option>
-                </select>
-
-                {bulkAction === "stock" && (
-                  <input
-                    type="text"
-                    placeholder="Stock"
-                    value={bulkStock}
-                    onChange={(e) => setBulkStock(e.target.value.replace(/\D/g, ""))}
-                    className="h-8 w-24 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] outline-none focus:border-[#E31E24] shadow-sm"
-                  />
-                )}
-                {bulkAction === "threshold" && (
-                  <input
-                    type="text"
-                    placeholder="Threshold"
-                    value={bulkThreshold}
-                    onChange={(e) => setBulkThreshold(e.target.value.replace(/\D/g, ""))}
-                    className="h-8 w-28 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] outline-none focus:border-[#E31E24] shadow-sm"
-                  />
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => void applyBulkUpdate()}
-                  disabled={bulkUpdate.isPending || selectedCount === 0 || !bulkAction}
-                  className="h-8 rounded-md bg-[#E31E24] hover:bg-[#B5151B] px-4 text-[12.5px] font-semibold text-white disabled:opacity-40 disabled:hover:bg-[#E31E24] disabled:cursor-not-allowed transition-all shadow-sm flex items-center justify-center min-w-[80px]"
-                >
-                  {bulkUpdate.isPending ? "Applying..." : "Apply"}
-                </button>
-              </div>
-            </div>
-          </div>
-
-      <div className="rounded-lg border border-[#E6E6E6] bg-white">
-        <div className="overflow-x-auto">
-          <div className="w-full min-w-max">
-            <div className="grid w-full gap-0 border-b border-[#E6E6E6] bg-[#F8F8F8] px-2 py-3 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]" style={{ gridTemplateColumns }}>
-              <span className="flex justify-center items-center">
+              {bulkAction === "stock" && (
                 <input
-                  type="checkbox"
-                  checked={allVisibleSelected}
-                  onChange={toggleVisible}
-                  className="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                  type="text"
+                  placeholder="Stock"
+                  value={bulkStock}
+                  onChange={(e) => setBulkStock(e.target.value.replace(/\D/g, ""))}
+                  className="h-8 w-24 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] outline-none focus:border-[#E31E24] shadow-sm"
                 />
-              </span>
-              <span className="px-2">Product / Variant</span>
-              <span className="px-2">SKU</span>
-              <span className="px-2">Stock</span>
-              <span className="px-2">Available</span>
-              {visibleColumns.warehouse && <span className="px-2">Warehouse</span>}
-              {visibleColumns.reserved && <span className="px-2">Reserved Stock</span>}
-              {visibleColumns.threshold && <span className="px-2">Low Stock At</span>}
-              {visibleColumns.status && <span className="px-2">Status</span>}
-              {visibleColumns.updated && <span className="px-2">Updated Date</span>}
-              <span className="px-2 text-right">Actions</span>
+              )}
+              {bulkAction === "threshold" && (
+                <input
+                  type="text"
+                  placeholder="Threshold"
+                  value={bulkThreshold}
+                  onChange={(e) => setBulkThreshold(e.target.value.replace(/\D/g, ""))}
+                  className="h-8 w-28 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] outline-none focus:border-[#E31E24] shadow-sm"
+                />
+              )}
+
+              <button
+                type="button"
+                onClick={() => void applyBulkUpdate()}
+                disabled={bulkUpdate.isPending || selectedIds.length === 0 || !bulkAction}
+                className="h-8 rounded-md bg-[#E31E24] hover:bg-[#B5151B] px-4 text-[12.5px] font-semibold text-white disabled:opacity-40 disabled:hover:bg-[#E31E24] disabled:cursor-not-allowed transition-all shadow-sm flex items-center justify-center min-w-[80px]"
+              >
+                {bulkUpdate.isPending ? "Applying..." : "Apply"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedIds([]);
+                  setBulkAction("");
+                }}
+                className="inline-flex h-8 items-center gap-1 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12px] text-[#555] hover:bg-gray-50"
+              >
+                <X size={13} /> Clear
+              </button>
             </div>
-
-            {isLoading ? (
-              <div className="divide-y divide-[#E6E6E6]">
-                {Array.from({ length: 5 }).map((_, index) => (
-                  <div key={index} className="grid w-full gap-0 px-2 py-4" style={{ gridTemplateColumns }}>
-                    {Array.from({ length: 5 + visibleColumnEntries.length }).map((__, cellIndex) => (
-                      <div key={cellIndex} className="px-2">
-                        <div className="h-4 animate-pulse rounded bg-[#E6E6E6]" />
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            ) : rows.length === 0 ? (
-              <div className="px-4 py-12 text-center text-[13.5px] text-[#9A9A9A]">No inventory records found.</div>
-            ) : (
-              <div className="divide-y divide-[#E6E6E6]">
-                {groupedRows.map((group) => {
-                  const firstRow = group[0];
-                  
-                  return (
-                    <div key={firstRow.variantId || firstRow.product?.id || firstRow.id} className="grid w-full items-center gap-0 px-2 py-0" style={{ gridTemplateColumns }}>
-                      <div className="flex h-full items-center justify-center px-2 py-4">
-                        {canUpdate && (
-                          <input
-                            type="checkbox"
-                            checked={group.every(r => selectedIds.includes(r.id))}
-                            onChange={(e) => {
-                              const groupId = firstRow.variantId || firstRow.product?.id || firstRow.id;
-                              const ids = group.map(r => r.id);
-                              const isShiftPressed = (e.nativeEvent as any).shiftKey;
-                              const isAllSelected = group.every(r => selectedIds.includes(r.id));
-
-                              if (isShiftPressed && lastSelectedGroupId !== null) {
-                                const groupIdsList = groupedRows.map(g => g[0].variantId || g[0].product?.id || g[0].id);
-                                const prevIndex = groupIdsList.indexOf(lastSelectedGroupId);
-                                const currIndex = groupIdsList.indexOf(groupId);
-
-                                if (prevIndex !== -1 && currIndex !== -1) {
-                                  const start = Math.min(prevIndex, currIndex);
-                                  const end = Math.max(prevIndex, currIndex);
-                                  const rangeGroups = groupedRows.slice(start, end + 1);
-                                  const rangeIds = rangeGroups.flatMap(g => g.map(r => r.id));
-
-                                  if (!isAllSelected) {
-                                    setSelectedIds(prev => Array.from(new Set([...prev, ...rangeIds])));
-                                  } else {
-                                    setSelectedIds(prev => prev.filter(id => !rangeIds.includes(id)));
-                                  }
-                                  setLastSelectedGroupId(groupId);
-                                  return;
-                                }
-                              }
-
-                              if (e.target.checked) {
-                                setSelectedIds(prev => Array.from(new Set([...prev, ...ids])));
-                              } else {
-                                setSelectedIds(prev => prev.filter(id => !ids.includes(id)));
-                              }
-                              setLastSelectedGroupId(groupId);
-                            }}
-                            className="h-4 w-4 accent-[#E31E24]"
-                            aria-label={`Select ${firstRow.product.title}`}
-                          />
-                        )}
-                      </div>
-                      <div className="min-w-0 px-2 py-4">
-                        <div className="truncate text-[13.5px] font-medium text-[#1A1A1A]">{firstRow.product.title}</div>
-                        <div className="truncate text-[11.5px] text-[#9A9A9A]">{firstRow.variant?.title || (firstRow.variantId ? firstRow.product.brand : "Product Stock")}</div>
-                      </div>
-                      <div className="space-y-1 px-2 py-4">
-                        <div className="truncate text-[13px] text-[#555]">{firstRow.variant?.sku || firstRow.product.sku || "—"}</div>
-                        <div className="truncate text-[11.5px] text-[#9A9A9A]">{firstRow.product.brand || "Modern Orthodontics"}</div>
-                      </div>
-
-                      <div className="flex flex-col">
-                        {group.map((row, index) => (
-                          <div key={row.id} className={`flex h-14 items-center px-2 text-[13px] text-[#555] ${index < group.length - 1 ? 'border-b border-[#F0F0F0]' : ''}`}>
-                            {tinyNumber(row.stock)}
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="flex flex-col">
-                        {group.map((row, index) => {
-                          const availableStock = Math.max(0, row.stock - row.reservedStock);
-                          return (
-                            <div key={row.id} className={`flex h-14 items-center px-2 text-[13px] text-[#555] ${index < group.length - 1 ? 'border-b border-[#F0F0F0]' : ''}`}>
-                              {tinyNumber(availableStock)}
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {visibleColumns.warehouse && (
-                        <div className="flex flex-col">
-                          {group.map((row, index) => {
-                            const warehouseLabel = row.warehouse ? `${row.warehouse.name} (${row.warehouse.gstin || row.warehouse.state || 'N/A'})` : "Base";
-                            return (
-                              <div key={row.id} className={`flex h-14 items-center px-2 text-[13px] text-[#555] ${index < group.length - 1 ? 'border-b border-[#F0F0F0]' : ''}`}>
-                                {warehouseLabel}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {visibleColumns.reserved && (
-                        <div className="flex flex-col">
-                          {group.map((row, index) => (
-                            <div key={row.id} className={`flex h-14 items-center px-2 text-[13px] text-[#555] ${index < group.length - 1 ? 'border-b border-[#F0F0F0]' : ''}`}>
-                              {tinyNumber(row.reservedStock)}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {visibleColumns.threshold && (
-                        <div className="flex flex-col">
-                          {group.map((row, index) => (
-                            <div key={row.id} className={`flex h-14 items-center px-2 ${index < group.length - 1 ? 'border-b border-[#F0F0F0]' : ''}`}>
-                              {canUpdate ? (
-                                <input
-                                  type="text"
-                                  defaultValue={row.lowStockThreshold}
-                                  className="w-full max-w-[96px] rounded border border-[#E6E6E6] px-2 py-1.5 text-center text-[13px] outline-none focus:border-[#E31E24]"
-                                  onChange={(event) => { event.target.value = event.target.value.replace(/\D/g, ""); }}
-                                  onBlur={(event) => {
-                                    const nextValue = Number(event.target.value);
-                                    if (!Number.isInteger(nextValue) || nextValue < 0 || nextValue === row.lowStockThreshold) return;
-                                    void handleInlineUpdate(row, { lowStockThreshold: nextValue });
-                                  }}
-                                />
-                              ) : (
-                                <span className="text-[13px] text-[#555]">{row.lowStockThreshold}</span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {visibleColumns.status && (
-                        <div className="flex flex-col">
-                          {group.map((row, index) => (
-                            <div key={row.id} className={`flex h-14 items-center px-2 ${index < group.length - 1 ? 'border-b border-[#F0F0F0]' : ''}`}>
-                              <StatusBadge status={row.status} />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {visibleColumns.updated && (
-                        <div className="flex flex-col">
-                          {group.map((row, index) => (
-                            <div key={row.id} className={`flex h-14 items-center px-2 text-[13px] text-[#6B6B6B] ${index < group.length - 1 ? 'border-b border-[#F0F0F0]' : ''}`}>
-                              {new Date(row.updatedAt).toLocaleDateString()}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="flex flex-col">
-                        {group.map((row, index) => (
-                          <div key={row.id} className={`flex h-14 items-center justify-end gap-2 px-2 ${index < group.length - 1 ? 'border-b border-[#F0F0F0]' : ''}`}>
-                            <button
-                              type="button"
-                              onClick={() => setHistoryRow(row)}
-                              disabled={!row.variantId}
-                              className="inline-flex h-8 items-center gap-1 rounded border border-[#E6E6E6] px-2 text-[12px] font-medium text-[#6B6B6B] hover:border-[#E31E24] hover:text-[#E31E24] hover:bg-[#FFF7F7] disabled:cursor-not-allowed disabled:text-[#CFCFCF] disabled:hover:border-[#E6E6E6] disabled:hover:bg-white"
-                            >
-                              History
-                            </button>
-                            {row.warehouseId ? (
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  if (!window.confirm("Are you sure you want to unassign this warehouse?")) return;
-                                  try {
-                                    await adminApi.delete(`/inventory/${row.id}`);
-                                    showToast("Warehouse unassigned.", "success");
-                                    refetch();
-                                  } catch (err: any) {
-                                    showToast(err?.response?.data?.error || "Error unassigning warehouse.", "error");
-                                  }
-                                }}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] px-2 text-[#6B6B6B] hover:border-[#E31E24] hover:text-[#E31E24] hover:bg-[#FFF7F7]"
-                                title="Unassign Warehouse"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
-                              </button>
-                            ) : (
-                              <div className="w-8" />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
-        </>
+          )}
+        />
       )}
 
       <Modal
@@ -1237,6 +1181,74 @@ export default function InventoryPage() {
           </div>
         </div>
       )}
+
+      <AdminDeleteModal
+        open={Boolean(unassignTarget)}
+        onClose={() => setUnassignTarget(null)}
+        itemName={unassignTarget ? `${unassignTarget.warehouse?.name ?? "Warehouse"} for ${unassignTarget.variant?.sku ?? unassignTarget.product?.title ?? "Item"}` : undefined}
+        itemType="Warehouse Assignment"
+        onSoftDelete={async () => {
+          if (!unassignTarget) return;
+          try {
+            await adminApi.delete(`/inventory/${unassignTarget.id}`);
+            showToast("Warehouse unassigned.", "success");
+            setUnassignTarget(null);
+            refetch();
+          } catch (err: any) {
+            showToast(err?.response?.data?.error || "Error unassigning warehouse.", "error");
+          }
+        }}
+        onPermanentDelete={async () => {
+          if (!unassignTarget) return;
+          try {
+            await adminApi.delete(`/inventory/${unassignTarget.id}`);
+            showToast("Warehouse unassigned.", "success");
+            setUnassignTarget(null);
+            refetch();
+          } catch (err: any) {
+            showToast(err?.response?.data?.error || "Error unassigning warehouse.", "error");
+          }
+        }}
+      />
+
+      <AdminDeleteModal
+        open={showBulkDeleteModal}
+        onClose={() => setShowBulkDeleteModal(false)}
+        itemName={`${selectedIds.length} selected warehouse assignments`}
+        itemType="Warehouse Assignments (Bulk)"
+        onSoftDelete={async () => {
+          setBulkSaving(true);
+          try {
+            await Promise.all(selectedIds.map((id) => adminApi.delete(`/inventory/${id}`)));
+            setSelectedIds([]);
+            setBulkAction("");
+            setShowBulkDeleteModal(false);
+            showToast(`Successfully deleted ${selectedIds.length} warehouse assignment(s).`, "success");
+            refetch();
+          } catch (error) {
+            showToast(getAdminErrorMessage(error, "Failed to delete warehouse assignments."), "error");
+          } finally {
+            setBulkSaving(false);
+          }
+        }}
+        onPermanentDelete={async () => {
+          setBulkSaving(true);
+          try {
+            await Promise.all(selectedIds.map((id) => adminApi.delete(`/inventory/${id}`)));
+            setSelectedIds([]);
+            setBulkAction("");
+            setShowBulkDeleteModal(false);
+            showToast(`Successfully deleted ${selectedIds.length} warehouse assignment(s).`, "success");
+            refetch();
+          } catch (error) {
+            showToast(getAdminErrorMessage(error, "Failed to delete warehouse assignments."), "error");
+          } finally {
+            setBulkSaving(false);
+          }
+        }}
+        isSoftDeleting={bulkSaving}
+        isPermanentDeleting={bulkSaving}
+      />
 
       {ToastComponent}
     </AdminLayout>

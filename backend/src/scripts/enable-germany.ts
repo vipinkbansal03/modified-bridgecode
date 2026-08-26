@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   const product = await prisma.product.findFirst({
-    where: { slug: "elfin-bondable-molar-tube" }
+    where: { slug: "elfin-bondable-molar-tube", deletedAt: null }
   });
   if (!product) {
     console.log("Product not found");
@@ -29,8 +29,8 @@ async function main() {
   console.log("Product enabled for Germany.");
 
   // 2. Disable variant for Germany
-  const variant = await prisma.productVariant.findUnique({
-    where: { sku: "ELFIN-L-Roth-022-H4-019025" }
+  const variant = await prisma.productVariant.findFirst({
+    where: { sku: "ELFIN-L-Roth-022-H4-019025", deletedAt: null }
   });
   if (!variant) {
     console.log("Variant not found");

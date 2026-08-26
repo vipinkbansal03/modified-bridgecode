@@ -11,6 +11,8 @@ type InventoryListQuery = {
   search?: string;
   status?: string;
   warehouseId?: string;
+  productId?: string;
+  variantId?: string;
   sortBy?: string;
   sortDir?: string;
   requestingUserId?: string;
@@ -139,6 +141,24 @@ async function buildInventoryWhere(query: InventoryListQuery): Promise<Prisma.In
 
   if (status) {
     where.status = status;
+  }
+
+  if (query.productId) {
+    const ids = query.productId.split(",").map((s) => s.trim()).filter(Boolean);
+    if (ids.length > 1) {
+      where.productId = { in: ids };
+    } else if (ids.length === 1) {
+      where.productId = ids[0];
+    }
+  }
+
+  if (query.variantId) {
+    const ids = query.variantId.split(",").map((s) => s.trim()).filter(Boolean);
+    if (ids.length > 1) {
+      where.variantId = { in: ids };
+    } else if (ids.length === 1) {
+      where.variantId = ids[0];
+    }
   }
 
   let allowedWarehouseIds: string[] | null = null;
@@ -879,7 +899,15 @@ export async function deleteInventory(id: string) {
   const existing = await prisma.inventory.findUnique({ where: { id } });
   if (!existing) throw new AppError("Inventory record not found.", 404);
 
-  // Safety check removed per user request: allow deletion even if stock exists
+  if (existing.reservedStock > 0) {
+    throw new AppError(
+      `Cannot delete inventory record: ${existing.reservedStock} item(s) are currently reserved for active orders.`,
+      400,
+    );
+  }
 
-  await prisma.inventory.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.inventoryAdjustment.deleteMany({ where: { inventoryId: id } });
+    await tx.inventory.delete({ where: { id } });
+  });
 }

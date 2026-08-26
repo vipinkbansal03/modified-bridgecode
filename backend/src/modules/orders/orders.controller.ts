@@ -20,13 +20,19 @@ export const invoice = asyncHandler(async (req: AuthRequest, res: Response) => {
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.send(buffer);
 });
-export const deleteOne = asyncHandler(async (req: AuthRequest, res: Response) => {
-  await S.deleteOrder(String(req.params.id));
-  return ApiResponse.success(res, "Order deleted.");
-});
 
 export const refundCancelledOrder = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { refundMethod, transactionReference } = req.body;
   const result = await S.refundCancelledOrder(String(req.params.id), refundMethod, transactionReference);
   return ApiResponse.success(res, "Cancelled order refund processed successfully.", result);
+});
+
+export const softDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await S.softDeleteOrder(String(req.params.id));
+  return ApiResponse.success(res, "Order soft-deleted successfully.", result);
+});
+
+export const permanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await S.permanentDeleteOrder(String(req.params.id));
+  return ApiResponse.success(res, "Test order permanently deleted successfully.", result);
 });

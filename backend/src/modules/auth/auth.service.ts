@@ -8,8 +8,8 @@ import { LoginInput } from "./auth.validation";
 const CUSTOMER_ROLES = ["Customer", "Dealer", "Doctor / Retailer"];
 
 export async function loginService(input: LoginInput) {
-  const user = await prisma.user.findUnique({
-    where: { email: input.email },
+  const user = await prisma.user.findFirst({
+    where: { email: input.email.toLowerCase(), deletedAt: null },
     include: { role: true },
   });
 

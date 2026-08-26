@@ -130,29 +130,11 @@ export const useDuplicateProduct = () => {
   });
 };
 
-export const useArchiveProduct = () => {
+export const usePermanentDeleteProduct = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      adminApi.post(`/products/${id}/archive`).then((r) => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-products"] });
-      qc.invalidateQueries({ queryKey: ["admin-products-infinite"] });
-      qc.invalidateQueries({ queryKey: ["admin-inventory"] });
-      qc.invalidateQueries({ queryKey: ["admin-inventory-dashboard"] });
-      qc.invalidateQueries({ queryKey: ["admin-inventory-alerts"] });
-      qc.invalidateQueries({ queryKey: ["admin-pricing"] });
-      qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
-      qc.invalidateQueries({ queryKey: ["products"] });
-    },
-  });
-};
-
-export const useRestoreProduct = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      adminApi.post(`/products/${id}/restore`).then((r) => r.data),
+      adminApi.delete(`/products/${id}/permanent`).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-products"] });
       qc.invalidateQueries({ queryKey: ["admin-products-infinite"] });
@@ -269,7 +251,7 @@ export const useAdminVariants = (params?: {
       adminApi.get("/products/variants", { params }).then((r) => r.data),
   });
 
-export const useArchiveVariant = (productId?: string, variantId?: string) => {
+export const usePermanentDeleteVariant = (productId?: string, variantId?: string) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -280,24 +262,26 @@ export const useArchiveVariant = (productId?: string, variantId?: string) => {
       variantId: string;
     }) =>
       adminApi
-        .post(`/products/${nextProductId}/variants/${nextVariantId}/archive`)
+        .delete(`/products/${nextProductId}/variants/${nextVariantId}/permanent`)
         .then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-variants"] }),
   });
 };
 
-export const useRestoreVariant = (productId?: string, variantId?: string) => {
+export const useUpdateVariant = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
       productId: nextProductId,
       variantId: nextVariantId,
+      data,
     }: {
       productId: string;
       variantId: string;
+      data: Record<string, unknown>;
     }) =>
       adminApi
-        .post(`/products/${nextProductId}/variants/${nextVariantId}/restore`)
+        .put(`/products/${nextProductId}/variants/${nextVariantId}`, data)
         .then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-variants"] }),
   });
@@ -946,6 +930,8 @@ export const useAdminInventory = (params?: {
   sortBy?: string;
   sortDir?: string;
   warehouseId?: string;
+  productId?: string;
+  variantId?: string;
 }) =>
   useQuery({
     queryKey: ["admin-inventory", params],
@@ -2175,10 +2161,12 @@ export const useAdminOrders = (params?: {
   paymentMethod?: string;
   search?: string;
   countryId?: string;
+  productId?: string;
   dateFrom?: string;
   dateTo?: string;
   sortBy?: string;
   sortDir?: string;
+  deleted?: boolean | string;
 }) =>
   useQuery({
     queryKey: ["admin-orders", params],
@@ -2207,17 +2195,6 @@ export const useAdminOrder = (id: string) =>
     queryFn: () => adminApi.get(`/orders/${id}`).then((r) => r.data.data),
     enabled: !!id,
   });
-
-export const useDeleteAdminOrder = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => adminApi.delete(`/orders/${id}`).then((r) => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-orders"] });
-      qc.invalidateQueries({ queryKey: ["admin-order-analytics"] });
-    },
-  });
-};
 
 export const useUpdateOrderStatus = () => {
   const qc = useQueryClient();
@@ -2273,6 +2250,28 @@ export const useDeliverOrder = () => {
       qc.invalidateQueries({ queryKey: ["admin-orders"] });
       qc.invalidateQueries({ queryKey: ["admin-order", id] });
       qc.invalidateQueries({ queryKey: ["admin-order-shipments", id] });
+    },
+  });
+};
+
+export const useDeleteOrder = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.delete(`/orders/${id}`),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["admin-orders"] });
+      qc.invalidateQueries({ queryKey: ["admin-order", id] });
+    },
+  });
+};
+
+export const usePermanentDeleteOrder = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.delete(`/orders/${id}/permanent`),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["admin-orders"] });
+      qc.invalidateQueries({ queryKey: ["admin-order", id] });
     },
   });
 };

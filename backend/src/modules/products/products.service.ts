@@ -296,7 +296,7 @@ function parseCategoryImportRow(raw: Record<string, string>): CategoryImportRow 
 
 type BulkVariantUpdate = {
   variantId: string;
-  action?: "delete" | "archive" | "restore";
+  action?: "delete" | "archive" | "restore" | "active" | "inactive";
   countryId?: string | null;
   price?:
     | string
@@ -778,51 +778,77 @@ export async function updateShippingInfo(id: string, data: ShippingInfoInput) {
   });
 }
 
-// ─── Soft delete ─────────────────────────────────────────
+// ─── Soft delete & Permanent delete ─────────────────────────
 
 export async function deleteProduct(id: string) {
-  const current = await getProduct(id);
+  await getProduct(id);
   return prisma.product.update({
     where: { id },
     data: {
       deletedAt: new Date(),
-      slug: `${current.slug}-deleted-${Date.now()}`,
-      ...(current.sku ? { sku: `${current.sku}-deleted-${Date.now()}` } : {}),
     },
   });
 }
 
-export async function archiveProduct(id: string) {
-  await getProduct(id);
-  return prisma.product.update({ where: { id }, data: { status: "ARCHIVED" } });
-}
-
-export async function restoreProduct(id: string) {
-  const current = await prisma.product.findFirst({ where: { id } });
-  if (!current) throw new AppError("Product not found.", 404);
-
-  const baseSlug = current.slug.replace(/-deleted-\d+(-\d+)?$/, "");
-  const baseSku = current.sku ? current.sku.replace(/-deleted-\d+(-\d+)?$/, "") : null;
-
-  const slugConflict = await prisma.product.findFirst({
-    where: { slug: baseSlug, deletedAt: null, id: { not: id } },
+export async function permanentDeleteProduct(id: string) {
+  const product = await prisma.product.findFirst({
+    where: { id },
+    include: {
+      media: true,
+      variants: true,
+    },
   });
-  const finalSlug = slugConflict ? `${baseSlug}-restored-${Date.now()}` : baseSlug;
+  if (!product) throw new AppError("Product not found.", 404);
 
-  const skuConflict = baseSku
-    ? await prisma.product.findFirst({
-        where: { sku: baseSku, deletedAt: null, id: { not: id } },
-      })
-    : null;
-  const finalSku = skuConflict ? `${baseSku}-restored-${Date.now()}` : baseSku;
+  const [orderItemCount, quoteItemCount] = await Promise.all([
+    prisma.orderItem.count({ where: { productId: id } }),
+    prisma.quoteItem.count({ where: { productId: id } }),
+  ]);
+
+  if (orderItemCount > 0 || quoteItemCount > 0) {
+    throw new AppError(
+      `Cannot permanently delete product: referenced by ${orderItemCount} order item(s) and ${quoteItemCount} quote item(s). Use normal delete (Soft Delete) instead to protect order history.`,
+      400,
+    );
+  }
 
   return prisma.$transaction(async (tx) => {
-    const product = await tx.product.update({
-      where: { id },
-      data: { status: "ACTIVE", deletedAt: null, slug: finalSlug, sku: finalSku },
+    // Clean up join tables & children
+    await tx.wishlist.deleteMany({ where: { productId: id } });
+    await tx.discountProduct.deleteMany({ where: { productId: id } });
+    await tx.collectionProduct.deleteMany({ where: { productId: id } });
+    await tx.productCountry.deleteMany({ where: { productId: id } });
+    await tx.productPaymentMethod.deleteMany({ where: { productId: id } });
+    await tx.productPrice.deleteMany({ where: { productId: id } });
+    await tx.moqPricing.deleteMany({ where: { productId: id } });
+    await tx.tierPricing.deleteMany({ where: { productId: id } });
+    await tx.productReview.deleteMany({ where: { productId: id } });
+    await tx.productTranslation.deleteMany({ where: { productId: id } });
+
+    // Clean up inventory adjustments and inventory
+    await tx.inventoryAdjustment.deleteMany({ where: { inventory: { productId: id } } });
+
+    // Clean up variants and their children
+    const variantIds = product.variants.map((v) => v.id);
+    if (variantIds.length > 0) {
+      await tx.productVariantAttributeValue.deleteMany({ where: { variantId: { in: variantIds } } });
+      await tx.variantCountry.deleteMany({ where: { variantId: { in: variantIds } } });
+      await tx.variantPaymentMethod.deleteMany({ where: { variantId: { in: variantIds } } });
+      await tx.productPrice.deleteMany({ where: { variantId: { in: variantIds } } });
+      await tx.inventory.deleteMany({ where: { variantId: { in: variantIds } } });
+      await tx.productVariant.deleteMany({ where: { productId: id } });
+    }
+
+    // Clean up attribute assignments
+    await tx.productAttributeValueSelection.deleteMany({
+      where: { productAttribute: { productId: id } },
     });
-    await syncStorefrontVisibility(tx, product.id, product.status, current.status);
-    return product;
+    await tx.productAttribute.deleteMany({ where: { productId: id } });
+    await tx.productPackage.deleteMany({ where: { productId: id } });
+    await tx.inventory.deleteMany({ where: { productId: id } });
+    await tx.productMedia.deleteMany({ where: { productId: id } });
+
+    return tx.product.delete({ where: { id } });
   });
 }
 
@@ -1066,29 +1092,12 @@ export async function bulkUpdateProducts(data: {
   }
 
   if (data.action === "delete") {
-    const activeOrderItemCount = await prisma.orderItem.count({
-      where: {
-        productId: { in: ids },
-        order: { status: { not: "CANCELLED" } },
+    await prisma.product.updateMany({
+      where: { id: { in: ids } },
+      data: {
+        deletedAt: new Date(),
       },
     });
-    const productsToDelete = await prisma.product.findMany({
-      where: { id: { in: ids } },
-      select: { id: true, slug: true, sku: true },
-    });
-    const timestamp = Date.now();
-    await prisma.$transaction(
-      productsToDelete.map((p, idx) =>
-        prisma.product.update({
-          where: { id: p.id },
-          data: {
-            deletedAt: new Date(),
-            slug: `${p.slug}-deleted-${timestamp}-${idx}`,
-            ...(p.sku ? { sku: `${p.sku}-deleted-${timestamp}-${idx}` } : {}),
-          },
-        }),
-      ),
-    );
     return { updated: ids.length };
   }
 
@@ -1943,7 +1952,7 @@ export async function createVariant(
   const variantKey = buildVariantKey(values.map((value) => value.id), data.packageId);
   const title = buildVariantTitle(values, pkg?.title, data.title);
 
-  const existing = await prisma.productVariant.findFirst({ where: { productId, variantKey } });
+  const existing = await prisma.productVariant.findFirst({ where: { productId, variantKey, deletedAt: null } });
   if (existing) throw new AppError("A variant with this configuration already exists.", 409);
 
   const variant = await prisma.productVariant.create({
@@ -2015,7 +2024,7 @@ export async function updateVariant(
       }));
   const nextVariantKey = buildVariantKey(values.map((value) => value.id), nextPackageId);
   const duplicate = await prisma.productVariant.findFirst({
-    where: { productId, variantKey: nextVariantKey, NOT: { id: variantId } },
+    where: { productId, variantKey: nextVariantKey, NOT: { id: variantId }, deletedAt: null },
   });
   if (duplicate) throw new AppError("A variant with this configuration already exists.", 409);
   const updateData: Prisma.ProductVariantUncheckedUpdateInput = {
@@ -2107,7 +2116,7 @@ export async function bulkUpdateVariants(
   const validRows: {
     index: number;
     variantId: string;
-    action?: "delete" | "archive" | "restore";
+    action?: "delete" | "archive" | "restore" | "active" | "inactive";
     stock?: number;
     countryId?: string;
     currencyId?: string;
@@ -2121,7 +2130,7 @@ export async function bulkUpdateVariants(
       if (!productVariantIds.has(update.variantId)) throw new Error("Variant was not found for this product.");
 
       if (update.action) {
-        if (!["delete", "archive", "restore"].includes(update.action)) throw new Error("Unsupported bulk variant action.");
+        if (!["delete", "archive", "restore", "active", "inactive"].includes(update.action)) throw new Error("Unsupported bulk variant action.");
         validRows.push({ index, variantId: update.variantId, action: update.action });
         continue;
       }
@@ -2156,7 +2165,7 @@ export async function bulkUpdateVariants(
       if (row.action) {
         await tx.productVariant.update({
           where: { id: row.variantId },
-          data: { status: row.action === "restore" ? "ACTIVE" : "INACTIVE" },
+          data: { status: (row.action === "restore" || row.action === "active") ? "ACTIVE" : "INACTIVE" },
         });
         results[row.index].success = true;
         continue;
@@ -2356,35 +2365,36 @@ export async function importVariantCountryPricesSpreadsheet(
 
 export async function deleteVariant(productId: string, variantId: string) {
   await getVariant(productId, variantId);
-  
-  const [variant] = await prisma.$transaction([
-    prisma.productVariant.update({
-      where: { id: variantId },
-      data: { status: "INACTIVE" },
-    }),
-    prisma.inventory.deleteMany({ where: { variantId } }),
-    prisma.productPrice.deleteMany({ where: { variantId } }),
-  ]);
-  
-  return variant;
-}
-
-export async function archiveVariant(productId: string, variantId: string) {
-  await getVariant(productId, variantId);
   return prisma.productVariant.update({
     where: { id: variantId },
-    data: { status: "INACTIVE" },
+    data: { deletedAt: new Date() },
   });
 }
 
-export async function restoreVariant(productId: string, variantId: string) {
+export async function permanentDeleteVariant(productId: string, variantId: string) {
   await getVariant(productId, variantId);
-  const variant = await prisma.productVariant.update({
-    where: { id: variantId },
-    data: { status: "ACTIVE" },
+
+  const [orderItemCount, quoteItemCount, adjustmentCount] = await Promise.all([
+    prisma.orderItem.count({ where: { variantId } }),
+    prisma.quoteItem.count({ where: { variantId } }),
+    prisma.inventoryAdjustment.count({ where: { variantId } }),
+  ]);
+
+  if (orderItemCount > 0 || quoteItemCount > 0 || adjustmentCount > 0) {
+    throw new AppError(
+      `Cannot permanently delete variant: referenced by ${orderItemCount} order item(s), ${quoteItemCount} quote item(s), and ${adjustmentCount} inventory adjustment(s). Use normal delete instead.`,
+      400,
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await tx.productVariantAttributeValue.deleteMany({ where: { variantId } });
+    await tx.variantCountry.deleteMany({ where: { variantId } });
+    await tx.variantPaymentMethod.deleteMany({ where: { variantId } });
+    await tx.productPrice.deleteMany({ where: { variantId } });
+    await tx.inventory.deleteMany({ where: { variantId } });
+    return tx.productVariant.delete({ where: { id: variantId } });
   });
-  await syncVariantStorefrontVisibility(variant.id, productId);
-  return variant;
 }
 
 export async function cloneVariant(productId: string, variantId: string) {
@@ -3076,7 +3086,7 @@ export async function executeVariantsImport(productId: string, rows: any[]) {
       if (!normalizedSku) continue;
 
       const existingVariant = await tx.productVariant.findFirst({
-        where: { productId, sku: normalizedSku },
+        where: { productId, sku: normalizedSku, deletedAt: null },
       });
 
       let variantId = "";
@@ -3104,7 +3114,7 @@ export async function executeVariantsImport(productId: string, rows: any[]) {
   const variantKey = [...attrValueIds].sort().join("-");
 
   const duplicateKeyVariant = await tx.productVariant.findFirst({
-    where: { productId, variantKey },
+    where: { productId, variantKey, deletedAt: null },
   });
 
   if (duplicateKeyVariant) {

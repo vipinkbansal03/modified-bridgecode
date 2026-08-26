@@ -45,14 +45,9 @@ export const remove = asyncHandler(async (req: AuthRequest, res: Response) => {
   return ApiResponse.success(res, "Product deleted.");
 });
 
-export const archive = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const product = await ProductService.archiveProduct(req.params.id as string);
-  return ApiResponse.success(res, "Product archived.", product);
-});
-
-export const restore = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const product = await ProductService.restoreProduct(req.params.id as string);
-  return ApiResponse.success(res, "Product restored.", product);
+export const permanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await ProductService.permanentDeleteProduct(req.params.id as string);
+  return ApiResponse.success(res, "Product permanently deleted.");
 });
 
 export const duplicate = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -248,14 +243,9 @@ export const deleteVariant = asyncHandler(async (req: AuthRequest, res: Response
   return ApiResponse.success(res, "Variant deleted.");
 });
 
-export const archiveVariant = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const variant = await ProductService.archiveVariant(req.params.id as string, req.params.variantId as string);
-  return ApiResponse.success(res, "Variant archived.", variant);
-});
-
-export const restoreVariant = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const variant = await ProductService.restoreVariant(req.params.id as string, req.params.variantId as string);
-  return ApiResponse.success(res, "Variant restored.", variant);
+export const permanentDeleteVariant = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await ProductService.permanentDeleteVariant(req.params.id as string, req.params.variantId as string);
+  return ApiResponse.success(res, "Variant permanently deleted.");
 });
 
 export const cloneVariant = asyncHandler(async (req: AuthRequest, res: Response) => {

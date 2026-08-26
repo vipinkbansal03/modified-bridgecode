@@ -140,6 +140,8 @@ interface OrderDetail {
   cancelReason?: string | null;
   cancelRefundDetails?: string | null;
   cancelTransactionReference?: string | null;
+  deletedAt?: string | null;
+  isTest?: boolean;
 }
 
 export default function OrderDetailPage() {
@@ -423,6 +425,18 @@ export default function OrderDetailPage() {
           </div>
         </div>
       </div>
+
+      {order.deletedAt && (
+        <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold">Notice:</span>
+            <span>This order was soft-deleted on {new Date(order.deletedAt).toLocaleDateString()}. It remains in the system for auditing, customer history, and invoice records.</span>
+          </div>
+          <span className="rounded bg-amber-200 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-amber-900">
+            Soft-Deleted
+          </span>
+        </div>
+      )}
 
       <div className="mb-5 flex gap-1 border-b border-[#E6E6E6] overflow-x-auto whitespace-nowrap pb-px">
         {TABS.map((tab) => (

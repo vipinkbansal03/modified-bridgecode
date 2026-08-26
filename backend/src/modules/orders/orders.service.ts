@@ -61,16 +61,39 @@ export async function listOrders(query: {
   paymentMethod?: string;
   search?: string;
   countryId?: string;
+  productId?: string;
   dateFrom?: string;
   dateTo?: string;
   sortBy?: string;
   sortDir?: string;
+  deleted?: string;
 }) {
   const { page, limit, skip } = getPagination(query);
   const where: Prisma.OrderWhereInput = {};
+  if (query.deleted === "true" || query.deleted === "1") {
+    where.deletedAt = { not: null };
+  } else {
+    where.deletedAt = null;
+  }
   if (query.status) where.status = query.status as never;
   if (query.paymentStatus) where.paymentStatus = query.paymentStatus as never;
   if (query.paymentMethod) where.paymentMethod = query.paymentMethod;
+  if (query.productId) {
+    const ids = query.productId.split(",").map((s) => s.trim()).filter(Boolean);
+    if (ids.length > 1) {
+      where.items = {
+        some: {
+          productId: { in: ids },
+        },
+      };
+    } else if (ids.length === 1) {
+      where.items = {
+        some: {
+          productId: ids[0],
+        },
+      };
+    }
+  }
   if (query.countryId) {
     const ids = query.countryId.split(",").map((s) => s.trim()).filter(Boolean);
     if (ids.length > 1) {
@@ -507,10 +530,6 @@ export async function deliverOrder(id: string) {
   return updated;
 }
 
-export const deleteOrder = async (id: string) => {
-  await prisma.orderItem.deleteMany({ where: { orderId: id } });
-  return prisma.order.delete({ where: { id } });
-};
 
 export async function refundCancelledOrder(
   orderId: string,
@@ -555,7 +574,6 @@ export async function refundCancelledOrder(
         amount: amountInPaise,
         notes: {
           orderId,
-          type: "CANCEL_REFUND",
         },
       });
     } catch (err: any) {
@@ -576,4 +594,112 @@ export async function refundCancelledOrder(
   });
 
   return updatedOrder;
+}
+
+export async function softDeleteOrder(id: string) {
+  const existing = await prisma.order.findUnique({
+    where: { id },
+  });
+  if (!existing) throw new AppError("Order not found.", 404);
+
+  const updated = await prisma.order.update({
+    where: { id },
+    data: { deletedAt: new Date() },
+  });
+
+  return updated;
+}
+
+export async function permanentDeleteOrder(id: string) {
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.order.findUnique({
+      where: { id },
+      include: {
+        paymentTransactions: true,
+        shipments: true,
+        returns: true,
+        items: true,
+      },
+    });
+
+    if (!order) throw new AppError("Order not found.", 404);
+
+    // Guard 1: Must be explicitly marked as a test order
+    if (!order.isTest) {
+      throw new AppError("Cannot permanently delete a real order. Only test orders can be permanently deleted.", 400);
+    }
+
+    // Guard 2: No captured or refunded payment
+    if (order.paymentStatus === "PAID" || order.paymentStatus === "REFUNDED") {
+      throw new AppError(`Cannot permanently delete order with payment status "${order.paymentStatus}".`, 400);
+    }
+
+    // Guard 3: Order lifecycle status check
+    const nonDeletableStatuses = ["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "RETURN_REQUESTED", "RETURNED"];
+    if (nonDeletableStatuses.includes(order.status)) {
+      throw new AppError(`Cannot permanently delete order with status "${order.status}".`, 400);
+    }
+
+    // Guard 4: No successful payment gateway transactions
+    const hasSuccessfulPayment = order.paymentTransactions.some(
+      (t) => t.status === "SUCCESS" || Boolean(t.gatewayPaymentId)
+    );
+    if (hasSuccessfulPayment) {
+      throw new AppError("Cannot permanently delete order with captured payment gateway transactions.", 400);
+    }
+
+    // Guard 5: No dispatched shipments
+    const hasDispatchedShipment = order.shipments.some(
+      (s) => s.status !== "CREATED" || Boolean(s.trackingNumber) || Boolean(s.awbNumber)
+    );
+    if (hasDispatchedShipment) {
+      throw new AppError("Cannot permanently delete order with shipment/tracking history.", 400);
+    }
+
+    // Guard 6: No return requests
+    if (order.returns.length > 0) {
+      throw new AppError("Cannot permanently delete order with associated return requests.", 400);
+    }
+
+    // Guard 7: No converted quote relationship
+    if (order.fromQuoteId) {
+      throw new AppError("Cannot permanently delete an order converted from a formal quote.", 400);
+    }
+
+    // 8. Safely release any inventory reservation holding stock
+    await releaseOrderReservation(order.id, tx);
+
+    // 9. Clean inventory adjustment audit logs created for this test order reservation
+    await tx.inventoryAdjustment.deleteMany({
+      where: {
+        adjustedBy: `system:reservation;order:${order.id}`,
+      },
+    });
+
+    // 10. Delete child records in FK-safe transactional order
+    await tx.orderShippingBox.deleteMany({ where: { orderId: id } });
+    await tx.shipmentEvent.deleteMany({
+      where: {
+        shipment: { orderId: id },
+      },
+    });
+    await tx.shipment.deleteMany({ where: { orderId: id } });
+    await tx.paymentTransaction.deleteMany({ where: { orderId: id } });
+    await tx.orderReturnItem.deleteMany({
+      where: {
+        orderReturn: { orderId: id },
+      },
+    });
+    await tx.orderReturn.deleteMany({ where: { orderId: id } });
+    await tx.quote.updateMany({
+      where: { convertedOrderId: id },
+      data: { convertedOrderId: null },
+    });
+    await tx.orderItem.deleteMany({ where: { orderId: id } });
+
+    // 11. Finally delete the order record
+    const deleted = await tx.order.delete({ where: { id } });
+
+    return deleted;
+  });
 }

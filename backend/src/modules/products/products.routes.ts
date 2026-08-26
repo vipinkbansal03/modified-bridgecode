@@ -26,8 +26,7 @@ router.delete("/:id/moq-pricing/:ruleId", requirePermission("products.update"), 
 router.get("/:id", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.getOne);
 router.put("/:id", requirePermission("products.update"), C.update);
 router.post("/:id/duplicate", requirePermission("products.update"), C.duplicate);
-router.post("/:id/archive", requirePermission("products.update"), C.archive);
-router.post("/:id/restore", requirePermission("products.update"), C.restore);
+router.delete("/:id/permanent", requirePermission("products.delete", "products.manage"), C.permanentDelete);
 router.delete("/:id", requirePermission("products.delete"), C.remove);
 router.put("/:id/shipping-info", requirePermission("products.update"), C.updateShippingInfo);
 router.post("/:id/packages", requirePermission("products.update"), C.createPackage);
@@ -51,9 +50,8 @@ router.post("/:id/variants", requirePermission("products.update"), C.createVaria
 router.get("/:id/variants/:variantId/countries", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listVariantCountries);
 router.put("/:id/variants/:variantId/countries", requirePermission("products.update"), C.updateVariantCountries);
 router.put("/:id/variants/:variantId", requirePermission("products.update"), C.updateVariant);
-router.post("/:id/variants/:variantId/archive", requirePermission("products.update"), C.archiveVariant);
-router.post("/:id/variants/:variantId/restore", requirePermission("products.update"), C.restoreVariant);
-router.delete("/:id/variants/:variantId", requirePermission("products.update"), C.deleteVariant);
+router.delete("/:id/variants/:variantId/permanent", requirePermission("products.delete", "products.manage"), C.permanentDeleteVariant);
+router.delete("/:id/variants/:variantId", requirePermission("products.update", "products.delete"), C.deleteVariant);
 router.post("/:id/variants/:variantId/clone", requirePermission("products.update"), C.cloneVariant);
 
 router.post("/import", requirePermission("products.create"), upload.single("file"), C.importSpreadsheet);

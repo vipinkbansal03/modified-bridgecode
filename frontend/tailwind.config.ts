@@ -20,8 +20,9 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["var(--font-body)", "-apple-system", "sans-serif"],
-        heading: ["var(--font-heading)", "var(--font-body)", "-apple-system", "sans-serif"],
+        sans: ["var(--font-body)", "'Futura'", "-apple-system", "sans-serif"],
+        heading: ["var(--font-heading)", "'Futura'", "-apple-system", "sans-serif"],
+        futura: ["'Futura'", "sans-serif"],
         jost: ["var(--font-jost)", "sans-serif"],
         inter: ["var(--font-inter)", "sans-serif"],
       },

@@ -10,7 +10,7 @@ datasource db {
 model User {
   id           String          @id @default(cuid())
   name         String
-  email        String          @unique
+  email        String
   password     String
   roleId       String
   status       UserStatus      @default(ACTIVE)
@@ -83,7 +83,7 @@ model Role {
 model Category {
   id             String                @id @default(uuid())
   name           String
-  slug           String                @unique
+  slug           String
   description    String?
   parentId       String?
   image          String?
@@ -125,14 +125,14 @@ model Collection {
 model Product {
   id                     String                 @id @default(cuid())
   title                  String
-  slug                   String                 @unique
+  slug                   String
   shortDescription       String?
   description            String?
   informationImage       String?
   informationDescription String?
   sortOrder              Int                    @default(0)
   categoryId             String
-  sku                    String?                @unique
+  sku                    String?
   productCode            String?
   hsnCode                String?
   brand                  String                 @default("Modern Orthodontics")
@@ -289,12 +289,13 @@ model ProductAttributeValueSelection {
 model ProductVariant {
   id                   String                         @id @default(cuid())
   productId            String
-  sku                  String?                        @unique
+  sku                  String?
   title                String
   variantKey           String
   status               Status                         @default(ACTIVE)
   createdAt            DateTime                       @default(now())
   updatedAt            DateTime                       @updatedAt
+  deletedAt            DateTime?
   height               Decimal?                       @db.Decimal(10, 2)
   length               Decimal?                       @db.Decimal(10, 2)
   moq                  Int                            @default(1)
@@ -422,7 +423,7 @@ model TierCountry {
 
 model Customer {
   id                         String            @id @default(uuid())
-  email                      String            @unique
+  email                      String
   passwordHash               String
   firstName                  String
   lastName                   String
@@ -726,6 +727,8 @@ model Order {
   cancelTransactionReference String?
   fromQuoteId         String?
   paymentExpiresAt    DateTime?
+  isTest              Boolean            @default(false)
+  deletedAt           DateTime?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   items               OrderItem[]

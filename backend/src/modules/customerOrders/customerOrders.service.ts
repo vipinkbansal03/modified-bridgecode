@@ -68,7 +68,7 @@ async function calculateCustomerOrder(
       },
     }),
     prisma.productVariant.findMany({
-      where: { id: { in: requestedVariantIds }, status: "ACTIVE" },
+      where: { id: { in: requestedVariantIds }, status: "ACTIVE", deletedAt: null },
       include: {
         inventories: { include: { warehouse: true } },
       },

@@ -100,7 +100,8 @@ async function resolveCountry(countryInput: string) {
 }
 
 export async function register(input: CustomerRegisterInput) {
-  const existing = await prisma.customer.findUnique({ where: { email: input.email } });
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const existing = await prisma.customer.findFirst({ where: { email: normalizedEmail, deletedAt: null } });
   if (existing) throw new AppError("A customer account with this email already exists.", 409);
 
   const country = await resolveCountry(input.country);
@@ -135,7 +136,7 @@ export async function register(input: CustomerRegisterInput) {
   const customer = await prisma.$transaction(async (tx) => {
     const createdCustomer = await tx.customer.create({
       data: {
-        email: input.email,
+        email: normalizedEmail,
         passwordHash,
         firstName: input.firstName,
         lastName: input.lastName,
@@ -198,8 +199,9 @@ export async function register(input: CustomerRegisterInput) {
 }
 
 export async function login(input: CustomerLoginInput) {
-  const customer = await prisma.customer.findUnique({
-    where: { email: input.email },
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const customer = await prisma.customer.findFirst({
+    where: { email: normalizedEmail, deletedAt: null },
     include: {
       customerRole: { select: { id: true, key: true, name: true } },
     },
@@ -217,7 +219,8 @@ export async function login(input: CustomerLoginInput) {
 }
 
 export async function forgotPassword(input: ForgotPasswordInput) {
-  const customer = await prisma.customer.findUnique({ where: { email: input.email } });
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const customer = await prisma.customer.findFirst({ where: { email: normalizedEmail, deletedAt: null } });
   if (customer && customer.status === "ACTIVE") {
     const resetToken = jwt.sign(
       { id: customer.id, scope: "customer_password_reset" },

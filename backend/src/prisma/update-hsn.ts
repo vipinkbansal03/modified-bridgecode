@@ -12,8 +12,8 @@ async function main() {
   console.log(`Updated product: ${productElfin.count}`);
 
   // 2. Update elfin order items
-  const product = await prisma.product.findUnique({
-    where: { slug: "elfin-bondable-molar-tube" },
+  const product = await prisma.product.findFirst({
+    where: { slug: "elfin-bondable-molar-tube", deletedAt: null },
   });
   if (product) {
     const itemsElfin = await prisma.orderItem.updateMany({
@@ -25,13 +25,13 @@ async function main() {
 
   // 3. Update niti-wire-product
   const productNiti = await prisma.product.updateMany({
-    where: { slug: "niti-wire-product" },
+    where: { slug: "niti-wire-product", deletedAt: null },
     data: { hsnCode: "9018.49" },
   });
   console.log(`Updated product: ${productNiti.count}`);
 
-  const nitiProd = await prisma.product.findUnique({
-    where: { slug: "niti-wire-product" },
+  const nitiProd = await prisma.product.findFirst({
+    where: { slug: "niti-wire-product", deletedAt: null },
   });
   if (nitiProd) {
     const itemsNiti = await prisma.orderItem.updateMany({

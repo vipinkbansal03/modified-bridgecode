@@ -1131,7 +1131,7 @@ async function importPriceSpreadsheet(filePath: string) {
 
       const variant =
         (row.variantId ? await tx.productVariant.findUnique({ where: { id: row.variantId }, select: { id: true, productId: true, status: true } }) : null) ||
-        (row.variantSku ? await tx.productVariant.findFirst({ where: { sku: row.variantSku }, select: { id: true, productId: true, status: true } }) : null);
+        (row.variantSku ? await tx.productVariant.findFirst({ where: { sku: row.variantSku, deletedAt: null }, select: { id: true, productId: true, status: true } }) : null);
 
       if (variant && variant.productId !== product.id) throw new AppError("Variant does not belong to selected product.", 400);
 

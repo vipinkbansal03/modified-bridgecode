@@ -58,7 +58,7 @@ export function LocationsSection({ data }: LocationsSectionProps) {
   );
 
   return (
-    <section className="border-t border-line py-6 lg:py-[34px]">
+    <section className="border-t border-line py-6 lg:py-[34px] bg-white">
       <Container>
         <Reveal>
           <div className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-4">
@@ -70,7 +70,7 @@ export function LocationsSection({ data }: LocationsSectionProps) {
 
           <div className="relative mt-2.5 w-full max-w-[760px] mx-auto">
             <svg viewBox="0 0 1010 666" className="block w-full" preserveAspectRatio="xMidYMid meet">
-              <path d={WORLD_MAP_PATH} fill="#F2F2F2" stroke="#F2F2F2" strokeWidth={0.8} strokeLinejoin="round" />
+              <path d={WORLD_MAP_PATH} fill="#E5E7EB" stroke="#D1D5DB" strokeWidth={0.8} strokeLinejoin="round" />
             </svg>
 
             {data.pins.map((pin) => (
