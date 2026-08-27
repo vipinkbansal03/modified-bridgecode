@@ -19,6 +19,23 @@ function buildVariantKey(attributeValueIds: string[], packageId?: string | null)
   return packageId ? `${packageId}::${valueKey}` : valueKey;
 }
 
+async function seedTier(name: string, sortOrder: number) {
+  const existing = await prisma.tier.findFirst({ where: { name } });
+  return existing
+    ? prisma.tier.update({ where: { id: existing.id }, data: { status: "ACTIVE", sortOrder } })
+    : prisma.tier.create({ data: { name, status: "ACTIVE", sortOrder } });
+}
+
+async function seedCustomerRole(data: { key: string; name: string; description: string; status: "ACTIVE"; sortOrder: number }) {
+  const existing = await prisma.customerRole.findFirst({ where: { key: data.key } });
+  return existing
+    ? prisma.customerRole.update({
+        where: { id: existing.id },
+        data: { name: data.name, status: data.status, sortOrder: data.sortOrder },
+      })
+    : prisma.customerRole.create({ data });
+}
+
 type SeedMenuItem = {
   key: string;
   label: string;
@@ -437,38 +454,14 @@ async function main() {
   }
 
   // Default customer pricing tiers. Country/pricing mappings are intentionally empty until admins enable them.
-  await prisma.tier.upsert({
-    where: { name: "Silver" },
-    update: { status: "ACTIVE", sortOrder: 1 },
-    create: { name: "Silver", status: "ACTIVE", sortOrder: 1 },
-  });
-  await prisma.tier.upsert({
-    where: { name: "Gold" },
-    update: { status: "ACTIVE", sortOrder: 2 },
-    create: { name: "Gold", status: "ACTIVE", sortOrder: 2 },
-  });
-  await prisma.tier.upsert({
-    where: { name: "Platinum" },
-    update: { status: "ACTIVE", sortOrder: 3 },
-    create: { name: "Platinum", status: "ACTIVE", sortOrder: 3 },
-  });
+  await seedTier("Silver", 1);
+  await seedTier("Gold", 2);
+  await seedTier("Platinum", 3);
 
   // ─── Default Customer Roles ────────────────────────────────
-  await prisma.customerRole.upsert({
-    where: { key: "GUEST" },
-    update: { name: "Guest Customer", status: "ACTIVE", sortOrder: 1 },
-    create: { key: "GUEST", name: "Guest Customer", description: "Default role for guest visitors", status: "ACTIVE", sortOrder: 1 },
-  });
-  await prisma.customerRole.upsert({
-    where: { key: "DOCTOR_RETAILER" },
-    update: { name: "Doctor / Retailer", status: "ACTIVE", sortOrder: 2 },
-    create: { key: "DOCTOR_RETAILER", name: "Doctor / Retailer", description: "Registered doctors and retail clinics", status: "ACTIVE", sortOrder: 2 },
-  });
-  await prisma.customerRole.upsert({
-    where: { key: "DEALER" },
-    update: { name: "Dealer / B2B Wholesale", status: "ACTIVE", sortOrder: 3 },
-    create: { key: "DEALER", name: "Dealer / B2B Wholesale", description: "B2B wholesale dealers and distributors", status: "ACTIVE", sortOrder: 3 },
-  });
+  await seedCustomerRole({ key: "GUEST", name: "Guest Customer", description: "Default role for guest visitors", status: "ACTIVE", sortOrder: 1 });
+  await seedCustomerRole({ key: "DOCTOR_RETAILER", name: "Doctor / Retailer", description: "Registered doctors and retail clinics", status: "ACTIVE", sortOrder: 2 });
+  await seedCustomerRole({ key: "DEALER", name: "Dealer / B2B Wholesale", description: "B2B wholesale dealers and distributors", status: "ACTIVE", sortOrder: 3 });
 
   let molarTubeCategory = await prisma.category.findFirst({ where: { slug: "molar-tubes", deletedAt: null } });
   if (!molarTubeCategory) {
@@ -602,25 +595,32 @@ async function main() {
     const valuesByValue = new Map<string, { id: string; attributeId: string; value: string }>();
     for (let i = 0; i < attributeData.values.length; i++) {
       const valueData = attributeData.values[i];
-      const attributeValue = await prisma.attributeValue.upsert({
-        where: { attributeId_slug: { attributeId: attribute.id, slug: slugify(valueData.value) } },
-        update: {
-          value: valueData.value,
-          note: valueData.note,
-          priceAdjustment: valueData.priceAdjustment,
-          sortOrder: i,
-          status: "ACTIVE",
-        },
-        create: {
-          attributeId: attribute.id,
-          value: valueData.value,
-          slug: slugify(valueData.value),
-          note: valueData.note,
-          priceAdjustment: valueData.priceAdjustment,
-          sortOrder: i,
-          status: "ACTIVE",
-        },
+      const valueSlug = slugify(valueData.value);
+      const existingAttributeValue = await prisma.attributeValue.findFirst({
+        where: { attributeId: attribute.id, slug: valueSlug },
       });
+      const attributeValue = existingAttributeValue
+        ? await prisma.attributeValue.update({
+            where: { id: existingAttributeValue.id },
+            data: {
+              value: valueData.value,
+              note: valueData.note,
+              priceAdjustment: valueData.priceAdjustment,
+              sortOrder: i,
+              status: "ACTIVE",
+            },
+          })
+        : await prisma.attributeValue.create({
+            data: {
+              attributeId: attribute.id,
+              value: valueData.value,
+              slug: valueSlug,
+              note: valueData.note,
+              priceAdjustment: valueData.priceAdjustment,
+              sortOrder: i,
+              status: "ACTIVE",
+            },
+          });
       valuesByValue.set(valueData.value, { id: attributeValue.id, attributeId: attribute.id, value: attributeValue.value });
     }
 
@@ -933,11 +933,13 @@ async function main() {
   console.log("🌱 Seeding CMS pages…");
 
   async function upsertPage(data: { title: string; slug: string; pageKey: string; seoTitle?: string; seoDescription?: string }) {
-    return prisma.cMSPage.upsert({
-      where: { pageKey: data.pageKey },
-      update: { title: data.title, slug: data.slug, seoTitle: data.seoTitle, seoDescription: data.seoDescription, status: "ACTIVE" },
-      create: { ...data, status: "ACTIVE" },
-    });
+    const existing = await prisma.cMSPage.findFirst({ where: { pageKey: data.pageKey } });
+    return existing
+      ? prisma.cMSPage.update({
+          where: { id: existing.id },
+          data: { title: data.title, slug: data.slug, seoTitle: data.seoTitle, seoDescription: data.seoDescription, status: "ACTIVE" },
+        })
+      : prisma.cMSPage.create({ data: { ...data, status: "ACTIVE" } });
   }
 
   async function upsertSection(
