@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useCallback } from "react";
 import { ArrowLeft, Edit2, GripVertical, Plus, Save, Trash2, Upload, X } from "lucide-react";
-import { AdminInput, AdminSelect, ConfirmModal, StatusBadge, useToast, LoadingButton, DataTable, TableStatusAction } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, ConfirmModal, StatusBadge, useToast, LoadingButton, DataTable, TableStatusAction, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { Modal } from "@/components/ui/Modal";
@@ -103,6 +103,8 @@ export default function BannersPage() {
   const [form, setForm] = useState(empty);
   const [showModal, setShowModal] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState<string>("enable");
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [uploading, setUploading] = useState<"image" | "mobileImage" | null>(null);
 
@@ -385,13 +387,30 @@ export default function BannersPage() {
     }
   };
 
-  const runBulk = async (action: string) => {
+  const handleBulkAction = async () => {
+    if (!selected.length) return;
+    if (bulkAction === "delete") {
+      setShowBulkDeleteModal(true);
+      return;
+    }
     try {
-      await bulkBanners.mutateAsync({ ids: selected, action });
+      await bulkBanners.mutateAsync({ ids: selected, action: bulkAction });
       setSelected([]);
-      showToast("Bulk action completed.");
+      showToast(bulkAction === "enable" ? "Selected banners enabled." : "Selected banners disabled.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Bulk action failed."), "error");
+    }
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    try {
+      await bulkBanners.mutateAsync({ ids: selected, action: "delete" });
+      setSelected([]);
+      showToast("Selected banners deleted.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Bulk delete failed."), "error");
+    } finally {
+      setShowBulkDeleteModal(false);
     }
   };
 
@@ -635,42 +654,19 @@ export default function BannersPage() {
           onToggleStatus={toggleStatus}
           statusLoadingId={updateBanner.isPending ? updateBanner.variables?.id : null}
           renderBulkActions={(selectedIds) => (
-            <div className="flex items-center gap-3 w-full">
-              <span className="text-[13px] font-bold text-[#1A1A1A]">{selectedIds.length} selected</span>
-              <button
-                type="button"
-                onClick={() => setSelected([])}
-                className="inline-flex items-center gap-1.5 rounded border border-[#E6E6E6] bg-white px-2.5 py-1 text-[11.5px] font-semibold text-[#1A1A1A] hover:bg-gray-50 hover:border-gray-300 shadow-sm transition-all"
-              >
-                <X size={12} /> Clear
-              </button>
-              <div className="h-4 w-px bg-[#E6E6E6]" />
-              <span className="text-[12px] text-gray-500 font-medium">Bulk Actions:</span>
-              <LoadingButton
-                onClick={() => runBulk("enable")}
-                loading={bulkBanners.isPending}
-                loadingText="Enabling..."
-                className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11.5px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors shadow-sm"
-              >
-                Enable
-              </LoadingButton>
-              <LoadingButton
-                onClick={() => runBulk("disable")}
-                loading={bulkBanners.isPending}
-                loadingText="Disabling..."
-                className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11.5px] font-semibold text-amber-700 hover:bg-amber-100 transition-colors shadow-sm"
-              >
-                Disable
-              </LoadingButton>
-              <LoadingButton
-                onClick={() => runBulk("delete")}
-                loading={bulkBanners.isPending}
-                loadingText="Deleting..."
-                className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-[11.5px] font-semibold text-red-700 hover:bg-red-100 transition-colors shadow-sm"
-              >
-                Delete
-              </LoadingButton>
-            </div>
+            <AdminBulkActionsBar
+              selectedCount={selectedIds.length}
+              onClear={() => setSelected([])}
+              actionType={bulkAction}
+              onActionTypeChange={(val) => setBulkAction(val)}
+              actions={[
+                { value: "enable", label: "Enable" },
+                { value: "disable", label: "Disable" },
+                { value: "delete", label: "Delete" },
+              ]}
+              onApply={handleBulkAction}
+              applyLoading={bulkBanners.isPending}
+            />
           )}
         />
       )}
@@ -847,6 +843,16 @@ export default function BannersPage() {
             setDeleting(null);
           }
         }}
+      />
+
+      {/* Bulk Delete Confirmation Modal */}
+      <ConfirmModal
+        open={showBulkDeleteModal}
+        title={`Delete ${selected.length} ${selected.length === 1 ? "banner" : "banners"}?`}
+        message="This will permanently delete the selected banner records. This action cannot be undone."
+        onCancel={() => setShowBulkDeleteModal(false)}
+        isLoading={bulkBanners.isPending}
+        onConfirm={handleConfirmBulkDelete}
       />
 
       {ToastComponent}

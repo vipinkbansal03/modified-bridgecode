@@ -82,6 +82,22 @@ export default function UsersPage() {
     form.reset();
   };
   const [deletingLoading, setDeletingLoading] = useState(false);
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
+
+  const handleToggleStatus = async (user: User) => {
+    const nextStatus = user.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    setTogglingUserId(user.id);
+    try {
+      await adminApi.put(`/users/${user.id}`, { status: nextStatus });
+      showToast(`Status updated to ${nextStatus.toLowerCase()}.`);
+      refetch();
+    } catch {
+      showToast("Failed to update status.", "error");
+    } finally {
+      setTogglingUserId(null);
+    }
+  };
+
   const handleDelete = async () => {
     if (!deleting) return;
     setDeletingLoading(true);
@@ -91,32 +107,7 @@ export default function UsersPage() {
   const columns: Column<User>[] = [
     { key: "name", label: "Name", render: (r) => <div><div className="font-medium">{r.name}</div><div className="text-[11.5px] text-[#9A9A9A]">{r.email}</div></div> },
     { key: "role", label: "Role", render: (r) => r.role?.name },
-    {
-      key: "status",
-      label: "Status",
-      render: (r) => (
-        canUpdate ? (
-          <button
-            onClick={async () => {
-              const nextStatus = r.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-              try {
-                await adminApi.put(`/users/${r.id}`, { status: nextStatus });
-                showToast(`Status updated to ${nextStatus.toLowerCase()}.`);
-                refetch();
-              } catch {
-                showToast("Failed to update status.", "error");
-              }
-            }}
-            className="cursor-pointer hover:opacity-85 transition-opacity focus:outline-hidden"
-            title="Click to toggle status"
-          >
-            <StatusBadge status={r.status} />
-          </button>
-        ) : (
-          <StatusBadge status={r.status} />
-        )
-      ),
-    },
+    { key: "status", label: "Status" },
     { key: "lastLoginAt", label: "Last Login", render: (r) => r.lastLoginAt ? new Date(r.lastLoginAt).toLocaleDateString() : "Never" },
     ...(canUpdate || canDelete
       ? [
@@ -263,7 +254,16 @@ export default function UsersPage() {
             </div>
           </form>
         </Modal>
-      <DataTable<User> columns={columns} data={users} rowKey="id" isLoading={isLoading} emptyMessage="No users." />
+      <DataTable<User>
+        columns={columns}
+        data={users}
+        rowKey="id"
+        isLoading={isLoading}
+        emptyMessage="No users."
+        onToggleStatus={canUpdate ? handleToggleStatus : undefined}
+        statusLoadingId={togglingUserId}
+        isStatusDisabled={() => !canUpdate}
+      />
       <ConfirmModal open={!!deleting} title="Remove user?" message="This will deactivate the user account." onConfirm={handleDelete} onCancel={() => setDeleting(null)} isLoading={deletingLoading} />
       {ToastComponent}
       </div>

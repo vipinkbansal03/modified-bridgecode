@@ -429,7 +429,7 @@ export default function CollectionsPage() {
       { key: "slug", label: "Slug", width: "180px", render: (row) => <span className="truncate font-mono text-[12px] text-[#6B6B6B]">{row.slug}</span> },
       { key: "products", label: "Products", width: "100px", render: (row) => row._count?.products ?? row.products?.length ?? 0 },
       { key: "sortOrder", label: "Sort", width: "84px", render: (row) => row.sortOrder },
-      { key: "status", label: "Status", width: "120px", render: (row) => <StatusBadge status={row.status} /> },
+      { key: "status", label: "Status", width: "120px" },
       {
         key: "updatedAt",
         label: "Updated",
@@ -747,6 +747,15 @@ export default function CollectionsPage() {
         enableSelection={true}
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
+        onToggleStatus={canUpdate ? handleArchiveToggle : undefined}
+        statusLoadingId={
+          archiveCollection.isPending
+            ? ((archiveCollection.variables as any)?.id ?? (archiveCollection.variables as any) ?? null)
+            : restoreCollection.isPending
+              ? ((restoreCollection.variables as any)?.id ?? (restoreCollection.variables as any) ?? null)
+              : null
+        }
+        isStatusDisabled={() => !canUpdate}
         totalItems={data?.pagination?.total}
         currentPage={page}
         pageSize={10}

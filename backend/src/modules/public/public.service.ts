@@ -37,7 +37,7 @@ function buildStorefrontProductWhere(
   countryId: string,
   extra?: Prisma.ProductWhereInput,
 ): Prisma.ProductWhereInput {
-  const { OR: extraOr, ...extraRest } = (extra ??
+  const { OR: extraOr, category: extraCategory, ...extraRest } = (extra ??
     {}) as Prisma.ProductWhereInput & { OR?: Prisma.ProductWhereInput[] };
   const andConditions: Prisma.ProductWhereInput[] = [
     {
@@ -47,14 +47,20 @@ function buildStorefrontProductWhere(
           variants: {
             some: {
               status: "ACTIVE",
-              countries: { some: { countryId, enabled: true } },
+              OR: [
+                { countries: { some: { countryId, enabled: true } } },
+                { countries: { none: {} } },
+              ],
             },
           },
         },
       ],
     },
     {
-      countries: { some: { countryId, enabled: true } },
+      OR: [
+        { countries: { some: { countryId, enabled: true } } },
+        { countries: { none: {} } },
+      ],
     },
   ];
 
@@ -62,12 +68,20 @@ function buildStorefrontProductWhere(
     andConditions.push({ OR: extraOr });
   }
 
+  const categoryWhere: Prisma.CategoryWhereInput = {
+    status: "ACTIVE",
+    deletedAt: null,
+    OR: [
+      { countries: { some: { countryId, enabled: true } } },
+      { countries: { none: {} } },
+    ],
+    ...(extraCategory ? (extraCategory as Prisma.CategoryWhereInput) : {}),
+  };
+
   return {
     status: "ACTIVE",
     deletedAt: null,
-    category: {
-      countries: { some: { countryId, enabled: true } },
-    },
+    category: categoryWhere,
     ...extraRest,
     AND: andConditions,
   };
@@ -91,6 +105,10 @@ export async function publicListProducts(
 ) {
   const { page, limit, skip } = getPagination(query);
   const country = await resolvePublicCountry(query.countryCode);
+  if (!country) {
+    return { data: [], total: 0, page, limit };
+  }
+
   const selectedAttributeValues = (query.attributeValues ?? "")
     .split(",")
     .map((value) => value.trim())
@@ -106,10 +124,9 @@ export async function publicListProducts(
       ...(filterIds.length > 0 && {
         id: { in: filterIds },
       }),
-      category: {
-        ...(query.category ? { slug: query.category } : {}),
-        countries: { some: { countryId: country.id, enabled: true } },
-      },
+      ...(query.category && {
+        category: { slug: query.category },
+      }),
       ...(query.search && {
         OR: buildProductTextSearchOr(query.search, languageCode),
       }),
@@ -120,12 +137,10 @@ export async function publicListProducts(
         variants: {
           some: {
             status: "ACTIVE",
-            countries: {
-              some: {
-                countryId: country.id,
-                enabled: true,
-              },
-            },
+            OR: [
+              { countries: { some: { countryId: country.id, enabled: true } } },
+              { countries: { none: {} } },
+            ],
             attributeValues: {
               some: {
                 attributeValue: {
@@ -184,7 +199,10 @@ export async function publicListProducts(
         variants: {
           where: {
             status: "ACTIVE",
-            countries: { some: { countryId: country.id, enabled: true } },
+            OR: [
+              { countries: { some: { countryId: country.id, enabled: true } } },
+              { countries: { none: {} } },
+            ],
           },
           include: {
             prices: {
@@ -198,7 +216,10 @@ export async function publicListProducts(
             variants: {
               where: {
                 status: "ACTIVE",
-                countries: { some: { countryId: country.id, enabled: true } },
+                OR: [
+                  { countries: { some: { countryId: country.id, enabled: true } } },
+                  { countries: { none: {} } },
+                ],
               },
             },
           },
@@ -213,12 +234,17 @@ export async function publicListProducts(
 
 export async function publicListProductFacets(countryCode?: string) {
   const country = await resolvePublicCountry(countryCode);
+  if (!country) return [];
+
   const rows = await prisma.productVariantAttributeValue.findMany({
     where: {
       attributeValue: { status: "ACTIVE" },
       variant: {
         status: "ACTIVE",
-        countries: { some: { countryId: country.id, enabled: true } },
+        OR: [
+          { countries: { some: { countryId: country.id, enabled: true } } },
+          { countries: { none: {} } },
+        ],
         product: buildStorefrontProductWhere(country.id),
       },
     },
@@ -254,6 +280,8 @@ export async function publicGetProduct(
   countryCode?: string,
 ) {
   const country = await resolvePublicCountry(countryCode);
+  if (!country) throw new AppError("Product not found.", 404);
+
   const product = await prisma.product.findFirst({
     where: buildStorefrontProductWhere(country.id, { slug }),
     include: {
@@ -285,7 +313,10 @@ export async function publicGetProduct(
       variants: {
         where: {
           status: "ACTIVE",
-          countries: { some: { countryId: country.id, enabled: true } },
+          OR: [
+            { countries: { some: { countryId: country.id, enabled: true } } },
+            { countries: { none: {} } },
+          ],
         },
         include: {
           package: true,
@@ -454,6 +485,8 @@ export async function previewPublicProductPrices(
   }
 
   const country = await resolvePublicCountry(countryCode);
+  if (!country) throw new AppError("Product not found.", 404);
+
   const product = await prisma.product.findFirst({
     where: buildStorefrontProductWhere(country.id, { slug }),
     select: { id: true, hasVariants: true },
@@ -492,7 +525,10 @@ export async function previewPublicProductPrices(
           id: { in: requestedVariantIds },
           productId: product.id,
           status: "ACTIVE",
-          countries: { some: { countryId: country.id, enabled: true } },
+          OR: [
+            { countries: { some: { countryId: country.id, enabled: true } } },
+            { countries: { none: {} } },
+          ],
         },
         select: { id: true, productId: true },
       })
@@ -558,11 +594,16 @@ export async function publicListCategories(
   countryCode?: string,
 ) {
   const country = await resolvePublicCountry(countryCode);
+  if (!country) return [];
+
   const cats = await prisma.category.findMany({
     where: {
       status: "ACTIVE",
       deletedAt: null,
-      countries: { some: { countryId: country.id, enabled: true } },
+      OR: [
+        { countries: { some: { countryId: country.id, enabled: true } } },
+        { countries: { none: {} } },
+      ],
     },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     include: {
@@ -585,12 +626,17 @@ export async function publicGetCategory(
   countryCode?: string,
 ) {
   const country = await resolvePublicCountry(countryCode);
+  if (!country) throw new AppError("Category not found.", 404);
+
   const category = await prisma.category.findFirst({
     where: {
       slug,
       status: "ACTIVE",
       deletedAt: null,
-      countries: { some: { countryId: country.id, enabled: true } },
+      OR: [
+        { countries: { some: { countryId: country.id, enabled: true } } },
+        { countries: { none: {} } },
+      ],
     },
     include: {
       ...(languageCode ? approvedCategoryTranslationInclude(languageCode) : {}),
@@ -906,6 +952,7 @@ export async function publicSearch(
 ) {
   if (!query || query.length < 2) return { products: [], categories: [] };
   const country = await resolvePublicCountry(countryCode);
+  if (!country) return { products: [], categories: [] };
 
   const [products, categories] = await Promise.all([
     prisma.product.findMany({
@@ -937,7 +984,10 @@ export async function publicSearch(
         variants: {
           where: {
             status: "ACTIVE",
-            countries: { some: { countryId: country.id, enabled: true } },
+            OR: [
+              { countries: { some: { countryId: country.id, enabled: true } } },
+              { countries: { none: {} } },
+            ],
           },
           include: {
             prices: {
@@ -952,8 +1002,17 @@ export async function publicSearch(
       where: {
         status: "ACTIVE",
         deletedAt: null,
-        countries: { some: { countryId: country.id, enabled: true } },
-        OR: buildCategoryTextSearchOr(query, languageCode),
+        AND: [
+          {
+            OR: [
+              { countries: { some: { countryId: country.id, enabled: true } } },
+              { countries: { none: {} } },
+            ],
+          },
+          {
+            OR: buildCategoryTextSearchOr(query, languageCode),
+          },
+        ],
       },
       take: 4,
       include: {
@@ -998,37 +1057,36 @@ export async function getPublicCountries() {
 
 // ─── Inventory availability check ────────────────────────
 
-async function resolvePublicCountry(countryCode?: string) {
+async function resolvePublicCountry(countryCode?: string): Promise<{ id: string; code: string } | null> {
   const normalizedCode = countryCode?.trim().toUpperCase();
-  const country = normalizedCode
-    ? await prisma.country.findFirst({
-        where: {
-          code: normalizedCode,
-          status: "ACTIVE",
-        },
-        select: { id: true, code: true },
-      })
-    : await prisma.country.findFirst({
-        where: {
-          isDefault: true,
-          status: "ACTIVE",
-        },
-        select: { id: true, code: true },
-      });
 
-  if (country) return country;
+  if (normalizedCode) {
+    return prisma.country.findFirst({
+      where: {
+        code: normalizedCode,
+        status: "ACTIVE",
+      },
+      select: { id: true, code: true },
+    });
+  }
 
-  const fallbackCountry = await prisma.country.findFirst({
+  const defaultCountry = await prisma.country.findFirst({
+    where: {
+      isDefault: true,
+      status: "ACTIVE",
+    },
+    select: { id: true, code: true },
+  });
+
+  if (defaultCountry) return defaultCountry;
+
+  return prisma.country.findFirst({
     where: {
       status: "ACTIVE",
     },
     orderBy: [{ isDefault: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
     select: { id: true, code: true },
   });
-
-  if (!fallbackCountry)
-    throw new AppError("Selected country is not available.", 400);
-  return fallbackCountry;
 }
 
 export async function checkInventory(

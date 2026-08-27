@@ -461,7 +461,7 @@ export default function AdminTaxPage() {
         width: "110px",
         render: (row) => <span className="font-medium text-[#1A1A1A]">{Number(row.percentage).toFixed(2)}%</span>,
       },
-      { key: "status", label: "Status", width: "120px", render: (row) => <StatusBadge status={row.status} /> },
+      { key: "status", label: "Status", width: "120px" },
       { key: "sortOrder", label: "Priority", width: "100px" },
       {
         key: "updatedAt",
@@ -838,6 +838,9 @@ export default function AdminTaxPage() {
                 rowKey="id"
                 isLoading={isLoading}
                 emptyMessage="No tax rules configured."
+                onToggleStatus={canUpdate ? handleStatusToggle : undefined}
+                statusLoadingId={updateRule.isPending ? ((updateRule.variables as any)?.id ?? null) : null}
+                isStatusDisabled={() => !canUpdate}
               />
               <Pagination
                 page={pagination.page}

@@ -190,56 +190,52 @@ export default function AdminCustomersPage() {
       key: "status",
       label: "Account",
       render: (row) => (
-        canUpdate ? (
-          <button
-            onClick={async () => {
-              const nextStatus = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-              try {
-                await adminApi.put(`/customers/${row.id}`, { status: nextStatus });
-                showToast(`Account status updated to ${nextStatus.toLowerCase()}.`);
-                customerQuery.refetch();
-              } catch (err) {
-                showToast(getAdminErrorMessage(err, "Failed to update account status."), "error");
-              }
-            }}
-            className="cursor-pointer hover:opacity-85 transition-opacity focus:outline-hidden"
-            title="Click to toggle account status"
-          >
-            <StatusBadge status={row.status} />
-          </button>
-        ) : (
-          <StatusBadge status={row.status} />
-        )
+        <StatusBadge
+          status={row.status}
+          disabled={!canUpdate}
+          onClick={
+            canUpdate
+              ? async () => {
+                  const nextStatus = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+                  try {
+                    await adminApi.put(`/customers/${row.id}`, { status: nextStatus });
+                    showToast(`Account status updated to ${nextStatus.toLowerCase()}.`);
+                    customerQuery.refetch();
+                  } catch (err) {
+                    showToast(getAdminErrorMessage(err, "Failed to update account status."), "error");
+                  }
+                }
+              : undefined
+          }
+        />
       ),
     },
     {
       key: "approvalStatus",
       label: "Approval",
       render: (row) => (
-        canUpdate ? (
-          <button
-            onClick={async () => {
-              try {
-                if (row.approvalStatus === "ACTIVE") {
-                  await adminApi.post(`/customers/${row.id}/reject`);
-                  showToast("Customer status set to Suspended.");
-                } else {
-                  await adminApi.post(`/customers/${row.id}/approve`);
-                  showToast("Customer approved.");
+        <StatusBadge
+          status={row.approvalStatus}
+          disabled={!canUpdate}
+          onClick={
+            canUpdate
+              ? async () => {
+                  try {
+                    if (row.approvalStatus === "ACTIVE") {
+                      await adminApi.post(`/customers/${row.id}/reject`);
+                      showToast("Customer status set to Suspended.");
+                    } else {
+                      await adminApi.post(`/customers/${row.id}/approve`);
+                      showToast("Customer approved.");
+                    }
+                    customerQuery.refetch();
+                  } catch (err) {
+                    showToast(getAdminErrorMessage(err, "Failed to update approval status."), "error");
+                  }
                 }
-                customerQuery.refetch();
-              } catch (err) {
-                showToast(getAdminErrorMessage(err, "Failed to update approval status."), "error");
-              }
-            }}
-            className="cursor-pointer hover:opacity-85 transition-opacity focus:outline-hidden"
-            title="Click to toggle approval status"
-          >
-            <StatusBadge status={row.approvalStatus} />
-          </button>
-        ) : (
-          <StatusBadge status={row.approvalStatus} />
-        )
+              : undefined
+          }
+        />
       ),
     },
     { key: "createdAt", label: "Created", render: (row) => formatDate(row.createdAt) },

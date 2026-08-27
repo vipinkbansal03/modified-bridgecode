@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, ChevronRight, X } from "lucide-react";
@@ -8,6 +8,9 @@ import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { sidebarSections } from "./data/sidebarNavigation";
 import { cn } from "@/utils/cn";
+
+const SIDEBAR_SCROLL_STORAGE_KEY = "admin_sidebar_scroll_top";
+let inMemorySidebarScrollTop = 0;
 
 interface AdminSidebarProps {
   open: boolean;
@@ -18,6 +21,7 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
   const { user, hasPermission, logout } = useAdminAuth();
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
+  const navRef = useRef<HTMLElement | null>(null);
 
   // Auto-expand menu folders that contain the active path
   useEffect(() => {
@@ -26,7 +30,7 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
       section.items.forEach((item) => {
         if (item.subItems) {
           const hasActiveSub = item.subItems.some(
-            (sub) => pathname === sub.href || pathname.startsWith(sub.href),
+            (sub) => pathname === sub.href || (sub.href !== "/admin/dashboard" && pathname.startsWith(sub.href + "/")),
           );
           if (hasActiveSub) {
             initial[item.label] = true;
@@ -36,6 +40,67 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
     });
     setExpandedMenus((prev) => ({ ...initial, ...prev }));
   }, [pathname]);
+
+  // Restore scroll position and ensure active element is in view
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+
+    // 1. Restore previous scroll position immediately
+    let targetScroll = inMemorySidebarScrollTop;
+    if (!targetScroll && typeof window !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem(SIDEBAR_SCROLL_STORAGE_KEY);
+        if (stored) targetScroll = parseFloat(stored);
+      } catch {}
+    }
+
+    if (targetScroll > 0) {
+      nav.scrollTop = targetScroll;
+    }
+
+    // 2. Check if the active item is currently outside the visible viewport
+    const frameId = requestAnimationFrame(() => {
+      const activeEl = nav.querySelector<HTMLElement>('[data-sidebar-active="true"]');
+      if (!activeEl) return;
+
+      const navRect = nav.getBoundingClientRect();
+      const activeRect = activeEl.getBoundingClientRect();
+
+      // Check if active item is outside current viewport with safe padding
+      const isAbove = activeRect.top < navRect.top + 10;
+      const isBelow = activeRect.bottom > navRect.bottom - 10;
+
+      if (isAbove || isBelow) {
+        activeEl.scrollIntoView({ block: "nearest", behavior: "auto" });
+        inMemorySidebarScrollTop = nav.scrollTop;
+        try {
+          sessionStorage.setItem(SIDEBAR_SCROLL_STORAGE_KEY, String(nav.scrollTop));
+        } catch {}
+      }
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [pathname, expandedMenus]);
+
+  const handleNavScroll = (e: React.UIEvent<HTMLElement>) => {
+    const top = e.currentTarget.scrollTop;
+    inMemorySidebarScrollTop = top;
+    try {
+      sessionStorage.setItem(SIDEBAR_SCROLL_STORAGE_KEY, String(top));
+    } catch {}
+  };
+
+  const handleLinkClick = () => {
+    if (navRef.current) {
+      const currentTop = navRef.current.scrollTop;
+      inMemorySidebarScrollTop = currentTop;
+      try {
+        sessionStorage.setItem(SIDEBAR_SCROLL_STORAGE_KEY, String(currentTop));
+      } catch {}
+    }
+    onClose();
+  };
 
   const toggleMenu = (label: string) => {
     setExpandedMenus((prev) => ({ ...prev, [label]: !prev[label] }));
@@ -104,7 +169,11 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
         </div>
 
         {/* Navigation list */}
-        <nav className="admin-sidebar-scrollbar flex-1 overflow-y-auto py-5 space-y-6">
+        <nav
+          ref={navRef}
+          onScroll={handleNavScroll}
+          className="admin-sidebar-scrollbar flex-1 overflow-y-auto py-5 space-y-6"
+        >
           {visibleSections.map((section) => (
             <div key={section.title} className="space-y-1.5">
               {/* Section Header */}
@@ -120,7 +189,7 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
                   // Check if this item link is active
                   const isLinkActive = item.href
                     ? pathname === item.href ||
-                      (item.href !== "/admin/dashboard" && pathname.startsWith(item.href))
+                      (item.href !== "/admin/dashboard" && (pathname.startsWith(item.href + "/") || pathname === item.href))
                     : false;
 
                   const isFolderExpanded = !!expandedMenus[item.label];
@@ -128,7 +197,7 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
                   // Folders / Expandable items
                   if (item.subItems) {
                     const isAnySubActive = item.subItems.some(
-                      (sub) => pathname === sub.href || pathname.startsWith(sub.href),
+                      (sub) => pathname === sub.href || (sub.href !== "/admin/dashboard" && pathname.startsWith(sub.href + "/")),
                     );
 
                     return (
@@ -158,12 +227,16 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
                         {isFolderExpanded && (
                           <div className="bg-black/20 py-1 ml-5 border-l border-white/5 pl-2 space-y-[1px]">
                             {item.subItems.map((sub) => {
-                              const subActive = pathname === sub.href;
+                              const subActive =
+                                pathname === sub.href ||
+                                (sub.href !== "/admin/dashboard" && pathname.startsWith(sub.href + "/"));
                               return (
                                 <Link
                                   key={sub.href}
                                   href={sub.href}
-                                  onClick={onClose}
+                                  onClick={handleLinkClick}
+                                  data-sidebar-active={subActive ? "true" : undefined}
+                                  aria-current={subActive ? "page" : undefined}
                                   className={cn(
                                     "flex items-center py-1.5 pl-3 pr-3 text-[12.5px] transition-colors rounded-sm",
                                     subActive
@@ -186,7 +259,9 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
                     <Link
                       key={item.href}
                       href={item.href || "#"}
-                      onClick={onClose}
+                      onClick={handleLinkClick}
+                      data-sidebar-active={isLinkActive ? "true" : undefined}
+                      aria-current={isLinkActive ? "page" : undefined}
                       className={cn(
                         "flex items-center gap-3 px-5 py-2 text-[13px] transition-colors border-l-2 pl-[18px]",
                         isLinkActive
@@ -220,7 +295,7 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
             </div>
           </div>
           <div className="flex items-center justify-between mt-3 text-[11.5px] text-white/40">
-            <Link href="/admin/settings" className="hover:text-white transition-colors">
+            <Link href="/admin/settings" onClick={handleLinkClick} className="hover:text-white transition-colors">
               View profile
             </Link>
             <button onClick={logout} className="hover:text-white transition-colors">

@@ -318,7 +318,7 @@ export default function AdminProductsPage() {
         label: "Actions",
         width: "168px",
         render: (product) => (
-          <div className="flex gap-1.5 md:justify-end" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-start gap-1.5" onClick={(e) => e.stopPropagation()}>
             {product.slug ? (
               <Link href={`/products/${product.slug}`} target="_blank" className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Preview on website">
                 <ExternalLink size={13} />

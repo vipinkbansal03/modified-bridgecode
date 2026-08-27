@@ -19,6 +19,8 @@ const isConfigValid = Boolean(
   firebaseConfig.appId
 );
 
+export const isFirebaseConfigured = isConfigValid;
+
 let app: any = null;
 if (isConfigValid) {
   try {
@@ -26,17 +28,12 @@ if (isConfigValid) {
   } catch (err) {
     console.error("Firebase initialization failed:", err);
   }
-} else {
-  if (typeof window !== "undefined") {
-    console.warn("Firebase configuration is missing or incomplete. Push notifications are disabled.");
-  }
 }
 
 export const requestForToken = async () => {
   if (!isConfigValid || !app) return null;
   try {
     if (!app) {
-      console.warn("Firebase app not initialized, skipping token request.");
       return null;
     }
     const supported = await isSupported();
@@ -66,7 +63,7 @@ export const requestForToken = async () => {
 export const onMessageListener = () =>
   new Promise((resolve, reject) => {
     if (!isConfigValid || !app) {
-      reject(new Error("Firebase app not initialized or config invalid."));
+      resolve(null);
       return;
     }
     isSupported().then((supported) => {
@@ -80,9 +77,11 @@ export const onMessageListener = () =>
           reject(err);
         }
       } else {
-        reject(new Error("Messaging not supported."));
+        resolve(null);
       }
-    }).catch(reject);
+    }).catch(() => {
+      resolve(null);
+    });
   });
 
 export { app };

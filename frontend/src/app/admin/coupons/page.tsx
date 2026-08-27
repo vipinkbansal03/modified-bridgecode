@@ -352,8 +352,11 @@ export default function CouponsPage() {
       ),
     },
     { key: "usage", label: "Usage", render: (row) => `${row.usedCount}/${row.usageLimit || "Unlimited"}` },
-    { key: "dates", label: "Validity", render: (row) => validity(row) },
-    { key: "status", label: "Status", render: (row) => <StatusBadge status={getEffectiveCouponStatus(row)} /> },
+    {
+      key: "status",
+      label: "Status",
+      getStatus: (row) => getEffectiveCouponStatus(row),
+    },
     {
       key: "actions",
       label: "Actions",
@@ -489,6 +492,9 @@ export default function CouponsPage() {
           enableSelection={true}
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
+          onToggleStatus={toggleStatus}
+          statusLoadingId={updateCoupon.isPending ? ((updateCoupon.variables as any)?.id ?? null) : null}
+          isStatusDisabled={() => !canUpdate}
           totalItems={pagination.total}
           currentPage={page}
           pageSize={limit}

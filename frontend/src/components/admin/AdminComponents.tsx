@@ -13,7 +13,13 @@ export interface Column<T> {
   key: keyof T | string;
   label: React.ReactNode;
   width?: string;
+  align?: "left" | "center" | "right";
   render?: (row: T) => ReactNode;
+  enableStatusToggle?: boolean;
+  getStatus?: (row: T) => string | boolean;
+  isStatusLoading?: (row: T) => boolean;
+  isStatusDisabled?: (row: T) => boolean;
+  onToggleStatus?: (row: T) => void | Promise<void>;
 }
 
 interface DataTableProps<T> {
@@ -38,6 +44,8 @@ interface DataTableProps<T> {
   // Optional Status Toggle configuration
   onToggleStatus?: (row: T) => void | Promise<void>;
   statusLoadingId?: string | null;
+  isStatusLoading?: (row: T) => boolean;
+  isStatusDisabled?: (row: T) => boolean;
 
   // Optional Bulk Actions
   renderBulkActions?: (selectedIds: string[]) => React.ReactNode;
@@ -74,6 +82,8 @@ export function DataTable<T>({
   disabledReorder = false,
   onToggleStatus,
   statusLoadingId = null,
+  isStatusLoading,
+  isStatusDisabled,
   renderBulkActions,
   title,
   description,
@@ -113,16 +123,16 @@ export function DataTable<T>({
   }
 
   const hasBulkActionsActive = enableSelection && !!renderBulkActions;
-  const isUnifiedToolbar = hasBulkActionsActive && totalItems !== undefined;
+  const isUnifiedToolbar = totalItems !== undefined;
 
   return (
     <div className="rounded-lg border border-[#E6E6E6] bg-white overflow-hidden flex flex-col">
-      {(title || description || hasBulkActionsActive) && (
+      {(title || description || hasBulkActionsActive || totalItems !== undefined) && (
         <>
           {isUnifiedToolbar ? (
-            <div className="border-b border-[#E6E6E6] bg-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 min-h-[56px] transition-all">
-              <div className="flex flex-wrap items-center gap-3 w-full">
-                <span className="text-[13px] font-bold text-[#1A1A1A]">{title || "List"}</span>
+            <div className="border-b border-[#E6E6E6] bg-white px-4 flex items-center justify-between h-[56px] overflow-x-auto transition-all">
+              <div className="flex items-center gap-3 w-full shrink-0">
+                <span className="text-[13px] font-bold text-[#1A1A1A] whitespace-nowrap">{title || "List"}</span>
 
                 {/* Showing Count */}
                 {totalItems !== undefined && currentPage !== undefined && pageSize !== undefined && (
@@ -133,11 +143,11 @@ export function DataTable<T>({
 
                 {/* Page Size Select */}
                 {pageSize !== undefined && onPageSizeChange && (
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     <select
                       value={pageSize}
                       onChange={(e) => onPageSizeChange(Number(e.target.value))}
-                      className="rounded-md border border-[#E6E6E6] bg-white px-2 py-1 text-[12px] text-[#1A1A1A] outline-none"
+                      className="h-8 rounded-md border border-[#E6E6E6] bg-white px-2 text-[12px] text-[#1A1A1A] outline-none shadow-xs cursor-pointer"
                     >
                       {(pageSizeOptions || [10, 25, 50, 100]).map((opt) => (
                         <option key={opt} value={opt}>{opt}</option>
@@ -148,21 +158,21 @@ export function DataTable<T>({
 
                 {/* Prev / Next Buttons */}
                 {currentPage !== undefined && totalPages !== undefined && onPageChange && (
-                  <div className="flex items-center gap-1.5 ml-2">
+                  <div className="flex items-center gap-1.5 ml-1 shrink-0">
                     <button
                       type="button"
                       onClick={() => onPageChange(Math.max(1, currentPage - 1))}
                       disabled={currentPage === 1}
-                      className="rounded-md border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] hover:bg-[#F5F5F5] disabled:opacity-40"
+                      className="h-8 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12px] hover:bg-[#F5F5F5] disabled:opacity-40 shadow-xs cursor-pointer"
                     >
                       Prev
                     </button>
-                    <span className="text-[12.5px] text-[#1A1A1A] font-semibold">{currentPage}/{totalPages}</span>
+                    <span className="text-[12.5px] text-[#1A1A1A] font-semibold whitespace-nowrap">{currentPage}/{totalPages}</span>
                     <button
                       type="button"
                       onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
                       disabled={currentPage === totalPages}
-                      className="rounded-md border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] hover:bg-[#F5F5F5] disabled:opacity-40"
+                      className="h-8 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12px] hover:bg-[#F5F5F5] disabled:opacity-40 shadow-xs cursor-pointer"
                     >
                       Next
                     </button>
@@ -170,13 +180,15 @@ export function DataTable<T>({
                 )}
 
                 {/* Bulk Actions container */}
-                <div className="flex items-center gap-2 border-l border-[#E6E6E6] pl-3 ml-2 flex-wrap">
-                  {renderBulkActions!(selectedIds)}
-                </div>
+                {hasBulkActionsActive && (
+                  <div className="flex items-center gap-2 border-l border-[#E6E6E6] pl-3 ml-1 shrink-0">
+                    {renderBulkActions!(selectedIds)}
+                  </div>
+                )}
 
                 {/* Extra header actions if any */}
                 {headerActions && (
-                  <div className="ml-auto flex items-center gap-2">
+                  <div className="ml-auto flex items-center gap-2 shrink-0">
                     {headerActions}
                   </div>
                 )}
@@ -228,11 +240,18 @@ export function DataTable<T>({
                   />
                 </th>
               )}
-              {columns.map((col) => (
-                <th key={String(col.key)} className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]" style={{ width: col.width }}>
-                  {col.label}
-                </th>
-              ))}
+              {columns.map((col) => {
+                const alignClass = col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left";
+                return (
+                  <th
+                    key={String(col.key)}
+                    className={cn("px-4 py-3 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]", alignClass)}
+                    style={col.width ? { width: col.width } : undefined}
+                  >
+                    {col.label}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody className="divide-y divide-[#E6E6E6]">
@@ -342,21 +361,51 @@ export function DataTable<T>({
                       </td>
                     )}
                     {columns.map((col) => {
-                      const isStatusCol = col.key === "status";
-                      const cellContent = isStatusCol && onToggleStatus ? (
-                        <TableStatusAction
-                          status={(row as any).status}
-                          loading={statusLoadingId === rowId}
-                          onToggle={() => onToggleStatus(row)}
-                        />
-                      ) : col.render ? (
-                        col.render(row)
-                      ) : (
-                        String((row as Record<string, unknown>)[String(col.key)] ?? "")
-                      );
+                      const isStatusCol = col.key === "status" || col.enableStatusToggle === true;
+                      const toggleHandler = col.onToggleStatus || (isStatusCol && onToggleStatus ? onToggleStatus : undefined);
+
+                      let cellContent: ReactNode;
+
+                      if (toggleHandler) {
+                        const rawStatus = col.getStatus
+                          ? col.getStatus(row)
+                          : (row as Record<string, unknown>)[String(col.key)];
+                        const isLoading = col.isStatusLoading
+                          ? col.isStatusLoading(row)
+                          : isStatusLoading
+                            ? isStatusLoading(row)
+                            : statusLoadingId === rowId;
+                        const isDisabled = col.isStatusDisabled
+                          ? col.isStatusDisabled(row)
+                          : isStatusDisabled
+                            ? isStatusDisabled(row)
+                            : false;
+
+                        cellContent = (
+                          <TableStatusAction
+                            status={rawStatus as string | boolean}
+                            loading={isLoading}
+                            disabled={isDisabled}
+                            onToggle={() => toggleHandler(row)}
+                          />
+                        );
+                      } else if (col.render) {
+                        cellContent = col.render(row);
+                      } else if (col.key === "status") {
+                        const rawStatus = (row as Record<string, unknown>)[String(col.key)];
+                        cellContent = <StatusBadge status={rawStatus as string | boolean} />;
+                      } else {
+                        cellContent = String((row as Record<string, unknown>)[String(col.key)] ?? "");
+                      }
+
+                      const alignClass = col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left";
 
                       return (
-                        <td key={String(col.key)} className="px-4 py-3 text-[13.5px] text-[#1A1A1A]" style={col.width ? { width: col.width } : undefined}>
+                        <td
+                          key={String(col.key)}
+                          className={cn("px-4 py-3 text-[13.5px] text-[#1A1A1A]", alignClass)}
+                          style={col.width ? { width: col.width } : undefined}
+                        >
                           {cellContent}
                         </td>
                       );
@@ -377,50 +426,45 @@ export function DataTable<T>({
 export interface TableStatusActionProps {
   status: string | boolean;
   loading?: boolean;
+  disabled?: boolean;
   onToggle: () => void | Promise<void>;
   activeLabel?: string;
   inactiveLabel?: string;
   tooltipActive?: string;
   tooltipInactive?: string;
+  className?: string;
 }
 
 export function TableStatusAction({
   status,
   loading = false,
+  disabled = false,
   onToggle,
-  activeLabel = "ACTIVE",
-  inactiveLabel = "INACTIVE",
+  activeLabel,
+  inactiveLabel,
   tooltipActive = "Click to deactivate",
   tooltipInactive = "Click to activate",
+  className,
 }: TableStatusActionProps) {
-  const isCurrentlyActive = status === true || String(status).toUpperCase() === "ACTIVE" || String(status) === "true" || String(status) === "1";
+  const isCurrentlyActive =
+    status === true ||
+    String(status).toUpperCase() === "ACTIVE" ||
+    String(status) === "true" ||
+    String(status) === "1";
+
+  const label = isCurrentlyActive ? activeLabel : inactiveLabel;
   const tooltip = isCurrentlyActive ? tooltipActive : tooltipInactive;
 
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        if (!loading) {
-          void onToggle();
-        }
-      }}
-      disabled={loading}
+    <StatusBadge
+      status={isCurrentlyActive ? "ACTIVE" : "INACTIVE"}
+      label={label}
+      loading={loading}
+      disabled={disabled}
+      onClick={onToggle}
       title={tooltip}
-      className={cn(
-        "relative inline-flex items-center justify-center focus:outline-none transition-opacity",
-        loading ? "opacity-75 cursor-wait" : "cursor-pointer hover:opacity-85"
-      )}
-    >
-      <span className="relative inline-flex items-center justify-center">
-        <StatusBadge status={isCurrentlyActive ? "ACTIVE" : "INACTIVE"} />
-        {loading && (
-          <span className="absolute inset-0 flex items-center justify-center rounded-full bg-white/70 backdrop-blur-[0.5px]">
-            <span className="inline-block animate-spin rounded-full border border-gray-400 border-t-[#E31E24] w-3 h-3" aria-hidden="true" />
-          </span>
-        )}
-      </span>
-    </button>
+      className={className}
+    />
   );
 }
 
@@ -541,11 +585,90 @@ const STATUS_STYLES: Record<string, string> = {
   REJECTED: "bg-red-50 text-red-700 border-red-200",
 };
 
-export function StatusBadge({ status }: { status: string }) {
-  const style = STATUS_STYLES[status] || "bg-gray-50 text-gray-600 border-gray-200";
+export interface StatusBadgeProps {
+  status: string | boolean;
+  label?: string;
+  loading?: boolean;
+  disabled?: boolean;
+  interactive?: boolean;
+  onClick?: (e?: React.MouseEvent) => void | Promise<void>;
+  title?: string;
+  className?: string;
+}
+
+export function StatusBadge({
+  status,
+  label,
+  loading = false,
+  disabled = false,
+  interactive,
+  onClick,
+  title,
+  className,
+}: StatusBadgeProps) {
+  const isBool = typeof status === "boolean";
+  const normalizedStatus = isBool
+    ? (status ? "ACTIVE" : "INACTIVE")
+    : String(status || "").toUpperCase();
+
+  const displayLabel = label || (isBool ? (status ? "Active" : "Inactive") : String(status || "").replace(/_/g, " "));
+  const style = STATUS_STYLES[normalizedStatus] || "bg-gray-50 text-gray-600 border-gray-200";
+
+  const isClickable = !!onClick || interactive === true;
+  const isCurrentlyActive = normalizedStatus === "ACTIVE" || status === true;
+  const defaultTooltip = isClickable
+    ? isCurrentlyActive
+      ? "Click to deactivate"
+      : "Click to activate"
+    : undefined;
+  const finalTitle = title ?? defaultTooltip;
+
+  if (isClickable) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!loading && !disabled) {
+            void onClick?.(e);
+          }
+        }}
+        disabled={disabled || loading}
+        title={finalTitle}
+        className={cn(
+          "relative inline-flex min-w-[78px] shrink-0 items-center justify-center text-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium transition-all select-none focus:outline-none",
+          style,
+          disabled
+            ? "opacity-50 cursor-not-allowed"
+            : loading
+              ? "opacity-75 cursor-wait"
+              : "cursor-pointer hover:opacity-85 hover:shadow-xs",
+          className
+        )}
+      >
+        <span className={cn(loading && "invisible")}>{displayLabel}</span>
+        {loading && (
+          <span className="absolute inset-0 flex items-center justify-center rounded-full bg-white/70 backdrop-blur-[0.5px]">
+            <span
+              className="inline-block animate-spin rounded-full border border-gray-400 border-t-[#E31E24] w-3 h-3"
+              aria-hidden="true"
+            />
+          </span>
+        )}
+      </button>
+    );
+  }
+
   return (
-    <span className={cn("inline-flex min-w-[70px] shrink-0 items-center justify-center text-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium", style)}>
-      {status.replace(/_/g, " ")}
+    <span
+      title={finalTitle}
+      className={cn(
+        "inline-flex min-w-[78px] shrink-0 items-center justify-center text-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium",
+        style,
+        className
+      )}
+    >
+      {displayLabel}
     </span>
   );
 }

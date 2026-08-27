@@ -70,7 +70,12 @@ export function makeQueryClient() {
         staleTime: STALE.medium,
         gcTime: 10 * 60 * 1000,
         retry: (failureCount, error) => {
-          // Never retry 404s or validation errors
+          // Never retry 4xx client errors (400, 401, 403, 404, 422, 429, etc.)
+          const status = (error as { status?: number; response?: { status?: number } })?.status ??
+            (error as { status?: number; response?: { status?: number } })?.response?.status;
+          if (typeof status === "number" && status >= 400 && status < 500) {
+            return false;
+          }
           const msg = (error as Error)?.message ?? "";
           if (msg.includes("Too many requests") || msg.includes("429"))
             return false;

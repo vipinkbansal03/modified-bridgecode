@@ -4,28 +4,24 @@ import { useEffect, useMemo, useState } from "react";
 import * as Yup from "yup";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import {
-  Search,
   Mail,
   Users,
   UserPlus,
   X,
-  Check,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import {
   DataTable,
-  Pagination,
   AdminInput,
-  AdminSelect,
-  StatCard,
   AdminStatsGrid,
   AdminListToolbar,
+  StatusBadge,
   useToast,
   ConfirmModal,
+  LoadingButton,
   type Column,
 } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
-import { RefreshButton } from "@/components/admin/RefreshButton";
 import {
   useAdminSubscribers,
   useCreateSubscriber,
@@ -44,7 +40,6 @@ type SubscriberRow = {
 };
 
 export default function NewsletterAdminPage() {
-  // Subscribers Listing State
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState("");
@@ -52,18 +47,17 @@ export default function NewsletterAdminPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [sortBy, setSortBy] = useState("subscribedAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [showFilters, setShowFilters] = useState(false);
 
   // Manual Add Modal State
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [newEmail, setNewEmail] = useState("");
 
   // Confirmations State
   const [isConfirmToggleOpen, setIsConfirmToggleOpen] = useState(false);
   const [toggleTarget, setToggleTarget] = useState<SubscriberRow | null>(null);
 
-  const { showToast } = useToast();
+  const { showToast, ToastComponent } = useToast();
 
-  // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
@@ -72,7 +66,6 @@ export default function NewsletterAdminPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Fetch Subscribers
   const { data, isLoading, refetch, isFetching } = useAdminSubscribers({
     page,
     limit,
@@ -86,24 +79,19 @@ export default function NewsletterAdminPage() {
     () => (data?.data ?? []) as SubscriberRow[],
     [data?.data],
   );
-  const pagination = data?.pagination ?? {
-    page,
-    limit,
-    total: 0,
-    totalPages: 1,
-  };
+  const total = data?.pagination?.total ?? 0;
+  const totalPages = data?.pagination?.totalPages ?? 1;
 
   const createMutation = useCreateSubscriber();
   const updateStatusMutation = useUpdateSubscriberStatus();
 
-  // Quick stats computed from total pagination or filtered counts
   const stats = useMemo(() => {
     return {
-      total: pagination.total ?? 0,
+      total: total,
       active: subscribers.filter((s) => s.status === "ACTIVE").length,
       unsubscribed: subscribers.filter((s) => s.status === "UNSUBSCRIBED").length,
     };
-  }, [subscribers, pagination.total]);
+  }, [subscribers, total]);
 
   const form = useAdminForm({
     initialValues: { email: "" },
@@ -114,22 +102,14 @@ export default function NewsletterAdminPage() {
       setStatus("");
       try {
         await createMutation.mutateAsync({ email: values.email.trim() });
-        showToast({
-          title: "Subscriber added",
-          message: `${values.email.trim()} has been registered successfully.`,
-          type: "success",
-        });
+        showToast("Subscriber registered successfully.");
         setIsAddOpen(false);
         resetForm();
         refetch();
       } catch (err) {
         const msg = getAdminErrorMessage(err, "Failed to register email.");
         setStatus(msg);
-        showToast({
-          title: "Error adding subscriber",
-          message: msg,
-          type: "error",
-        });
+        showToast(msg, "error");
       } finally {
         setSubmitting(false);
       }
@@ -143,42 +123,34 @@ export default function NewsletterAdminPage() {
 
   const executeToggleStatus = () => {
     if (!toggleTarget) return;
-
     const nextStatus = toggleTarget.status === "ACTIVE" ? "UNSUBSCRIBED" : "ACTIVE";
 
     updateStatusMutation.mutate(
       { id: toggleTarget.id, status: nextStatus },
       {
         onSuccess: () => {
-          showToast({
-            title: "Subscriber status updated",
-            message: `Subscriber marked as ${nextStatus.toLowerCase()}.`,
-            type: "success",
-          });
+          showToast(`Subscriber marked as ${nextStatus.toLowerCase()}.`);
           setIsConfirmToggleOpen(false);
           setToggleTarget(null);
           refetch();
         },
         onError: (err) => {
-          showToast({
-            title: "Failed to update status",
-            message: getAdminErrorMessage(err, "Action could not be performed."),
-            type: "error",
-          });
+          showToast(getAdminErrorMessage(err, "Action could not be performed."), "error");
         },
       },
     );
   };
 
-  // Columns Configuration
   const columns: Column<SubscriberRow>[] = [
     {
       key: "email",
       label: "Subscriber Email",
+      width: "320px",
+      align: "left",
       render: (row: SubscriberRow) => (
-        <div>
-          <p className="text-[13.5px] font-semibold text-[#1A1A1A]">{row.email}</p>
-          <p className="text-[11.5px] text-[#6B6B6B]">
+        <div className="min-w-0 pr-3">
+          <p className="text-[13px] font-semibold text-[#1A1A1A] truncate">{row.email}</p>
+          <p className="text-[11.5px] text-[#6B6B6B] mt-0.5">
             Source: {row.source ? row.source.toLowerCase() : "storefront"}
           </p>
         </div>
@@ -187,43 +159,46 @@ export default function NewsletterAdminPage() {
     {
       key: "status",
       label: "Status",
-      render: (row: SubscriberRow) => {
-        const isActive = row.status === "ACTIVE";
-        return (
-          <span
-            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${
-              isActive
-                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                : "bg-gray-100 text-gray-600 border border-gray-200"
-            }`}
-          >
-            {isActive ? <Check size={11} /> : <X size={11} />}
-            {row.status}
-          </span>
-        );
-      },
+      width: "140px",
+      align: "left",
+      render: (row: SubscriberRow) => <StatusBadge status={row.status} />,
     },
     {
       key: "subscribedAt",
       label: "Subscribed Date",
+      width: "160px",
+      align: "left",
       render: (row: SubscriberRow) => (
-        <span className="text-[12.5px] text-[#6B6B6B]">
+        <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">
           {row.subscribedAt ? new Date(row.subscribedAt).toLocaleDateString() : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "unsubscribedAt",
+      label: "Unsubscribed Date",
+      width: "160px",
+      align: "left",
+      render: (row: SubscriberRow) => (
+        <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">
+          {row.unsubscribedAt ? new Date(row.unsubscribedAt).toLocaleDateString() : "—"}
         </span>
       ),
     },
     {
       key: "actions",
       label: "Actions",
+      width: "140px",
+      align: "left",
       render: (row: SubscriberRow) => (
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-start">
           <button
             type="button"
             onClick={() => handleToggleClick(row)}
-            className={`rounded-md px-2.5 py-1 text-[12px] font-semibold transition ${
+            className={`inline-flex h-7 items-center rounded-md px-2.5 text-[12px] font-medium transition-colors shadow-2xs cursor-pointer ${
               row.status === "ACTIVE"
-                ? "border border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                ? "border border-[#F2C9C9] bg-white text-[#E31E24] hover:bg-[#FFF5F5]"
+                : "border border-[#CFE8D7] bg-white text-[#1F8F4A] hover:bg-[#F1FBF4]"
             }`}
           >
             {row.status === "ACTIVE" ? "Unsubscribe" : "Reactivate"}
@@ -234,41 +209,33 @@ export default function NewsletterAdminPage() {
   ];
 
   return (
-    <AdminLayout title="Newsletter Subscribers">
-      <div className="space-y-6">
+    <AdminLayout title="Newsletter Subscribers" breadcrumb={[{ label: "Newsletter Subscribers" }]}>
+      <div className="space-y-5">
         <AdminStatsGrid
           stats={[
-            { title: "Total List Count", value: stats.total, subtitle: "All registered emails", icon: <Users size={18} />, isLoading: isLoading },
-            { title: "Active Subscriptions", value: stats.active, subtitle: "Subscribed and active", icon: <Mail size={18} />, color: "bg-emerald-600", isLoading: isLoading },
-            { title: "Unsubscriptions", value: stats.unsubscribed, subtitle: "Opted-out subscribers", icon: <X size={18} />, color: "bg-gray-600", isLoading: isLoading }
+            { title: "Total List Count", value: stats.total, subtitle: "All registered emails", icon: <Users size={18} />, isLoading },
+            { title: "Active Subscriptions", value: stats.active, subtitle: "Subscribed and active", icon: <Mail size={18} />, color: "bg-green-600", isLoading },
+            { title: "Unsubscriptions", value: stats.unsubscribed, subtitle: "Opted-out subscribers", icon: <X size={18} />, color: "bg-gray-600", isLoading },
           ]}
         />
 
         <AdminListToolbar
           search={{
             value: search,
-            onChange: setSearch,
+            onChange: (val) => {
+              setSearch(val);
+              setPage(1);
+            },
             placeholder: "Search subscriber email...",
-            widthClassName: "max-w-[280px]",
+            widthClassName: "w-[260px]",
           }}
-          leftExtra={
-            <AdminSelect
-              label=""
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setPage(1);
-              }}
-              className="h-10"
-              options={[
-                { value: "", label: "All Statuses" },
-                { value: "ACTIVE", label: "Active" },
-                { value: "UNSUBSCRIBED", label: "Unsubscribed" },
-              ]}
-            />
-          }
+          filters={{
+            showFilters,
+            onToggle: () => setShowFilters(!showFilters),
+            activeCount: [statusFilter, sortBy !== "subscribedAt" ? sortBy : "", sortDir !== "desc" ? sortDir : ""].filter(Boolean).length,
+          }}
           refresh={{
-            onRefresh: refetch,
+            onRefresh: () => void refetch(),
             isRefreshing: isFetching,
           }}
           primaryAction={{
@@ -276,24 +243,69 @@ export default function NewsletterAdminPage() {
             label: "Add Subscriber",
             icon: <UserPlus size={14} />,
           }}
+          onResetFilters={() => {
+            setSearch("");
+            setStatusFilter("");
+            setSortBy("subscribedAt");
+            setSortDir("desc");
+            setPage(1);
+          }}
+          filterPanel={
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[140px]"
+              >
+                <option value="">All Statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="UNSUBSCRIBED">Unsubscribed</option>
+              </select>
+              <select
+                value={sortBy}
+                onChange={(e) => {
+                  setSortBy(e.target.value);
+                  setPage(1);
+                }}
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[140px]"
+              >
+                <option value="subscribedAt">Subscribed Date</option>
+                <option value="email">Email</option>
+                <option value="status">Status</option>
+              </select>
+              <select
+                value={sortDir}
+                onChange={(e) => {
+                  setSortDir(e.target.value as "asc" | "desc");
+                  setPage(1);
+                }}
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[120px]"
+              >
+                <option value="desc">Descending</option>
+                <option value="asc">Ascending</option>
+              </select>
+            </div>
+          }
         />
 
-        {/* Subscribers Table */}
-        <DataTable
+        <DataTable<SubscriberRow>
+          title="Subscribers List"
           columns={columns}
           data={subscribers}
-          isLoading={isLoading}
           rowKey="id"
+          isLoading={isLoading}
+          emptyMessage="No subscribers found."
+          totalItems={total}
+          currentPage={page}
+          pageSize={limit}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          onPageSizeChange={setLimit}
+          pageSizeOptions={[10, 20, 50, 100]}
         />
-
-        {/* Pagination */}
-        <div className="mt-6">
-          <Pagination
-            page={page}
-            totalPages={pagination.totalPages}
-            onPageChange={setPage}
-          />
-        </div>
       </div>
 
       {/* Manual Add Subscriber Modal */}
@@ -301,6 +313,7 @@ export default function NewsletterAdminPage() {
         open={isAddOpen}
         onClose={() => setIsAddOpen(false)}
         title="Manually Add Subscriber"
+        panelClassName="max-w-md"
       >
         <form onSubmit={form.handleSubmit} className="space-y-4 p-5">
           <AdminInput
@@ -313,24 +326,25 @@ export default function NewsletterAdminPage() {
             disabled={form.isSubmitting}
           />
           {form.status && (
-            <p className="text-[13px] text-[#E31E24]">{form.status}</p>
+            <p className="text-[12.5px] text-[#E31E24]">{form.status}</p>
           )}
-          <div className="flex justify-end gap-2.5 pt-2">
+          <div className="flex justify-end gap-2.5 pt-2 border-t border-[#E6E6E6]">
             <button
               type="button"
               onClick={() => setIsAddOpen(false)}
-              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2]"
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#555] hover:bg-[#F2F2F2] cursor-pointer"
               disabled={form.isSubmitting}
             >
               Cancel
             </button>
-            <button
+            <LoadingButton
               type="submit"
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-              disabled={form.isSubmitting}
+              loading={form.isSubmitting || createMutation.isPending}
+              loadingText="Adding..."
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] cursor-pointer"
             >
-              {form.isSubmitting ? "Adding..." : "Add Subscriber"}
-            </button>
+              Add Subscriber
+            </LoadingButton>
           </div>
         </form>
       </Modal>
@@ -354,8 +368,9 @@ export default function NewsletterAdminPage() {
           setToggleTarget(null);
         }}
         isLoading={updateStatusMutation.isPending}
-        danger={toggleTarget?.status === "ACTIVE"}
       />
+
+      {ToastComponent}
     </AdminLayout>
   );
 }

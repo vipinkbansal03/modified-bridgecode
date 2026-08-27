@@ -1,26 +1,37 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Copy,
   Download,
   Edit2,
-  Eye,
   Filter,
+  Globe,
   Plus,
   RefreshCw,
   Search,
-  SlidersHorizontal,
   SquareCheckBig,
   Trash2,
   Upload,
   X,
+  Layers,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
-import { AdminInput, AdminSelect, AdminStatsGrid, ConfirmModal, Pagination, StatCard, StatusBadge, useToast, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
-import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
+import {
+  AdminInput,
+  AdminSelect,
+  AdminStatsGrid,
+  AdminListToolbar,
+  AdminBulkActionsBar,
+  Column,
+  ConfirmModal,
+  DataTable,
+  StatusBadge,
+  useToast,
+  LoadingButton,
+} from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import {
   useAdminCountries,
@@ -97,10 +108,11 @@ const visibleColumnsDefault = {
   priority: true,
   status: true,
   updatedAt: true,
+  actions: true,
 };
 
 function formatDate(value?: string) {
-  if (!value) return " - ";
+  if (!value) return " — ";
   return new Date(value).toLocaleDateString();
 }
 
@@ -129,10 +141,26 @@ export default function AdminTiersPage() {
   const [sortBy, setSortBy] = useState("sortOrder");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [showFilters, setShowFilters] = useState(false);
-  const [showColumns, setShowColumns] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState(visibleColumnsDefault);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<"ENABLE" | "DISABLE" | "DELETE" | "">("");
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<TierRow | null>(null);
+
+  // Country Availability Modal state
+  const [countryModalTier, setCountryModalTier] = useState<TierRow | null>(null);
+  const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
+  const [countrySearchQuery, setCountrySearchQuery] = useState("");
+
+  // Import Spreadsheet Modal state
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importReport, setImportReport] = useState<SpreadsheetReport | null>(null);
+  const [importMessage, setImportMessage] = useState("");
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const form = useAdminForm({
     initialValues: emptyForm,
     validate: (values) => {
@@ -157,13 +185,6 @@ export default function AdminTiersPage() {
       }
     }
   });
-  const [deleteTarget, setDeleteTarget] = useState<TierRow | null>(null);
-  const [selectedTierId, setSelectedTierId] = useState("");
-  const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importReport, setImportReport] = useState<SpreadsheetReport | null>(null);
-  const [importMessage, setImportMessage] = useState("");
-  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -193,8 +214,8 @@ export default function AdminTiersPage() {
   const rows = (tiersResponse?.data ?? []) as TierRow[];
   const pagination = tiersResponse?.pagination ?? { page, limit, total: 0, totalPages: 1 };
 
-  const selectedTier = rows.find((tier) => tier.id === selectedTierId) ?? null;
-  const { data: tierCountries = [], isLoading: countriesLoading } = useAdminTierCountries(selectedTierId);
+  const { data: tierCountries = [], isLoading: countriesLoading } = useAdminTierCountries(countryModalTier?.id ?? "");
+  const updateTierCountries = useUpdateTierCountries(countryModalTier?.id ?? "");
 
   const createTier = useCreateTier();
   const updateTier = useUpdateTier();
@@ -203,9 +224,6 @@ export default function AdminTiersPage() {
   const exportTiers = useExportTiers();
   const previewTierImport = usePreviewTierImport();
   const importTiers = useImportTiers();
-  const updateTierCountries = useUpdateTierCountries(selectedTierId);
-
-  const [visibleColumns, setVisibleColumns] = useState(visibleColumnsDefault);
 
   const countryOptions = useMemo(
     () => [
@@ -223,37 +241,17 @@ export default function AdminTiersPage() {
   }, [page, limit, debouncedSearch, statusFilter, countryFilter, sortBy, sortDir]);
 
   useEffect(() => {
-    if (rows.length === 0) {
-      setSelectedTierId("");
-      return;
-    }
-    if (!rows.some((row) => row.id === selectedTierId)) {
-      setSelectedTierId(rows[0].id);
-    }
-  }, [rows, selectedTierId]);
-
-  useEffect(() => {
     setCountryOverrides({});
-  }, [selectedTierId]);
+    setCountrySearchQuery("");
+  }, [countryModalTier?.id]);
 
-  const filteredColumns = useMemo(
-    () =>
-      [
-        visibleColumns.name ? "name" : null,
-        visibleColumns.customers ? "customers" : null,
-        visibleColumns.pricing ? "pricing" : null,
-        visibleColumns.discounts ? "discounts" : null,
-        visibleColumns.countries ? "countries" : null,
-        visibleColumns.priority ? "priority" : null,
-        visibleColumns.status ? "status" : null,
-        visibleColumns.updatedAt ? "updatedAt" : null,
-      ].filter(Boolean) as string[],
-    [visibleColumns],
-  );
-
-  const pageIds = rows.map((row) => row.id);
-  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
   const selectedTierCountries = tierCountries as TierCountryRow[];
+  const filteredModalCountries = useMemo(() => {
+    if (!countrySearchQuery.trim()) return selectedTierCountries;
+    const q = countrySearchQuery.toLowerCase();
+    return selectedTierCountries.filter((c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q));
+  }, [selectedTierCountries, countrySearchQuery]);
+
   const enabledCountryCount = selectedTierCountries.filter((country) => countryOverrides[country.id] ?? country.enabled).length;
   const allCountriesSelected =
     selectedTierCountries.length > 0 &&
@@ -296,9 +294,6 @@ export default function AdminTiersPage() {
     if (!deleteTarget) return;
     try {
       await deleteTier.mutateAsync(deleteTarget.id);
-      if (selectedTierId === deleteTarget.id) {
-        setSelectedTierId("");
-      }
       showToast("Tier deleted.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to delete tier."), "error");
@@ -307,9 +302,36 @@ export default function AdminTiersPage() {
     }
   };
 
+  const handleSelectAll = async (checked: boolean) => {
+    if (!checked) {
+      setSelectedIds([]);
+      return;
+    }
+    try {
+      const { adminApi } = await import("@/services/adminApi");
+      const res = await adminApi.get("/tiers", {
+        params: {
+          search: debouncedSearch || undefined,
+          status: statusFilter || undefined,
+          countryId: countryFilter || undefined,
+          sortBy,
+          sortDir,
+          limit: 999999,
+          ignoreMaxLimit: "true",
+        },
+      });
+      const allIds = (res.data.data ?? []).map((t: any) => t.id);
+      setSelectedIds(allIds);
+      showToast(`Selected all ${allIds.length} tiers across all pages.`, "success");
+    } catch (err) {
+      showToast("Failed to select all tiers.", "error");
+    }
+  };
+
   const handleBulkAction = async () => {
-    if (!bulkAction || selectedIds.length === 0) {
-      showToast("Select at least one tier and choose an action.", "error");
+    if (!bulkAction || selectedIds.length === 0) return;
+    if (bulkAction === "DELETE") {
+      setBulkDeleting(true);
       return;
     }
 
@@ -326,11 +348,11 @@ export default function AdminTiersPage() {
             showToast(`Completed with warnings: ${summary.succeeded} succeeded, ${summary.failed} failed.`, "warning");
           }
         } else {
-          showToast("Tiers deleted.", "success");
+          showToast(bulkAction === "ENABLE" ? "Tiers activated." : "Tiers deactivated.", "success");
         }
       } else {
         showToast(
-          bulkAction === "ENABLE" ? "Tiers enabled." : "Tiers disabled.",
+          bulkAction === "ENABLE" ? "Tiers activated." : "Tiers deactivated.",
           "success"
         );
       }
@@ -341,25 +363,34 @@ export default function AdminTiersPage() {
     }
   };
 
+  const confirmBulkDelete = async () => {
+    try {
+      const res = await bulkTiers.mutateAsync({ ids: selectedIds, action: "DELETE" });
+      const summary = res.data?.summary;
+      if (summary?.failed > 0) {
+        showToast(`Deleted ${summary.succeeded} tier(s). ${summary.failed} could not be deleted as they are in use.`, "warning");
+      } else {
+        showToast(`Successfully deleted ${selectedIds.length} tier(s).`, "success");
+      }
+      setSelectedIds([]);
+      setBulkAction("");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to complete bulk delete."), "error");
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   const handleToggleStatus = async (tier: TierRow) => {
     try {
       await updateTier.mutateAsync({
         id: tier.id,
         status: tier.status === "ACTIVE" ? "INACTIVE" : "ACTIVE",
       });
-      showToast(tier.status === "ACTIVE" ? "Tier disabled." : "Tier enabled.");
+      showToast(tier.status === "ACTIVE" ? "Tier deactivated." : "Tier activated.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to update tier."), "error");
     }
-  };
-
-  const handleSelectAllPage = () => {
-    if (allPageSelected) {
-      setSelectedIds((current) => current.filter((id) => !pageIds.includes(id)));
-      return;
-    }
-
-    setSelectedIds((current) => Array.from(new Set([...current, ...pageIds])));
   };
 
   const handleSelectAllCountries = (checked: boolean) => {
@@ -371,7 +402,7 @@ export default function AdminTiersPage() {
   const handleExport = async (selectedOnly = false) => {
     try {
       const params: Record<string, unknown> = {
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         status: statusFilter || undefined,
         countryId: countryFilter || undefined,
         sortBy,
@@ -387,20 +418,16 @@ export default function AdminTiersPage() {
     }
   };
 
-  const handleImportPreview = async () => {
-    if (!importFile) {
-      showToast("Choose a spreadsheet first.", "error");
-      return;
-    }
-
+  const handleImportPreview = async (file: File) => {
     try {
       const formData = new FormData();
-      formData.append("file", importFile);
+      formData.append("file", file);
       const report = (await previewTierImport.mutateAsync(formData)) as SpreadsheetReport;
       setImportReport(report);
       setImportMessage(report.invalidRows > 0 ? "Fix the validation issues before importing." : "Preview looks good. You can import now.");
     } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to preview tier spreadsheet."), "error");
+      setImportMessage(getAdminErrorMessage(error, "Failed to preview tier spreadsheet."));
+      setImportReport(null);
     }
   };
 
@@ -419,6 +446,8 @@ export default function AdminTiersPage() {
       setImportFile(null);
       setImportReport(null);
       setImportMessage("");
+      setImportOpen(false);
+      tiersQuery.refetch();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to import tiers."), "error");
     } finally {
@@ -426,596 +455,373 @@ export default function AdminTiersPage() {
     }
   };
 
+  const columns: Column<TierRow>[] = [
+    {
+      key: "name",
+      label: "Tier Name",
+      width: "220px",
+      render: (tier) => (
+        <div className="min-w-0 pr-3">
+          <button
+            type="button"
+            onClick={() => startEdit(tier)}
+            className="text-left font-semibold text-[#1A1A1A] hover:text-[#E31E24] text-[13px] block truncate transition-colors"
+            title={tier.name}
+          >
+            {tier.name}
+          </button>
+          <div className="mt-0.5 text-[11.5px] text-[#6B6B6B]">Updated {formatDate(tier.updatedAt)}</div>
+        </div>
+      ),
+    },
+    {
+      key: "customers",
+      label: "Customers",
+      width: "110px",
+      render: (tier) => <span className="font-medium text-[#1A1A1A] text-[12.5px]">{tier._count?.customers ?? 0}</span>,
+    },
+    {
+      key: "pricing",
+      label: "Pricing Rules",
+      width: "120px",
+      render: (tier) => <span className="font-medium text-[#1A1A1A] text-[12.5px]">{tier._count?.pricing ?? 0}</span>,
+    },
+    {
+      key: "discounts",
+      label: "Discounts",
+      width: "110px",
+      render: (tier) => <span className="font-medium text-[#1A1A1A] text-[12.5px]">{tier._count?.discounts ?? 0}</span>,
+    },
+    {
+      key: "countries",
+      label: "Countries",
+      width: "140px",
+      render: (tier) => {
+        const count = tier._count?.countries ?? 0;
+        return (
+          <button
+            type="button"
+            onClick={() => setCountryModalTier(tier)}
+            className="inline-flex items-center gap-1 text-[12px] font-medium text-[#1A1A1A] hover:text-[#E31E24] rounded-md px-2 py-1 bg-gray-50 border border-gray-200 hover:border-gray-300 transition-colors cursor-pointer"
+            title="Manage country availability"
+          >
+            <Globe size={12} className="text-[#6B6B6B]" />
+            <span>{count === 0 ? "Global (All)" : `${count} Countries`}</span>
+          </button>
+        );
+      },
+    },
+    {
+      key: "priority",
+      label: "Priority",
+      width: "100px",
+      render: (tier) => <span className="font-medium text-[#6B6B6B] text-[12.5px]">{tier.sortOrder}</span>,
+    },
+    {
+      key: "status",
+      label: "Status",
+      width: "110px",
+      render: (tier) => (
+        <StatusBadge
+          status={tier.status}
+          interactive={canUpdate}
+          onClick={() => handleToggleStatus(tier)}
+          loading={updateTier.isPending && (updateTier.variables as any)?.id === tier.id}
+        />
+      ),
+    },
+    {
+      key: "updatedAt",
+      label: "Updated Date",
+      width: "120px",
+      render: (tier) => <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">{formatDate(tier.updatedAt)}</span>,
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      width: "150px",
+      align: "left",
+      render: (tier) => (
+        <div className="flex items-center justify-start gap-1">
+          <button
+            type="button"
+            onClick={() => setCountryModalTier(tier)}
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] transition-colors shadow-2xs cursor-pointer"
+            title="Manage country availability"
+          >
+            <Globe size={13} />
+          </button>
+          {canUpdate && (
+            <button
+              type="button"
+              onClick={() => startEdit(tier)}
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] transition-colors shadow-2xs cursor-pointer"
+              title="Edit tier"
+            >
+              <Edit2 size={13} />
+            </button>
+          )}
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => startClone(tier)}
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] transition-colors shadow-2xs cursor-pointer"
+              title="Clone tier"
+            >
+              <Copy size={13} />
+            </button>
+          )}
+          {canDelete && (
+            <button
+              type="button"
+              onClick={() => setDeleteTarget(tier)}
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#E31E24] hover:bg-[#FFF5F5] hover:border-[#F2C9C9] transition-colors shadow-2xs cursor-pointer"
+              title="Delete tier"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
+        </div>
+      ),
+    },
+  ];
+
+  const filteredColumns = columns.filter((column) => {
+    if (column.key === "name") return visibleColumns.name;
+    if (column.key === "customers") return visibleColumns.customers;
+    if (column.key === "pricing") return visibleColumns.pricing;
+    if (column.key === "discounts") return visibleColumns.discounts;
+    if (column.key === "countries") return visibleColumns.countries;
+    if (column.key === "priority") return visibleColumns.priority;
+    if (column.key === "status") return visibleColumns.status;
+    if (column.key === "updatedAt") return visibleColumns.updatedAt;
+    if (column.key === "actions") return visibleColumns.actions;
+    return true;
+  });
+
   return (
-    <AdminLayout title="Tiers" breadcrumb={[{ label: "Tiers" }]}>
+    <AdminLayout title="Pricing Tiers" breadcrumb={[{ label: "Pricing Tiers" }]}>
       <div className="space-y-5">
         <AdminStatsGrid
           stats={[
-            { title: "Total Tiers", value: tierDashboard?.totalTiers ?? 0, subtitle: "All tier records", icon: <Filter size={18} />, isLoading: dashboardLoading },
+            { title: "Total Tiers", value: tierDashboard?.totalTiers ?? 0, subtitle: "All tier records", icon: <Layers size={18} />, isLoading: dashboardLoading },
             { title: "Active Tiers", value: tierDashboard?.activeTiers ?? 0, subtitle: "Available for use", icon: <SquareCheckBig size={18} />, color: "bg-green-600", isLoading: dashboardLoading },
             { title: "Inactive Tiers", value: tierDashboard?.inactiveTiers ?? 0, subtitle: "Disabled tiers", icon: <X size={18} />, color: "bg-gray-600", isLoading: dashboardLoading },
-            { title: "Country Rules", value: tierDashboard?.mappedCountries ?? 0, subtitle: "Tiers with country mapping", icon: <RefreshCw size={18} />, color: "bg-[#0F6CBD]", isLoading: dashboardLoading }
+            { title: "Country Rules", value: tierDashboard?.mappedCountries ?? 0, subtitle: "Tiers with country mapping", icon: <Globe size={18} />, color: "bg-amber-600", isLoading: dashboardLoading },
           ]}
         />
 
-        <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="relative w-full max-w-[280px]">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
-              <input
-                value={search}
-                onChange={(event) => {
-                  setPage(1);
-                  setSearch(event.target.value);
-                }}
-                placeholder="Search tiers..."
-                className="h-10 w-full rounded-md border border-[#E6E6E6] bg-white py-2 pl-8 pr-3.5 text-[13.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
-              />
+        {/* RECENTLY UPDATED CARD */}
+        {(tierDashboard?.recentlyUpdated ?? []).length > 0 && (
+          <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-[13.5px] font-semibold text-[#1A1A1A]">Recently Updated</h3>
+                <p className="text-[12px] text-[#6B6B6B]">Quick access to latest modified pricing tiers.</p>
+              </div>
+              <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-medium text-[#6B6B6B]">
+                {tierDashboard?.recentlyUpdated?.length ?? 0} items
+              </span>
             </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowFilters((current) => !current)}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
-              >
-                <Filter size={14} />
-                {showFilters ? "Hide filters" : "Show filters"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowColumns((current) => !current)}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#555] hover:bg-[#F2F2F2]"
-              >
-                <SlidersHorizontal size={14} />
-                Columns
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleExport(false)}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7]"
-              >
-                <Download size={14} />
-                Export
-              </button>
-              {canCreate && (
-                <button
-                  type="button"
-                  onClick={startCreate}
-                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+            <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+              {(tierDashboard?.recentlyUpdated ?? []).slice(0, 5).map((tier) => (
+                <div
+                  key={tier.id}
+                  className="rounded-lg border border-[#E6E6E6] p-3 text-left transition hover:bg-[#FAFAFA] flex flex-col justify-between"
                 >
-                  <Plus size={14} />
-                  Add Tier
-                </button>
-              )}
-            </div>
-          </div>
-
-          {showFilters && (
-            <div className="mt-4 border-t border-[#F0F0F0] pt-4">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-[13px] font-bold text-[#1A1A1A]">Filters & Sorting</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch("");
-                    setStatusFilter("");
-                    setCountryFilter("");
-                    setSortBy("sortOrder");
-                    setSortDir("asc");
-                    setPage(1);
-                  }}
-                  className="text-[12.5px] font-medium text-[#E31E24] hover:underline"
-                >
-                  Reset
-                </button>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                <AdminSelect
-                  label="Status"
-                  value={statusFilter}
-                  onChange={(event) => {
-                    setPage(1);
-                    setStatusFilter(event.target.value);
-                  }}
-                  options={[
-                    { value: "", label: "All status" },
-                    { value: "ACTIVE", label: "Active" },
-                    { value: "INACTIVE", label: "Inactive" },
-                  ]}
-                />
-                <AdminMultiSearchableSelect
-                  label="Country"
-                  values={countryFilter ? countryFilter.split(",").filter(Boolean) : []}
-                  onValuesChange={(values) => {
-                    setPage(1);
-                    setCountryFilter(values.join(","));
-                  }}
-                  options={countries.map((country: { id: string; name: string; code: string }) => ({
-                    value: country.id,
-                    label: `${country.name} (${country.code})`,
-                  }))}
-                  placeholder="Select countries"
-                  allowSelectAll
-                  selectAllLabel="All countries"
-                />
-                <AdminSelect
-                  label="Sort By"
-                  value={sortBy}
-                  onChange={(event) => setSortBy(event.target.value)}
-                  options={[
-                    { value: "sortOrder", label: "Priority" },
-                    { value: "updatedAt", label: "Updated date" },
-                    { value: "createdAt", label: "Created date" },
-                    { value: "name", label: "Tier name" },
-                    { value: "status", label: "Status" },
-                  ]}
-                />
-                <AdminSelect
-                  label="Direction"
-                  value={sortDir}
-                  onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
-                  options={[
-                    { value: "asc", label: "Ascending" },
-                    { value: "desc", label: "Descending" },
-                  ]}
-                />
-                <AdminSelect
-                  label="Page Size"
-                  value={String(limit)}
-                  onChange={(event) => {
-                    setPage(1);
-                    setLimit(Number(event.target.value));
-                  }}
-                  options={[
-                    { value: "10", label: "10 per page" },
-                    { value: "20", label: "20 per page" },
-                    { value: "50", label: "50 per page" },
-                  ]}
-                />
-              </div>
-            </div>
-          )}
-
-
-          {showColumns ? (
-            <div className="mt-4 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
-              <div className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">Column visibility</div>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                {Object.entries(visibleColumns).map(([key, value]) => (
-                  <label key={key} className="flex items-center gap-2 text-[13px] text-[#1A1A1A]">
-                    <input
-                      type="checkbox"
-                      checked={value}
-                      onChange={(event) => setVisibleColumns((current) => ({ ...current, [key]: event.target.checked }))}
-                    />
-                    <span className="capitalize">{key.replace(/([A-Z])/g, " $1")}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Recently Updated</h3>
-              <p className="mt-0.5 text-[12.5px] text-[#6B6B6B]">Quick access to the latest tier changes.</p>
-            </div>
-            <span className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] text-[#6B6B6B]">
-              {tierDashboard?.recentlyUpdated?.length ?? 0} items
-            </span>
-          </div>
-          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-            {(tierDashboard?.recentlyUpdated ?? []).slice(0, 5).map((tier) => (
-              <button
-                key={tier.id}
-                type="button"
-                onClick={() => {
-                  setSelectedTierId(tier.id);
-                  setShowForm(false);
-                }}
-                className="rounded-lg border border-[#E6E6E6] px-3 py-2 text-left transition hover:bg-[#FAFAFA]"
-              >
-                <div className="truncate text-[13px] font-medium text-[#1A1A1A]">{tier.name}</div>
-                <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">Updated {formatDate(tier.updatedAt)}</div>
-              </button>
-            ))}
-            {(tierDashboard?.recentlyUpdated ?? []).length === 0 ? (
-              <p className="text-[13px] text-[#6B6B6B]">No recent tier changes yet.</p>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.95fr)]">
-          <div className="space-y-4">
-            <div className="rounded-xl border border-[#E6E6E6] bg-white">
-              <div className="border-b border-[#E6E6E6] bg-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 min-h-[56px] transition-all rounded-t-xl">
-                <div className="flex flex-wrap items-center gap-3 w-full">
-                  <span className="text-[13px] font-bold text-[#1A1A1A]">Tiers List</span>
-                  <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">
-                    Showing {pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.limit + 1}-{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
-                  </span>
-                  
-                  <div className="flex items-center gap-2 border-l border-[#E6E6E6] pl-3 ml-2 flex-wrap">
-                    <AdminBulkActionsBar
-                      selectedCount={selectedIds.length}
-                      onClear={() => setSelectedIds([])}
-                      actionType={bulkAction}
-                      onActionTypeChange={(val) => setBulkAction(val as any)}
-                      actions={[
-                        { value: "ENABLE", label: "Mark active" },
-                        { value: "DISABLE", label: "Mark inactive" },
-                        { value: "DELETE", label: "Delete selected" }
-                      ]}
-                      onApply={handleBulkAction}
-                      applyLoading={bulkTiers.isPending}
-                      applyDisabled={!bulkAction || selectedIds.length === 0}
-                    />
+                  <div>
+                    <div className="truncate text-[13px] font-semibold text-[#1A1A1A]">{tier.name}</div>
+                    <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">Updated {formatDate(tier.updatedAt)}</div>
                   </div>
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-[#F8F8F8] border-b border-[#E6E6E6]">
-                    <tr>
-                      <th className="w-10 px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">
-                        {canUpdate ? (
-                          <input
-                            type="checkbox"
-                            checked={allPageSelected}
-                            onChange={handleSelectAllPage}
-                            aria-label="Select all rows on this page"
-                            className="h-4 w-4 accent-[#E31E24]"
-                          />
-                        ) : null}
-                      </th>
-                      {filteredColumns.includes("name") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Tier Name</th> : null}
-                      {filteredColumns.includes("customers") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Customers</th> : null}
-                      {filteredColumns.includes("pricing") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Pricing Rules</th> : null}
-                      {filteredColumns.includes("discounts") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Discounts</th> : null}
-                      {filteredColumns.includes("countries") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Countries</th> : null}
-                      {filteredColumns.includes("priority") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Priority</th> : null}
-                      {filteredColumns.includes("status") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Status</th> : null}
-                      {filteredColumns.includes("updatedAt") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Updated Date</th> : null}
-                      <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#E6E6E6]">
-                    {tiersQuery.isLoading ? (
-                      [...Array(5)].map((_, index) => (
-                        <tr key={index}>
-                          <td className="px-4 py-4" colSpan={10}>
-                            <div className="h-5 animate-pulse rounded bg-[#F0F0F0]" />
-                          </td>
-                        </tr>
-                      ))
-                    ) : rows.length === 0 ? (
-                      <tr>
-                        <td colSpan={10} className="px-4 py-12 text-center text-[13.5px] text-[#9A9A9A]">
-                          No tiers found.
-                        </td>
-                      </tr>
-                    ) : (
-                      rows.map((tier) => {
-                        const isSelected = selectedIds.includes(tier.id);
-                        return (
-                          <tr key={tier.id} className={isSelected ? "bg-[#FFF8F8]" : "hover:bg-[#FAFAFA]"}>
-                            <td className="px-4 py-4 align-top">
-                              {canUpdate ? (
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={(event) => {
-                                    const checked = event.target.checked;
-                                    setSelectedIds((current) =>
-                                      checked ? Array.from(new Set([...current, tier.id])) : current.filter((id) => id !== tier.id),
-                                    );
-                                  }}
-                                  className="h-4 w-4 accent-[#E31E24]"
-                                />
-                              ) : null}
-                            </td>
-                            {filteredColumns.includes("name") ? (
-                              <td className="px-4 py-4 align-top">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedTierId(tier.id);
-                                    setShowForm(false);
-                                  }}
-                                  className="text-left"
-                                >
-                                  <div className="font-medium text-[#1A1A1A] hover:text-[#E31E24]">{tier.name}</div>
-                                  <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">Updated {formatDate(tier.updatedAt)}</div>
-                                </button>
-                              </td>
-                            ) : null}
-                            {filteredColumns.includes("customers") ? <td className="px-4 py-4 align-top text-[13px] text-[#1A1A1A]">{tier._count?.customers ?? 0}</td> : null}
-                            {filteredColumns.includes("pricing") ? <td className="px-4 py-4 align-top text-[13px] text-[#1A1A1A]">{tier._count?.pricing ?? 0}</td> : null}
-                            {filteredColumns.includes("discounts") ? <td className="px-4 py-4 align-top text-[13px] text-[#1A1A1A]">{tier._count?.discounts ?? 0}</td> : null}
-                            {filteredColumns.includes("countries") ? <td className="px-4 py-4 align-top text-[13px] text-[#1A1A1A]">{tier._count?.countries ?? 0}</td> : null}
-                            {filteredColumns.includes("priority") ? <td className="px-4 py-4 align-top text-[13px] text-[#6B6B6B]">{tier.sortOrder}</td> : null}
-                            {filteredColumns.includes("status") ? <td className="px-4 py-4 align-top"><StatusBadge status={tier.status} /></td> : null}
-                            {filteredColumns.includes("updatedAt") ? <td className="px-4 py-4 align-top text-[13px] text-[#1A1A1A]">{formatDate(tier.updatedAt)}</td> : null}
-                            <td className="px-4 py-4 align-top">
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedTierId(tier.id);
-                                    setShowForm(false);
-                                  }}
-                                  className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                                  title="View countries"
-                                >
-                                  <Eye size={15} />
-                                </button>
-                                {canUpdate && (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => startEdit(tier)}
-                                      className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                                      title="Edit tier"
-                                    >
-                                      <Edit2 size={15} />
-                                    </button>
-                                  </>
-                                )}
-                                {canCreate && (
-                                  <button
-                                    type="button"
-                                    onClick={() => startClone(tier)}
-                                    className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                                    title="Clone tier"
-                                  >
-                                    <Copy size={15} />
-                                  </button>
-                                )}
-                                {canUpdate && (
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleToggleStatus(tier)}
-                                    className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                                    title={tier.status === "ACTIVE" ? "Disable tier" : "Enable tier"}
-                                  >
-                                    <RefreshCw size={15} />
-                                  </button>
-                                )}
-                                {canDelete && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setDeleteTarget(tier)}
-                                    className="rounded border border-[#F2D7D7] p-2 text-[#E31E24] hover:bg-[#FFF5F5]"
-                                    title="Delete tier"
-                                  >
-                                    <Trash2 size={15} />
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
+                  <div className="mt-2 pt-2 border-t border-[#F0F0F0] flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setCountryModalTier(tier)}
+                      className="text-[11.5px] font-medium text-[#E31E24] hover:underline cursor-pointer"
+                    >
+                      Countries
+                    </button>
+                    {canUpdate && (
+                      <button
+                        type="button"
+                        onClick={() => startEdit(tier)}
+                        className="text-[11.5px] font-medium text-[#555] hover:text-[#1A1A1A] cursor-pointer"
+                      >
+                        Edit
+                      </button>
                     )}
-                  </tbody>
-                </table>
-              </div>
-              <div className="border-t border-[#E6E6E6] px-4 py-3">
-                <Pagination page={pagination.page} totalPages={pagination.totalPages || 1} onPageChange={setPage} />
-              </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
+        )}
 
-          <div className="space-y-5">
-            <div className="rounded-xl border border-[#E6E6E6] bg-white p-5">
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Country Availability</h3>
-                  <p className="mt-0.5 text-[12.5px] text-[#6B6B6B]">
-                    A tier stays global if no countries are enabled. Once one or more are selected, the tier is restricted to those countries.
-                  </p>
-                </div>
-                {selectedTier ? (
-                  <span className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] text-[#6B6B6B]">
-                    {enabledCountryCount === 0 ? "Global fallback" : `${enabledCountryCount} enabled`}
-                  </span>
-                ) : null}
-              </div>
-
-              {!selectedTier ? (
-                <p className="rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-4 text-[13px] text-[#9A9A9A]">
-                  Select a tier to manage country availability.
-                </p>
-              ) : countriesLoading ? (
-                <div className="h-28 animate-pulse rounded-md bg-[#F2F2F2]" />
-              ) : selectedTierCountries.length === 0 ? (
-                <p className="text-[13px] text-[#9A9A9A]">No countries found.</p>
-              ) : (
-                <>
-                  <div className="mb-4 rounded-md bg-[#FAFAFA] px-3 py-2 text-[13px] font-medium text-[#1A1A1A]">{selectedTier.name}</div>
-                  <label className="mb-3 flex items-center gap-2.5 rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2.5">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 accent-[#E31E24]"
-                      checked={allCountriesSelected}
-                      ref={(element) => {
-                        if (element) element.indeterminate = someCountriesSelected;
-                      }}
-                      onChange={(event) => handleSelectAllCountries(event.target.checked)}
-                      aria-label="Select all countries"
-                    />
-                    <span className="text-[13px] font-medium text-[#1A1A1A]">Select all</span>
-                    <span className="text-[12px] text-[#9A9A9A]">
-                      ({enabledCountryCount} of {selectedTierCountries.length} enabled)
-                    </span>
-                  </label>
-                  <div className="grid gap-2">
-                    {selectedTierCountries.map((country) => (
-                      <label key={country.id} className="flex items-center justify-between gap-3 rounded-md border border-[#E6E6E6] px-3 py-2">
-                        <span className="min-w-0">
-                          <span className="block truncate text-[13px] font-medium text-[#1A1A1A]">{country.name}</span>
-                          <span className="text-[11.5px] text-[#9A9A9A]">
-                            {country.code}
-                            {country.currency?.code ? ` - ${country.currency.code}` : ""}
-                          </span>
-                        </span>
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 accent-[#E31E24]"
-                          checked={countryOverrides[country.id] ?? country.enabled}
-                          onChange={(event) => setCountryOverrides((current) => ({ ...current, [country.id]: event.target.checked }))}
-                        />
-                      </label>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        await updateTierCountries.mutateAsync(
-                          selectedTierCountries.map((country) => ({
-                            countryId: country.id,
-                            enabled: countryOverrides[country.id] ?? country.enabled,
-                          })),
-                        );
-                        setCountryOverrides({});
-                        showToast("Tier country availability saved.");
-                      } catch (error) {
-                        showToast(getAdminErrorMessage(error, "Failed to save tier country availability."), "error");
-                      }
-                    }}
-                    disabled={updateTierCountries.isPending}
-                    className="mt-4 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
-                  >
-                    {updateTierCountries.isPending ? "Saving..." : "Save Availability"}
-                  </button>
-                </>
-              )}
+        <AdminListToolbar
+          search={{
+            value: search,
+            onChange: (val) => {
+              setSearch(val);
+              setPage(1);
+            },
+            placeholder: "Search tiers...",
+            widthClassName: "w-[240px]",
+          }}
+          filters={{
+            showFilters: showFilters,
+            onToggle: () => setShowFilters(!showFilters),
+            activeCount: [statusFilter, countryFilter, sortBy !== "sortOrder" ? sortBy : "", sortDir !== "asc" ? sortDir : ""].filter(Boolean).length,
+            label: "Filters",
+          }}
+          columns={{
+            visibleColumns: visibleColumns,
+            onToggleColumn: (key) => {
+              setVisibleColumns((current) => ({
+                ...current,
+                [key]: !current[key as keyof typeof current],
+              }));
+            },
+            options: [
+              { key: "name", label: "Tier Name" },
+              { key: "customers", label: "Customers" },
+              { key: "pricing", label: "Pricing Rules" },
+              { key: "discounts", label: "Discounts" },
+              { key: "countries", label: "Countries" },
+              { key: "priority", label: "Priority" },
+              { key: "status", label: "Status" },
+              { key: "updatedAt", label: "Updated Date" },
+              { key: "actions", label: "Actions" },
+            ],
+          }}
+          exportAction={{
+            onClick: () => void handleExport(selectedIds.length > 0),
+            label: selectedIds.length > 0 ? `Export Selected (${selectedIds.length})` : "Export Excel",
+          }}
+          importAction={
+            canUpdate
+              ? {
+                  onClick: () => setImportOpen(true),
+                  label: "Import Excel",
+                }
+              : undefined
+          }
+          refresh={{
+            onRefresh: () => {
+              void tiersQuery.refetch().then(() => showToast("Tiers refreshed."));
+            },
+            isRefreshing: tiersQuery.isFetching,
+          }}
+          primaryAction={
+            canCreate
+              ? {
+                  onClick: startCreate,
+                  label: "Add Tier",
+                  icon: <Plus size={14} />,
+                }
+              : undefined
+          }
+          filterPanel={
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                value={statusFilter}
+                onChange={(event) => {
+                  setStatusFilter(event.target.value);
+                  setPage(1);
+                }}
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[130px]"
+              >
+                <option value="">All Statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+              </select>
+              <select
+                value={countryFilter}
+                onChange={(event) => {
+                  setCountryFilter(event.target.value);
+                  setPage(1);
+                }}
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[140px]"
+              >
+                <option value="">All Countries</option>
+                {countries.map((c: any) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.code})
+                  </option>
+                ))}
+              </select>
+              <select
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[140px]"
+              >
+                <option value="sortOrder">Priority</option>
+                <option value="updatedAt">Updated date</option>
+                <option value="createdAt">Created date</option>
+                <option value="name">Tier name</option>
+                <option value="status">Status</option>
+              </select>
+              <select
+                value={sortDir}
+                onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[120px]"
+              >
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+              </select>
             </div>
+          }
+          onResetFilters={() => {
+            setSearch("");
+            setStatusFilter("");
+            setCountryFilter("");
+            setSortBy("sortOrder");
+            setSortDir("asc");
+            setPage(1);
+          }}
+        />
 
-            <div className="rounded-xl border border-[#E6E6E6] bg-white p-5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Import / Export</h3>
-                  <p className="mt-1 text-[12.5px] text-[#6B6B6B]">Spreadsheet import uses validation before commit and reuses the existing Excel utility.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void handleExport(false)}
-                  className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
-                >
-                  <Download size={14} /> Export
-                </button>
-              </div>
+        {/* FULL-WIDTH DATA TABLE */}
+        <DataTable<TierRow>
+          title="Tiers List"
+          columns={filteredColumns}
+          data={rows}
+          rowKey="id"
+          isLoading={tiersQuery.isLoading}
+          emptyMessage="No tiers found."
+          enableSelection={true}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          onToggleStatus={canUpdate ? handleToggleStatus : undefined}
+          statusLoadingId={updateTier.isPending ? ((updateTier.variables as any)?.id ?? null) : null}
+          isStatusDisabled={() => !canUpdate}
+          totalItems={pagination.total}
+          currentPage={page}
+          pageSize={limit}
+          totalPages={pagination.totalPages || 1}
+          onPageChange={setPage}
+          onPageSizeChange={setLimit}
+          pageSizeOptions={[10, 20, 50, 100]}
+          onSelectAll={handleSelectAll}
+          renderBulkActions={(selectedIds) => (
+            <AdminBulkActionsBar
+              selectedCount={selectedIds.length}
+              onClear={() => setSelectedIds([])}
+              actionType={bulkAction}
+              onActionTypeChange={(val) => setBulkAction(val as any)}
+              actions={[
+                { value: "ENABLE", label: "Mark active" },
+                { value: "DISABLE", label: "Mark inactive" },
+                { value: "DELETE", label: "Delete selected" },
+              ]}
+              onApply={handleBulkAction}
+              applyLoading={bulkTiers.isPending}
+              applyDisabled={!bulkAction || selectedIds.length === 0}
+            />
+          )}
+        />
 
-              {canUpdate ? (
-                <div className="mt-4 grid gap-3">
-                  <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-[#D6D6D6] bg-[#FAFAFA] px-4 py-3">
-                    <input
-                      type="file"
-                      accept=".xlsx,.xls,.csv"
-                      className="hidden"
-                      onChange={(event) => {
-                        setImportFile(event.target.files?.[0] ?? null);
-                        setImportReport(null);
-                        setImportMessage("");
-                      }}
-                    />
-                    <div className="min-w-0">
-                      <div className="text-[13px] font-medium text-[#1A1A1A]">{importFile ? importFile.name : "Choose file"}</div>
-                      <div className="mt-0.5 text-[12px] text-[#6B6B6B]">Preview before import.</div>
-                    </div>
-                    <Upload size={16} className="shrink-0 text-[#E31E24]" />
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void handleImportPreview()}
-                      disabled={previewTierImport.isPending}
-                      className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-50"
-                    >
-                      <Eye size={14} /> Preview
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleImport()}
-                      disabled={importing || importTiers.isPending || !!importReport?.invalidRows}
-                      className="inline-flex items-center gap-2 rounded-md bg-[#E31E24] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
-                    >
-                      <Upload size={14} /> {importing ? "Importing..." : "Import"}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-4 grid gap-3">
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center text-[13px] text-[#6B6B6B]">
-                    Importing is disabled (No edit permission)
-                  </div>
-                </div>
-              )}
-
-              {importMessage ? (
-                <div className="mt-4 rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2 text-[13px] text-[#1A1A1A]">
-                  {importMessage}
-                </div>
-              ) : null}
-
-              {importReport ? (
-                <div className="mt-4 space-y-3 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3 text-[12.5px] text-[#1A1A1A]">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
-                      <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Total rows</div>
-                      <div className="mt-1 text-[18px] font-semibold text-[#1A1A1A]">{importReport.totalRows}</div>
-                    </div>
-                    <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
-                      <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Valid rows</div>
-                      <div className="mt-1 text-[18px] font-semibold text-green-600">{importReport.validRows}</div>
-                    </div>
-                    <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
-                      <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Invalid rows</div>
-                      <div className="mt-1 text-[18px] font-semibold text-red-600">{importReport.invalidRows}</div>
-                    </div>
-                    <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
-                      <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Duplicates</div>
-                      <div className="mt-1 text-[18px] font-semibold text-amber-600">{importReport.duplicateWarnings.length}</div>
-                    </div>
-                  </div>
-
-                  {importReport.issues.length > 0 ? (
-                    <div>
-                      <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Validation issues</div>
-                      <div className="mt-2 space-y-1.5">
-                        {importReport.issues.slice(0, 5).map((issue, index) => (
-                          <div key={`${issue.row}-${issue.field}-${index}`} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[12px] text-[#6B6B6B]">
-                            Row {issue.row}: {issue.message}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {importReport.sampleRows.length > 0 ? (
-                    <div>
-                      <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Sample rows</div>
-                      <div className="mt-2 space-y-2">
-                        {importReport.sampleRows.slice(0, 3).map((row, index) => (
-                          <div key={index} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[12px] text-[#6B6B6B]">
-                            {JSON.stringify(row)}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        <Modal open={showForm} onClose={resetForm} title={form.values.id ? "Edit tier" : "Add tier"} panelClassName="max-w-xl">
+        {/* ADD / EDIT TIER MODAL */}
+        <Modal open={showForm} onClose={resetForm} title={form.values.id ? "Edit Tier" : "Add Tier"} panelClassName="max-w-xl">
           <form onSubmit={form.handleSubmit} className="space-y-6 p-6">
             <div className="grid gap-4 md:grid-cols-2">
               <AdminInput required label="Tier Name" {...form.getFieldProps("name")} error={form.errors.name as string} placeholder="Diamond, Gold, Silver..." />
@@ -1039,26 +845,291 @@ export default function AdminTiersPage() {
             </div>
 
             <div className="flex items-center justify-between gap-3 border-t border-[#E6E6E6] pt-4">
-              <p className="text-[12.5px] text-[#6B6B6B]">Priority controls resolver precedence. Lower values are processed first.</p>
+              <p className="text-[12px] text-[#6B6B6B]">Priority controls resolver precedence. Lower values are processed first.</p>
               <div className="flex gap-2">
-                <button type="button" onClick={resetForm} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
+                <button type="button" onClick={resetForm} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] cursor-pointer">
                   Cancel
                 </button>
-                <button type="submit" disabled={form.isSubmitting} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
-                  {form.isSubmitting ? "Processing..." : form.values.id ? "Save tier" : "Create tier"}
-                </button>
+                <LoadingButton
+                  type="submit"
+                  loading={form.isSubmitting || createTier.isPending || updateTier.isPending}
+                  loadingText="Saving..."
+                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] cursor-pointer"
+                >
+                  {form.values.id ? "Save Tier" : "Create Tier"}
+                </LoadingButton>
               </div>
             </div>
           </form>
         </Modal>
 
+        {/* COUNTRY AVAILABILITY MODAL */}
+        <Modal
+          open={!!countryModalTier}
+          onClose={() => setCountryModalTier(null)}
+          title={`Country Availability — ${countryModalTier?.name ?? ""}`}
+          panelClassName="max-w-2xl"
+        >
+          <div className="space-y-4">
+            <div className="flex items-start justify-between gap-3 border-b border-[#E6E6E6] pb-3">
+              <p className="text-[12.5px] text-[#6B6B6B] max-w-[420px]">
+                A tier stays global if no countries are enabled. Once one or more countries are enabled, this tier is restricted exclusively to those selected countries.
+              </p>
+              <span className="rounded-full bg-gray-100 border border-gray-200 px-3 py-1 text-[11.5px] font-semibold text-[#1A1A1A] shrink-0">
+                {enabledCountryCount === 0 ? "Global fallback (All countries)" : `${enabledCountryCount} Countries Enabled`}
+              </span>
+            </div>
+
+            {countriesLoading ? (
+              <div className="h-48 animate-pulse rounded-md bg-[#F2F2F2]" />
+            ) : selectedTierCountries.length === 0 ? (
+              <p className="py-8 text-center text-[13px] text-[#9A9A9A]">No countries found.</p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-3">
+                  <label className="flex items-center gap-2 text-[13px] font-semibold text-[#1A1A1A] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-[#E31E24] cursor-pointer"
+                      checked={allCountriesSelected}
+                      ref={(element) => {
+                        if (element) element.indeterminate = someCountriesSelected;
+                      }}
+                      onChange={(event) => handleSelectAllCountries(event.target.checked)}
+                    />
+                    <span>Select all ({enabledCountryCount} of {selectedTierCountries.length} enabled)</span>
+                  </label>
+
+                  <div className="relative w-[200px]">
+                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
+                    <input
+                      type="text"
+                      placeholder="Filter countries..."
+                      value={countrySearchQuery}
+                      onChange={(e) => setCountrySearchQuery(e.target.value)}
+                      className="h-8 w-full rounded-md border border-[#E6E6E6] bg-white pl-7 pr-2.5 text-[12px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                    />
+                  </div>
+                </div>
+
+                <div className="max-h-[320px] overflow-y-auto rounded-lg border border-[#E6E6E6] bg-white divide-y divide-[#F0F0F0] p-1">
+                  {filteredModalCountries.length === 0 ? (
+                    <p className="p-4 text-center text-[12.5px] text-[#9A9A9A]">No matching countries.</p>
+                  ) : (
+                    filteredModalCountries.map((country) => {
+                      const isEnabled = countryOverrides[country.id] ?? country.enabled;
+                      return (
+                        <label
+                          key={country.id}
+                          className="flex items-center justify-between gap-3 px-3 py-2 hover:bg-[#FAFAFA] rounded-md transition-colors cursor-pointer"
+                        >
+                          <div className="min-w-0">
+                            <span className="block truncate text-[13px] font-medium text-[#1A1A1A]">{country.name}</span>
+                            <span className="text-[11.5px] text-[#9A9A9A]">
+                              {country.code}
+                              {country.currency?.code ? ` • ${country.currency.code}` : ""}
+                            </span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-[#E31E24] cursor-pointer"
+                            checked={isEnabled}
+                            onChange={(event) => setCountryOverrides((current) => ({ ...current, [country.id]: event.target.checked }))}
+                          />
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#E6E6E6]">
+                  <button
+                    type="button"
+                    onClick={() => setCountryModalTier(null)}
+                    className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#555] hover:bg-[#F2F2F2] cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <LoadingButton
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await updateTierCountries.mutateAsync(
+                          selectedTierCountries.map((country) => ({
+                            countryId: country.id,
+                            enabled: countryOverrides[country.id] ?? country.enabled,
+                          })),
+                        );
+                        setCountryOverrides({});
+                        showToast("Tier country availability saved.");
+                        setCountryModalTier(null);
+                        tiersQuery.refetch();
+                      } catch (error) {
+                        showToast(getAdminErrorMessage(error, "Failed to save tier country availability."), "error");
+                      }
+                    }}
+                    loading={updateTierCountries.isPending}
+                    loadingText="Saving..."
+                    className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] cursor-pointer"
+                  >
+                    Save Availability
+                  </LoadingButton>
+                </div>
+              </>
+            )}
+          </div>
+        </Modal>
+
+        {/* IMPORT SPREADSHEET MODAL */}
+        <Modal
+          open={importOpen}
+          onClose={() => {
+            setImportOpen(false);
+            setImportFile(null);
+            setImportReport(null);
+            setImportMessage("");
+          }}
+          title="Import Tiers Spreadsheet"
+          panelClassName="max-w-2xl"
+        >
+          <div className="space-y-4">
+            <p className="text-[13px] text-[#6B6B6B]">
+              Upload an Excel (.xlsx, .xls) or CSV spreadsheet to create or update pricing tiers in bulk.
+            </p>
+
+            <div className="rounded-lg border-2 border-dashed border-[#E6E6E6] bg-[#FAFAFA] p-6 text-center hover:bg-[#F5F5F5] transition-colors">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                id="tier-import-file"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setImportFile(file);
+                    void handleImportPreview(file);
+                  }
+                }}
+              />
+              <label htmlFor="tier-import-file" className="cursor-pointer">
+                <Upload size={28} className="mx-auto text-[#9A9A9A] mb-2" />
+                <span className="text-[13.5px] font-semibold text-[#1A1A1A] block">
+                  {importFile ? importFile.name : "Click to select spreadsheet"}
+                </span>
+                <span className="text-[12px] text-[#9A9A9A] mt-1 block">
+                  XLSX, XLS or CSV files supported
+                </span>
+              </label>
+              {importFile && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImportFile(null);
+                    setImportReport(null);
+                    setImportMessage("");
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                  className="mt-2 text-[12px] font-medium text-red-600 hover:underline inline-block cursor-pointer"
+                >
+                  Remove file
+                </button>
+              )}
+            </div>
+
+            {previewTierImport.isPending && (
+              <div className="flex items-center gap-2 text-[13px] text-[#6B6B6B]">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
+                Validating and previewing spreadsheet...
+              </div>
+            )}
+
+            {importReport && (
+              <div className="space-y-3 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
+                    <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Total Rows</div>
+                    <div className="mt-1 text-[18px] font-bold text-[#1A1A1A]">{importReport.totalRows}</div>
+                  </div>
+                  <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
+                    <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Valid Rows</div>
+                    <div className="mt-1 text-[18px] font-bold text-emerald-600">{importReport.validRows}</div>
+                  </div>
+                  <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
+                    <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Invalid Rows</div>
+                    <div className="mt-1 text-[18px] font-bold text-red-600">{importReport.invalidRows}</div>
+                  </div>
+                  <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
+                    <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Duplicates</div>
+                    <div className="mt-1 text-[18px] font-bold text-amber-600">{importReport.duplicateWarnings.length}</div>
+                  </div>
+                </div>
+
+                {importReport.issues.length > 0 && (
+                  <div>
+                    <h4 className="mb-1.5 text-[12.5px] font-semibold text-[#1A1A1A]">Validation Issues</h4>
+                    <div className="max-h-40 overflow-y-auto rounded border border-[#E6E6E6] bg-white divide-y divide-[#F0F0F0]">
+                      {importReport.issues.map((issue, index) => (
+                        <div key={`${issue.row}-${issue.field}-${index}`} className="px-3 py-2 text-[12px] text-red-600">
+                          <span className="font-semibold">Row {issue.row} [{issue.field}]:</span> {issue.message}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {importMessage && !importReport && (
+              <div className="rounded-md bg-red-50 border border-red-200 p-3 text-[12.5px] text-red-700">
+                {importMessage}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#E6E6E6]">
+              <button
+                type="button"
+                onClick={() => {
+                  setImportOpen(false);
+                  setImportFile(null);
+                  setImportReport(null);
+                  setImportMessage("");
+                }}
+                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#555] hover:bg-[#F2F2F2] cursor-pointer"
+              >
+                Cancel
+              </button>
+              <LoadingButton
+                type="button"
+                onClick={handleImport}
+                loading={importing || importTiers.isPending}
+                loadingText="Importing..."
+                disabled={!importFile || (importReport !== null && importReport.invalidRows > 0)}
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50 cursor-pointer"
+              >
+                Import Tiers
+              </LoadingButton>
+            </div>
+          </div>
+        </Modal>
+
+        {/* CONFIRM DELETE MODALS */}
         <ConfirmModal
           open={!!deleteTarget}
           title="Delete tier?"
-          message={deleteTarget ? `Delete ${deleteTarget.name}? This is blocked automatically if customers, pricing rules, or discounts still reference it.` : ""}
+          message={deleteTarget ? `Delete tier "${deleteTarget.name}"? This is blocked automatically if customers, pricing rules, or discounts still reference it.` : ""}
           onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
           isLoading={deleteTier.isPending}
+        />
+
+        <ConfirmModal
+          open={bulkDeleting}
+          title="Delete selected tiers?"
+          message={`Are you sure you want to delete the ${selectedIds.length} selected tier(s)? Tiers with active customer, pricing, or discount associations will be protected from deletion.`}
+          onConfirm={confirmBulkDelete}
+          onCancel={() => setBulkDeleting(false)}
+          isLoading={bulkTiers.isPending}
         />
 
         {ToastComponent}

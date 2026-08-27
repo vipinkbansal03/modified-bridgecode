@@ -98,7 +98,7 @@ function AdminLoginForm() {
           <AdminInput
             label="Email address"
             type="email"
-            placeholder="admin@modortho.com"
+            placeholder="Enter your email"
             {...formik.getFieldProps("email")}
             error={formik.touched.email ? (formik.errors.email as string) : ""}
           />
@@ -128,10 +128,6 @@ function AdminLoginForm() {
             {formik.isSubmitting ? "Signing in…" : "Sign In"}
           </button>
         </form>
-
-        <p className="mt-4 text-center text-[12px] text-[#9A9A9A]">
-          Default credentials: admin@modortho.com / Admin@1234
-        </p>
       </div>
     </div>
   );

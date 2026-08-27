@@ -87,10 +87,13 @@ export function NotificationBell({ role = "customer" }: { role?: "admin" | "cust
       initFirebase();
     }
 
-    onMessageListener().then((_payload: any) => {
+    onMessageListener().then((payload: any) => {
+      if (!payload) return;
       // Invalidate query to trigger refetch
       queryClient.invalidateQueries({ queryKey: ["notifications", role] });
-    }).catch(err => console.log('failed: ', err));
+    }).catch(() => {
+      // Quiet fallback when notifications are disabled/unsupported
+    });
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);

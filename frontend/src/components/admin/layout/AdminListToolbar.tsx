@@ -160,7 +160,7 @@ export function AdminListToolbar({
 
         {/* RIGHT SLOT */}
         {hasRightItems && (
-          <div className="flex flex-wrap items-start   justify-start sm:justify-end gap-2 shrink-0">
+          <div className="flex items-center justify-start sm:justify-end gap-2 shrink-0">
             {rightExtra}
 
             {exportAction && (

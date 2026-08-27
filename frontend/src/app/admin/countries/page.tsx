@@ -127,6 +127,7 @@ export default function CountriesPage() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
+  const [togglingCountryId, setTogglingCountryId] = useState<string | null>(null);
 
   const { data: countries = [], isLoading, refetch } = useAdminCountries({ includeInactive: true });
   const { data: currencies = [] } = useAdminCurrencies();
@@ -370,12 +371,15 @@ export default function CountriesPage() {
       return;
     }
     const nextStatus = country.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    setTogglingCountryId(country.id);
     try {
       await adminApi.put(`/countries/${country.id}`, { status: nextStatus });
       showToast(`${country.name} is now ${nextStatus.toLowerCase()}.`);
       await refetch();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to update status."), "error");
+    } finally {
+      setTogglingCountryId(null);
     }
   }
 
@@ -419,24 +423,7 @@ export default function CountriesPage() {
     { key: "code", label: "Code", render: (row: Country) => <span className="font-mono font-semibold text-[#1A1A1A]">{row.code}</span> },
     { key: "currency", label: "Currency", render: (row: Country) => `${row.currency?.name ?? "-"} (${row.currency?.symbol ?? "-"})` },
     { key: "isDefault", label: "Default", render: (row: Country) => (row.isDefault ? <span className="font-medium text-green-600">Default</span> : "-") },
-    {
-      key: "status",
-      label: "Status",
-      render: (row: Country) => (
-        canUpdate ? (
-          <button
-            type="button"
-            onClick={() => handleToggleStatus(row)}
-            title={`Click to toggle status (currently ${row.status.toLowerCase()})`}
-            className="cursor-pointer transition-transform hover:scale-105"
-          >
-            <StatusBadge status={row.status} />
-          </button>
-        ) : (
-          <StatusBadge status={row.status} />
-        )
-      ),
-    },
+    { key: "status", label: "Status" },
     ...(canUpdate || canDelete
       ? [
           {
@@ -600,7 +587,16 @@ export default function CountriesPage() {
         ) : null}
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white">
-          <DataTable<Country> columns={columns} data={paginatedCountries} rowKey="id" isLoading={isLoading} emptyMessage="No countries configured." />
+          <DataTable<Country>
+            columns={columns}
+            data={paginatedCountries}
+            rowKey="id"
+            isLoading={isLoading}
+            emptyMessage="No countries configured."
+            onToggleStatus={canUpdate ? handleToggleStatus : undefined}
+            statusLoadingId={togglingCountryId}
+            isStatusDisabled={(c) => !canUpdate || (c.isDefault && c.status === "ACTIVE")}
+          />
           <div className="border-t border-[#E6E6E6] px-4 py-3">
             <Pagination page={safePage} totalPages={totalPages} onPageChange={setPage} />
           </div>

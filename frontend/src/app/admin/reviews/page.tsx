@@ -2,11 +2,20 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { adminApi } from "@/services/adminApi";
-import { Star, CheckCircle2, XCircle, Trash2, Search, Filter, MessageSquare, ExternalLink } from "lucide-react";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
+import { Star, CheckCircle2, Trash2, MessageSquare, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { StatCard, AdminStatsGrid, AdminListToolbar, ConfirmModal, LoadingButton, useToast } from "@/components/admin/AdminComponents";
+import {
+  AdminStatsGrid,
+  AdminListToolbar,
+  ConfirmModal,
+  LoadingButton,
+  DataTable,
+  StatusBadge,
+  useToast,
+} from "@/components/admin/AdminComponents";
+import { cn } from "@/utils/cn";
 
 interface ReviewItem {
   id: string;
@@ -25,7 +34,7 @@ interface ReviewItem {
 }
 
 export default function AdminReviewsPage() {
-  const { showToast } = useToast();
+  const { showToast, ToastComponent } = useToast();
   const { hasPermission } = useAdminAuth();
   const canUpdate = hasPermission("reviews.update");
   const canDelete = hasPermission("reviews.delete");
@@ -90,10 +99,11 @@ export default function AdminReviewsPage() {
         setReviews((prev) =>
           prev.map((r) => (r.id === id ? { ...r, status: newStatus as any } : r))
         );
+        showToast(`Review ${newStatus.toLowerCase()} successfully.`);
       }
     } catch (err) {
       console.error("Failed to update status", err);
-      showToast("Failed to update status.", "error");
+      showToast(getAdminErrorMessage(err, "Failed to update status."), "error");
     } finally {
       setUpdatingId(null);
     }
@@ -106,15 +116,156 @@ export default function AdminReviewsPage() {
       const res = await adminApi.delete(`/reviews/${deletingId}`);
       if (res.data?.success) {
         setReviews((prev) => prev.filter((r) => r.id !== deletingId));
+        showToast("Review deleted successfully.");
       }
     } catch (err) {
       console.error("Failed to delete review", err);
-      showToast("Failed to delete review.", "error");
+      showToast(getAdminErrorMessage(err, "Failed to delete review."), "error");
     } finally {
       setDeletingLoading(false);
       setDeletingId(null);
     }
   };
+
+  const columns = useMemo(
+    () => [
+      {
+        key: "product",
+        label: "Product",
+        width: "220px",
+        render: (rev: ReviewItem) => (
+          <div className="min-w-0 pr-3">
+            <span className="font-semibold text-[#1A1A1A] block truncate text-[13px]" title={rev.productTitle}>
+              {rev.productTitle}
+            </span>
+            <Link
+              href={`/products/${rev.productSlug}`}
+              target="_blank"
+              className="inline-flex items-center gap-1 text-[11.5px] text-[#E31E24] hover:underline mt-0.5 font-medium"
+            >
+              View Page <ExternalLink size={11} />
+            </Link>
+          </div>
+        ),
+      },
+      {
+        key: "customer",
+        label: "Customer",
+        width: "200px",
+        render: (rev: ReviewItem) => (
+          <div>
+            <span className="font-semibold text-[#1A1A1A] block text-[13px]">{rev.customerName}</span>
+            {rev.customerEmail && (
+              <span className="text-[11.5px] text-[#6B6B6B] block truncate">{rev.customerEmail}</span>
+            )}
+            <span className="inline-flex items-center gap-1 mt-1 text-[10.5px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+              ✓ Verified Buyer
+            </span>
+          </div>
+        ),
+      },
+      {
+        key: "rating",
+        label: "Rating",
+        width: "140px",
+        render: (rev: ReviewItem) => (
+          <div>
+            <div className="flex items-center gap-1 text-[#F59E0B] font-bold text-[13px]">
+              <span>{rev.ratingOverall}.0</span>
+              <Star size={13} className="fill-[#F59E0B]" />
+            </div>
+            <div className="text-[11px] text-[#6B6B6B] mt-0.5 font-medium">
+              Q: {rev.ratingQuality}/5 ★ | P: {rev.ratingPrice}/5 ★
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: "feedback",
+        label: "Feedback Comment",
+        render: (rev: ReviewItem) => (
+          <div className="max-w-[320px]">
+            {rev.feedbackText ? (
+              <p className="text-[12.5px] text-[#374151] line-clamp-3 leading-relaxed bg-[#F9FAFB] p-2.5 rounded-md border border-[#E6E6E6]">
+                &quot;{rev.feedbackText}&quot;
+              </p>
+            ) : (
+              <span className="text-[12px] italic text-[#9A9A9A]">No comment provided</span>
+            )}
+          </div>
+        ),
+      },
+      {
+        key: "status",
+        label: "Status",
+        width: "110px",
+        render: (rev: ReviewItem) => (
+          <StatusBadge status={rev.status} />
+        ),
+      },
+      {
+        key: "date",
+        label: "Date",
+        width: "110px",
+        render: (rev: ReviewItem) => (
+          <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">
+            {new Date(rev.createdAt).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </span>
+        ),
+      },
+      ...((canUpdate || canDelete)
+        ? [
+            {
+              key: "actions",
+              label: "Actions",
+              width: "160px",
+              render: (rev: ReviewItem) => (
+                <div className="flex items-center justify-end gap-1.5">
+                  {canUpdate && rev.status !== "APPROVED" && (
+                    <LoadingButton
+                      loading={updatingId === rev.id}
+                      loadingText="Approving..."
+                      onClick={() => handleUpdateStatus(rev.id, "APPROVED")}
+                      className="inline-flex h-7 items-center gap-1 rounded-md border border-[#CFE8D7] bg-white px-2.5 text-[12px] font-medium text-[#1F8F4A] hover:bg-[#F1FBF4] transition-colors shadow-2xs cursor-pointer"
+                      title="Approve Review"
+                    >
+                      <CheckCircle2 size={13} />
+                      Approve
+                    </LoadingButton>
+                  )}
+                  {canUpdate && rev.status !== "REJECTED" && (
+                    <LoadingButton
+                      loading={updatingId === rev.id}
+                      loadingText="Rejecting..."
+                      onClick={() => handleUpdateStatus(rev.id, "REJECTED")}
+                      className="inline-flex h-7 items-center gap-1 rounded-md border border-[#F2C9C9] bg-white px-2.5 text-[12px] font-medium text-[#E31E24] hover:bg-[#FFF5F5] transition-colors shadow-2xs cursor-pointer"
+                      title="Reject Review"
+                    >
+                      Reject
+                    </LoadingButton>
+                  )}
+                  {canDelete && (
+                    <button
+                      disabled={updatingId === rev.id}
+                      onClick={() => setDeletingId(rev.id)}
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#E31E24] hover:bg-[#FFF5F5] hover:border-[#F2C9C9] transition-colors disabled:opacity-40 cursor-pointer shadow-2xs"
+                      title="Delete Review"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
+              ),
+            },
+          ]
+        : []),
+    ],
+    [canUpdate, canDelete, updatingId]
+  );
 
   return (
     <AdminLayout title="Product Reviews & Feedback" breadcrumb={[{ label: "Reviews" }]}>
@@ -124,194 +275,83 @@ export default function AdminReviewsPage() {
             { title: "Total Reviews", value: reviewStats.total, subtitle: "Customer feedback entries", icon: <MessageSquare size={18} /> },
             { title: "Approved Reviews", value: reviewStats.approved, subtitle: "Published on product pages", icon: <CheckCircle2 size={18} />, color: "bg-green-600" },
             { title: "Pending Reviews", value: reviewStats.pending, subtitle: "Awaiting moderation", icon: <Star size={18} />, color: "bg-amber-600" },
-            { title: "Average Score", value: `${reviewStats.avgScore} ★`, subtitle: "Overall average rating", icon: <Star size={18} />, color: "bg-indigo-600" }
+            { title: "Average Score", value: `${reviewStats.avgScore} ★`, subtitle: "Overall average rating", icon: <Star size={18} />, color: "bg-gray-600" },
           ]}
           isLoading={loading}
         />
+
         <AdminListToolbar
           search={{
             value: search,
             onChange: setSearch,
             placeholder: "Search customer, email, text...",
-            widthClassName: "max-w-[280px]",
+            widthClassName: "w-[240px]",
           }}
           leftExtra={
-            <div className="flex items-center gap-1 overflow-x-auto">
-              {["ALL", "APPROVED", "PENDING", "REJECTED"].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setStatusFilter(tab)}
-                  className={`px-3.5 py-1.5 rounded-lg text-[13px] font-semibold transition-colors ${
-                    statusFilter === tab
-                      ? "bg-[#E31E24] text-white shadow-2xs"
-                      : "bg-[#F9FAFB] text-[#4B5563] hover:bg-[#F3F4F6]"
-                  }`}
-                >
-                  {tab === "ALL" ? "All Reviews" : tab}
-                </button>
-              ))}
+            <div className="flex items-center gap-1.5 overflow-x-auto">
+              {[
+                { id: "ALL", label: "All Reviews", count: reviewStats.total },
+                { id: "APPROVED", label: "Approved", count: reviewStats.approved },
+                { id: "PENDING", label: "Pending", count: reviewStats.pending },
+                { id: "REJECTED", label: "Rejected", count: reviews.filter((r) => r.status === "REJECTED").length },
+              ].map((tab) => {
+                const isSelected = statusFilter === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setStatusFilter(tab.id)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-semibold transition-all cursor-pointer",
+                      isSelected
+                        ? "border border-[#E31E24] bg-[#FFF8F8] text-[#E31E24]"
+                        : "border border-[#E6E6E6] bg-white text-[#555555] hover:border-[#D1D1D1] hover:bg-[#FAFAFA]"
+                    )}
+                  >
+                    <span>{tab.label}</span>
+                    <span
+                      className={cn(
+                        "rounded-full px-1.5 py-0.2 text-[10.5px] font-bold",
+                        isSelected ? "bg-[#E31E24] text-white" : "bg-[#F0F0F0] text-[#666666]"
+                      )}
+                    >
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           }
           rightExtra={
-            <span className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#F3F4F6] text-[#374151]">
+            <span className="text-[12.5px] font-semibold text-[#6B6B6B]">
               Total Reviews: {reviews.length}
             </span>
           }
         />
 
         {/* Reviews List Table */}
-        <div className="bg-white rounded-xl border border-[#E5E7EB] shadow-2xs overflow-hidden">
-          {loading ? (
-            <div className="p-8 text-center text-sm text-[#6B7280]">Loading customer reviews...</div>
-          ) : reviews.length === 0 ? (
-            <div className="p-12 text-center">
-              <MessageSquare size={36} className="mx-auto mb-2 text-[#9CA3AF]" />
-              <h3 className="text-base font-bold text-[#111827]">No Reviews Found</h3>
-              <p className="text-xs text-[#6B7280] mt-1">No customer reviews match your selected filters.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB] text-[12px] font-bold uppercase tracking-wider text-[#6B7280]">
-                    <th className="py-3 px-4">Product</th>
-                    <th className="py-3 px-4">Customer</th>
-                    <th className="py-3 px-4">Rating</th>
-                    <th className="py-3 px-4">Feedback Comment</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Date</th>
-                    {(canUpdate || canDelete) && <th className="py-3 px-4 text-right">Actions</th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E5E7EB] text-[13px] text-[#374151]">
-                  {reviews.map((rev) => (
-                    <tr key={rev.id} className="hover:bg-[#F9FAFB] transition-colors">
-                      {/* Product */}
-                      <td className="py-3.5 px-4 max-w-[220px]">
-                        <span className="font-semibold text-[#111827] block truncate" title={rev.productTitle}>
-                          {rev.productTitle}
-                        </span>
-                        <Link
-                          href={`/products/${rev.productSlug}`}
-                          target="_blank"
-                          className="inline-flex items-center gap-1 text-[11px] text-[#E31E24] hover:underline mt-0.5"
-                        >
-                          View Page <ExternalLink size={10} />
-                        </Link>
-                      </td>
-
-                      {/* Customer */}
-                      <td className="py-3.5 px-4">
-                        <span className="font-bold text-[#111827] block">{rev.customerName}</span>
-                        {rev.customerEmail && (
-                          <span className="text-[11.5px] text-[#6B7280] block">{rev.customerEmail}</span>
-                        )}
-                        <span className="inline-block mt-1 text-[10px] font-semibold text-[#16A34A] bg-[#DCFCE7] px-1.5 py-0.5 rounded">
-                          ✓ Verified Buyer
-                        </span>
-                      </td>
-
-                      {/* Rating */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="flex items-center gap-1 text-[#F59E0B] font-bold">
-                          <span>{rev.ratingOverall}.0</span>
-                          <Star size={14} className="fill-[#F59E0B]" />
-                        </div>
-                        <div className="text-[11px] text-[#6B7280] mt-0.5">
-                          Q: {rev.ratingQuality}/5 ★ | P: {rev.ratingPrice}/5 ★
-                        </div>
-                      </td>
-
-                      {/* Feedback Text */}
-                      <td className="py-3.5 px-4 max-w-[280px]">
-                        {rev.feedbackText ? (
-                          <p className="text-[12.5px] text-[#374151] line-clamp-3 leading-relaxed bg-[#F9FAFB] p-2 rounded border border-[#E5E7EB]">
-                            &quot;{rev.feedbackText}&quot;
-                          </p>
-                        ) : (
-                          <span className="text-[11.5px] italic text-[#9CA3AF]">No text provided</span>
-                        )}
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full ${
-                            rev.status === "APPROVED"
-                              ? "bg-[#DCFCE7] text-[#15803D]"
-                              : rev.status === "REJECTED"
-                              ? "bg-[#FEE2E2] text-[#B91C1C]"
-                              : "bg-[#FEF3C7] text-[#B45309]"
-                          }`}
-                        >
-                          {rev.status}
-                        </span>
-                      </td>
-
-                      {/* Date */}
-                      <td className="py-3.5 px-4 whitespace-nowrap text-[12px] text-[#6B7280]">
-                        {new Date(rev.createdAt).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </td>
-
-                      {(canUpdate || canDelete) && (
-                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {canUpdate && rev.status !== "APPROVED" && (
-                              <LoadingButton
-                                loading={updatingId === rev.id}
-                                loadingText="Approving..."
-                                onClick={() => handleUpdateStatus(rev.id, "APPROVED")}
-                                className="px-2.5 py-1 bg-[#16A34A] text-white text-[11px] font-semibold rounded hover:bg-[#15803D] transition-colors"
-                                title="Approve Review"
-                              >
-                                Approve
-                              </LoadingButton>
-                            )}
-                            {canUpdate && rev.status !== "REJECTED" && (
-                              <LoadingButton
-                                loading={updatingId === rev.id}
-                                loadingText="Rejecting..."
-                                onClick={() => handleUpdateStatus(rev.id, "REJECTED")}
-                                className="px-2.5 py-1 bg-[#EA580C] text-white text-[11px] font-semibold rounded hover:bg-[#C2410C] transition-colors"
-                                title="Reject Review"
-                              >
-                                Reject
-                              </LoadingButton>
-                            )}
-                            {canDelete && (
-                              <button
-                                disabled={updatingId === rev.id}
-                                onClick={() => setDeletingId(rev.id)}
-                                className="p-1.5 text-[#EF4444] hover:bg-[#FEE2E2] rounded transition-colors disabled:opacity-50"
-                                title="Delete Review"
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <DataTable
+          title="Product Reviews"
+          description="Moderate and manage customer feedback across catalog products."
+          columns={columns}
+          data={reviews}
+          rowKey="id"
+          isLoading={loading}
+          emptyMessage="No customer reviews match your search or filter."
+        />
       </div>
+
       <ConfirmModal
         open={!!deletingId}
         title="Delete review?"
-        message="Are you sure you want to delete this review permanently?"
+        message="Are you sure you want to delete this review permanently? This action cannot be undone."
         onConfirm={confirmDeleteReview}
         onCancel={() => setDeletingId(null)}
         isLoading={deletingLoading}
         danger
       />
+
+      {ToastComponent}
     </AdminLayout>
   );
 }

@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Download,
   Plus,
   Edit2,
-  Eye,
   Filter,
   Search,
-  SlidersHorizontal,
   SquareCheckBig,
   Trash2,
   Upload,
@@ -22,8 +20,6 @@ import {
   Column,
   ConfirmModal,
   DataTable,
-  Pagination,
-  StatCard,
   AdminStatsGrid,
   AdminListToolbar,
   StatusBadge,
@@ -33,7 +29,6 @@ import {
 } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
-import { RefreshButton } from "@/components/admin/RefreshButton";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import {
   useAdminCategories,
@@ -41,7 +36,6 @@ import {
   useAdminDiscountDashboard,
   useAdminDiscounts,
   useAdminCollections,
-  useAdminProducts,
   useAdminProductsInfinite,
   useAdminTiers,
   useBulkDiscounts,
@@ -61,6 +55,7 @@ type Related = {
   code?: string;
   slug?: string;
 };
+
 type Discount = {
   id: string;
   name: string;
@@ -154,6 +149,7 @@ const visibleColumnsDefault = {
   country: true,
   dates: true,
   status: true,
+  actions: true,
 };
 
 function dateInput(value: string | null) {
@@ -210,11 +206,6 @@ function toForm(discount: Discount): FormState {
   };
 }
 
-function formatDate(value?: string | null) {
-  if (!value) return " - ";
-  return new Date(value).toLocaleDateString();
-}
-
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -241,20 +232,19 @@ export default function DiscountsPage() {
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [showFilters, setShowFilters] = useState(false);
-  const [showColumns, setShowColumns] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importReport, setImportReport] = useState<SpreadsheetReport | null>(
-    null,
-  );
+  const [importReport, setImportReport] = useState<SpreadsheetReport | null>(null);
   const [importMessage, setImportMessage] = useState("");
   const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [showForm, setShowForm] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const { showToast, ToastComponent } = useToast();
-  const { data: dashboardData, isLoading: dashboardLoading } =
-    useAdminDiscountDashboard();
+
+  const { data: dashboardData, isLoading: dashboardLoading } = useAdminDiscountDashboard();
   const { data, isLoading, refetch, isFetching } = useAdminDiscounts({
     page,
     limit,
@@ -266,6 +256,7 @@ export default function DiscountsPage() {
     sortBy,
     sortDir,
   });
+
   const { data: tiers = [] } = useAdminTiers();
   const { data: countries = [] } = useAdminCountries();
   const { data: collectionsData } = useAdminCollections({ page: 1 });
@@ -280,6 +271,7 @@ export default function DiscountsPage() {
     search: productSearch || undefined,
     limit: 20,
   });
+
   const createDiscount = useCreateDiscount();
   const updateDiscount = useUpdateDiscount();
   const deleteDiscount = useDeleteDiscount();
@@ -308,7 +300,7 @@ export default function DiscountsPage() {
       if (values.scope === "CATEGORY" && values.categoryIds.length === 0) errors.categoryIds = "Select at least one category.";
       return errors;
     },
-    onSubmit: async (values, { setSubmitting, resetForm }) => {
+    onSubmit: async (values, { resetForm: resetF }) => {
       const payload = {
         name: values.name,
         type: values.type,
@@ -334,7 +326,7 @@ export default function DiscountsPage() {
           await createDiscount.mutateAsync(payload);
           showToast("Discount created.");
         }
-        resetForm();
+        resetF();
         setShowForm(false);
       } catch (error) {
         showToast(
@@ -348,7 +340,7 @@ export default function DiscountsPage() {
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setDebouncedSearch(search);
-    }, 400);
+    }, 300);
 
     return () => window.clearTimeout(timeout);
   }, [search]);
@@ -368,18 +360,12 @@ export default function DiscountsPage() {
   ]);
 
   const products: Related[] = useMemo(() => {
-    return infiniteProductsData?.pages.flatMap((page: any) => page.data ?? []) ?? [];
+    return infiniteProductsData?.pages.flatMap((p: any) => p.data ?? []) ?? [];
   }, [infiniteProductsData?.pages]);
   const collections: Related[] = collectionsData?.data ?? [];
   const discounts: Discount[] = data?.data ?? [];
   const totalPages = data?.pagination?.totalPages ?? 1;
   const dashboard = dashboardData as DiscountDashboard | undefined;
-  const visibleIds = useMemo(
-    () => discounts.map((discount) => discount.id),
-    [discounts],
-  );
-  const selectedOnPage =
-    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
   const [visibleColumns, setVisibleColumns] = useState(visibleColumnsDefault);
 
   const options = useMemo(
@@ -466,8 +452,6 @@ export default function DiscountsPage() {
     form.setValues(next);
   };
 
-
-
   const confirmDelete = async () => {
     if (!deleting) return;
     try {
@@ -496,22 +480,6 @@ export default function DiscountsPage() {
         "error",
       );
     }
-  };
-
-  const toggleRowSelection = (id: string) => {
-    setSelectedIds((current) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id],
-    );
-  };
-
-  const togglePageSelection = () => {
-    setSelectedIds((current) => {
-      if (selectedOnPage)
-        return current.filter((id) => !visibleIds.includes(id));
-      return Array.from(new Set([...current, ...visibleIds]));
-    });
   };
 
   const runBulkAction = async (action: "ENABLE" | "DISABLE" | "DELETE") => {
@@ -568,9 +536,8 @@ export default function DiscountsPage() {
   const handleBulkAction = async () => {
     if (!bulkAction || selectedIds.length === 0) return;
     if (bulkAction === "DELETE") {
-      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected discount(s)? This action cannot be undone.`)) {
-        return;
-      }
+      setBulkDeleting(true);
+      return;
     }
     await runBulkAction(bulkAction);
     setBulkAction("");
@@ -605,14 +572,10 @@ export default function DiscountsPage() {
     }
   };
 
-  const handleImportPreview = async () => {
-    if (!importFile) {
-      showToast("Choose a spreadsheet first.", "error");
-      return;
-    }
+  const handleImportPreview = async (file: File) => {
     try {
       const formData = new FormData();
-      formData.append("file", importFile);
+      formData.append("file", file);
       const report = (await previewDiscountImport.mutateAsync(
         formData,
       )) as SpreadsheetReport;
@@ -623,10 +586,8 @@ export default function DiscountsPage() {
           : "Preview looks good. You can import now.",
       );
     } catch (error) {
-      showToast(
-        getAdminErrorMessage(error, "Failed to preview discounts spreadsheet."),
-        "error",
-      );
+      setImportMessage(getAdminErrorMessage(error, "Failed to preview discounts spreadsheet."));
+      setImportReport(null);
     }
   };
 
@@ -644,6 +605,8 @@ export default function DiscountsPage() {
       setImportFile(null);
       setImportReport(null);
       setImportMessage("");
+      setImportOpen(false);
+      refetch();
     } catch (error) {
       showToast(
         getAdminErrorMessage(error, "Failed to import discounts."),
@@ -658,10 +621,11 @@ export default function DiscountsPage() {
     {
       key: "name",
       label: "Rule",
+      width: "240px",
       render: (row) => (
-        <div className="min-w-[210px]">
-          <div className="font-semibold text-[#1A1A1A]">{row.name}</div>
-          <div className="mt-1 text-[12px] text-[#6B6B6B]">
+        <div className="min-w-0 pr-3">
+          <div className="font-semibold text-[#1A1A1A] text-[13px]">{row.name}</div>
+          <div className="mt-0.5 text-[11.5px] text-[#6B6B6B] truncate" title={scopeLabel(row)}>
             {scopeLabel(row)}
           </div>
         </div>
@@ -670,8 +634,9 @@ export default function DiscountsPage() {
     {
       key: "type",
       label: "Type",
+      width: "130px",
       render: (row) => (
-        <span className="rounded-full border border-[#E6E6E6] bg-[#F8F8F8] px-2.5 py-1 text-[12px] font-medium text-[#1A1A1A]">
+        <span className="inline-flex items-center rounded-full border border-[#E6E6E6] bg-[#FAFAFA] px-2.5 py-0.5 text-[11.5px] font-medium text-[#555] whitespace-nowrap">
           {row.type === "TIER"
             ? "Tier discount"
             : row.type === "MOQ"
@@ -681,14 +646,15 @@ export default function DiscountsPage() {
       ),
     },
     {
-      key: "value",
+      key: "discount",
       label: "Discount",
+      width: "130px",
       render: (row) => (
         <div>
-          <div className="font-semibold text-[#1A1A1A]">
+          <div className="font-semibold text-[#1A1A1A] text-[13px]">
             {discountValue(row)}
           </div>
-          <div className="mt-1 text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">
+          <div className="mt-0.5 text-[11px] uppercase tracking-wide text-[#9A9A9A]">
             {row.discountPercent != null ? "Percentage" : "Fixed amount"}
           </div>
         </div>
@@ -697,8 +663,9 @@ export default function DiscountsPage() {
     {
       key: "condition",
       label: "Condition",
+      width: "150px",
       render: (row) => (
-        <div className="text-[#6B6B6B]">
+        <div className="text-[12.5px] text-[#555]">
           {row.type === "TIER"
             ? (row.tier?.name ?? "Tier required")
             : row.type === "MOQ"
@@ -712,68 +679,55 @@ export default function DiscountsPage() {
     {
       key: "country",
       label: "Country",
+      width: "160px",
       render: (row) => {
-        const countries = row.countries ?? (row.country ? [row.country] : []);
-        if (countries.length === 0) return "All countries";
-        if (countries.length === 1) return `${countries[0].name ?? countries[0].code} (${countries[0].code})`;
-        if (countries.length <= 2) return countries.map((c) => c.code ?? c.name).join(", ");
-        return `${countries.length} Countries (${countries.slice(0, 2).map((c) => c.code ?? c.name).join(", ")}, ...)`;
+        const cList = row.countries ?? (row.country ? [row.country] : []);
+        let label = "All countries";
+        if (cList.length === 1) label = `${cList[0].name ?? cList[0].code} (${cList[0].code})`;
+        else if (cList.length <= 2) label = cList.map((c) => c.code ?? c.name).join(", ");
+        else if (cList.length > 2) label = `${cList.length} Countries (${cList.slice(0, 2).map((c) => c.code ?? c.name).join(", ")}, ...)`;
+        return <span className="text-[12.5px] text-[#555] truncate block" title={label}>{label}</span>;
       },
     },
     {
       key: "dates",
       label: "Dates",
-      render: (row) =>
-        row.startDate || row.endDate
-          ? `${dateInput(row.startDate) || "Any"} to ${dateInput(row.endDate) || "Any"}`
-          : "Always active",
+      width: "180px",
+      render: (row) => (
+        <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">
+          {row.startDate || row.endDate
+            ? `${dateInput(row.startDate) || "Any"} to ${dateInput(row.endDate) || "Any"}`
+            : "Always active"}
+        </span>
+      ),
     },
     {
       key: "status",
       label: "Status",
-      render: (row) => {
-        const isActive = row.status === "ACTIVE";
-        return (
-          <button
-            type="button"
-            onClick={() => toggleStatus(row)}
-            disabled={updateDiscount.isPending || !canUpdate}
-            title={
-              !canUpdate
-                ? "You do not have permission to edit discounts"
-                : isActive
-                  ? "Click to pause this discount rule"
-                  : "Click to activate this discount rule"
-            }
-            className="inline-flex items-center gap-2 rounded-full border border-[#E6E6E6] bg-white px-2.5 py-1.5 text-[12px] font-medium transition hover:border-[#D0D0D0] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <span
-              className={`relative h-4 w-8 rounded-full transition ${isActive ? "bg-emerald-500" : "bg-[#D9D9D9]"}`}
-            >
-              <span
-                className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition ${isActive ? "left-4" : "left-0.5"}`}
-              />
-            </span>
-            <span className={isActive ? "text-emerald-700" : "text-[#6B6B6B]"}>
-              {isActive ? "Active" : "Inactive"}
-            </span>
-          </button>
-        );
-      },
+      width: "110px",
+      render: (row) => (
+        <StatusBadge
+          status={row.status}
+          interactive={canUpdate}
+          onClick={() => toggleStatus(row)}
+          loading={updateDiscount.isPending && (updateDiscount.variables as any)?.id === row.id}
+        />
+      ),
     },
     {
       key: "actions",
-      label: "",
-      width: "86px",
+      label: "Actions",
+      width: "90px",
+      align: "left",
       render: (row) => (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-start gap-1">
           {canUpdate && (
             <button
               onClick={() => {
                 form.reset(toForm(row));
                 setShowForm(true);
               }}
-              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] transition-colors shadow-2xs cursor-pointer"
               title="Edit discount"
             >
               <Edit2 size={13} />
@@ -782,7 +736,7 @@ export default function DiscountsPage() {
           {canDelete && (
             <button
               onClick={() => setDeleting(row.id)}
-              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#E31E24] hover:bg-[#FFF5F5] hover:border-[#F2C9C9] transition-colors shadow-2xs cursor-pointer"
               title="Delete discount"
             >
               <Trash2 size={13} />
@@ -796,11 +750,12 @@ export default function DiscountsPage() {
   const filteredColumns = columns.filter((column) => {
     if (column.key === "name") return visibleColumns.name;
     if (column.key === "type") return visibleColumns.type;
-    if (column.key === "value") return visibleColumns.discount;
+    if (column.key === "discount") return visibleColumns.discount;
     if (column.key === "condition") return visibleColumns.condition;
     if (column.key === "country") return visibleColumns.country;
     if (column.key === "dates") return visibleColumns.dates;
     if (column.key === "status") return visibleColumns.status;
+    if (column.key === "actions") return visibleColumns.actions;
     return true;
   });
 
@@ -993,7 +948,7 @@ export default function DiscountsPage() {
         <button
           type="button"
           onClick={resetForm}
-          className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2]"
+          className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2] cursor-pointer"
         >
           Cancel
         </button>
@@ -1001,7 +956,7 @@ export default function DiscountsPage() {
           type="submit"
           loading={form.isSubmitting || createDiscount.isPending || updateDiscount.isPending}
           loadingText="Processing..."
-          className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
+          className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] cursor-pointer"
         >
           {form.values.id ? "Update Discount" : "Create Discount"}
         </LoadingButton>
@@ -1019,6 +974,7 @@ export default function DiscountsPage() {
         ]}
       />
 
+      <div className="space-y-5">
         <AdminListToolbar
           search={{
             value: search,
@@ -1027,12 +983,12 @@ export default function DiscountsPage() {
               resetPage();
             },
             placeholder: "Search rule, product, category...",
-            widthClassName: "max-w-[280px]",
+            widthClassName: "w-[240px]",
           }}
           filters={{
             showFilters: showFilters,
             onToggle: () => setShowFilters(!showFilters),
-            activeCount: [status, typeFilter, scopeFilter, countryFilter].filter(Boolean).length,
+            activeCount: [status, typeFilter, scopeFilter, countryFilter, sortBy !== "createdAt" ? sortBy : ""].filter(Boolean).length,
             label: "Filters",
           }}
           columns={{
@@ -1043,11 +999,34 @@ export default function DiscountsPage() {
                 [key]: !current[key as keyof typeof current],
               }));
             },
-            options: Object.keys(visibleColumns).map((key) => ({ key, label: key })),
+            options: [
+              { key: "name", label: "Rule" },
+              { key: "type", label: "Type" },
+              { key: "discount", label: "Discount" },
+              { key: "condition", label: "Condition" },
+              { key: "country", label: "Country" },
+              { key: "dates", label: "Dates" },
+              { key: "status", label: "Status" },
+              { key: "actions", label: "Actions" },
+            ],
           }}
           exportAction={{
             onClick: () => void handleExport(selectedIds.length > 0),
-            label: selectedIds.length > 0 ? `Export Selected (${selectedIds.length})` : "Export",
+            label: selectedIds.length > 0 ? `Export Selected (${selectedIds.length})` : "Export Excel",
+          }}
+          importAction={
+            canUpdate
+              ? {
+                  onClick: () => setImportOpen(true),
+                  label: "Import Excel",
+                }
+              : undefined
+          }
+          refresh={{
+            onRefresh: () => {
+              void refetch().then(() => showToast("Discounts refreshed."));
+            },
+            isRefreshing: isFetching,
           }}
           primaryAction={
             canCreate
@@ -1062,92 +1041,80 @@ export default function DiscountsPage() {
               : undefined
           }
           filterPanel={
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 pt-2">
-              <AdminSelect
-                label="Status"
+            <div className="flex flex-wrap items-center gap-3">
+              <select
                 value={status}
                 onChange={(event) => {
                   setStatus(event.target.value);
                   resetPage();
                 }}
-                options={[
-                  { value: "", label: "All statuses" },
-                  { value: "ACTIVE", label: "Active" },
-                  { value: "INACTIVE", label: "Inactive" },
-                ]}
-              />
-              <AdminSelect
-                label="Discount Type"
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[130px]"
+              >
+                <option value="">All Statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+              </select>
+              <select
                 value={typeFilter}
                 onChange={(event) => {
                   setTypeFilter(event.target.value);
                   resetPage();
                 }}
-                options={[
-                  { value: "", label: "All types" },
-                  { value: "TIER", label: "Tier-based" },
-                  { value: "MOQ", label: "MOQ-based" },
-                  { value: "PROMOTIONAL", label: "Open promotion" },
-                ]}
-              />
-              <AdminSelect
-                label="Scope"
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[130px]"
+              >
+                <option value="">All Types</option>
+                <option value="TIER">Tier-based</option>
+                <option value="MOQ">MOQ-based</option>
+                <option value="PROMOTIONAL">Open promotion</option>
+              </select>
+              <select
                 value={scopeFilter}
                 onChange={(event) => {
                   setScopeFilter(event.target.value);
                   resetPage();
                 }}
-                options={[
-                  { value: "", label: "All scopes" },
-                  { value: "PLATFORM", label: "Platform-wide" },
-                  { value: "PRODUCT", label: "Product" },
-                  { value: "COLLECTION", label: "Collection" },
-                  { value: "CATEGORY", label: "Category" },
-                ]}
-              />
-              <AdminSelect
-                label="Country"
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[130px]"
+              >
+                <option value="">All Scopes</option>
+                <option value="PLATFORM">Platform-wide</option>
+                <option value="PRODUCT">Product</option>
+                <option value="COLLECTION">Collection</option>
+                <option value="CATEGORY">Category</option>
+              </select>
+              <select
                 value={countryFilter}
                 onChange={(event) => {
                   setCountryFilter(event.target.value);
                   resetPage();
                 }}
-                options={options.countries}
-              />
-              <AdminSelect
-                label="Sort By"
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[140px]"
+              >
+                <option value="">All Countries</option>
+                {options.countries.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+              <select
                 value={String(sortBy)}
                 onChange={(event) => setSortBy(event.target.value)}
-                options={[
-                  { value: "createdAt", label: "Created date" },
-                  { value: "updatedAt", label: "Updated date" },
-                  { value: "name", label: "Rule name" },
-                  { value: "type", label: "Type" },
-                  { value: "status", label: "Status" },
-                ]}
-              />
-              <AdminSelect
-                label="Direction"
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[140px]"
+              >
+                <option value="createdAt">Created date</option>
+                <option value="updatedAt">Updated date</option>
+                <option value="name">Rule name</option>
+                <option value="type">Type</option>
+                <option value="status">Status</option>
+              </select>
+              <select
                 value={sortDir}
                 onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
-                options={[
-                  { value: "desc", label: "Descending" },
-                  { value: "asc", label: "Ascending" },
-                ]}
-              />
-              <AdminSelect
-                label="Page Size"
-                value={String(limit)}
-                onChange={(event) => {
-                  setLimit(Number(event.target.value));
-                  resetPage();
-                }}
-                options={[
-                  { value: "10", label: "10 per page" },
-                  { value: "20", label: "20 per page" },
-                  { value: "50", label: "50 per page" },
-                ]}
-              />
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[120px]"
+              >
+                <option value="desc">Descending</option>
+                <option value="asc">Ascending</option>
+              </select>
             </div>
           }
           onResetFilters={() => {
@@ -1162,198 +1129,148 @@ export default function DiscountsPage() {
           }}
         />
 
+        <DataTable<Discount>
+          title="Discounts List"
+          columns={filteredColumns}
+          data={discounts}
+          rowKey="id"
+          isLoading={isLoading}
+          emptyMessage="No discount rules found."
+          enableSelection={true}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          onToggleStatus={canUpdate ? toggleStatus : undefined}
+          statusLoadingId={updateDiscount.isPending ? ((updateDiscount.variables as any)?.id ?? null) : null}
+          isStatusDisabled={() => !canUpdate}
+          totalItems={data?.pagination?.total ?? 0}
+          currentPage={page}
+          pageSize={limit}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          onPageSizeChange={setLimit}
+          pageSizeOptions={[10, 20, 50, 100]}
+          onSelectAll={handleSelectAll}
+          renderBulkActions={(selectedIds) => (
+            <AdminBulkActionsBar
+              selectedCount={selectedIds.length}
+              onClear={() => setSelectedIds([])}
+              actionType={bulkAction}
+              onActionTypeChange={(val) => setBulkAction(val as any)}
+              actions={[
+                { value: "ENABLE", label: "Mark active" },
+                { value: "DISABLE", label: "Mark inactive" },
+                { value: "DELETE", label: "Delete selected" }
+              ]}
+              onApply={handleBulkAction}
+              applyLoading={bulkDiscounts.isPending}
+              applyDisabled={!bulkAction || selectedIds.length === 0}
+            />
+          )}
+        />
+      </div>
+
+      {/* CREATE / EDIT DISCOUNT MODAL */}
       <Modal
         open={showForm}
         onClose={resetForm}
-        title={form.values.id ? "Edit discount" : "New discount"}
+        title={form.values.id ? "Edit Discount" : "New Discount"}
         panelClassName="max-w-5xl flex flex-col max-h-[90vh] overflow-hidden z-[9999]"
       >
         {showForm ? discountForm : null}
       </Modal>
 
-      <div className="flex gap-6 items-start">
-        {/* TABLE */}
-        <div className="flex-1 min-w-0">
-          <DataTable<Discount>
-            title="Discounts List"
-            columns={filteredColumns}
-            data={discounts}
-            rowKey="id"
-            isLoading={isLoading}
-            emptyMessage="No discount rules found."
-            enableSelection={true}
-            selectedIds={selectedIds}
-            onSelectionChange={setSelectedIds}
-            totalItems={data?.pagination?.total}
-            currentPage={page}
-            pageSize={limit}
-            totalPages={totalPages}
-            onPageChange={setPage}
-            onPageSizeChange={setLimit}
-            onSelectAll={handleSelectAll}
-            renderBulkActions={(selectedIds) => (
-              <AdminBulkActionsBar
-                selectedCount={selectedIds.length}
-                onClear={() => setSelectedIds([])}
-                actionType={bulkAction}
-                onActionTypeChange={(val) => setBulkAction(val as any)}
-                actions={[
-                  { value: "ENABLE", label: "Mark active" },
-                  { value: "DISABLE", label: "Mark inactive" },
-                  { value: "DELETE", label: "Delete selected" }
-                ]}
-                onApply={handleBulkAction}
-                applyLoading={bulkDiscounts.isPending}
-                applyDisabled={!bulkAction || selectedIds.length === 0}
-              />
-            )}
-          />
-        </div>
+      {/* IMPORT SPREADSHEET MODAL */}
+      <Modal
+        open={importOpen}
+        onClose={() => {
+          setImportOpen(false);
+          setImportFile(null);
+          setImportReport(null);
+          setImportMessage("");
+        }}
+        title="Import Discounts Spreadsheet"
+        panelClassName="max-w-2xl"
+      >
+        <div className="space-y-4">
+          <p className="text-[13px] text-[#6B6B6B]">
+            Upload an Excel (.xlsx, .xls) or CSV spreadsheet to create or update discount rules in bulk.
+          </p>
 
-        {/* RIGHT SIDEBAR */}
-        <div className="w-[340px] shrink-0 space-y-5">
-          {/* IMPORT / EXPORT CARD */}
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            {/* HEADER */}
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="text-[15px] font-semibold text-gray-900">
-                  Import / Export
-                </h3>
-                <p className="mt-1 text-[12.5px] text-gray-500">
-                  Upload spreadsheet to manage discounts
-                </p>
-              </div>
-
+          <div className="rounded-lg border-2 border-dashed border-[#E6E6E6] bg-[#FAFAFA] p-6 text-center hover:bg-[#F5F5F5] transition-colors">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              id="discount-import-file"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  setImportFile(file);
+                  void handleImportPreview(file);
+                }
+              }}
+            />
+            <label htmlFor="discount-import-file" className="cursor-pointer">
+              <Upload size={28} className="mx-auto text-[#9A9A9A] mb-2" />
+              <span className="text-[13.5px] font-semibold text-[#1A1A1A] block">
+                {importFile ? importFile.name : "Click to select spreadsheet"}
+              </span>
+              <span className="text-[12px] text-[#9A9A9A] mt-1 block">
+                XLSX, XLS or CSV files supported
+              </span>
+            </label>
+            {importFile && (
               <button
                 type="button"
-                onClick={() => void handleExport(false)}
-                className="text-sm font-medium text-gray-600 hover:text-black"
+                onClick={() => {
+                  setImportFile(null);
+                  setImportReport(null);
+                  setImportMessage("");
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+                className="mt-2 text-[12px] font-medium text-red-600 hover:underline inline-block cursor-pointer"
               >
-                Export
+                Remove file
               </button>
-            </div>
-
-            {/* DROPZONE */}
-            {canUpdate ? (
-              <label className="mt-4 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-5 text-center transition hover:bg-gray-100">
-                <input
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  className="hidden"
-                  onChange={(event) => {
-                    setImportFile(event.target.files?.[0] ?? null);
-                    setImportReport(null);
-                    setImportMessage("");
-                  }}
-                />
-
-                <Upload size={20} className="mb-2 text-red-500" />
-
-                <p className="text-sm font-medium text-gray-800 truncate max-w-[220px]">
-                  {importFile ? importFile.name : "Click to upload file"}
-                </p>
-
-                <p className="text-xs text-gray-500 mt-1">
-                  XLSX, XLS, CSV supported
-                </p>
-              </label>
-            ) : (
-              <div className="mt-4 flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-gray-50 p-5 text-center text-[13px] text-[#6B6B6B]">
-                Importing is disabled (No edit permission)
-              </div>
-            )}
-
-            {/* ACTION BUTTONS */}
-            {canUpdate && (
-              <div className="mt-4 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => void handleImportPreview()}
-                  disabled={previewDiscountImport.isPending}
-                  className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Preview
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => void handleImport()}
-                  disabled={
-                    importing ||
-                    importDiscounts.isPending ||
-                    !!importReport?.invalidRows
-                  }
-                className="flex-1 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-              >
-                {importing ? "Importing..." : "Import"}
-              </button>
-            </div>
-            )}
-
-            {/* MESSAGE */}
-            {importMessage && (
-              <div className="mt-4 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-sm text-gray-700">
-                {importMessage}
-              </div>
             )}
           </div>
 
-          {/* REPORT CARD */}
-          {importReport && (
-            <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm space-y-4">
-              <h4 className="text-sm font-semibold text-gray-800">
-                Import Summary
-              </h4>
+          {previewDiscountImport.isPending && (
+            <div className="flex items-center gap-2 text-[13px] text-[#6B6B6B]">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
+              Validating and previewing spreadsheet...
+            </div>
+          )}
 
-              {/* STATS */}
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: "Rows", value: importReport.totalRows },
-                  {
-                    label: "Valid",
-                    value: importReport.validRows,
-                    color: "text-green-600",
-                  },
-                  {
-                    label: "Invalid",
-                    value: importReport.invalidRows,
-                    color: "text-red-600",
-                  },
-                  {
-                    label: "Duplicates",
-                    value: importReport.duplicateWarnings.length,
-                    color: "text-amber-600",
-                  },
-                ].map((item, i) => (
-                  <div
-                    key={i}
-                    className="rounded-xl bg-gray-50 p-3 text-center"
-                  >
-                    <div className="text-xs text-gray-500">{item.label}</div>
-                    <div
-                      className={`text-lg font-semibold ${item.color || "text-gray-900"}`}
-                    >
-                      {item.value}
-                    </div>
-                  </div>
-                ))}
+          {importReport && (
+            <div className="space-y-3 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
+                  <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Total Rows</div>
+                  <div className="mt-1 text-[18px] font-bold text-[#1A1A1A]">{importReport.totalRows}</div>
+                </div>
+                <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
+                  <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Valid Rows</div>
+                  <div className="mt-1 text-[18px] font-bold text-emerald-600">{importReport.validRows}</div>
+                </div>
+                <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
+                  <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Invalid Rows</div>
+                  <div className="mt-1 text-[18px] font-bold text-red-600">{importReport.invalidRows}</div>
+                </div>
+                <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
+                  <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Duplicates</div>
+                  <div className="mt-1 text-[18px] font-bold text-amber-600">{importReport.duplicateWarnings.length}</div>
+                </div>
               </div>
 
-              {/* ISSUES */}
               {importReport.issues.length > 0 && (
                 <div>
-                  <div className="text-xs font-medium text-gray-500 mb-2">
-                    Issues
-                  </div>
-
-                  <div className="space-y-2 max-h-[150px] overflow-auto">
-                    {importReport.issues.slice(0, 4).map((issue, index) => (
-                      <div
-                        key={`${issue.row}-${issue.field}-${index}`}
-                        className="rounded-md bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-600"
-                      >
-                        Row {issue.row}: {issue.message}
+                  <h4 className="mb-1.5 text-[12.5px] font-semibold text-[#1A1A1A]">Validation Issues</h4>
+                  <div className="max-h-40 overflow-y-auto rounded border border-[#E6E6E6] bg-white divide-y divide-[#F0F0F0]">
+                    {importReport.issues.map((issue, index) => (
+                      <div key={`${issue.row}-${issue.field}-${index}`} className="px-3 py-2 text-[12px] text-red-600">
+                        <span className="font-semibold">Row {issue.row} [{issue.field}]:</span> {issue.message}
                       </div>
                     ))}
                   </div>
@@ -1361,33 +1278,59 @@ export default function DiscountsPage() {
               )}
             </div>
           )}
-        </div>
-      </div>
 
-      <Pagination
-        page={page}
-        totalPages={totalPages}
-        onPageChange={(nextPage) => {
-          setPage(nextPage);
-          setSelectedIds([]);
-        }}
-      />
+          {importMessage && !importReport && (
+            <div className="rounded-md bg-red-50 border border-red-200 p-3 text-[12.5px] text-red-700">
+              {importMessage}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#E6E6E6]">
+            <button
+              type="button"
+              onClick={() => {
+                setImportOpen(false);
+                setImportFile(null);
+                setImportReport(null);
+                setImportMessage("");
+              }}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#555] hover:bg-[#F2F2F2] cursor-pointer"
+            >
+              Cancel
+            </button>
+            <LoadingButton
+              type="button"
+              onClick={handleImport}
+              loading={importing || importDiscounts.isPending}
+              loadingText="Importing..."
+              disabled={!importFile || (importReport !== null && importReport.invalidRows > 0)}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50 cursor-pointer"
+            >
+              Import Discounts
+            </LoadingButton>
+          </div>
+        </div>
+      </Modal>
+
+      {/* CONFIRM DELETE MODALS */}
       <ConfirmModal
         open={!!deleting}
         title="Delete discount?"
-        message="This rule will stop applying immediately."
+        message="This discount rule will be deleted and will immediately stop applying to quotes, orders, and carts."
         onConfirm={confirmDelete}
         onCancel={() => setDeleting(null)}
         isLoading={deleteDiscount.isPending}
       />
+
       <ConfirmModal
         open={bulkDeleting}
         title="Delete selected discounts?"
-        message="Selected discount rules will stop applying immediately."
+        message={`Are you sure you want to permanently delete the ${selectedIds.length} selected discount rule(s)? This action cannot be undone.`}
         onConfirm={() => runBulkAction("DELETE")}
         onCancel={() => setBulkDeleting(false)}
         isLoading={bulkDiscounts.isPending}
       />
+
       {ToastComponent}
     </AdminLayout>
   );

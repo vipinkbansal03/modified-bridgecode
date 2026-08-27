@@ -6,8 +6,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Copy, Edit2, Eye, EyeOff, FileText, Image as ImageIcon, Layers, Trash2, XCircle } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, AdminStatsGrid, Column, AdminDeleteModal, DataTable, Pagination, StatCard, StatusBadge, useToast, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
-import { Modal } from "@/components/ui/Modal";
+import {
+  AdminStatsGrid,
+  AdminListToolbar,
+  AdminDeleteModal,
+  DataTable,
+  StatusBadge,
+  useToast,
+  AdminBulkActionsBar,
+  Column,
+} from "@/components/admin/AdminComponents";
 import { ProductEditor } from "@/components/admin/products/ProductEditor";
 import {
   useAdminVariants,
@@ -42,7 +50,7 @@ type VariantSortBy = "updatedAt" | "createdAt" | "title" | "sku" | "status" | "p
 
 function formatPrice(row: VariantRow) {
   const price = row.prices?.[0];
-  if (!price) return "No price";
+  if (!price) return "—";
   const amount = Number(price.sellingPrice);
   const formatted = Number.isFinite(amount) ? amount.toLocaleString("en-IN") : String(price.sellingPrice);
   return `${price.currency.symbol}${formatted}`;
@@ -64,11 +72,13 @@ function VariantsList() {
   const activeProductId = searchParams.get("productId");
 
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("");
   const [sortBy, setSortBy] = useState<VariantSortBy>("updatedAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [showFilters, setShowFilters] = useState(false);
   const [deleting, setDeleting] = useState<VariantRow | null>(null);
   const { showToast, ToastComponent } = useToast();
 
@@ -83,7 +93,7 @@ function VariantsList() {
       return;
     }
     try {
-      const res = await adminApi.get("/variants", {
+      const res = await adminApi.get("/products/variants", {
         params: {
           search: debouncedSearch || undefined,
           status: status || undefined,
@@ -160,9 +170,9 @@ function VariantsList() {
     setPage(1);
   }, [debouncedSearch]);
 
-  const { data, isLoading } = useAdminVariants({
+  const { data, isLoading, isFetching, refetch } = useAdminVariants({
     page,
-    limit: 10,
+    limit,
     search: debouncedSearch || undefined,
     status: status || undefined,
     sortBy,
@@ -239,12 +249,16 @@ function VariantsList() {
     {
       key: "image",
       label: "Image",
-      width: "84px",
+      width: "70px",
       render: (row) => {
         const media = row.product.media?.[0];
         return (
-          <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg border border-[#E6E6E6] bg-[#F8F8F8]">
-            {media?.url ? <img src={media.url} alt={media.altText ?? row.product.title} className="h-full w-full object-cover" /> : <ImageIcon size={18} className="text-[#BDBDBD]" />}
+          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8] shrink-0">
+            {media?.url ? (
+              <img src={media.url} alt={media.altText ?? row.product.title} className="h-full w-full object-cover" />
+            ) : (
+              <ImageIcon size={16} className="text-[#BDBDBD]" />
+            )}
           </div>
         );
       },
@@ -252,74 +266,89 @@ function VariantsList() {
     {
       key: "product",
       label: "Product",
-      width: "230px",
+      width: "200px",
       render: (row) => (
-        <div className="min-w-0">
-          <div className="truncate font-medium text-[#1A1A1A]">{row.product.title}</div>
-          <div className="truncate text-[12px] text-[#9A9A9A]">{row.product.sku || row.product.id}</div>
+        <div className="min-w-0 pr-3">
+          <div className="truncate font-semibold text-[#1A1A1A] text-[13px]" title={row.product.title}>
+            {row.product.title}
+          </div>
+          <div className="truncate text-[11.5px] text-[#6B6B6B] mt-0.5">
+            {row.product.sku || row.product.category?.name || "—"}
+          </div>
         </div>
       ),
     },
     {
       key: "title",
       label: "Variant",
-      width: "220px",
+      width: "360px",
       render: (row) => (
-        <div className="min-w-0">
-          <div className="truncate font-medium text-[#1A1A1A]">{row.title}</div>
-          <div className="truncate text-[12px] text-[#9A9A9A]">{row.package?.title || row.variantKey}</div>
+        <div className="min-w-0 pr-4">
+          <div className="font-semibold text-[#1A1A1A] text-[13px] leading-snug break-words" title={row.title}>
+            {row.title}
+          </div>
+          {row.package?.title ? (
+            <div className="text-[11.5px] text-[#6B6B6B] mt-0.5 font-medium">
+              Package: {row.package.title}
+            </div>
+          ) : null}
         </div>
       ),
     },
     {
       key: "sku",
       label: "SKU",
-      width: "150px",
-      render: (row) => <span className="font-medium text-[#1A1A1A]">{row.sku || "—"}</span>,
+      width: "160px",
+      render: (row) => <span className="font-medium text-[#1A1A1A] text-[12.5px] font-mono">{row.sku || "—"}</span>,
     },
     {
       key: "status",
       label: "Status",
-      width: "120px",
+      width: "110px",
       render: (row) => <StatusBadge status={row.status} />,
     },
     {
       key: "countryAvailability",
-      label: "Country Availability",
-      width: "170px",
-      render: (row) => <span className="font-medium text-[#1A1A1A]">{row.countries?.length ?? 0}</span>,
+      label: "Countries",
+      width: "90px",
+      render: (row) => <span className="font-medium text-[#1A1A1A] text-[12.5px]">{row.countries?.length ?? 0}</span>,
     },
     {
       key: "inventory",
       label: "Inventory",
-      width: "140px",
+      width: "130px",
       render: (row) => {
         const inventory = getBaseInventory(row);
         const stock = Number(inventory?.stock ?? 0);
         const reserved = Number(inventory?.reservedStock ?? 0);
-        return <span className="font-medium text-[#1A1A1A]">{`${stock} / ${Math.max(0, stock - reserved)}`}</span>;
+        return <span className="font-medium text-[#1A1A1A] text-[12.5px]">{`${stock} / ${Math.max(0, stock - reserved)}`}</span>;
       },
     },
     {
       key: "price",
       label: "Price",
-      width: "130px",
-      render: (row) => <span className="font-medium text-[#1A1A1A]">{formatPrice(row)}</span>,
+      width: "100px",
+      render: (row) => <span className="font-semibold text-[#1A1A1A] text-[12.5px]">{formatPrice(row)}</span>,
     },
     {
       key: "updatedAt",
       label: "Updated Date",
-      width: "140px",
-      render: (row) => <span className="text-[#1A1A1A]">{new Date(row.updatedAt).toLocaleDateString()}</span>,
+      width: "110px",
+      render: (row) => <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">{new Date(row.updatedAt).toLocaleDateString()}</span>,
     },
     {
       key: "actions",
       label: "Actions",
-      width: "260px",
+      width: "170px",
+      align: "left",
       render: (row) => (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Link href={`/admin/products/${row.product.id}/edit`} className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]" title="View product">
-            <Eye size={15} />
+        <div className="flex items-center justify-start gap-1">
+          <Link
+            href={`/admin/products/${row.product.id}/edit`}
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] transition-colors shadow-2xs"
+            title="View product"
+          >
+            <Eye size={13} />
           </Link>
           {canUpdate && (
             <button
@@ -327,42 +356,42 @@ function VariantsList() {
               onClick={() => {
                 router.push(`/admin/variants?productId=${row.product.id}&variant=${row.id}`, { scroll: false });
               }}
-              className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] transition-colors shadow-2xs cursor-pointer"
               title="Edit variant"
             >
-              <Edit2 size={15} />
+              <Edit2 size={13} />
             </button>
           )}
           {canCreate && (
             <button
               type="button"
               onClick={() => handleDuplicate(row)}
-              className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] transition-colors shadow-2xs disabled:opacity-40 cursor-pointer"
               title="Duplicate variant"
               disabled={duplicateVariant.isPending}
             >
-              <Copy size={15} />
+              <Copy size={13} />
             </button>
           )}
           {canUpdate && (
             <button
               type="button"
               onClick={() => handleStatusToggle(row)}
-              className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] transition-colors shadow-2xs disabled:opacity-40 cursor-pointer"
               title={row.status === "ACTIVE" ? "Deactivate variant" : "Activate variant"}
               disabled={updateVariant.isPending}
             >
-              {row.status === "ACTIVE" ? <EyeOff size={15} /> : <Eye size={15} />}
+              {row.status === "ACTIVE" ? <EyeOff size={13} /> : <CheckCircle2 size={13} />}
             </button>
           )}
           {canDelete && (
             <button
               type="button"
               onClick={() => setDeleting(row)}
-              className="rounded border border-[#F2D7D7] p-2 text-[#E31E24] hover:bg-[#FFF5F5]"
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#E31E24] hover:bg-[#FFF5F5] hover:border-[#F2C9C9] transition-colors shadow-2xs cursor-pointer"
               title="Delete variant"
             >
-              <Trash2 size={15} />
+              <Trash2 size={13} />
             </button>
           )}
         </div>
@@ -378,63 +407,82 @@ function VariantsList() {
           { title: "Total Variants", value: variantStats.total, subtitle: "Configured SKU combinations", icon: <Layers size={18} />, isLoading: totalLoading },
           { title: "Active Variants", value: variantStats.active, subtitle: "Purchasable & active", icon: <CheckCircle2 size={18} />, color: "bg-green-600", isLoading: activeLoading },
           { title: "Draft Variants", value: variantStats.draft, subtitle: "Unpublished variants", icon: <FileText size={18} />, color: "bg-amber-600", isLoading: draftLoading },
-          { title: "Inactive Variants", value: variantStats.inactive, subtitle: "Disabled / hidden", icon: <XCircle size={18} />, color: "bg-gray-600", isLoading: inactiveLoading }
+          { title: "Inactive Variants", value: variantStats.inactive, subtitle: "Disabled / hidden", icon: <XCircle size={18} />, color: "bg-gray-600", isLoading: inactiveLoading },
         ]}
       />
 
       <div className="space-y-5">
-        <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="mb-4 rounded-md border border-dashed border-[#E6E6E6] bg-[#FAFAFA] px-4 py-3 text-[13px] leading-5 text-[#6B6B6B]">
-            Variants are managed through the product editor. The page below lists them globally so you can search and route directly to the right product.
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <AdminInput
-                value={search}
-                onChange={(event) => {
-                  setPage(1);
-                  setSearch(event.target.value);
-                }}
-                placeholder="Search variants..."
-                className="pl-3"
-                label="Search"
-              />
-              <AdminSelect
-                label="Status"
+        <AdminListToolbar
+          search={{
+            value: search,
+            onChange: (val: string) => {
+              setSearch(val);
+              setPage(1);
+            },
+            placeholder: "Search variants...",
+            widthClassName: "w-[240px]",
+          }}
+          filters={{
+            showFilters,
+            onToggle: () => setShowFilters(!showFilters),
+            activeCount: [status, sortBy !== "updatedAt" ? sortBy : "", sortDir !== "desc" ? sortDir : ""].filter(Boolean).length,
+          }}
+          refresh={{
+            onRefresh: () => {
+              void refetch().then(() => showToast("Variants refreshed."));
+            },
+            isRefreshing: isFetching,
+          }}
+          onResetFilters={() => {
+            setStatus("");
+            setSortBy("updatedAt");
+            setSortDir("desc");
+            setPage(1);
+          }}
+          filterPanel={
+            <div className="flex flex-wrap items-center gap-3">
+              <select
                 value={status}
-                onChange={(event) => {
+                onChange={(e) => {
+                  setStatus(e.target.value);
                   setPage(1);
-                  setStatus(event.target.value);
                 }}
-                options={[
-                  { value: "", label: "All status" },
-                  { value: "ACTIVE", label: "Active" },
-                  { value: "INACTIVE", label: "Inactive" },
-                ]}
-              />
-              <AdminSelect
-                label="Sort by"
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none"
+              >
+                <option value="">All Statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+                <option value="DRAFT">Draft</option>
+              </select>
+              <select
                 value={sortBy}
-                onChange={(event) => setSortBy(event.target.value as VariantSortBy)}
-                options={[
-                  { value: "updatedAt", label: "Updated date" },
-                  { value: "createdAt", label: "Created date" },
-                  { value: "title", label: "Variant name" },
-                  { value: "sku", label: "SKU" },
-                  { value: "status", label: "Status" },
-                  { value: "product", label: "Product" },
-                ]}
-              />
-              <AdminSelect
-                label="Direction"
+                onChange={(e) => {
+                  setSortBy(e.target.value as VariantSortBy);
+                  setPage(1);
+                }}
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none"
+              >
+                <option value="updatedAt">Sort by Updated Date</option>
+                <option value="createdAt">Sort by Created Date</option>
+                <option value="title">Sort by Variant Name</option>
+                <option value="sku">Sort by SKU</option>
+                <option value="status">Sort by Status</option>
+                <option value="product">Sort by Product</option>
+              </select>
+              <select
                 value={sortDir}
-                onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
-                options={[
-                  { value: "desc", label: "Descending" },
-                  { value: "asc", label: "Ascending" },
-                ]}
-              />
-          </div>
-        </div>
+                onChange={(e) => {
+                  setSortDir(e.target.value as "asc" | "desc");
+                  setPage(1);
+                }}
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none"
+              >
+                <option value="desc">Descending</option>
+                <option value="asc">Ascending</option>
+              </select>
+            </div>
+          }
+        />
 
         <DataTable<VariantRow>
           title="Variants List"
@@ -446,11 +494,13 @@ function VariantsList() {
           enableSelection={true}
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
-          totalItems={data?.pagination?.total}
+          totalItems={data?.pagination?.total ?? 0}
           currentPage={page}
-          pageSize={10}
+          pageSize={limit}
           totalPages={data?.pagination?.totalPages || 1}
           onPageChange={setPage}
+          onPageSizeChange={setLimit}
+          pageSizeOptions={[10, 25, 50, 100]}
           onSelectAll={handleSelectAll}
           renderBulkActions={(selectedIds) => (
             <AdminBulkActionsBar
@@ -461,7 +511,7 @@ function VariantsList() {
               actions={[
                 { value: "activate", label: "Mark active" },
                 { value: "deactivate", label: "Mark inactive" },
-                { value: "delete", label: "Delete selected" }
+                { value: "delete", label: "Delete selected" },
               ]}
               onApply={handleBulkAction}
               applyLoading={bulkSaving}

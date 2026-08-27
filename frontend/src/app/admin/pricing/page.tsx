@@ -1188,11 +1188,7 @@ export default function PricingPage() {
       {
         key: "status",
         label: "Status",
-        render: (row: PricingRuleRow) => (
-          <div className="align-top">
-            <StatusBadge status={row.status} />
-          </div>
-        ),
+        width: "110px",
       },
       {
         key: "createdBy",

@@ -1,11 +1,19 @@
 "use client";
 
-import { useMemo, useState, useLayoutEffect } from "react";
+import { useMemo, useState, useLayoutEffect, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { ConfirmModal, useToast, LoadingButton } from "@/components/admin/AdminComponents";
+import {
+  ConfirmModal,
+  useToast,
+  LoadingButton,
+  DataTable,
+  AdminStatsGrid,
+  AdminListToolbar,
+  type Column,
+} from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { useAdminRoles } from "@/hooks/admin/useAdminHooks";
 import { adminApi } from "@/services/adminApi";
@@ -51,8 +59,16 @@ export default function RolesPage() {
   const canDelete = hasPermission("roles.delete");
 
   const { showToast, ToastComponent } = useToast();
-  const { data: rolesData = [], isLoading, refetch } = useAdminRoles();
+  const { data: rolesData = [], isLoading, refetch, isFetching } = useAdminRoles();
   const roles = (rolesData || []) as Role[];
+
+  // Table filtering & sorting states
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [accessFilter, setAccessFilter] = useState("");
+  const [sortBy, setSortBy] = useState<"name" | "users" | "permissions">("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [showFilters, setShowFilters] = useState(false);
 
   // Modal / Editing state
   const [showModal, setShowModal] = useState(false);
@@ -60,10 +76,15 @@ export default function RolesPage() {
   const [roleName, setRoleName] = useState("");
   const [selectedPerms, setSelectedPerms] = useState<string[]>([]);
   const [isFullAccess, setIsFullAccess] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [permSearchQuery, setPermSearchQuery] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingLoading, setDeletingLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   const handleDeleteConfirm = async () => {
     if (!deletingId) return;
@@ -80,6 +101,7 @@ export default function RolesPage() {
       setDeletingId(null);
     }
   };
+
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     Catalog: true,
     Operations: true,
@@ -87,7 +109,6 @@ export default function RolesPage() {
     Administration: true,
   });
 
-  // Calculate summary totals
   const totals = useMemo(() => {
     const totalRoles = roles.length;
     const fullAccessRoles = roles.filter((r) => r.permissions.includes("*")).length;
@@ -96,6 +117,36 @@ export default function RolesPage() {
     return { totalRoles, fullAccessRoles, customRoles, totalUsers };
   }, [roles]);
 
+  const rows = useMemo(() => {
+    const value = debouncedSearch.trim().toLowerCase();
+    const filtered = roles.filter((role) => {
+      const isSuper = role.permissions.includes("*");
+      const matchesSearch = !value || role.name.toLowerCase().includes(value);
+      const matchesAccess =
+        !accessFilter ||
+        (accessFilter === "FULL" && isSuper) ||
+        (accessFilter === "CUSTOM" && !isSuper);
+      return matchesSearch && matchesAccess;
+    });
+
+    filtered.sort((a, b) => {
+      const direction = sortDir === "asc" ? 1 : -1;
+      if (sortBy === "users") {
+        const left = a._count?.users || 0;
+        const right = b._count?.users || 0;
+        return (left - right) * direction;
+      }
+      if (sortBy === "permissions") {
+        const left = a.permissions.includes("*") ? ALL_PERMISSIONS.length : a.permissions.length;
+        const right = b.permissions.includes("*") ? ALL_PERMISSIONS.length : b.permissions.length;
+        return (left - right) * direction;
+      }
+      return a.name.localeCompare(b.name) * direction;
+    });
+
+    return filtered;
+  }, [roles, debouncedSearch, accessFilter, sortBy, sortDir]);
+
   const [enabledModules, setEnabledModules] = useState<Record<string, boolean>>({});
 
   const openCreateModal = () => {
@@ -103,7 +154,7 @@ export default function RolesPage() {
     setRoleName("");
     setSelectedPerms([]);
     setIsFullAccess(false);
-    setSearchQuery("");
+    setPermSearchQuery("");
     setEnabledModules({});
     setShowModal(true);
   };
@@ -122,7 +173,7 @@ export default function RolesPage() {
     });
     setEnabledModules(initialEnabled);
 
-    setSearchQuery("");
+    setPermSearchQuery("");
     setShowModal(true);
   };
 
@@ -133,28 +184,6 @@ export default function RolesPage() {
     setSelectedPerms([]);
     setIsFullAccess(false);
     setEnabledModules({});
-  };
-
-  const applyPreset = (preset: RolePreset) => {
-    const perms = [...preset.permissions];
-    if (preset.permissions.includes("*")) {
-      setIsFullAccess(true);
-      setSelectedPerms(["*"]);
-    } else {
-      setIsFullAccess(false);
-      setSelectedPerms(perms);
-    }
-
-    const initialEnabled: Record<string, boolean> = {};
-    PERMISSION_GROUPS.forEach((g) => {
-      initialEnabled[g.title] = g.permissions.some((p) => perms.includes(p));
-    });
-    setEnabledModules(initialEnabled);
-
-    if (!roleName) {
-      setRoleName(preset.name);
-    }
-    showToast(`Loaded "${preset.name}" preset.`);
   };
 
   const togglePermission = (key: string) => {
@@ -214,161 +243,215 @@ export default function RolesPage() {
     setExpandedGroups((prev) => ({ ...prev, [groupTitle]: !prev[groupTitle] }));
   };
 
+  const columns: Column<Role>[] = [
+    {
+      key: "name",
+      label: "Role",
+      width: "320px",
+      align: "left",
+      render: (row) => {
+        const isSuper = row.permissions.includes("*");
+        return (
+          <div className="min-w-0 pr-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[13.5px] font-semibold text-[#1A1A1A] truncate">{row.name}</span>
+              {isSuper ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-green-700 shrink-0">
+                  <ShieldCheck size={11} />
+                  Full Access
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full border border-[#E6E6E6] bg-[#FAFAFA] px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B] shrink-0">
+                  <Shield size={11} />
+                  Custom
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: "permissions",
+      label: "Permissions",
+      align: "left",
+      render: (row) => {
+        const isSuper = row.permissions.includes("*");
+        const permCount = isSuper
+          ? ALL_PERMISSIONS.length
+          : row.permissions.filter((p) => ALL_PERMISSIONS.includes(p)).length;
+        return (
+          <span className="text-[12.5px] text-[#6B6B6B]">
+            {isSuper ? "All Permissions (*)" : `${permCount} / ${ALL_PERMISSIONS.length} Permissions`}
+          </span>
+        );
+      },
+    },
+    {
+      key: "users",
+      label: "Assigned Users",
+      width: "160px",
+      align: "left",
+      render: (row) => {
+        const count = row._count?.users || 0;
+        return (
+          <span className="text-[13px] text-[#1A1A1A] font-medium">
+            {count} {count === 1 ? "User" : "Users"}
+          </span>
+        );
+      },
+    },
+    ...(canUpdate || canDelete
+      ? [
+          {
+            key: "actions",
+            label: "Actions",
+            width: "120px",
+            align: "left" as const,
+            render: (row: Role) => {
+              const isSuper = row.permissions.includes("*");
+              const hasUsers = (row._count?.users || 0) > 0;
+              return (
+                <div className="flex items-center justify-start gap-1.5">
+                  {canUpdate && (
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(row)}
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] transition-colors shadow-2xs cursor-pointer"
+                      title="Edit Permissions"
+                    >
+                      <Edit3 size={13} />
+                    </button>
+                  )}
+                  {canDelete && !isSuper && (
+                    <button
+                      type="button"
+                      onClick={() => setDeletingId(row.id)}
+                      disabled={hasUsers}
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#E31E24] hover:bg-[#FFF5F5] hover:border-[#F2C9C9] transition-colors shadow-2xs disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                      title={hasUsers ? "Cannot delete role with assigned users" : "Delete role"}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
+              );
+            },
+          },
+        ]
+      : []),
+  ];
+
   if (authLoading || !hasPermission("roles.view")) {
     return null;
   }
 
   return (
-    <AdminLayout title="Roles & Permissions" breadcrumb={[{ label: "Roles" }]}>
-      <div className="space-y-6 p-4 md:p-6">
+    <AdminLayout title="Roles & Permissions" breadcrumb={[{ label: "System Roles" }]}>
+      <div className="space-y-5">
         {/* Navigation Tabs */}
-        <div className="flex border-b border-[#E6E6E6] mb-5">
+        <div className="flex border-b border-[#E6E6E6]">
           <Link
             href="/admin/roles"
-            className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-[#E31E24] text-[#E31E24]"
+            className="px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors border-[#E31E24] text-[#E31E24]"
           >
             System Roles
           </Link>
           <Link
             href="/admin/customer-roles"
-            className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-transparent text-[#6B7280] hover:text-[#111827]"
+            className="px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors border-transparent text-[#6B7280] hover:text-[#111827]"
           >
             Customer Roles
           </Link>
         </div>
-        {/* Header Banner */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-xl border border-[#E5E7EB] shadow-2xs">
-          <div>
-            <h1 className="text-xl font-bold text-[#111827]">Role-Based Access Control (RBAC)</h1>
-            <p className="text-sm text-[#6B7280] mt-0.5">
-              Configure system roles and define precise permissions for admins, managers, and staff members.
-            </p>
-          </div>
-          {canCreate && (
-            <button
-              onClick={openCreateModal}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs shrink-0"
-            >
-              <Plus size={16} /> Create New Role
-            </button>
-          )}
-        </div>
 
         {/* Stat Cards */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-2xs flex items-center justify-between">
-            <div>
-              <span className="text-xs font-semibold uppercase text-[#6B7280]">Total Roles</span>
-              <div className="text-2xl font-extrabold text-[#111827] mt-0.5">{totals.totalRoles}</div>
-            </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#F3F4F6] text-[#374151]">
-              <Shield size={20} />
-            </div>
-          </div>
+        <AdminStatsGrid
+          stats={[
+            { title: "Total Roles", value: totals.totalRoles, subtitle: "Configured system roles", icon: <Shield size={18} /> },
+            { title: "Full Access", value: totals.fullAccessRoles, subtitle: "Super Admin privileges", icon: <ShieldCheck size={18} />, color: "bg-green-600" },
+            { title: "Custom Roles", value: totals.customRoles, subtitle: "Scoped permissions", icon: <ShieldAlert size={18} />, color: "bg-amber-600" },
+            { title: "Assigned Users", value: totals.totalUsers, subtitle: "Active staff assignments", icon: <Users size={18} />, color: "bg-gray-600" }
+          ]}
+          isLoading={isLoading}
+        />
 
-          <div className="rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-2xs flex items-center justify-between">
-            <div>
-              <span className="text-xs font-semibold uppercase text-[#6B7280]">Full Access (Super Admin)</span>
-              <div className="text-2xl font-extrabold text-[#15803D] mt-0.5">{totals.fullAccessRoles}</div>
+        <AdminListToolbar
+          search={{
+            value: search,
+            onChange: setSearch,
+            placeholder: "Search roles...",
+            widthClassName: "w-[240px]",
+          }}
+          filters={{
+            showFilters,
+            onToggle: () => setShowFilters(!showFilters),
+            activeCount: [accessFilter, sortBy !== "name" ? sortBy : "", sortDir !== "asc" ? sortDir : ""].filter(Boolean).length,
+          }}
+          refresh={{
+            onRefresh: () => void refetch(),
+            isRefreshing: isFetching,
+          }}
+          primaryAction={
+            canCreate
+              ? {
+                  onClick: openCreateModal,
+                  label: "New System Role",
+                  icon: <Plus size={14} />,
+                }
+              : undefined
+          }
+          onResetFilters={() => {
+            setSearch("");
+            setAccessFilter("");
+            setSortBy("name");
+            setSortDir("asc");
+          }}
+          filterPanel={
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                value={accessFilter}
+                onChange={(e) => setAccessFilter(e.target.value)}
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[150px]"
+              >
+                <option value="">All Access Levels</option>
+                <option value="FULL">Full Access</option>
+                <option value="CUSTOM">Custom Defined</option>
+              </select>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as "name" | "users" | "permissions")}
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[150px]"
+              >
+                <option value="name">Role Name</option>
+                <option value="users">Assigned Users</option>
+                <option value="permissions">Permission Count</option>
+              </select>
+              <select
+                value={sortDir}
+                onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
+                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[120px]"
+              >
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+              </select>
             </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#DCFCE7] text-[#15803D]">
-              <ShieldCheck size={20} />
-            </div>
-          </div>
+          }
+        />
 
-          <div className="rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-2xs flex items-center justify-between">
-            <div>
-              <span className="text-xs font-semibold uppercase text-[#6B7280]">Custom Defined Roles</span>
-              <div className="text-2xl font-extrabold text-[#2563EB] mt-0.5">{totals.customRoles}</div>
-            </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#EFF6FF] text-[#2563EB]">
-              <ShieldAlert size={20} />
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-2xs flex items-center justify-between">
-            <div>
-              <span className="text-xs font-semibold uppercase text-[#6B7280]">Assigned Users</span>
-              <div className="text-2xl font-extrabold text-[#111827] mt-0.5">{totals.totalUsers}</div>
-            </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#F3F4F6] text-[#374151]">
-              <Users size={20} />
-            </div>
-          </div>
-        </div>
-
-        {/* Roles Grid */}
-        <div className="space-y-3">
-          <h2 className="text-base font-bold text-[#111827]">Active System Roles</h2>
-          {isLoading ? (
-            <div className="p-8 text-center text-sm text-[#6B7280]">Loading roles...</div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {roles.map((role) => {
-                const isSuper = role.permissions.includes("*");
-                const permCount = isSuper ? ALL_PERMISSIONS.length : role.permissions.filter((p) => ALL_PERMISSIONS.includes(p)).length;
-                const userCount = role._count?.users || 0;
-
-                return (
-                  <div
-                    key={role.id}
-                    className="rounded-xl border border-[#E5E7EB] bg-white p-5 shadow-2xs flex flex-col justify-between hover:border-[#D1D5DB] transition-all"
-                  >
-                    <div>
-                      {/* Top Row: Name & Access Badge */}
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="text-base font-bold text-[#111827]">{role.name}</h3>
-                        {isSuper ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#DCFCE7] px-2.5 py-0.5 text-[11px] font-bold text-[#15803D]">
-                            <ShieldCheck size={12} /> Full Access
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#F3F4F6] px-2.5 py-0.5 text-[11px] font-semibold text-[#374151]">
-                            {permCount} / {ALL_PERMISSIONS.length} Perms
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Description & User Count */}
-                      <div className="mt-3 flex items-center gap-3 text-[12.5px] text-[#6B7280]">
-                        <span className="inline-flex items-center gap-1.5 font-medium text-[#374151]">
-                          <Users size={14} className="text-[#9CA3AF]" />
-                          {userCount} {userCount === 1 ? "User Assigned" : "Users Assigned"}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Bottom Action Footer */}
-                    {(canUpdate || (canDelete && !isSuper)) && (
-                      <div className="mt-5 pt-3 border-t border-[#F3F4F6] flex items-center justify-between">
-                        {canUpdate ? (
-                          <button
-                            onClick={() => openEditModal(role)}
-                            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#2563EB] hover:text-[#1D4ED8] hover:underline"
-                          >
-                            <Edit3 size={13} /> Edit Permissions
-                          </button>
-                        ) : (
-                          <span />
-                        )}
-
-                        {canDelete && !isSuper && (
-                          <button
-                            onClick={() => setDeletingId(role.id)}
-                            className="p-1.5 text-[#EF4444] hover:bg-[#FEE2E2] rounded-md transition-colors"
-                            title="Delete Role"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        {/* DataTable */}
+        <DataTable<Role>
+          title="System Roles List"
+          columns={columns}
+          data={rows}
+          rowKey="id"
+          isLoading={isLoading}
+          emptyMessage="No system roles found."
+          totalItems={rows.length}
+          currentPage={1}
+          pageSize={rows.length || 10}
+          totalPages={1}
+        />
       </div>
 
       {/* Role Creation / Editing Modal */}
@@ -414,16 +497,14 @@ export default function RolesPage() {
             </div>
           </div>
 
-
-
           {/* Search Bar */}
           {!isFullAccess && (
             <div className="relative">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
               <input
                 type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={permSearchQuery}
+                onChange={(e) => setPermSearchQuery(e.target.value)}
                 placeholder="Search permissions by keyword (e.g. product, order, view, manage)..."
                 className="w-full pl-9 pr-3 py-1.5 text-xs border border-[#E5E7EB] rounded-lg bg-white outline-none focus:border-[#E31E24]"
               />
@@ -438,8 +519,8 @@ export default function RolesPage() {
                   .map((k) => PERMISSION_METADATA[k])
                   .filter(Boolean)
                   .filter((meta) => {
-                    if (!searchQuery.trim()) return true;
-                    const q = searchQuery.toLowerCase();
+                    if (!permSearchQuery.trim()) return true;
+                    const q = permSearchQuery.toLowerCase();
                     return (
                       meta.label.toLowerCase().includes(q) ||
                       meta.description.toLowerCase().includes(q) ||
@@ -455,7 +536,6 @@ export default function RolesPage() {
 
                 return (
                   <div key={group.title} className="rounded-xl border border-[#E5E7EB] bg-white overflow-hidden shadow-2xs">
-                    {/* Group Header */}
                     {/* Group Header */}
                     <div className="bg-[#F9FAFB] px-3.5 py-2.5 border-b border-[#E5E7EB] flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
@@ -567,7 +647,7 @@ export default function RolesPage() {
             <button
               type="button"
               onClick={closeModal}
-              className="px-3.5 py-1.5 rounded-lg border border-[#E5E7EB] bg-white text-xs font-medium text-[#374151] hover:bg-[#F3F4F6]"
+              className="px-3.5 py-1.5 rounded-lg border border-[#E5E7EB] bg-white text-xs font-medium text-[#374151] hover:bg-[#F3F4F6] cursor-pointer"
             >
               Cancel
             </button>
@@ -576,7 +656,7 @@ export default function RolesPage() {
               onClick={handleSave}
               loading={saving}
               loadingText="Saving..."
-              className="px-4 py-1.5 rounded-lg bg-[#E31E24] text-xs font-bold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+              className="px-4 py-1.5 rounded-lg bg-[#E31E24] text-xs font-bold text-white hover:bg-[#B5151B] transition-colors shadow-2xs cursor-pointer"
             >
               {editingRole ? "Update Role" : "Create Role"}
             </LoadingButton>

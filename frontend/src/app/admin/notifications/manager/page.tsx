@@ -192,21 +192,21 @@ export default function NotificationManagerPage() {
     <AdminLayout title="Notification Manager" breadcrumb={[{ label: "Notifications", href: "/admin/notifications" }, { label: "Notification Manager" }]}>
       <div className="min-h-[calc(100vh-64px)] overflow-hidden flex flex-col p-6 bg-[#FDFDFD] space-y-6">
         
-        {/* Dark Header Banner */}
-        <div className="bg-[#122A26] rounded-lg p-6 text-white flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-sm">
+        {/* Header Banner */}
+        <div className="bg-white border border-[#E6E6E6] rounded-lg p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-sm">
           <div>
-            <div className="text-[11px] font-bold tracking-widest text-[#5CBAA4] uppercase">CENTRALIZED CONTROL</div>
-            <h1 className="text-xl font-medium mt-1 font-serif">Notification Manager</h1>
-            <p className="text-[13px] text-[#A6C4BF] mt-1.5 max-w-xl">Turn notifications on or off, choose channels, and decide which users should receive each update.</p>
+            <div className="text-[11px] font-bold tracking-widest text-[#7A7A7A] uppercase">CENTRALIZED CONTROL</div>
+            <h1 className="text-xl font-medium mt-1 font-serif text-[#1A1A1A]">Notification Manager</h1>
+            <p className="text-[13px] text-[#6B6B6B] mt-1.5 max-w-xl">Turn notifications on or off, choose channels, and decide which users should receive each update.</p>
           </div>
           <div className="flex gap-4">
-            <div className="bg-[#1E3E39] border border-[#2A524C] px-5 py-3 rounded text-center min-w-[100px]">
-              <div className="text-[10px] text-[#A6C4BF] font-bold uppercase tracking-wider">Active Rules</div>
-              <div className="text-[20px] font-bold mt-0.5">{activeRulesCount}</div>
+            <div className="bg-[#FAFAFA] border border-[#E6E6E6] px-5 py-3 rounded text-center min-w-[100px]">
+              <div className="text-[10px] text-[#7A7A7A] font-bold uppercase tracking-wider">Active Rules</div>
+              <div className="text-[20px] font-bold text-[#1A1A1A] mt-0.5">{activeRulesCount}</div>
             </div>
-            <div className="bg-[#1E3E39] border border-[#2A524C] px-5 py-3 rounded text-center min-w-[100px]">
-              <div className="text-[10px] text-[#A6C4BF] font-bold uppercase tracking-wider">Channels</div>
-              <div className="text-[20px] font-bold mt-0.5">5</div>
+            <div className="bg-[#FAFAFA] border border-[#E6E6E6] px-5 py-3 rounded text-center min-w-[100px]">
+              <div className="text-[10px] text-[#7A7A7A] font-bold uppercase tracking-wider">Channels</div>
+              <div className="text-[20px] font-bold text-[#1A1A1A] mt-0.5">5</div>
             </div>
           </div>
         </div>

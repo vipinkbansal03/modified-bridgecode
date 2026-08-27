@@ -197,10 +197,21 @@ export default function AdminCustomerRolesPage() {
     }
   }
 
+  const toggleStatus = async (role: CustomerRoleRow) => {
+    const nextStatus = role.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    try {
+      await updateRole.mutateAsync({ id: role.id, status: nextStatus });
+      showToast(`Customer role marked ${nextStatus.toLowerCase()}.`);
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to update customer role status."), "error");
+    }
+  };
+
   const columns: Column<CustomerRoleRow>[] = [
     {
       key: "name",
       label: "Role",
+      width: "320px",
       render: (row) => (
         <div className="min-w-[220px]">
           <div className="flex items-center gap-2">
@@ -216,10 +227,10 @@ export default function AdminCustomerRolesPage() {
         </div>
       ),
     },
-    { key: "key", label: "Key", render: (row) => <span className="font-mono text-[12px] text-[#6B6B6B]">{row.key}</span> },
-    { key: "customers", label: "Customers", render: (row) => row._count?.customers ?? 0 },
-    { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
-    { key: "sortOrder", label: "Sort", render: (row) => row.sortOrder },
+    { key: "key", label: "Key", width: "180px", render: (row) => <span className="font-mono text-[12px] text-[#6B6B6B]">{row.key}</span> },
+    { key: "customers", label: "Customers", width: "120px", render: (row) => row._count?.customers ?? 0 },
+    { key: "status", label: "Status", width: "120px" },
+    { key: "sortOrder", label: "Sort", width: "80px", render: (row) => row.sortOrder },
     ...(canUpdate || canDelete
       ? [
           {
@@ -448,7 +459,16 @@ export default function AdminCustomerRolesPage() {
         </Modal>
 
         <div className="rounded-xl border border-[#E6E6E6] bg-white">
-          <DataTable<CustomerRoleRow> columns={columns} data={rows} rowKey="id" isLoading={isLoading} emptyMessage="No customer roles found." />
+          <DataTable<CustomerRoleRow>
+            columns={columns}
+            data={rows}
+            rowKey="id"
+            isLoading={isLoading}
+            emptyMessage="No customer roles found."
+            onToggleStatus={canUpdate ? toggleStatus : undefined}
+            statusLoadingId={updateRole.isPending ? ((updateRole.variables as any)?.id ?? null) : null}
+            isStatusDisabled={() => !canUpdate}
+          />
         </div>
       </div>
 
