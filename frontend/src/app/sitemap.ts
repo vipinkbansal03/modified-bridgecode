@@ -1,6 +1,18 @@
 import type { MetadataRoute } from "next";
 
 const API_BASE = process.env.API_BASE_URL ?? (process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api(?:\/admin)?$/, "") : "http://localhost:4000");
+const SITEMAP_FETCH_TIMEOUT_MS = 5000;
+
+async function fetchSitemapData(input: string, init: RequestInit = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SITEMAP_FETCH_TIMEOUT_MS);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 const defaultSitemapConfig = {
   includeProducts: true,
@@ -15,8 +27,8 @@ async function getSitemapConfigAndSiteUrl() {
 
   try {
     const [configRes, trackingRes] = await Promise.allSettled([
-      fetch(`${API_BASE}/api/settings/public/sitemap-config`, { next: { revalidate: 60 } }),
-      fetch(`${API_BASE}/api/settings/public/tracking`, { next: { revalidate: 60 } }),
+      fetchSitemapData(`${API_BASE}/api/settings/public/sitemap-config`, { next: { revalidate: 60 } }),
+      fetchSitemapData(`${API_BASE}/api/settings/public/tracking`, { next: { revalidate: 60 } }),
     ]);
 
     if (configRes.status === "fulfilled" && configRes.value.ok) {
@@ -38,7 +50,7 @@ async function getSitemapConfigAndSiteUrl() {
 
 async function getProductSlugs(): Promise<string[]> {
   try {
-    const res = await fetch(`${API_BASE}/api/products?limit=500&status=ACTIVE`, { next: { revalidate: 3600 } });
+    const res = await fetchSitemapData(`${API_BASE}/api/products?limit=500&status=ACTIVE`, { next: { revalidate: 3600 } });
     if (!res.ok) return [];
     const json = await res.json();
     return (json.data?.data ?? []).map((p: { slug: string }) => p.slug).filter(Boolean);
@@ -49,7 +61,7 @@ async function getProductSlugs(): Promise<string[]> {
 
 async function getCategorySlugs(): Promise<string[]> {
   try {
-    const res = await fetch(`${API_BASE}/api/categories`, { next: { revalidate: 3600 } });
+    const res = await fetchSitemapData(`${API_BASE}/api/categories`, { next: { revalidate: 3600 } });
     if (!res.ok) return [];
     const json = await res.json();
     return (json.data ?? []).map((c: { slug: string }) => c.slug).filter(Boolean);
@@ -60,7 +72,7 @@ async function getCategorySlugs(): Promise<string[]> {
 
 async function getBlogSlugs(): Promise<string[]> {
   try {
-    const res = await fetch(`${API_BASE}/api/blogs?limit=500`, { next: { revalidate: 3600 } });
+    const res = await fetchSitemapData(`${API_BASE}/api/blogs?limit=500`, { next: { revalidate: 3600 } });
     if (!res.ok) return [];
     const json = await res.json();
     return (json.data?.data ?? []).map((b: { slug: string }) => b.slug).filter(Boolean);
@@ -71,7 +83,7 @@ async function getBlogSlugs(): Promise<string[]> {
 
 async function getCmsPages(): Promise<Array<{ slug: string; pageKey: string; updatedAt?: string }>> {
   try {
-    const res = await fetch(`${API_BASE}/api/cms/pages`, { next: { revalidate: 3600 } });
+    const res = await fetchSitemapData(`${API_BASE}/api/cms/pages`, { next: { revalidate: 3600 } });
     if (!res.ok) return [];
     const json = await res.json();
     return (json.data ?? []).map((p: any) => ({
