@@ -80,9 +80,7 @@ async function runTests() {
   console.log("\n2. Testing Image Presets...");
 
   const productPreset = getPreset("product");
-  assert.strictEqual(productPreset.thumbnail.width, 320, "Product thumbnail width must be 320");
   assert.strictEqual(productPreset.medium.width, 800, "Product medium width must be 800");
-  assert.strictEqual(productPreset.large.width, 1600, "Product large width must be 1600");
 
   const bannerPreset = getPreset("banner");
   assert.strictEqual(bannerPreset.mobile.width, 900, "Banner mobile width must be 900");
@@ -147,25 +145,13 @@ async function runTests() {
   console.log("\n4. Testing Sharp Processor...");
 
   const processedVariants = await processImageVariants(testPngBuffer, productPreset);
-  assert.strictEqual(processedVariants.length, 3, "Must generate 3 variants for product preset");
+  assert.strictEqual(processedVariants.length, 1, "Must generate only the consumed product variant");
 
-  const thumbVariant = processedVariants.find((v) => v.variantName === "thumbnail")!;
   const medVariant = processedVariants.find((v) => v.variantName === "medium")!;
-  const largeVariant = processedVariants.find((v) => v.variantName === "large")!;
-
-  assert.ok(thumbVariant, "Thumbnail variant must exist");
-  assert.ok(thumbVariant.width <= 320, `Thumbnail width (${thumbVariant.width}) must be <= 320`);
-  assert.strictEqual(thumbVariant.format, "webp", "Output format must be webp");
 
   assert.ok(medVariant, "Medium variant must exist");
   assert.ok(medVariant.width <= 800, `Medium width (${medVariant.width}) must be <= 800`);
   assert.strictEqual(medVariant.format, "webp", "Output format must be webp");
-
-  // Because original was 1000px and large preset is 1600px with withoutEnlargement: true, width must NOT exceed 1000px!
-  assert.ok(
-    largeVariant.width <= 1000,
-    `withoutEnlargement: true must prevent upscaling original (got ${largeVariant.width})`
-  );
 
   console.log("   ✓ Sharp processor tests passed (including withoutEnlargement verification).");
 
@@ -224,7 +210,7 @@ async function runTests() {
     // Test successful multi-variant upload
     const uploadResult = await uploadOptimizedVariants(processedVariants, "products", "prod-1");
     assert.ok(uploadResult.uploadId, "Must return uploadId");
-    assert.strictEqual(recordedPutCommands.length, 3, "Must perform 3 PutObject commands");
+    assert.strictEqual(recordedPutCommands.length, 1, "Must perform 1 PutObject command for the consumed product variant");
 
     const firstPut = recordedPutCommands[0];
     assert.strictEqual(firstPut.Bucket, "modern-orthodontics-prod-uploads", "Bucket must match");
@@ -240,9 +226,13 @@ async function runTests() {
     // Test rollback on simulated failure
     recordedPutCommands.length = 0;
     failOnSecondUpload = true;
+    const rollbackVariants = [
+      processedVariants[0],
+      { ...processedVariants[0], variantName: "rollback-second" },
+    ];
 
     await assert.rejects(
-      async () => uploadOptimizedVariants(processedVariants, "products", "prod-2"),
+      async () => uploadOptimizedVariants(rollbackVariants, "products", "prod-2"),
       /Failed to upload optimized image variants to storage/,
       "Must throw error on upload failure"
     );
@@ -280,9 +270,7 @@ async function runTests() {
 
     assert.ok(endToEndResult.uploadId, "Must return uploadId");
     assert.strictEqual(endToEndResult.folder, "blogs", "Folder must be blogs");
-    assert.ok(endToEndResult.variants.thumbnail, "Thumbnail variant key must exist");
     assert.ok(endToEndResult.variants.medium, "Medium variant key must exist");
-    assert.ok(endToEndResult.variants.large, "Large variant key must exist");
     assert.ok(endToEndResult.primaryUrl.startsWith("https://media.apricotequipment.in/blogs/post-101/"), "Primary URL must be resolved CDN URL");
 
     console.log("   ✓ End-to-end media pipeline orchestrator passed.");

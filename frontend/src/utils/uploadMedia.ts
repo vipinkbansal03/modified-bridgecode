@@ -54,9 +54,10 @@ export async function uploadMediaFiles(
       }
 
       // Confirm upload with backend
-      await adminApi.post("/media/confirm", { mediaId });
+      const confirmRes = await adminApi.post("/media/confirm", { mediaId });
+      const confirmedUrl = confirmRes.data?.data?.url;
 
-      results.push({ url: key || "", mediaId });
+      results.push({ url: confirmedUrl || key || "", mediaId });
     }
   } 
   
