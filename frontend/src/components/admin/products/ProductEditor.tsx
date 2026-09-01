@@ -102,7 +102,8 @@ const basicSchema = Yup.object({
   seoDescription: Yup.string().max(160),
   seoKeywords: Yup.string(),
   highlights: Yup.array().of(Yup.object({ title: Yup.string(), description: Yup.string(), image: Yup.string() })),
-  technicalSpecs: Yup.array().of(Yup.object({ label: Yup.string(), value: Yup.string() })),
+  technicalSpecs: Yup.mixed().optional(),
+  specImages: Yup.array().of(Yup.object({ url: Yup.string(), title: Yup.string() })).optional(),
   warranty: Yup.array().of(Yup.string()),
   primaryFeatures: Yup.array().of(Yup.object({ title: Yup.string(), description: Yup.string() })),
 });
@@ -138,6 +139,7 @@ type ProductEditorFormValues = {
   seoKeywords: string;
   highlights: Array<{ title: string; description: string; image?: string }>;
   technicalSpecs: Array<{ label: string; value: string }>;
+  specImages: Array<{ url: string; title: string }>;
   warranty: string[];
   primaryFeatures: Array<{ title: string; description: string }>;
   additionalInfo: Array<{ label: string; value: string }>;
@@ -404,7 +406,7 @@ type ProductTranslationField = "title" | "shortDescription" | "description" | "s
 
 type ProductTranslationDraft = {
   highlights: Array<{ title: string; description: string; image?: string }>;
-  technicalSpecs: Array<{ label: string; value: string }>;
+  technicalSpecs: Array<{ label: string; value: string; image?: string }>;
   warranty: string[];
   primaryFeatures: Array<{ title: string; description: string }>;
 };
@@ -677,6 +679,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [editingSpecIndex, setEditingSpecIndex] = useState<number | null>(null);
   const [specLabelState, setSpecLabelState] = useState("");
   const [specValueState, setSpecValueState] = useState("");
+  const [uploadingSpecDiagrams, setUploadingSpecDiagrams] = useState(false);
 
   const [directionModalOpen, setDirectionModalOpen] = useState(false);
   const [editingDirectionIndex, setEditingDirectionIndex] = useState<number | null>(null);
@@ -792,7 +795,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
   const handleSaveSpecModal = () => {
     const list = [...(form.values.technicalSpecs || [])];
-    const newItem = { label: specLabelState.trim(), value: specValueState.trim() };
+    const newItem = {
+      label: specLabelState.trim(),
+      value: specValueState.trim(),
+    };
     if (editingSpecIndex !== null) {
       list[editingSpecIndex] = newItem;
     } else {
@@ -806,6 +812,48 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     const list = [...(form.values.technicalSpecs || [])];
     list.splice(index, 1);
     form.setFieldValue("technicalSpecs", list);
+  };
+
+  // Multiple Diagram Upload Handlers for Key Specifications
+  const handleUploadSpecDiagrams = async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList).filter((f) => f.type.startsWith("image/"));
+    if (!files.length) return;
+    setUploadingSpecDiagrams(true);
+    try {
+      const results = await uploadMediaFiles(files, {
+        entityType: "SYSTEM",
+        purpose: "SPEC_DIAGRAM",
+      });
+      const newDiagrams = results
+        .filter((r) => r?.url)
+        .map((r, idx) => ({
+          url: r.url,
+          title: `Specification Diagram ${(form.values.specImages?.length || 0) + idx + 1}`,
+        }));
+      if (newDiagrams.length > 0) {
+        form.setFieldValue("specImages", [...(form.values.specImages || []), ...newDiagrams]);
+        showToast(`${newDiagrams.length} specification diagram(s) uploaded.`);
+      }
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to upload specification diagrams."), "error");
+    } finally {
+      setUploadingSpecDiagrams(false);
+    }
+  };
+
+  const handleDeleteSpecDiagram = (index: number) => {
+    const list = [...(form.values.specImages || [])];
+    list.splice(index, 1);
+    form.setFieldValue("specImages", list);
+    showToast("Diagram removed.");
+  };
+
+  const handleUpdateSpecDiagramTitle = (index: number, newTitle: string) => {
+    const list = [...(form.values.specImages || [])];
+    if (list[index]) {
+      list[index] = { ...list[index], title: newTitle };
+      form.setFieldValue("specImages", list);
+    }
   };
 
   // Direction To Use Modal Handlers
@@ -2702,8 +2750,16 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           : DEFAULT_PRODUCT_HIGHLIGHTS,
       technicalSpecs:
         Array.isArray(product?.technicalSpecs) && product.technicalSpecs.length > 0
-          ? product.technicalSpecs
-          : DEFAULT_TECHNICAL_SPECS,
+          ? product.technicalSpecs.map((s: any) => ({ label: String(s?.label ?? ""), value: String(s?.value ?? "") }))
+          : Array.isArray((product?.technicalSpecs as any)?.specs) && (product?.technicalSpecs as any).specs.length > 0
+            ? (product?.technicalSpecs as any).specs
+            : DEFAULT_TECHNICAL_SPECS,
+      specImages:
+        Array.isArray((product?.technicalSpecs as any)?.images)
+          ? (product?.technicalSpecs as any).images
+          : Array.isArray(product?.technicalSpecs)
+            ? product.technicalSpecs.filter((s: any) => s?.image).map((s: any, idx: number) => ({ url: s.image, title: s.label || `Specification Diagram ${idx + 1}` }))
+            : [],
       warranty: Array.isArray(product?.warranty) ? product.warranty : [],
       primaryFeatures:
         Array.isArray(product?.primaryFeatures) && product.primaryFeatures.length > 0
@@ -2720,19 +2776,31 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         const hasContent = (text?: string | null) =>
           Boolean(text && text.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, "").trim().length > 0);
 
+        const cleanSpecs = Array.isArray(values.technicalSpecs)
+          ? values.technicalSpecs
+              .map((s) => ({ label: String(s?.label ?? "").trim(), value: String(s?.value ?? "").trim() }))
+              .filter((s) => hasContent(s.label) || hasContent(s.value))
+          : [];
+
+        const cleanSpecImages = Array.isArray(values.specImages)
+          ? values.specImages
+              .map((img) => ({ url: String(img?.url ?? "").trim(), title: String(img?.title ?? "").trim() }))
+              .filter((img) => Boolean(img.url))
+          : [];
+
         // Build a sanitized payload to avoid sending unexpected types or empty array items to the API
+        const { specImages: _discardSpecImages, ...otherValues } = values;
         const payload = {
-          ...values,
+          ...otherValues,
           highlights: Array.isArray(values.highlights)
             ? values.highlights
                 .map((h) => ({ title: String(h?.title ?? "").trim(), description: String(h?.description ?? "").trim() }))
                 .filter((h) => hasContent(h.title) || hasContent(h.description))
             : [],
-          technicalSpecs: Array.isArray(values.technicalSpecs)
-            ? values.technicalSpecs
-                .map((s) => ({ label: String(s?.label ?? "").trim(), value: String(s?.value ?? "").trim() }))
-                .filter((s) => hasContent(s.label) || hasContent(s.value))
-            : [],
+          technicalSpecs: {
+            specs: cleanSpecs,
+            images: cleanSpecImages,
+          },
           warranty: Array.isArray(values.warranty)
             ? values.warranty
                 .map((w) => String(w ?? "").trim())
@@ -2748,7 +2816,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 .map((a) => ({ label: String(a?.label ?? "").trim(), value: String(a?.value ?? "").trim() }))
                 .filter((a) => hasContent(a.label) || hasContent(a.value))
             : [],
-        } as typeof values;
+        } as unknown as typeof values;
 
         // Debug: log sanitized payload
         // eslint-disable-next-line no-console
@@ -4849,7 +4917,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 <AdminInput label="Slug" {...form.getFieldProps("slug")} placeholder="Auto-generated from title" />
               </div>
               <AdminSelect label="Category" options={catOptions} {...form.getFieldProps("categoryId")} error={form.errors.categoryId as string} required />
-              <div className="z-[1000] relative">
+              <div>
                 <AdminMultiSelect
                   label="Active Country"
                   options={countryRows.map((c: any) => ({ value: c.id, label: c.name }))}
@@ -4975,6 +5043,90 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               rowTooltip="Click row or edit icon to edit specification"
               emptyMessage="No key specifications added yet."
             />
+
+            {/* Specification Diagrams (Multiple Upload) */}
+            <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-2xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-[#F0F0F0]">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-[15px] font-bold text-[#1A1A1A]">Specification Diagrams & Blueprints</h3>
+                    <span className="rounded-full bg-red-50 text-[#E31E24] px-2 py-0.5 text-[11px] font-bold">
+                      {form.values.specImages?.length || 0} Images
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[12.5px] text-[#6B6B6B]">
+                    Upload technical drawings, slot blueprints, or torque/angulation charts. These display in the interactive carousel on the product page.
+                  </p>
+                </div>
+
+                <label className="inline-flex items-center justify-center gap-2 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shrink-0 shadow-2xs">
+                  <Upload size={15} />
+                  {uploadingSpecDiagrams ? "Uploading..." : "Upload Diagrams"}
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    className="hidden"
+                    disabled={uploadingSpecDiagrams}
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        void handleUploadSpecDiagrams(e.target.files);
+                        e.target.value = "";
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+
+              {form.values.specImages && form.values.specImages.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
+                  {form.values.specImages.map((diagram: { url: string; title: string }, index: number) => (
+                    <div
+                      key={`${diagram.url}-${index}`}
+                      className="group relative flex flex-col rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] overflow-hidden hover:border-[#D1D5DB] transition-all"
+                    >
+                      <div className="relative flex h-36 w-full items-center justify-center bg-white p-2.5 border-b border-[#E6E6E6]">
+                        <img
+                          src={diagram.url}
+                          alt={diagram.title || `Diagram ${index + 1}`}
+                          className="h-full w-full object-contain"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSpecDiagram(index)}
+                          className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-700 shadow-xs text-xs font-bold transition-transform hover:scale-110 cursor-pointer"
+                          title="Delete diagram"
+                        >
+                          ✕
+                        </button>
+                        <span className="absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 text-[10.5px] font-medium text-white backdrop-blur-xs">
+                          #{index + 1}
+                        </span>
+                      </div>
+                      <div className="p-2.5">
+                        <input
+                          type="text"
+                          value={diagram.title || ""}
+                          onChange={(e) => handleUpdateSpecDiagramTitle(index, e.target.value)}
+                          placeholder="Diagram title / caption..."
+                          className="w-full rounded border border-[#E0E0E0] bg-white px-2.5 py-1 text-[12px] text-[#1A1A1A] placeholder:text-[#9A9A9A] focus:border-[#E31E24] focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#E5E7EB] bg-[#FAFAFA] py-8 px-4 text-center">
+                  <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-[#E31E24]">
+                    <Upload size={20} />
+                  </div>
+                  <p className="text-[13.5px] font-semibold text-[#1A1A1A]">No Specification Diagrams Uploaded</p>
+                  <p className="mt-1 text-[12px] text-[#6B6B6B] max-w-sm">
+                    Click <strong>Upload Diagrams</strong> above to select and upload multiple technical diagrams and charts at once.
+                  </p>
+                </div>
+              )}
+            </div>
 
             <AdminSectionTable
               title="Direction To Use"
@@ -7465,8 +7617,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     seoTitle?: string | null;
                     seoDescription?: string | null;
                     seoKeywords?: string | null;
-                    highlights?: Array<{ title: string; description: string }> | string | null;
-                    technicalSpecs?: Array<{ label: string; value: string }> | string | null;
+                    highlights?: Array<{ title: string; description: string; image?: string }> | string | null;
+                    technicalSpecs?: Array<{ label: string; value: string; image?: string }> | string | null;
                     warranty?: string[] | string | null;
                     primaryFeatures?: Array<{ title: string; description: string }> | string | null;
                     isAiGenerated?: boolean;
@@ -7476,12 +7628,12 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     highlights: Array.isArray(t?.highlights)
                       ? t.highlights
                       : Array.isArray(product.highlights)
-                        ? (product.highlights as Array<{ title: string; description: string }>)
+                        ? (product.highlights as Array<{ title: string; description: string; image?: string }>)
                         : [],
                     technicalSpecs: Array.isArray(t?.technicalSpecs)
                       ? t.technicalSpecs
                       : Array.isArray(product.technicalSpecs)
-                        ? (product.technicalSpecs as Array<{ label: string; value: string }>)
+                        ? (product.technicalSpecs as Array<{ label: string; value: string; image?: string }>)
                         : [],
                     warranty: Array.isArray(t?.warranty)
                       ? t.warranty
@@ -10152,7 +10304,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         open={featureModalOpen}
         onClose={() => setFeatureModalOpen(false)}
         title={editingFeatureIndex !== null ? "Edit Feature" : "Add Feature"}
-        panelClassName="max-w-2xl"
+        size="lg"
+        onSave={handleSaveFeatureModal}
+        saveText={editingFeatureIndex !== null ? "Save Feature" : "Add Feature"}
       >
         <div className="space-y-4 p-6">
           <AdminInput
@@ -10168,22 +10322,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             onChange={(val) => setFeatureDescriptionState(val)}
             className="min-h-[160px]"
           />
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E6E6E6]">
-            <button
-              type="button"
-              onClick={() => setFeatureModalOpen(false)}
-              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveFeatureModal}
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-            >
-              {editingFeatureIndex !== null ? "Save Feature" : "Add Feature"}
-            </button>
-          </div>
         </div>
       </Modal>
 
@@ -10192,37 +10330,23 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         open={specModalOpen}
         onClose={() => setSpecModalOpen(false)}
         title={editingSpecIndex !== null ? "Edit Key Specification" : "Add Key Specification"}
-        panelClassName="max-w-lg"
+        size="md"
+        onSave={handleSaveSpecModal}
+        saveText={editingSpecIndex !== null ? "Save Spec" : "Add Spec"}
       >
         <div className="space-y-4 p-6">
           <AdminInput
             label="Specification Label"
             value={specLabelState}
             onChange={(e) => setSpecLabelState(e.target.value)}
-            placeholder="e.g. Material"
+            placeholder="e.g. Slot Size, Base Type, or Material"
           />
           <AdminInput
             label="Specification Value"
             value={specValueState}
             onChange={(e) => setSpecValueState(e.target.value)}
-            placeholder="e.g. Medical Grade Stainless Steel"
+            placeholder="e.g. .018 / .022 or 80-Mesh Contoured Base"
           />
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E6E6E6]">
-            <button
-              type="button"
-              onClick={() => setSpecModalOpen(false)}
-              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveSpecModal}
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-            >
-              {editingSpecIndex !== null ? "Save Spec" : "Add Spec"}
-            </button>
-          </div>
         </div>
       </Modal>
 
@@ -10231,7 +10355,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         open={directionModalOpen}
         onClose={() => setDirectionModalOpen(false)}
         title={editingDirectionIndex !== null ? "Edit Guideline" : "Add Guideline"}
-        panelClassName="max-w-2xl"
+        size="lg"
+        onSave={handleSaveDirectionModal}
+        saveText={editingDirectionIndex !== null ? "Save Guideline" : "Add Guideline"}
       >
         <div className="space-y-4 p-6">
           <AdminInput
@@ -10247,22 +10373,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             onChange={(val) => setDirectionDescriptionState(val)}
             className="min-h-[160px]"
           />
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E6E6E6]">
-            <button
-              type="button"
-              onClick={() => setDirectionModalOpen(false)}
-              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveDirectionModal}
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-            >
-              {editingDirectionIndex !== null ? "Save Guideline" : "Add Guideline"}
-            </button>
-          </div>
         </div>
       </Modal>
 
@@ -10271,7 +10381,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         open={warrantyModalOpen}
         onClose={() => setWarrantyModalOpen(false)}
         title={editingWarrantyIndex !== null ? "Edit Warranty Clause" : "Add Warranty Clause"}
-        panelClassName="max-w-xl"
+        size="md"
+        onSave={handleSaveWarrantyModal}
+        saveText={editingWarrantyIndex !== null ? "Save Clause" : "Add Clause"}
       >
         <div className="space-y-4 p-6">
           <AdminRichTextEditor
@@ -10281,22 +10393,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             onChange={(val) => setWarrantyTextState(val)}
             className="min-h-[140px]"
           />
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E6E6E6]">
-            <button
-              type="button"
-              onClick={() => setWarrantyModalOpen(false)}
-              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveWarrantyModal}
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-            >
-              {editingWarrantyIndex !== null ? "Save Clause" : "Add Clause"}
-            </button>
-          </div>
         </div>
       </Modal>
 
@@ -10305,7 +10401,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         open={additionalInfoModalOpen}
         onClose={() => setAdditionalInfoModalOpen(false)}
         title={editingAdditionalInfoIndex !== null ? "Edit Additional Info Row" : "Add Info Row"}
-        panelClassName="max-w-lg"
+        size="md"
+        onSave={handleSaveAdditionalInfoModal}
+        saveText={editingAdditionalInfoIndex !== null ? "Save Info Row" : "Add Info Row"}
       >
         <div className="space-y-4 p-6">
           <AdminInput
@@ -10320,22 +10418,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             onChange={(e) => setAdditionalInfoValueState(e.target.value)}
             placeholder="e.g. Modern Orthodontics"
           />
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E6E6E6]">
-            <button
-              type="button"
-              onClick={() => setAdditionalInfoModalOpen(false)}
-              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveAdditionalInfoModal}
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
-            >
-              {editingAdditionalInfoIndex !== null ? "Save Info Row" : "Add Info Row"}
-            </button>
-          </div>
         </div>
       </Modal>
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Building2,
   CheckCircle2,
   HelpCircle,
   Lock,
@@ -17,6 +18,8 @@ import { QuantityInput } from "@/components/product/QuantityInput";
 import { CartItemWarehouseSelector } from "@/components/cart/CartItemWarehouseSelector";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import PhoneInputField from "@/components/ui/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
 import { useCart } from "@/contexts/CartContext";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
@@ -45,6 +48,8 @@ import {
 import { RazorpayPaymentButton, launchRazorpayModal } from "@/components/checkout/RazorpayPaymentButton";
 import { PaymentCountdownTimer } from "@/components/checkout/PaymentCountdownTimer";
 import { AddressValidationDialog } from "@/components/ui/delivery/AddressValidationDialog";
+
+const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 
 const DEMO_PAYMENT_LABEL = "Pay on Delivery";
 const SHIPPING_UNAVAILABLE_MESSAGE =
@@ -558,18 +563,33 @@ export default function CheckoutPage() {
     }
   }, [currentCustomer]);
 
+  const isPhoneValid = useMemo(() => {
+    if (!form.phone.trim()) return false;
+    return isValidPhoneNumber(form.phone);
+  }, [form.phone]);
+
+  const isTaxIdFormatValid = useMemo(() => {
+    if (!taxIdInput.trim()) return true;
+    if (taxIdConfig.type === "GSTIN") {
+      return GSTIN_REGEX.test(taxIdInput.trim().toUpperCase());
+    }
+    return true;
+  }, [taxIdInput, taxIdConfig.type]);
+
   const canSubmit = useMemo(() => {
     return Boolean(
       items.length &&
       form.fullName.trim() &&
       form.phone.trim() &&
+      isPhoneValid &&
+      isTaxIdFormatValid &&
       form.addressLine1.trim() &&
       form.city.trim() &&
       form.state.trim() &&
       form.postalCode.trim() &&
       form.countryCode.trim(),
     );
-  }, [form, items.length]);
+  }, [form, items.length, isPhoneValid, isTaxIdFormatValid]);
 
   const hasSpecificTaxes = useMemo(() => {
     if (!estimate?.items) return false;
@@ -970,7 +990,15 @@ export default function CheckoutPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) {
-      setError("Complete the shipping address before placing the order.");
+      if (form.phone.trim() && !isPhoneValid) {
+        setError("Please enter a valid phone number with country code.");
+        return;
+      }
+      if (taxIdInput.trim() && !isTaxIdFormatValid) {
+        setError(`Please enter a valid ${taxIdConfig.type} format or clear the field.`);
+        return;
+      }
+      setError("Complete all required shipping address fields before placing the order.");
       return;
     }
     if (!shippingEstimate?.available) {
@@ -985,6 +1013,10 @@ export default function CheckoutPage() {
     setIsSubmitting(true);
     setError(null);
     try {
+      if (taxIdInput.trim() && vatStatus !== "VALID" && isTaxIdFormatValid) {
+        await handleVerifyVat();
+      }
+
       const addressPayload = {
         addressLine1: form.addressLine1.trim(),
         addressLine2: form.addressLine2.trim() || undefined,
@@ -1264,17 +1296,32 @@ export default function CheckoutPage() {
                       }))
                     }
                   />
-                  <Input
-                    required
-                    label="Phone"
-                    value={form.phone}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        phone: event.target.value,
-                      }))
-                    }
-                  />
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-steel-2">
+                      Phone *
+                    </label>
+                    <PhoneInputField
+                      value={form.phone}
+                      onChange={(val) =>
+                        setForm((current) => ({
+                          ...current,
+                          phone: val || "",
+                        }))
+                      }
+                      defaultCountry={
+                        form.countryCode && ["IN", "US", "GB", "AU", "DE"].includes(form.countryCode.toUpperCase())
+                          ? (form.countryCode.toUpperCase() as any)
+                          : "IN"
+                      }
+                      placeholder="Phone number"
+                      error={
+                        form.phone.trim() && !isPhoneValid
+                          ? "Please enter a valid phone number"
+                          : undefined
+                      }
+                      touched={Boolean(form.phone.trim())}
+                    />
+                  </div>
                   <Input
                     required
                     className="sm:col-span-2"
@@ -1376,63 +1423,95 @@ export default function CheckoutPage() {
                       }))
                     }
                   />
-                  <div className="sm:col-span-2 border-t border-line pt-4 mt-2">
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-steel-2">
-                      {taxIdConfig.label}
-                    </label>
-                    <div className="flex gap-3">
-                      <input
-                        type="text"
-                        placeholder={taxIdConfig.placeholder}
-                        value={taxIdInput}
-                        onChange={(e) => {
-                          setTaxIdInput(e.target.value);
-                          setVatStatus(null);
-                          setVatMessage("");
-                        }}
-                        onBlur={handleVerifyVat}
-                        className="flex-1 rounded-md border border-line bg-white px-4 py-2.5 text-[14.5px] text-ink outline-none transition-colors focus:border-steel-2"
-                      />
-                      <button
-                        type="button"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
+                </div>
+              </div>
+
+              <div className="rounded-md border border-line bg-white p-5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4.5 w-4.5 text-brand" />
+                    <h2 className="text-[17px] font-semibold text-ink">
+                      {form.countryCode.toUpperCase() === "IN" ? "GSTIN & Business Tax Invoice (Optional)" : `${taxIdConfig.label}`}
+                    </h2>
+                  </div>
+                  {vatStatus === "VALID" && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 border border-emerald-200">
+                      ✓ Verified
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-steel mb-3.5">
+                  {form.countryCode.toUpperCase() === "IN"
+                    ? "Enter your GSTIN if you need a B2B Tax invoice to claim Input Tax Credit (ITC) for your practice or company."
+                    : "Enter your registered business tax identifier for B2B tax exemption / invoicing."}
+                </p>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      placeholder={taxIdConfig.placeholder}
+                      value={taxIdInput}
+                      onChange={(e) => {
+                        const val = taxIdConfig.type === "GSTIN" ? e.target.value.toUpperCase() : e.target.value;
+                        setTaxIdInput(val);
+                        setVatStatus(null);
+                        setVatMessage("");
+                      }}
+                      onBlur={() => {
+                        if (taxIdInput.trim() && isTaxIdFormatValid) {
                           handleVerifyVat();
-                        }}
-                        disabled={isVerifyingVat || !taxIdInput.trim()}
-                        className="rounded-md bg-brand px-5 py-2.5 text-[13.5px] font-bold text-white shadow-sm hover:bg-brand/90 disabled:opacity-50"
-                      >
-                        {isVerifyingVat ? "Verifying..." : "Verify/Validate"}
-                      </button>
-                      <button
-                        type="button"
-                        onMouseDown={(e) => {
-                          e.preventDefault(); // Prevent input from losing focus immediately
-                          handleClearVat();
-                        }}
-                        disabled={isVerifyingVat}
-                        className="rounded-md border border-line px-4 py-2.5 text-[13.5px] font-medium text-steel hover:bg-grey disabled:opacity-50"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                    {vatStatus === "VALID" && (
-                      <p className="mt-2 text-xs font-semibold text-green-600 flex items-center gap-1">
-                        ✓ Status: VALID {vatMessage ? `(${vatMessage})` : ""}
-                      </p>
-                    )}
-                    {vatStatus === "PENDING" && (
-                      <p className="mt-2 text-xs font-semibold text-amber-600 flex items-center gap-1">
-                        ⚠ Status: PENDING {vatMessage ? `(${vatMessage})` : ""}
-                      </p>
-                    )}
-                    {vatStatus === "INVALID" && (
-                      <p className="mt-2 text-xs font-semibold text-brand flex items-center gap-1">
-                        ✗ Status: INVALID {vatMessage ? `(${vatMessage})` : ""}
+                        }
+                      }}
+                      className={`w-full rounded-md border bg-white px-4 py-2.5 text-[14px] text-ink outline-none transition-colors ${
+                        taxIdInput.trim() && !isTaxIdFormatValid
+                          ? "border-[#E31E24] focus:border-[#E31E24]"
+                          : "border-line focus:border-steel-2"
+                      }`}
+                    />
+                    {taxIdInput.trim() && !isTaxIdFormatValid && (
+                      <p className="mt-1 text-xs text-[#E31E24]">
+                        Invalid {taxIdConfig.type} format (e.g. {taxIdConfig.type === "GSTIN" ? "27AAAAA1111A1Z5" : "valid identifier"})
                       </p>
                     )}
                   </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleVerifyVat}
+                      disabled={isVerifyingVat || !taxIdInput.trim() || !isTaxIdFormatValid}
+                      className="rounded-md bg-brand px-4 py-2.5 text-[13.5px] font-bold text-white shadow-sm hover:bg-brand/90 disabled:opacity-50 transition-colors"
+                    >
+                      {isVerifyingVat ? "Verifying..." : "Verify / Apply"}
+                    </button>
+                    {taxIdInput && (
+                      <button
+                        type="button"
+                        onClick={handleClearVat}
+                        disabled={isVerifyingVat}
+                        className="rounded-md border border-line px-3 py-2.5 text-[13.5px] font-medium text-steel hover:bg-grey disabled:opacity-50 transition-colors"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {vatStatus === "VALID" && (
+                  <p className="mt-2.5 text-xs font-semibold text-green-600 flex items-center gap-1">
+                    ✓ Status: VALID {vatMessage ? `(${vatMessage})` : ""}
+                  </p>
+                )}
+                {vatStatus === "PENDING" && (
+                  <p className="mt-2.5 text-xs font-semibold text-amber-600 flex items-center gap-1">
+                    ⚠ Status: PENDING {vatMessage ? `(${vatMessage})` : ""}
+                  </p>
+                )}
+                {vatStatus === "INVALID" && (
+                  <p className="mt-2.5 text-xs font-semibold text-brand flex items-center gap-1">
+                    ✗ Status: INVALID {vatMessage ? `(${vatMessage})` : ""}
+                  </p>
+                )}
               </div>
 
               <div className="rounded-md border border-line bg-white p-5">

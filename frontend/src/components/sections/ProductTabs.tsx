@@ -1,7 +1,23 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { CheckCircle2, ShieldCheck, Box, FileText, Layers, Stethoscope, Info, Star, MessageSquareCheck, UserCheck } from "lucide-react";
+import {
+  CheckCircle2,
+  ShieldCheck,
+  Box,
+  FileText,
+  Layers,
+  Stethoscope,
+  Info,
+  Star,
+  MessageSquareCheck,
+  UserCheck,
+  ChevronLeft,
+  ChevronRight,
+  Maximize2,
+  X,
+  ImageIcon,
+} from "lucide-react";
 import type { ProductDetail } from "@/types/product.types";
 import type { ApiProductDetail } from "@/types/api.types";
 
@@ -88,6 +104,67 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
     const raw = (apiProduct?.additionalInfo || product.additionalInfo) as Array<{ label: string; value: string }> | undefined;
     return Array.isArray(raw) ? raw : [];
   }, [apiProduct?.additionalInfo, product.additionalInfo]);
+
+  const [activeSpecImageIndex, setActiveSpecImageIndex] = useState(0);
+  const [isSpecZoomed, setIsSpecZoomed] = useState(false);
+
+  const specImages = useMemo(() => {
+    const list: Array<{ url: string; title: string }> = [];
+
+    const rawSpecs = apiProduct?.technicalSpecs || product.technicalSpecs;
+
+    // 1. Dedicated Specification Diagrams from { images: [...] }
+    if (rawSpecs && typeof rawSpecs === "object" && Array.isArray((rawSpecs as any).images)) {
+      (rawSpecs as any).images.forEach((img: any, idx: number) => {
+        const url = typeof img === "string" ? img : img?.url;
+        if (url && typeof url === "string" && url.trim()) {
+          const cleanUrl = url.replace(/^http:\/\/(?:localhost|127\.0\.0\.1):4000(\/uploads\/)/i, "$1");
+          if (!list.some((existing) => existing.url === cleanUrl)) {
+            list.push({
+              url: cleanUrl,
+              title: (typeof img === "object" && img.title) || `Specification Diagram ${idx + 1}`,
+            });
+          }
+        }
+      });
+    }
+
+    // 2. Backwards-compatibility check for array items with image property
+    if (Array.isArray(rawSpecs)) {
+      rawSpecs.forEach((spec: any, idx: number) => {
+        if (spec && typeof spec === "object" && spec.image && typeof spec.image === "string" && spec.image.trim()) {
+          const cleanUrl = spec.image.replace(/^http:\/\/(?:localhost|127\.0\.0\.1):4000(\/uploads\/)/i, "$1");
+          if (!list.some((existing) => existing.url === cleanUrl)) {
+            list.push({
+              url: cleanUrl,
+              title: spec.label ? `${spec.label}: ${spec.value || "Diagram"}` : `Specification Diagram ${idx + 1}`,
+            });
+          }
+        }
+      });
+    }
+
+    return list;
+  }, [product, apiProduct]);
+
+  useEffect(() => {
+    if (!isSpecZoomed) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsSpecZoomed(false);
+      if (e.key === "ArrowLeft") {
+        setActiveSpecImageIndex((prev) => (prev === 0 ? specImages.length - 1 : prev - 1));
+      }
+      if (e.key === "ArrowRight") {
+        setActiveSpecImageIndex((prev) => (prev === specImages.length - 1 ? 0 : prev + 1));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [isSpecZoomed, specImages.length]);
 
   useEffect(() => {
     async function fetchReviews() {
@@ -217,20 +294,200 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
 
         {/* 4. KEY SPECIFICATIONS TAB */}
         {activeTab === "specs" && (
-          <div className="space-y-3">
-            <h3 className="text-[16px] font-bold text-[#1A1A1A]">Key Specifications</h3>
-            <div className="overflow-hidden rounded-lg border border-[#E5E7EB]">
-              <table className="w-full text-left text-[13px]">
-                <tbody className="divide-y divide-[#E5E7EB]">
-                  {Object.entries(specsMap).map(([key, val]) => (
-                    <tr key={key} className="even:bg-[#F9FAFB]">
-                      <td className="w-1/3 px-3.5 py-2.5 font-semibold text-[#374151] bg-[#F3F4F6]/50">{key}</td>
-                      <td className="px-3.5 py-2.5 text-[#1A1A1A]">{String(val)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div className="space-y-6">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3 className="text-[16px] font-bold text-[#1A1A1A]">Technical Specifications & Clinical Geometry</h3>
+              <span className="text-[12px] font-medium text-[#6B7280] bg-[#F3F4F6] px-2.5 py-1 rounded-md">
+                ISO 13485 & CE Precision Engineering
+              </span>
             </div>
+
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
+              {/* Specs Key-Value Table (7 cols on desktop) */}
+              <div className={specImages.length > 0 ? "lg:col-span-7 space-y-4" : "lg:col-span-12 space-y-4"}>
+                <div className="overflow-hidden rounded-lg border border-[#E5E7EB] bg-white shadow-2xs">
+                  <table className="w-full text-left text-[13px]">
+                    <tbody className="divide-y divide-[#E5E7EB]">
+                      {Object.entries(specsMap).map(([key, val]) => (
+                        <tr key={key} className="even:bg-[#F9FAFB] hover:bg-[#F3F4F6]/60 transition-colors">
+                          <td className="w-2/5 px-3.5 py-3 font-semibold text-[#374151] bg-[#F3F4F6]/50 border-r border-[#E5E7EB]/50">{key}</td>
+                          <td className="px-3.5 py-3 font-medium text-[#1A1A1A]">{String(val)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Additional Spec Notes */}
+                <div className="rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-3 text-[12.5px] text-[#4B5563] flex items-center gap-2">
+                  <Info size={16} className="text-[#E31E24] shrink-0" />
+                  <span>All bracket dimensions, slot tolerances (.018 / .022), torque, and angulation parameters adhere to international clinical standards.</span>
+                </div>
+              </div>
+
+              {/* Technical Specification Image Carousel (5 cols on desktop) */}
+              {specImages.length > 0 && (
+                <div className="lg:col-span-5 rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-4 shadow-2xs">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <span className="text-[13px] font-bold text-[#1A1A1A] flex items-center gap-1.5">
+                      <Layers size={14} className="text-[#E31E24]" />
+                      Specification Diagrams
+                    </span>
+                    <span className="text-[11.5px] font-semibold text-[#6B7280] bg-white px-2 py-0.5 rounded border border-[#E5E7EB]">
+                      {activeSpecImageIndex + 1} / {specImages.length}
+                    </span>
+                  </div>
+
+                  {/* Main Carousel Slide Display */}
+                  <div className="relative flex h-[220px] sm:h-[260px] w-full items-center justify-center overflow-hidden rounded-lg border border-[#E5E7EB] bg-white p-3">
+                    {/* Previous Arrow */}
+                    {specImages.length > 1 && (
+                      <button
+                        type="button"
+                        aria-label="Previous technical diagram"
+                        onClick={() =>
+                          setActiveSpecImageIndex((prev) =>
+                            prev === 0 ? specImages.length - 1 : prev - 1
+                          )
+                        }
+                        className="absolute left-2 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#E5E7EB] bg-white/90 text-[#1A1A1A] shadow-2xs hover:bg-white hover:scale-105 transition-all"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                    )}
+
+                    {/* Image Preview with Zoom */}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-label="Zoom technical specification image"
+                      onClick={() => setIsSpecZoomed(true)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") setIsSpecZoomed(true);
+                      }}
+                      className="group relative flex h-full w-full cursor-zoom-in items-center justify-center"
+                    >
+                      <img
+                        src={specImages[activeSpecImageIndex]?.url}
+                        alt={specImages[activeSpecImageIndex]?.title || "Technical specification diagram"}
+                        className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-105"
+                      />
+                      <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-md bg-black/60 px-2 py-1 text-[11px] font-medium text-white backdrop-blur-xs opacity-80 group-hover:opacity-100 transition-opacity">
+                        <Maximize2 size={12} />
+                        Click to zoom
+                      </span>
+                    </div>
+
+                    {/* Next Arrow */}
+                    {specImages.length > 1 && (
+                      <button
+                        type="button"
+                        aria-label="Next technical diagram"
+                        onClick={() =>
+                          setActiveSpecImageIndex((prev) =>
+                            prev === specImages.length - 1 ? 0 : prev + 1
+                          )
+                        }
+                        className="absolute right-2 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#E5E7EB] bg-white/90 text-[#1A1A1A] shadow-2xs hover:bg-white hover:scale-105 transition-all"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Caption */}
+                  <p className="mt-2 text-center text-[12px] font-medium text-[#4B5563] truncate">
+                    {specImages[activeSpecImageIndex]?.title}
+                  </p>
+
+                  {/* Thumbnail Selector Bar */}
+                  {specImages.length > 1 && (
+                    <div className="mt-3 flex gap-2 overflow-x-auto pb-1 custom-scrollbar-x justify-center">
+                      {specImages.map((item, idx) => (
+                        <button
+                          key={`${item.url}-${idx}`}
+                          type="button"
+                          onClick={() => setActiveSpecImageIndex(idx)}
+                          className={`relative h-12 w-12 flex-none overflow-hidden rounded-md border p-1 bg-white transition-all ${
+                            activeSpecImageIndex === idx
+                              ? "border-[#E31E24] shadow-2xs scale-105 ring-1 ring-[#E31E24]"
+                              : "border-[#E5E7EB] opacity-70 hover:opacity-100"
+                          }`}
+                        >
+                          <img
+                            src={item.url}
+                            alt={`Thumbnail ${idx + 1}`}
+                            className="h-full w-full object-contain"
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Fullscreen Lightbox Modal for Technical Spec Diagrams */}
+            {isSpecZoomed && (
+              <div
+                role="dialog"
+                aria-modal="true"
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-xs"
+                onClick={() => setIsSpecZoomed(false)}
+              >
+                <div
+                  className="relative flex max-h-[90vh] max-w-[90vw] flex-col items-center justify-center"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    aria-label="Close zoomed view"
+                    onClick={() => setIsSpecZoomed(false)}
+                    className="absolute -top-10 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/40 transition-all cursor-pointer"
+                  >
+                    <X size={20} />
+                  </button>
+
+                  <img
+                    src={specImages[activeSpecImageIndex]?.url}
+                    alt={specImages[activeSpecImageIndex]?.title || "Technical specification diagram"}
+                    className="max-h-[80vh] max-w-[85vw] rounded-lg bg-white p-4 object-contain shadow-2xl"
+                  />
+
+                  <div className="mt-3 flex items-center gap-4 text-white">
+                    {specImages.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setActiveSpecImageIndex((prev) =>
+                            prev === 0 ? specImages.length - 1 : prev - 1
+                          )
+                        }
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 hover:bg-white/40 cursor-pointer"
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
+                    )}
+                    <span className="text-xs font-semibold">
+                      {specImages[activeSpecImageIndex]?.title} ({activeSpecImageIndex + 1} / {specImages.length})
+                    </span>
+                    {specImages.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setActiveSpecImageIndex((prev) =>
+                            prev === specImages.length - 1 ? 0 : prev + 1
+                          )
+                        }
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 hover:bg-white/40 cursor-pointer"
+                      >
+                        <ChevronRight size={18} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -484,9 +741,14 @@ function useMemoSpecs(product: ProductDetail, apiProduct?: ApiProductDetail | nu
   };
 
   const rawSpecs = apiProduct?.technicalSpecs || product.technicalSpecs;
+  const specList = Array.isArray(rawSpecs)
+    ? rawSpecs
+    : Array.isArray((rawSpecs as any)?.specs)
+      ? (rawSpecs as any).specs
+      : null;
 
-  if (Array.isArray(rawSpecs)) {
-    rawSpecs.forEach((item: any) => {
+  if (Array.isArray(specList)) {
+    specList.forEach((item: any) => {
       if (item && typeof item === "object") {
         const key = item.label || item.key || item.name;
         const val = item.value || item.val;
@@ -497,13 +759,15 @@ function useMemoSpecs(product: ProductDetail, apiProduct?: ApiProductDetail | nu
     });
   } else if (rawSpecs && typeof rawSpecs === "object") {
     Object.entries(rawSpecs).forEach(([key, val]) => {
-      if (val && typeof val === "object") {
-        const item = val as any;
-        const k = item.label || item.key || key;
-        const v = item.value || item.val;
-        if (k && v) specs[String(k)] = String(v);
-      } else if (val !== undefined && val !== null) {
-        specs[key] = String(val);
+      if (key !== "images" && key !== "specs") {
+        if (val && typeof val === "object") {
+          const item = val as any;
+          const k = item.label || item.key || key;
+          const v = item.value || item.val;
+          if (k && v) specs[String(k)] = String(v);
+        } else if (val !== undefined && val !== null) {
+          specs[key] = String(val);
+        }
       }
     });
   }
