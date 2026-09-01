@@ -1,11 +1,22 @@
 import { Response } from "express";
-import { ApiResponse, asyncHandler } from "../../utils/apiResponse";
+import { ApiResponse, AppError, asyncHandler } from "../../utils/apiResponse";
 import { AuthRequest } from "../../middleware/auth.middleware";
 import * as BannersService from "./banners.service";
+
+export const uploadImage = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const file = req.file;
+  if (!file) {
+    throw new AppError("No image file provided.", 400);
+  }
+  const bannerId = (req.body?.bannerId || req.query?.bannerId || undefined) as string | undefined;
+  const result = await BannersService.uploadBannerImage(file.buffer, bannerId);
+  return ApiResponse.success(res, "Banner image uploaded successfully.", result);
+});
 
 export const list = asyncHandler(async (req: AuthRequest, res: Response) =>
   ApiResponse.success(res, "Banners fetched.", await BannersService.listBanners(req.query as never))
 );
+
 export const getOne = asyncHandler(async (req: AuthRequest, res: Response) =>
   ApiResponse.success(res, "Banner fetched.", await BannersService.getBanner(String(req.params.id)))
 );

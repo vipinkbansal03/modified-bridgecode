@@ -1,6 +1,8 @@
 import { BannerPlacement, Prisma } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
+import { optimizeAndUploadPublicImage, getMediaUrl, deletePublicMediaVariants } from "../../shared/media";
+
 
 type BannerInput = {
   title?: string;
@@ -16,6 +18,27 @@ type BannerInput = {
   startDate?: string | Date | null;
   endDate?: string | Date | null;
 };
+
+export async function uploadBannerImage(buffer: Buffer, bannerId?: string) {
+  const uploadResult = await optimizeAndUploadPublicImage({
+    buffer,
+    folder: "banners",
+    presetName: "banner",
+    entityId: bannerId,
+  });
+
+  const desktopKey = uploadResult.variants.desktop || uploadResult.primaryKey;
+  const mobileKey = uploadResult.variants.mobile || desktopKey;
+
+  return {
+    uploadId: uploadResult.uploadId,
+    desktopKey,
+    desktopUrl: getMediaUrl(desktopKey) || "",
+    mobileKey,
+    mobileUrl: getMediaUrl(mobileKey) || "",
+    variants: uploadResult.variants,
+  };
+}
 
 function optionalDate(value: string | Date | null | undefined) {
   if (!value) return null;
@@ -73,6 +96,8 @@ function formatBannerResponse(banner: any) {
     : (banner.countryId ? [banner.countryId] : []);
   return {
     ...banner,
+    image: getMediaUrl(banner.image) || banner.image,
+    mobileImage: getMediaUrl(banner.mobileImage) || banner.mobileImage,
     countryIds,
   };
 }
@@ -212,11 +237,28 @@ export async function updateBanner(id: string, input: BannerInput) {
 }
 
 export async function deleteBanner(id: string) {
-  const current = await getBanner(id);
+  const current = await prisma.banner.findUnique({ where: { id } });
+  if (!current) throw new AppError("Banner not found.", 404);
+
   if (current.placement === "HOMEPAGE_HERO" && current.status) {
     await ensureAtLeastOneActiveBanner(current.placement, [id]);
   }
+
   await prisma.banner.delete({ where: { id } });
+
+  // Clean up owned S3 public media objects (ignoring legacy external URLs)
+  const keysToDelete = [current.image, current.mobileImage].filter(
+    (k): k is string =>
+      typeof k === "string" &&
+      !k.startsWith("http://") &&
+      !k.startsWith("https://") &&
+      !k.startsWith("data:") &&
+      k.startsWith("banners/")
+  );
+
+  if (keysToDelete.length > 0) {
+    await deletePublicMediaVariants(keysToDelete);
+  }
 }
 
 export async function reorderBanners(ids: string[]) {
@@ -246,7 +288,39 @@ export async function bulkUpdateBanners(input: { ids?: string[]; action?: "enabl
   }
 
   if (input.action === "delete") {
+    const bannersToDelete = await prisma.banner.findMany({
+      where: { id: { in: ids } },
+      select: { image: true, mobileImage: true },
+    });
+
     await prisma.banner.deleteMany({ where: { id: { in: ids } } });
+
+    const keysToDelete: string[] = [];
+    for (const b of bannersToDelete) {
+      if (
+        b.image &&
+        !b.image.startsWith("http://") &&
+        !b.image.startsWith("https://") &&
+        !b.image.startsWith("data:") &&
+        b.image.startsWith("banners/")
+      ) {
+        keysToDelete.push(b.image);
+      }
+      if (
+        b.mobileImage &&
+        !b.mobileImage.startsWith("http://") &&
+        !b.mobileImage.startsWith("https://") &&
+        !b.mobileImage.startsWith("data:") &&
+        b.mobileImage.startsWith("banners/")
+      ) {
+        keysToDelete.push(b.mobileImage);
+      }
+    }
+
+    if (keysToDelete.length > 0) {
+      await deletePublicMediaVariants(keysToDelete);
+    }
+
     return { updated: ids.length };
   }
   if (input.action === "enable" || input.action === "disable") {
@@ -279,7 +353,7 @@ export async function listPublicBanners(query: { placement?: BannerPlacement; co
         ],
       };
 
-  return prisma.banner.findMany({
+  const banners = await prisma.banner.findMany({
     where: {
       placement: query.placement,
       status: true,
@@ -292,5 +366,8 @@ export async function listPublicBanners(query: { placement?: BannerPlacement; co
     orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
     include: bannerInclude,
   });
+
+  return banners.map(formatBannerResponse);
 }
+
 
