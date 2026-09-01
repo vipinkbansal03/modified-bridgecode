@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { protect, requirePermission } from "../../middleware/auth.middleware";
+import { uploadMemory } from "../../middleware/upload.middleware";
 import * as C from "./banners.controller";
 
 const router = Router();
 router.use(protect);
 
 router.get("/", requirePermission("cms.view", "cms.manage"), C.list);
+router.post("/upload-image", requirePermission("cms.manage"), uploadMemory.single("file"), C.uploadImage);
 router.post("/", requirePermission("cms.manage"), C.create);
 router.post("/bulk", requirePermission("cms.manage"), C.bulk);
 router.put("/reorder", requirePermission("cms.manage"), C.reorder);

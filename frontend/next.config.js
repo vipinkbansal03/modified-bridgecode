@@ -5,6 +5,8 @@ const nextConfig = {
   images: {
     qualities: [70, 75, 85, 90],
     remotePatterns: [
+      { protocol: "https", hostname: "media.apricotequipment.in" },
+      { protocol: "https", hostname: "media-staging.apricotequipment.in" },
       { protocol: "https", hostname: "images.unsplash.com" },
       { protocol: "https", hostname: "plus.unsplash.com" },
       { protocol: "https", hostname: "www.modortho.com" },

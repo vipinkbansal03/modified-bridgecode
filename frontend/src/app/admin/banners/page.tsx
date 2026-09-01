@@ -7,8 +7,8 @@ import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearcha
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { Modal } from "@/components/ui/Modal";
 import { useAdminBanners, useAdminCountries, useBulkBanners, useCreateBanner, useDeleteBanner, useReorderBanners, useUpdateBanner } from "@/hooks/admin/useAdminHooks";
-import { getAdminErrorMessage } from "@/services/adminApi";
-import { uploadMediaFiles } from "@/utils/uploadMedia";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
+
 
 type Banner = {
   id: string;
@@ -107,6 +107,8 @@ export default function BannersPage() {
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [uploading, setUploading] = useState<"image" | "mobileImage" | null>(null);
+  const [previewUrls, setPreviewUrls] = useState<{ image?: string; mobileImage?: string }>({});
+
 
   const { showToast, ToastComponent } = useToast();
   const { data: allBannersData = [], isLoading } = useAdminBanners({});
@@ -228,6 +230,7 @@ export default function BannersPage() {
       startDate: row.startDate?.slice(0, 10) ?? "",
       endDate: row.endDate?.slice(0, 10) ?? "",
     });
+    setPreviewUrls({ image: row.image, mobileImage: row.mobileImage || undefined });
     setShowModal(true);
   }, []);
 
@@ -332,12 +335,14 @@ export default function BannersPage() {
       ...empty,
       placement: defaultPlacement,
     });
+    setPreviewUrls({});
     setShowModal(true);
   };
 
   const closeModal = () => {
     setShowModal(false);
     setForm(empty);
+    setPreviewUrls({});
   };
 
   const save = async (event: React.FormEvent) => {
@@ -374,12 +379,27 @@ export default function BannersPage() {
     if (!file) return;
     setUploading(field);
     try {
-      const results = await uploadMediaFiles([file], {
-        entityType: "BANNER",
-        entityId: form.id || undefined,
-      });
-      const uploaded = results[0];
-      if (uploaded?.url) set(field, uploaded.url);
+      const formData = new FormData();
+      formData.append("file", file);
+      if (form.id) formData.append("bannerId", form.id);
+
+      const response = await adminApi.post("/banners/upload-image", formData);
+      const data = response.data?.data;
+      if (data) {
+        if (field === "image") {
+          set("image", data.desktopKey);
+          setPreviewUrls((prev) => ({ ...prev, image: data.desktopUrl }));
+          // If mobile image is not yet set, automatically provide the mobile variant
+          if (!form.mobileImage) {
+            set("mobileImage", data.mobileKey);
+            setPreviewUrls((prev) => ({ ...prev, mobileImage: data.mobileUrl }));
+          }
+        } else {
+          set("mobileImage", data.mobileKey);
+          setPreviewUrls((prev) => ({ ...prev, mobileImage: data.mobileUrl }));
+        }
+        showToast("Banner image optimized and uploaded.");
+      }
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Upload failed."), "error");
     } finally {
@@ -780,46 +800,52 @@ export default function BannersPage() {
 
             {/* Images Upload Section */}
             <div className="grid gap-4 md:grid-cols-2 pt-2">
-              {(["image", "mobileImage"] as const).map((field) => (
-                <div key={field} className="rounded-lg border border-[#E6E6E6] bg-gray-50/50 p-4">
-                  <div className="mb-2 text-[13px] font-semibold text-[#1A1A1A]">
-                    {field === "image" ? "Desktop Image *" : "Mobile Image Override (Optional)"}
-                  </div>
-                  {form[field] ? (
-                    <div className="relative mb-3 overflow-hidden rounded-md border border-[#E6E6E6]">
-                      <img src={form[field]} alt="" className="h-36 w-full object-cover" />
+              {(["image", "mobileImage"] as const).map((field) => {
+                const currentPreview = previewUrls[field] || form[field];
+                return (
+                  <div key={field} className="rounded-lg border border-[#E6E6E6] bg-gray-50/50 p-4">
+                    <div className="mb-2 text-[13px] font-semibold text-[#1A1A1A]">
+                      {field === "image" ? "Desktop Image *" : "Mobile Image Override (Optional)"}
                     </div>
-                  ) : null}
-                  <AdminInput
-                    label="Image URL"
-                    value={String(form[field] ?? "")}
-                    onChange={(event) => set(field, event.target.value)}
-                    placeholder="https://..."
-                  />
-                  <label
-                    className={`mt-3 inline-flex cursor-pointer items-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-3.5 py-2 text-[12.5px] font-semibold text-[#333] hover:bg-gray-50 ${
-                      uploading === field ? "opacity-50 pointer-events-none" : ""
-                    }`}
-                  >
-                    {uploading === field ? (
-                      <span
-                        className="inline-block animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent w-3.5 h-3.5"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <Upload size={14} />
-                    )}
-                    {uploading === field ? "Uploading Image..." : "Upload Image File"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      disabled={uploading !== null}
-                      className="hidden"
-                      onChange={(event) => upload(field, event.target.files?.[0])}
+                    {currentPreview ? (
+                      <div className="relative mb-3 overflow-hidden rounded-md border border-[#E6E6E6]">
+                        <img src={currentPreview} alt="" className="h-36 w-full object-cover" />
+                      </div>
+                    ) : null}
+                    <AdminInput
+                      label={field === "image" ? "Desktop Key / URL" : "Mobile Key / URL"}
+                      value={String(form[field] ?? "")}
+                      onChange={(event) => {
+                        set(field, event.target.value);
+                        setPreviewUrls((prev) => ({ ...prev, [field]: event.target.value }));
+                      }}
+                      placeholder="banners/uuid-desktop.webp or https://..."
                     />
-                  </label>
-                </div>
-              ))}
+                    <label
+                      className={`mt-3 inline-flex cursor-pointer items-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-3.5 py-2 text-[12.5px] font-semibold text-[#333] hover:bg-gray-50 ${
+                        uploading === field ? "opacity-50 pointer-events-none" : ""
+                      }`}
+                    >
+                      {uploading === field ? (
+                        <span
+                          className="inline-block animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent w-3.5 h-3.5"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <Upload size={14} />
+                      )}
+                      {uploading === field ? "Optimizing & Uploading..." : "Upload Image File"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={uploading !== null}
+                        className="hidden"
+                        onChange={(event) => upload(field, event.target.files?.[0])}
+                      />
+                    </label>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </form>

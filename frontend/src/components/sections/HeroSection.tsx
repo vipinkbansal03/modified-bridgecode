@@ -124,7 +124,7 @@ export function HeroSection({ data }: HeroSectionProps) {
       <section className="relative flex h-[calc(100dvh-64px)] xl:h-[calc(100dvh-130px)] xl:min-h-[580px] xl:max-h-[760px] items-center overflow-hidden bg-gradient-to-br from-[#0F2D52] via-[#1A1A1A] to-[#0D0D0D]">
         <Container className="relative flex h-full flex-col justify-end md:justify-center items-start pb-16 sm:pb-14 pt-8">
           <div className="flex w-full max-w-[820px] flex-col justify-end text-left">
-            <span className="mb-3.5 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3.5 py-1 text-[12px] font-semibold tracking-wider uppercase text-white backdrop-blur-sm shadow-xs">
+            <span className="mb-3.5 inline-flex w-fit items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3.5 py-1 text-[12px] font-semibold tracking-wider uppercase text-white backdrop-blur-sm shadow-xs">
               <span className="h-1.5 w-1.5 rounded-full bg-brand" />
               Modern Orthodontics
             </span>

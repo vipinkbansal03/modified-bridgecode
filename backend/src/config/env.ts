@@ -84,6 +84,7 @@ export function validateBackendEnv() {
     requireValue("AWS_REGION", errors);
     const bucket = requireValue("AWS_S3_BUCKET", errors);
     const bucketEnv = requireValue("AWS_S3_BUCKET_ENV", errors);
+    const mediaCdnUrl = requireValue("MEDIA_CDN_URL", errors);
     requireValue("SETTINGS_ENCRYPTION_KEY", errors);
 
     if (nodeEnv !== "production") errors.push("NODE_ENV must be production for deployed environments");
@@ -100,6 +101,15 @@ export function validateBackendEnv() {
 
     if (bucket && bucketEnv && bucketEnv !== appEnv) {
       errors.push(`AWS_S3_BUCKET_ENV must be ${appEnv} for ${appEnv}`);
+    }
+
+    if (mediaCdnUrl) {
+      if (appEnv === "production" && mediaCdnUrl.includes("staging")) {
+        errors.push("MEDIA_CDN_URL must not point to staging CDN for production");
+      }
+      if (appEnv === "staging" && !mediaCdnUrl.includes("staging") && !mediaCdnUrl.includes("localhost")) {
+        errors.push("MEDIA_CDN_URL must not point to production CDN for staging");
+      }
     }
 
     const frontendHost = getHost(frontendUrl);
@@ -127,6 +137,7 @@ export function validateBackendEnv() {
     databaseHost: getHost(databaseUrl),
     awsRegion: process.env.AWS_REGION || "",
     s3Bucket: process.env.AWS_S3_BUCKET || "",
+    mediaCdnUrl: process.env.MEDIA_CDN_URL || "",
     frontendUrl,
     envFile: loadedEnv.envFile,
     envPath: loadedEnv.envPath,
