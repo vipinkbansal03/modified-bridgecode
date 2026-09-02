@@ -7,6 +7,7 @@ import * as Yup from "yup";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput } from "@/components/admin/AdminComponents";
 import { Eye, EyeOff, Lock, AlertTriangle } from "lucide-react";
+import { cn } from "@/utils/cn";
 
 const schema = Yup.object({
   email: Yup.string().email("Invalid email").required("Email is required"),
@@ -103,21 +104,34 @@ function AdminLoginForm() {
             error={formik.touched.email ? (formik.errors.email as string) : ""}
           />
 
-          <div className="relative">
-            <AdminInput
-              label="Password"
-              type={showPw ? "text" : "password"}
-              placeholder="Enter password"
-              {...formik.getFieldProps("password")}
-              error={formik.touched.password ? (formik.errors.password as string) : ""}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPw(!showPw)}
-              className="absolute right-3 top-[34px] text-[#9A9A9A] hover:text-[#1A1A1A]"
-            >
-              {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
+          <div>
+            <label className="block text-[13px] font-medium text-[#1A1A1A] mb-1.5">
+              Password
+            </label>
+            <div className="relative">
+              <input
+                type={showPw ? "text" : "password"}
+                placeholder="Enter password"
+                {...formik.getFieldProps("password")}
+                className={cn(
+                  "w-full rounded-md border bg-white pl-3.5 pr-10 py-2.5 text-[14px] text-[#1A1A1A] outline-none transition-colors placeholder:text-[#9A9A9A]",
+                  formik.touched.password && formik.errors.password
+                    ? "border-red-400 focus:border-red-500"
+                    : "border-[#E6E6E6] focus:border-[#E31E24]"
+                )}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw(!showPw)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9A9A9A] hover:text-[#1A1A1A] transition-colors p-1"
+                aria-label={showPw ? "Hide password" : "Show password"}
+              >
+                {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {formik.touched.password && formik.errors.password && (
+              <p className="mt-1.5 text-[12px] text-red-500">{formik.errors.password as string}</p>
+            )}
           </div>
 
           <button

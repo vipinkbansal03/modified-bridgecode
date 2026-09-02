@@ -2,10 +2,49 @@
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, createContext, useContext, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, XCircle, Info, Check, Plus, GripVertical } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Info,
+  Check,
+  Plus,
+  GripVertical,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  Link2,
+  Unlink,
+  Image as ImageIcon,
+  List,
+  ListOrdered,
+  Quote,
+  Code,
+  Heading2,
+  Heading3,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
+  Undo2,
+  Redo2,
+  RemoveFormatting,
+  Code2,
+  Eye,
+  X,
+  ExternalLink,
+  Upload,
+  Globe,
+  Loader2,
+} from "lucide-react";
 import { cn } from "@/utils/cn";
 import { adminApi } from "@/services/adminApi";
 import { ToastProvider, useToast as useSharedToast } from "@/components/ui/ToastProvider";
+export { Modal, type ModalProps } from "@/components/ui/Modal";
 
 // ─── DataTable ────────────────────────────────────────────
 
@@ -1488,6 +1527,21 @@ export function AdminRichTextEditor({
   const savedRangeRef = useRef<Range | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [uploadingImg, setUploadingImg] = useState(false);
+  const [editorMode, setEditorMode] = useState<"visual" | "code">("visual");
+
+  // Link Modal State
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkText, setLinkText] = useState("");
+  const [linkNewTab, setLinkNewTab] = useState(true);
+
+  // Image Modal State
+  const [imgModalOpen, setImgModalOpen] = useState(false);
+  const [imgTab, setImgTab] = useState<"upload" | "url">("upload");
+  const [selectedImgFile, setSelectedImgFile] = useState<File | null>(null);
+  const [selectedImgPreview, setSelectedImgPreview] = useState<string>("");
+  const [imgUrlInput, setImgUrlInput] = useState("");
+  const [imgAltInput, setImgAltInput] = useState("");
 
   const plainText = stripHtmlTags(value);
   const charCount = plainText.length;
@@ -1496,7 +1550,7 @@ export function AdminRichTextEditor({
   const [hitLimitShake, setHitLimitShake] = useState(false);
 
   useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== value) {
+    if (editorMode === "visual" && editorRef.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value;
       // Ensure all images inside editor have a cross (X) delete button
       const imgs = editorRef.current.querySelectorAll("img");
@@ -1508,7 +1562,8 @@ export function AdminRichTextEditor({
 
           const btn = document.createElement("button");
           btn.type = "button";
-          btn.className = "img-delete-btn absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white text-[11px] font-bold shadow-md hover:bg-[#B5151B] transition-transform hover:scale-110 cursor-pointer";
+          btn.className =
+            "img-delete-btn absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white text-[11px] font-bold shadow-md hover:bg-[#B5151B] transition-transform hover:scale-110 cursor-pointer";
           btn.title = "Remove image";
           btn.innerHTML = "✕";
 
@@ -1518,7 +1573,7 @@ export function AdminRichTextEditor({
         }
       });
     }
-  }, [value]);
+  }, [value, editorMode]);
 
   const updateValue = () => {
     if (!editorRef.current) return;
@@ -1534,6 +1589,7 @@ export function AdminRichTextEditor({
   };
 
   const applyFormat = (command: string, option?: string) => {
+    if (editorMode !== "visual") return;
     document.execCommand(command, false, option || "");
     updateValue();
     editorRef.current?.focus();
@@ -1623,159 +1679,388 @@ export function AdminRichTextEditor({
     }
   };
 
-  const handleInsertImageFile = async (file: File) => {
+  const openLinkDialog = () => {
+    saveCursorLocation();
+    const sel = typeof window !== "undefined" ? window.getSelection() : null;
+    const selectedText = sel?.toString() || "";
+    setLinkText(selectedText);
+    setLinkUrl("https://");
+    setLinkNewTab(true);
+    setLinkModalOpen(true);
+  };
+
+  const handleApplyLink = () => {
+    if (!linkUrl || linkUrl.trim() === "https://" || linkUrl.trim() === "") {
+      showToast("Please enter a valid link URL.", "error");
+      return;
+    }
+    const targetAttr = linkNewTab ? ' target="_blank" rel="noopener noreferrer"' : "";
+    const textToUse = linkText.trim() || linkUrl.trim();
+    const linkHtml = `<a href="${linkUrl.trim()}"${targetAttr} class="text-[#E31E24] underline underline-offset-2 font-medium">${textToUse}</a>`;
+    insertHtmlAtSavedCursor(linkHtml);
+    setLinkModalOpen(false);
+  };
+
+  const openImageDialog = () => {
+    saveCursorLocation();
+    setSelectedImgFile(null);
+    setSelectedImgPreview("");
+    setImgUrlInput("");
+    setImgAltInput("");
+    setImgTab("upload");
+    setImgModalOpen(true);
+  };
+
+  const handleSelectFile = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      showToast("Please select a valid image file (PNG, JPG, WEBP, GIF).", "error");
+      return;
+    }
+    setSelectedImgFile(file);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setSelectedImgPreview(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUploadAndInsertImage = async () => {
+    if (!selectedImgFile) {
+      showToast("Please select an image file first.", "error");
+      return;
+    }
     setUploadingImg(true);
     try {
       const formData = new FormData();
-      if (mediaContext?.entityType) formData.append("entityType", mediaContext.entityType);
+      formData.append("entityType", mediaContext?.entityType || "SYSTEM");
       if (mediaContext?.entityId) formData.append("entityId", mediaContext.entityId);
-      formData.append("files", file);
+      formData.append("purpose", "RICH_TEXT_IMAGE");
+      formData.append("files", selectedImgFile);
       const res = await adminApi.post("/media", formData);
       const mediaItem = Array.isArray(res.data?.data) ? res.data.data[0] : res.data?.data || res.data;
       const url = mediaItem?.url || mediaItem?.location || (typeof mediaItem === "string" ? mediaItem : "");
       if (url) {
-        const cleanImgHtml = `<span class="img-wrapper relative inline-block my-2 mr-3 align-bottom group select-none" contenteditable="false"><img src="${url}" alt="Product Image" class="max-h-48 max-w-full w-auto inline-block rounded-lg border border-[#E5E7EB] bg-white p-1.5 shadow-2xs" /><button type="button" class="img-delete-btn absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white text-[11px] font-bold shadow-md hover:bg-[#B5151B] transition-transform hover:scale-110 cursor-pointer" title="Remove image">✕</button></span><p><br></p>`;
+        const cleanImgHtml = `<span class="img-wrapper relative inline-block my-2 mr-3 align-bottom group select-none" contenteditable="false"><img src="${url}" alt="${imgAltInput.trim() || selectedImgFile.name || "Product Image"}" class="max-h-56 max-w-full w-auto inline-block rounded-lg border border-[#E5E7EB] bg-white p-1.5 shadow-2xs" /><button type="button" class="img-delete-btn absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white text-[11px] font-bold shadow-md hover:bg-[#B5151B] transition-transform hover:scale-110 cursor-pointer" title="Remove image">✕</button></span><p><br></p>`;
         insertHtmlAtSavedCursor(cleanImgHtml);
+        setImgModalOpen(false);
+        showToast("Image inserted successfully.", "success");
       } else {
         showToast("Failed to get uploaded media URL.", "error");
       }
     } catch (err) {
       console.error("Image upload failed", err);
-      showToast("Image upload failed. Please make sure you are logged in.", "error");
+      showToast("Image upload failed. Please try again.", "error");
     } finally {
       setUploadingImg(false);
     }
+  };
+
+  const handleInsertImageUrl = () => {
+    if (!imgUrlInput.trim()) {
+      showToast("Please enter an image URL.", "error");
+      return;
+    }
+    const cleanImgHtml = `<span class="img-wrapper relative inline-block my-2 mr-3 align-bottom group select-none" contenteditable="false"><img src="${imgUrlInput.trim()}" alt="${imgAltInput.trim() || "Product Image"}" class="max-h-56 max-w-full w-auto inline-block rounded-lg border border-[#E5E7EB] bg-white p-1.5 shadow-2xs" /><button type="button" class="img-delete-btn absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white text-[11px] font-bold shadow-md hover:bg-[#B5151B] transition-transform hover:scale-110 cursor-pointer" title="Remove image">✕</button></span><p><br></p>`;
+    insertHtmlAtSavedCursor(cleanImgHtml);
+    setImgModalOpen(false);
+    showToast("Image inserted successfully.", "success");
   };
 
   const isMinimal = Boolean(hideImageUpload || compact);
 
   return (
     <div className="space-y-1.5">
-      {label && <label className="block text-[13px] font-medium text-[#1A1A1A]">{label}</label>}
+      {label && (
+        <div className="flex items-center justify-between">
+          <label className="block text-[13px] font-semibold text-[#1A1A1A]">{label}</label>
+          <div className="flex items-center gap-1 rounded-md border border-[#E2E8F0] bg-[#F8FAFC] p-0.5 text-[11.5px] font-medium shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setEditorMode("visual")}
+              className={`flex items-center gap-1.5 rounded px-2.5 py-1 transition-all ${
+                editorMode === "visual"
+                  ? "bg-white text-[#E31E24] shadow-2xs font-bold"
+                  : "text-[#64748B] hover:text-[#0F172A]"
+              }`}
+            >
+              <Eye size={13} />
+              Visual
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditorMode("code")}
+              className={`flex items-center gap-1.5 rounded px-2.5 py-1 transition-all ${
+                editorMode === "code"
+                  ? "bg-white text-[#E31E24] shadow-2xs font-bold"
+                  : "text-[#64748B] hover:text-[#0F172A]"
+              }`}
+            >
+              <Code2 size={13} />
+              HTML Code
+            </button>
+          </div>
+        </div>
+      )}
       <div
         className={cn(
-          "rounded-md border bg-white transition-colors",
+          "rounded-lg border bg-white shadow-2xs transition-all overflow-hidden",
           error || isOverLimit
-            ? "border-red-400"
+            ? "border-red-400 ring-1 ring-red-400"
             : isAtLimit
-              ? "border-amber-400"
-              : "border-[#E6E6E6] focus-within:border-[#E31E24]",
+              ? "border-amber-400 ring-1 ring-amber-400"
+              : "border-[#CBD5E1] focus-within:border-[#E31E24] focus-within:ring-2 focus-within:ring-[#E31E24]/10",
           className
         )}
       >
-        <div className="flex flex-wrap gap-1 border-b border-[#E6E6E6] bg-[#FAFAFA] px-2 py-2">
-          <button type="button" title="Bold" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("bold")}>
-            B
-          </button>
-          <button type="button" title="Italic" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("italic")}>
-            I
-          </button>
-          <button type="button" title="Underline" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("underline")}>
-            U
-          </button>
-          <button type="button" title="Strike" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("strikeThrough")}>
-            S
-          </button>
-          <button type="button" title="Link" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => {
-            const url = window.prompt("Enter link URL:", "https://");
-            if (url) applyFormat("createLink", url);
-          }}>
-            Link
-          </button>
-
-          {!isMinimal && (
-            <>
+        {/* Toolbar Header */}
+        {editorMode === "visual" && (
+          <div className="flex flex-wrap items-center gap-1 border-b border-[#E2E8F0] bg-[#F8FAFC] px-2 py-1.5 select-none">
+            {/* Group 1: Typography Formatting */}
+            <div className="flex items-center gap-0.5">
               <button
                 type="button"
-                title="Attach/Insert Image"
-                className="flex items-center gap-1 rounded bg-[#E31E24]/10 px-2 py-1 text-[12px] font-bold text-[#E31E24] hover:bg-[#E31E24]/20"
-                onClick={() => {
-                  saveCursorLocation();
-                  fileInputRef.current?.click();
-                }}
-                disabled={uploadingImg}
+                title="Bold (Ctrl+B)"
+                className="flex h-7 w-7 items-center justify-center rounded text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors"
+                onClick={() => applyFormat("bold")}
               >
-                🖼️ {uploadingImg ? "Uploading..." : "Image"}
+                <Bold size={14} />
               </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleInsertImageFile(file);
-                  e.target.value = "";
-                }}
-              />
-              <button type="button" title="Unordered list" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("insertUnorderedList")}>
-                • List
+              <button
+                type="button"
+                title="Italic (Ctrl+I)"
+                className="flex h-7 w-7 items-center justify-center rounded text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors"
+                onClick={() => applyFormat("italic")}
+              >
+                <Italic size={14} />
               </button>
-              <button type="button" title="Ordered list" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("insertOrderedList")}>
-                1. List
+              <button
+                type="button"
+                title="Underline (Ctrl+U)"
+                className="flex h-7 w-7 items-center justify-center rounded text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors"
+                onClick={() => applyFormat("underline")}
+              >
+                <Underline size={14} />
               </button>
-              <button type="button" title="Blockquote" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "blockquote")}>
-                {"\""}
+              <button
+                type="button"
+                title="Strikethrough"
+                className="flex h-7 w-7 items-center justify-center rounded text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors"
+                onClick={() => applyFormat("strikeThrough")}
+              >
+                <Strikethrough size={14} />
               </button>
-              <button type="button" title="Code block" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "pre")}>
-                {'</>'}
-              </button>
-              <button type="button" title="Heading 2" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "h2")}>
-                H2
-              </button>
-              <button type="button" title="Heading 3" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("formatBlock", "h3")}>
-                H3
-              </button>
-              <button type="button" title="Align left" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("justifyLeft")}>
-                L
-              </button>
-              <button type="button" title="Align center" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("justifyCenter")}>
-                C
-              </button>
-              <button type="button" title="Align right" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("justifyRight")}>
-                R
-              </button>
-              <button type="button" title="Undo" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("undo")}>
-                ↺
-              </button>
-              <button type="button" title="Redo" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("redo")}>
-                ↻
-              </button>
-            </>
-          )}
+            </div>
 
-          <button type="button" title="Remove formatting" className="rounded px-2 py-1 text-[13px] text-[#1A1A1A] hover:bg-[#F2F2F2]" onClick={() => applyFormat("removeFormat")}>
-            Clear
-          </button>
-        </div>
-        <div className="relative">
-          {!value && !isFocused ? (
-            <div className="pointer-events-none absolute inset-0 px-3 py-3 text-[14px] text-[#9A9A9A]">{placeholder}</div>
-          ) : null}
-          <div
-            ref={editorRef}
-            contentEditable
-            role="textbox"
-            aria-multiline="true"
-            suppressContentEditableWarning
-            onClick={handleEditorClick}
-            onKeyDown={handleKeyDown}
-            onInput={() => {
-              saveCursorLocation();
-              updateValue();
-            }}
-            onKeyUp={saveCursorLocation}
-            onMouseUp={saveCursorLocation}
-            onBlur={() => {
-              saveCursorLocation();
-              setIsFocused(false);
-              updateValue();
-            }}
-            onFocus={() => setIsFocused(true)}
-            className="min-h-[120px] w-full rounded-b-md bg-white px-3 py-3 text-[14px] leading-6 text-[#1A1A1A] outline-none"
-          />
-        </div>
+            <div className="h-4 w-px bg-[#CBD5E1] mx-1" />
+
+            {/* Group 2: Headings & Block Types */}
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                title="Paragraph"
+                className="flex h-7 px-2 items-center justify-center rounded text-[11.5px] font-bold text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors"
+                onClick={() => applyFormat("formatBlock", "p")}
+              >
+                P
+              </button>
+              <button
+                type="button"
+                title="Heading 2"
+                className="flex h-7 w-7 items-center justify-center rounded text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors"
+                onClick={() => applyFormat("formatBlock", "h2")}
+              >
+                <Heading2 size={15} />
+              </button>
+              <button
+                type="button"
+                title="Heading 3"
+                className="flex h-7 w-7 items-center justify-center rounded text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors"
+                onClick={() => applyFormat("formatBlock", "h3")}
+              >
+                <Heading3 size={15} />
+              </button>
+              <button
+                type="button"
+                title="Quote Block"
+                className="flex h-7 w-7 items-center justify-center rounded text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors"
+                onClick={() => applyFormat("formatBlock", "blockquote")}
+              >
+                <Quote size={14} />
+              </button>
+              <button
+                type="button"
+                title="Code Snippet"
+                className="flex h-7 w-7 items-center justify-center rounded text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors"
+                onClick={() => applyFormat("formatBlock", "pre")}
+              >
+                <Code size={14} />
+              </button>
+            </div>
+
+            <div className="h-4 w-px bg-[#CBD5E1] mx-1" />
+
+            {/* Group 3: Lists */}
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                title="Bullet List"
+                className="flex h-7 w-7 items-center justify-center rounded text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors"
+                onClick={() => applyFormat("insertUnorderedList")}
+              >
+                <List size={14} />
+              </button>
+              <button
+                type="button"
+                title="Numbered List"
+                className="flex h-7 w-7 items-center justify-center rounded text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors"
+                onClick={() => applyFormat("insertOrderedList")}
+              >
+                <ListOrdered size={14} />
+              </button>
+            </div>
+
+            <div className="h-4 w-px bg-[#CBD5E1] mx-1" />
+
+            {/* Group 4: Alignment */}
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                title="Align Left"
+                className="flex h-7 w-7 items-center justify-center rounded text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors"
+                onClick={() => applyFormat("justifyLeft")}
+              >
+                <AlignLeft size={14} />
+              </button>
+              <button
+                type="button"
+                title="Align Center"
+                className="flex h-7 w-7 items-center justify-center rounded text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors"
+                onClick={() => applyFormat("justifyCenter")}
+              >
+                <AlignCenter size={14} />
+              </button>
+              <button
+                type="button"
+                title="Align Right"
+                className="flex h-7 w-7 items-center justify-center rounded text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors"
+                onClick={() => applyFormat("justifyRight")}
+              >
+                <AlignRight size={14} />
+              </button>
+              <button
+                type="button"
+                title="Justify"
+                className="flex h-7 w-7 items-center justify-center rounded text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors"
+                onClick={() => applyFormat("justifyFull")}
+              >
+                <AlignJustify size={14} />
+              </button>
+            </div>
+
+            <div className="h-4 w-px bg-[#CBD5E1] mx-1" />
+
+            {/* Group 5: Link & Media */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                title="Insert Link"
+                className="flex items-center gap-1.5 rounded bg-blue-50/70 border border-blue-200/60 px-2.5 py-1 text-[12px] font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+                onClick={openLinkDialog}
+              >
+                <Link2 size={13} />
+                Link
+              </button>
+
+              {!isMinimal && (
+                <button
+                  type="button"
+                  title="Insert Image"
+                  className="flex items-center gap-1.5 rounded bg-red-50 border border-red-200/70 px-2.5 py-1 text-[12px] font-semibold text-[#E31E24] hover:bg-red-100 transition-colors"
+                  onClick={openImageDialog}
+                >
+                  <ImageIcon size={13} />
+                  Image
+                </button>
+              )}
+            </div>
+
+            <div className="h-4 w-px bg-[#CBD5E1] mx-1" />
+
+            {/* Group 6: History & Clear */}
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                title="Undo (Ctrl+Z)"
+                className="flex h-7 w-7 items-center justify-center rounded text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors"
+                onClick={() => applyFormat("undo")}
+              >
+                <Undo2 size={14} />
+              </button>
+              <button
+                type="button"
+                title="Redo (Ctrl+Y)"
+                className="flex h-7 w-7 items-center justify-center rounded text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F172A] transition-colors"
+                onClick={() => applyFormat("redo")}
+              >
+                <Redo2 size={14} />
+              </button>
+              <button
+                type="button"
+                title="Clear Formatting"
+                className="flex h-7 w-7 items-center justify-center rounded text-[#64748B] hover:bg-[#E2E8F0] hover:text-[#E31E24] transition-colors"
+                onClick={() => applyFormat("removeFormat")}
+              >
+                <RemoveFormatting size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Editor Body Area */}
+        {editorMode === "visual" ? (
+          <div className="relative">
+            {!value && !isFocused ? (
+              <div className="pointer-events-none absolute inset-0 px-4 py-3 text-[13.5px] text-[#94A3B8]">
+                {placeholder || "Enter description..."}
+              </div>
+            ) : null}
+            <div
+              ref={editorRef}
+              contentEditable
+              role="textbox"
+              aria-multiline="true"
+              suppressContentEditableWarning
+              onClick={handleEditorClick}
+              onKeyDown={handleKeyDown}
+              onInput={() => {
+                saveCursorLocation();
+                updateValue();
+              }}
+              onKeyUp={saveCursorLocation}
+              onMouseUp={saveCursorLocation}
+              onBlur={() => {
+                saveCursorLocation();
+                setIsFocused(false);
+                updateValue();
+              }}
+              onFocus={() => setIsFocused(true)}
+              className="min-h-[160px] w-full bg-white px-4 py-3 text-[13.5px] leading-relaxed text-[#1E293B] outline-none [&_h2]:text-[18px] [&_h2]:font-bold [&_h2]:text-[#0F172A] [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h3]:text-[15px] [&_h3]:font-bold [&_h3]:text-[#0F172A] [&_h3]:mt-2.5 [&_h3]:mb-1 [&_p]:text-[13.5px] [&_p]:leading-relaxed [&_p]:text-[#334155] [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_ol]:space-y-1 [&_blockquote]:border-l-4 [&_blockquote]:border-[#E31E24] [&_blockquote]:bg-[#F8FAFC] [&_blockquote]:pl-3.5 [&_blockquote]:py-1.5 [&_blockquote]:my-2 [&_blockquote]:italic [&_blockquote]:text-[#475569] [&_blockquote]:rounded-r [&_pre]:bg-[#0F172A] [&_pre]:text-[#F8FAFC] [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:font-mono [&_pre]:text-[12px] [&_pre]:my-2 [&_pre]:overflow-x-auto [&_code]:bg-[#F1F5F9] [&_code]:text-[#E31E24] [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[12px] [&_a]:text-[#E31E24] [&_a]:underline [&_a]:underline-offset-2"
+            />
+          </div>
+        ) : (
+          <div className="p-3 bg-[#0F172A]">
+            <textarea
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              placeholder="Enter HTML markup here..."
+              rows={10}
+              className="w-full bg-transparent font-mono text-[13px] text-[#38BDF8] outline-none resize-y p-1 leading-relaxed selection:bg-[#38BDF8]/30"
+            />
+          </div>
+        )}
       </div>
+
+      {/* Character Count & Alerts */}
       {(showCharCount || maxLength) && (
         <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11.5px] pt-1">
           <div className="flex items-center gap-1.5">
@@ -1798,16 +2083,268 @@ export function AdminRichTextEditor({
               </span>
             )}
           </div>
-          <span
-            className={cn(
-              "font-medium shrink-0",
-              isOverLimit ? "font-bold text-red-600" : isAtLimit ? "font-bold text-amber-700" : "text-[#666]"
-            )}
-          >
-            {charCount} {maxLength ? `/ ${maxLength}` : ""} characters
+          <span className={cn("font-medium", isOverLimit ? "text-red-600 font-bold" : isAtLimit ? "text-amber-700 font-semibold" : "text-[#888]")}>
+            {charCount} {maxLength ? `/ ${maxLength}` : ""} chars
           </span>
         </div>
       )}
+
+      {/* Link Inserter Modal */}
+      {linkModalOpen && typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+            <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
+                <h4 className="text-[15px] font-bold text-[#1A1A1A] flex items-center gap-2">
+                  <Link2 size={16} className="text-[#E31E24]" />
+                  Insert Hyperlink
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setLinkModalOpen(false)}
+                  className="text-[#9CA3AF] hover:text-[#1A1A1A] transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[12.5px] font-semibold text-[#374151] mb-1">Link URL</label>
+                  <input
+                    type="url"
+                    value={linkUrl}
+                    onChange={(e) => setLinkUrl(e.target.value)}
+                    placeholder="https://example.com"
+                    className="w-full rounded-md border border-[#D1D5DB] px-3 py-2 text-[13px] outline-none focus:border-[#E31E24] focus:ring-1 focus:ring-[#E31E24]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[12.5px] font-semibold text-[#374151] mb-1">Display Text</label>
+                  <input
+                    type="text"
+                    value={linkText}
+                    onChange={(e) => setLinkText(e.target.value)}
+                    placeholder="Click here to view"
+                    className="w-full rounded-md border border-[#D1D5DB] px-3 py-2 text-[13px] outline-none focus:border-[#E31E24] focus:ring-1 focus:ring-[#E31E24]"
+                  />
+                </div>
+
+                <label className="flex items-center gap-2 text-[13px] text-[#374151] cursor-pointer pt-1">
+                  <input
+                    type="checkbox"
+                    checked={linkNewTab}
+                    onChange={(e) => setLinkNewTab(e.target.checked)}
+                    className="rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24]"
+                  />
+                  Open link in a new tab
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-[#E5E7EB] pt-3">
+                <button
+                  type="button"
+                  onClick={() => setLinkModalOpen(false)}
+                  className="rounded-md border border-[#D1D5DB] bg-white px-3.5 py-1.5 text-[13px] font-medium text-[#374151] hover:bg-[#F3F4F6] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyLink}
+                  className="rounded-md bg-[#E31E24] px-4 py-1.5 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer"
+                >
+                  Insert Link
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* Image Inserter Modal */}
+      {imgModalOpen && typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+            <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
+                <h4 className="text-[15px] font-bold text-[#1A1A1A] flex items-center gap-2">
+                  <ImageIcon size={16} className="text-[#E31E24]" />
+                  Insert Image
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setImgModalOpen(false)}
+                  className="text-[#9CA3AF] hover:text-[#1A1A1A] transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Tab selection */}
+              <div className="flex border-b border-[#E5E7EB]">
+                <button
+                  type="button"
+                  onClick={() => setImgTab("upload")}
+                  className={`flex flex-1 items-center justify-center gap-1.5 pb-2.5 text-[13px] font-semibold border-b-2 transition-all cursor-pointer ${
+                    imgTab === "upload"
+                      ? "border-[#E31E24] text-[#E31E24]"
+                      : "border-transparent text-[#6B7280] hover:text-[#1A1A1A]"
+                  }`}
+                >
+                  <Upload size={14} />
+                  Upload File
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImgTab("url")}
+                  className={`flex flex-1 items-center justify-center gap-1.5 pb-2.5 text-[13px] font-semibold border-b-2 transition-all cursor-pointer ${
+                    imgTab === "url"
+                      ? "border-[#E31E24] text-[#E31E24]"
+                      : "border-transparent text-[#6B7280] hover:text-[#1A1A1A]"
+                  }`}
+                >
+                  <Globe size={14} />
+                  Image URL
+                </button>
+              </div>
+
+              {imgTab === "upload" ? (
+                <div className="space-y-3">
+                  {selectedImgPreview ? (
+                    <div className="relative flex flex-col items-center rounded-lg border border-[#E5E7EB] bg-[#F8FAFC] p-3 text-center">
+                      <img
+                        src={selectedImgPreview}
+                        alt="Selected preview"
+                        className="max-h-36 w-auto rounded-md object-contain shadow-2xs mb-2 border border-[#E2E8F0] bg-white p-1"
+                      />
+                      <div className="text-[12px] font-medium text-[#1E293B] truncate max-w-full">
+                        {selectedImgFile?.name}
+                      </div>
+                      <div className="text-[11px] text-[#64748B]">
+                        {selectedImgFile ? `${(selectedImgFile.size / 1024).toFixed(1)} KB` : ""}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="mt-2 text-[12px] font-semibold text-[#E31E24] hover:underline cursor-pointer"
+                      >
+                        Change file
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-6 text-center hover:bg-[#F1F5F9] hover:border-[#94A3B8] cursor-pointer transition-colors"
+                    >
+                      <Upload size={26} className="text-[#94A3B8] mb-2" />
+                      <p className="text-[13px] font-semibold text-[#334155]">
+                        Click or drag & drop image to select
+                      </p>
+                      <p className="text-[11.5px] text-[#94A3B8] mt-0.5">PNG, JPG, WEBP, GIF up to 10MB</p>
+                    </div>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleSelectFile(file);
+                      e.target.value = "";
+                    }}
+                  />
+
+                  <div>
+                    <label className="block text-[12px] font-medium text-[#64748B] mb-1">Alt description (optional)</label>
+                    <input
+                      type="text"
+                      value={imgAltInput}
+                      onChange={(e) => setImgAltInput(e.target.value)}
+                      placeholder="e.g. Product diagram or technical illustration"
+                      className="w-full rounded-md border border-[#D1D5DB] px-3 py-1.5 text-[12.5px] outline-none focus:border-[#E31E24]"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[12.5px] font-semibold text-[#374151] mb-1">Image URL</label>
+                    <input
+                      type="url"
+                      value={imgUrlInput}
+                      onChange={(e) => setImgUrlInput(e.target.value)}
+                      placeholder="https://example.com/image.jpg"
+                      className="w-full rounded-md border border-[#D1D5DB] px-3 py-2 text-[13px] outline-none focus:border-[#E31E24] focus:ring-1 focus:ring-[#E31E24]"
+                    />
+                  </div>
+
+                  {imgUrlInput.trim() && (
+                    <div className="flex items-center justify-center p-2 rounded-md border border-[#E2E8F0] bg-[#F8FAFC]">
+                      <img
+                        src={imgUrlInput.trim()}
+                        alt="URL preview"
+                        onError={(e) => ((e.target as HTMLElement).style.display = "none")}
+                        className="max-h-28 rounded object-contain"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-[12px] font-medium text-[#64748B] mb-1">Alt description (optional)</label>
+                    <input
+                      type="text"
+                      value={imgAltInput}
+                      onChange={(e) => setImgAltInput(e.target.value)}
+                      placeholder="e.g. Product diagram or technical illustration"
+                      className="w-full rounded-md border border-[#D1D5DB] px-3 py-1.5 text-[12.5px] outline-none focus:border-[#E31E24]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 border-t border-[#E5E7EB] pt-3">
+                <button
+                  type="button"
+                  onClick={() => setImgModalOpen(false)}
+                  className="rounded-md border border-[#D1D5DB] bg-white px-3.5 py-1.5 text-[13px] font-medium text-[#374151] hover:bg-[#F3F4F6] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                {imgTab === "upload" ? (
+                  <button
+                    type="button"
+                    disabled={!selectedImgFile || uploadingImg}
+                    onClick={handleUploadAndInsertImage}
+                    className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-1.5 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {uploadingImg ? (
+                      <>
+                        <Loader2 size={13} className="animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      "Upload & Insert Image"
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!imgUrlInput.trim()}
+                    onClick={handleInsertImageUrl}
+                    className="rounded-md bg-[#E31E24] px-4 py-1.5 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    Insert Image
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
       {error && <p className="text-[12px] text-red-500">{error}</p>}
     </div>
   );

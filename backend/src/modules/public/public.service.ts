@@ -1220,7 +1220,7 @@ function getProductText(product: ProductTextSource) {
       translation?.seoDescription || product.seoDescription || null,
     seoKeywords: translation?.seoKeywords || product.seoKeywords || null,
     highlights: asArray<{ title: string; description: string }>(translation?.highlights ?? product.highlights),
-    technicalSpecs: asArray<{ label: string; value: string }>(translation?.technicalSpecs ?? product.technicalSpecs),
+    technicalSpecs: (translation?.technicalSpecs ?? product.technicalSpecs) ?? [],
     warranty: asArray<string>(translation?.warranty ?? product.warranty),
     primaryFeatures: asArray<{ title: string; description: string }>(translation?.primaryFeatures ?? product.primaryFeatures),
   };

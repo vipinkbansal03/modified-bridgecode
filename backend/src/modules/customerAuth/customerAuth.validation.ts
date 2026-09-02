@@ -1,11 +1,19 @@
 import { z } from "zod";
 
+const PHONE_REGEX = /^[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{2,4}[-\s\.]?[0-9]{3,6}$/;
+const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+
 export const customerRegisterSchema = z.object({
   email: z.string().email("Invalid email address").transform((value) => value.toLowerCase().trim()),
   password: z.string().min(8, "Password must be at least 8 characters"),
   firstName: z.string().trim().min(1, "First name is required"),
   lastName: z.string().trim().min(1, "Last name is required"),
-  phone: z.string().trim().min(1, "Mobile number is required"),
+  phone: z
+    .string()
+    .trim()
+    .min(7, "Mobile number must be at least 7 digits")
+    .max(20, "Mobile number is too long")
+    .regex(PHONE_REGEX, "Please enter a valid mobile number"),
   customerType: z.enum(["RETAIL", "DEALER", "DOCTOR", "WHOLESALE"]).optional(),
   customerRoleKey: z.enum(["GUEST", "DEALER", "DOCTOR_RETAILER"]).optional(),
   companyName: z.string().trim().optional(),
@@ -22,7 +30,14 @@ export const customerRegisterSchema = z.object({
   currentPractice: z.enum(["STUDENT", "ORTHODONTIST", "OTHER"]).optional(),
   currentPracticeOther: z.string().trim().optional(),
   usingModernProducts: z.boolean().optional(),
-  taxId: z.string().trim().optional(),
+  taxId: z
+    .string()
+    .trim()
+    .optional()
+    .refine((val) => {
+      if (!val) return true;
+      return val.length >= 4 && val.length <= 25;
+    }, "Tax ID / GSTIN must be between 4 and 25 characters"),
   taxIdType: z.string().trim().optional(),
 });
 
