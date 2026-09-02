@@ -1760,7 +1760,9 @@ export async function generateVariants(
     if (!attributeGroups.length) {
       attributeGroups = productAttributeMappings.map((mapping) => ({
         attributeId: mapping.attributeId,
-        attributeValueIds: mapping.allowedValues.map((allowedValue) => allowedValue.attributeValueId),
+        attributeValueIds: mapping.allowedValues.length
+          ? mapping.allowedValues.map((allowedValue) => allowedValue.attributeValueId)
+          : mapping.attribute.values.map((v) => v.id),
       }));
     }
 
@@ -1789,12 +1791,14 @@ export async function generateVariants(
       }
 
       const allowedValueIds = new Set(mapping.allowedValues.map((allowedValue) => allowedValue.attributeValueId));
-      const unmappedValue = group.attributeValueIds.find((attributeValueId) => !allowedValueIds.has(attributeValueId));
-      if (unmappedValue) {
-        throw new AppError(
-          `Value "${unmappedValue}" is not mapped for "${mapping.attribute.name}". Add it to Product Attributes before generating variants.`,
-          400,
-        );
+      if (allowedValueIds.size > 0) {
+        const unmappedValue = group.attributeValueIds.find((attributeValueId) => !allowedValueIds.has(attributeValueId));
+        if (unmappedValue) {
+          throw new AppError(
+            `Value "${unmappedValue}" is not mapped for "${mapping.attribute.name}". Add it to Product Attributes before generating variants.`,
+            400,
+          );
+        }
       }
     }
   }

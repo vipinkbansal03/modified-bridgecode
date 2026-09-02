@@ -8,7 +8,6 @@ import { ProductGallery } from "@/components/sections/ProductGallery";
 import { ProductTabs } from "@/components/sections/ProductTabs";
 import { ProductFeedbackSection } from "@/components/sections/ProductFeedbackSection";
 import { ProductHeaderRating } from "@/components/product/ProductHeaderRating";
-import { BulkOrderPanel } from "@/components/sections/BulkOrderPanel";
 import { SimpleInquiryPanel } from "@/components/sections/SimpleInquiryPanel";
 import { VariantConfigurator } from "@/components/product/VariantConfigurator";
 import { BaseProductConfigurator } from "@/components/product/BaseProductConfigurator";
@@ -20,14 +19,12 @@ import { WishlistButton } from "@/components/product/WishlistButton";
 import { ViewSpecsLink } from "@/components/product/ViewSpecsLink";
 import { ConfigureButton } from "@/components/product/ConfigureButton";
 import { buildMetadata } from "@/lib/seo";
-import productsData from "@/data/products.json";
 import homeContent from "@/data/home.json";
 import type { ProductDetail } from "@/types/product.types";
 import type { ApiProductDetail, ApiProductPrice } from "@/types/api.types";
 
 export const revalidate = 300;
 
-const staticProducts = productsData as ProductDetail[];
 const API_ORIGIN =
   process.env.API_BASE_URL ??
   (process.env.NEXT_PUBLIC_API_URL
@@ -111,7 +108,7 @@ function getPublicDiscount(price?: ApiProductPrice | null) {
   return { amount, percent };
 }
 
-function mergeProduct(api: ApiProductDetail, staticProduct: ProductDetail | undefined): ProductDetail {
+function mergeProduct(api: ApiProductDetail): ProductDetail {
   const normalizeUrl = (url?: string | null) => {
     if (!url) return undefined;
     let trimmed = url.trim();
@@ -136,57 +133,54 @@ function mergeProduct(api: ApiProductDetail, staticProduct: ProductDetail | unde
     title: api.title,
     category: api.category.name,
     categorySlug: api.category.slug,
-    productCode: api.productCode ?? staticProduct?.productCode ?? "",
+    productCode: api.productCode ?? "",
     images: apiImages,
-    information: api.shortDescription ?? staticProduct?.information ?? "",
+    information: api.shortDescription ?? "",
     informationImage: resolveUrl(api.informationImage),
     informationDescription: api.informationDescription ?? undefined,
-    tagline: staticProduct?.tagline,
-    highlights: api.highlights ?? staticProduct?.highlights ?? [],
-    technicalSpecs: api.technicalSpecs ?? staticProduct?.technicalSpecs ?? [],
-    warranty: api.warranty ?? staticProduct?.warranty ?? [],
-    primaryFeatures: api.primaryFeatures ?? staticProduct?.primaryFeatures ?? [],
+    tagline: api.shortDescription || undefined,
+    highlights: api.highlights ?? [],
+    technicalSpecs: api.technicalSpecs ?? [],
+    warranty: api.warranty ?? [],
+    primaryFeatures: api.primaryFeatures ?? [],
     additionalInfo: api.additionalInfo ?? [],
-    prescriptionOptions: staticProduct?.prescriptionOptions,
-    slotOptions: staticProduct?.slotOptions,
-    packagingOptions: staticProduct?.packagingOptions,
-    discountTiers: staticProduct?.discountTiers,
-    catalogueUrl: staticProduct?.catalogueUrl ?? "#",
-    bundle: staticProduct?.bundle ?? [],
+    prescriptionOptions: undefined,
+    slotOptions: undefined,
+    packagingOptions: undefined,
+    discountTiers: undefined,
+    catalogueUrl: (api as any).documents?.[0]?.url ?? "",
+    bundle: [],
     seo: {
-      title: api.seoTitle ?? staticProduct?.seo?.title ?? api.title,
-      description: api.seoDescription ?? staticProduct?.seo?.description ?? api.shortDescription ?? "",
-      keywords: api.seoKeywords ? api.seoKeywords.split(",").map((s) => s.trim()) : staticProduct?.seo?.keywords,
+      title: api.seoTitle ?? api.title,
+      description: api.seoDescription ?? api.shortDescription ?? "",
+      keywords: api.seoKeywords ? api.seoKeywords.split(",").map((s) => s.trim()) : [],
     },
   };
 }
 
 export async function generateStaticParams() {
   const apiSlugs = await fetchSlugsFromApi();
-  const allSlugs = new Set([...staticProducts.map((p) => p.slug), ...apiSlugs]);
-  return Array.from(allSlugs).map((slug) => ({ slug }));
+  return apiSlugs.map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const staticProduct = staticProducts.find((p) => p.slug === slug);
   const apiProduct = await fetchProductFromApi(slug);
 
-  if (!apiProduct && !staticProduct) return {};
-  const product = apiProduct ? mergeProduct(apiProduct, staticProduct) : staticProduct!;
+  if (!apiProduct) return {};
+  const product = mergeProduct(apiProduct);
   return buildMetadata(product.seo, `/products/${product.slug}`);
 }
 
 export default async function ProductDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const staticProduct = staticProducts.find((p) => p.slug === slug);
   const apiProduct = await fetchProductFromApi(slug);
 
-  if (!apiProduct && !staticProduct) notFound();
+  if (!apiProduct) notFound();
 
-  const publicPrice = apiProduct ? getPublicPrice(apiProduct) : null;
+  const publicPrice = getPublicPrice(apiProduct);
   const publicDiscount = getPublicDiscount(publicPrice);
-  const product = apiProduct ? mergeProduct(apiProduct, staticProduct) : staticProduct!;
+  const product = mergeProduct(apiProduct);
 
   return (
     <>
@@ -317,14 +311,12 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             </div>
           </div>
 
-          {/* Variant Configurator Flow (First: Configurator / Matrix / Bulk Order / Inquiry) */}
+          {/* Variant Configurator Flow (First: Configurator / Matrix / Inquiry) */}
           <div id="configurator-section">
-            {apiProduct && apiProduct.variants.length > 0 ? (
+            {apiProduct.variants && apiProduct.variants.length > 0 ? (
               <VariantConfigurator apiProduct={apiProduct} />
-            ) : product.prescriptionOptions && product.slotOptions && product.packagingOptions && product.discountTiers ? (
-              <BulkOrderPanel product={product as Required<typeof product>} productId={apiProduct?.id} />
             ) : (
-              <SimpleInquiryPanel product={product} productId={apiProduct?.id} />
+              <SimpleInquiryPanel product={product} productId={apiProduct.id} />
             )}
           </div>
 
