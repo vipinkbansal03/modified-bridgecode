@@ -62,6 +62,8 @@ function getPriceForCurrency(
   return (
     variant.prices.find((price) => price.currencyCode === currencyCode) ??
     productPrices.find((price) => price.currencyCode === currencyCode) ??
+    variant.prices[0] ??
+    productPrices[0] ??
     null
   );
 }
@@ -310,6 +312,18 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
       ),
     ) ?? null;
 
+  const currentAvailableStock = currentVariant
+    ? (currentVariant.warehouseInventories?.length
+        ? currentVariant.warehouseInventories.reduce((sum, inv) => sum + inv.available, 0)
+        : (currentVariant.inventory?.available ?? 0))
+    : 0;
+
+  useEffect(() => {
+    if (currentAvailableStock > 0 && quantity > currentAvailableStock) {
+      setQuantity(currentAvailableStock);
+    }
+  }, [currentAvailableStock, quantity]);
+
   const { selectedAddress } = useDeliveryAddress();
 
   const { data: warehouses, isLoading: isWarehousesLoading } = useProductWarehouses(
@@ -518,10 +532,8 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
       return;
     }
 
-    const availableStock = currentVariant.inventory?.available ?? 0;
-    const isOutOfStock =
-      currentVariant.inventory?.status === "OUT_OF_STOCK" ||
-      availableStock <= 0;
+    const availableStock = currentAvailableStock;
+    const isOutOfStock = availableStock <= 0;
 
     if (isOutOfStock) {
       setError("This item is currently out of stock.");
@@ -575,10 +587,10 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
       return;
     }
 
-    const availableStock = currentVariant.inventory?.available ?? 0;
-    const isOutOfStock =
-      currentVariant.inventory?.status === "OUT_OF_STOCK" ||
-      availableStock <= 0;
+    const availableStock = currentVariant.warehouseInventories?.length
+      ? currentVariant.warehouseInventories.reduce((sum, inv) => sum + inv.available, 0)
+      : (currentVariant.inventory?.available ?? 0);
+    const isOutOfStock = availableStock <= 0;
 
     if (isOutOfStock) {
       setError("This item is currently out of stock.");
@@ -635,12 +647,21 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     nextQuantity: number,
     shouldFocusQuoteSummary = false,
   ) {
+    const variant = apiProduct.variants.find((v) => v.id === variantId);
+    const maxStock = variant
+      ? (variant.warehouseInventories?.length
+          ? variant.warehouseInventories.reduce((sum, inv) => sum + inv.available, 0)
+          : (variant.inventory?.available ?? 0))
+      : 9999;
+
+    const clampedQuantity = Math.min(maxStock > 0 ? maxStock : 9999, nextQuantity);
+
     setDrafts((current) =>
-      nextQuantity <= 0
+      clampedQuantity <= 0
         ? current.filter((item) => item.variantId !== variantId)
         : current.map((item) =>
             item.variantId === variantId
-              ? { ...item, quantity: nextQuantity }
+              ? { ...item, quantity: clampedQuantity }
               : item,
           ),
     );
@@ -831,27 +852,39 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                   <button
                     type="button"
                     aria-label="Decrease quantity"
+                    disabled={quantity <= 1 || currentAvailableStock <= 0}
                     onClick={() =>
                       setQuantity((current) => Math.max(1, current - 1))
                     }
-                    className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink transition hover:border-steel-2"
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink transition hover:border-steel-2 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Minus size={14} />
                   </button>
                   <input
-                    type="number"
-                    min={1}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={quantity}
-                    onChange={(event) =>
-                      setQuantity(Math.max(1, Number(event.target.value) || 1))
-                    }
-                    className="w-12 appearance-none border-0 bg-transparent text-center text-[15px] font-semibold text-ink outline-none sm:w-16 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    disabled={currentAvailableStock <= 0}
+                    onChange={(event) => {
+                      const raw = event.target.value.replace(/[^0-9]/g, "");
+                      const num = Number(raw) || 1;
+                      const maxLimit = currentAvailableStock > 0 ? currentAvailableStock : 9999;
+                      setQuantity(Math.min(maxLimit, Math.max(1, num)));
+                    }}
+                    className="w-12 appearance-none border-0 bg-transparent text-center text-[15px] font-semibold text-ink outline-none sm:w-16 disabled:opacity-40"
                   />
                   <button
                     type="button"
                     aria-label="Increase quantity"
-                    onClick={() => setQuantity((current) => current + 1)}
-                    className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink transition hover:border-steel-2"
+                    disabled={currentAvailableStock <= 0 || (currentAvailableStock > 0 && quantity >= currentAvailableStock)}
+                    onClick={() =>
+                      setQuantity((current) => {
+                        const maxLimit = currentAvailableStock > 0 ? currentAvailableStock : 9999;
+                        return Math.min(maxLimit, current + 1);
+                      })
+                    }
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink transition hover:border-steel-2 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Plus size={14} />
                   </button>

@@ -59,21 +59,35 @@ export default function AttributesPage() {
   const [bulkAction, setBulkAction] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
 
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
+  const executeBulkDelete = async () => {
+    setBulkSaving(true);
+    try {
+      await Promise.all(selectedIds.map(id => deleteAttribute.mutateAsync(id)));
+      showToast(`Successfully deleted ${selectedIds.length} attribute(s).`, "success");
+      setSelectedIds([]);
+      setBulkAction("");
+      setShowBulkDeleteConfirm(false);
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to complete bulk delete."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   const handleBulkAction = async () => {
     if (selectedIds.length === 0 || !bulkAction) return;
 
     if (bulkAction === "delete") {
-      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected attribute(s)? This action cannot be undone.`)) {
-        return;
-      }
+      setShowBulkDeleteConfirm(true);
+      return;
     }
 
     setBulkSaving(true);
     try {
-      if (bulkAction === "delete") {
-        await Promise.all(selectedIds.map(id => deleteAttribute.mutateAsync(id)));
-        showToast(`Successfully deleted ${selectedIds.length} attribute(s).`, "success");
-      } else if (bulkAction === "activate") {
+      if (bulkAction === "activate") {
         await Promise.all(selectedIds.map(id => updateAttribute.mutateAsync({ id, status: "ACTIVE" })));
         showToast(`Successfully activated ${selectedIds.length} attribute(s).`, "success");
       } else if (bulkAction === "deactivate") {
@@ -396,7 +410,29 @@ export default function AttributesPage() {
         open={isEditorOpen}
         onClose={resetEditorState}
         title={editorMode === "edit" ? "Edit attribute" : "New attribute"}
-        panelClassName="max-h-[90vh] max-w-3xl overflow-y-auto"
+        subtitle={editorMode === "edit" ? "Update attribute configurations, display type, and preset option values." : "Define custom specifications, matrix axes, and option lists for products."}
+        size="3xl"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={resetEditorState}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <LoadingButton
+              type="button"
+              onClick={handleSave}
+              loading={isSaving}
+              loadingText={editorMode === "edit" ? "Saving..." : "Creating..."}
+              disabled={editorMode === "edit" && editLoading}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs disabled:opacity-60"
+            >
+              {editorMode === "edit" ? "Save Changes" : "Create Attribute"}
+            </LoadingButton>
+          </div>
+        }
       >
         <div className="p-6">
           {editorMode === "edit" && editLoading ? (
@@ -453,26 +489,21 @@ export default function AttributesPage() {
                   <AttributeValueEditors attribute={{ ...(editingAttribute as ApiAttribute), role }} />
                 </div>
               ) : null}
-
-              <div className="mt-6 flex gap-2">
-                <LoadingButton
-                  type="button"
-                  onClick={handleSave}
-                  loading={isSaving}
-                  loadingText={editorMode === "edit" ? "Saving..." : "Creating..."}
-                  disabled={editorMode === "edit" && editLoading}
-                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60"
-                >
-                  {editorMode === "edit" ? "Save" : "Create"}
-                </LoadingButton>
-                <button type="button" onClick={resetEditorState} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] text-[#6B6B6B]">
-                  Cancel
-                </button>
-              </div>
             </>
           )}
         </div>
       </Modal>
+
+      <ConfirmModal
+        open={showBulkDeleteConfirm}
+        title="Delete Selected Attributes"
+        message={`Are you sure you want to permanently delete the ${selectedIds.length} selected attribute(s)? This action cannot be undone.`}
+        danger={true}
+        confirmText="Delete Attributes"
+        isLoading={bulkSaving}
+        onConfirm={executeBulkDelete}
+        onCancel={() => setShowBulkDeleteConfirm(false)}
+      />
 
       <ConfirmModal
         open={!!deletingId}

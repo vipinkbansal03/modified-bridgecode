@@ -905,7 +905,6 @@ export default function AdminTaxPage() {
           </div>
         </div>
       </div>
-
       {/* TAX PREVIEW MODAL */}
       <Modal open={showPreviewModal} onClose={() => setShowPreviewModal(false)} title="Tax Preview Calculator" panelClassName="max-w-xl">
         <div className="p-6 space-y-4">
@@ -1126,152 +1125,157 @@ export default function AdminTaxPage() {
         </div>
       </Modal>
 
-      <Modal open={showForm} onClose={() => setShowForm(false)} title={form.values.id ? "Edit Tax Rule" : "Add Tax Rule"} panelClassName="max-w-3xl flex flex-col max-h-[90vh]">
-        <form onSubmit={form.handleSubmit} className="flex flex-col min-h-0 overflow-hidden">
-          <div className="p-6 overflow-y-auto space-y-5 flex-1">
-            {/* Rule Details Grid */}
-            <div className="grid gap-x-5 gap-y-4 md:grid-cols-2">
-              <AdminInput
-                label="Rule Name"
-                required
-                {...form.getFieldProps("name")}
-                error={form.errors.name as string}
-                placeholder="GST / VAT / Sales Tax"
-              />
-              <AdminSelect
-                label="Rule Type"
-                {...form.getFieldProps("type")}
-                error={form.errors.type as string}
-                options={[
-                  { value: "CGST", label: "CGST" },
-                  { value: "SGST", label: "SGST" },
-                  { value: "VAT", label: "VAT" },
-                  { value: "SALES_TAX", label: "Sales Tax" },
-                ]}
-              />
-              <AdminSelect
-                label="Tax Mode (Calculation)"
-                {...form.getFieldProps("taxMode")}
-                error={form.errors.taxMode as string}
-                options={[
-                  { value: "EXCLUSIVE", label: "Exclusive (Added on top of subtotal)" },
-                  { value: "INCLUSIVE", label: "Inclusive (Included in product price)" },
-                  { value: "EXEMPT", label: "Exempt (0% Tax / Tax Free)" },
-                ]}
-              />
-              <AdminMultiSearchableSelect
-                label="Countries"
-                values={form.values.countryIds ?? []}
-                onValuesChange={(values) => form.setFieldValue("countryIds", values)}
-                options={(countries as any[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
-                placeholder="Select countries"
-                allowSelectAll
-                selectAllLabel="All countries"
-              />
-              <AdminInput
-                label="Tax Percentage (%)"
-                required
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                {...form.getFieldProps("percentage")}
-                error={form.errors.percentage as string}
-                placeholder="e.g. 18.00"
-              />
-              <AdminSelect
-                label="Status"
-                {...form.getFieldProps("status")}
-                error={form.errors.status as string}
-                options={[
-                  { value: "ACTIVE", label: "Active" },
-                  { value: "INACTIVE", label: "Inactive" },
-                ]}
-              />
-              <AdminInput
-                label="Priority (Sort Order)"
-                type="number"
-                min="0"
-                step="1"
-                {...form.getFieldProps("sortOrder")}
-                error={form.errors.sortOrder as string}
-                placeholder="0"
-              />
-            </div>
-
-            {/* Applicable Categories Section */}
-            <div className="pt-2 space-y-3">
-              <label className="block text-xs font-bold uppercase tracking-wider text-[#374151]">
-                Applicable Categories (Optional)
-              </label>
-              <div className="space-y-3">
-                <AdminMultiSelect
-                  placeholder="Select categories..."
-                  options={categories.map((cat: any) => ({
-                    value: cat.id,
-                    label: cat.name
-                  }))}
-                  selectedValues={form.values.categoryIds ?? []}
-                  onChange={(nextIds) => form.setFieldValue("categoryIds", nextIds)}
-                />
-              </div>
-              <p className="text-[11.5px] text-[#6B7280] leading-normal">
-                If categories are selected, this tax rule will apply to all products in those categories.
-              </p>
-            </div>
-
-            {/* Applicable Products Section */}
-            <div className="pt-2 space-y-3">
-              <label className="block text-xs font-bold uppercase tracking-wider text-[#374151]">
-                Applicable Products (Optional)
-              </label>
-              <div className="space-y-3">
-                <AdminMultiSelect
-                  placeholder="Select products..."
-                  options={products.map((p: any) => ({
-                    value: p.id,
-                    label: `${p.title} ${p.productCode ? `[${p.productCode}]` : ""}`
-                  }))}
-                  selectedValues={form.values.productIds ?? []}
-                  onChange={(nextIds) => form.setFieldValue("productIds", nextIds)}
-                />
-
-                {form.values.productIds && form.values.productIds.length > 0 && (
-                  <TaxVariantsDropdown
-                    selectedProductIds={form.values.productIds}
-                    selectedVariantIds={form.values.variantIds ?? []}
-                    onChange={(nextVariantIds) => form.setFieldValue("variantIds", nextVariantIds)}
-                  />
-                )}
-              </div>
-              <p className="text-[11.5px] text-[#6B7280] leading-normal">
-                If no products/categories/variants are selected, this tax rule will apply globally to all products in the selected country.
-              </p>
-            </div>
-          </div>
-
-          {/* Footer Section */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[#E5E7EB] px-6 py-4 bg-[#FAFAFA] shrink-0">
-            <p className="text-[11.5px] text-[#6B7280] max-w-sm leading-normal">
+      <Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        title={form.values.id ? "Edit Tax Rule" : "Add Tax Rule"}
+        subtitle="Configure country tax rates, calculation mode (VAT, GST, Sales Tax), and scope overrides."
+        size="3xl"
+        footer={
+          <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+            <p className="text-[12px] text-[#6B6B6B] max-w-sm">
               Higher priority rules are resolved first. Tax percentage stays resolver-backed and never recalculates on the client.
             </p>
-            <div className="flex items-center gap-2.5 shrink-0 w-full sm:w-auto justify-end">
+            <div className="flex items-center gap-2.5">
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="px-4 py-2 rounded-lg border border-[#E5E7EB] bg-white text-xs font-medium text-[#374151] hover:bg-[#F3F4F6] transition-colors"
+                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <LoadingButton
                 type="submit"
+                form="tax-rule-form"
                 loading={form.isSubmitting || createRule.isPending || updateRule.isPending}
                 loadingText="Processing..."
-                className="px-5 py-2 rounded-lg bg-[#E31E24] text-xs font-bold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
               >
-                {form.values.id ? "Save Rule" : "Create Rule"}
+                {form.values.id ? "Update Rule" : "Create Rule"}
               </LoadingButton>
             </div>
+          </div>
+        }
+      >
+        <form id="tax-rule-form" onSubmit={form.handleSubmit} className="p-6 space-y-5">
+          {/* Rule Details Grid */}
+          <div className="grid gap-x-5 gap-y-4 md:grid-cols-2">
+            <AdminInput
+              label="Rule Name"
+              required
+              {...form.getFieldProps("name")}
+              error={form.errors.name as string}
+              placeholder="GST / VAT / Sales Tax"
+            />
+            <AdminSelect
+              label="Rule Type"
+              {...form.getFieldProps("type")}
+              error={form.errors.type as string}
+              options={[
+                { value: "CGST", label: "CGST" },
+                { value: "SGST", label: "SGST" },
+                { value: "VAT", label: "VAT" },
+                { value: "SALES_TAX", label: "Sales Tax" },
+              ]}
+            />
+            <AdminSelect
+              label="Tax Mode (Calculation)"
+              {...form.getFieldProps("taxMode")}
+              error={form.errors.taxMode as string}
+              options={[
+                { value: "EXCLUSIVE", label: "Exclusive (Added on top of subtotal)" },
+                { value: "INCLUSIVE", label: "Inclusive (Included in product price)" },
+                { value: "EXEMPT", label: "Exempt (0% Tax / Tax Free)" },
+              ]}
+            />
+            <AdminMultiSearchableSelect
+              label="Countries"
+              values={form.values.countryIds ?? []}
+              onValuesChange={(values) => form.setFieldValue("countryIds", values)}
+              options={(countries as any[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+              placeholder="Select countries"
+              allowSelectAll
+              selectAllLabel="All countries"
+            />
+            <AdminInput
+              label="Tax Percentage (%)"
+              required
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              {...form.getFieldProps("percentage")}
+              error={form.errors.percentage as string}
+              placeholder="e.g. 18.00"
+            />
+            <AdminSelect
+              label="Status"
+              {...form.getFieldProps("status")}
+              error={form.errors.status as string}
+              options={[
+                { value: "ACTIVE", label: "Active" },
+                { value: "INACTIVE", label: "Inactive" },
+              ]}
+            />
+            <AdminInput
+              label="Priority (Sort Order)"
+              type="number"
+              min="0"
+              step="1"
+              {...form.getFieldProps("sortOrder")}
+              error={form.errors.sortOrder as string}
+              placeholder="0"
+            />
+          </div>
+
+          {/* Applicable Categories Section */}
+          <div className="pt-2 space-y-3">
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#374151]">
+              Applicable Categories (Optional)
+            </label>
+            <div className="space-y-3">
+              <AdminMultiSelect
+                placeholder="Select categories..."
+                options={categories.map((cat: any) => ({
+                  value: cat.id,
+                  label: cat.name
+                }))}
+                selectedValues={form.values.categoryIds ?? []}
+                onChange={(nextIds) => form.setFieldValue("categoryIds", nextIds)}
+              />
+            </div>
+            <p className="text-[11.5px] text-[#6B7280] leading-normal">
+              If categories are selected, this tax rule will apply to all products in those categories.
+            </p>
+          </div>
+
+          {/* Applicable Products Section */}
+          <div className="pt-2 space-y-3">
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#374151]">
+              Applicable Products (Optional)
+            </label>
+            <div className="space-y-3">
+              <AdminMultiSelect
+                placeholder="Select products..."
+                options={products.map((p: any) => ({
+                  value: p.id,
+                  label: `${p.title} ${p.productCode ? `[${p.productCode}]` : ""}`
+                }))}
+                selectedValues={form.values.productIds ?? []}
+                onChange={(nextIds) => form.setFieldValue("productIds", nextIds)}
+              />
+
+              {form.values.productIds && form.values.productIds.length > 0 && (
+                <TaxVariantsDropdown
+                  selectedProductIds={form.values.productIds}
+                  selectedVariantIds={form.values.variantIds ?? []}
+                  onChange={(nextVariantIds) => form.setFieldValue("variantIds", nextVariantIds)}
+                />
+              )}
+            </div>
+            <p className="text-[11.5px] text-[#6B7280] leading-normal">
+              If no products/categories/variants are selected, this tax rule will apply globally to all products in the selected country.
+            </p>
           </div>
         </form>
       </Modal>

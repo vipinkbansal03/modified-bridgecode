@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import * as Yup from "yup";
-import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search, ChevronRight, ChevronLeft, ChevronDown, Eye, ZoomIn, CheckSquare, Square, Check, FolderUp, Image as ImageIcon, Loader2, Box, Package, Info, Star } from "lucide-react";
+import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search, ChevronRight, ChevronLeft, ChevronDown, Eye, ZoomIn, CheckSquare, Square, Check, FolderUp, Image as ImageIcon, Loader2, Box, Package, Info, Star, GripVertical } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, AdminMultiSelect, StatusBadge, useToast, ConfirmModal, AdminDeleteModal, DataTable, AdminSectionTable, Column, toastMessages, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
@@ -921,6 +921,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   };
   const [manualVariantOpen, setManualVariantOpen] = useState(false);
   const [editingVariant, setEditingVariant] = useState<VariantRow | null>(null);
+  const [isUpdatingVariant, setIsUpdatingVariant] = useState(false);
   const [editVariantSubTab, setEditVariantSubTab] = useState<"general" | "prices" | "tiers" | "moqs">("general");
   const [editVariantCountryPrices, setEditVariantCountryPrices] = useState<Record<string, { mrp: string; sellingPrice: string; dealerPrice: string; doctorRetailerPrice: string; stock?: string }>>({});
   const [modalTierRuleDraft, setModalTierRuleDraft] = useState({
@@ -1054,6 +1055,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [newMappingRequired, setNewMappingRequired] = useState(true);
   const [newMappingGridAxis, setNewMappingGridAxis] = useState<GridAxis | null>(null);
   const [newMappingValueIds, setNewMappingValueIds] = useState<string[]>([]);
+  const [draggingAttributeId, setDraggingAttributeId] = useState<string | null>(null);
+  const [overAttributeId, setOverAttributeId] = useState<string | null>(null);
   const [bulkEditMode, setBulkEditMode] = useState(false);
   const [bulkCountryIds, setBulkCountryIds] = useState<string[]>(["ALL"]);
   const [variantTableDisplayCountryId, setVariantTableDisplayCountryId] = useState("");
@@ -3779,6 +3782,24 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   };
 
+  const handleReorderMappedAttributes = async (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    const fromIndex = mappedAttributeRows.findIndex((m) => m.id === fromId || m.attributeId === fromId);
+    const toIndex = mappedAttributeRows.findIndex((m) => m.id === toId || m.attributeId === toId);
+    if (fromIndex < 0 || toIndex < 0) return;
+
+    const next = [...mappedAttributeRows];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+
+    try {
+      await assignProductAttributes.mutateAsync(toProductAttributePayload(next));
+      showToast("Attribute order updated.");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to reorder attributes."), "error");
+    }
+  };
+
   const roleBadgeClass = (role: AttributeRole) =>
     role === "DROPDOWN"
       ? "border-blue-200 bg-blue-50 text-blue-700"
@@ -4377,6 +4398,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       return;
     }
 
+    setIsUpdatingVariant(true);
     try {
       await adminApi.put(`/products/${productId}/variants/${editingVariant.id}`, {
         attributeValueIds: selectedValueIds,
@@ -4456,6 +4478,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       refetch();
     } catch (error) {
       showToast("Failed to update variant.", "error");
+    } finally {
+      setIsUpdatingVariant(false);
     }
   };
 
@@ -7957,25 +7981,66 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   </div>
                 ) : (
                   mappedAttributeRows.map((mapping) => (
-                    <div key={mapping.id} className="rounded-lg border border-[#E6E6E6] p-4">
+                    <div
+                      key={mapping.id}
+                      draggable={canManageAttributes}
+                      onDragStart={(e) => {
+                        setDraggingAttributeId(mapping.id);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragEnd={() => {
+                        setDraggingAttributeId(null);
+                        setOverAttributeId(null);
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                        if (overAttributeId !== mapping.id) {
+                          setOverAttributeId(mapping.id);
+                        }
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggingAttributeId) {
+                          handleReorderMappedAttributes(draggingAttributeId, mapping.id);
+                        }
+                        setDraggingAttributeId(null);
+                        setOverAttributeId(null);
+                      }}
+                      className={cn(
+                        "rounded-lg border border-[#E6E6E6] bg-white p-4 transition-all",
+                        draggingAttributeId === mapping.id && "opacity-40 border-dashed border-[#E31E24]",
+                        overAttributeId === mapping.id && draggingAttributeId !== mapping.id && "border-[#E31E24] shadow-md ring-2 ring-[#E31E24]/20"
+                      )}
+                    >
                       <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">{mapping.attribute.name}</h4>
-                            <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", roleBadgeClass(getDisplayTypeRole(mapping.gridAxis)))}>
-                              {getDisplayTypeLabel(mapping.gridAxis)}
-                            </span>
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {mapping.allowedValues.length ? (
-                              mapping.allowedValues.map((allowedValue) => (
-                                <span key={allowedValue.attributeValueId} className="rounded-full bg-[#F2F2F2] px-2 py-0.5 text-[11.5px] text-[#555]">
-                                  {allowedValue.attributeValue.value}
-                                </span>
-                              ))
-                            ) : (
-                              <span className="text-[12px] text-[#9A9A9A]">No allowed values selected.</span>
-                            )}
+                        <div className="flex items-start gap-2.5">
+                          {canManageAttributes && (
+                            <div
+                              title="Drag to reorder attribute"
+                              className="mt-0.5 cursor-grab active:cursor-grabbing text-[#9A9A9A] hover:text-[#1A1A1A] p-0.5"
+                            >
+                              <GripVertical size={16} />
+                            </div>
+                          )}
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">{mapping.attribute.name}</h4>
+                              <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", roleBadgeClass(getDisplayTypeRole(mapping.gridAxis)))}>
+                                {getDisplayTypeLabel(mapping.gridAxis)}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {mapping.allowedValues.length ? (
+                                mapping.allowedValues.map((allowedValue) => (
+                                  <span key={allowedValue.attributeValueId} className="rounded-full bg-[#F2F2F2] px-2 py-0.5 text-[11.5px] text-[#555]">
+                                    {allowedValue.attributeValue.value}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-[12px] text-[#9A9A9A]">No allowed values selected.</span>
+                              )}
+                            </div>
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center justify-end gap-3">
@@ -8404,397 +8469,377 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         </div>
       )}
 
-      {generateVariantOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="flex h-full max-h-[90vh] w-full max-w-[920px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="shrink-0 border-b border-[#E6E6E6] px-6 py-5 sm:px-7">
-              <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-[18px] font-semibold text-[#1A1A1A]">Generate Variants</h3>
-                <p className="mt-1 max-w-3xl text-[13px] leading-5 text-[#6B6B6B]">
-                  {hasMappedProductAttributes
-                    ? "Showing attributes mapped to this product. Add values in Product Attributes before using them here."
-                    : "No product attribute mappings found, so this uses the full global catalog exactly as before."}
-                </p>
-              </div>
-              <button onClick={() => setGenerateVariantOpen(false)} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
-                <X size={18} />
+      <Modal
+        open={generateVariantOpen}
+        onClose={() => setGenerateVariantOpen(false)}
+        title="Generate Variants"
+        subtitle={
+          hasMappedProductAttributes
+            ? "Showing attributes mapped to this product. Add values in Product Attributes before using them here."
+            : "No product attribute mappings found, so this uses the full global catalog exactly as before."
+        }
+        size="3xl"
+        footer={
+          <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+            <p className="text-[12.5px] text-[#6B6B6B]">Review the selected packages and attribute values before generating variants.</p>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setGenerateVariantOpen(false)}
+                className="rounded-lg border border-[#D1D5DB] bg-white px-4 py-2 text-[13px] font-medium text-[#374151] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateVariants}
+                disabled={generatingVariants}
+                className="rounded-lg bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                {generatingVariants ? "Generating…" : "Generate Variants"}
               </button>
             </div>
-            </div>
+          </div>
+        }
+      >
+        <div className="space-y-5">
+          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-[12.5px] leading-5 text-blue-800">
+            New variants inherit the product-level base inventory and every country inventory override configured in the Inventory tab.
+          </div>
 
-            <div className="flex-1 overflow-y-auto px-6 py-5 sm:px-7">
-              <div className="space-y-5">
+          <div className="rounded-lg border border-[#E6E6E6] p-4">
+            <div className="mb-1 text-[13px] font-semibold text-[#1A1A1A]">Base Price (optional)</div>
+            <p className="mb-3 text-[12.5px] leading-5 text-[#6B6B6B]">
+              Enter the base manufacturer price to automatically generate per-country landed prices (including each country&apos;s customs duty and shipping) for these variants as they are created. Leave blank to set prices later.
+            </p>
+            <AdminInput
+              label="Base Price"
+              type="text"
+              value={generateVariantBasePrice}
+              onChange={(event) => setGenerateVariantBasePrice(event.target.value)}
+              placeholder="Enter base price (e.g. 100.00)"
+            />
+          </div>
 
+          <div className="space-y-4">
+            {generateAttributeIds.map((attributeId) => {
+              const attribute = variantGenerationCatalog.find((item) => item.id === attributeId);
+              if (!attribute) return null;
+              const selectedValueIds = generateSelectionMap[attribute.id] ?? [];
+              const values = getAttributeValues(attribute);
 
-
-            <div className="mb-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-[12.5px] leading-5 text-blue-800">
-              New variants inherit the product-level base inventory and every country inventory override configured in the Inventory tab.
-            </div>
-
-            <div className="mb-5 rounded-lg border border-[#E6E6E6] p-4">
-              <div className="mb-3 text-[13px] font-medium text-[#1A1A1A]">Base Price (optional)</div>
-              <p className="mb-3 text-[12.5px] leading-5 text-[#6B6B6B]">
-                Enter the base manufacturer price to automatically generate per-country landed prices (including each country&apos;s customs duty and shipping) for these variants as they are created. Leave blank to set prices later.
-              </p>
-              <AdminInput
-                label="Base Price"
-                type="number"
-                min="0"
-                step="0.01"
-                value={generateVariantBasePrice}
-                onChange={(event) => setGenerateVariantBasePrice(event.target.value)}
-                placeholder="Enter base price"
-              />
-            </div>
-
-            {/* {!hasMappedProductAttributes && (
-              <div className="mb-4 rounded-lg border border-[#E6E6E6] p-4">
-                <div className="mb-3 text-[13px] font-medium text-[#1A1A1A]">Add Attributes To Generation</div>
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <div className="flex-1">
-                    <AdminSelect
-                      value={generateAttributePicker}
-                      onChange={(e) => setGenerateAttributePicker(e.target.value)}
-                      options={[
-                        { value: "", label: "Select attribute…" },
-                        ...variantGenerationCatalog
-                          .filter((attribute) => !generateAttributeIds.includes(attribute.id))
-                          .map((attribute) => ({ value: attribute.id, label: attribute.name })),
-                      ]}
-                    />
+              return (
+                <div key={attribute.id} className="rounded-xl border border-[#E6E6E6] bg-white p-5 transition-all duration-200 hover:shadow-xs">
+                  {/* Header */}
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#F5F5F5] pb-3">
+                    <div className="text-[14px] font-bold text-[#1A1A1A] flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-[#E31E24]"></span>
+                      {attribute.name}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {!hasMappedProductAttributes && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => removeGenerateAttribute(attribute.id)}
+                            className="text-[11px] font-semibold text-[#6B6B6B] hover:text-[#E31E24] transition-colors underline underline-offset-2 cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                          <span className="text-[#D1D5DB] text-[10px]">|</span>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => selectAllGenerateValues(attribute.id)}
+                        className="text-[11px] font-semibold text-[#E31E24] hover:text-[#B5151B] transition-colors underline underline-offset-2 cursor-pointer"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-[#D1D5DB] text-[10px]">|</span>
+                      <button
+                        type="button"
+                        onClick={() => clearGenerateValues(attribute.id)}
+                        className="text-[11px] font-semibold text-[#6B6B6B] hover:text-[#1A1A1A] transition-colors underline underline-offset-2 cursor-pointer"
+                      >
+                        Clear Selection
+                      </button>
+                    </div>
                   </div>
-                  <button onClick={addGenerateAttribute} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5]">
-                    Add Attribute
-                  </button>
-                </div>
-              </div>
-            )} */}
 
-            <div className="space-y-4">
-              {generateAttributeIds.map((attributeId) => {
-                const attribute = variantGenerationCatalog.find((item) => item.id === attributeId);
-                if (!attribute) return null;
-                const selectedValueIds = generateSelectionMap[attribute.id] ?? [];
-                const values = getAttributeValues(attribute);
-
-                return (
-                  <div key={attribute.id} className="rounded-xl border border-[#E6E6E6] bg-white p-5 transition-all duration-200 hover:shadow-md">
-                    {/* Header */}
-                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#F5F5F5] pb-3">
-                      <div>
-                        <div className="text-[14px] font-bold text-[#1A1A1A] flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-[#E31E24]"></span>
-                          {attribute.name}
-                        </div>
+                  {/* Chips grid */}
+                  {values.length === 0 ? (
+                    <p className="text-[12px] text-[#9A9A9A] italic">No values found for this attribute. Add values in Admin → Attributes first.</p>
+                  ) : (
+                    <div>
+                      <div className="flex flex-wrap gap-2.5">
+                        {values.map((val) => {
+                          const isSelected = selectedValueIds.includes(val.id);
+                          return (
+                            <button
+                              key={val.id}
+                              type="button"
+                              onClick={(e) => toggleGenerateValue(attribute.id, val.id, !isSelected, e.shiftKey)}
+                              className={cn(
+                                "group relative flex items-center justify-center rounded-lg border px-4 py-2 text-[12.5px] font-medium transition-all duration-200 select-none cursor-pointer",
+                                isSelected
+                                  ? "border-[#E31E24] bg-[#E31E24] text-white shadow-xs"
+                                  : "border-[#E0E0E0] bg-white text-[#4A4A4A] hover:border-[#1A1A1A] hover:bg-[#F9FAFB]"
+                              )}
+                            >
+                              {val.value}
+                            </button>
+                          );
+                        })}
                       </div>
-                      <div className="flex items-center gap-3">
-                        {!hasMappedProductAttributes && (
+                      <p className="mt-3 text-[11.5px] text-[#6B6B6B] font-medium">
+                        {selectedValueIds.length} of {values.length} options selected for variant combinations.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={manualVariantOpen}
+        onClose={() => setManualVariantOpen(false)}
+        title="Create Manual Variant"
+        subtitle="Pick a package, add only the relevant attributes, then click values directly."
+        size="3xl"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={() => setManualVariantOpen(false)}
+              className="rounded-lg border border-[#D1D5DB] bg-white px-4 py-2 text-[13px] font-medium text-[#374151] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateManualVariant}
+              className="rounded-lg bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer"
+            >
+              {manualVariantAttributeIds.some((attributeId) => (manualVariantModeMap[attributeId] ?? "single") !== "single") ? "Create Variants" : "Create Variant"}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 gap-3 rounded-xl border border-[#F0E2E2] bg-[#FFF8F8] p-4 text-[12px] text-[#6B6B6B] sm:grid-cols-3">
+            <div>
+              <div className="font-semibold text-[#1A1A1A]">1. Base Setup</div>
+              <div className="mt-1">Choose package, SKU and MOQ.</div>
+            </div>
+            <div>
+              <div className="font-semibold text-[#1A1A1A]">2. Relevant Attributes</div>
+              <div className="mt-1">Add only the attributes this variant should use.</div>
+            </div>
+            <div>
+              <div className="font-semibold text-[#1A1A1A]">3. Value Strategy</div>
+              <div className="mt-1">
+                {manualVariantAttributeIds.some((attributeId) => (manualVariantModeMap[attributeId] ?? "single") !== "single")
+                  ? "This will create multiple variants."
+                  : "This will create one exact variant."}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <AdminInput label="SKU" value={manualVariantSku} onChange={(e) => setManualVariantSku(e.target.value)} placeholder="Optional custom SKU" />
+            <AdminInput label="MOQ" type="number" min={1} value={manualVariantMoq} onChange={(e) => setManualVariantMoq(Math.max(1, Number(e.target.value) || 1))} />
+          </div>
+
+          <div className="rounded-lg border border-[#E6E6E6] p-4">
+            <div className="mb-1 text-[13px] font-semibold text-[#1A1A1A]">Choose Attributes For This Variant</div>
+            <p className="mb-3 text-[12px] text-[#6B6B6B]">Keep this limited to the attributes that actually define the SKU.</p>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="flex-1">
+                <AdminSelect
+                  value={manualVariantAttributePicker}
+                  onChange={(e) => setManualVariantAttributePicker(e.target.value)}
+                  options={[
+                    { value: "", label: "Select attribute…" },
+                    ...attributeCatalog
+                      .filter((attribute) => !manualVariantAttributeIds.includes(attribute.id))
+                      .map((attribute) => ({ value: attribute.id, label: attribute.name })),
+                  ]}
+                />
+              </div>
+              <button type="button" onClick={addManualVariantAttribute} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] cursor-pointer">
+                Add Attribute
+              </button>
+            </div>
+
+            {manualVariantAttributeIds.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {manualVariantAttributeIds.map((attributeId) => {
+                  const attribute = attributeCatalog.find((item) => item.id === attributeId);
+                  if (!attribute) return null;
+                  return (
+                    <span key={attributeId} className="inline-flex items-center gap-2 rounded-full border border-[#F0D2D2] bg-[#FFF5F5] px-3 py-1.5 text-[12px] font-medium text-[#B5151B]">
+                      {attribute.name}
+                      <button type="button" onClick={() => removeManualVariantAttribute(attributeId)} className="text-[#D06F6F] hover:text-[#B5151B] cursor-pointer">
+                        <X size={12} />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] px-4 py-3 text-[12px] text-[#6B6B6B]">
+            <span className="font-semibold text-[#1A1A1A]">{manualVariantAttributeIds.length}</span> attributes selected,{" "}
+            <span className="font-semibold text-[#1A1A1A]">{manualVariantAttributeIds.reduce((count, attributeId) => count + (manualVariantSelectionMap[attributeId] ?? []).length, 0)}</span> values chosen.
+          </div>
+
+          <div className="space-y-4">
+            {manualVariantAttributeIds.map((attributeId) => {
+              const attribute = attributeCatalog.find((item) => item.id === attributeId);
+              if (!attribute) return null;
+              const mode = manualVariantModeMap[attribute.id] ?? "single";
+              const selectedValueIds = manualVariantSelectionMap[attribute.id] ?? [];
+              const values = getAttributeValues(attribute);
+              const selectedValues = values.filter((value) => selectedValueIds.includes(value.id));
+
+              return (
+                <div key={attribute.id} className="rounded-lg border border-[#E6E6E6] p-4">
+                  <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[13px] font-semibold text-[#1A1A1A]">{attribute.name} <span className="ml-1 font-normal text-[#9A9A9A]">{attribute.id}</span></div>
+                      <p className="mt-1 text-[12px] text-[#6B6B6B]">Choose how this attribute should behave for this variant flow.</p>
+                    </div>
+                    <button type="button" onClick={() => removeManualVariantAttribute(attribute.id)} className="text-[13px] font-medium text-[#E31E24] hover:text-[#B5151B] cursor-pointer">
+                      Remove
+                    </button>
+                  </div>
+
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    {[
+                      { value: "single", label: "Single Value" },
+                      { value: "specific", label: "Specific Values" },
+                      { value: "all", label: "All Values" },
+                    ].map((option) => {
+                      const active = mode === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setManualVariantMode(attribute.id, option.value as ManualAttributeMode)}
+                          className={cn(
+                            "rounded-full border px-4 py-2 text-[12px] font-medium transition cursor-pointer",
+                            active ? "border-[#E31E24] bg-red-50 text-[#B5151B]" : "border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F8F8F8]"
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {mode === "all" && (
+                    <div className="rounded-md bg-[#FAFAFA] px-3 py-2 text-[12px] text-[#6B6B6B]">
+                      All {values.length} values of {attribute.name} will be used.
+                    </div>
+                  )}
+
+                  {mode !== "all" && (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[12px] font-medium text-[#1A1A1A]">Click values to select:</span>
+                        {mode === "specific" && (
                           <>
                             <button
                               type="button"
-                              onClick={() => removeGenerateAttribute(attribute.id)}
-                              className="text-[11px] font-semibold text-[#6B6B6B] hover:text-[#E31E24] transition-colors underline underline-offset-2"
+                              onClick={() => selectAllManualVariantValues(attribute.id)}
+                              className="rounded-full border border-[#E6E6E6] px-3 py-1 text-[11px] text-[#6B6B6B] hover:bg-[#F5F5F5] cursor-pointer"
                             >
-                              Remove
+                              Select all
                             </button>
-                            <span className="text-[#D1D5DB] text-[10px]">|</span>
+                            <button
+                              type="button"
+                              onClick={() => clearManualVariantValues(attribute.id)}
+                              className="rounded-full border border-[#E6E6E6] px-3 py-1 text-[11px] text-[#6B6B6B] hover:bg-[#F5F5F5] cursor-pointer"
+                            >
+                              Clear
+                            </button>
                           </>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => selectAllGenerateValues(attribute.id)}
-                          className="text-[11px] font-semibold text-[#E31E24] hover:text-[#B5151B] transition-colors underline underline-offset-2"
-                        >
-                          Select All
-                        </button>
-                        <span className="text-[#D1D5DB] text-[10px]">|</span>
-                        <button
-                          type="button"
-                          onClick={() => clearGenerateValues(attribute.id)}
-                          className="text-[11px] font-semibold text-[#6B6B6B] hover:text-[#1A1A1A] transition-colors underline underline-offset-2"
-                        >
-                          Clear Selection
-                        </button>
                       </div>
-                    </div>
 
-                    {/* Chips grid */}
-                    {values.length === 0 ? (
-                      <p className="text-[12px] text-[#9A9A9A] italic">No values found for this attribute. Add values in Admin → Attributes first.</p>
-                    ) : (
-                      <div>
-                        <div className="flex flex-wrap gap-2.5">
-                          {values.map((val) => {
-                            const isSelected = selectedValueIds.includes(val.id);
-                            return (
-                              <button
-                                key={val.id}
-                                type="button"
-                                onClick={(e) => toggleGenerateValue(attribute.id, val.id, !isSelected, e.shiftKey)}
-                                className={cn(
-                                  "group relative flex items-center justify-center rounded-lg border px-4 py-2 text-[12.5px] font-medium transition-all duration-200 select-none cursor-pointer",
-                                  isSelected
-                                    ? "border-[#E31E24] bg-[#E31E24] text-white shadow-sm"
-                                    : "border-[#E0E0E0] bg-white text-[#4A4A4A] hover:border-[#1A1A1A] hover:bg-[#F9FAFB]"
-                                )}
-                              >
-                                {val.value}
-                              </button>
-                            );
-                          })}
+                      <div className="flex flex-wrap gap-2">
+                        {values.map((value) => {
+                          const selected = selectedValueIds.includes(value.id);
+                          return (
+                            <button
+                              key={value.id}
+                              type="button"
+                              onClick={() => toggleManualVariantValue(attribute.id, value.id)}
+                              className={cn(
+                                "rounded-full border px-4 py-2 text-[12px] transition cursor-pointer",
+                                selected ? "border-[#E31E24] bg-red-50 text-[#B5151B]" : "border-[#E6E6E6] bg-white text-[#1A1A1A] hover:bg-[#FAFAFA]"
+                              )}
+                            >
+                              {value.value}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {selectedValues.length > 0 && (
+                        <div className="rounded-md bg-[#FAFAFA] px-3 py-2 text-[12px] text-[#6B6B6B]">
+                          Selected: {selectedValues.map((value) => value.value).join(", ")}
                         </div>
-                        <p className="mt-3 text-[11.5px] text-[#6B6B6B] font-medium">
-                          {selectedValueIds.length} of {values.length} options selected for variant combinations.
+                      )}
+
+                      {selectedValues.length === 0 && (
+                        <p className="text-[12px] text-[#9A9A9A]">
+                          {mode === "single" ? "Add exactly one value for this attribute." : "Add one or more values for this attribute."}
                         </p>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-              </div>
-            </div>
-
-            <div className="shrink-0 border-t border-[#E6E6E6] bg-white px-6 py-4 sm:px-7">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-[12.5px] text-[#6B6B6B]">Review the selected packages and attribute values before generating variants.</p>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setGenerateVariantOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]">
-                    Cancel
-                  </button>
-                  <button onClick={handleGenerateVariants} disabled={generatingVariants} className="rounded-md bg-[#1A1A1A] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#333] disabled:opacity-40">
-                    {generatingVariants ? "Generating…" : "Generate Variants"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {manualVariantOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="max-h-[90vh] w-full max-w-[920px] overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
-            {(() => {
-              const createsMultiple = manualVariantAttributeIds.some((attributeId) => (manualVariantModeMap[attributeId] ?? "single") !== "single");
-              const selectedValueCount = manualVariantAttributeIds.reduce((count, attributeId) => count + (manualVariantSelectionMap[attributeId] ?? []).length, 0);
-
-              return (
-                <>
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-[18px] font-semibold text-[#1A1A1A]">Create Manual Variant</h3>
-                <p className="mt-1 text-[13px] text-[#6B6B6B]">Pick a package, add only the relevant attributes, then click values directly.</p>
-              </div>
-              <button onClick={() => setManualVariantOpen(false)} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="mb-5 grid grid-cols-1 gap-3 rounded-xl border border-[#F0E2E2] bg-[#FFF8F8] p-4 text-[12px] text-[#6B6B6B] sm:grid-cols-3">
-              <div>
-                <div className="font-semibold text-[#1A1A1A]">1. Base Setup</div>
-                <div className="mt-1">Choose package, SKU and MOQ.</div>
-              </div>
-              <div>
-                <div className="font-semibold text-[#1A1A1A]">2. Relevant Attributes</div>
-                <div className="mt-1">Add only the attributes this variant should use.</div>
-              </div>
-              <div>
-                <div className="font-semibold text-[#1A1A1A]">3. Value Strategy</div>
-                <div className="mt-1">{createsMultiple ? "This will create multiple variants." : "This will create one exact variant."}</div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <AdminInput label="SKU" value={manualVariantSku} onChange={(e) => setManualVariantSku(e.target.value)} placeholder="Optional custom SKU" />
-              <AdminInput label="MOQ" type="number" min={1} value={manualVariantMoq} onChange={(e) => setManualVariantMoq(Math.max(1, Number(e.target.value) || 1))} />
-            </div>
-
-            <div className="mt-5 rounded-lg border border-[#E6E6E6] p-4">
-              <div className="mb-1 text-[13px] font-medium text-[#1A1A1A]">Choose Attributes For This Variant</div>
-              <p className="mb-3 text-[12px] text-[#6B6B6B]">Keep this limited to the attributes that actually define the SKU.</p>
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <div className="flex-1">
-                  <AdminSelect
-                    value={manualVariantAttributePicker}
-                    onChange={(e) => setManualVariantAttributePicker(e.target.value)}
-                    options={[
-                      { value: "", label: "Select attribute…" },
-                      ...attributeCatalog
-                        .filter((attribute) => !manualVariantAttributeIds.includes(attribute.id))
-                        .map((attribute) => ({ value: attribute.id, label: attribute.name })),
-                    ]}
-                  />
-                </div>
-                <button onClick={addManualVariantAttribute} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5]">
-                  Add Attribute
-                </button>
-              </div>
-
-              {manualVariantAttributeIds.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {manualVariantAttributeIds.map((attributeId) => {
-                    const attribute = attributeCatalog.find((item) => item.id === attributeId);
-                    if (!attribute) return null;
-                    return (
-                      <span key={attributeId} className="inline-flex items-center gap-2 rounded-full border border-[#F0D2D2] bg-[#FFF5F5] px-3 py-1.5 text-[12px] font-medium text-[#B5151B]">
-                        {attribute.name}
-                        <button type="button" onClick={() => removeManualVariantAttribute(attributeId)} className="text-[#D06F6F] hover:text-[#B5151B]">
-                          <X size={12} />
-                        </button>
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-4 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] px-4 py-3 text-[12px] text-[#6B6B6B]">
-              <span className="font-semibold text-[#1A1A1A]">{manualVariantAttributeIds.length}</span> attributes selected,{" "}
-              <span className="font-semibold text-[#1A1A1A]">{selectedValueCount}</span> values chosen.
-            </div>
-
-            <div className="mt-4 space-y-4">
-              {manualVariantAttributeIds.map((attributeId) => {
-                const attribute = attributeCatalog.find((item) => item.id === attributeId);
-                if (!attribute) return null;
-                const mode = manualVariantModeMap[attribute.id] ?? "single";
-                const selectedValueIds = manualVariantSelectionMap[attribute.id] ?? [];
-                const values = getAttributeValues(attribute);
-                const selectedValues = values.filter((value) => selectedValueIds.includes(value.id));
-
-                return (
-                  <div key={attribute.id} className="rounded-lg border border-[#E6E6E6] p-4">
-                    <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <div className="text-[13px] font-semibold text-[#1A1A1A]">{attribute.name} <span className="ml-1 font-normal text-[#9A9A9A]">{attribute.id}</span></div>
-                        <p className="mt-1 text-[12px] text-[#6B6B6B]">Choose how this attribute should behave for this variant flow.</p>
-                      </div>
-                      <button onClick={() => removeManualVariantAttribute(attribute.id)} className="text-[13px] font-medium text-[#E31E24] hover:text-[#B5151B]">
-                        Remove
-                      </button>
+                      )}
                     </div>
-
-                    <div className="mb-4 flex flex-wrap gap-2">
-                      {[
-                        { value: "single", label: "Single Value" },
-                        { value: "specific", label: "Specific Values" },
-                        { value: "all", label: "All Values" },
-                      ].map((option) => {
-                        const active = mode === option.value;
-                        return (
-                          <button
-                            key={option.value}
-                            type="button"
-                            onClick={() => setManualVariantMode(attribute.id, option.value as ManualAttributeMode)}
-                            className={cn(
-                              "rounded-full border px-4 py-2 text-[12px] font-medium transition",
-                              active ? "border-[#E31E24] bg-red-50 text-[#B5151B]" : "border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F8F8F8]"
-                            )}
-                          >
-                            {option.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {mode === "all" && (
-                      <div className="rounded-md bg-[#FAFAFA] px-3 py-2 text-[12px] text-[#6B6B6B]">
-                        All {values.length} values of {attribute.name} will be used.
-                      </div>
-                    )}
-
-                    {mode !== "all" && (
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[12px] font-medium text-[#1A1A1A]">Click values to select:</span>
-                          {mode === "specific" && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => selectAllManualVariantValues(attribute.id)}
-                                className="rounded-full border border-[#E6E6E6] px-3 py-1 text-[11px] text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                              >
-                                Select all
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => clearManualVariantValues(attribute.id)}
-                                className="rounded-full border border-[#E6E6E6] px-3 py-1 text-[11px] text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                              >
-                                Clear
-                              </button>
-                            </>
-                          )}
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          {values.map((value) => {
-                            const selected = selectedValueIds.includes(value.id);
-                            return (
-                              <button
-                                key={value.id}
-                                type="button"
-                                onClick={() => toggleManualVariantValue(attribute.id, value.id)}
-                                className={cn(
-                                  "rounded-full border px-4 py-2 text-[12px] transition",
-                                  selected ? "border-[#E31E24] bg-red-50 text-[#B5151B]" : "border-[#E6E6E6] bg-white text-[#1A1A1A] hover:bg-[#FAFAFA]"
-                                )}
-                              >
-                                {value.value}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {selectedValues.length > 0 && (
-                          <div className="rounded-md bg-[#FAFAFA] px-3 py-2 text-[12px] text-[#6B6B6B]">
-                            Selected: {selectedValues.map((value) => value.value).join(", ")}
-                          </div>
-                        )}
-
-                        {selectedValues.length === 0 && (
-                          <p className="text-[12px] text-[#9A9A9A]">
-                            {mode === "single" ? "Add exactly one value for this attribute." : "Add one or more values for this attribute."}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="mt-6 flex items-center justify-end gap-2">
-              <button onClick={() => setManualVariantOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]">Cancel</button>
-              <button onClick={handleCreateManualVariant} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-                {createsMultiple ? "Create Variants" : "Create Variant"}
-              </button>
-            </div>
-                </>
+                  )}
+                </div>
               );
-            })()}
+            })}
           </div>
         </div>
-      )}
+      </Modal>
 
-      {variantCountryModalVariant && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="max-h-[88vh] w-full max-w-[720px] overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-[18px] font-semibold text-[#1A1A1A]">Variant Country Availability</h3>
-                <p className="mt-1 text-[13px] text-[#6B6B6B]">
-                  Visibility for {variantCountryModalVariant.title}. New variants start hidden in every country until enabled here.
-                </p>
-              </div>
-              <button onClick={closeVariantCountriesModal} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
-                <X size={18} />
-              </button>
-            </div>
-
+      <Modal
+        open={Boolean(variantCountryModalVariant)}
+        onClose={closeVariantCountriesModal}
+        title="Variant Country Availability"
+        subtitle={variantCountryModalVariant ? `Visibility for ${variantCountryModalVariant.title}. New variants start hidden in every country until enabled here.` : undefined}
+        size="2xl"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={closeVariantCountriesModal}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <LoadingButton
+              type="button"
+              onClick={saveVariantCountryAvailability}
+              loading={updateVariantCountries.isPending || variantCountriesLoading}
+              loadingText="Saving..."
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+            >
+              Save Availability
+            </LoadingButton>
+          </div>
+        }
+      >
+        {variantCountryModalVariant && (
+          <div className="p-6">
             <div className="mb-4 flex items-center justify-between rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2">
               <span className="text-[13px] font-medium text-[#1A1A1A]">{variantCountryModalVariant.sku || "No SKU"}</span>
               <span className="text-[12px] text-[#9A9A9A]">
@@ -8809,7 +8854,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             ) : (
               <div className="grid gap-2 md:grid-cols-2">
                 {(variantCountries as CountryAvailability[]).filter((c) => c.status === "ACTIVE").map((country) => (
-                  <label key={country.id} className="flex items-center justify-between gap-3 rounded-md border border-[#E6E6E6] px-3 py-2">
+                  <label key={country.id} className="flex items-center justify-between gap-3 rounded-md border border-[#E6E6E6] px-3 py-2 cursor-pointer hover:bg-[#FAFAFA]">
                     <span className="min-w-0">
                       <span className="block truncate text-[13px] font-medium text-[#1A1A1A]">{country.name}</span>
                       <span className="text-[11.5px] text-[#9A9A9A]">
@@ -8826,34 +8871,39 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 ))}
               </div>
             )}
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button onClick={closeVariantCountriesModal} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]">Cancel</button>
-              <button
-                onClick={saveVariantCountryAvailability}
-                disabled={updateVariantCountries.isPending || variantCountriesLoading}
-                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
-              >
-                {updateVariantCountries.isPending ? "Saving..." : "Save Availability"}
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
-      {editingVariant && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="max-h-[90vh] w-full max-w-[920px] overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-[18px] font-semibold text-[#1A1A1A]">Edit Variant</h3>
-                <p className="mt-1 text-[13px] text-[#6B6B6B]">Update variant details, country prices, tier overrides, and MOQ rules.</p>
-              </div>
-              <button onClick={closeEditVariantModal} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
-                <X size={18} />
-              </button>
-            </div>
-
+      <Modal
+        open={Boolean(editingVariant)}
+        onClose={closeEditVariantModal}
+        title="Edit Variant"
+        subtitle="Update variant details, country prices, tier overrides, and MOQ rules."
+        size="4xl"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={closeEditVariantModal}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <LoadingButton
+              type="button"
+              onClick={handleUpdateVariant}
+              loading={isUpdatingVariant}
+              loadingText="Saving..."
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+            >
+              Save Variant
+            </LoadingButton>
+          </div>
+        }
+      >
+        {editingVariant && (
+          <div className="p-6">
             <div className="mb-5 flex flex-wrap gap-1 rounded-lg border border-[#E6E6E6] bg-white p-1 max-w-max">
               {[
                 { key: "general", label: "General Info" },
@@ -8866,7 +8916,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   type="button"
                   onClick={() => setEditVariantSubTab(subTab.key as any)}
                   className={cn(
-                    "rounded-md px-3.5 py-1.5 text-[12.5px] font-medium transition-colors",
+                    "rounded-md px-3.5 py-1.5 text-[12.5px] font-medium transition-colors cursor-pointer",
                     editVariantSubTab === subTab.key ? "bg-[#1A1A1A] text-white" : "text-[#6B6B6B] hover:bg-[#F2F2F2]"
                   )}
                 >
@@ -9280,13 +9330,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               </div>
             )}
 
-            <div className="mt-6 flex items-center justify-end gap-2">
-              <button onClick={closeEditVariantModal} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]">Cancel</button>
-              <button onClick={handleUpdateVariant} className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">Save Variant</button>
-            </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
       <ConfirmModal
         open={!!deletingMedia}

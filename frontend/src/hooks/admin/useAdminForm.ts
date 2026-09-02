@@ -121,13 +121,8 @@ export function useAdminForm<T extends Record<string, any>>({
   );
 
   const handleClose = useCallback(() => {
-    if (JSON.stringify(values) !== JSON.stringify(initialValuesState)) {
-      if (!window.confirm("You have unsaved changes. Are you sure you want to discard them?")) {
-        return;
-      }
-    }
     if (onClose) onClose();
-  }, [values, initialValuesState, onClose]);
+  }, [onClose]);
 
   const handleSubmit = useCallback(
     async (e?: React.FormEvent) => {

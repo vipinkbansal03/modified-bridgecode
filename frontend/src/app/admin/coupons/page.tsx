@@ -521,8 +521,39 @@ export default function CouponsPage() {
         />
       </div>
 
-      <Modal open={isFormOpen} onClose={resetForm} title={form.values.id ? "Edit coupon" : "New coupon"} panelClassName="max-w-4xl">
-        <form onSubmit={form.handleSubmit} className="space-y-6 p-6">
+      <Modal
+        open={isFormOpen}
+        onClose={resetForm}
+        title={form.values.id ? "Edit coupon" : "New coupon"}
+        subtitle="Create customer promo codes, discount percentages, limits, and country rules."
+        size="4xl"
+        footer={
+          <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+            <div className="text-[12px] text-[#6B6B6B]">
+              Country restriction is checked during checkout. Leave it as "All countries" for a global coupon.
+            </div>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={resetForm}
+                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <LoadingButton
+                type="submit"
+                form="coupon-form"
+                loading={form.isSubmitting}
+                loadingText="Processing..."
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+              >
+                {form.values.id ? "Update Coupon" : "Create Coupon"}
+              </LoadingButton>
+            </div>
+          </div>
+        }
+      >
+        <form id="coupon-form" onSubmit={form.handleSubmit} className="space-y-6 p-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <AdminInput label="Coupon Code" placeholder="SAVE20" {...form.getFieldProps("code")} error={form.errors.code as string} onChange={(e) => form.setFieldValue("code", e.target.value.toUpperCase())} />
             <AdminSelect
@@ -575,24 +606,6 @@ export default function CouponsPage() {
             <div className="md:col-span-2">
               <AdminInput label="Description" placeholder="Short admin/customer note" {...form.getFieldProps("description")} error={form.errors.description as string} />
             </div>
-          </div>
-
-          <div className="rounded-lg bg-[#F8F8F8] p-3 text-[12.5px] text-[#6B6B6B]">
-            Country restriction is checked during checkout. Leave it as "All countries" for a global coupon.
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={resetForm} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2]">
-              Cancel
-            </button>
-            <LoadingButton
-              type="submit"
-              loading={form.isSubmitting}
-              loadingText="Processing..."
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-            >
-              {form.values.id ? "Update Coupon" : "Create Coupon"}
-            </LoadingButton>
           </div>
         </form>
       </Modal>

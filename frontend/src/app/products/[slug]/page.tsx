@@ -124,7 +124,7 @@ function mergeProduct(api: ApiProductDetail, staticProduct: ProductDetail | unde
     return `/${trimmed}`;
   };
 
-  const apiImages = api.images
+  const apiImages = (api.images || [])
     .map((img) => (typeof img === "string" ? img : img.url))
     .map((url) => normalizeUrl(url) || "")
     .filter(Boolean);
@@ -137,7 +137,7 @@ function mergeProduct(api: ApiProductDetail, staticProduct: ProductDetail | unde
     category: api.category.name,
     categorySlug: api.category.slug,
     productCode: api.productCode ?? staticProduct?.productCode ?? "",
-    images: apiImages.length > 0 ? apiImages : (staticProduct?.images ?? []),
+    images: apiImages,
     information: api.shortDescription ?? staticProduct?.information ?? "",
     informationImage: resolveUrl(api.informationImage),
     informationDescription: api.informationDescription ?? undefined,

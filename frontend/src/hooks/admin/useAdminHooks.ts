@@ -1620,7 +1620,7 @@ export const useAdminCustomer = (id?: string) =>
   useQuery({
     queryKey: ["admin-customer", id],
     queryFn: () => adminApi.get(`/customers/${id}`).then((r) => r.data.data),
-    enabled: !!id,
+    enabled: Boolean(id) && id !== "create",
   });
 
 export const useAdminCustomerOrders = (id?: string) =>
@@ -1628,7 +1628,7 @@ export const useAdminCustomerOrders = (id?: string) =>
     queryKey: ["admin-customer-orders", id],
     queryFn: () =>
       adminApi.get(`/customers/${id}/orders`).then((r) => r.data.data),
-    enabled: !!id,
+    enabled: Boolean(id) && id !== "create",
   });
 
 export const useAdminCustomerAddresses = (id?: string) =>
@@ -1636,8 +1636,19 @@ export const useAdminCustomerAddresses = (id?: string) =>
     queryKey: ["admin-customer-addresses", id],
     queryFn: () =>
       adminApi.get(`/customers/${id}/addresses`).then((r) => r.data.data),
-    enabled: !!id,
+    enabled: Boolean(id) && id !== "create",
   });
+
+export const useCreateAdminCustomer = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      adminApi.post("/customers", data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-customers"] });
+    },
+  });
+};
 
 export const useUpdateAdminCustomer = () => {
   const qc = useQueryClient();

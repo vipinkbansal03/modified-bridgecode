@@ -766,7 +766,7 @@ export function ConfirmModal({
   const finalLoadingText = loadingText || defaultLoadingText;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 px-4">
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/60 px-4 backdrop-blur-xs">
       <div className="w-full max-w-[400px] rounded-xl bg-white p-6 shadow-xl">
         <div className="flex items-start gap-3 mb-4">
           {danger && <AlertTriangle size={20} className="flex-none text-red-500 mt-0.5" />}
@@ -861,7 +861,7 @@ export function AdminDeleteModal({
   const displayName = itemName ? `"${itemName}"` : itemType.toLowerCase();
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 px-4">
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/60 px-4 backdrop-blur-xs">
       <div className="w-full max-w-[500px] rounded-2xl bg-white p-6 shadow-2xl animate-fade-in border border-[#E6E6E6]">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 pb-3 border-b border-[#F0F0F0]">

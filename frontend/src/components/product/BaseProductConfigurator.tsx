@@ -32,11 +32,14 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
   const { addItem } = useCart();
   const { currentCustomer } = useCustomerAuth();
 
+  const { selectedCurrency } = useCurrencyContext();
   const [quantity, setQuantity] = useState(1);
   const [isAdding, setIsAdding] = useState(false);
 
-  // For a base product, we use the first price from apiProduct.prices (which should be for the current region)
-  const basePrice = apiProduct.prices?.[0];
+  // For a base product, we use the price matching selected currency, or the first available price
+  const basePrice =
+    apiProduct.prices?.find((p) => p.currencyCode === selectedCurrency) ??
+    apiProduct.prices?.[0];
 
   const getTierDiscountPercent = (tp: any) => {
     if (tp.discountPercent != null) return tp.discountPercent;
@@ -76,8 +79,10 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
     );
   }
 
-  const inventory = apiProduct.inventory;
-  const isOutOfStock = inventory?.status === "OUT_OF_STOCK" || inventory?.available === 0;
+  const totalAvailableStock = apiProduct.warehouseInventories?.length
+    ? apiProduct.warehouseInventories.reduce((sum, inv) => sum + inv.available, 0)
+    : (apiProduct.inventory?.available ?? 0);
+  const isOutOfStock = totalAvailableStock <= 0;
 
   const handleAddToCart = async (buyNow = false) => {
     try {
@@ -96,7 +101,7 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
         countryCode: basePrice.countryCode,
         countryName: basePrice.countryName,
         selectedAttributes: {},
-        availableStock: inventory?.available,
+        availableStock: totalAvailableStock,
         isOutOfStock: isOutOfStock,
       });
 
@@ -125,11 +130,11 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
       <div className="flex flex-col gap-6 sm:flex-row">
         <div className="flex-1 space-y-3">
           <label className="text-[12px] font-semibold uppercase tracking-wider text-steel-2">Availability</label>
-          {inventory ? (
-            <StockBadge available={inventory.available} status={inventory.status} className="mt-1" />
-          ) : (
-            <div className="text-[13px] text-steel">Checking stock...</div>
-          )}
+          <StockBadge
+            available={totalAvailableStock}
+            status={totalAvailableStock > 0 ? (apiProduct.inventory?.status ?? "IN_STOCK") : "OUT_OF_STOCK"}
+            className="mt-1"
+          />
         </div>
         
         <div className="w-full sm:w-auto">
@@ -138,7 +143,7 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
             value={quantity}
             onChange={setQuantity}
             min={1}
-            max={inventory?.available || 999}
+            max={totalAvailableStock || 999}
             disabled={isOutOfStock || isAdding}
           />
         </div>

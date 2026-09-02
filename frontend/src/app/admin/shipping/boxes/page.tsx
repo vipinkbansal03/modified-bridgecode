@@ -495,8 +495,34 @@ export default function ShippingBoxesPage() {
         )}
       </div>
 
-      <Modal open={formOpen} onClose={() => setFormOpen(false)} title={form.values.id ? "Edit Box" : "Add Box"} panelClassName="max-w-2xl">
-        <form onSubmit={form.handleSubmit} className="p-6">
+      <Modal
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        title={form.values.id ? "Edit Box" : "Add Box"}
+        subtitle="Define package box dimensions, capacity, and country availability for shipping calculations."
+        size="2xl"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={() => setFormOpen(false)}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <LoadingButton
+              type="submit"
+              form="shipping-box-form"
+              loading={form.isSubmitting || upsertMutation.isPending}
+              loadingText="Saving..."
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+            >
+              {form.values.id ? "Update Box" : "Create Box"}
+            </LoadingButton>
+          </div>
+        }
+      >
+        <form id="shipping-box-form" onSubmit={form.handleSubmit} className="p-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <AdminInput required label="Box Name" placeholder="e.g. Small Box, Medium Box" {...form.getFieldProps("name")} error={form.errors.name as string} />
@@ -520,23 +546,15 @@ export default function ShippingBoxesPage() {
             </div>
             <div className="flex items-end pb-2">
               <label className="flex cursor-pointer items-center gap-2">
-                <input type="checkbox" checked={form.values.isActive} onChange={(e) => form.setFieldValue("isActive", e.target.checked)} className="rounded" />
+                <input
+                  type="checkbox"
+                  checked={form.values.isActive}
+                  onChange={(e) => form.setFieldValue("isActive", e.target.checked)}
+                  className="h-4 w-4 rounded border-[#D1D5DB] accent-[#E31E24] cursor-pointer"
+                />
                 <span className="text-[13.5px] text-[#1A1A1A]">Active</span>
               </label>
             </div>
-          </div>
-          <div className="mt-6 flex justify-end gap-3">
-            <button type="button" onClick={() => setFormOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2.5 text-[13.5px] font-medium text-[#555] hover:bg-[#F2F2F2]">
-              Cancel
-            </button>
-            <LoadingButton
-              type="submit"
-              loading={form.isSubmitting || upsertMutation.isPending}
-              loadingText="Saving..."
-              className="rounded-md bg-[#E31E24] px-5 py-2.5 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-            >
-              {form.values.id ? "Update Box" : "Create Box"}
-            </LoadingButton>
           </div>
         </form>
       </Modal>

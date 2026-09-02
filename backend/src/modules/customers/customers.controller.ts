@@ -3,6 +3,11 @@ import { asyncHandler, ApiResponse, AppError } from "../../utils/apiResponse";
 import { AuthRequest } from "../../middleware/auth.middleware";
 import * as CustomersService from "./customers.service";
 
+export const create = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const customer = await CustomersService.createCustomer(req.body);
+  return ApiResponse.created(res, "Customer created successfully.", customer);
+});
+
 export const list = asyncHandler(async (req: AuthRequest, res: Response) => {
   const result = await CustomersService.listCustomers(req.query as never);
   return ApiResponse.paginated(res, "Customers fetched.", result.data, {

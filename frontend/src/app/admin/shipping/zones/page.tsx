@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminListToolbar, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, ConfirmModal, DataTable, Modal, StatusBadge, useToast, type Column, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { getAdminErrorMessage } from "@/services/adminApi";
 import {
@@ -323,76 +323,78 @@ export default function ShippingZonesPage() {
         />
       </div>
 
-      {formOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-[16px] font-semibold text-[#111]">{editingZone ? "Edit Zone" : "Add Zone"}</h2>
-              <button onClick={() => setFormOpen(false)} className="rounded-md p-1 text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#111]">
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={form.handleSubmit} className="space-y-5">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <AdminSelect
-                  label="Provider"
-                  required
-                  options={providerOptions}
-                  {...form.getFieldProps("providerId")}
-                  onChange={(event) => {
-                    setRateCurrency("");
-                    form.setValues({ ...form.values, providerId: event.target.value, charge: "", estimatedDays: "" });
-                  }}
-                  error={form.errors.providerId as string}
-                />
-                <AdminMultiSearchableSelect
-                  label="Countries"
-                  required
-                  options={countryMultiOptions}
-                  values={form.values.countryIds}
-                  onValuesChange={(values) => {
-                    if (values.length === 0) setRateCurrency("");
-                    form.setValues({ ...form.values, countryIds: values, charge: values.length ? form.values.charge : "", estimatedDays: values.length ? form.values.estimatedDays : "" });
-                  }}
-                  allowSelectAll
-                  selectAllLabel="Select All"
-                  emptyMeansAll={false}
-                  error={form.errors.countryIds as string}
-                />
-                <AdminInput label={rateCurrency ? `Charge (${rateCurrency})` : "Charge"} required type="text" name="charge" value={form.values.charge} onChange={(e) => form.setFieldValue("charge", e.target.value.replace(/[^0-9.]/g, ""))} onBlur={form.handleBlur} error={form.errors.charge as string} disabled className="cursor-not-allowed bg-[#F5F5F5] text-[#6B6B6B]" />
-                <AdminInput label={rateCurrency ? `Free Above (${rateCurrency})` : "Free Above"} type="text" name="freeAbove" value={form.values.freeAbove} onChange={(e) => form.setFieldValue("freeAbove", e.target.value.replace(/[^0-9.]/g, ""))} onBlur={form.handleBlur} error={form.errors.freeAbove as string} placeholder="Optional" />
-                <AdminInput label="Estimated Days" required {...form.getFieldProps("estimatedDays")} error={form.errors.estimatedDays as string} disabled className="cursor-not-allowed bg-[#F5F5F5] text-[#6B6B6B]" />
-                <AdminSelect
-                  label="Status"
-                  options={[
-                    { value: "ACTIVE", label: "Active" },
-                    { value: "INACTIVE", label: "Inactive" },
-                  ]}
-                  {...form.getFieldProps("status")}
-                  error={form.errors.status as string}
-                />
-              </div>
-              <p className="text-[12px] text-[#6B6B6B]">
-                {rateLoading ? "Fetching default rate from provider..." : "Charge and estimated days are fetched from the selected provider and are read-only."}
-              </p>
-              <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => setFormOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2]">
-                  Cancel
-                </button>
-                <LoadingButton
-                  type="submit"
-                  loading={form.isSubmitting || createMutation.isPending || updateMutation.isPending}
-                  loadingText="Saving..."
-                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-                >
-                  {editingZone ? "Save Changes" : "Create Zone"}
-                </LoadingButton>
-              </div>
-            </form>
+      <Modal
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        title={editingZone ? "Edit Zone" : "Add Zone"}
+        subtitle="Configure shipping provider, country coverage, rates, and delivery estimates."
+        size="2xl"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={() => setFormOpen(false)}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <LoadingButton
+              type="submit"
+              form="shipping-zone-form"
+              loading={form.isSubmitting || createMutation.isPending || updateMutation.isPending}
+              loadingText="Saving..."
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+            >
+              {editingZone ? "Save Changes" : "Create Zone"}
+            </LoadingButton>
           </div>
-        </div>
-      )}
+        }
+      >
+        <form id="shipping-zone-form" onSubmit={form.handleSubmit} className="space-y-5 p-6">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <AdminSelect
+              label="Provider"
+              required
+              options={providerOptions}
+              {...form.getFieldProps("providerId")}
+              onChange={(event) => {
+                setRateCurrency("");
+                form.setValues({ ...form.values, providerId: event.target.value, charge: "", estimatedDays: "" });
+              }}
+              error={form.errors.providerId as string}
+            />
+            <AdminMultiSearchableSelect
+              label="Countries"
+              required
+              options={countryMultiOptions}
+              values={form.values.countryIds}
+              onValuesChange={(values) => {
+                if (values.length === 0) setRateCurrency("");
+                form.setValues({ ...form.values, countryIds: values, charge: values.length ? form.values.charge : "", estimatedDays: values.length ? form.values.estimatedDays : "" });
+              }}
+              allowSelectAll
+              selectAllLabel="Select All"
+              emptyMeansAll={false}
+              error={form.errors.countryIds as string}
+            />
+            <AdminInput label={rateCurrency ? `Charge (${rateCurrency})` : "Charge"} required type="text" name="charge" value={form.values.charge} onChange={(e) => form.setFieldValue("charge", e.target.value.replace(/[^0-9.]/g, ""))} onBlur={form.handleBlur} error={form.errors.charge as string} disabled className="cursor-not-allowed bg-[#F5F5F5] text-[#6B6B6B]" />
+            <AdminInput label={rateCurrency ? `Free Above (${rateCurrency})` : "Free Above"} type="text" name="freeAbove" value={form.values.freeAbove} onChange={(e) => form.setFieldValue("freeAbove", e.target.value.replace(/[^0-9.]/g, ""))} onBlur={form.handleBlur} error={form.errors.freeAbove as string} placeholder="Optional" />
+            <AdminInput label="Estimated Days" required {...form.getFieldProps("estimatedDays")} error={form.errors.estimatedDays as string} disabled className="cursor-not-allowed bg-[#F5F5F5] text-[#6B6B6B]" />
+            <AdminSelect
+              label="Status"
+              options={[
+                { value: "ACTIVE", label: "Active" },
+                { value: "INACTIVE", label: "Inactive" },
+              ]}
+              {...form.getFieldProps("status")}
+              error={form.errors.status as string}
+            />
+          </div>
+          <p className="text-[12px] text-[#6B6B6B]">
+            {rateLoading ? "Fetching default rate from provider..." : "Charge and estimated days are fetched from the selected provider and are read-only."}
+          </p>
+        </form>
+      </Modal>
 
       <ConfirmModal
         open={Boolean(deleteTarget)}

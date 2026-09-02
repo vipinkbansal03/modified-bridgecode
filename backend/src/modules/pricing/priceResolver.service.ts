@@ -272,6 +272,21 @@ async function findBasePrice(input: ResolvePriceInput) {
     status: "ACTIVE",
   });
 
+  // Fallbacks: if no price configured for this specific country, look for any active price for variant or product
+  if (input.variantId) {
+    lookups.push({
+      productId: input.productId,
+      variantId: input.variantId,
+      status: "ACTIVE",
+    });
+  }
+
+  lookups.push({
+    productId: input.productId,
+    variantId: null,
+    status: "ACTIVE",
+  });
+
   for (const where of lookups) {
     const price = await prisma.productPrice.findFirst({
       where,

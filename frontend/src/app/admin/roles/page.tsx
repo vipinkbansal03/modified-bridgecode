@@ -169,7 +169,9 @@ export default function RolesPage() {
     setRoleName(role.name);
     const fullAcc = role.permissions.includes("*");
     setIsFullAccess(fullAcc);
-    const perms = (fullAcc ? ["*"] : [...role.permissions]).filter((p) => p === "*" || ALL_PERMISSIONS.includes(p));
+    const perms = fullAcc
+      ? [...ALL_PERMISSIONS]
+      : role.permissions.filter((p) => ALL_PERMISSIONS.includes(p));
     setSelectedPerms(perms);
     
     const initialEnabled: Record<string, boolean> = {};
@@ -192,22 +194,32 @@ export default function RolesPage() {
   };
 
   const togglePermission = (key: string) => {
-    if (isFullAccess) return;
     if (selectedPerms.includes(key)) {
-      setSelectedPerms(selectedPerms.filter((p) => p !== key));
+      const next = selectedPerms.filter((p) => p !== key);
+      setSelectedPerms(next);
+      setIsFullAccess(false);
     } else {
-      setSelectedPerms([...selectedPerms, key]);
+      const next = [...selectedPerms, key];
+      setSelectedPerms(next);
+      if (next.length === ALL_PERMISSIONS.length) {
+        setIsFullAccess(true);
+      }
     }
   };
 
   const toggleGroupAll = (groupTitle: string, groupKeys: string[]) => {
-    if (isFullAccess) return;
     const allSelected = groupKeys.every((k) => selectedPerms.includes(k));
     if (allSelected) {
-      setSelectedPerms(selectedPerms.filter((p) => !groupKeys.includes(p)));
+      const next = selectedPerms.filter((p) => !groupKeys.includes(p));
+      setSelectedPerms(next);
+      setIsFullAccess(false);
     } else {
       const union = new Set([...selectedPerms, ...groupKeys]);
-      setSelectedPerms(Array.from(union));
+      const next = Array.from(union);
+      setSelectedPerms(next);
+      if (next.length === ALL_PERMISSIONS.length) {
+        setIsFullAccess(true);
+      }
     }
   };
 
@@ -466,9 +478,42 @@ export default function RolesPage() {
         open={showModal}
         onClose={closeModal}
         title={editingRole ? `Edit Role: ${editingRole.name}` : "Create New System Role"}
-        panelClassName="max-w-4xl max-h-[85vh] flex flex-col overflow-hidden"
+        subtitle={editingRole ? "Configure system role permissions and access level." : "Add a new system role and configure granular permissions across modules."}
+        size="4xl"
+        panelClassName="max-w-4xl"
+        footer={
+          <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+            <div className="text-[12.5px] font-semibold text-[#1A1A1A]">
+              Selected:{" "}
+              <span className="text-[#E31E24]">
+                {isFullAccess || selectedPerms.length === ALL_PERMISSIONS.length
+                  ? `ALL PERMISSIONS (${ALL_PERMISSIONS.length} / ${ALL_PERMISSIONS.length})`
+                  : `${selectedPerms.length} / ${ALL_PERMISSIONS.length} Permissions`}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={closeModal}
+                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <LoadingButton
+                type="button"
+                onClick={handleSave}
+                loading={saving}
+                loadingText="Saving..."
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+              >
+                {editingRole ? "Update Role" : "Create Role"}
+              </LoadingButton>
+            </div>
+          </div>
+        }
       >
-        <div className="p-5 space-y-4 overflow-y-auto max-h-[calc(85vh-120px)]">
+        <div className="p-6 space-y-4">
           {/* Role Name & Full Access Switch */}
           <div className="grid gap-3 sm:grid-cols-[1fr_auto] items-center bg-[#F9FAFB] p-3.5 rounded-xl border border-[#E6E6E6]">
             <div>
@@ -489,8 +534,17 @@ export default function RolesPage() {
                 onClick={() => {
                   const nextVal = !isFullAccess;
                   setIsFullAccess(nextVal);
-                  if (nextVal) setSelectedPerms(["*"]);
-                  else setSelectedPerms([]);
+                  if (nextVal) {
+                    setSelectedPerms(["*"]);
+                    const allEnabled: Record<string, boolean> = {};
+                    PERMISSION_GROUPS.forEach((g) => {
+                      allEnabled[g.title] = true;
+                    });
+                    setEnabledModules(allEnabled);
+                  } else {
+                    setSelectedPerms([]);
+                    setEnabledModules({});
+                  }
                 }}
                 className={cn(
                   "flex items-center gap-2.5 cursor-pointer px-3.5 py-2 rounded-lg border transition-colors select-none",
@@ -516,179 +570,141 @@ export default function RolesPage() {
           </div>
 
           {/* Search Bar */}
-          {!isFullAccess && (
-            <div className="relative">
-              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-              <input
-                type="text"
-                value={permSearchQuery}
-                onChange={(e) => setPermSearchQuery(e.target.value)}
-                placeholder="Search permissions by keyword (e.g. product, order, view, manage)..."
-                className="w-full h-9.5 pl-9 pr-3 text-[13px] border border-[#E6E6E6] rounded-md bg-white outline-none focus:border-[#E31E24] text-[#1A1A1A]"
-              />
-            </div>
-          )}
+          <div className="relative">
+            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
+            <input
+              type="text"
+              value={permSearchQuery}
+              onChange={(e) => setPermSearchQuery(e.target.value)}
+              placeholder="Search permissions by keyword (e.g. product, order, view, manage)..."
+              className="w-full h-9.5 pl-9 pr-3 text-[13px] border border-[#E6E6E6] rounded-md bg-white outline-none focus:border-[#E31E24] text-[#1A1A1A]"
+            />
+          </div>
 
           {/* Permission Group Cards */}
-          {!isFullAccess ? (
-            <div className="space-y-4">
-              {PERMISSION_GROUPS.map((group) => {
-                const groupMeta = group.permissions
-                  .map((k) => PERMISSION_METADATA[k])
-                  .filter(Boolean)
-                  .filter((meta) => {
-                    if (!permSearchQuery.trim()) return true;
-                    const q = permSearchQuery.toLowerCase();
-                    return (
-                      meta.label.toLowerCase().includes(q) ||
-                      meta.description.toLowerCase().includes(q) ||
-                      meta.key.toLowerCase().includes(q)
-                    );
-                  });
+          <div className="space-y-4">
+            {PERMISSION_GROUPS.map((group) => {
+              const groupMeta = group.permissions
+                .map((k) => PERMISSION_METADATA[k])
+                .filter(Boolean)
+                .filter((meta) => {
+                  if (!permSearchQuery.trim()) return true;
+                  const q = permSearchQuery.toLowerCase();
+                  return (
+                    meta.label.toLowerCase().includes(q) ||
+                    meta.description.toLowerCase().includes(q) ||
+                    meta.key.toLowerCase().includes(q)
+                  );
+                });
 
-                if (groupMeta.length === 0) return null;
+              if (groupMeta.length === 0) return null;
 
-                const groupKeys = groupMeta.map((m) => m.key);
-                const allSelected = groupKeys.every((k) => selectedPerms.includes(k));
-                const isExpanded = expandedGroups[group.title] ?? true;
-                const isModuleEnabled = enabledModules[group.title] ?? false;
+              const groupKeys = groupMeta.map((m) => m.key);
+              const allSelected = isFullAccess || groupKeys.every((k) => selectedPerms.includes(k));
+              const isExpanded = expandedGroups[group.title] ?? true;
+              const isModuleEnabled = isFullAccess || (enabledModules[group.title] ?? false);
 
-                return (
-                  <div key={group.title} className="rounded-xl border border-[#E6E6E6] bg-white overflow-hidden shadow-2xs">
-                    {/* Group Header */}
-                    <div className="bg-[#F8F9FA] px-4 py-2.5 border-b border-[#E6E6E6] flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const nextChecked = !isModuleEnabled;
-                            setEnabledModules((prev) => ({ ...prev, [group.title]: nextChecked }));
-                            if (!nextChecked) {
-                              setSelectedPerms((current) => current.filter((p) => !groupKeys.includes(p)));
-                            }
-                          }}
-                          className={cn(
-                            "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors cursor-pointer",
-                            isModuleEnabled ? "border-[#E31E24] bg-[#E31E24] text-white" : "border-[#D1D5DB] bg-white hover:border-[#9CA3AF]"
-                          )}
-                        >
-                          {isModuleEnabled && <Check size={11} className="stroke-[3]" />}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => toggleGroupAccordion(group.title)}
-                          className="text-[#6B7280] hover:text-[#111827] flex items-center cursor-pointer"
-                        >
-                          {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                        </button>
-                        <h4 className="text-[13px] font-bold text-[#111827]">{group.title} Module</h4>
-                        {isModuleEnabled && (
-                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#E5E7EB] text-[#374151]">
-                            {groupKeys.filter((k) => selectedPerms.includes(k)).length} / {groupKeys.length} Selected
-                          </span>
+              return (
+                <div key={group.title} className="rounded-xl border border-[#E6E6E6] bg-white overflow-hidden shadow-2xs">
+                  {/* Group Header */}
+                  <div className="bg-[#F8F9FA] px-4 py-2.5 border-b border-[#E6E6E6] flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        disabled={isFullAccess}
+                        onClick={() => {
+                          const nextChecked = !isModuleEnabled;
+                          setEnabledModules((prev) => ({ ...prev, [group.title]: nextChecked }));
+                          if (!nextChecked) {
+                            setSelectedPerms((current) => current.filter((p) => !groupKeys.includes(p)));
+                          }
+                        }}
+                        className={cn(
+                          "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
+                          isFullAccess ? "cursor-not-allowed opacity-80" : "cursor-pointer",
+                          isModuleEnabled ? "border-[#E31E24] bg-[#E31E24] text-white" : "border-[#D1D5DB] bg-white hover:border-[#9CA3AF]"
                         )}
-                      </div>
-
+                      >
+                        {isModuleEnabled && <Check size={11} className="stroke-[3]" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleGroupAccordion(group.title)}
+                        className="text-[#6B7280] hover:text-[#111827] flex items-center cursor-pointer"
+                      >
+                        {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                      </button>
+                      <h4 className="text-[13px] font-bold text-[#111827]">{group.title} Module</h4>
                       {isModuleEnabled && (
-                        <button
-                          type="button"
-                          onClick={() => toggleGroupAll(group.title, groupKeys)}
-                          className="text-[12px] font-semibold text-[#E31E24] hover:text-[#B5151B] hover:underline cursor-pointer"
-                        >
-                          {allSelected ? "Deselect All" : "Select All Module"}
-                        </button>
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#E5E7EB] text-[#374151]">
+                          {isFullAccess ? groupKeys.length : groupKeys.filter((k) => selectedPerms.includes(k)).length} / {groupKeys.length} Selected
+                        </span>
                       )}
                     </div>
 
-                    {/* Group Permission Switches Grid */}
-                    {isExpanded && (
-                      <div className="p-3">
-                        {isModuleEnabled ? (
-                          <div className="grid gap-2.5 sm:grid-cols-2">
-                            {groupMeta.map((meta) => {
-                              const checked = selectedPerms.includes(meta.key);
-                              return (
-                                <div
-                                  key={meta.key}
-                                  onClick={() => togglePermission(meta.key)}
-                                  className={cn(
-                                    "flex items-start gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer select-none",
-                                    checked
-                                      ? "border-[#D1D5DB] bg-[#F9FAFB] shadow-2xs"
-                                      : "border-[#E6E6E6] bg-white hover:border-[#D1D5DB] hover:bg-[#FAFAFA]"
-                                  )}
-                                >
-                                  <div
-                                    className={cn(
-                                      "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
-                                      checked
-                                        ? "border-[#E31E24] bg-[#E31E24] text-white"
-                                        : "border-[#D1D5DB] bg-white"
-                                    )}
-                                  >
-                                    {checked && <Check size={11} className="stroke-[3]" />}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center justify-between gap-1">
-                                      <span className="text-[12.5px] font-semibold text-[#111827]">{meta.label}</span>
-                                      <span className="font-mono text-[9.5px] text-[#6B7280] bg-[#EDEDED] px-1.5 py-0.5 rounded">
-                                        {meta.key}
-                                      </span>
-                                    </div>
-                                    <p className="text-[11px] text-[#6B6B6B] mt-0.5 leading-normal">{meta.description}</p>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="py-3 text-center text-xs text-[#9CA3AF] italic">
-                            Module disabled. Check the box in the header to configure granular permissions.
-                          </div>
-                        )}
-                      </div>
+                    {isModuleEnabled && !isFullAccess && (
+                      <button
+                        type="button"
+                        onClick={() => toggleGroupAll(group.title, groupKeys)}
+                        className="text-[12px] font-semibold text-[#E31E24] hover:text-[#B5151B] hover:underline cursor-pointer"
+                      >
+                        {allSelected ? "Deselect All" : "Select All Module"}
+                      </button>
                     )}
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="py-10 px-6 text-center bg-[#DCFCE7]/40 rounded-xl border border-[#DCFCE7]">
-              <ShieldCheck size={40} className="mx-auto mb-2 text-[#15803D]" />
-              <h3 className="text-base font-extrabold text-[#15803D]">Full Access Mode Enabled</h3>
-              <p className="text-xs text-[#166534] mt-1 max-w-md mx-auto leading-relaxed">
-                This role automatically bypasses all individual permission checks across the entire system (Super Admin access).
-              </p>
-            </div>
-          )}
-        </div>
 
-        {/* Modal Footer Bar */}
-        <div className="bg-[#F8F9FA] px-5 py-3 border-t border-[#E6E6E6] flex items-center justify-between">
-          <div className="text-[12.5px] font-medium text-[#6B6B6B]">
-            Selected:{" "}
-            <span className="font-bold text-[#1A1A1A]">
-              {isFullAccess ? "FULL ACCESS (*)" : `${selectedPerms.length} / ${ALL_PERMISSIONS.length} Permissions`}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={closeModal}
-              className="h-9 px-4 rounded-md border border-[#E6E6E6] bg-white text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <LoadingButton
-              type="button"
-              onClick={handleSave}
-              loading={saving}
-              loadingText="Saving..."
-              className="h-9 px-4 rounded-md bg-[#E31E24] text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs cursor-pointer"
-            >
-              {editingRole ? "Update Role" : "Create Role"}
-            </LoadingButton>
+                  {/* Group Permission Switches Grid */}
+                  {isExpanded && (
+                    <div className="p-3">
+                      {isModuleEnabled ? (
+                        <div className="grid gap-2.5 sm:grid-cols-2">
+                          {groupMeta.map((meta) => {
+                            const checked = isFullAccess || selectedPerms.includes(meta.key);
+                            return (
+                              <div
+                                key={meta.key}
+                                onClick={() => !isFullAccess && togglePermission(meta.key)}
+                                className={cn(
+                                  "flex items-start gap-2.5 p-2.5 rounded-lg border transition-all select-none",
+                                  isFullAccess ? "cursor-default" : "cursor-pointer",
+                                  checked
+                                    ? "border-[#D1D5DB] bg-[#F9FAFB] shadow-2xs"
+                                    : "border-[#E6E6E6] bg-white hover:border-[#D1D5DB] hover:bg-[#FAFAFA]"
+                                )}
+                              >
+                                <div
+                                  className={cn(
+                                    "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
+                                    checked
+                                      ? "border-[#E31E24] bg-[#E31E24] text-white"
+                                      : "border-[#D1D5DB] bg-white"
+                                  )}
+                                >
+                                  {checked && <Check size={11} className="stroke-[3]" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="text-[12.5px] font-semibold text-[#111827]">{meta.label}</span>
+                                    <span className="font-mono text-[9.5px] text-[#6B7280] bg-[#EDEDED] px-1.5 py-0.5 rounded">
+                                      {meta.key}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-[#6B6B6B] mt-0.5 leading-normal">{meta.description}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="py-3 text-center text-xs text-[#9CA3AF] italic">
+                          Module disabled. Check the box in the header to configure granular permissions.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </Modal>
