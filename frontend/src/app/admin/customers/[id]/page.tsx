@@ -88,6 +88,13 @@ export default function AdminCustomerDetailPage() {
   const searchParams = useSearchParams();
   const params = useParams<{ id: string }>();
   const customerId = params.id;
+
+  useEffect(() => {
+    if (customerId === "create") {
+      router.replace("/admin/customers/create");
+    }
+  }, [customerId, router]);
+
   const { showToast } = useToast();
   const { data: customer, isLoading } = useAdminCustomer(customerId) as { data?: Customer; isLoading: boolean };
   const { data: customerRoles = [] } = useAdminCustomerRoles();
@@ -252,8 +259,12 @@ export default function AdminCustomerDetailPage() {
         </Link>
       </div>
 
-      {isLoading || !customer ? (
+      {isLoading ? (
         <div className="rounded-lg border border-[#E6E6E6] bg-white p-5 text-[13.5px] text-[#9A9A9A]">Loading customer...</div>
+      ) : !customer ? (
+        <div className="rounded-lg border border-[#E6E6E6] bg-white p-8 text-center text-[13.5px] text-[#9A9A9A]">
+          Customer not found or has been removed.
+        </div>
       ) : (
         <div className="space-y-5">
           <div className={`grid gap-5 ${customer.approvalStatus === "PENDING_APPROVAL" ? "lg:grid-cols-[1fr_360px]" : "grid-cols-1"}`}>

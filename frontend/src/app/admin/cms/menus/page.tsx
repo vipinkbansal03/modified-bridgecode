@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Edit2, Trash2, Search, ArrowUp, ArrowDown, Globe, Link2, FolderTree, ExternalLink, X, Settings, GripVertical, Check, ArrowRight, ArrowLeft } from "lucide-react";
-import { AdminInput, AdminSelect, AdminTextarea, ConfirmModal, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminTextarea, ConfirmModal, Modal, useToast } from "@/components/admin/AdminComponents";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminCategories, useAdminCmsMenus, useAdminCmsPages, useAdminLanguages, useAdminCollections, useAdminBlogs, useAdminProducts } from "@/hooks/admin/useAdminHooks";
 import { CMS_MENU_LOCATIONS } from "@/lib/cmsNavigation";
@@ -1215,259 +1215,253 @@ export default function CmsMenusPage() {
       )}
 
       {/* Add Item Modal with Shopify Link Picker */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-white p-6 shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-[#E6E6E6] pb-3">
-              <h3 className="text-[15px] font-bold text-[#1A1A1A]">Add Menu Item</h3>
-              <button onClick={() => { setIsAddModalOpen(false); setAddTranslations({}); }} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <AdminInput label="Item Label" value={addLabel} onChange={(e) => setAddLabel(e.target.value)} placeholder="e.g. Metal Brackets" />
-              
-              <LinkPickerInput
-                label="URL / Target Link"
-                value={addUrl}
-                onChange={setAddUrl}
-                onSelectLink={(url, label) => {
-                  setAddUrl(url);
-                  if (!addLabel.trim()) {
-                    setAddLabel(label);
-                  }
-                }}
-                categories={categories}
-                collections={collections}
-                cmsPages={cmsPages}
-                blogs={blogs}
-                products={products}
-              />
-
-              <AdminSelect label="Parent Menu (Column Group)" value={addParentId} onChange={(e) => setAddParentId(e.target.value)} options={parentOptions} />
-              <div className="grid grid-cols-2 gap-3">
-                <AdminInput label="Sort Order" type="number" value={String(addSortOrder)} onChange={(e) => setAddSortOrder(Number(e.target.value || 0))} />
-                <AdminSelect
-                  label="Open in New Tab"
-                  value={addOpenInNewTab}
-                  onChange={(e) => setAddOpenInNewTab(e.target.value)}
-                  options={[
-                    { value: "false", label: "No (Same Window)" },
-                    { value: "true", label: "Yes (New Tab)" },
-                  ]}
-                />
-              </div>
-
-              {activeTranslationLanguages.length > 0 && (
-                <div className="pt-3 border-t border-[#E6E6E6] space-y-2">
-                  <p className="text-xs font-bold uppercase tracking-wider text-[#9A9A9A]">Multi-Language Translations</p>
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1">
-                      <AdminSelect
-                        label="Select Language to Translate"
-                        value={selectedTranslationLangId || (activeTranslationLanguages[0]?.id ?? "")}
-                        onChange={(e) => setSelectedTranslationLangId(e.target.value)}
-                        options={activeTranslationLanguages.map((lang: Language) => ({
-                          value: lang.id,
-                          label: `${lang.name} (${lang.code})`,
-                        }))}
-                      />
-                    </div>
-                  </div>
-                  <div className="pt-1">
-                    {(() => {
-                      const activeLangId = selectedTranslationLangId || (activeTranslationLanguages[0]?.id ?? "");
-                      const activeLang = activeTranslationLanguages.find((l: Language) => l.id === activeLangId);
-                      return activeLang ? (
-                        <AdminTextarea
-                          key={activeLangId}
-                          label={`Translation Value for ${activeLang.name}`}
-                          value={addTranslations[activeLangId] ?? ""}
-                          onChange={(e) => setAddTranslations((prev) => ({ ...prev, [activeLangId]: e.target.value }))}
-                          rows={1}
-                          placeholder={`Enter translation for ${addLabel || "Item"}...`}
-                        />
-                      ) : null;
-                    })()}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E6E6E6]">
-              <button
-                type="button"
-                onClick={() => { setIsAddModalOpen(false); setAddTranslations({}); }}
-                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-xs font-semibold text-[#1A1A1A] hover:bg-[#F5F5F5]"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={addItem}
-                className="rounded-md bg-[#E31E24] px-5 py-2 text-xs font-semibold text-white hover:bg-[#B5151B]"
-              >
-                Create Item
-              </button>
-            </div>
+      <Modal
+        open={isAddModalOpen}
+        onClose={() => { setIsAddModalOpen(false); setAddTranslations({}); }}
+        title="Add Menu Item"
+        subtitle="Configure the item label, link target, parent group, and translations."
+        size="lg"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={() => { setIsAddModalOpen(false); setAddTranslations({}); }}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={addItem}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+            >
+              Create Item
+            </button>
           </div>
+        }
+      >
+        <div className="space-y-4 p-6">
+          <AdminInput label="Item Label" value={addLabel} onChange={(e) => setAddLabel(e.target.value)} placeholder="e.g. Metal Brackets" />
+          
+          <LinkPickerInput
+            label="URL / Target Link"
+            value={addUrl}
+            onChange={setAddUrl}
+            onSelectLink={(url, label) => {
+              setAddUrl(url);
+              if (!addLabel.trim()) {
+                setAddLabel(label);
+              }
+            }}
+            categories={categories}
+            collections={collections}
+            cmsPages={cmsPages}
+            blogs={blogs}
+            products={products}
+          />
+
+          <AdminSelect label="Parent Menu (Column Group)" value={addParentId} onChange={(e) => setAddParentId(e.target.value)} options={parentOptions} />
+          <div className="grid grid-cols-2 gap-3">
+            <AdminInput label="Sort Order" type="number" value={String(addSortOrder)} onChange={(e) => setAddSortOrder(Number(e.target.value || 0))} />
+            <AdminSelect
+              label="Open in New Tab"
+              value={addOpenInNewTab}
+              onChange={(e) => setAddOpenInNewTab(e.target.value)}
+              options={[
+                { value: "false", label: "No (Same Window)" },
+                { value: "true", label: "Yes (New Tab)" },
+              ]}
+            />
+          </div>
+
+          {activeTranslationLanguages.length > 0 && (
+            <div className="pt-3 border-t border-[#E6E6E6] space-y-2">
+              <p className="text-xs font-bold uppercase tracking-wider text-[#9A9A9A]">Multi-Language Translations</p>
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <AdminSelect
+                    label="Select Language to Translate"
+                    value={selectedTranslationLangId || (activeTranslationLanguages[0]?.id ?? "")}
+                    onChange={(e) => setSelectedTranslationLangId(e.target.value)}
+                    options={activeTranslationLanguages.map((lang: Language) => ({
+                      value: lang.id,
+                      label: `${lang.name} (${lang.code})`,
+                    }))}
+                  />
+                </div>
+              </div>
+              <div className="pt-1">
+                {(() => {
+                  const activeLangId = selectedTranslationLangId || (activeTranslationLanguages[0]?.id ?? "");
+                  const activeLang = activeTranslationLanguages.find((l: Language) => l.id === activeLangId);
+                  return activeLang ? (
+                    <AdminTextarea
+                      key={activeLangId}
+                      label={`Translation Value for ${activeLang.name}`}
+                      value={addTranslations[activeLangId] ?? ""}
+                      onChange={(e) => setAddTranslations((prev) => ({ ...prev, [activeLangId]: e.target.value }))}
+                      rows={1}
+                      placeholder={`Enter translation for ${addLabel || "Item"}...`}
+                    />
+                  ) : null;
+                })()}
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </Modal>
 
       {/* Edit Item Modal with Shopify Link Picker */}
-      {editingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-white p-6 shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-[#E6E6E6] pb-3">
-              <h3 className="text-[15px] font-bold text-[#1A1A1A]">Edit Menu Item</h3>
-              <button onClick={closeEditModal} className="text-[#9A9A9A] hover:text-[#1A1A1A]">
-                <X size={18} />
-              </button>
+      <Modal
+        open={Boolean(editingItem)}
+        onClose={closeEditModal}
+        title="Edit Menu Item"
+        subtitle="Update the item label, link target, parent group, and translations."
+        size="lg"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={closeEditModal}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => editingItem && saveItem(editingItem)}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+            >
+              Save Changes
+            </button>
+          </div>
+        }
+      >
+        {editingItem && (
+          <div className="space-y-4 p-6">
+            <AdminInput
+              label="Item Label"
+              value={editingItem.label}
+              onChange={(e) => setEditingItem({ ...editingItem, label: e.target.value })}
+            />
+            
+            <LinkPickerInput
+              label="URL / Target Link"
+              value={editingItem.url}
+              onChange={(val) => setEditingItem({ ...editingItem, url: val })}
+              onSelectLink={(url, label) => {
+                setEditingItem(prev => {
+                  if (!prev) return null;
+                  return {
+                    ...prev,
+                    url,
+                    label: prev.label ? prev.label : label
+                  };
+                });
+              }}
+              categories={categories}
+              collections={collections}
+              cmsPages={cmsPages}
+              blogs={blogs}
+              products={products}
+            />
+
+            <AdminSelect
+              label="Parent Menu (Column Group)"
+              value={editingItem.parentId ?? ""}
+              onChange={(e) => setEditingItem({ ...editingItem, parentId: e.target.value || null })}
+              options={[{ value: "", label: "No Parent (Top-Level Column)" }].concat(
+                localItems
+                  .filter((candidate) => candidate.id !== editingItem.id)
+                  .map((candidate) => ({ value: candidate.id, label: candidate.label })),
+              )}
+            />
+            <div className="grid grid-cols-3 gap-3">
+              <AdminInput
+                label="Sort Order"
+                type="number"
+                value={String(editingItem.sortOrder)}
+                onChange={(e) => setEditingItem({ ...editingItem, sortOrder: Number(e.target.value || 0) })}
+              />
+              <AdminSelect
+                label="Status"
+                value={editingItem.status ?? "ACTIVE"}
+                onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value })}
+                options={[
+                  { value: "ACTIVE", label: "Active" },
+                  { value: "INACTIVE", label: "Inactive" },
+                ]}
+              />
+              <AdminSelect
+                label="New Tab"
+                value={editingItem.openInNewTab ? "true" : "false"}
+                onChange={(e) => setEditingItem({ ...editingItem, openInNewTab: e.target.value === "true" })}
+                options={[
+                  { value: "false", label: "No" },
+                  { value: "true", label: "Yes" },
+                ]}
+              />
             </div>
 
-            <div className="space-y-3">
-              <AdminInput
-                label="Item Label"
-                value={editingItem.label}
-                onChange={(e) => setEditingItem({ ...editingItem, label: e.target.value })}
-              />
-              
-              <LinkPickerInput
-                label="URL / Target Link"
-                value={editingItem.url}
-                onChange={(val) => setEditingItem({ ...editingItem, url: val })}
-                onSelectLink={(url, label) => {
-                  setEditingItem(prev => {
-                    if (!prev) return null;
-                    return {
-                      ...prev,
-                      url,
-                      label: prev.label ? prev.label : label
-                    };
-                  });
-                }}
-                categories={categories}
-                collections={collections}
-                cmsPages={cmsPages}
-                blogs={blogs}
-                products={products}
-              />
-
-              <AdminSelect
-                label="Parent Menu (Column Group)"
-                value={editingItem.parentId ?? ""}
-                onChange={(e) => setEditingItem({ ...editingItem, parentId: e.target.value || null })}
-                options={[{ value: "", label: "No Parent (Top-Level Column)" }].concat(
-                  localItems
-                    .filter((candidate) => candidate.id !== editingItem.id)
-                    .map((candidate) => ({ value: candidate.id, label: candidate.label })),
-                )}
-              />
-              <div className="grid grid-cols-3 gap-3">
-                <AdminInput
-                  label="Sort Order"
-                  type="number"
-                  value={String(editingItem.sortOrder)}
-                  onChange={(e) => setEditingItem({ ...editingItem, sortOrder: Number(e.target.value || 0) })}
-                />
-                <AdminSelect
-                  label="Status"
-                  value={editingItem.status ?? "ACTIVE"}
-                  onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value })}
-                  options={[
-                    { value: "ACTIVE", label: "Active" },
-                    { value: "INACTIVE", label: "Inactive" },
-                  ]}
-                />
-                <AdminSelect
-                  label="New Tab"
-                  value={editingItem.openInNewTab ? "true" : "false"}
-                  onChange={(e) => setEditingItem({ ...editingItem, openInNewTab: e.target.value === "true" })}
-                  options={[
-                    { value: "false", label: "No" },
-                    { value: "true", label: "Yes" },
-                  ]}
-                />
-              </div>
-
-              {activeTranslationLanguages.length > 0 && (
-                <div className="pt-3 border-t border-[#E6E6E6] space-y-2">
-                  <p className="text-xs font-bold uppercase tracking-wider text-[#9A9A9A]">Multi-Language Translations</p>
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1">
-                      <AdminSelect
-                        label="Select Language to Translate"
-                        value={selectedTranslationLangId || (activeTranslationLanguages[0]?.id ?? "")}
-                        onChange={(e) => setSelectedTranslationLangId(e.target.value)}
-                        options={activeTranslationLanguages.map((lang: Language) => ({
-                          value: lang.id,
-                          label: `${lang.name} (${lang.code})`,
-                        }))}
-                      />
-                    </div>
-                  </div>
-                  <div className="pt-1">
-                    {(() => {
-                      const activeLangId = selectedTranslationLangId || (activeTranslationLanguages[0]?.id ?? "");
-                      const activeLang = activeTranslationLanguages.find((l: Language) => l.id === activeLangId);
-                      return activeLang ? (
-                        <AdminTextarea
-                          key={activeLangId}
-                          label={`Translation Value for ${activeLang.name}`}
-                          value={loadingTranslation ? "" : activeTranslationValue}
-                          onChange={(e) => setActiveTranslationValue(e.target.value)}
-                          rows={1}
-                          onBlur={(e) => {
-                            setLocalItems(prev =>
-                              prev.map(item => {
-                                if (item.id === editingItem.id) {
-                                  const updatedTranslations = { ...item.translations };
-                                  if (!updatedTranslations.label) {
-                                    updatedTranslations.label = [];
-                                  }
-                                  const idx = updatedTranslations.label.findIndex(entry => entry.languageId === activeLangId);
-                                  if (idx >= 0) {
-                                    updatedTranslations.label[idx] = { languageId: activeLangId, value: e.target.value };
-                                  } else {
-                                    updatedTranslations.label.push({ languageId: activeLangId, value: e.target.value });
-                                  }
-                                  return { ...item, translations: updatedTranslations };
-                                }
-                                return item;
-                              })
-                            );
-                            setUnsavedChanges(true);
-                          }}
-                          placeholder={loadingTranslation ? "Loading translation..." : `Enter translation for ${editingItem.label}...`}
-                          disabled={loadingTranslation}
-                        />
-                      ) : null;
-                    })()}
+            {activeTranslationLanguages.length > 0 && (
+              <div className="pt-3 border-t border-[#E6E6E6] space-y-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-[#9A9A9A]">Multi-Language Translations</p>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <AdminSelect
+                      label="Select Language to Translate"
+                      value={selectedTranslationLangId || (activeTranslationLanguages[0]?.id ?? "")}
+                      onChange={(e) => setSelectedTranslationLangId(e.target.value)}
+                      options={activeTranslationLanguages.map((lang: Language) => ({
+                        value: lang.id,
+                        label: `${lang.name} (${lang.code})`,
+                      }))}
+                    />
                   </div>
                 </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E6E6E6]">
-              <button
-                type="button"
-                onClick={closeEditModal}
-                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-xs font-semibold text-[#1A1A1A] hover:bg-[#F5F5F5]"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => saveItem(editingItem)}
-                className="rounded-md bg-[#E31E24] px-5 py-2 text-xs font-semibold text-white hover:bg-[#B5151B]"
-              >
-                Save Changes
-              </button>
-            </div>
+                <div className="pt-1">
+                  {(() => {
+                    const activeLangId = selectedTranslationLangId || (activeTranslationLanguages[0]?.id ?? "");
+                    const activeLang = activeTranslationLanguages.find((l: Language) => l.id === activeLangId);
+                    return activeLang ? (
+                      <AdminTextarea
+                        key={activeLangId}
+                        label={`Translation Value for ${activeLang.name}`}
+                        value={loadingTranslation ? "" : activeTranslationValue}
+                        onChange={(e) => setActiveTranslationValue(e.target.value)}
+                        rows={1}
+                        onBlur={(e) => {
+                          setLocalItems(prev =>
+                            prev.map(item => {
+                              if (item.id === editingItem.id) {
+                                const updatedTranslations = { ...item.translations };
+                                if (!updatedTranslations.label) {
+                                  updatedTranslations.label = [];
+                                }
+                                const idx = updatedTranslations.label.findIndex(entry => entry.languageId === activeLangId);
+                                if (idx >= 0) {
+                                  updatedTranslations.label[idx] = { languageId: activeLangId, value: e.target.value };
+                                } else {
+                                  updatedTranslations.label.push({ languageId: activeLangId, value: e.target.value });
+                                }
+                                return { ...item, translations: updatedTranslations };
+                              }
+                              return item;
+                            })
+                          );
+                          setUnsavedChanges(true);
+                        }}
+                        placeholder={loadingTranslation ? "Loading translation..." : `Enter translation for ${editingItem.label}...`}
+                        disabled={loadingTranslation}
+                      />
+                    ) : null;
+                  })()}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
       {/* Delete Item Confirmation Modal */}
       <ConfirmModal open={!!deleteItemId} title="Remove item" message="Are you sure you want to remove this menu item?" onConfirm={removeItem} onCancel={() => setDeleteItemId(null)} danger />

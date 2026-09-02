@@ -234,11 +234,13 @@ async function main() {
   const adminEmail = process.env.SEED_ADMIN_EMAIL?.trim() || (isDeployedSeed ? "" : "admin@modortho.com");
   const adminPassword = process.env.SEED_ADMIN_PASSWORD?.trim() || (isDeployedSeed ? "" : "Admin@1234");
 
-  if (!adminEmail) {
-    throw new Error("SEED_ADMIN_EMAIL is required when seeding staging or production.");
-  }
-  if (!adminPassword || adminPassword.length < 12) {
-    throw new Error("SEED_ADMIN_PASSWORD must be at least 12 characters when seeding staging or production.");
+  if (isDeployedSeed) {
+    if (!adminEmail) {
+      throw new Error("SEED_ADMIN_EMAIL is required when seeding staging or production.");
+    }
+    if (!adminPassword || adminPassword.length < 12) {
+      throw new Error("SEED_ADMIN_PASSWORD must be at least 12 characters when seeding staging or production.");
+    }
   }
 
   const password = await bcrypt.hash(adminPassword, 12);
@@ -250,7 +252,7 @@ async function main() {
   } else {
     adminUser = await prisma.user.update({
       where: { id: adminUser.id },
-      data: { roleId: superAdminRole.id },
+      data: { password, roleId: superAdminRole.id },
     });
   }
 

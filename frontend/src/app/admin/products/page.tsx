@@ -496,7 +496,6 @@ export default function AdminProductsPage() {
     setImportMessage("");
     setImportFile(null);
     setImportOpen(true);
-    fileInputRef.current?.click();
   };
 
   const handleImportFile = async (file?: File) => {
@@ -869,17 +868,39 @@ export default function AdminProductsPage() {
         open={importOpen}
         onClose={() => setImportOpen(false)}
         title="Import Products Excel"
-        panelClassName="max-w-4xl max-h-[calc(100vh-2.5rem)] overflow-y-auto"
+        subtitle="Upload an .xlsx or .csv file to bulk create or update catalog products."
+        size="2xl"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={() => setImportOpen(false)}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <LoadingButton
+              type="button"
+              onClick={confirmImport}
+              loading={importing}
+              loadingText="Importing..."
+              disabled={!importFile || !!importPreview?.invalidRows}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
+            >
+              Import Products
+            </LoadingButton>
+          </div>
+        }
       >
         <div className="space-y-4 p-6">
-          <p className="text-[13.5px] leading-5 text-[#6B6B6B]">
-            Upload an `.xlsx` or `.csv` file. The first sheet is validated on the server before any product is created or updated.
+          <p className="text-[13px] leading-5 text-[#6B6B6B]">
+            Upload an <code className="rounded bg-[#F3F4F6] px-1.5 py-0.5 text-[12px] font-mono text-[#1F2937]">.xlsx</code> or <code className="rounded bg-[#F3F4F6] px-1.5 py-0.5 text-[12px] font-mono text-[#1F2937]">.csv</code> file. The first sheet is validated on the server before any product is created or updated.
           </p>
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
+              className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] cursor-pointer shadow-xs"
             >
               <Upload size={14} />
               {importFile ? importFile.name : "Choose Excel / CSV File"}
@@ -899,7 +920,7 @@ export default function AdminProductsPage() {
                   setImportPreview(null);
                   if (fileInputRef.current) fileInputRef.current.value = "";
                 }}
-                className="text-[12.5px] text-red-600 hover:underline"
+                className="text-[12.5px] text-red-600 hover:underline cursor-pointer"
               >
                 Remove
               </button>
@@ -945,21 +966,6 @@ export default function AdminProductsPage() {
               ) : null}
             </div>
           ) : null}
-          <div className="flex items-center justify-end gap-2.5">
-            <button type="button" onClick={() => setImportOpen(false)} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium text-[#555] hover:bg-[#F2F2F2]">
-              Close
-            </button>
-            <LoadingButton
-              type="button"
-              onClick={confirmImport}
-              loading={importing}
-              loadingText="Importing..."
-              disabled={!importFile || !!importPreview?.invalidRows}
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white disabled:opacity-60"
-            >
-              Import Products
-            </LoadingButton>
-          </div>
         </div>
       </Modal>
 

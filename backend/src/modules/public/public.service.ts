@@ -324,21 +324,43 @@ export async function publicGetProduct(
             include: { attribute: true, attributeValue: true },
           },
           prices: {
-            where: { status: "ACTIVE", countryId: country.id },
+            where: {
+              status: "ACTIVE",
+              countryId: country.id,
+            },
             include: { country: true, currency: true },
           },
           inventories: {
-            where: { OR: [{ countryId: country.id }, { countryId: null }] },
+            where: {
+              OR: [
+                { countryId: country.id },
+                { countryId: null },
+                { warehouse: { countryId: country.id } },
+                { warehouseId: null },
+              ],
+            },
             orderBy: [{ countryId: "desc" }],
           },
         },
       },
       prices: {
-        where: { status: "ACTIVE", countryId: country.id, variantId: null },
+        where: {
+          status: "ACTIVE",
+          variantId: null,
+          countryId: country.id,
+        },
         include: { country: true, currency: true },
       },
       inventories: {
-        where: { variantId: null, OR: [{ countryId: country.id }, { countryId: null }] },
+        where: {
+          variantId: null,
+          OR: [
+            { countryId: country.id },
+            { countryId: null },
+            { warehouse: { countryId: country.id } },
+            { warehouseId: null },
+          ],
+        },
         orderBy: [{ countryId: "desc" }],
       },
       moqPricing: {
@@ -1098,13 +1120,24 @@ export async function checkInventory(
     : null;
   const records = await prisma.inventory.findMany({
     where: {
-      variantId: { in: variantIds },
-      OR: requestedCountry
-        ? [{ countryId: requestedCountry.id }, { countryId: null }]
-        : [{ countryId: null }],
+      OR: [
+        { variantId: { in: variantIds } },
+        { productId: { in: variantIds }, variantId: null },
+      ],
+      ...(requestedCountry
+        ? {
+            OR: [
+              { countryId: requestedCountry.id },
+              { countryId: null },
+              { warehouse: { countryId: requestedCountry.id } },
+              { warehouseId: null },
+            ],
+          }
+        : {}),
     },
     select: {
       variantId: true,
+      productId: true,
       countryId: true,
       stock: true,
       reservedStock: true,
@@ -1121,29 +1154,63 @@ export async function checkInventory(
           },
         },
       },
+      product: {
+        select: {
+          id: true,
+          title: true,
+          productCode: true,
+        },
+      },
     },
     orderBy: [{ countryId: "desc" }],
   });
 
-  const bestByVariant = new Map<string, (typeof records)[number]>();
+  const variantStockMap = new Map<string, {
+    variantId: string;
+    totalStock: number;
+    totalReserved: number;
+    hasInStock: boolean;
+    productTitle: string;
+    variantTitle: string;
+    sku: string | null;
+  }>();
+
   for (const record of records) {
-    if (!record.variantId) continue;
-    if (
-      !bestByVariant.has(record.variantId) ||
-      (!!record.countryId && !bestByVariant.get(record.variantId)?.countryId)
-    ) {
-      bestByVariant.set(record.variantId, record);
+    const key = record.variantId || record.productId;
+    if (!key) continue;
+
+    const available = Math.max(0, record.stock - record.reservedStock);
+    const existing = variantStockMap.get(key);
+    if (!existing) {
+      variantStockMap.set(key, {
+        variantId: key,
+        totalStock: record.stock,
+        totalReserved: record.reservedStock,
+        hasInStock: record.status === "IN_STOCK" || available > 0,
+        productTitle: record.variant?.product?.title ?? record.product?.title ?? "",
+        variantTitle: record.variant?.title ?? "",
+        sku: record.variant?.sku ?? record.product?.productCode ?? null,
+      });
+    } else {
+      existing.totalStock += record.stock;
+      existing.totalReserved += record.reservedStock;
+      if (record.status === "IN_STOCK" || available > 0) {
+        existing.hasInStock = true;
+      }
     }
   }
 
-  return Array.from(bestByVariant.values()).map((r) => ({
-    variantId: r.variantId,
-    available: Math.max(0, r.stock - r.reservedStock),
-    status: r.status,
-    productTitle: r.variant?.product?.title ?? "",
-    variantTitle: r.variant?.title ?? "",
-    sku: r.variant?.sku ?? null,
-  }));
+  return Array.from(variantStockMap.values()).map((r) => {
+    const available = Math.max(0, r.totalStock - r.totalReserved);
+    return {
+      variantId: r.variantId,
+      available,
+      status: available > 0 ? (r.hasInStock ? "IN_STOCK" : "LOW_STOCK") : "OUT_OF_STOCK",
+      productTitle: r.productTitle,
+      variantTitle: r.variantTitle,
+      sku: r.sku,
+    };
+  });
 }
 
 // ─── Shape mappers ────────────────────────────────────────
@@ -1523,10 +1590,10 @@ async function toPublicProductDetail(
   }
 
   const productPrices = p.prices.map((pr) => ({
-    countryCode: pr.country.code,
-    countryName: pr.country.name,
-    currencyCode: pr.currency.code,
-    currencySymbol: pr.currency.symbol,
+    countryCode: pr.country?.code ?? "",
+    countryName: pr.country?.name ?? "",
+    currencyCode: pr.currency?.code ?? "",
+    currencySymbol: pr.currency?.symbol ?? "",
     mrp: Number(pr.mrp),
     sellingPrice: Number(pr.sellingPrice),
     dealerPrice: pr.dealerPrice != null ? Number(pr.dealerPrice) : null,
@@ -1538,13 +1605,14 @@ async function toPublicProductDetail(
     landedCost: buildPublicPriceBreakdown(pr),
   }));
 
-  const baseInventoryRecord = 
-    (p as any).inventories?.find((inv: any) => inv.countryId === countryId) ??
-    (p as any).inventories?.find((inv: any) => inv.countryId === null);
+  const baseAvailable = (p as any).inventories?.reduce(
+    (sum: number, inv: any) => sum + Math.max(0, (inv.stock ?? 0) - (inv.reservedStock ?? 0)),
+    0
+  ) ?? 0;
   
-  const baseInventory = baseInventoryRecord ? {
-    available: Math.max(0, (baseInventoryRecord.stock ?? 0) - (baseInventoryRecord.reservedStock ?? 0)),
-    status: baseInventoryRecord.status ?? "OUT_OF_STOCK",
+  const baseInventory = (p as any).inventories?.length ? {
+    available: baseAvailable,
+    status: baseAvailable > 0 ? "IN_STOCK" : "OUT_OF_STOCK",
   } : null;
 
   const baseWarehouseInventories = (p as any).inventories?.map((inv: any) => ({
@@ -1555,10 +1623,10 @@ async function toPublicProductDetail(
 
   const publicVariants = p.variants.map((v) => {
     const variantPrices = v.prices.map((pr) => ({
-      countryCode: pr.country.code,
-      countryName: pr.country.name,
-      currencyCode: pr.currency.code,
-      currencySymbol: pr.currency.symbol,
+      countryCode: pr.country?.code ?? "",
+      countryName: pr.country?.name ?? "",
+      currencyCode: pr.currency?.code ?? "",
+      currencySymbol: pr.currency?.symbol ?? "",
       mrp: Number(pr.mrp),
       sellingPrice: Number(pr.sellingPrice),
       dealerPrice: pr.dealerPrice != null ? Number(pr.dealerPrice) : null,
@@ -1569,6 +1637,16 @@ async function toPublicProductDetail(
       taxMode: resolvedTaxMode,
       landedCost: buildPublicPriceBreakdown(pr),
     }));
+
+    const totalVariantAvailable = v.inventories.reduce(
+      (sum, inv) => sum + Math.max(0, (inv.stock ?? 0) - (inv.reservedStock ?? 0)),
+      0
+    );
+
+    const variantInventory = v.inventories.length > 0 ? {
+      available: totalVariantAvailable,
+      status: totalVariantAvailable > 0 ? "IN_STOCK" : "OUT_OF_STOCK",
+    } : null;
 
     return {
       id: v.id,
@@ -1602,40 +1680,7 @@ async function toPublicProductDetail(
       pricingStatus: (variantPrices.length > 0 || productPrices.length > 0)
         ? "AVAILABLE"
         : "PRICE_ON_REQUEST",
-      inventory:
-        (v.inventories.find((inventory) => inventory.countryId === countryId) ??
-        v.inventories.find((inventory) => inventory.countryId === null))
-          ? {
-              available: Math.max(
-                0,
-                ((
-                  v.inventories.find(
-                    (inventory) => inventory.countryId === countryId,
-                  ) ??
-                  v.inventories.find(
-                    (inventory) => inventory.countryId === null,
-                  )
-                )?.stock ?? 0) -
-                  ((
-                    v.inventories.find(
-                      (inventory) => inventory.countryId === countryId,
-                    ) ??
-                    v.inventories.find(
-                      (inventory) => inventory.countryId === null,
-                    )
-                  )?.reservedStock ?? 0),
-              ),
-              status:
-                (
-                  v.inventories.find(
-                    (inventory) => inventory.countryId === countryId,
-                  ) ??
-                  v.inventories.find(
-                    (inventory) => inventory.countryId === null,
-                  )
-                )?.status ?? "OUT_OF_STOCK",
-            }
-          : null,
+      inventory: variantInventory,
       warehouseInventories: v.inventories.map((inv) => ({
         warehouseId: inv.warehouseId,
         available: Math.max(0, (inv.stock ?? 0) - (inv.reservedStock ?? 0)),

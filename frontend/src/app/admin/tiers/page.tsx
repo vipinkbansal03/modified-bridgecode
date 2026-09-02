@@ -821,8 +821,37 @@ export default function AdminTiersPage() {
         />
 
         {/* ADD / EDIT TIER MODAL */}
-        <Modal open={showForm} onClose={resetForm} title={form.values.id ? "Edit Tier" : "Add Tier"} panelClassName="max-w-xl">
-          <form onSubmit={form.handleSubmit} className="space-y-6 p-6">
+        <Modal
+          open={showForm}
+          onClose={resetForm}
+          title={form.values.id ? "Edit Tier" : "Add Tier"}
+          subtitle="Configure customer pricing tiers, rank precedence, and lifecycle status."
+          size="lg"
+          footer={
+            <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+              <p className="text-[12px] text-[#6B6B6B]">Priority controls resolver precedence. Lower values are processed first.</p>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <LoadingButton
+                  type="submit"
+                  form="tier-form"
+                  loading={form.isSubmitting || createTier.isPending || updateTier.isPending}
+                  loadingText="Saving..."
+                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+                >
+                  {form.values.id ? "Save Tier" : "Create Tier"}
+                </LoadingButton>
+              </div>
+            </div>
+          }
+        >
+          <form id="tier-form" onSubmit={form.handleSubmit} className="space-y-6 p-6">
             <div className="grid gap-4 md:grid-cols-2">
               <AdminInput required label="Tier Name" {...form.getFieldProps("name")} error={form.errors.name as string} placeholder="Diamond, Gold, Silver..." />
               <AdminSelect
@@ -843,23 +872,6 @@ export default function AdminTiersPage() {
                 error={form.errors.sortOrder as string}
               />
             </div>
-
-            <div className="flex items-center justify-between gap-3 border-t border-[#E6E6E6] pt-4">
-              <p className="text-[12px] text-[#6B6B6B]">Priority controls resolver precedence. Lower values are processed first.</p>
-              <div className="flex gap-2">
-                <button type="button" onClick={resetForm} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] cursor-pointer">
-                  Cancel
-                </button>
-                <LoadingButton
-                  type="submit"
-                  loading={form.isSubmitting || createTier.isPending || updateTier.isPending}
-                  loadingText="Saving..."
-                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] cursor-pointer"
-                >
-                  {form.values.id ? "Save Tier" : "Create Tier"}
-                </LoadingButton>
-              </div>
-            </div>
           </form>
         </Modal>
 
@@ -868,13 +880,46 @@ export default function AdminTiersPage() {
           open={!!countryModalTier}
           onClose={() => setCountryModalTier(null)}
           title={`Country Availability — ${countryModalTier?.name ?? ""}`}
-          panelClassName="max-w-2xl"
+          subtitle="A tier stays global if no countries are enabled. Once one or more countries are enabled, this tier is restricted exclusively to those selected countries."
+          size="2xl"
+          footer={
+            <div className="flex items-center justify-end gap-2.5 w-full">
+              <button
+                type="button"
+                onClick={() => setCountryModalTier(null)}
+                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <LoadingButton
+                type="button"
+                onClick={async () => {
+                  try {
+                    await updateTierCountries.mutateAsync(
+                      selectedTierCountries.map((country) => ({
+                        countryId: country.id,
+                        enabled: countryOverrides[country.id] ?? country.enabled,
+                      })),
+                    );
+                    setCountryOverrides({});
+                    showToast("Tier country availability saved.");
+                    setCountryModalTier(null);
+                    tiersQuery.refetch();
+                  } catch (error) {
+                    showToast(getAdminErrorMessage(error, "Failed to save tier country availability."), "error");
+                  }
+                }}
+                loading={updateTierCountries.isPending}
+                loadingText="Saving..."
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+              >
+                Save Availability
+              </LoadingButton>
+            </div>
+          }
         >
-          <div className="space-y-4">
-            <div className="flex items-start justify-between gap-3 border-b border-[#E6E6E6] pb-3">
-              <p className="text-[12.5px] text-[#6B6B6B] max-w-[420px]">
-                A tier stays global if no countries are enabled. Once one or more countries are enabled, this tier is restricted exclusively to those selected countries.
-              </p>
+          <div className="space-y-4 p-6">
+            <div className="flex items-center justify-end">
               <span className="rounded-full bg-gray-100 border border-gray-200 px-3 py-1 text-[11.5px] font-semibold text-[#1A1A1A] shrink-0">
                 {enabledCountryCount === 0 ? "Global fallback (All countries)" : `${enabledCountryCount} Countries Enabled`}
               </span>
@@ -941,40 +986,6 @@ export default function AdminTiersPage() {
                     })
                   )}
                 </div>
-
-                <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#E6E6E6]">
-                  <button
-                    type="button"
-                    onClick={() => setCountryModalTier(null)}
-                    className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#555] hover:bg-[#F2F2F2] cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <LoadingButton
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        await updateTierCountries.mutateAsync(
-                          selectedTierCountries.map((country) => ({
-                            countryId: country.id,
-                            enabled: countryOverrides[country.id] ?? country.enabled,
-                          })),
-                        );
-                        setCountryOverrides({});
-                        showToast("Tier country availability saved.");
-                        setCountryModalTier(null);
-                        tiersQuery.refetch();
-                      } catch (error) {
-                        showToast(getAdminErrorMessage(error, "Failed to save tier country availability."), "error");
-                      }
-                    }}
-                    loading={updateTierCountries.isPending}
-                    loadingText="Saving..."
-                    className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] cursor-pointer"
-                  >
-                    Save Availability
-                  </LoadingButton>
-                </div>
               </>
             )}
           </div>
@@ -990,13 +1001,36 @@ export default function AdminTiersPage() {
             setImportMessage("");
           }}
           title="Import Tiers Spreadsheet"
-          panelClassName="max-w-2xl"
+          subtitle="Upload an Excel (.xlsx, .xls) or CSV spreadsheet to create or update pricing tiers in bulk."
+          size="2xl"
+          footer={
+            <div className="flex items-center justify-end gap-2.5 w-full">
+              <button
+                type="button"
+                onClick={() => {
+                  setImportOpen(false);
+                  setImportFile(null);
+                  setImportReport(null);
+                  setImportMessage("");
+                }}
+                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <LoadingButton
+                type="button"
+                onClick={handleImport}
+                loading={importing || importTiers.isPending}
+                loadingText="Importing..."
+                disabled={!importFile || (importReport !== null && importReport.invalidRows > 0)}
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
+              >
+                Import Tiers
+              </LoadingButton>
+            </div>
+          }
         >
-          <div className="space-y-4">
-            <p className="text-[13px] text-[#6B6B6B]">
-              Upload an Excel (.xlsx, .xls) or CSV spreadsheet to create or update pricing tiers in bulk.
-            </p>
-
+          <div className="space-y-4 p-6">
             <div className="rounded-lg border-2 border-dashed border-[#E6E6E6] bg-[#FAFAFA] p-6 text-center hover:bg-[#F5F5F5] transition-colors">
               <input
                 ref={fileInputRef}
@@ -1085,31 +1119,6 @@ export default function AdminTiersPage() {
                 {importMessage}
               </div>
             )}
-
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#E6E6E6]">
-              <button
-                type="button"
-                onClick={() => {
-                  setImportOpen(false);
-                  setImportFile(null);
-                  setImportReport(null);
-                  setImportMessage("");
-                }}
-                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#555] hover:bg-[#F2F2F2] cursor-pointer"
-              >
-                Cancel
-              </button>
-              <LoadingButton
-                type="button"
-                onClick={handleImport}
-                loading={importing || importTiers.isPending}
-                loadingText="Importing..."
-                disabled={!importFile || (importReport !== null && importReport.invalidRows > 0)}
-                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50 cursor-pointer"
-              >
-                Import Tiers
-              </LoadingButton>
-            </div>
           </div>
         </Modal>
 
