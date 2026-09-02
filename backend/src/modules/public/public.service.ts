@@ -374,8 +374,7 @@ export async function publicGetProduct(
     },
   });
 
-  if (!product || (product.hasVariants && product.variants.length === 0))
-    throw new AppError("Product not found.", 404);
+  if (!product) throw new AppError("Product not found.", 404);
 
   const now = new Date();
   const startOfCurrentDay = new Date(now);
