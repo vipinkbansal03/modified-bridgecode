@@ -3685,10 +3685,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       showToast("Choose an attribute to map.", "error");
       return;
     }
-    if (!newMappingValueIds.length) {
-      showToast("Choose at least one allowed value for this product.", "error");
-      return;
-    }
 
     try {
       const existingMappings = toProductAttributePayload(mappedAttributeRows);
@@ -8007,7 +8003,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                   </span>
                                 ))
                               ) : (
-                                <span className="text-[12px] text-[#9A9A9A]">No allowed values selected.</span>
+                                <span className="rounded-full bg-[#EBF5FF] text-[#1E40AF] px-2 py-0.5 text-[11.5px] font-medium">All attribute values allowed</span>
                               )}
                             </div>
                           </div>
