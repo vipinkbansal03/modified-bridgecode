@@ -1770,19 +1770,6 @@ export async function generateVariants(
     }
 
     const mappedAttributeById = new Map(productAttributeMappings.map((mapping) => [mapping.attributeId, mapping]));
-    const mappedRequiredAttributeIds = productAttributeMappings
-      .filter((mapping) => mapping.required)
-      .map((mapping) => mapping.attributeId);
-    const requestedAttributeIds = new Set(attributeGroups.map((group) => group.attributeId));
-
-    const missingRequired = mappedRequiredAttributeIds.find((attributeId) => !requestedAttributeIds.has(attributeId));
-    if (missingRequired) {
-      const mapping = mappedAttributeById.get(missingRequired);
-      throw new AppError(
-        `Include required mapped attribute "${mapping?.attribute.name ?? missingRequired}" before generating variants.`,
-        400,
-      );
-    }
 
     for (const group of attributeGroups) {
       const mapping = mappedAttributeById.get(group.attributeId);

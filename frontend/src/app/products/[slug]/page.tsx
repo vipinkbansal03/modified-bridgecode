@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Share2 } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { ProductGallery } from "@/components/sections/ProductGallery";
 import { ProductTabs } from "@/components/sections/ProductTabs";
@@ -15,6 +14,7 @@ import { BundleSection } from "@/components/sections/BundleSection";
 import { RecentlySeenSection } from "@/components/sections/RecentlySeenSection";
 import { ContactCTASection } from "@/components/sections/ContactCTASection";
 import { WishlistButton } from "@/components/product/WishlistButton";
+import { ShareButton } from "@/components/product/ShareButton";
 
 import { ViewSpecsLink } from "@/components/product/ViewSpecsLink";
 import { ConfigureButton } from "@/components/product/ConfigureButton";
@@ -131,8 +131,8 @@ function mergeProduct(api: ApiProductDetail): ProductDetail {
   return {
     slug: api.slug,
     title: api.title,
-    category: api.category.name,
-    categorySlug: api.category.slug,
+    category: api.category?.name ?? "",
+    categorySlug: api.category?.slug ?? "",
     productCode: api.productCode ?? "",
     images: apiImages,
     information: api.shortDescription ?? "",
@@ -207,9 +207,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             <h6 className="text-[14.5px] font-medium text-ink">{product.title}</h6>
             <div className="flex items-center gap-3">
               {apiProduct?.id && <WishlistButton productId={apiProduct.id} />}
-              <button aria-label="Share" className="text-steel hover:text-brand transition-colors p-1">
-                <Share2 size={16} />
-              </button>
+              <ShareButton title={product.title} />
             </div>
           </div>
 
