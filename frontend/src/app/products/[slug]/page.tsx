@@ -295,13 +295,13 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 )}
                 <div className="flex items-center">
                   <ViewSpecsLink />
-                  {apiProduct && apiProduct.variants.length > 0 && (
+                  {apiProduct && (apiProduct.variants?.length ?? 0) > 0 && (
                     <ConfigureButton />
                   )}
                 </div>
               </div>
 
-              {apiProduct && apiProduct.variants.length === 0 && apiProduct.prices && apiProduct.prices.length > 0 && (
+              {apiProduct && (!apiProduct.variants || apiProduct.variants.length === 0) && (apiProduct.prices?.length ?? 0) > 0 && (
                 <div className="mt-8 pt-6 border-t border-line">
                   <BaseProductConfigurator apiProduct={apiProduct} />
                 </div>
@@ -311,10 +311,10 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
           {/* Variant Configurator Flow (First: Configurator / Matrix / Inquiry) */}
           <div id="configurator-section">
-            {apiProduct.variants && apiProduct.variants.length > 0 ? (
+            {apiProduct && (apiProduct.variants?.length ?? 0) > 0 ? (
               <VariantConfigurator apiProduct={apiProduct} />
             ) : (
-              <SimpleInquiryPanel product={product} productId={apiProduct.id} />
+              <SimpleInquiryPanel product={product} productId={apiProduct?.id} />
             )}
           </div>
 
