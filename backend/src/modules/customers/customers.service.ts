@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs";
 import { ApprovalStatus, CustomerType, Status } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { AppError, getPagination } from "../../utils/apiResponse";
@@ -255,5 +256,63 @@ export async function updateCustomerAddress(customerId: string, addressId: strin
     },
     include: { country: true },
   });
+}
+
+export async function createCustomer(data: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password?: string;
+  phone?: string | null;
+  companyName?: string | null;
+  customerType?: CustomerType;
+  status?: Status;
+  approvalStatus?: ApprovalStatus;
+  customerRoleId?: string | null;
+  tierId?: string | null;
+  defaultCountryId?: string | null;
+  taxId?: string | null;
+  taxIdType?: string | null;
+}) {
+  if (!data.email?.trim()) throw new AppError("Email is required.", 400);
+  if (!data.firstName?.trim()) throw new AppError("First name is required.", 400);
+  if (!data.lastName?.trim()) throw new AppError("Last name is required.", 400);
+
+  const email = data.email.trim().toLowerCase();
+  const existing = await prisma.customer.findFirst({
+    where: { email, deletedAt: null },
+  });
+  if (existing) {
+    throw new AppError("A customer with this email already exists.", 409);
+  }
+
+  const rawPassword = data.password?.trim() || Math.random().toString(36).slice(-8) + "Aa1!";
+  const passwordHash = await bcrypt.hash(rawPassword, 10);
+
+  if (data.tierId) {
+    await assertTierUsable(data.tierId);
+  }
+
+  const customer = await prisma.customer.create({
+    data: {
+      firstName: data.firstName.trim(),
+      lastName: data.lastName.trim(),
+      email,
+      passwordHash,
+      phone: data.phone?.trim() || null,
+      companyName: data.companyName?.trim() || null,
+      customerType: data.customerType || CustomerType.RETAIL,
+      status: data.status || Status.ACTIVE,
+      approvalStatus: data.approvalStatus || ApprovalStatus.ACTIVE,
+      customerRoleId: data.customerRoleId || null,
+      tierId: data.tierId || null,
+      defaultCountryId: data.defaultCountryId || null,
+      taxId: data.taxId?.trim() || null,
+      taxIdType: data.taxIdType?.trim() || null,
+    },
+    include: { tier: true, customerRole: true, defaultCountry: true },
+  });
+
+  return customer;
 }
 

@@ -760,206 +760,185 @@ export default function DiscountsPage() {
   });
 
   const discountForm = (
-    <form onSubmit={form.handleSubmit} className="flex flex-col min-h-0 overflow-hidden">
-      <div className="p-6 overflow-y-auto flex-1">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <AdminInput
-            label="Rule Name"
-            {...form.getFieldProps("name")}
-            error={form.errors.name as string}
-            placeholder="Gold launch promo"
-          />
+    <form id="discount-form" onSubmit={form.handleSubmit} className="p-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <AdminInput
+          label="Rule Name"
+          {...form.getFieldProps("name")}
+          error={form.errors.name as string}
+          placeholder="Gold launch promo"
+        />
+        <AdminSelect
+          label="Discount Type"
+          {...form.getFieldProps("type")}
+          error={form.errors.type as string}
+          onChange={(event) => setField("type", event.target.value)}
+          options={[
+            { value: "TIER", label: "Tier Discount" },
+            { value: "MOQ", label: "MOQ Discount" },
+            { value: "PROMOTIONAL", label: "Promotional" },
+          ]}
+        />
+        <AdminMultiSearchableSelect
+          label="Countries"
+          values={form.values.countryIds}
+          onValuesChange={(values) =>
+            form.setFieldValue("countryIds", values)
+          }
+          options={options.countries}
+          placeholder="Select countries"
+          allowSelectAll
+          selectAllLabel="All countries"
+          selectionSummaryFormatter={(selected) => `${selected.length} Countries Selected`}
+        />
+        <AdminSelect
+          label="Status"
+          {...form.getFieldProps("status")}
+          error={form.errors.status as string}
+          options={[
+            { value: "ACTIVE", label: "Active" },
+            { value: "INACTIVE", label: "Inactive" },
+          ]}
+        />
+
+        {form.values.type === "TIER" ? (
           <AdminSelect
-            label="Discount Type"
-            {...form.getFieldProps("type")}
-            error={form.errors.type as string}
-            onChange={(event) => setField("type", event.target.value)}
-            options={[
-              { value: "TIER", label: "Tier Discount" },
-              { value: "MOQ", label: "MOQ Discount" },
-              { value: "PROMOTIONAL", label: "Promotional" },
-            ]}
+            label="Tier"
+            {...form.getFieldProps("tierId")}
+            error={form.errors.tierId as string}
+            options={options.tiers}
           />
+        ) : form.values.type === "MOQ" ? (
+          <div className="grid grid-cols-2 gap-4">
+            <AdminInput
+              label="Minimum Quantity"
+              type="text"
+              inputMode="numeric"
+              {...form.getFieldProps("minQuantity")}
+              error={form.errors.minQuantity as string}
+            />
+            <AdminInput
+              label="Maximum Quantity"
+              type="text"
+              inputMode="numeric"
+              placeholder="Optional"
+              {...form.getFieldProps("maxQuantity")}
+              error={form.errors.maxQuantity as string}
+            />
+          </div>
+        ) : null}
+
+        <AdminSelect
+          label="Value Type"
+          {...form.getFieldProps("valueType")}
+          error={form.errors.valueType as string}
+          onChange={(event) => setField("valueType", event.target.value)}
+          options={[
+            { value: "PERCENT", label: "Percentage" },
+            { value: "FIXED", label: "Fixed amount off" },
+          ]}
+        />
+        {form.values.valueType === "PERCENT" ? (
+          <AdminInput
+            label="Discount Percent"
+            type="text"
+            inputMode="decimal"
+            {...form.getFieldProps("discountPercent")}
+            error={form.errors.discountPercent as string}
+          />
+        ) : (
+          <AdminInput
+            label="Fixed Amount"
+            type="text"
+            inputMode="decimal"
+            {...form.getFieldProps("fixedAmount")}
+            error={form.errors.fixedAmount as string}
+          />
+        )}
+
+        <AdminSelect
+          label="Scope"
+          {...form.getFieldProps("scope")}
+          error={form.errors.scope as string}
+          onChange={(event) => setField("scope", event.target.value)}
+          options={[
+            { value: "PLATFORM", label: "Platform-wide" },
+            { value: "PRODUCT", label: "Product" },
+            { value: "COLLECTION", label: "Collection" },
+            { value: "CATEGORY", label: "Category" },
+          ]}
+        />
+        {form.values.scope === "PRODUCT" && (
+          <div className="flex flex-col">
           <AdminMultiSearchableSelect
-            label="Countries"
-            values={form.values.countryIds}
+            label="Products"
+            values={form.values.productIds}
             onValuesChange={(values) =>
-              form.setFieldValue("countryIds", values)
+              form.setFieldValue("productIds", values)
             }
-            options={options.countries}
-            placeholder="Select countries"
+            options={options.products}
+            placeholder="Select products"
             allowSelectAll
-            selectAllLabel="All countries"
-            selectionSummaryFormatter={(selected) => `${selected.length} Countries Selected`}
-          />
-          <AdminSelect
-            label="Status"
-            {...form.getFieldProps("status")}
-            error={form.errors.status as string}
-            options={[
-              { value: "ACTIVE", label: "Active" },
-              { value: "INACTIVE", label: "Inactive" },
-            ]}
-          />
-
-          {form.values.type === "TIER" ? (
-            <AdminSelect
-              label="Tier"
-              {...form.getFieldProps("tierId")}
-              error={form.errors.tierId as string}
-              options={options.tiers}
-            />
-          ) : form.values.type === "MOQ" ? (
-            <div className="grid grid-cols-2 gap-4">
-              <AdminInput
-                label="Minimum Quantity"
-                type="text"
-                inputMode="numeric"
-                {...form.getFieldProps("minQuantity")}
-                error={form.errors.minQuantity as string}
-              />
-              <AdminInput
-                label="Maximum Quantity (Optional)"
-                type="text"
-                inputMode="numeric"
-                {...form.getFieldProps("maxQuantity")}
-                error={form.errors.maxQuantity as string}
-              />
-            </div>
-          ) : (
-            <div className="rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3.5 py-2.5 text-[13px] text-[#6B6B6B]">
-              Open promotions apply by scope, country, and active date window.
-            </div>
-          )}
-
-          <AdminSelect
-            label="Value Type"
-            {...form.getFieldProps("valueType")}
-            error={form.errors.valueType as string}
-            onChange={(event) => setField("valueType", event.target.value)}
-            options={[
-              { value: "PERCENT", label: "Percentage" },
-              { value: "FIXED", label: "Fixed amount off" },
-            ]}
-          />
-          {form.values.valueType === "PERCENT" ? (
-            <AdminInput
-              label="Discount Percent"
-              type="text"
-              inputMode="decimal"
-              {...form.getFieldProps("discountPercent")}
-              error={form.errors.discountPercent as string}
-            />
-          ) : (
-            <AdminInput
-              label="Fixed Amount"
-              type="text"
-              inputMode="decimal"
-              {...form.getFieldProps("fixedAmount")}
-              error={form.errors.fixedAmount as string}
-            />
-          )}
-          <AdminSelect
-            label="Scope"
-            {...form.getFieldProps("scope")}
-            error={form.errors.scope as string}
-            onChange={(event) => setField("scope", event.target.value)}
-            options={[
-              { value: "PLATFORM", label: "Platform-wide" },
-              { value: "PRODUCT", label: "Product" },
-              { value: "COLLECTION", label: "Collection" },
-              { value: "CATEGORY", label: "Category" },
-            ]}
-          />
-          {form.values.scope === "PRODUCT" && (
-            <div className="flex flex-col">
-            <AdminMultiSearchableSelect
-              label="Products"
-              values={form.values.productIds}
-              onValuesChange={(values) =>
-                form.setFieldValue("productIds", values)
+            selectAllLabel="All products"
+            selectionSummaryFormatter={(selected) => `${selected.length} Products Selected`}
+            onMenuScrollToBottom={() => {
+              if (hasNextProductsPage && !isFetchingNextProductsPage) {
+                fetchNextProductsPage();
               }
-              options={options.products}
-              placeholder="Select products"
-              allowSelectAll
-              selectAllLabel="All products"
-              selectionSummaryFormatter={(selected) => `${selected.length} Products Selected`}
-              onMenuScrollToBottom={() => {
-                if (hasNextProductsPage && !isFetchingNextProductsPage) {
-                  fetchNextProductsPage();
-                }
-              }}
-              isLoadingMore={isFetchingNextProductsPage}
-              onSearchChange={setProductSearch}
-            />
-            {form.errors.productIds && <span className="text-red-500 text-[11.5px] mt-1">{form.errors.productIds as string}</span>}
-            </div>
-          )}
-          {form.values.scope === "COLLECTION" && (
-            <div className="flex flex-col">
-            <AdminMultiSearchableSelect
-              label="Collections"
-              values={form.values.collectionIds}
-              onValuesChange={(values) =>
-                form.setFieldValue("collectionIds", values)
-              }
-              options={options.collections}
-              placeholder="Select collections"
-              allowSelectAll
-              selectAllLabel="All collections"
-              selectionSummaryFormatter={(selected) => `${selected.length} Collections Selected`}
-            />
-            {form.errors.collectionIds && <span className="text-red-500 text-[11.5px] mt-1">{form.errors.collectionIds as string}</span>}
-            </div>
-          )}
-          {form.values.scope === "CATEGORY" && (
-            <div className="flex flex-col">
-            <AdminMultiSearchableSelect
-              label="Categories"
-              values={form.values.categoryIds}
-              onValuesChange={(values) =>
-                form.setFieldValue("categoryIds", values)
-              }
-              options={options.categories}
-              placeholder="Select categories"
-              allowSelectAll
-              selectAllLabel="All categories"
-              selectionSummaryFormatter={(selected) => `${selected.length} Categories Selected`}
-            />
-            {form.errors.categoryIds && <span className="text-red-500 text-[11.5px] mt-1">{form.errors.categoryIds as string}</span>}
-            </div>
-          )}
+            }}
+            isLoadingMore={isFetchingNextProductsPage}
+            onSearchChange={setProductSearch}
+          />
+          {form.errors.productIds && <span className="text-red-500 text-[11.5px] mt-1">{form.errors.productIds as string}</span>}
+          </div>
+        )}
+        {form.values.scope === "COLLECTION" && (
+          <div className="flex flex-col">
+          <AdminMultiSearchableSelect
+            label="Collections"
+            values={form.values.collectionIds}
+            onValuesChange={(values) =>
+              form.setFieldValue("collectionIds", values)
+            }
+            options={options.collections}
+            placeholder="Select collections"
+            allowSelectAll
+            selectAllLabel="All collections"
+            selectionSummaryFormatter={(selected) => `${selected.length} Collections Selected`}
+          />
+          {form.errors.collectionIds && <span className="text-red-500 text-[11.5px] mt-1">{form.errors.collectionIds as string}</span>}
+          </div>
+        )}
+        {form.values.scope === "CATEGORY" && (
+          <div className="flex flex-col">
+          <AdminMultiSearchableSelect
+            label="Categories"
+            values={form.values.categoryIds}
+            onValuesChange={(values) =>
+              form.setFieldValue("categoryIds", values)
+            }
+            options={options.categories}
+            placeholder="Select categories"
+            allowSelectAll
+            selectAllLabel="All categories"
+            selectionSummaryFormatter={(selected) => `${selected.length} Categories Selected`}
+          />
+          {form.errors.categoryIds && <span className="text-red-500 text-[11.5px] mt-1">{form.errors.categoryIds as string}</span>}
+          </div>
+        )}
 
-          <AdminInput
-            label="Start Date"
-            type="date"
-            {...form.getFieldProps("startDate")}
-            error={form.errors.startDate as string}
-          />
-          <AdminInput
-            label="End Date"
-            type="date"
-            {...form.getFieldProps("endDate")}
-            error={form.errors.endDate as string}
-          />
-        </div>
-      </div>
-      <div className="border-t border-[#E5E7EB] bg-[#FAFAFA] px-6 py-4 flex items-center justify-end gap-2.5 shrink-0">
-        <button
-          type="button"
-          onClick={resetForm}
-          className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2] cursor-pointer"
-        >
-          Cancel
-        </button>
-        <LoadingButton
-          type="submit"
-          loading={form.isSubmitting || createDiscount.isPending || updateDiscount.isPending}
-          loadingText="Processing..."
-          className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] cursor-pointer"
-        >
-          {form.values.id ? "Update Discount" : "Create Discount"}
-        </LoadingButton>
+        <AdminInput
+          label="Start Date"
+          type="date"
+          {...form.getFieldProps("startDate")}
+          error={form.errors.startDate as string}
+        />
+        <AdminInput
+          label="End Date"
+          type="date"
+          {...form.getFieldProps("endDate")}
+          error={form.errors.endDate as string}
+        />
       </div>
     </form>
   );
@@ -1174,7 +1153,29 @@ export default function DiscountsPage() {
         open={showForm}
         onClose={resetForm}
         title={form.values.id ? "Edit Discount" : "New Discount"}
-        panelClassName="max-w-5xl flex flex-col max-h-[90vh] overflow-hidden z-[9999]"
+        subtitle="Configure promotional, tier-based, or volume MOQ discount campaigns."
+        size="4xl"
+        panelClassName="max-w-5xl"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={resetForm}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <LoadingButton
+              type="submit"
+              form="discount-form"
+              loading={form.isSubmitting || createDiscount.isPending || updateDiscount.isPending}
+              loadingText="Processing..."
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+            >
+              {form.values.id ? "Update Discount" : "Create Discount"}
+            </LoadingButton>
+          </div>
+        }
       >
         {showForm ? discountForm : null}
       </Modal>
@@ -1189,13 +1190,36 @@ export default function DiscountsPage() {
           setImportMessage("");
         }}
         title="Import Discounts Spreadsheet"
-        panelClassName="max-w-2xl"
+        subtitle="Upload an Excel (.xlsx, .xls) or CSV spreadsheet to create or update discount rules in bulk."
+        size="2xl"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={() => {
+                setImportOpen(false);
+                setImportFile(null);
+                setImportReport(null);
+                setImportMessage("");
+              }}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <LoadingButton
+              type="button"
+              onClick={handleImport}
+              loading={importing || importDiscounts.isPending}
+              loadingText="Importing..."
+              disabled={!importFile || (importReport !== null && importReport.invalidRows > 0)}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
+            >
+              Import Discounts
+            </LoadingButton>
+          </div>
+        }
       >
-        <div className="space-y-4">
-          <p className="text-[13px] text-[#6B6B6B]">
-            Upload an Excel (.xlsx, .xls) or CSV spreadsheet to create or update discount rules in bulk.
-          </p>
-
+        <div className="space-y-4 p-6">
           <div className="rounded-lg border-2 border-dashed border-[#E6E6E6] bg-[#FAFAFA] p-6 text-center hover:bg-[#F5F5F5] transition-colors">
             <input
               ref={fileInputRef}
@@ -1284,31 +1308,6 @@ export default function DiscountsPage() {
               {importMessage}
             </div>
           )}
-
-          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#E6E6E6]">
-            <button
-              type="button"
-              onClick={() => {
-                setImportOpen(false);
-                setImportFile(null);
-                setImportReport(null);
-                setImportMessage("");
-              }}
-              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#555] hover:bg-[#F2F2F2] cursor-pointer"
-            >
-              Cancel
-            </button>
-            <LoadingButton
-              type="button"
-              onClick={handleImport}
-              loading={importing || importDiscounts.isPending}
-              loadingText="Importing..."
-              disabled={!importFile || (importReport !== null && importReport.invalidRows > 0)}
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50 cursor-pointer"
-            >
-              Import Discounts
-            </LoadingButton>
-          </div>
         </div>
       </Modal>
 

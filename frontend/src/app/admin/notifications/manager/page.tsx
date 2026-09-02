@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { Modal } from "@/components/admin/AdminComponents";
 import {
   useNotificationConfigs,
   useUpdateNotificationConfig,
@@ -457,87 +458,87 @@ export default function NotificationManagerPage() {
         </div>
 
         {/* Configure Modal */}
-        {editingConfig && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-[#E6E6E6]">
-                <h2 className="text-[16px] font-serif text-[#1A1A1A]">Configure Rule: {editingConfig.name}</h2>
-                <button onClick={() => setEditingConfig(null)} className="p-1 hover:bg-[#F2F2F2] rounded">
-                  ✕
-                </button>
+        <Modal
+          open={Boolean(editingConfig)}
+          onClose={() => setEditingConfig(null)}
+          title={`Configure Rule: ${editingConfig?.name ?? ""}`}
+          subtitle="Select recipient target roles and active delivery channels for this trigger."
+          size="2xl"
+          footer={
+            <div className="flex items-center justify-end gap-2.5 w-full">
+              <button
+                type="button"
+                onClick={() => setEditingConfig(null)}
+                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveConfigDetails}
+                className="flex items-center gap-2 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+              >
+                <Save className="w-3.5 h-3.5" />
+                Save Config
+              </button>
+            </div>
+          }
+        >
+          {editingConfig && (
+            <div className="space-y-6 p-6">
+              <div>
+                <label className="block text-[12px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-2">Target Roles</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {ROLE_OPTIONS.map((r: any) => {
+                    const active = editingConfig.targetRoles.includes(r.value);
+                    return (
+                      <button
+                        key={r.value}
+                        type="button"
+                        onClick={() => {
+                          const next = active
+                            ? editingConfig.targetRoles.filter((v: string) => v !== r.value)
+                            : [...editingConfig.targetRoles, r.value];
+                          setEditingConfig({ ...editingConfig, targetRoles: next });
+                        }}
+                        className={`p-3 text-[12px] border text-left rounded font-medium flex items-center justify-between cursor-pointer ${
+                          active ? "border-[#E31E24] bg-red-50/20 text-[#E31E24]" : "border-[#E6E6E6] bg-white hover:bg-[#FAFAFA]"
+                        }`}
+                      >
+                        {r.label}
+                        {active && <Check className="w-4.5 h-4.5 text-[#E31E24]" />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div className="p-6 overflow-y-auto flex-1 space-y-6">
-                <div>
-                  <label className="block text-[12px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-2">Target Roles</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {ROLE_OPTIONS.map((r: any) => {
-                      const active = editingConfig.targetRoles.includes(r.value);
-                      return (
-                        <button
-                          key={r.value}
-                          type="button"
-                          onClick={() => {
-                            const next = active
-                              ? editingConfig.targetRoles.filter((v: string) => v !== r.value)
-                              : [...editingConfig.targetRoles, r.value];
-                            setEditingConfig({ ...editingConfig, targetRoles: next });
+              <div>
+                <label className="block text-[12px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-3">Enabled Channels</label>
+                <div className="grid grid-cols-2 gap-4">
+                  {CHANNEL_OPTIONS.map((ch) => {
+                    const key = ch.key === "inApp" ? "inApp" : ch.key;
+                    const isChecked = editingConfig.channels[key] !== false;
+                    return (
+                      <label key={ch.key} className="flex items-center gap-2.5 p-3 border border-[#E6E6E6] rounded cursor-pointer hover:bg-[#FAFAFA]">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            const updated = { ...editingConfig.channels, [key]: e.target.checked };
+                            setEditingConfig({ ...editingConfig, channels: updated });
                           }}
-                          className={`p-3 text-[12px] border text-left rounded font-medium flex items-center justify-between ${
-                            active ? "border-[#1A1A1A] bg-[#FAFAFA]" : "border-[#E6E6E6] bg-white hover:bg-[#FAFAFA]"
-                          }`}
-                        >
-                          {r.label}
-                          {active && <Check className="w-4.5 h-4.5 text-[#1A1A1A]" />}
-                        </button>
-                      );
-                    })}
-                  </div>
+                          className="rounded border-[#cccccc] text-[#E31E24] focus:ring-[#E31E24]"
+                        />
+                        <span className="text-[13px] font-medium text-[#1A1A1A]">{ch.label}</span>
+                      </label>
+                    );
+                  })}
                 </div>
-
-                <div>
-                  <label className="block text-[12px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-3">Enabled Channels</label>
-                  <div className="grid grid-cols-2 gap-4">
-                    {CHANNEL_OPTIONS.map((ch) => {
-                      const key = ch.key === "inApp" ? "inApp" : ch.key;
-                      const isChecked = editingConfig.channels[key] !== false;
-                      return (
-                        <label key={ch.key} className="flex items-center gap-2.5 p-3 border border-[#E6E6E6] rounded cursor-pointer hover:bg-[#FAFAFA]">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              const updated = { ...editingConfig.channels, [key]: e.target.checked };
-                              setEditingConfig({ ...editingConfig, channels: updated });
-                            }}
-                            className="rounded border-[#cccccc] text-[#1A1A1A] focus:ring-0"
-                          />
-                          <span className="text-[13px] font-medium text-[#1A1A1A]">{ch.label}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 px-6 py-4 border-t border-[#E6E6E6]">
-                <button
-                  onClick={() => setEditingConfig(null)}
-                  className="px-4 py-2 border border-[#E6E6E6] hover:bg-[#F9F9F9] text-[11px] font-bold uppercase tracking-wider rounded transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveConfigDetails}
-                  className="flex items-center gap-2 px-4 py-2 bg-[#1A1A1A] hover:bg-[#333] text-white text-[11px] font-bold uppercase tracking-wider rounded transition-colors"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  Save Config
-                </button>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </Modal>
 
       </div>
     </AdminLayout>

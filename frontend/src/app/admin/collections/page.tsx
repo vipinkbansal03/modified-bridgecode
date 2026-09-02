@@ -121,21 +121,44 @@ export default function CollectionsPage() {
     }
   };
 
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
+  const handleCloseForm = () => {
+    if (form.dirty) {
+      setShowDiscardConfirm(true);
+    } else {
+      reset();
+    }
+  };
+
+  const executeBulkDelete = async () => {
+    setBulkSaving(true);
+    try {
+      await Promise.all(selectedIds.map((id) => deleteCollection.mutateAsync(id)));
+      showToast(`Successfully deleted ${selectedIds.length} collection(s).`, "success");
+      setSelectedIds([]);
+      setBulkAction("");
+      setShowBulkDeleteConfirm(false);
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to complete bulk delete."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   const handleBulkAction = async () => {
     if (selectedIds.length === 0 || !bulkAction) return;
 
     if (bulkAction === "delete") {
-      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected collection(s)? This action cannot be undone.`)) {
-        return;
-      }
+      setShowBulkDeleteConfirm(true);
+      return;
     }
 
     setBulkSaving(true);
     try {
-      if (bulkAction === "delete") {
-        await Promise.all(selectedIds.map(id => deleteCollection.mutateAsync(id)));
-        showToast(`Successfully deleted ${selectedIds.length} collection(s).`, "success");
-      } else if (bulkAction === "activate") {
+      if (bulkAction === "activate") {
         await Promise.all(selectedIds.map(id => updateCollection.mutateAsync({ id, status: "ACTIVE" })));
         showToast(`Successfully activated ${selectedIds.length} collection(s).`, "success");
       } else if (bulkAction === "deactivate") {
@@ -493,65 +516,56 @@ export default function CollectionsPage() {
   const isEditInlineOpen = showForm && !!form.values.id;
 
   const collectionForm = (
-        <form onSubmit={form.handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-3 gap-6">
-            <AdminInput label="Name" required {...form.getFieldProps("name")} error={form.errors.name as string} />
-            <AdminInput label="Slug" placeholder="Auto from name if blank" {...form.getFieldProps("slug")} error={form.errors.slug as string} />
-            <AdminSelect
-              label="Status"
-              options={[
-                { value: "ACTIVE", label: "Active" },
-                { value: "INACTIVE", label: "Inactive" },
-              ]}
-              {...form.getFieldProps("status")}
-              error={form.errors.status as string}
+    <form id="collection-form" onSubmit={form.handleSubmit} className="space-y-6">
+      <div className="grid grid-cols-3 gap-6">
+        <AdminInput label="Name" required {...form.getFieldProps("name")} error={form.errors.name as string} />
+        <AdminInput label="Slug" placeholder="Auto from name if blank" {...form.getFieldProps("slug")} error={form.errors.slug as string} />
+        <AdminSelect
+          label="Status"
+          options={[
+            { value: "ACTIVE", label: "Active" },
+            { value: "INACTIVE", label: "Inactive" },
+          ]}
+          {...form.getFieldProps("status")}
+          error={form.errors.status as string}
+        />
+      </div>
+      <div className="grid grid-cols-3 gap-6">
+        <AdminInput label="Sort Order" type="number" {...form.getFieldProps("sortOrder")} error={form.errors.sortOrder as string} />
+        <div className="space-y-1">
+          <label className="text-[13px] font-medium text-[#111]">Image URL</label>
+          <div className="flex gap-2">
+            <input
+              {...form.getFieldProps("image")}
+              className="flex-1 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none focus:border-[#E31E24]"
+              placeholder="https://..."
             />
+            <label className="flex cursor-pointer items-center justify-center rounded-md bg-[#F2F2F2] px-3 py-2 text-[13.5px] font-medium text-[#111] hover:bg-[#E6E6E6]">
+              {isUploading ? <Loader2 size={16} className="animate-spin" /> : "Upload"}
+              <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} disabled={isUploading} />
+            </label>
           </div>
-          <div className="grid grid-cols-3 gap-6">
-            <AdminInput label="Sort Order" type="number" {...form.getFieldProps("sortOrder")} error={form.errors.sortOrder as string} />
-            <div className="space-y-1">
-              <label className="text-[13px] font-medium text-[#111]">Image URL</label>
-              <div className="flex gap-2">
-                <input
-                  {...form.getFieldProps("image")}
-                  className="flex-1 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none focus:border-[#E31E24]"
-                  placeholder="https://..."
-                />
-                <label className="flex cursor-pointer items-center justify-center rounded-md bg-[#F2F2F2] px-3 py-2 text-[13.5px] font-medium text-[#111] hover:bg-[#E6E6E6]">
-                  {isUploading ? <Loader2 size={16} className="animate-spin" /> : "Upload"}
-                  <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} disabled={isUploading} />
-                </label>
-              </div>
-              {form.errors.image && <div className="text-[12px] text-red-500">{form.errors.image as string}</div>}
-            </div>
-            <AdminInput label="Description" {...form.getFieldProps("description")} error={form.errors.description as string} />
-          </div>
+          {form.errors.image && <div className="text-[12px] text-red-500">{form.errors.image as string}</div>}
+        </div>
+        <AdminInput label="Description" {...form.getFieldProps("description")} error={form.errors.description as string} />
+      </div>
       <div className="mt-4">
         <div className="mb-2 text-[13px] font-medium text-[#111]">Products</div>
         <div className="grid max-h-[220px] grid-cols-1 gap-2 overflow-y-auto rounded-md border border-[#E6E6E6] p-3 md:grid-cols-2">
           {products.map((product) => (
-            <label key={product.id} className="flex items-center gap-2 text-[13px]">
-                    <input
-                      type="checkbox"
-                      checked={form.values.productIds.includes(product.id)}
-                      onChange={() => toggleProduct(product.id)}
-                      className="rounded border-gray-300 text-red-600 focus:ring-red-500"
-                    />
-                    {product.title}
+            <label key={product.id} className="flex items-center gap-2 text-[13px] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.values.productIds.includes(product.id)}
+                onChange={() => toggleProduct(product.id)}
+                className="rounded border-gray-300 text-red-600 focus:ring-red-500"
+              />
+              {product.title}
             </label>
           ))}
         </div>
       </div>
-
-      <LoadingButton
-        type="submit"
-        loading={form.isSubmitting || createCollection.isPending || updateCollection.isPending}
-        loadingText={form.values.id ? "Updating..." : "Creating..."}
-        className="mt-5 rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B]"
-      >
-        {form.values.id ? "Update Collection" : "Create Collection"}
-      </LoadingButton>
-        </form>
+    </form>
   );
 
   return (
@@ -615,9 +629,30 @@ export default function CollectionsPage() {
 
       <Modal
         open={showForm}
-        onClose={reset}
+        onClose={handleCloseForm}
         title={form.values.id ? "Edit Collection" : "Create Collection"}
-        panelClassName="max-w-5xl max-h-[calc(100vh-2.5rem)] overflow-y-auto"
+        subtitle="Organize products into curated collections with pricing and regional visibility."
+        size="4xl"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={handleCloseForm}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <LoadingButton
+              type="submit"
+              form="collection-form"
+              loading={form.isSubmitting || createCollection.isPending || updateCollection.isPending}
+              loadingText={form.values.id ? "Updating..." : "Creating..."}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+            >
+              {form.values.id ? "Update Collection" : "Create Collection"}
+            </LoadingButton>
+          </div>
+        }
       >
         {showForm ? (
           <div className="space-y-6 p-6">
@@ -736,6 +771,30 @@ export default function CollectionsPage() {
           </div>
         ) : null}
       </Modal>
+
+      <ConfirmModal
+        open={showDiscardConfirm}
+        title="Discard Unsaved Changes?"
+        message="You have unsaved changes in this collection form. Are you sure you want to discard them?"
+        danger={true}
+        confirmText="Discard Changes"
+        onConfirm={() => {
+          setShowDiscardConfirm(false);
+          reset();
+        }}
+        onCancel={() => setShowDiscardConfirm(false)}
+      />
+
+      <ConfirmModal
+        open={showBulkDeleteConfirm}
+        title="Delete Selected Collections"
+        message={`Are you sure you want to permanently delete the ${selectedIds.length} selected collection(s)? This action cannot be undone.`}
+        danger={true}
+        confirmText="Delete Collections"
+        isLoading={bulkSaving}
+        onConfirm={executeBulkDelete}
+        onCancel={() => setShowBulkDeleteConfirm(false)}
+      />
 
       <DataTable<Collection>
         title="Collections List"

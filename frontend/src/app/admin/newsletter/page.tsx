@@ -313,9 +313,31 @@ export default function NewsletterAdminPage() {
         open={isAddOpen}
         onClose={() => setIsAddOpen(false)}
         title="Manually Add Subscriber"
-        panelClassName="max-w-md"
+        subtitle="Register an email address to the newsletter distribution list."
+        size="md"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={() => setIsAddOpen(false)}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+              disabled={form.isSubmitting}
+            >
+              Cancel
+            </button>
+            <LoadingButton
+              type="submit"
+              form="add-subscriber-form"
+              loading={form.isSubmitting || createMutation.isPending}
+              loadingText="Adding..."
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+            >
+              Add Subscriber
+            </LoadingButton>
+          </div>
+        }
       >
-        <form onSubmit={form.handleSubmit} className="space-y-4 p-5">
+        <form id="add-subscriber-form" onSubmit={form.handleSubmit} className="space-y-4 p-6">
           <AdminInput
             label="Email Address"
             required
@@ -328,24 +350,6 @@ export default function NewsletterAdminPage() {
           {form.status && (
             <p className="text-[12.5px] text-[#E31E24]">{form.status}</p>
           )}
-          <div className="flex justify-end gap-2.5 pt-2 border-t border-[#E6E6E6]">
-            <button
-              type="button"
-              onClick={() => setIsAddOpen(false)}
-              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#555] hover:bg-[#F2F2F2] cursor-pointer"
-              disabled={form.isSubmitting}
-            >
-              Cancel
-            </button>
-            <LoadingButton
-              type="submit"
-              loading={form.isSubmitting || createMutation.isPending}
-              loadingText="Adding..."
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] cursor-pointer"
-            >
-              Add Subscriber
-            </LoadingButton>
-          </div>
         </form>
       </Modal>
 

@@ -381,80 +381,68 @@ export default function AdminCustomerRolesPage() {
           )}
         </div>
 
-        <Modal open={showForm} onClose={resetForm}>
-          <form onSubmit={form.handleSubmit} className="flex flex-col max-h-[90vh] w-full max-w-2xl bg-white rounded-xl shadow-xl overflow-hidden">
-            <div className="border-b border-[#E6E6E6] px-5 py-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-semibold text-[#1A1A1A]">
-                  {form.values.id ? "Edit Customer Role" : "Create Customer Role"}
-                </h3>
-                <p className="mt-0.5 text-xs text-[#6B6B6B]">
-                  System roles stay protected. New roles should use short keys.
-                </p>
-              </div>
+        <Modal
+          open={showForm}
+          onClose={resetForm}
+          title={form.values.id ? "Edit Customer Role" : "Create Customer Role"}
+          subtitle="System roles stay protected. New roles should use short unique keys."
+          size="2xl"
+          footer={
+            <div className="flex items-center justify-end gap-2.5 w-full">
               <button
                 type="button"
                 onClick={resetForm}
-                className="text-[#9A9A9A] hover:text-[#1A1A1A]"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <AdminInput
-                  label="Name"
-                  {...form.getFieldProps("name")}
-                  error={form.errors.name as string}
-                />
-                <AdminInput
-                  label="Key"
-                  {...form.getFieldProps("key")}
-                  error={form.errors.key as string}
-                  disabled={rows.find((role) => role.id === form.values.id)?.isSystem}
-                />
-                <AdminSelect
-                  label="Status"
-                  {...form.getFieldProps("status")}
-                  error={form.errors.status as string}
-                  options={[
-                    { value: "ACTIVE", label: "Active" },
-                    { value: "INACTIVE", label: "Inactive" },
-                  ]}
-                />
-                <AdminInput
-                  label="Sort Order"
-                  type="number"
-                  {...form.getFieldProps("sortOrder")}
-                  error={form.errors.sortOrder as string}
-                />
-              </div>
-
-              <AdminInput
-                label="Description"
-                {...form.getFieldProps("description")}
-                error={form.errors.description as string}
-              />
-            </div>
-
-            <div className="border-t border-[#E6E6E6] bg-slate-50 px-5 py-4 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={resetForm}
-                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
+                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <LoadingButton
                 type="submit"
+                form="customer-role-form"
                 loading={form.isSubmitting}
                 loadingText="Processing..."
-                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
               >
                 {form.values.id ? "Update Role" : "Create Role"}
               </LoadingButton>
             </div>
+          }
+        >
+          <form id="customer-role-form" onSubmit={form.handleSubmit} className="p-6 space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <AdminInput
+                label="Name"
+                {...form.getFieldProps("name")}
+                error={form.errors.name as string}
+              />
+              <AdminInput
+                label="Key"
+                {...form.getFieldProps("key")}
+                error={form.errors.key as string}
+                disabled={rows.find((role) => role.id === form.values.id)?.isSystem}
+              />
+              <AdminSelect
+                label="Status"
+                {...form.getFieldProps("status")}
+                error={form.errors.status as string}
+                options={[
+                  { value: "ACTIVE", label: "Active" },
+                  { value: "INACTIVE", label: "Inactive" },
+                ]}
+              />
+              <AdminInput
+                label="Sort Order"
+                type="number"
+                {...form.getFieldProps("sortOrder")}
+                error={form.errors.sortOrder as string}
+              />
+            </div>
+
+            <AdminInput
+              label="Description"
+              {...form.getFieldProps("description")}
+              error={form.errors.description as string}
+            />
           </form>
         </Modal>
 

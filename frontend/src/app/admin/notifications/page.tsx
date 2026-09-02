@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Search, Trash2, Eye, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { useToast } from "@/components/admin/AdminComponents";
+import { Modal, useToast } from "@/components/admin/AdminComponents";
 import { useNotificationLogs, useDeleteNotificationLog, useBulkDeleteNotificationLogs } from "@/hooks/api";
 
 const CHANNELS = [
@@ -288,43 +288,42 @@ export default function AdminNotificationsPage() {
       </div>
 
       {/* Detail Modal */}
-      {viewModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#E6E6E6]">
-              <h2 className="text-[16px] font-serif text-[#1A1A1A]">Notification Log Details</h2>
-              <button onClick={() => setViewModal(null)} className="p-1.5 text-[#9A9A9A] hover:text-[#1A1A1A] hover:bg-[#F5F5F5] rounded transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto flex-1">
-              <div className="border border-[#E6E6E6] rounded">
-                <DetailRow label="CHANNEL" value={viewModal.channel} />
-                <DetailRow label="RECIPIENT" value={viewModal.to} />
-                <DetailRow label="SUBJECT" value={viewModal.subject || "—"} />
-                <DetailRow label="MESSAGE" value={viewModal.message} />
-                <DetailRow label="STATUS" value={viewModal.status} />
-                <DetailRow label="PROVIDER" value={viewModal.provider || "—"} />
-                <DetailRow label="PROVIDER REFERENCE ID" value={viewModal.providerReferenceId || "—"} />
-                <DetailRow label="JOB ID" value={viewModal.jobId || "—"} />
-                <DetailRow label="ERROR MESSAGE" value={viewModal.errorMessage || "—"} />
-                <DetailRow label="CREATED AT" value={new Date(viewModal.createdAt).toLocaleString()} />
-                <DetailRow label="SENT AT" value={viewModal.sentAt ? new Date(viewModal.sentAt).toLocaleString() : "—"} />
-              </div>
-            </div>
-
-            <div className="px-6 py-4 border-t border-[#E6E6E6] flex justify-end">
-              <button 
-                onClick={() => setViewModal(null)}
-                className="px-6 py-2 text-[11px] font-bold tracking-wider text-[#6B6B6B] uppercase border border-[#E6E6E6] hover:bg-[#FAFAFA] rounded transition-colors"
-              >
-                Close
-              </button>
+      <Modal
+        open={Boolean(viewModal)}
+        onClose={() => setViewModal(null)}
+        title="Notification Log Details"
+        subtitle={viewModal ? `Channel: ${viewModal.channel.toUpperCase()} | Recipient: ${viewModal.to}` : undefined}
+        size="2xl"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button 
+              type="button"
+              onClick={() => setViewModal(null)}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        }
+      >
+        {viewModal && (
+          <div className="p-6">
+            <div className="border border-[#E6E6E6] rounded divide-y divide-[#E6E6E6]">
+              <DetailRow label="CHANNEL" value={viewModal.channel} />
+              <DetailRow label="RECIPIENT" value={viewModal.to} />
+              <DetailRow label="SUBJECT" value={viewModal.subject || "—"} />
+              <DetailRow label="MESSAGE" value={viewModal.message} />
+              <DetailRow label="STATUS" value={viewModal.status} />
+              <DetailRow label="PROVIDER" value={viewModal.provider || "—"} />
+              <DetailRow label="PROVIDER REFERENCE ID" value={viewModal.providerReferenceId || "—"} />
+              <DetailRow label="JOB ID" value={viewModal.jobId || "—"} />
+              <DetailRow label="ERROR MESSAGE" value={viewModal.errorMessage || "—"} />
+              <DetailRow label="CREATED AT" value={new Date(viewModal.createdAt).toLocaleString()} />
+              <DetailRow label="SENT AT" value={viewModal.sentAt ? new Date(viewModal.sentAt).toLocaleString() : "—"} />
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </AdminLayout>
   );
 }

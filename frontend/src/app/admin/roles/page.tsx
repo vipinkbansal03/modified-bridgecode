@@ -164,12 +164,14 @@ export default function RolesPage() {
     setRoleName(role.name);
     const fullAcc = role.permissions.includes("*");
     setIsFullAccess(fullAcc);
-    const perms = (fullAcc ? ["*"] : [...role.permissions]).filter((p) => p === "*" || ALL_PERMISSIONS.includes(p));
+    const perms = fullAcc
+      ? [...ALL_PERMISSIONS]
+      : role.permissions.filter((p) => ALL_PERMISSIONS.includes(p));
     setSelectedPerms(perms);
     
     const initialEnabled: Record<string, boolean> = {};
     PERMISSION_GROUPS.forEach((g) => {
-      initialEnabled[g.title] = g.permissions.some((p) => perms.includes(p));
+      initialEnabled[g.title] = fullAcc || g.permissions.some((p) => perms.includes(p));
     });
     setEnabledModules(initialEnabled);
 
@@ -187,22 +189,32 @@ export default function RolesPage() {
   };
 
   const togglePermission = (key: string) => {
-    if (isFullAccess) return;
     if (selectedPerms.includes(key)) {
-      setSelectedPerms(selectedPerms.filter((p) => p !== key));
+      const next = selectedPerms.filter((p) => p !== key);
+      setSelectedPerms(next);
+      setIsFullAccess(false);
     } else {
-      setSelectedPerms([...selectedPerms, key]);
+      const next = [...selectedPerms, key];
+      setSelectedPerms(next);
+      if (next.length === ALL_PERMISSIONS.length) {
+        setIsFullAccess(true);
+      }
     }
   };
 
   const toggleGroupAll = (groupTitle: string, groupKeys: string[]) => {
-    if (isFullAccess) return;
     const allSelected = groupKeys.every((k) => selectedPerms.includes(k));
     if (allSelected) {
-      setSelectedPerms(selectedPerms.filter((p) => !groupKeys.includes(p)));
+      const next = selectedPerms.filter((p) => !groupKeys.includes(p));
+      setSelectedPerms(next);
+      setIsFullAccess(false);
     } else {
       const union = new Set([...selectedPerms, ...groupKeys]);
-      setSelectedPerms(Array.from(union));
+      const next = Array.from(union);
+      setSelectedPerms(next);
+      if (next.length === ALL_PERMISSIONS.length) {
+        setIsFullAccess(true);
+      }
     }
   };
 
@@ -459,9 +471,42 @@ export default function RolesPage() {
         open={showModal}
         onClose={closeModal}
         title={editingRole ? `Edit Role: ${editingRole.name}` : "Create New System Role"}
-        panelClassName="max-w-4xl max-h-[85vh] flex flex-col overflow-hidden"
+        subtitle={editingRole ? "Configure system role permissions and access level." : "Add a new system role and configure granular permissions across modules."}
+        size="4xl"
+        panelClassName="max-w-4xl"
+        footer={
+          <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+            <div className="text-[12.5px] font-semibold text-[#1A1A1A]">
+              Selected:{" "}
+              <span className="text-[#E31E24]">
+                {isFullAccess || selectedPerms.length === ALL_PERMISSIONS.length
+                  ? `ALL PERMISSIONS (${ALL_PERMISSIONS.length} / ${ALL_PERMISSIONS.length})`
+                  : `${selectedPerms.length} / ${ALL_PERMISSIONS.length} Permissions`}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={closeModal}
+                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <LoadingButton
+                type="button"
+                onClick={handleSave}
+                loading={saving}
+                loadingText="Saving..."
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+              >
+                {editingRole ? "Update Role" : "Create Role"}
+              </LoadingButton>
+            </div>
+          </div>
+        }
       >
-        <div className="p-5 space-y-4 overflow-y-auto max-h-[calc(85vh-120px)]">
+        <div className="p-6 space-y-4">
           {/* Role Name & Full Access Switch */}
           <div className="grid gap-3 sm:grid-cols-[1fr_auto] items-center bg-[#F9FAFB] p-3.5 rounded-xl border border-[#E5E7EB]">
             <div>
@@ -483,11 +528,21 @@ export default function RolesPage() {
                   type="checkbox"
                   checked={isFullAccess}
                   onChange={(e) => {
-                    setIsFullAccess(e.target.checked);
-                    if (e.target.checked) setSelectedPerms(["*"]);
-                    else setSelectedPerms([]);
+                    const checked = e.target.checked;
+                    setIsFullAccess(checked);
+                    if (checked) {
+                      setSelectedPerms([...ALL_PERMISSIONS]);
+                      const allEnabled: Record<string, boolean> = {};
+                      PERMISSION_GROUPS.forEach((g) => {
+                        allEnabled[g.title] = true;
+                      });
+                      setEnabledModules(allEnabled);
+                    } else {
+                      setSelectedPerms([]);
+                      setEnabledModules({});
+                    }
                   }}
-                  className="h-4 w-4 rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24]"
+                  className="h-4 w-4 rounded border-[#D1D5DB] accent-[#E31E24] cursor-pointer"
                 />
                 <div>
                   <span className="text-xs font-bold text-[#111827] block">👑 Grant Full Access (* Wildcard)</span>
@@ -498,168 +553,128 @@ export default function RolesPage() {
           </div>
 
           {/* Search Bar */}
-          {!isFullAccess && (
-            <div className="relative">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-              <input
-                type="text"
-                value={permSearchQuery}
-                onChange={(e) => setPermSearchQuery(e.target.value)}
-                placeholder="Search permissions by keyword (e.g. product, order, view, manage)..."
-                className="w-full pl-9 pr-3 py-1.5 text-xs border border-[#E5E7EB] rounded-lg bg-white outline-none focus:border-[#E31E24]"
-              />
-            </div>
-          )}
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
+            <input
+              type="text"
+              value={permSearchQuery}
+              onChange={(e) => setPermSearchQuery(e.target.value)}
+              placeholder="Search permissions by keyword (e.g. product, order, view, manage)..."
+              className="w-full pl-9 pr-3 py-1.5 text-xs border border-[#E5E7EB] rounded-lg bg-white outline-none focus:border-[#E31E24]"
+            />
+          </div>
 
           {/* Permission Group Cards */}
-          {!isFullAccess ? (
-            <div className="space-y-4">
-              {PERMISSION_GROUPS.map((group) => {
-                const groupMeta = group.permissions
-                  .map((k) => PERMISSION_METADATA[k])
-                  .filter(Boolean)
-                  .filter((meta) => {
-                    if (!permSearchQuery.trim()) return true;
-                    const q = permSearchQuery.toLowerCase();
-                    return (
-                      meta.label.toLowerCase().includes(q) ||
-                      meta.description.toLowerCase().includes(q) ||
-                      meta.key.toLowerCase().includes(q)
-                    );
-                  });
+          <div className="space-y-4">
+            {PERMISSION_GROUPS.map((group) => {
+              const groupMeta = group.permissions
+                .map((k) => PERMISSION_METADATA[k])
+                .filter(Boolean)
+                .filter((meta) => {
+                  if (!permSearchQuery.trim()) return true;
+                  const q = permSearchQuery.toLowerCase();
+                  return (
+                    meta.label.toLowerCase().includes(q) ||
+                    meta.description.toLowerCase().includes(q) ||
+                    meta.key.toLowerCase().includes(q)
+                  );
+                });
 
-                if (groupMeta.length === 0) return null;
+              if (groupMeta.length === 0) return null;
 
-                const groupKeys = groupMeta.map((m) => m.key);
-                const allSelected = groupKeys.every((k) => selectedPerms.includes(k));
-                const isExpanded = expandedGroups[group.title] ?? true;
+              const groupKeys = groupMeta.map((m) => m.key);
+              const allSelected = groupKeys.every((k) => selectedPerms.includes(k));
+              const isExpanded = expandedGroups[group.title] ?? true;
 
-                return (
-                  <div key={group.title} className="rounded-xl border border-[#E5E7EB] bg-white overflow-hidden shadow-2xs">
-                    {/* Group Header */}
-                    <div className="bg-[#F9FAFB] px-3.5 py-2.5 border-b border-[#E5E7EB] flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <input
-                          type="checkbox"
-                          checked={enabledModules[group.title] ?? false}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setEnabledModules((prev) => ({ ...prev, [group.title]: checked }));
-                            if (!checked) {
-                              setSelectedPerms((current) => current.filter((p) => !groupKeys.includes(p)));
-                            }
-                          }}
-                          className="h-4 w-4 rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24] cursor-pointer"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => toggleGroupAccordion(group.title)}
-                          className="text-[#6B7280] hover:text-[#111827] flex items-center"
-                        >
-                          {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                        </button>
-                        <h4 className="text-xs font-bold text-[#111827]">{group.title} Module</h4>
-                        {enabledModules[group.title] && (
-                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-[#E5E7EB] text-[#374151]">
-                            {groupKeys.filter((k) => selectedPerms.includes(k)).length} / {groupKeys.length} Selected
-                          </span>
-                        )}
-                      </div>
-
+              return (
+                <div key={group.title} className="rounded-xl border border-[#E5E7EB] bg-white overflow-hidden shadow-2xs">
+                  {/* Group Header */}
+                  <div className="bg-[#F9FAFB] px-3.5 py-2.5 border-b border-[#E5E7EB] flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={enabledModules[group.title] ?? false}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setEnabledModules((prev) => ({ ...prev, [group.title]: checked }));
+                          if (!checked) {
+                            setSelectedPerms((current) => current.filter((p) => !groupKeys.includes(p)));
+                            setIsFullAccess(false);
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-[#D1D5DB] accent-[#E31E24] cursor-pointer"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => toggleGroupAccordion(group.title)}
+                        className="text-[#6B7280] hover:text-[#111827] flex items-center"
+                      >
+                        {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                      </button>
+                      <h4 className="text-xs font-bold text-[#111827]">{group.title} Module</h4>
                       {enabledModules[group.title] && (
-                        <button
-                          type="button"
-                          onClick={() => toggleGroupAll(group.title, groupKeys)}
-                          className="text-[11.5px] font-bold text-[#E31E24] hover:underline"
-                        >
-                          {allSelected ? "Deselect All" : "Select All Module"}
-                        </button>
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-[#E5E7EB] text-[#374151]">
+                          {groupKeys.filter((k) => selectedPerms.includes(k)).length} / {groupKeys.length} Selected
+                        </span>
                       )}
                     </div>
 
-                    {/* Group Permission Switches Grid */}
-                    {isExpanded && (
-                      <div className="p-3">
-                        {enabledModules[group.title] ? (
-                          <div className="grid gap-2.5 sm:grid-cols-2">
-                            {groupMeta.map((meta) => {
-                              const checked = selectedPerms.includes(meta.key);
-                              return (
-                                <label
-                                  key={meta.key}
-                                  className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer ${
-                                    checked
-                                      ? "border-[#E5E7EB] bg-[#FFF5F5] ring-1 ring-[#E31E24]/30 shadow-2xs"
-                                      : "border-[#E5E7EB] bg-white hover:border-[#D1D5DB]"
-                                  }`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={() => togglePermission(meta.key)}
-                                    className="mt-0.5 h-4 w-4 rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24]"
-                                  />
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center justify-between gap-1">
-                                      <span className="text-xs font-bold text-[#111827]">{meta.label}</span>
-                                      <span className="font-mono text-[9.5px] text-[#6B7280] bg-[#F3F4F6] px-1.5 py-0.5 rounded">
-                                        {meta.key}
-                                      </span>
-                                    </div>
-                                    <p className="text-[11px] text-[#6B6B6B] mt-0.5 leading-normal">{meta.description}</p>
-                                  </div>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="py-3 text-center text-xs text-[#9CA3AF] italic">
-                            Module disabled. Check the box in the header to configure granular permissions.
-                          </div>
-                        )}
-                      </div>
+                    {enabledModules[group.title] && (
+                      <button
+                        type="button"
+                        onClick={() => toggleGroupAll(group.title, groupKeys)}
+                        className="text-[11.5px] font-bold text-[#E31E24] hover:underline"
+                      >
+                        {allSelected ? "Deselect All" : "Select All Module"}
+                      </button>
                     )}
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="py-10 px-6 text-center bg-[#DCFCE7]/40 rounded-xl border border-[#DCFCE7]">
-              <ShieldCheck size={40} className="mx-auto mb-2 text-[#15803D]" />
-              <h3 className="text-base font-extrabold text-[#15803D]">Full Access Mode Enabled</h3>
-              <p className="text-xs text-[#166534] mt-1 max-w-md mx-auto leading-relaxed">
-                This role automatically bypasses all individual permission checks across the entire system (Super Admin access).
-              </p>
-            </div>
-          )}
-        </div>
 
-        {/* Modal Footer Bar */}
-        <div className="bg-[#F9FAFB] px-5 py-3 border-t border-[#E5E7EB] flex items-center justify-between">
-          <div className="text-xs font-bold text-[#374151]">
-            Selected:{" "}
-            <span className="text-[#E31E24]">
-              {isFullAccess ? "FULL ACCESS (*)" : `${selectedPerms.length} / ${ALL_PERMISSIONS.length} Permissions`}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={closeModal}
-              className="px-3.5 py-1.5 rounded-lg border border-[#E5E7EB] bg-white text-xs font-medium text-[#374151] hover:bg-[#F3F4F6] cursor-pointer"
-            >
-              Cancel
-            </button>
-            <LoadingButton
-              type="button"
-              onClick={handleSave}
-              loading={saving}
-              loadingText="Saving..."
-              className="px-4 py-1.5 rounded-lg bg-[#E31E24] text-xs font-bold text-white hover:bg-[#B5151B] transition-colors shadow-2xs cursor-pointer"
-            >
-              {editingRole ? "Update Role" : "Create Role"}
-            </LoadingButton>
+                  {/* Group Permission Switches Grid */}
+                  {isExpanded && (
+                    <div className="p-3">
+                      {enabledModules[group.title] ? (
+                        <div className="grid gap-2.5 sm:grid-cols-2">
+                          {groupMeta.map((meta) => {
+                            const checked = selectedPerms.includes(meta.key);
+                            return (
+                              <label
+                                key={meta.key}
+                                className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer ${
+                                  checked
+                                    ? "border-[#E5E7EB] bg-[#FFF5F5] ring-1 ring-[#E31E24]/30 shadow-2xs"
+                                    : "border-[#E5E7EB] bg-white hover:border-[#D1D5DB]"
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => togglePermission(meta.key)}
+                                  className="mt-0.5 h-4 w-4 rounded border-[#D1D5DB] accent-[#E31E24] cursor-pointer"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="text-xs font-bold text-[#111827]">{meta.label}</span>
+                                    <span className="font-mono text-[9.5px] text-[#6B7280] bg-[#F3F4F6] px-1.5 py-0.5 rounded">
+                                      {meta.key}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-[#6B6B6B] mt-0.5 leading-normal">{meta.description}</p>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="py-3 text-center text-xs text-[#9CA3AF] italic">
+                          Module disabled. Check the box in the header to configure granular permissions.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </Modal>

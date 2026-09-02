@@ -1545,9 +1545,41 @@ export default function PricingPage() {
         ) : null}
       </div>
 
-      <Modal open={showForm} onClose={resetForm} title={form.values.id ? "Edit pricing rule" : "New pricing rule"} panelClassName="max-w-5xl">
+      <Modal
+        open={showForm}
+        onClose={resetForm}
+        title={form.values.id ? "Edit pricing rule" : "New pricing rule"}
+        subtitle="Configure base prices, country pricing, tier overrides, or role-specific pricing rules."
+        size="4xl"
+        panelClassName="max-w-5xl"
+        footer={
+          <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+            <div className="text-[12px] text-[#6B6B6B]">
+              Priority is currently enforced by the existing resolver hierarchy: Customer Specific, Tier, Country, Variant, MOQ, Base Price.
+            </div>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={resetForm}
+                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <LoadingButton
+                type="submit"
+                form="pricing-rule-form"
+                loading={form.isSubmitting || createPricing.isPending || updatePricing.isPending}
+                loadingText="Processing..."
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+              >
+                {form.values.id ? "Save Changes" : "Create Rule"}
+              </LoadingButton>
+            </div>
+          </div>
+        }
+      >
         {showForm ? (
-          <form onSubmit={form.handleSubmit} className="space-y-6 p-6">
+          <form id="pricing-rule-form" onSubmit={form.handleSubmit} className="space-y-6 p-6">
             {form.values.id ? (
               <div className="rounded-md bg-[#F8F9FA] border border-[#E6E6E6] px-3.5 py-2 text-[12.5px] text-[#5A5A5A] flex items-center gap-1.5">
                 <span>
@@ -1695,32 +1727,32 @@ export default function PricingPage() {
                 })()
               ) : null}
             </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#E6E6E6] pt-4">
-              <div className="text-[12.5px] text-[#6B6B6B]">
-                Priority is currently enforced by the existing resolver hierarchy: Customer Specific, Tier, Country, Variant, MOQ, Base Price.
-              </div>
-              <div className="flex gap-2">
-                <button type="button" onClick={resetForm} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
-                  Cancel
-                </button>
-                <LoadingButton type="submit" loading={form.isSubmitting || createPricing.isPending || updatePricing.isPending} loadingText="Processing..." className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-                  {form.values.id ? "Save rule" : "Create rule"}
-                </LoadingButton>
-              </div>
-            </div>
           </form>
         ) : null}
       </Modal>
 
-      <Modal open={previewOpen} onClose={() => setPreviewOpen(false)} title="Live Pricing Preview" panelClassName="max-w-xl">
+      <Modal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        title="Live Pricing Preview"
+        subtitle="Preview final prices for variants based on rules, country taxes, roles, and quantities."
+        size="2xl"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(false)}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        }
+      >
         <div className="space-y-4 p-6">
-          <div className="flex items-center justify-between border-b border-[#E6E6E6] pb-3 gap-3">
-            <div className="text-[13px] text-[#6B6B6B]">
-              Preview final prices for variants based on rules, country taxes, roles, and quantities.
-            </div>
-            <button type="button" onClick={() => setPreviewInput(emptyPreview)} className="text-[12.5px] font-semibold text-[#E31E24] hover:underline shrink-0">
-              Reset
+          <div className="flex items-center justify-end pb-1">
+            <button type="button" onClick={() => setPreviewInput(emptyPreview)} className="text-[12.5px] font-semibold text-[#E31E24] hover:underline shrink-0 cursor-pointer">
+              Reset Filters
             </button>
           </div>
 
@@ -1811,25 +1843,50 @@ export default function PricingPage() {
               <p className="text-[13px] text-[#6B6B6B] text-center py-4">Choose product and country to preview the final price.</p>
             )}
           </div>
-
-          <div className="flex justify-end pt-3 border-t border-[#E6E6E6]">
-            <button
-              type="button"
-              onClick={() => setPreviewOpen(false)}
-              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[12.5px] font-semibold text-[#6B6B6B] hover:bg-[#F5F5F5]"
-            >
-              Close
-            </button>
-          </div>
         </div>
       </Modal>
 
-      <Modal open={importOpen} onClose={() => { setImportOpen(false); setImportFile(null); setImportReport(null); }} title="Import Pricing Rules" panelClassName="max-w-xl">
-        <div className="space-y-4 p-6">
-          <div className="text-[13px] text-[#6B6B6B]">
-            Upload an Excel (.xlsx, .xls) or CSV file with pricing rules. The file must match the template format.
+      <Modal
+        open={importOpen}
+        onClose={() => { setImportOpen(false); setImportFile(null); setImportReport(null); }}
+        title="Import Pricing Rules"
+        subtitle="Upload an Excel (.xlsx, .xls) or CSV file with pricing rules matching the template format."
+        size="2xl"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={() => {
+                setImportOpen(false);
+                setImportFile(null);
+                setImportReport(null);
+              }}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleImportPreview}
+              disabled={!importFile || previewImport.isPending}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors disabled:opacity-40 cursor-pointer"
+            >
+              {previewImport.isPending ? "Generating Preview..." : "Preview"}
+            </button>
+            <LoadingButton
+              type="button"
+              onClick={handleImportCommit}
+              disabled={!importFile || importPricing.isPending}
+              loading={importPricing.isPending}
+              loadingText="Importing..."
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-40 cursor-pointer shadow-2xs"
+            >
+              Import Rules
+            </LoadingButton>
           </div>
-          
+        }
+      >
+        <div className="space-y-4 p-6">
           <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-[#D6D6D6] bg-[#FAFAFA] px-4 py-3">
             <input
               type="file"
@@ -1854,36 +1911,6 @@ export default function PricingPage() {
               </pre>
             </div>
           ) : null}
-
-          <div className="flex items-center justify-end gap-2 border-t border-[#E6E6E6] pt-4">
-            <button
-              type="button"
-              onClick={() => {
-                setImportOpen(false);
-                setImportFile(null);
-                setImportReport(null);
-              }}
-              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[12.5px] font-semibold text-[#6B6B6B] hover:bg-[#F5F5F5]"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleImportPreview}
-              disabled={!importFile || previewImport.isPending}
-              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[12.5px] font-semibold text-[#1A1A1A] hover:bg-[#F5F5F5] disabled:opacity-40"
-            >
-              {previewImport.isPending ? "Generating Preview..." : "Preview"}
-            </button>
-            <button
-              type="button"
-              onClick={handleImportCommit}
-              disabled={!importFile || importPricing.isPending}
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-40"
-            >
-              {importPricing.isPending ? "Importing..." : "Import"}
-            </button>
-          </div>
         </div>
       </Modal>
 

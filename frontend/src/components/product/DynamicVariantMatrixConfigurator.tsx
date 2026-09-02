@@ -58,6 +58,8 @@ function getPriceForCurrency(
   return (
     variant.prices.find((price) => price.currencyCode === currencyCode) ??
     productPrices.find((price) => price.currencyCode === currencyCode) ??
+    variant.prices[0] ??
+    productPrices[0] ??
     null
   );
 }

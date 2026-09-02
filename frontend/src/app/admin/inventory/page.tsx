@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Clock3, Download, Filter, History, Layers, Search, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, Pagination, StatCard, StatusBadge, useToast, AdminBulkActionsBar, AdminDeleteModal, DataTable } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, Pagination, StatCard, StatusBadge, useToast, AdminBulkActionsBar, AdminDeleteModal, DataTable, LoadingButton } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { RefreshButton } from "@/components/admin/RefreshButton";
 import { Modal } from "@/components/ui/Modal";
@@ -473,7 +473,6 @@ export default function InventoryPage() {
     setImportMessage("");
     setImportFile(null);
     setImportOpen(true);
-    fileInputRef.current?.click();
   };
 
   const previewImport = async (file?: File) => {
@@ -986,7 +985,27 @@ export default function InventoryPage() {
         open={warehouseAssignModalOpen}
         onClose={() => { setWarehouseAssignModalOpen(false); setBulkAction(""); }}
         title="Assign Selected Variants to Warehouses"
-        panelClassName="max-w-md"
+        subtitle="Select warehouses and specify initial stock levels for the selected variants."
+        size="lg"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={() => { setWarehouseAssignModalOpen(false); setBulkAction(""); }}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleWarehouseAssignSubmit}
+              disabled={bulkSaving}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
+            >
+              {bulkSaving ? "Assigning..." : "Assign"}
+            </button>
+          </div>
+        }
       >
         <div className="space-y-4 p-6">
           <p className="text-[13px] text-[#6B6B6B]">
@@ -1017,23 +1036,6 @@ export default function InventoryPage() {
               </div>
             ))}
           </div>
-          <div className="mt-4 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => { setWarehouseAssignModalOpen(false); setBulkAction(""); }}
-              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleWarehouseAssignSubmit}
-              disabled={bulkSaving}
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
-            >
-              {bulkSaving ? "Assigning..." : "Assign"}
-            </button>
-          </div>
         </div>
       </Modal>
 
@@ -1051,136 +1053,166 @@ export default function InventoryPage() {
         </section>
       )}
 
-      {historyRow && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[85vh] w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-xl">
-            <div className="flex items-start justify-between gap-4 border-b border-[#EFEFEF] p-5">
-              <div>
-                <h2 className="text-[18px] font-semibold text-[#1A1A1A]">Stock History</h2>
-                <p className="mt-1 text-[13px] text-[#6B6B6B]">
-                  {historyRow.product.title} / {historyRow.variant?.title ?? "Variant"}
-                </p>
-              </div>
-              <button type="button" onClick={() => setHistoryRow(null)} className="rounded p-1 text-[#6B6B6B] hover:bg-[#F5F5F5]">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="max-h-[65vh] overflow-y-auto p-5">
-              {rowHistoryLoading ? (
-                <div className="py-4 text-[13px] text-[#9A9A9A]">Loading history...</div>
-              ) : (
-                <AdjustmentRows adjustments={historyRows} emptyMessage="No stock adjustments recorded for this variant." />
-              )}
-            </div>
+      <Modal
+        open={Boolean(historyRow)}
+        onClose={() => setHistoryRow(null)}
+        title="Stock History"
+        subtitle={historyRow ? `${historyRow.product.title} / ${historyRow.variant?.title ?? "Variant"}` : undefined}
+        size="2xl"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={() => setHistoryRow(null)}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Close
+            </button>
           </div>
+        }
+      >
+        <div className="p-6">
+          {rowHistoryLoading ? (
+            <div className="py-4 text-[13px] text-[#9A9A9A]">Loading history...</div>
+          ) : (
+            <AdjustmentRows adjustments={historyRows} emptyMessage="No stock adjustments recorded for this variant." />
+          )}
         </div>
-      )}
+      </Modal>
 
-      {importOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-lg bg-white shadow-xl">
-            <div className="flex items-start justify-between gap-4 border-b border-[#EFEFEF] p-5">
-              <div>
-                <h2 className="text-[18px] font-semibold text-[#1A1A1A]">Import Inventory Excel</h2>
-                <p className="mt-1 text-[13px] text-[#6B6B6B]">
-                  Upload an `.xlsx` or `.csv` file with `variantId`, `variantSku` or `productSku`, plus `stock`, `reservedStock`, and `lowStockThreshold`.
-                </p>
-              </div>
-              <button type="button" onClick={() => setImportOpen(false)} className="rounded p-1 text-[#6B6B6B] hover:bg-[#F5F5F5]">
-                <X size={18} />
+      <Modal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        title="Import Inventory Excel"
+        subtitle="Upload an .xlsx or .csv file to update variant stock levels."
+        size="3xl"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={() => setImportOpen(false)}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <LoadingButton
+              type="button"
+              onClick={() => void confirmImport()}
+              loading={importing}
+              loadingText="Importing..."
+              disabled={!importFile || (importPreview?.invalidRows ?? 0) > 0}
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
+            >
+              Import Inventory
+            </LoadingButton>
+          </div>
+        }
+      >
+        <div className="space-y-4 p-6">
+          <p className="text-[13px] leading-5 text-[#6B6B6B]">
+            Upload an <code className="rounded bg-[#F3F4F6] px-1.5 py-0.5 text-[12px] font-mono text-[#1F2937]">.xlsx</code> or <code className="rounded bg-[#F3F4F6] px-1.5 py-0.5 text-[12px] font-mono text-[#1F2937]">.csv</code> file with <code className="rounded bg-[#F3F4F6] px-1 py-0.5 text-[11px] font-mono">variantId</code>, <code className="rounded bg-[#F3F4F6] px-1 py-0.5 text-[11px] font-mono">variantSku</code> or <code className="rounded bg-[#F3F4F6] px-1 py-0.5 text-[11px] font-mono">productSku</code>, plus <code className="rounded bg-[#F3F4F6] px-1 py-0.5 text-[11px] font-mono">stock</code>, <code className="rounded bg-[#F3F4F6] px-1 py-0.5 text-[11px] font-mono">reservedStock</code>, and <code className="rounded bg-[#F3F4F6] px-1 py-0.5 text-[11px] font-mono">lowStockThreshold</code>.
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] cursor-pointer shadow-xs"
+            >
+              <Upload size={14} />
+              {importFile ? importFile.name : "Choose Excel / CSV File"}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.csv"
+              className="hidden"
+              onChange={(e) => void previewImport(e.target.files?.[0])}
+            />
+            {importFile && (
+              <button
+                type="button"
+                onClick={() => {
+                  setImportFile(null);
+                  setImportPreview(null);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+                className="text-[12.5px] text-red-600 hover:underline cursor-pointer"
+              >
+                Remove
               </button>
-            </div>
-            <div className="max-h-[78vh] overflow-y-auto p-5">
-              <div className="mb-4 flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
-                >
-                  <Upload size={15} /> Choose File
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void confirmImport()}
-                  disabled={!importFile || importing || (importPreview?.invalidRows ?? 0) > 0}
-                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
-                >
-                  {importing ? "Importing..." : "Import Now"}
-                </button>
-                <span className="text-[13px] text-[#6B6B6B]">{importMessage || "Pick a spreadsheet to preview validation results before importing."}</span>
-              </div>
+            )}
+            <span className="text-[13px] text-[#6B6B6B]">{importMessage || "Pick a spreadsheet to preview validation results before importing."}</span>
+          </div>
 
-              {importPreview && (
-                <div className="space-y-4">
-                  <AdminStatsGrid
-                    stats={[
-                      { title: "Total Rows", value: tinyNumber(importPreview.totalRows), icon: <Clock3 size={18} /> },
-                      { title: "Valid Rows", value: tinyNumber(importPreview.validRows), icon: <History size={18} />, color: "bg-emerald-600" },
-                      { title: "Invalid Rows", value: tinyNumber(importPreview.invalidRows), icon: <X size={18} />, color: "bg-red-500" },
-                      { title: "Duplicates", value: tinyNumber(importPreview.duplicateWarnings.length), icon: <Filter size={18} />, color: "bg-orange-500" }
-                    ]}
-                  />
-                  {importPreview.issues.length > 0 && (
-                    <div className="rounded-lg border border-[#F1D6D6] bg-[#FFF8F8] p-4">
-                      <h3 className="mb-3 text-[14px] font-semibold text-[#1A1A1A]">Validation Issues</h3>
-                      <div className="max-h-44 space-y-2 overflow-y-auto text-[13px] text-[#6B6B6B]">
-                        {importPreview.issues.slice(0, 30).map((issue, index) => (
-                          <div key={`${issue.row}-${issue.field}-${index}`} className="rounded border border-[#F1D6D6] bg-white px-3 py-2">
-                            Row {issue.row}, {issue.field}: {issue.message}
-                          </div>
-                        ))}
+          {importPreview && (
+            <div className="space-y-4">
+              <AdminStatsGrid
+                stats={[
+                  { title: "Total Rows", value: tinyNumber(importPreview.totalRows), icon: <Clock3 size={18} /> },
+                  { title: "Valid Rows", value: tinyNumber(importPreview.validRows), icon: <History size={18} />, color: "bg-emerald-600" },
+                  { title: "Invalid Rows", value: tinyNumber(importPreview.invalidRows), icon: <X size={18} />, color: "bg-red-500" },
+                  { title: "Duplicates", value: tinyNumber(importPreview.duplicateWarnings.length), icon: <Filter size={18} />, color: "bg-orange-500" }
+                ]}
+              />
+              {importPreview.issues.length > 0 && (
+                <div className="rounded-lg border border-[#F1D6D6] bg-[#FFF8F8] p-4">
+                  <h3 className="mb-3 text-[14px] font-semibold text-[#1A1A1A]">Validation Issues</h3>
+                  <div className="max-h-44 space-y-2 overflow-y-auto text-[13px] text-[#6B6B6B]">
+                    {importPreview.issues.slice(0, 30).map((issue, index) => (
+                      <div key={`${issue.row}-${issue.field}-${index}`} className="rounded border border-[#F1D6D6] bg-white px-3 py-2">
+                        Row {issue.row}, {issue.field}: {issue.message}
                       </div>
-                    </div>
-                  )}
-                  {importPreview.duplicateWarnings.length > 0 && (
-                    <div className="rounded-lg border border-[#F0E1C0] bg-[#FFFDF6] p-4">
-                      <h3 className="mb-3 text-[14px] font-semibold text-[#1A1A1A]">Duplicate Warnings</h3>
-                      <div className="max-h-40 space-y-2 overflow-y-auto text-[13px] text-[#6B6B6B]">
-                        {importPreview.duplicateWarnings.map((warning, index) => (
-                          <div key={`${warning}-${index}`} className="rounded border border-[#F0E1C0] bg-white px-3 py-2">
-                            {warning}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="rounded-lg border border-[#E6E6E6]">
-                    <div className="border-b border-[#E6E6E6] px-4 py-3 text-[13px] font-semibold text-[#1A1A1A]">Preview Rows</div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[900px] text-[13px]">
-                        <thead className="bg-[#F8F8F8] text-[#9A9A9A]">
-                          <tr>
-                            <th className="px-4 py-2 text-left">Row</th>
-                            <th className="px-4 py-2 text-left">Variant ID</th>
-                            <th className="px-4 py-2 text-left">Variant SKU</th>
-                            <th className="px-4 py-2 text-left">Product SKU</th>
-                            <th className="px-4 py-2 text-left">Stock</th>
-                            <th className="px-4 py-2 text-left">Reserved Stock</th>
-                            <th className="px-4 py-2 text-left">Low Stock At</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[#E6E6E6]">
-                          {importPreview.sampleRows.map((sample) => (
-                            <tr key={String(sample.row)} className="hover:bg-[#FAFAFA]">
-                              <td className="px-4 py-2">{String(sample.row)}</td>
-                              <td className="px-4 py-2">{String(sample.variantId ?? "")}</td>
-                              <td className="px-4 py-2">{String(sample.variantSku ?? "")}</td>
-                              <td className="px-4 py-2">{String(sample.productSku ?? "")}</td>
-                              <td className="px-4 py-2">{String(sample.stock ?? "")}</td>
-                              <td className="px-4 py-2">{String(sample.reservedStock ?? "")}</td>
-                              <td className="px-4 py-2">{String(sample.lowStockThreshold ?? "")}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    ))}
                   </div>
                 </div>
               )}
+              {importPreview.duplicateWarnings.length > 0 && (
+                <div className="rounded-lg border border-[#F0E1C0] bg-[#FFFDF6] p-4">
+                  <h3 className="mb-3 text-[14px] font-semibold text-[#1A1A1A]">Duplicate Warnings</h3>
+                  <div className="max-h-40 space-y-2 overflow-y-auto text-[13px] text-[#6B6B6B]">
+                    {importPreview.duplicateWarnings.map((warning, index) => (
+                      <div key={`${warning}-${index}`} className="rounded border border-[#F0E1C0] bg-white px-3 py-2">
+                        {warning}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="rounded-lg border border-[#E6E6E6]">
+                <div className="border-b border-[#E6E6E6] px-4 py-3 text-[13px] font-semibold text-[#1A1A1A]">Preview Rows</div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[900px] text-[13px]">
+                    <thead className="bg-[#F8F8F8] text-[#9A9A9A]">
+                      <tr>
+                        <th className="px-4 py-2 text-left">Row</th>
+                        <th className="px-4 py-2 text-left">Variant ID</th>
+                        <th className="px-4 py-2 text-left">Variant SKU</th>
+                        <th className="px-4 py-2 text-left">Product SKU</th>
+                        <th className="px-4 py-2 text-left">Stock</th>
+                        <th className="px-4 py-2 text-left">Reserved Stock</th>
+                        <th className="px-4 py-2 text-left">Low Stock At</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E6E6E6]">
+                      {importPreview.sampleRows.map((sample) => (
+                        <tr key={String(sample.row)} className="hover:bg-[#FAFAFA]">
+                          <td className="px-4 py-2">{String(sample.row)}</td>
+                          <td className="px-4 py-2">{String(sample.variantId ?? "")}</td>
+                          <td className="px-4 py-2">{String(sample.variantSku ?? "")}</td>
+                          <td className="px-4 py-2">{String(sample.productSku ?? "")}</td>
+                          <td className="px-4 py-2">{String(sample.stock ?? "")}</td>
+                          <td className="px-4 py-2">{String(sample.reservedStock ?? "")}</td>
+                          <td className="px-4 py-2">{String(sample.lowStockThreshold ?? "")}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </Modal>
 
       <AdminDeleteModal
         open={Boolean(unassignTarget)}

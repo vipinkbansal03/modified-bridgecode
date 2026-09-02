@@ -112,6 +112,33 @@ export default function WarehousesPage() {
   const updateMutation = useUpdateWarehouse(editing?.id || "");
   const deleteMutation = useDeleteWarehouse();
 
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
+  const handleRequestClose = () => {
+    if (form.dirty) {
+      setShowDiscardConfirm(true);
+    } else {
+      setShowForm(false);
+    }
+  };
+
+  const executeBulkDelete = async () => {
+    setBulkLoading(true);
+    try {
+      await Promise.all(selectedIds.map((id) => adminApi.delete(`/warehouses/${id}`)));
+      showToast(`Successfully deleted ${selectedIds.length} warehouse(s).`, "success");
+      setSelectedIds([]);
+      setBulkAction("");
+      setShowBulkDeleteConfirm(false);
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Bulk action failed."), "error");
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   const handleBulkAction = async () => {
     if (!selectedIds.length) {
       showToast("Select at least one warehouse first.", "error");
@@ -122,20 +149,16 @@ export default function WarehousesPage() {
       return;
     }
 
+    if (bulkAction === "delete") {
+      setShowBulkDeleteConfirm(true);
+      return;
+    }
+
     setBulkLoading(true);
     try {
-      if (bulkAction === "delete") {
-        if (!window.confirm(`Delete ${selectedIds.length} selected warehouse(s)?`)) {
-          setBulkLoading(false);
-          return;
-        }
-        await Promise.all(selectedIds.map(id => adminApi.delete(`/warehouses/${id}`)));
-        showToast(`Successfully deleted ${selectedIds.length} warehouse(s).`, "success");
-      } else {
-        const nextStatus = bulkAction === "enable" ? "ACTIVE" : "INACTIVE";
-        await Promise.all(selectedIds.map(id => adminApi.put(`/warehouses/${id}`, { status: nextStatus })));
-        showToast(`Successfully ${bulkAction}d ${selectedIds.length} warehouse(s).`, "success");
-      }
+      const nextStatus = bulkAction === "enable" ? "ACTIVE" : "INACTIVE";
+      await Promise.all(selectedIds.map(id => adminApi.put(`/warehouses/${id}`, { status: nextStatus })));
+      showToast(`Successfully ${bulkAction}d ${selectedIds.length} warehouse(s).`, "success");
       setSelectedIds([]);
       setBulkAction("");
       refetch();
@@ -399,8 +422,34 @@ export default function WarehousesPage() {
         </div>
       </div>
 
-      <Modal open={showForm} onClose={form.handleClose} title={editing ? "Edit Warehouse" : "Add Warehouse"} panelClassName="max-w-2xl">
-        <form onSubmit={form.handleSubmit} className="space-y-5 p-6">
+      <Modal
+        open={showForm}
+        onClose={handleRequestClose}
+        title={editing ? "Edit Warehouse" : "Add Warehouse"}
+        subtitle="Configure warehouse location, contact, tax information, and delivery coverage zones."
+        size="2xl"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={handleRequestClose}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <LoadingButton
+              type="submit"
+              form="warehouse-form"
+              loading={form.isSubmitting || createMutation.isPending || updateMutation.isPending}
+              loadingText="Saving..."
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+            >
+              {editing ? "Save Changes" : "Create Warehouse"}
+            </LoadingButton>
+          </div>
+        }
+      >
+        <form id="warehouse-form" onSubmit={form.handleSubmit} className="space-y-5 p-6">
           <AdminInput 
             id="field-name"
             label="Warehouse Name" 
@@ -527,7 +576,7 @@ export default function WarehousesPage() {
               <button
                 type="button"
                 onClick={() => form.handleChange("deliveryZones", [...form.values.deliveryZones, { countryId: "", states: [] }])}
-                className="text-[12px] font-semibold text-[#E31E24] hover:underline flex items-center gap-1"
+                className="text-[12px] font-semibold text-[#E31E24] hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <Plus size={14} /> Add Delivery Country
               </button>
@@ -570,7 +619,7 @@ export default function WarehousesPage() {
                         newZones.splice(index, 1);
                         form.handleChange("deliveryZones", newZones);
                       }}
-                      className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-600 rounded-md hover:bg-gray-200 transition-colors"
+                      className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-600 rounded-md hover:bg-gray-200 transition-colors cursor-pointer"
                       title="Remove Zone"
                     >
                       <Trash2 size={16} />
@@ -621,22 +670,33 @@ export default function WarehousesPage() {
               })}
             </div>
           </div>
-
-          <div className="flex justify-end gap-3 pt-4">
-            <button type="button" onClick={form.handleClose} className="rounded-md px-4 py-2 text-sm font-medium text-[#6B6B6B] hover:text-[#1A1A1A]">
-              Cancel
-            </button>
-            <LoadingButton
-              type="submit"
-              loading={form.isSubmitting || createMutation.isPending || updateMutation.isPending}
-              loadingText="Processing..."
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-sm font-medium text-white hover:bg-[#C91A20]"
-            >
-              {editing ? "Save Changes" : "Create Warehouse"}
-            </LoadingButton>
-          </div>
         </form>
       </Modal>
+
+      <ConfirmModal
+        open={showDiscardConfirm}
+        title="Discard Unsaved Changes?"
+        message="You have unsaved changes in this warehouse form. Are you sure you want to discard them?"
+        danger={true}
+        confirmText="Discard Changes"
+        onConfirm={() => {
+          setShowDiscardConfirm(false);
+          setShowForm(false);
+          form.reset(emptyForm);
+        }}
+        onCancel={() => setShowDiscardConfirm(false)}
+      />
+
+      <ConfirmModal
+        open={showBulkDeleteConfirm}
+        title="Delete Selected Warehouses"
+        message={`Are you sure you want to delete ${selectedIds.length} selected warehouse(s)? This action cannot be undone.`}
+        danger={true}
+        confirmText="Delete Warehouses"
+        isLoading={bulkLoading}
+        onConfirm={executeBulkDelete}
+        onCancel={() => setShowBulkDeleteConfirm(false)}
+      />
 
       <ConfirmModal
         open={!!deleting}

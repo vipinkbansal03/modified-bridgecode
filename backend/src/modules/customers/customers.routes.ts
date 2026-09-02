@@ -6,6 +6,7 @@ const router = Router();
 router.use(protect);
 
 router.get("/", requirePermission("customers.view", "customers.manage"), C.list);
+router.post("/", requirePermission("customers.manage"), C.create);
 router.get("/:id/orders", requirePermission("customers.view", "customers.manage"), C.listOrders);
 router.get("/:id/addresses", requirePermission("customers.view", "customers.manage"), C.listAddresses);
 router.put("/:id/addresses/:addressId", requirePermission("customers.manage"), C.updateAddress);
