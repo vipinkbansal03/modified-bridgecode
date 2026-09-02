@@ -1238,12 +1238,12 @@ type CategoryTextSource = {
   translations?: CategoryTranslationSnapshot[];
 };
 
-function getCategoryText(category: CategoryTextSource) {
-  const translation = category.translations?.[0];
+function getCategoryText(category?: CategoryTextSource | null) {
+  const translation = category?.translations?.[0];
 
   return {
-    name: translation?.name || category.name,
-    description: translation?.description || category.description || null,
+    name: translation?.name || category?.name || "",
+    description: translation?.description || category?.description || null,
   };
 }
 
@@ -1523,10 +1523,10 @@ type PublicProductDetailRecord = {
 };
 
 function buildPublicPriceBreakdown(pr: {
-  country: { code: string; dutyPercentage?: Prisma.Decimal | number };
+  country?: { code?: string; dutyPercentage?: Prisma.Decimal | number | null } | null;
   mrp: Prisma.Decimal | number;
 }) {
-  const dutyPercentage = Number(pr.country.dutyPercentage) || 0;
+  const dutyPercentage = Number(pr?.country?.dutyPercentage) || 0;
   if (dutyPercentage <= 0) return undefined;
   const mrp = Number(pr.mrp);
   return {
