@@ -1559,6 +1559,9 @@ export async function addProductMedia(
   if (mediaIds && mediaIds.length > 0) {
     const existingMedia = await prisma.media.findMany({ where: { id: { in: mediaIds } } });
     existingMedia.forEach((media, i) => {
+      if (!media.url || media.url.startsWith("temporary/")) {
+        throw new AppError("Product media cannot be linked before upload confirmation produces a final URL.", 400);
+      }
       results.push({
         url: media.url,
         publicId: media.publicId,

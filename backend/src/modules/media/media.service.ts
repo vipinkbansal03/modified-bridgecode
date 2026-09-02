@@ -278,6 +278,10 @@ export async function confirmUpload(mediaId: string) {
         folder,
       },
     });
+
+    if (!readyMedia.url || readyMedia.url.startsWith("temporary/")) {
+      throw new AppError("Upload confirmation failed to produce a final optimized media URL.", 500);
+    }
   }
 
   if (readyMedia.entityType === "PRODUCT" && readyMedia.entityId && readyMedia.purpose !== "PACKAGE") {
