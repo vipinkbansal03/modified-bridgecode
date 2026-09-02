@@ -34,6 +34,7 @@ router.put("/:id/packages/:packageId", requirePermission("products.update"), C.u
 router.delete("/:id/packages/:packageId", requirePermission("products.update"), C.deletePackage);
 
 router.post("/:id/media", requirePermission("products.update"), upload.array("files", 10), C.uploadMedia);
+router.put("/:id/media/:mediaId/cover", requirePermission("products.update"), C.setCoverMedia);
 router.delete("/:id/media/:mediaId", requirePermission("products.update"), C.removeMedia);
 
 router.get("/:id/attributes", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listAttribs);

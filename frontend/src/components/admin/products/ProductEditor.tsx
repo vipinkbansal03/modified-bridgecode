@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import * as Yup from "yup";
-import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search, ChevronRight, ChevronLeft, ChevronDown, Eye, ZoomIn, CheckSquare, Square, Check, FolderUp, Image as ImageIcon, Loader2, Box, Package, Info } from "lucide-react";
+import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search, ChevronRight, ChevronLeft, ChevronDown, Eye, ZoomIn, CheckSquare, Square, Check, FolderUp, Image as ImageIcon, Loader2, Box, Package, Info, Star } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, AdminMultiSelect, StatusBadge, useToast, ConfirmModal, AdminDeleteModal, DataTable, AdminSectionTable, Column, toastMessages, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
@@ -643,6 +643,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadingMediaCount, setUploadingMediaCount] = useState(0);
   const [deletingMedia, setDeletingMedia] = useState<string | null>(null);
+  const [settingCoverMediaId, setSettingCoverMediaId] = useState<string | null>(null);
   const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set());
   const lastSelectedMediaIndexRef = useRef<number | null>(null);
   const [previewMediaIndex, setPreviewMediaIndex] = useState<number | null>(null);
@@ -4035,6 +4036,20 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   };
 
+  const handleSetCoverMedia = async (mediaId: string) => {
+    if (!mediaId || settingCoverMediaId) return;
+    setSettingCoverMediaId(mediaId);
+    try {
+      await adminApi.put(`/products/${productId}/media/${mediaId}/cover`);
+      showToast("Cover image updated.");
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to update cover image."), "error");
+    } finally {
+      setSettingCoverMediaId(null);
+    }
+  };
+
   const handleDeleteMedia = async (mediaId: string) => {
     try {
       await adminApi.delete(`/products/${productId}/media/${mediaId}`);
@@ -5431,10 +5446,26 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                           {index + 1}. {media.altText || `Image ${index + 1}`}
                         </span>
                         <div className="flex items-center gap-1">
+                          {!isCover && media.id && (
+                            <button
+                              type="button"
+                              disabled={settingCoverMediaId !== null}
+                              onClick={() => media.id && handleSetCoverMedia(media.id)}
+                              className="rounded p-1 text-[#6B6B6B] hover:bg-amber-50 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-40 transition-colors cursor-pointer"
+                              title="Set as cover photo"
+                              aria-label="Set as cover photo"
+                            >
+                              {settingCoverMediaId === media.id ? (
+                                <Loader2 size={13} className="animate-spin text-amber-600" />
+                              ) : (
+                                <Star size={13} />
+                              )}
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => setPreviewMediaIndex(index)}
-                            className="rounded p-1 text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#1A1A1A]"
+                            className="rounded p-1 text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#1A1A1A] cursor-pointer"
                             title="Inspect image"
                           >
                             <Eye size={13} />
@@ -5443,7 +5474,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                             type="button"
                             disabled={!media.id}
                             onClick={() => media.id && setDeletingMedia(media.id)}
-                            className="rounded p-1 text-[#6B6B6B] hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                            className="rounded p-1 text-[#6B6B6B] hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
                             title={media.id ? "Delete image" : "Media ID missing"}
                           >
                             <Trash2 size={13} />
@@ -9342,6 +9373,24 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
+                {previewMediaIndex !== 0 && (product?.media ?? [])[previewMediaIndex!]?.id && (
+                  <button
+                    type="button"
+                    disabled={settingCoverMediaId !== null}
+                    onClick={async () => {
+                      const currentId = (product?.media ?? [])[previewMediaIndex!]?.id;
+                      if (currentId) {
+                        await handleSetCoverMedia(currentId);
+                        setPreviewMediaIndex(0);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-3.5 py-2 text-[13px] font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50 cursor-pointer"
+                    title="Set as cover photo"
+                  >
+                    {settingCoverMediaId ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} />}
+                    Set as Cover
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -9349,7 +9398,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     setPreviewMediaIndex(null);
                     if (currentId) setDeletingMedia(currentId);
                   }}
-                  className="flex items-center gap-1.5 rounded-md border border-[#F2C9C9] bg-white px-3.5 py-2 text-[13px] font-medium text-red-600 hover:bg-red-50"
+                  className="flex items-center gap-1.5 rounded-md border border-[#F2C9C9] bg-white px-3.5 py-2 text-[13px] font-medium text-red-600 hover:bg-red-50 cursor-pointer"
                 >
                   <Trash2 size={14} />
                   Delete Image

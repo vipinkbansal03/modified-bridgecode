@@ -13,6 +13,7 @@ import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import {
   DataTable,
   AdminInput,
+  AdminSelect,
   AdminStatsGrid,
   AdminListToolbar,
   StatusBadge,
@@ -38,6 +39,11 @@ type SubscriberRow = {
   unsubscribedAt?: string | null;
   createdAt: string;
 };
+
+const initialSubscriberValues = { email: "" };
+const addSubscriberSchema = Yup.object({
+  email: Yup.string().email("Invalid email").required("Email is required"),
+});
 
 export default function NewsletterAdminPage() {
   const [page, setPage] = useState(1);
@@ -94,10 +100,8 @@ export default function NewsletterAdminPage() {
   }, [subscribers, total]);
 
   const form = useAdminForm({
-    initialValues: { email: "" },
-    validationSchema: Yup.object({
-      email: Yup.string().email("Invalid email").required("Email is required"),
-    }),
+    initialValues: initialSubscriberValues,
+    validationSchema: addSubscriberSchema,
     onSubmit: async (values, { setSubmitting, resetForm, setStatus }) => {
       setStatus("");
       try {
@@ -115,6 +119,22 @@ export default function NewsletterAdminPage() {
       }
     },
   });
+
+  const handleOpenAddModal = () => {
+    form.resetForm();
+    setIsAddOpen(true);
+  };
+
+  const handleCloseAddModal = () => {
+    setIsAddOpen(false);
+    form.resetForm();
+  };
+
+  useEffect(() => {
+    if (!isAddOpen) {
+      form.resetForm();
+    }
+  }, [isAddOpen]);
 
   const handleToggleClick = (row: SubscriberRow) => {
     setToggleTarget(row);
@@ -239,7 +259,7 @@ export default function NewsletterAdminPage() {
             isRefreshing: isFetching,
           }}
           primaryAction={{
-            onClick: () => setIsAddOpen(true),
+            onClick: handleOpenAddModal,
             label: "Add Subscriber",
             icon: <UserPlus size={14} />,
           }}
@@ -251,42 +271,45 @@ export default function NewsletterAdminPage() {
             setPage(1);
           }}
           filterPanel={
-            <div className="flex flex-wrap items-center gap-3">
-              <select
+            <div className="grid gap-4 md:grid-cols-3 pt-2">
+              <AdminSelect
+                label="Status"
                 value={statusFilter}
                 onChange={(e) => {
                   setStatusFilter(e.target.value);
                   setPage(1);
                 }}
-                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[140px]"
-              >
-                <option value="">All Statuses</option>
-                <option value="ACTIVE">Active</option>
-                <option value="UNSUBSCRIBED">Unsubscribed</option>
-              </select>
-              <select
+                options={[
+                  { value: "", label: "All Statuses" },
+                  { value: "ACTIVE", label: "Active" },
+                  { value: "UNSUBSCRIBED", label: "Unsubscribed" },
+                ]}
+              />
+              <AdminSelect
+                label="Sort By"
                 value={sortBy}
                 onChange={(e) => {
                   setSortBy(e.target.value);
                   setPage(1);
                 }}
-                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[140px]"
-              >
-                <option value="subscribedAt">Subscribed Date</option>
-                <option value="email">Email</option>
-                <option value="status">Status</option>
-              </select>
-              <select
+                options={[
+                  { value: "subscribedAt", label: "Subscribed Date" },
+                  { value: "email", label: "Email" },
+                  { value: "status", label: "Status" },
+                ]}
+              />
+              <AdminSelect
+                label="Direction"
                 value={sortDir}
                 onChange={(e) => {
                   setSortDir(e.target.value as "asc" | "desc");
                   setPage(1);
                 }}
-                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[120px]"
-              >
-                <option value="desc">Descending</option>
-                <option value="asc">Ascending</option>
-              </select>
+                options={[
+                  { value: "desc", label: "Descending" },
+                  { value: "asc", label: "Ascending" },
+                ]}
+              />
             </div>
           }
         />
@@ -311,7 +334,7 @@ export default function NewsletterAdminPage() {
       {/* Manual Add Subscriber Modal */}
       <Modal
         open={isAddOpen}
-        onClose={() => setIsAddOpen(false)}
+        onClose={handleCloseAddModal}
         title="Manually Add Subscriber"
         panelClassName="max-w-md"
       >
@@ -331,7 +354,7 @@ export default function NewsletterAdminPage() {
           <div className="flex justify-end gap-2.5 pt-2 border-t border-[#E6E6E6]">
             <button
               type="button"
-              onClick={() => setIsAddOpen(false)}
+              onClick={handleCloseAddModal}
               className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#555] hover:bg-[#F2F2F2] cursor-pointer"
               disabled={form.isSubmitting}
             >

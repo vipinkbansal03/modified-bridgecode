@@ -195,5 +195,6 @@ export function useAdminForm<T extends Record<string, any>>({
     setFieldValue,
     getFieldProps,
     reset,
+    resetForm: reset,
   };
 }

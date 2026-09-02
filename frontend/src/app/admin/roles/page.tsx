@@ -12,17 +12,16 @@ import {
   DataTable,
   AdminStatsGrid,
   AdminListToolbar,
+  AdminSelect,
   type Column,
 } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
 import { useAdminRoles } from "@/hooks/admin/useAdminHooks";
-import { adminApi } from "@/services/adminApi";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import {
   ALL_PERMISSIONS,
   PERMISSION_GROUPS,
   PERMISSION_METADATA,
-  ROLE_PRESETS,
-  type RolePreset,
 } from "@/constants/adminPermissions";
 import {
   Shield,
@@ -35,7 +34,9 @@ import {
   Search,
   ChevronDown,
   ChevronUp,
+  Check,
 } from "lucide-react";
+import { cn } from "@/utils/cn";
 
 interface Role {
   id: string;
@@ -94,8 +95,7 @@ export default function RolesPage() {
       showToast("Role deleted successfully.");
       refetch();
     } catch (err) {
-      console.error("Delete failed", err);
-      showToast("Cannot delete role with assigned users.", "error");
+      showToast(getAdminErrorMessage(err, "Cannot delete role with assigned users."), "error");
     } finally {
       setDeletingLoading(false);
       setDeletingId(null);
@@ -155,7 +155,12 @@ export default function RolesPage() {
     setSelectedPerms([]);
     setIsFullAccess(false);
     setPermSearchQuery("");
-    setEnabledModules({});
+    setEnabledModules({
+      Catalog: true,
+      Operations: true,
+      Content: true,
+      Administration: true,
+    });
     setShowModal(true);
   };
 
@@ -169,7 +174,7 @@ export default function RolesPage() {
     
     const initialEnabled: Record<string, boolean> = {};
     PERMISSION_GROUPS.forEach((g) => {
-      initialEnabled[g.title] = g.permissions.some((p) => perms.includes(p));
+      initialEnabled[g.title] = fullAcc || g.permissions.some((p) => perms.includes(p));
     });
     setEnabledModules(initialEnabled);
 
@@ -232,8 +237,7 @@ export default function RolesPage() {
       refetch();
       closeModal();
     } catch (err) {
-      console.error("Failed to save role", err);
-      showToast("Failed to save role.", "error");
+      showToast(getAdminErrorMessage(err, "Failed to save role."), "error");
     } finally {
       setSaving(false);
     }
@@ -408,33 +412,36 @@ export default function RolesPage() {
             setSortDir("asc");
           }}
           filterPanel={
-            <div className="flex flex-wrap items-center gap-3">
-              <select
+            <div className="grid gap-4 md:grid-cols-3 pt-2">
+              <AdminSelect
+                label="Access Level"
                 value={accessFilter}
                 onChange={(e) => setAccessFilter(e.target.value)}
-                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[150px]"
-              >
-                <option value="">All Access Levels</option>
-                <option value="FULL">Full Access</option>
-                <option value="CUSTOM">Custom Defined</option>
-              </select>
-              <select
+                options={[
+                  { value: "", label: "All Access Levels" },
+                  { value: "FULL", label: "Full Access" },
+                  { value: "CUSTOM", label: "Custom Defined" },
+                ]}
+              />
+              <AdminSelect
+                label="Sort By"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as "name" | "users" | "permissions")}
-                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[150px]"
-              >
-                <option value="name">Role Name</option>
-                <option value="users">Assigned Users</option>
-                <option value="permissions">Permission Count</option>
-              </select>
-              <select
+                options={[
+                  { value: "name", label: "Role Name" },
+                  { value: "users", label: "Assigned Users" },
+                  { value: "permissions", label: "Permission Count" },
+                ]}
+              />
+              <AdminSelect
+                label="Direction"
                 value={sortDir}
                 onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
-                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[120px]"
-              >
-                <option value="asc">Ascending</option>
-                <option value="desc">Descending</option>
-              </select>
+                options={[
+                  { value: "asc", label: "Ascending" },
+                  { value: "desc", label: "Descending" },
+                ]}
+              />
             </div>
           }
         />
@@ -463,9 +470,9 @@ export default function RolesPage() {
       >
         <div className="p-5 space-y-4 overflow-y-auto max-h-[calc(85vh-120px)]">
           {/* Role Name & Full Access Switch */}
-          <div className="grid gap-3 sm:grid-cols-[1fr_auto] items-center bg-[#F9FAFB] p-3.5 rounded-xl border border-[#E5E7EB]">
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto] items-center bg-[#F9FAFB] p-3.5 rounded-xl border border-[#E6E6E6]">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-[#374151] mb-1">
+              <label className="block text-[12px] font-semibold text-[#1A1A1A] mb-1">
                 Role Name <span className="text-[#E31E24]">*</span>
               </label>
               <input
@@ -473,25 +480,36 @@ export default function RolesPage() {
                 value={roleName}
                 onChange={(e) => setRoleName(e.target.value)}
                 placeholder="e.g. Catalog Manager, Sales Executive"
-                className="w-full h-9 px-3 text-xs border border-[#E5E7EB] rounded-lg bg-white outline-none focus:border-[#E31E24]"
+                className="w-full h-9.5 px-3 text-[13.5px] border border-[#E6E6E6] rounded-md bg-white outline-none focus:border-[#E31E24] text-[#1A1A1A]"
               />
             </div>
 
             <div className="flex items-center sm:justify-end pt-2 sm:pt-0">
-              <label className="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 rounded-lg border border-[#E5E7EB] shadow-2xs hover:bg-[#F9FAFB] transition-colors">
-                <input
-                  type="checkbox"
-                  checked={isFullAccess}
-                  onChange={(e) => {
-                    setIsFullAccess(e.target.checked);
-                    if (e.target.checked) setSelectedPerms(["*"]);
-                    else setSelectedPerms([]);
-                  }}
-                  className="h-4 w-4 rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24]"
-                />
+              <label
+                onClick={() => {
+                  const nextVal = !isFullAccess;
+                  setIsFullAccess(nextVal);
+                  if (nextVal) setSelectedPerms(["*"]);
+                  else setSelectedPerms([]);
+                }}
+                className={cn(
+                  "flex items-center gap-2.5 cursor-pointer px-3.5 py-2 rounded-lg border transition-colors select-none",
+                  isFullAccess
+                    ? "border-emerald-300 bg-emerald-50/80 text-emerald-950"
+                    : "border-[#E6E6E6] bg-white hover:bg-[#F9FAFB] text-[#1A1A1A]"
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
+                    isFullAccess ? "border-emerald-600 bg-emerald-600 text-white" : "border-[#D1D5DB] bg-white"
+                  )}
+                >
+                  {isFullAccess && <Check size={11} className="stroke-[3]" />}
+                </div>
                 <div>
-                  <span className="text-xs font-bold text-[#111827] block">👑 Grant Full Access (* Wildcard)</span>
-                  <span className="text-[10.5px] text-[#6B7280]">Bypasses all permission checks (Super Admin)</span>
+                  <span className="text-[12.5px] font-bold block">👑 Grant Full Access (* Wildcard)</span>
+                  <span className="text-[11px] text-[#6B7280]">Bypasses all permission checks (Super Admin)</span>
                 </div>
               </label>
             </div>
@@ -500,13 +518,13 @@ export default function RolesPage() {
           {/* Search Bar */}
           {!isFullAccess && (
             <div className="relative">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
               <input
                 type="text"
                 value={permSearchQuery}
                 onChange={(e) => setPermSearchQuery(e.target.value)}
                 placeholder="Search permissions by keyword (e.g. product, order, view, manage)..."
-                className="w-full pl-9 pr-3 py-1.5 text-xs border border-[#E5E7EB] rounded-lg bg-white outline-none focus:border-[#E31E24]"
+                className="w-full h-9.5 pl-9 pr-3 text-[13px] border border-[#E6E6E6] rounded-md bg-white outline-none focus:border-[#E31E24] text-[#1A1A1A]"
               />
             </div>
           )}
@@ -533,44 +551,49 @@ export default function RolesPage() {
                 const groupKeys = groupMeta.map((m) => m.key);
                 const allSelected = groupKeys.every((k) => selectedPerms.includes(k));
                 const isExpanded = expandedGroups[group.title] ?? true;
+                const isModuleEnabled = enabledModules[group.title] ?? false;
 
                 return (
-                  <div key={group.title} className="rounded-xl border border-[#E5E7EB] bg-white overflow-hidden shadow-2xs">
+                  <div key={group.title} className="rounded-xl border border-[#E6E6E6] bg-white overflow-hidden shadow-2xs">
                     {/* Group Header */}
-                    <div className="bg-[#F9FAFB] px-3.5 py-2.5 border-b border-[#E5E7EB] flex items-center justify-between">
+                    <div className="bg-[#F8F9FA] px-4 py-2.5 border-b border-[#E6E6E6] flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
-                        <input
-                          type="checkbox"
-                          checked={enabledModules[group.title] ?? false}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setEnabledModules((prev) => ({ ...prev, [group.title]: checked }));
-                            if (!checked) {
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextChecked = !isModuleEnabled;
+                            setEnabledModules((prev) => ({ ...prev, [group.title]: nextChecked }));
+                            if (!nextChecked) {
                               setSelectedPerms((current) => current.filter((p) => !groupKeys.includes(p)));
                             }
                           }}
-                          className="h-4 w-4 rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24] cursor-pointer"
-                        />
+                          className={cn(
+                            "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors cursor-pointer",
+                            isModuleEnabled ? "border-[#E31E24] bg-[#E31E24] text-white" : "border-[#D1D5DB] bg-white hover:border-[#9CA3AF]"
+                          )}
+                        >
+                          {isModuleEnabled && <Check size={11} className="stroke-[3]" />}
+                        </button>
                         <button
                           type="button"
                           onClick={() => toggleGroupAccordion(group.title)}
-                          className="text-[#6B7280] hover:text-[#111827] flex items-center"
+                          className="text-[#6B7280] hover:text-[#111827] flex items-center cursor-pointer"
                         >
                           {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                         </button>
-                        <h4 className="text-xs font-bold text-[#111827]">{group.title} Module</h4>
-                        {enabledModules[group.title] && (
-                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-[#E5E7EB] text-[#374151]">
+                        <h4 className="text-[13px] font-bold text-[#111827]">{group.title} Module</h4>
+                        {isModuleEnabled && (
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#E5E7EB] text-[#374151]">
                             {groupKeys.filter((k) => selectedPerms.includes(k)).length} / {groupKeys.length} Selected
                           </span>
                         )}
                       </div>
 
-                      {enabledModules[group.title] && (
+                      {isModuleEnabled && (
                         <button
                           type="button"
                           onClick={() => toggleGroupAll(group.title, groupKeys)}
-                          className="text-[11.5px] font-bold text-[#E31E24] hover:underline"
+                          className="text-[12px] font-semibold text-[#E31E24] hover:text-[#B5151B] hover:underline cursor-pointer"
                         >
                           {allSelected ? "Deselect All" : "Select All Module"}
                         </button>
@@ -580,35 +603,41 @@ export default function RolesPage() {
                     {/* Group Permission Switches Grid */}
                     {isExpanded && (
                       <div className="p-3">
-                        {enabledModules[group.title] ? (
+                        {isModuleEnabled ? (
                           <div className="grid gap-2.5 sm:grid-cols-2">
                             {groupMeta.map((meta) => {
                               const checked = selectedPerms.includes(meta.key);
                               return (
-                                <label
+                                <div
                                   key={meta.key}
-                                  className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer ${
+                                  onClick={() => togglePermission(meta.key)}
+                                  className={cn(
+                                    "flex items-start gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer select-none",
                                     checked
-                                      ? "border-[#E5E7EB] bg-[#FFF5F5] ring-1 ring-[#E31E24]/30 shadow-2xs"
-                                      : "border-[#E5E7EB] bg-white hover:border-[#D1D5DB]"
-                                  }`}
+                                      ? "border-[#D1D5DB] bg-[#F9FAFB] shadow-2xs"
+                                      : "border-[#E6E6E6] bg-white hover:border-[#D1D5DB] hover:bg-[#FAFAFA]"
+                                  )}
                                 >
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={() => togglePermission(meta.key)}
-                                    className="mt-0.5 h-4 w-4 rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24]"
-                                  />
+                                  <div
+                                    className={cn(
+                                      "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
+                                      checked
+                                        ? "border-[#E31E24] bg-[#E31E24] text-white"
+                                        : "border-[#D1D5DB] bg-white"
+                                    )}
+                                  >
+                                    {checked && <Check size={11} className="stroke-[3]" />}
+                                  </div>
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center justify-between gap-1">
-                                      <span className="text-xs font-bold text-[#111827]">{meta.label}</span>
-                                      <span className="font-mono text-[9.5px] text-[#6B7280] bg-[#F3F4F6] px-1.5 py-0.5 rounded">
+                                      <span className="text-[12.5px] font-semibold text-[#111827]">{meta.label}</span>
+                                      <span className="font-mono text-[9.5px] text-[#6B7280] bg-[#EDEDED] px-1.5 py-0.5 rounded">
                                         {meta.key}
                                       </span>
                                     </div>
                                     <p className="text-[11px] text-[#6B6B6B] mt-0.5 leading-normal">{meta.description}</p>
                                   </div>
-                                </label>
+                                </div>
                               );
                             })}
                           </div>
@@ -635,10 +664,10 @@ export default function RolesPage() {
         </div>
 
         {/* Modal Footer Bar */}
-        <div className="bg-[#F9FAFB] px-5 py-3 border-t border-[#E5E7EB] flex items-center justify-between">
-          <div className="text-xs font-bold text-[#374151]">
+        <div className="bg-[#F8F9FA] px-5 py-3 border-t border-[#E6E6E6] flex items-center justify-between">
+          <div className="text-[12.5px] font-medium text-[#6B6B6B]">
             Selected:{" "}
-            <span className="text-[#E31E24]">
+            <span className="font-bold text-[#1A1A1A]">
               {isFullAccess ? "FULL ACCESS (*)" : `${selectedPerms.length} / ${ALL_PERMISSIONS.length} Permissions`}
             </span>
           </div>
@@ -647,7 +676,7 @@ export default function RolesPage() {
             <button
               type="button"
               onClick={closeModal}
-              className="px-3.5 py-1.5 rounded-lg border border-[#E5E7EB] bg-white text-xs font-medium text-[#374151] hover:bg-[#F3F4F6] cursor-pointer"
+              className="h-9 px-4 rounded-md border border-[#E6E6E6] bg-white text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -656,7 +685,7 @@ export default function RolesPage() {
               onClick={handleSave}
               loading={saving}
               loadingText="Saving..."
-              className="px-4 py-1.5 rounded-lg bg-[#E31E24] text-xs font-bold text-white hover:bg-[#B5151B] transition-colors shadow-2xs cursor-pointer"
+              className="h-9 px-4 rounded-md bg-[#E31E24] text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs cursor-pointer"
             >
               {editingRole ? "Update Role" : "Create Role"}
             </LoadingButton>

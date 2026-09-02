@@ -87,8 +87,8 @@ export function AdminListToolbar({
   const hasRightItems = Boolean(exportAction || importAction || refresh || primaryAction || rightExtra);
 
   return (
-    <div className={cn("adminListToolbar mb-5 space-y-3", className)}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-h-[42px]">
+    <div className={cn("adminListToolbar mb-4 space-y-3", className)}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between min-h-[42px]">
         {/* LEFT SLOT */}
         {hasLeftItems ? (
           <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
@@ -160,7 +160,7 @@ export function AdminListToolbar({
 
         {/* RIGHT SLOT */}
         {hasRightItems && (
-          <div className="flex items-center justify-start sm:justify-end gap-2 shrink-0">
+          <div className="flex items-start justify-start sm:justify-end gap-2 shrink-0">
             {rightExtra}
 
             {exportAction && (

@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Copy, Download, Edit2, Filter, Plus, RefreshCw, Search, SlidersHorizontal, SquareCheckBig, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, AdminStatsGrid, AdminListToolbar, ConfirmModal, Pagination, StatCard, StatusBadge, useToast, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminStatsGrid, AdminListToolbar, ConfirmModal, Pagination, StatCard, StatusBadge, useToast, LoadingButton, DataTable, type Column } from "@/components/admin/AdminComponents";
+import { AdminBulkActionsBar } from "@/components/admin/AdminBulkActionsBar";
 import { Modal } from "@/components/ui/Modal";
 import {
   useAdminCurrencyDashboard,
@@ -149,6 +150,7 @@ export default function CurrenciesPage() {
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
   const [importMessage, setImportMessage] = useState("");
   const [importing, setImporting] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [dismissedSyncAt, setDismissedSyncAt] = useState<string | null>(null);
 
   const { data: dashboardData, isLoading: dashboardLoading } = useAdminCurrencyDashboard();
@@ -176,12 +178,7 @@ export default function CurrenciesPage() {
   const importCurrencies = useImportCurrencies();
   const syncCurrencyRates = useSyncCurrencyRates();
 
-  const visibleColumnKeys = useMemo(
-    () => Object.entries(visibleColumns).filter(([, enabled]) => enabled).map(([key]) => key),
-    [visibleColumns],
-  );
 
-  const allSelected = currencies.length > 0 && currencies.every((currency) => selectedIds.includes(currency.id));
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
@@ -299,6 +296,157 @@ export default function CurrenciesPage() {
     }
   }
 
+  const handleStatusToggle = async (currency: CurrencyRow) => {
+    try {
+      const nextStatus = currency.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+      await updateCurrency.mutateAsync({
+        id: currency.id,
+        name: currency.name,
+        code: currency.code,
+        symbol: currency.symbol,
+        exchangeRate: Number(currency.exchangeRate),
+        isBase: currency.isBase,
+        status: nextStatus,
+      });
+      showToast(`Currency status changed to ${nextStatus}.`);
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to update currency status."), "error");
+    }
+  };
+
+  const columns: Column<CurrencyRow>[] = useMemo(
+    () => [
+      {
+        key: "name",
+        label: "Currency",
+        render: (row) => (
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-[#1A1A1A]">{row.name}</span>
+            {row.isBase && (
+              <span className="inline-flex items-center rounded-full bg-[#0F6CBD]/10 px-2 py-0.5 text-[10px] font-bold text-[#0F6CBD]">
+                BASE
+              </span>
+            )}
+          </div>
+        ),
+      },
+      {
+        key: "code",
+        label: "Code",
+        width: "100px",
+        render: (row) => (
+          <span className="font-mono font-semibold text-[#1A1A1A]">{row.code}</span>
+        ),
+      },
+      {
+        key: "symbol",
+        label: "Symbol",
+        width: "90px",
+        render: (row) => <span className="text-[#1A1A1A]">{row.symbol}</span>,
+      },
+      {
+        key: "exchangeRate",
+        label: "Exchange Rate",
+        width: "140px",
+        render: (row) => (
+          <span className="font-mono text-[#1A1A1A]">{formatRate(row.exchangeRate)}</span>
+        ),
+      },
+      {
+        key: "isBase",
+        label: "Base",
+        width: "90px",
+        render: (row) =>
+          row.isBase ? (
+            <span className="inline-flex items-center rounded-full bg-[#0F6CBD]/15 px-2 py-0.5 text-[11px] font-bold text-[#0F6CBD]">
+              BASE
+            </span>
+          ) : (
+            <span className="text-[#9A9A9A]">-</span>
+          ),
+      },
+      {
+        key: "status",
+        label: "Status",
+        width: "110px",
+        render: (row) => <StatusBadge status={row.status} />,
+      },
+      {
+        key: "countries",
+        label: "Countries",
+        width: "110px",
+        render: (row) => (
+          <span className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700">
+            {row._count?.countries ?? 0}
+          </span>
+        ),
+      },
+      {
+        key: "updatedAt",
+        label: (
+          <span>
+            Updated Date <span className="text-[9.5px] font-normal lowercase tracking-normal text-[#9A9A9A]">(dd/mm/yy)</span>
+          </span>
+        ),
+        width: "160px",
+        render: (row) => (
+          <span className="text-[11.5px] text-[#6B6B6B] whitespace-nowrap">
+            {formatDateTime(row.updatedAt)}
+          </span>
+        ),
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        width: "110px",
+        render: (row) => (
+          <div className="flex items-center justify-start gap-1.5 whitespace-nowrap">
+            {canCreate && (
+              <button
+                type="button"
+                onClick={() => openDuplicate(row)}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] transition-colors cursor-pointer"
+                title="Duplicate currency"
+              >
+                <Copy size={13} />
+              </button>
+            )}
+            {canUpdate && (
+              <button
+                type="button"
+                onClick={() => openEdit(row)}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] transition-colors cursor-pointer"
+                title="Edit currency"
+              >
+                <Edit2 size={13} />
+              </button>
+            )}
+            {canDelete && (
+              <button
+                type="button"
+                onClick={() => setDeleting(row)}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#F2D7D7] bg-white text-[#E31E24] hover:bg-[#FFF5F5] transition-colors cursor-pointer"
+                title="Delete currency"
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
+        ),
+      },
+    ],
+    [canCreate, canUpdate, canDelete]
+  );
+
+  const filteredColumns = useMemo(() => {
+    return columns.filter((col) => {
+      if (col.key in visibleColumns) {
+        return visibleColumns[col.key as keyof typeof visibleColumns];
+      }
+      return true;
+    });
+  }, [columns, visibleColumns]);
+
   async function handleBulkAction() {
     if (!bulkAction || selectedIds.length === 0) {
       showToast("Select at least one currency and choose an action.", "error");
@@ -343,14 +491,15 @@ export default function CurrenciesPage() {
     }
   }
 
-  async function handleImportPreview() {
-    if (!importFile) {
+  async function handleImportPreview(fileToPreview?: File) {
+    const file = fileToPreview || importFile;
+    if (!file) {
       showToast("Choose a spreadsheet first.", "error");
       return;
     }
     try {
       const formData = new FormData();
-      formData.append("file", importFile);
+      formData.append("file", file);
       const report = (await previewCurrencyImport.mutateAsync(formData)) as ImportReport;
       setImportReport(report);
       setImportMessage(report.invalidRows > 0 ? "Fix validation issues before importing." : "Preview looks clean.");
@@ -373,6 +522,7 @@ export default function CurrenciesPage() {
       setImportFile(null);
       setImportReport(null);
       setImportMessage("");
+      setShowImportModal(false);
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to import currencies."), "error");
     } finally {
@@ -480,6 +630,49 @@ export default function CurrenciesPage() {
           </div>
         )}
 
+        {/* RECENTLY UPDATED CARDS GRID */}
+        {recentlyUpdated.length > 0 && (
+          <div className="rounded-xl border border-[#E6E6E6] bg-white p-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-[14px] font-bold text-[#1A1A1A]">Recently Updated</h3>
+                <p className="mt-0.5 text-[12px] text-[#6B6B6B]">Quick access to latest modified currencies.</p>
+              </div>
+              <span className="text-[12px] font-medium text-[#6B6B6B]">{recentlyUpdated.length} items</span>
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {recentlyUpdated.slice(0, 3).map((currency) => (
+                <div
+                  key={currency.id}
+                  onClick={() => canUpdate && openEdit(currency)}
+                  className="group flex flex-col justify-between rounded-lg border border-[#EDEDED] bg-[#FAFAFA] p-3 transition-colors hover:border-[#D6D6D6] hover:bg-white cursor-pointer"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-[13.5px] text-[#1A1A1A] truncate">{currency.name}</span>
+                        {currency.isBase && (
+                          <span className="inline-flex items-center rounded-full bg-[#0F6CBD]/10 px-1.5 py-0.2 text-[9.5px] font-bold text-[#0F6CBD]">
+                            BASE
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 text-[12px] font-mono text-[#6B6B6B]">
+                        {currency.code} ({currency.symbol}) · Rate: {formatRate(currency.exchangeRate)}
+                      </div>
+                    </div>
+                    <StatusBadge status={currency.status} />
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[11px] text-[#9A9A9A] border-t border-[#F0F0F0] pt-1.5">
+                    <span>{formatDate(currency.updatedAt)}</span>
+                    <span className="text-[#6B6B6B]">{currency._count?.countries ?? 0} Countries</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <AdminListToolbar
           search={{
             value: search,
@@ -512,7 +705,7 @@ export default function CurrenciesPage() {
                 type="button"
                 disabled={syncCurrencyRates.isPending}
                 onClick={handleSyncRates}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-60"
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-60 cursor-pointer"
               >
                 <RefreshCw size={14} className={syncCurrencyRates.isPending ? "animate-spin text-[#E31E24]" : ""} />
                 {syncCurrencyRates.isPending ? "Syncing..." : "Sync Rates"}
@@ -521,8 +714,16 @@ export default function CurrenciesPage() {
           }
           exportAction={{
             onClick: () => void handleExport(selectedIds.length > 0),
-            label: selectedIds.length > 0 ? `Export Selected (${selectedIds.length})` : "Export",
+            label: selectedIds.length > 0 ? `Export Selected (${selectedIds.length})` : "Export Excel",
           }}
+          importAction={
+            canUpdate
+              ? {
+                  onClick: () => setShowImportModal(true),
+                  label: "Import Excel",
+                }
+              : undefined
+          }
           primaryAction={
             canCreate
               ? {
@@ -579,6 +780,7 @@ export default function CurrenciesPage() {
                   { value: "10", label: "10 per page" },
                   { value: "20", label: "20 per page" },
                   { value: "50", label: "50 per page" },
+                  { value: "100", label: "100 per page" },
                 ]}
               />
             </div>
@@ -592,300 +794,193 @@ export default function CurrenciesPage() {
           }}
         />
 
-        {selectedIds.length > 0 && (
-          <div className="rounded-xl border border-dashed border-[#E31E24]/30 bg-[#FFF5F5]/30 p-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="text-[13px] font-semibold text-[#E31E24]">{selectedIds.length} rows selected</span>
-              <div className="h-4 w-[1px] bg-[#E6E6E6]" />
-              <div className="flex items-center gap-2">
-                <AdminSelect
-                  label=""
-                  value={bulkAction}
-                  onChange={(event) => setBulkAction(event.target.value as "ENABLE" | "DISABLE" | "DELETE" | "")}
-                  options={[
-                    { value: "", label: "Choose action" },
-                    { value: "ENABLE", label: "Enable" },
-                    { value: "DISABLE", label: "Disable" },
-                    { value: "DELETE", label: "Delete" },
-                  ]}
-                />
-                <button type="button" onClick={() => void handleBulkAction()} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-                  Apply
-                </button>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => void handleExport(true)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
-                <Download size={13} /> Export selected
-              </button>
-              <button type="button" onClick={() => setSelectedIds([])} className="text-[13px] font-medium text-[#6B6B6B] hover:text-[#E31E24] hover:underline">
-                Clear selection
-              </button>
-            </div>
+        {/* FULL-WIDTH DATA TABLE WITH UNIFIED SUBHEADER & PAGINATION */}
+        <div className="rounded-xl border border-[#E6E6E6] bg-white overflow-hidden shadow-xs">
+          <DataTable<CurrencyRow>
+            title="Currencies List"
+            columns={filteredColumns}
+            data={currencies}
+            rowKey="id"
+            isLoading={currenciesQuery.isLoading}
+            emptyMessage="No currencies found."
+            enableSelection={canUpdate}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+            onToggleStatus={canUpdate ? handleStatusToggle : undefined}
+            statusLoadingId={updateCurrency.isPending ? ((updateCurrency.variables as any)?.id ?? null) : null}
+            isStatusDisabled={() => !canUpdate}
+            totalItems={pagination.total ?? 0}
+            currentPage={page}
+            pageSize={limit}
+            totalPages={pagination.totalPages || 1}
+            onPageChange={setPage}
+            onPageSizeChange={(newLimit) => {
+              setLimit(newLimit);
+              setPage(1);
+            }}
+            pageSizeOptions={[10, 20, 50, 100]}
+            onSelectAll={(checked) => setSelectedIds(checked ? currencies.map((c) => c.id) : [])}
+            renderBulkActions={(selectedIds) => (
+              <AdminBulkActionsBar
+                selectedCount={selectedIds.length}
+                onClear={() => setSelectedIds([])}
+                actionType={bulkAction}
+                onActionTypeChange={(val) => setBulkAction(val as "ENABLE" | "DISABLE" | "DELETE" | "")}
+                actions={[
+                  { value: "ENABLE", label: "Mark active" },
+                  { value: "DISABLE", label: "Mark inactive" },
+                  { value: "DELETE", label: "Delete selected" },
+                ]}
+                onApply={handleBulkAction}
+                applyLoading={bulkCurrencies.isPending}
+                applyDisabled={!bulkAction || selectedIds.length === 0}
+              />
+            )}
+          />
+          <div className="border-t border-[#E6E6E6] px-4 py-3 bg-white">
+            <Pagination
+              page={pagination.page}
+              totalPages={pagination.totalPages || 1}
+              onPageChange={setPage}
+              alwaysShow={true}
+            />
           </div>
-        )}
+        </div>
 
+        {/* IMPORT SPREADSHEET MODAL */}
+        <Modal
+          open={showImportModal}
+          onClose={() => {
+            setShowImportModal(false);
+            setImportFile(null);
+            setImportReport(null);
+            setImportMessage("");
+          }}
+          title="Import Currencies Spreadsheet"
+          panelClassName="max-w-2xl"
+        >
+          <div className="space-y-4 p-6">
+            <p className="text-[13px] text-[#6B6B6B]">
+              Upload an Excel (.xlsx, .xls) or CSV spreadsheet to create or update currency records in bulk.
+            </p>
 
-
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.95fr)]">
-          <div className="rounded-xl border border-[#E6E6E6] bg-white">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="border-b border-[#E6E6E6] bg-[#F8F8F8]">
-                  <tr>
-                    {canUpdate && (
-                      <th className="w-10 px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">
-                        <input
-                          type="checkbox"
-                          checked={allSelected}
-                          onChange={(event) =>
-                            setSelectedIds((current) =>
-                              event.target.checked ? Array.from(new Set([...current, ...currencies.map((currency) => currency.id)])) : current.filter((id) => !currencies.some((currency) => currency.id === id)),
-                            )
-                          }
-                          className="h-4 w-4 accent-[#E31E24]"
-                          aria-label="Select all currencies"
-                        />
-                      </th>
-                    )}
-                    {visibleColumnKeys.includes("name") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Currency</th> : null}
-                    {visibleColumnKeys.includes("code") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Code</th> : null}
-                    {visibleColumnKeys.includes("symbol") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Symbol</th> : null}
-                    {visibleColumnKeys.includes("exchangeRate") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Exchange Rate</th> : null}
-                    {visibleColumnKeys.includes("isBase") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Base</th> : null}
-                    {visibleColumnKeys.includes("status") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Status</th> : null}
-                    {visibleColumnKeys.includes("countries") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Countries</th> : null}
-                    {visibleColumnKeys.includes("updatedAt") ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Updated Date</th> : null}
-                    {(canCreate || canUpdate || canDelete) ? <th className="px-4 py-3 text-left text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]">Actions</th> : null}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E6E6E6]">
-                  {currenciesQuery.isLoading ? (
-                    Array.from({ length: 5 }).map((_, index) => (
-                      <tr key={index}>
-                        <td className="px-4 py-4" colSpan={10}>
-                          <div className="h-5 animate-pulse rounded bg-[#F0F0F0]" />
-                        </td>
-                      </tr>
-                    ))
-                  ) : currencies.length === 0 ? (
-                    <tr>
-                      <td className="px-4 py-12 text-center text-[13.5px] text-[#9A9A9A]" colSpan={10}>
-                        No currencies found.
-                      </td>
-                    </tr>
-                  ) : (
-                    currencies.map((currency) => {
-                      const selected = selectedIds.includes(currency.id);
-                      return (
-                        <tr key={currency.id} className={selected ? "bg-[#FFF8F8]" : "hover:bg-[#FAFAFA]"}>
-                          {canUpdate && (
-                            <td className="px-4 py-4 align-top">
-                              <input
-                                type="checkbox"
-                                checked={selected}
-                                onChange={(event) =>
-                                  setSelectedIds((current) =>
-                                    event.target.checked ? Array.from(new Set([...current, currency.id])) : current.filter((id) => id !== currency.id),
-                                  )
-                                }
-                                className="h-4 w-4 accent-[#E31E24]"
-                                aria-label={`Select ${currency.code}`}
-                              />
-                            </td>
-                          )}
-                          {visibleColumnKeys.includes("name") ? (
-                            <td className="px-4 py-4 align-top">
-                              <div className="font-medium text-[#1A1A1A] flex items-center gap-2">
-                                <span>{currency.name}</span>
-                                {currency.isBase && (
-                                  <span className="inline-flex items-center rounded-full bg-[#0F6CBD]/10 px-2 py-0.5 text-[10px] font-bold text-[#0F6CBD]">
-                                    BASE
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                          ) : null}
-                          {visibleColumnKeys.includes("code") ? <td className="px-4 py-4 align-top font-mono font-semibold text-[#1A1A1A]">{currency.code}</td> : null}
-                          {visibleColumnKeys.includes("symbol") ? <td className="px-4 py-4 align-top text-[#1A1A1A]">{currency.symbol}</td> : null}
-                          {visibleColumnKeys.includes("exchangeRate") ? <td className="px-4 py-4 align-top text-[#1A1A1A]">{formatRate(currency.exchangeRate)}</td> : null}
-                          {visibleColumnKeys.includes("isBase") ? <td className="px-4 py-4 align-top">{currency.isBase ? <span className="inline-flex items-center rounded-full bg-[#0F6CBD]/15 px-2 py-0.5 text-[11px] font-bold text-[#0F6CBD]">BASE</span> : "-"}</td> : null}
-                          {visibleColumnKeys.includes("status") ? (
-                            <td className="px-4 py-4 align-top">
-                              <StatusBadge status={currency.status} />
-                            </td>
-                          ) : null}
-                          {visibleColumnKeys.includes("countries") ? <td className="px-4 py-4 align-top text-[#1A1A1A]">{currency._count?.countries ?? 0}</td> : null}
-                          {visibleColumnKeys.includes("updatedAt") ? <td className="px-4 py-4 align-top text-[#1A1A1A]">{formatDate(currency.updatedAt)}</td> : null}
-                          {(canCreate || canUpdate || canDelete) ? (
-                            <td className="px-4 py-4 align-top">
-                              <div className="flex flex-nowrap items-center gap-1.5 whitespace-nowrap">
-                                {canCreate && (
-                                  <button
-                                    type="button"
-                                    onClick={() => openDuplicate(currency)}
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                                    title="Duplicate currency"
-                                  >
-                                    <Copy size={14} />
-                                  </button>
-                                )}
-                                {canUpdate && (
-                                  <button
-                                    type="button"
-                                    onClick={() => openEdit(currency)}
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                                    title="Edit currency"
-                                  >
-                                    <Edit2 size={14} />
-                                  </button>
-                                )}
-                                {canDelete && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setDeleting(currency)}
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#F2D7D7] text-[#E31E24] hover:bg-[#FFF5F5]"
-                                    title="Delete currency"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          ) : null}
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className="border-t border-[#E6E6E6] px-4 py-3">
-              <Pagination page={pagination.page} totalPages={pagination.totalPages || 1} onPageChange={setPage} />
-            </div>
-          </div>
-
-          <div className="space-y-5">
-            <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Import / Export</h3>
-                  <p className="mt-1 text-[12.5px] text-[#6B6B6B]">Validate spreadsheets before import.</p>
-                </div>
+            <div className="rounded-lg border-2 border-dashed border-[#E6E6E6] bg-[#FAFAFA] p-6 text-center hover:bg-[#F5F5F5] transition-colors">
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                id="currency-import-file"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setImportFile(file);
+                    setImportReport(null);
+                    setImportMessage("");
+                    void handleImportPreview(file);
+                  }
+                }}
+              />
+              <label htmlFor="currency-import-file" className="cursor-pointer block">
+                <Upload className="mx-auto h-8 w-8 text-[#9A9A9A]" />
+                <span className="mt-2 block text-[13px] font-semibold text-[#1A1A1A]">
+                  {importFile ? importFile.name : "Choose spreadsheet file"}
+                </span>
+                <span className="mt-0.5 block text-[11.5px] text-[#9A9A9A]">
+                  XLSX, XLS or CSV files supported
+                </span>
+              </label>
+              {importFile && (
                 <button
                   type="button"
-                  onClick={() => void handleExport(false)}
-                  className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
+                  onClick={() => {
+                    setImportFile(null);
+                    setImportReport(null);
+                    setImportMessage("");
+                  }}
+                  className="mt-2 text-[12px] font-medium text-red-600 hover:underline inline-block cursor-pointer"
                 >
-                  <Download size={14} />
-                  Export
+                  Remove file
                 </button>
-              </div>
-
-              {canUpdate && (
-                <>
-                  <div className="mt-4 space-y-3">
-                    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-[#D6D6D6] bg-[#FAFAFA] px-4 py-3">
-                      <input
-                        type="file"
-                        accept=".xlsx,.xls,.csv"
-                        className="hidden"
-                        onChange={(event) => {
-                          setImportFile(event.target.files?.[0] ?? null);
-                          setImportReport(null);
-                          setImportMessage("");
-                        }}
-                      />
-                      <div className="min-w-0">
-                        <div className="text-[13px] font-medium text-[#1A1A1A]">{importFile ? importFile.name : "Choose file"}</div>
-                        <div className="mt-0.5 text-[12px] text-[#6B6B6B]">Preview, validate, then import.</div>
-                      </div>
-                      <Upload size={16} className="shrink-0 text-[#E31E24]" />
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void handleImportPreview()}
-                        disabled={previewCurrencyImport.isPending}
-                        className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-50"
-                      >
-                        Preview
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleImport()}
-                        disabled={importing || importCurrencies.isPending || !!importReport?.invalidRows}
-                        className="inline-flex items-center gap-2 rounded-md bg-[#E31E24] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50"
-                      >
-                        <Upload size={14} />
-                        {importing ? "Importing..." : "Import"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {importMessage ? <div className="mt-4 rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2 text-[13px] text-[#1A1A1A]">{importMessage}</div> : null}
-
-                  {importReport ? (
-                    <div className="mt-4 space-y-3 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3 text-[12.5px] text-[#1A1A1A]">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
-                          <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Rows</div>
-                          <div className="mt-1 text-[18px] font-semibold text-[#1A1A1A]">{importReport.totalRows}</div>
-                        </div>
-                        <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
-                          <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Valid</div>
-                          <div className="mt-1 text-[18px] font-semibold text-green-600">{importReport.validRows}</div>
-                        </div>
-                        <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
-                          <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Invalid</div>
-                          <div className="mt-1 text-[18px] font-semibold text-red-600">{importReport.invalidRows}</div>
-                        </div>
-                        <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
-                          <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Warnings</div>
-                          <div className="mt-1 text-[18px] font-semibold text-amber-600">{importReport.duplicateWarnings.length}</div>
-                        </div>
-                      </div>
-                      {importReport.issues.length > 0 ? (
-                        <div className="space-y-2">
-                          <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Preview issues</div>
-                          <div className="max-h-48 space-y-2 overflow-auto rounded-md border border-[#E6E6E6] bg-white p-2">
-                            {importReport.issues.slice(0, 8).map((issue, index) => (
-                              <div key={`${issue.row}-${issue.field}-${index}`} className="rounded border border-[#F0E0E0] bg-[#FFF8F8] px-3 py-2">
-                                <div className="text-[12px] font-semibold text-[#1A1A1A]">Row {issue.row} · {issue.field}</div>
-                                <div className="text-[12px] text-[#6B6B6B]">{issue.message}</div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </>
               )}
             </div>
 
-            <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-              <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Recently Updated</h3>
-              <div className="mt-3 space-y-2">
-              {recentlyUpdated.length > 0 ? (
-                  recentlyUpdated.map((currency) => (
-                    <div key={currency.id} className="flex items-center justify-between rounded-lg border border-[#EDEDED] px-3 py-2">
-                      <div>
-                        <div className="text-[13px] font-medium text-[#1A1A1A]">{currency.name}</div>
-                        <div className="text-[12px] text-[#9A9A9A]">{currency.code} · {formatDate(currency.updatedAt)}</div>
-                      </div>
-                      <StatusBadge status={currency.status} />
+            {previewCurrencyImport.isPending && (
+              <div className="flex items-center gap-2 text-[13px] text-[#6B6B6B]">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
+                Validating and previewing spreadsheet...
+              </div>
+            )}
+
+            {importMessage && (
+              <div className="rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3.5 py-2.5 text-[12.5px] text-[#1A1A1A]">
+                {importMessage}
+              </div>
+            )}
+
+            {importReport && (
+              <div className="space-y-3 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
+                    <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Total Rows</div>
+                    <div className="mt-1 text-[18px] font-bold text-[#1A1A1A]">{importReport.totalRows}</div>
+                  </div>
+                  <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
+                    <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Valid Rows</div>
+                    <div className="mt-1 text-[18px] font-bold text-emerald-600">{importReport.validRows}</div>
+                  </div>
+                  <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
+                    <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Invalid Rows</div>
+                    <div className="mt-1 text-[18px] font-bold text-red-600">{importReport.invalidRows}</div>
+                  </div>
+                  <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
+                    <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Warnings</div>
+                    <div className="mt-1 text-[18px] font-bold text-amber-600">{importReport.duplicateWarnings.length}</div>
+                  </div>
+                </div>
+
+                {importReport.issues.length > 0 && (
+                  <div>
+                    <h4 className="mb-1.5 text-[12.5px] font-semibold text-[#1A1A1A]">Validation Issues</h4>
+                    <div className="max-h-40 overflow-y-auto rounded border border-[#E6E6E6] bg-white divide-y divide-[#F0F0F0]">
+                      {importReport.issues.map((issue, idx) => (
+                        <div key={idx} className="flex items-center gap-3 px-3 py-2 text-[12px]">
+                          <span className="font-mono font-semibold text-[#E31E24]">Row {issue.row}</span>
+                          <span className="font-medium text-[#1A1A1A]">{issue.field}</span>
+                          <span className="text-[#6B6B6B]">{issue.message}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))
-                ) : (
-                  <div className="rounded-lg border border-dashed border-[#E6E6E6] px-3 py-8 text-center text-[13px] text-[#9A9A9A]">
-                    No recent updates yet.
                   </div>
                 )}
               </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 border-t border-[#E6E6E6] pt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportFile(null);
+                  setImportReport(null);
+                  setImportMessage("");
+                }}
+                className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] cursor-pointer"
+              >
+                Cancel
+              </button>
+              <LoadingButton
+                type="button"
+                onClick={handleImport}
+                loading={importing || importCurrencies.isPending}
+                loadingText="Importing..."
+                disabled={!importFile || (importReport !== null && importReport.invalidRows > 0)}
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50 cursor-pointer"
+              >
+                Import Currencies
+              </LoadingButton>
             </div>
           </div>
-        </div>
+        </Modal>
 
         <Modal open={showForm} onClose={() => { form.reset(); setShowForm(false); }} title={form.values.id ? "Edit currency" : "Add currency"} panelClassName="max-w-3xl">
           <form onSubmit={form.handleSubmit} className="space-y-6 p-6">

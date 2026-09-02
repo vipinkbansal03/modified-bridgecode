@@ -576,21 +576,34 @@ export function AdminSectionTable<T>({
 
 // ─── Pagination ───────────────────────────────────────────
 
-interface PaginationProps {
+export interface PaginationProps {
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
+  alwaysShow?: boolean;
+  className?: string;
 }
 
-export function Pagination({ page, totalPages, onPageChange }: PaginationProps) {
-  if (totalPages <= 1) return null;
+export function Pagination({ page, totalPages, onPageChange, alwaysShow = false, className }: PaginationProps) {
+  if (totalPages <= 1 && !alwaysShow) return null;
+  const safeTotalPages = Math.max(1, totalPages || 1);
   return (
-    <div className="flex items-center justify-end gap-2 pt-4">
-      <button disabled={page <= 1} onClick={() => onPageChange(page - 1)} className="flex items-center gap-1 rounded border border-[#E6E6E6] px-2.5 py-1.5 text-[13px] disabled:opacity-40 hover:bg-[#F2F2F2]">
+    <div className={cn("flex items-center justify-end gap-2", className)}>
+      <button
+        disabled={page <= 1}
+        onClick={() => onPageChange(Math.max(1, page - 1))}
+        className="flex items-center gap-1 rounded border border-[#E6E6E6] bg-white px-2.5 py-1.5 text-[13px] font-medium text-[#1A1A1A] disabled:text-[#9A9A9A] disabled:opacity-40 hover:bg-[#F2F2F2] transition-colors cursor-pointer disabled:cursor-not-allowed"
+      >
         <ChevronLeft size={14} /> Prev
       </button>
-      <span className="text-[13px] text-[#6B6B6B]">Page {page} of {totalPages}</span>
-      <button disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} className="flex items-center gap-1 rounded border border-[#E6E6E6] px-2.5 py-1.5 text-[13px] disabled:opacity-40 hover:bg-[#F2F2F2]">
+      <span className="text-[13px] text-[#6B6B6B] px-1">
+        Page {page} of {safeTotalPages}
+      </span>
+      <button
+        disabled={page >= safeTotalPages}
+        onClick={() => onPageChange(Math.min(safeTotalPages, page + 1))}
+        className="flex items-center gap-1 rounded border border-[#E6E6E6] bg-white px-2.5 py-1.5 text-[13px] font-medium text-[#1A1A1A] disabled:text-[#9A9A9A] disabled:opacity-40 hover:bg-[#F2F2F2] transition-colors cursor-pointer disabled:cursor-not-allowed"
+      >
         Next <ChevronRight size={14} />
       </button>
     </div>

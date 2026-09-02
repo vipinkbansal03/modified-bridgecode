@@ -2864,4 +2864,49 @@ export const useRefundCancelledOrder = () => {
   });
 };
 
+// ─── Product Reviews ──────────────────────────────────────
+
+export interface AdminReviewsParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  ratingOverall?: number;
+  productId?: string;
+  categoryId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: string;
+  sortDir?: string;
+}
+
+export const useAdminReviews = (params?: AdminReviewsParams) =>
+  useQuery({
+    queryKey: ["admin-reviews", params],
+    queryFn: () => adminApi.get("/reviews", { params }).then((r) => r.data),
+  });
+
+export const useUpdateReviewStatus = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      adminApi.patch(`/reviews/${id}/status`, { status }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-reviews"] });
+    },
+  });
+};
+
+export const useDeleteReview = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      adminApi.delete(`/reviews/${id}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-reviews"] });
+    },
+  });
+};
+
+
 

@@ -1596,14 +1596,72 @@ export async function addProductMedia(
   return prisma.productMedia.findMany({ where: { productId } });
 }
 
+// ─── Set cover product media ──────────────────────────────
+
+export async function setProductCoverMedia(productId: string, mediaId: string) {
+  await getProduct(productId);
+
+  const targetMedia = await prisma.productMedia.findUnique({
+    where: { id: mediaId },
+  });
+
+  if (!targetMedia || targetMedia.productId !== productId) {
+    throw new AppError("Media not found for this product.", 404);
+  }
+
+  // Fetch all media for this product ordered by current sortOrder, then createdAt
+  const allMedia = await prisma.productMedia.findMany({
+    where: { productId },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+
+  // Reorder: targetMedia first (sortOrder: 0), all others sequentially (1, 2, 3...)
+  const otherMedia = allMedia.filter((m) => m.id !== mediaId);
+  const reordered = [targetMedia, ...otherMedia];
+
+  await prisma.$transaction(
+    reordered.map((m, index) =>
+      prisma.productMedia.update({
+        where: { id: m.id },
+        data: { sortOrder: index },
+      })
+    )
+  );
+
+  return prisma.productMedia.findMany({
+    where: { productId },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+}
+
 // ─── Delete product media ─────────────────────────────────
 
 export async function deleteProductMedia(mediaId: string) {
   const media = await prisma.productMedia.findUnique({ where: { id: mediaId } });
   if (!media) throw new AppError("Media not found.", 404);
+  const productId = media.productId;
   await deleteFile(media.publicId || media.url, media.storageProvider);
   await prisma.media.deleteMany({ where: { url: media.url } });
-  return prisma.productMedia.delete({ where: { id: mediaId } });
+  await prisma.productMedia.delete({ where: { id: mediaId } });
+
+  // Re-index remaining media to ensure clean sequential sortOrder (0, 1, 2...)
+  const remaining = await prisma.productMedia.findMany({
+    where: { productId },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+
+  if (remaining.length > 0) {
+    await prisma.$transaction(
+      remaining.map((m, index) =>
+        prisma.productMedia.update({
+          where: { id: m.id },
+          data: { sortOrder: index },
+        })
+      )
+    );
+  }
+
+  return remaining;
 }
 
 // ─── Assign attributes to product ────────────────────────
