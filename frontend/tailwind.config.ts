@@ -20,11 +20,9 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["var(--font-body)", "'Futura'", "-apple-system", "sans-serif"],
-        heading: ["var(--font-heading)", "'Futura'", "-apple-system", "sans-serif"],
-        futura: ["'Futura'", "sans-serif"],
-        jost: ["var(--font-jost)", "sans-serif"],
-        inter: ["var(--font-inter)", "sans-serif"],
+        sans: ["var(--font-body)", "'Poppins'", "-apple-system", "sans-serif"],
+        heading: ["var(--font-heading)", "'Poppins'", "-apple-system", "sans-serif"],
+        poppins: ["var(--font-poppins)", "'Poppins'", "sans-serif"],
       },
       maxWidth: {
         wrap: "1320px",

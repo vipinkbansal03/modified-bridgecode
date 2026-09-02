@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Jost } from "next/font/google";
+import { Poppins } from "next/font/google";
 import { AppShell } from "@/components/layout/AppShell";
 import { ReactQueryProvider } from "@/lib/reactQueryProvider";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
@@ -16,18 +16,11 @@ import seoData from "@/data/seo.json";
 import "react-toastify/dist/ReactToastify.css";
 import "@/styles/globals.css";
 
-const inter = Inter({
+const poppins = Poppins({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800"],
+  weight: ["300", "400", "500", "600", "700", "800", "900"],
   display: "swap",
-  variable: "--font-inter",
-});
-
-const jost = Jost({
-  subsets: ["latin"],
-  weight: ["100", "200", "300", "400", "500", "600", "700", "800", "900"],
-  display: "swap",
-  variable: "--font-jost",
+  variable: "--font-poppins",
 });
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -40,7 +33,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${jost.variable}`} data-scroll-behavior="smooth">
+    <html lang="en" className={`${poppins.variable}`} data-scroll-behavior="smooth">
       <body className="font-sans antialiased">
         <ReactQueryProvider>
           <LanguageProvider>

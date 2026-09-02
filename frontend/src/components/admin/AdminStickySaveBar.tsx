@@ -47,20 +47,20 @@ export function AdminStickySaveBar({
   return (
     <div
       className={cn(
-        "sticky z-30 mb-5 flex flex-wrap items-center justify-between gap-3 rounded-b-xl border border-t-0 border-[#E6E6E6] bg-white/95 px-4 py-3 shadow-[0_14px_35px_rgba(227,30,36,0.10)] backdrop-blur before:absolute before:left-0 before:top-0 before:h-[3px] before:w-full before:bg-[#E31E24]",
+        "sticky z-30 mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#E6E6E6] bg-white px-4 py-3 shadow-xs backdrop-blur",
         stickyOffsetClass,
         className
       )}
     >
       <div className="min-w-0 pr-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <h2 className="text-[15px] font-bold text-[#1A1A1A] truncate">{title}</h2>
+          <h2 className="text-[15px] font-semibold text-[#1A1A1A] truncate">{title}</h2>
           {badge}
         </div>
         {isReadOnly ? (
           <p className="mt-0.5 text-[11.5px] font-medium text-amber-600">{readOnlyMessage}</p>
         ) : subtitle ? (
-          <p className="mt-0.5 text-[11.5px] text-[#8B8B8B]">{subtitle}</p>
+          <p className="mt-0.5 text-[11.5px] text-[#6B6B6B]">{subtitle}</p>
         ) : null}
       </div>
 
@@ -98,7 +98,7 @@ export function AdminStickySaveBar({
             type="button"
             onClick={onSave}
             disabled={saving}
-            className="flex items-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white shadow-[0_8px_20px_rgba(227,30,36,0.28)] transition-all hover:bg-[#B5151B] disabled:opacity-50 active:scale-[0.98]"
+            className="flex items-center gap-2 rounded-lg bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white shadow-xs transition-all hover:bg-[#B5151B] disabled:opacity-50 active:scale-[0.98]"
           >
             {saving ? (
               <span className="flex items-center gap-1.5">
