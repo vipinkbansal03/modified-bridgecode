@@ -114,7 +114,10 @@ export async function register(input: CustomerRegisterInput) {
       const nextType = input.taxIdType || "GSTIN";
       if (nextType === "GSTIN") {
         const gstResult = await validateGstinWithApi(nextTaxId);
-        taxIdStatus = gstResult.valid ? "VALID" : "INVALID";
+        if (!gstResult.valid) {
+          throw new AppError(gstResult.message || "Invalid GSTIN format or verification failed.", 400);
+        }
+        taxIdStatus = "VALID";
       } else {
         taxIdStatus = "PENDING";
       }

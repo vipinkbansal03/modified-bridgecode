@@ -12,6 +12,7 @@ import { apiClient } from "@/lib/apiClient";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
 import { useCountries } from "@/hooks/api/useCurrencies";
 import { fetchPublicPaymentMethods } from "@/services/customerApi";
+import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { toast } from "react-toastify";
 
 export interface CartItem {
@@ -115,6 +116,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
+  const { currentCustomer } = useCustomerAuth();
   const { selectedCountryCode } = useCurrencyContext();
   const { data: countries = [] } = useCountries();
   const activeCountry = countries.find((c) => c.code === selectedCountryCode);
@@ -207,7 +209,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
                 (item) => item.variantId === preview.variantId,
               );
 
-              if (index !== -1) {
+              if (index !== -1 && preview.unitPrice > 0) {
                 updatedItems[index] = {
                   ...updatedItems[index],
                   unitPrice: preview.unitPrice,
@@ -221,18 +223,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
             }
           } catch (error: any) {
             const message = error?.message || "";
-
-            if (message.includes("Product not found")) {
-              console.warn(`Removing non-existent product ${productSlug} from cart.`);
-              updatedItems = updatedItems.filter((item) => item.productSlug !== productSlug);
-              continue;
-            }
-
-            if (message.includes("requested variants are not available")) {
-              console.warn(`Removing unavailable variants for product ${productSlug} from cart.`);
-              updatedItems = updatedItems.filter((item) => item.productSlug !== productSlug);
-              continue;
-            }
 
             updatedItems.forEach((item, index) => {
               if (item.productSlug === productSlug) {
@@ -333,7 +323,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [selectedCountryCode, hydrated]);
+  }, [selectedCountryCode, hydrated, currentCustomer?.id]);
 
   const mergeCartItems = (current: CartItem[], incomingItems: CartItem[]) => {
     const next = [...current];

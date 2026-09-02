@@ -1,47 +1,62 @@
 import "../config/env";
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  const countries = await prisma.country.findMany({
-    select: { id: true, code: true, name: true }
+  const users = await prisma.user.findMany({
+    include: {
+      role: true
+    }
   });
-  console.log("=== Countries in DB ===");
-  console.log(countries);
 
-  const product = await prisma.product.findFirst({
-    where: { slug: "elfin-bondable-molar-tube" }
-  });
-  if (!product) {
-    console.log("Elfin product not found!");
-    return;
+  console.log(`=== USERS IN DB (${users.length}) ===`);
+  for (const u of users) {
+    const isMatch = u.password ? await bcrypt.compare("Admin@1234", u.password) : false;
+    console.log(`Email: ${u.email} | Name: ${u.name} | Role: ${u.role?.name} | Status: ${u.status} | Match Admin@1234: ${isMatch}`);
   }
-  console.log(`\n=== Product: ${product.title} (ID: ${product.id}) ===`);
 
-  const productCountries = await prisma.productCountry.findMany({
-    where: { productId: product.id },
-    include: { country: true }
+  // Ensure admin@modortho.com exists with Super Admin role and password Admin@1234
+  let superAdminRole = await prisma.role.findFirst({
+    where: { name: "Super Admin" }
   });
-  console.log("\n=== Product Countries ===");
-  console.log(productCountries.map((pc: any) => ({ code: pc.country.code, enabled: pc.enabled })));
 
-  const variant = await prisma.productVariant.findFirst({
-    where: { sku: "ELFIN-L-Roth-022-H4-019025" }
-  });
-  if (variant) {
-    console.log(`\n=== Variant: ${variant.title} (SKU: ${variant.sku}, ID: ${variant.id}) ===`);
-    const variantCountries = await prisma.variantCountry.findMany({
-      where: { variantId: variant.id },
-      include: { country: true }
+  if (!superAdminRole) {
+    superAdminRole = await prisma.role.create({
+      data: { name: "Super Admin", permissions: ["*"] }
     });
-    console.log("=== Variant Countries ===");
-    console.log(variantCountries.map((vc: any) => ({ code: vc.country.code, enabled: vc.enabled })));
+  }
+
+  const newHash = await bcrypt.hash("Admin@1234", 12);
+
+  const existingAdmin = await prisma.user.findFirst({
+    where: { email: "admin@modortho.com" }
+  });
+
+  if (existingAdmin) {
+    await prisma.user.update({
+      where: { id: existingAdmin.id },
+      data: {
+        password: newHash,
+        status: "ACTIVE",
+        deletedAt: null,
+        roleId: superAdminRole.id
+      }
+    });
+    console.log("\n>>> SUCCESS: Reset password for admin@modortho.com to 'Admin@1234'");
   } else {
-    console.log("\nVariant ELFIN-L-Roth-022-H4-019025 not found!");
+    await prisma.user.create({
+      data: {
+        email: "admin@modortho.com",
+        name: "Super Admin",
+        password: newHash,
+        status: "ACTIVE",
+        roleId: superAdminRole.id
+      }
+    });
+    console.log("\n>>> SUCCESS: Created admin@modortho.com with password 'Admin@1234'");
   }
 }
 
-main()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect());
+main().catch(console.error).finally(() => prisma.$disconnect());

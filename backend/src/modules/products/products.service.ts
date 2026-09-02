@@ -120,6 +120,7 @@ type ProductHighlightInput = {
 type ProductSpecInput = {
   label: string;
   value: string;
+  image?: string;
 };
 
 type ProductInput = {
@@ -678,6 +679,7 @@ export async function createProduct(data: ProductInput) {
   const normalizedStatus = (data.status as never) || "DRAFT";
 
   const { activeCountryIds, ...createData } = data;
+  if ("specImages" in createData) delete (createData as any).specImages;
 
   const createdProduct = await prisma.$transaction(async (tx) => {
     const product = await tx.product.create({
@@ -744,6 +746,7 @@ export async function updateProduct(id: string, data: Partial<ProductInput>) {
   if (data.shortDescription !== undefined) updateData.shortDescription = data.shortDescription || null;
   if (data.description !== undefined) updateData.description = data.description || null;
   if (data.brand !== undefined) updateData.brand = data.brand?.trim() || existing.brand;
+  if ("specImages" in updateData) delete updateData.specImages;
 
   const updatedProduct = await prisma.$transaction(async (tx) => {
     const product = await tx.product.update({ where: { id }, data: updateData as Prisma.ProductUpdateInput });

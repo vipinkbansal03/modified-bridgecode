@@ -20,9 +20,12 @@ import {
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { getCustomerErrorMessage } from "@/services/customerApi";
 import PhoneInputField from "@/components/ui/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
 import { useCountries } from "@/hooks/api/useCurrencies";
 import { worldCountries } from "@/data/world-countries";
 import { apiClient } from "@/lib/apiClient";
+
+const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 
 const registerSchema = Yup.object({
   customerType: Yup.string()
@@ -33,7 +36,13 @@ const registerSchema = Yup.object({
   email: Yup.string()
     .email("Invalid email address")
     .required("Email is required"),
-  mobile: Yup.string().trim().required("Mobile number is required"),
+  mobile: Yup.string()
+    .trim()
+    .required("Mobile number is required")
+    .test("is-valid-phone", "Please enter a valid mobile phone number", (value) => {
+      if (!value) return false;
+      return isValidPhoneNumber(value);
+    }),
   address: Yup.string().trim().required("Address is required"),
   addressLine2: Yup.string().trim(),
   city: Yup.string().trim().required("City is required"),
@@ -41,7 +50,21 @@ const registerSchema = Yup.object({
   country: Yup.string().trim().required("Country is required"),
   zipcode: Yup.string().trim().required("Zipcode is required"),
   website: Yup.string().trim(),
-  taxId: Yup.string().trim().nullable(),
+  taxId: Yup.string()
+    .trim()
+    .nullable()
+    .test("is-valid-tax-id", function (value) {
+      if (!value) return true;
+      const { taxIdType, country } = this.parent;
+      const type = taxIdType || (country === "India" || country === "IN" ? "GSTIN" : "TAX_ID");
+      if (type === "GSTIN") {
+        const clean = value.trim().toUpperCase();
+        if (!GSTIN_REGEX.test(clean)) {
+          return this.createError({ message: "Invalid GSTIN format (e.g. 27AAAAA1111A1Z5)" });
+        }
+      }
+      return true;
+    }),
   taxIdType: Yup.string().trim().nullable(),
   password: Yup.string()
     .min(8, "Password must be at least 8 characters")
@@ -250,9 +273,9 @@ export default function RegisterPage() {
 
   return (
     <main className="grid min-h-screen grid-cols-1 bg-white lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1.3fr)]">
-      <section className="relative sticky top-0 hidden h-screen overflow-hidden lg:block">
+      <section className="sticky top-0 hidden h-screen w-full self-start overflow-hidden lg:block">
         <div
-          className="absolute inset-0 bg-cover bg-center"
+          className="absolute inset-0 h-full w-full bg-cover bg-center"
           style={{ backgroundImage: "url('/auth/login2.jpg')" }}
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/35 to-black/75" />
@@ -456,28 +479,46 @@ export default function RegisterPage() {
                 error={formik.errors.website}
                 touched={formik.touched.website}
               />
-              <div className="flex h-10 sm:h-9 overflow-hidden rounded-md border border-[#E0E0E0] bg-[#EEF4FF] transition-colors focus-within:border-[#E31E24]">
-                <select
-                  name="taxIdType"
-                  value={formik.values.taxIdType || "GSTIN"}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                  className="bg-transparent border-r border-[#E0E0E0] px-2 text-[13px] sm:text-[12px] text-[#6B6B6B] outline-none cursor-pointer shrink-0"
+              <div>
+                <div
+                  className={`flex h-10 sm:h-9 overflow-hidden rounded-md border bg-[#EEF4FF] transition-colors ${
+                    Boolean(formik.touched.taxId && formik.errors.taxId)
+                      ? "border-[#E31E24]"
+                      : "border-[#E0E0E0] focus-within:border-[#E31E24]"
+                  }`}
                 >
-                  <option value="GSTIN">GSTIN (IN)</option>
-                  <option value="VAT">VAT ID (EU)</option>
-                  <option value="EIN">EIN (US)</option>
-                  <option value="TAX_ID">Tax ID</option>
-                </select>
-                <input
-                  type="text"
-                  name="taxId"
-                  placeholder="GSTIN / Tax ID (optional)"
-                  value={formik.values.taxId || ""}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                  className="min-w-0 flex-1 bg-transparent px-3 text-[16px] sm:text-[12.5px] text-[#1A1A1A] outline-none placeholder:text-[#8A8A8A]"
-                />
+                  <select
+                    name="taxIdType"
+                    value={formik.values.taxIdType || "GSTIN"}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    className="bg-transparent border-r border-[#E0E0E0] px-2 text-[13px] sm:text-[12px] text-[#6B6B6B] outline-none cursor-pointer shrink-0"
+                  >
+                    <option value="GSTIN">GSTIN (IN)</option>
+                    <option value="VAT">VAT ID (EU)</option>
+                    <option value="EIN">EIN (US)</option>
+                    <option value="TAX_ID">Tax ID</option>
+                  </select>
+                  <input
+                    type="text"
+                    name="taxId"
+                    placeholder={
+                      formik.values.taxIdType === "GSTIN"
+                        ? "GSTIN (e.g. 27AAAAA1111A1Z5)"
+                        : "Tax ID (optional)"
+                    }
+                    value={formik.values.taxId || ""}
+                    onChange={(e) => {
+                      const val = formik.values.taxIdType === "GSTIN" ? e.target.value.toUpperCase() : e.target.value;
+                      formik.setFieldValue("taxId", val);
+                    }}
+                    onBlur={formik.handleBlur}
+                    className="min-w-0 flex-1 bg-transparent px-3 text-[16px] sm:text-[12.5px] text-[#1A1A1A] outline-none placeholder:text-[#8A8A8A]"
+                  />
+                </div>
+                {Boolean(formik.touched.taxId && formik.errors.taxId) && (
+                  <p className="mt-0.5 text-[11px] text-[#E31E24]">{formik.errors.taxId}</p>
+                )}
               </div>
               <div className="relative">
                 <IconInput
@@ -525,7 +566,7 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 items-start">
               {/* Preferred Prescription */}
               <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3">
                 <p className="mb-2 text-[12px] font-semibold text-[#1A1A1A]">
@@ -563,6 +604,7 @@ export default function RegisterPage() {
                     value={formik.values.preferredPrescriptionOther}
                     onChange={formik.handleChange}
                     className="mt-2.5 h-10 sm:h-9 w-full rounded-md border border-[#E0E0E0] bg-white px-3 text-[16px] sm:text-[12.5px] outline-none transition-colors placeholder:text-[#9A9A9A] focus:border-[#E31E24]"
+                    autoFocus
                   />
                 )}
               </div>

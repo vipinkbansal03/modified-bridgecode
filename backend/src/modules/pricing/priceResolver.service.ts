@@ -442,13 +442,21 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
     },
   ];
 
-  if (pricingContext.role.key === SYSTEM_CUSTOMER_ROLE_KEYS.dealer && basePrice.dealerPrice != null) {
+  if (
+    pricingContext.role.key === SYSTEM_CUSTOMER_ROLE_KEYS.dealer &&
+    basePrice.dealerPrice != null &&
+    money(basePrice.dealerPrice) > 0
+  ) {
     const appliedRolePrice = buildRolePriceLayer(currentPrice, basePrice.dealerPrice, `${pricingContext.role.name} role price`);
     currentPrice = appliedRolePrice.nextPrice;
     layers.push(appliedRolePrice.layer);
   }
 
-  if (pricingContext.role.key === SYSTEM_CUSTOMER_ROLE_KEYS.doctorRetailer && basePrice.distributorPrice != null) {
+  if (
+    pricingContext.role.key === SYSTEM_CUSTOMER_ROLE_KEYS.doctorRetailer &&
+    basePrice.distributorPrice != null &&
+    money(basePrice.distributorPrice) > 0
+  ) {
     const appliedRolePrice = buildRolePriceLayer(currentPrice, basePrice.distributorPrice, `${pricingContext.role.name} role price`);
     currentPrice = appliedRolePrice.nextPrice;
     layers.push(appliedRolePrice.layer);

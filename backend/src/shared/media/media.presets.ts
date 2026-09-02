@@ -7,26 +7,20 @@ import { ImagePresetDefinition } from "./media.types";
  */
 export const IMAGE_PRESETS: Record<string, ImagePresetDefinition> = {
   product: {
-    thumbnail: { width: 320, quality: 75, fit: "inside" },
     medium: { width: 800, quality: 80, fit: "inside" },
-    large: { width: 1600, quality: 82, fit: "inside" },
   },
   banner: {
     mobile: { width: 900, quality: 80, fit: "inside" },
     desktop: { width: 1920, quality: 82, fit: "inside" },
   },
   profile: {
-    thumbnail: { width: 160, height: 160, quality: 75, fit: "cover" },
     medium: { width: 500, height: 500, quality: 80, fit: "cover" },
   },
   category: {
-    thumbnail: { width: 320, quality: 75, fit: "inside" },
     medium: { width: 800, quality: 80, fit: "inside" },
   },
   blog: {
-    thumbnail: { width: 320, quality: 75, fit: "inside" },
     medium: { width: 800, quality: 80, fit: "inside" },
-    large: { width: 1600, quality: 82, fit: "inside" },
   },
   adminThumbnail: {
     thumbnail: { width: 320, quality: 75, fit: "inside" },

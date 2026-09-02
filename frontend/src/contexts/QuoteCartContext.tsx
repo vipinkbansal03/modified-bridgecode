@@ -228,25 +228,15 @@ export function QuoteCartProvider({ children }: { children: React.ReactNode }) {
         } catch (error: any) {
           const message = error?.message || "";
 
-          if (message.includes("Product not found")) {
-            console.warn(`Removing non-existent product ${productSlug} from quote cart.`);
-            updatedItems = updatedItems.filter((item) => item.productSlug !== productSlug);
-            continue;
-          }
-
-          if (message.includes("No active price is configured")) {
-            updatedItems = updatedItems.map((item) =>
-              item.productSlug === productSlug
-                ? {
-                    ...item,
-                    priceUnavailable: true,
-                    priceUnavailableMessage: message,
-                  }
-                : item,
-            );
-
-            continue;
-          }
+          updatedItems = updatedItems.map((item) =>
+            item.productSlug === productSlug
+              ? {
+                  ...item,
+                  priceUnavailable: true,
+                  priceUnavailableMessage: message || "Item unavailable in selected country.",
+                }
+              : item,
+          );
 
           console.warn(`Failed to refresh prices for ${productSlug}`, error);
         }

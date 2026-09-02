@@ -1739,6 +1739,7 @@ enum MediaStatus {
 enum StorageProvider {
   LOCAL
   CLOUDINARY
+  S3
 }
 
 enum PaymentMethodType {
@@ -2070,5 +2071,4 @@ model OrderReturnItem {
   @@index([orderItemId])
   @@map("order_return_items")
 }
-
 
