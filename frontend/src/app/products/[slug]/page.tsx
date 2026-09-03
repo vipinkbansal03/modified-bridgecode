@@ -153,7 +153,7 @@ function mergeProduct(api: ApiProductDetail): ProductDetail {
     seo: {
       title: api.seoTitle ?? api.title,
       description: api.seoDescription ?? api.shortDescription ?? "",
-      keywords: api.seoKeywords ? api.seoKeywords.split(",").map((s) => s.trim()) : [],
+      keywords: typeof api.seoKeywords === "string" ? api.seoKeywords.split(",").map((s) => s.trim()).filter(Boolean) : Array.isArray(api.seoKeywords) ? (api.seoKeywords as string[]).map(String) : [],
     },
   };
 }
