@@ -451,7 +451,7 @@ export async function publicGetProduct(
 
   const baseTierPricing = product.tierPricing.map((t) => ({
     id: t.id,
-    tier: { id: t.tier.id, name: t.tier.name },
+    tier: { id: t.tier?.id ?? "", name: t.tier?.name ?? "" },
     discountPercent: t.discountPercent != null ? Number(t.discountPercent) : null,
     fixedPrice: t.fixedPrice != null ? Number(t.fixedPrice) : null,
   }));
@@ -468,7 +468,7 @@ export async function publicGetProduct(
   const allTierPricing = [...baseTierPricing, ...promoTierPricing];
   const tierGroups: Record<string, typeof allTierPricing> = {};
   for (const tp of allTierPricing) {
-    const key = tp.tier.id;
+    const key = tp.tier?.id ?? "default";
     if (!tierGroups[key]) tierGroups[key] = [];
     tierGroups[key].push(tp);
   }
