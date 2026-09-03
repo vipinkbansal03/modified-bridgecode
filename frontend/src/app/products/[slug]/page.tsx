@@ -23,7 +23,7 @@ import homeContent from "@/data/home.json";
 import type { ProductDetail } from "@/types/product.types";
 import type { ApiProductDetail, ApiProductPrice } from "@/types/api.types";
 
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 const API_ORIGIN =
   process.env.API_BASE_URL ??
@@ -156,11 +156,6 @@ function mergeProduct(api: ApiProductDetail): ProductDetail {
       keywords: typeof api.seoKeywords === "string" ? api.seoKeywords.split(",").map((s) => s.trim()).filter(Boolean) : Array.isArray(api.seoKeywords) ? (api.seoKeywords as string[]).map(String) : [],
     },
   };
-}
-
-export async function generateStaticParams() {
-  const apiSlugs = await fetchSlugsFromApi();
-  return apiSlugs.map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
