@@ -17,9 +17,11 @@ import { WishlistButton } from "@/components/product/WishlistButton";
 import { ShareButton } from "@/components/product/ShareButton";
 
 import { ViewSpecsLink } from "@/components/product/ViewSpecsLink";
+import { DownloadCatalogueButton } from "@/components/product/DownloadCatalogueButton";
 import { ConfigureButton } from "@/components/product/ConfigureButton";
 import { buildMetadata } from "@/lib/seo";
 import homeContent from "@/data/home.json";
+import productsData from "@/data/products.json";
 import type { ProductDetail } from "@/types/product.types";
 import type { ApiProductDetail, ApiProductPrice } from "@/types/api.types";
 
@@ -93,10 +95,14 @@ function formatMoney(symbol: string, amount: number | null | undefined) {
 
 function getPublicPrice(apiProduct?: ApiProductDetail | null) {
   if (!apiProduct) return null;
+  const hasVariants = Boolean(apiProduct.hasVariants && (apiProduct.variants?.length ?? 0) > 0);
+  if (!hasVariants) {
+    return apiProduct.prices?.[0] ?? apiProduct.lowestPrice?.[0] ?? null;
+  }
   return (
     apiProduct.lowestPrice?.[0] ??
-    apiProduct.prices?.[0] ??
     apiProduct.variants?.[0]?.prices?.[0] ??
+    apiProduct.prices?.[0] ??
     null
   );
 }
@@ -148,7 +154,7 @@ function mergeProduct(api: ApiProductDetail): ProductDetail {
     slotOptions: undefined,
     packagingOptions: undefined,
     discountTiers: undefined,
-    catalogueUrl: (api as any).documents?.[0]?.url ?? "",
+    catalogueUrl: (api as any).documents?.[0]?.url || undefined,
     bundle: [],
     seo: {
       title: api.seoTitle ?? api.title,
@@ -176,6 +182,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const publicPrice = getPublicPrice(apiProduct);
   const publicDiscount = getPublicDiscount(publicPrice);
   const product = mergeProduct(apiProduct);
+  const hasVariants = Boolean(apiProduct.hasVariants && (apiProduct.variants?.length ?? 0) > 0);
 
   return (
     <>
@@ -288,15 +295,16 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                     Product Code: {product.productCode}
                   </span>
                 )}
-                <div className="flex items-center">
-                  <ViewSpecsLink />
-                  {apiProduct && (apiProduct.variants?.length ?? 0) > 0 && (
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <DownloadCatalogueButton catalogueUrl={product.catalogueUrl} title={product.title} />
+                  {hasVariants && (
                     <ConfigureButton />
                   )}
+                  <ViewSpecsLink />
                 </div>
               </div>
 
-              {apiProduct && (!apiProduct.variants || apiProduct.variants.length === 0) && (apiProduct.prices?.length ?? 0) > 0 && (
+              {apiProduct && !hasVariants && (apiProduct.prices?.length ?? 0) > 0 && (
                 <div className="mt-8 pt-6 border-t border-line">
                   <BaseProductConfigurator apiProduct={apiProduct} />
                 </div>
@@ -306,7 +314,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
           {/* Variant Configurator Flow (First: Configurator / Matrix / Inquiry) */}
           <div id="configurator-section">
-            {apiProduct && (apiProduct.variants?.length ?? 0) > 0 ? (
+            {hasVariants ? (
               <VariantConfigurator apiProduct={apiProduct} />
             ) : (
               <SimpleInquiryPanel product={product} productId={apiProduct?.id} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, Suspense } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -1567,14 +1567,9 @@ export default function AdminArchivePage() {
   return (
     <Suspense
       fallback={
-        <AdminLayout
-          title="Archive Management"
-          breadcrumb={[{ label: "System" }, { label: "Archive" }]}
-        >
-          <div className="flex h-64 items-center justify-center">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
-          </div>
-        </AdminLayout>
+        <div className="flex h-screen items-center justify-center bg-[#F2F2F2]">
+          <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
+        </div>
       }
     >
       <AdminArchiveContent />

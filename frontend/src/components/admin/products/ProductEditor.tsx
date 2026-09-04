@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import * as Yup from "yup";
-import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search, ChevronRight, ChevronLeft, ChevronDown, Eye, ZoomIn, CheckSquare, Square, Check, FolderUp, Image as ImageIcon, Loader2, Box, Package, Info, Star, GripVertical } from "lucide-react";
+import { Upload, Download, Trash2, RefreshCw, Plus, Zap, Copy, X, Pencil, Save, Globe2, Search, ChevronRight, ChevronLeft, ChevronDown, Eye, ZoomIn, CheckSquare, Square, Check, FolderUp, Image as ImageIcon, Loader2, Box, Package, Info, Star, GripVertical, FileText } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { AdminInput, AdminRichTextEditor, AdminTextarea, AdminSelect, AdminMultiSelect, StatusBadge, useToast, ConfirmModal, AdminDeleteModal, DataTable, AdminSectionTable, Column, toastMessages, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
@@ -642,6 +642,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [pricingSubTab, setPricingSubTab] = useState<"base" | "variant_prices" | "tier" | "moq">("base");
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadingMediaCount, setUploadingMediaCount] = useState(0);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [isDragOverPdf, setIsDragOverPdf] = useState(false);
   const [deletingMedia, setDeletingMedia] = useState<string | null>(null);
   const [settingCoverMediaId, setSettingCoverMediaId] = useState<string | null>(null);
   const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set());
@@ -4036,6 +4038,103 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     if (isDragOverMedia) setIsDragOverMedia(false);
   };
 
+  const handlePdfFilesUpload = async (fileList: File[]) => {
+    if (!fileList || fileList.length === 0) return;
+    const pdfFile = fileList.find(
+      (file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+    );
+    if (!pdfFile) {
+      showToast("Only PDF files (.pdf) are supported for product catalogue.", "error");
+      return;
+    }
+
+    try {
+      setUploadingPdf(true);
+
+      // Clean up previous PDF catalogue media records so there is strictly 1 single catalogue PDF
+      const existingPdfMedia = (product.media ?? []).filter(
+        (m: any) => m.type === "PDF" || m.mimeType?.includes("pdf") || m.url?.toLowerCase().endsWith(".pdf")
+      );
+      if (productId && productId !== "new" && existingPdfMedia.length > 0) {
+        await Promise.all(
+          existingPdfMedia.map((m: any) =>
+            m.id ? adminApi.delete(`/products/${productId}/media/${m.id}`).catch(() => {}) : Promise.resolve()
+          )
+        );
+      }
+
+      const results = await uploadMediaFiles([pdfFile], {
+        entityType: "PRODUCT",
+        entityId: productId && productId !== "new" ? productId : undefined,
+        purpose: "CATALOGUE",
+      });
+
+      const mediaIds = results.map((r) => r.mediaId).filter(Boolean);
+      const needsManualLink = !productId || productId === "new";
+      if (mediaIds.length > 0 && needsManualLink) {
+        await adminApi.post(`/products/${productId}/media`, { mediaIds });
+      }
+      showToast("Product catalogue PDF uploaded successfully.");
+      refetch();
+    } catch {
+      showToast("Failed to upload catalogue PDF.", "error");
+    } finally {
+      setUploadingPdf(false);
+    }
+  };
+
+  const handleDeletePdfCatalogue = async () => {
+    const pdfMedia = (product.media ?? []).filter(
+      (m: any) => m.type === "PDF" || m.mimeType?.includes("pdf") || m.url?.toLowerCase().endsWith(".pdf")
+    );
+    if (pdfMedia.length === 0) return;
+    try {
+      setUploadingPdf(true);
+      await Promise.all(
+        pdfMedia.map((m: any) =>
+          m.id ? adminApi.delete(`/products/${productId}/media/${m.id}`).catch(() => {}) : Promise.resolve()
+        )
+      );
+      showToast("Catalogue PDF removed.");
+      refetch();
+    } catch {
+      showToast("Failed to remove catalogue PDF.", "error");
+    } finally {
+      setUploadingPdf(false);
+    }
+  };
+
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const filesArray = Array.from(files);
+    e.target.value = "";
+    await handlePdfFilesUpload(filesArray);
+  };
+
+  const handlePdfDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverPdf(false);
+    if (uploadingPdf) return;
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length > 0) {
+      handlePdfFilesUpload(droppedFiles);
+    }
+  };
+
+  const handlePdfDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOverPdf) setIsDragOverPdf(true);
+  };
+
+  const handlePdfDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isDragOverPdf) setIsDragOverPdf(false);
+  };
+
   const handleToggleSelectMedia = (mediaId: string) => {
     setSelectedMediaIds((prev) => {
       const next = new Set(prev);
@@ -5266,274 +5365,367 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           </div>
         )}
 
-        {activeTab === 2 && (
-          <div className="p-6">
-            {/* Header & Bulk Action Bar */}
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Media</h3>
-                <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">
-                  Upload and manage product images used in listings and detail pages.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {(product.media ?? []).length > 0 && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleSelectAllMedia((product.media ?? []).map((m: any) => m.id).filter(Boolean))}
-                      className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]"
-                    >
-                      {selectedMediaIds.size === (product.media ?? []).length ? (
+        {activeTab === 2 && (() => {
+          const imageMedia = (product.media ?? []).filter(
+            (m: any) => m.type !== "PDF" && !m.mimeType?.includes("pdf") && !m.url?.toLowerCase().endsWith(".pdf")
+          );
+          const pdfMedia = (product.media ?? []).filter(
+            (m: any) => m.type === "PDF" || m.mimeType?.includes("pdf") || m.url?.toLowerCase().endsWith(".pdf")
+          );
+          const catalogueDoc = pdfMedia.length > 0 ? pdfMedia[pdfMedia.length - 1] : null;
+
+          return (
+            <div className="p-6">
+              {/* 1. Product Brochure / Catalogue (PDF) Section */}
+              <div className="mb-8 rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-xs">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-50 text-[#E31E24] border border-red-100">
+                      <FileText size={20} />
+                    </div>
+                    <div>
+                      <h4 className="text-[14.5px] font-semibold text-[#1A1A1A]">Product Brochure / Catalogue (PDF)</h4>
+                      <p className="text-[12.5px] text-[#6B7280]">
+                        Upload a single PDF brochure or technical datasheet for this product. Customers can download it directly from the storefront.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs disabled:opacity-60">
+                      {uploadingPdf ? (
                         <>
-                          <CheckSquare size={14} className="text-[#E31E24]" />
-                          Deselect All
+                          <Loader2 size={13} className="animate-spin text-white" />
+                          <span>Uploading PDF...</span>
                         </>
                       ) : (
                         <>
-                          <Square size={14} className="text-[#9A9A9A]" />
-                          Select All ({selectedMediaIds.size > 0 ? `${selectedMediaIds.size}/${(product.media ?? []).length}` : "0"})
+                          <Upload size={13} />
+                          <span>{catalogueDoc ? "Replace Catalogue PDF" : "Upload Catalogue PDF"}</span>
                         </>
                       )}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (selectedMediaIds.size > 0) {
-                          setDeletingBulkMedia(true);
-                        } else {
-                          setDeletingAllMedia(true);
-                        }
-                      }}
-                      className={`flex items-center gap-1.5 rounded-md px-3.5 py-2 text-[13px] font-semibold transition-colors ${
-                        selectedMediaIds.size > 0
-                          ? "bg-[#E31E24] text-white hover:bg-[#B5151B]"
-                          : "border border-[#F2C9C9] bg-white text-red-600 hover:bg-red-50"
-                      }`}
-                    >
-                      <Trash2 size={14} />
-                      {selectedMediaIds.size > 0 ? `Delete Selected (${selectedMediaIds.size})` : "Delete All"}
-                    </button>
-                  </>
-                )}
-
-                <label className="flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-60">
-                  {uploadingMedia ? (
-                    <>
-                      <Loader2 size={14} className="animate-spin text-white" />
-                      <span>Uploading...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Upload size={14} />
-                      <span>Upload Media</span>
-                    </>
-                  )}
-                  <input type="file" accept="image/*" multiple className="hidden" onChange={handleMediaUpload} disabled={uploadingMedia} />
-                </label>
-              </div>
-            </div>
-
-            {/* Drag & Drop Area */}
-            <label
-              onDragOver={handleMediaDragOver}
-              onDragLeave={handleMediaDragLeave}
-              onDrop={handleMediaDrop}
-              title="Click anywhere or drag and drop files to upload product images"
-              className={`group mb-6 flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition-all cursor-pointer select-none ${
-                uploadingMedia
-                  ? "border-[#E31E24] bg-red-50/30 cursor-not-allowed opacity-75"
-                  : isDragOverMedia
-                  ? "border-[#E31E24] bg-red-50/50 scale-[1.005]"
-                  : "border-[#E6E6E6] bg-[#FAFAFA] hover:border-[#E31E24] hover:bg-[#FFF8F8] hover:shadow-xs"
-              }`}
-            >
-              <input type="file" accept="image/*" multiple className="hidden" onChange={handleMediaUpload} disabled={uploadingMedia} />
-              {uploadingMedia ? (
-                <div className="flex flex-col items-center py-1">
-                  <Loader2 size={24} className="animate-spin text-[#E31E24] mb-2" />
-                  <p className="text-[13.5px] font-semibold text-[#1A1A1A]">
-                    Uploading {uploadingMediaCount > 0 ? `${uploadingMediaCount} image(s)...` : "images..."}
-                  </p>
-                  <p className="mt-0.5 text-[12px] text-[#6B6B6B]">Please wait while files are being uploaded to the server.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-xs border border-[#E6E6E6] group-hover:border-[#E31E24]/40 group-hover:bg-[#FFF5F5] transition-colors">
-                    <FolderUp size={20} className={isDragOverMedia ? "text-[#E31E24]" : "text-[#6B6B6B] group-hover:text-[#E31E24] transition-colors"} />
+                      <input type="file" accept="application/pdf,.pdf" className="hidden" onChange={handlePdfUpload} disabled={uploadingPdf} />
+                    </label>
                   </div>
-                  <p className="text-[13.5px] font-medium text-[#1A1A1A]">
-                    Drag &amp; drop product images here, or{" "}
-                    <span className="font-semibold text-[#E31E24] underline group-hover:text-[#B5151B]">
-                      browse files
-                    </span>
-                  </p>
-                  <p className="mt-1 text-[12px] text-[#9A9A9A]">
-                    Supports JPG, PNG, WEBP, GIF, SVG. Click anywhere or drag single or multiple images.
-                  </p>
-                </>
-              )}
-            </label>
+                </div>
 
-            {/* Product Media Grid */}
-            {(product.media ?? []).length > 0 || uploadingMedia ? (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                {(product.media ?? []).map((media: { id?: string; url: string; altText?: string | null }, index: number) => {
-                  const isSelected = media.id ? selectedMediaIds.has(media.id) : false;
-                  const isCover = index === 0;
+                {catalogueDoc ? (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-3.5 transition hover:border-[#D1D5DB]">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white border border-[#E5E7EB] text-[#E31E24] shadow-xs">
+                          <FileText size={20} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-[13px] font-semibold text-[#1F2937]" title={catalogueDoc.originalName || catalogueDoc.filename || "Catalogue Document"}>
+                            {catalogueDoc.originalName || catalogueDoc.filename || "Catalogue Document.pdf"}
+                          </p>
+                          <p className="text-[11.5px] text-[#6B7280]">
+                            {catalogueDoc.size ? `${(catalogueDoc.size / (1024 * 1024)).toFixed(2)} MB • ` : ""}PDF Document
+                          </p>
+                        </div>
+                      </div>
 
-                  return (
-                    <div
-                      key={media.id ?? media.url}
-                      className={`group relative flex flex-col overflow-hidden rounded-xl border transition-all ${
-                        isSelected
-                          ? "border-[#E31E24] ring-2 ring-[#E31E24]/20 shadow-md"
-                          : "border-[#E6E6E6] bg-white hover:border-[#D1D5DB] hover:shadow-sm"
-                      }`}
-                    >
-                      {/* Selection Checkbox */}
-                      {media.id && (
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={catalogueDoc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3 py-1.5 text-[12px] font-medium text-[#374151] hover:bg-[#F3F4F6] transition shadow-xs"
+                        >
+                          <Eye size={13} />
+                          <span>View PDF</span>
+                        </a>
                         <button
                           type="button"
-                          onClick={(e: any) => {
-                            e.stopPropagation();
-                            const isShift = e.shiftKey;
-                            const isChecked = !isSelected;
-                            
-                            if (isShift && lastSelectedMediaIndexRef.current !== null) {
-                              const start = Math.min(lastSelectedMediaIndexRef.current, index);
-                              const end = Math.max(lastSelectedMediaIndexRef.current, index);
-                              const rangeMedia = (product.media ?? []).slice(start, end + 1).filter((m: any) => m.id);
-                              
-                              setSelectedMediaIds((prev) => {
-                                const newSet = new Set(prev);
-                                if (isChecked) {
-                                  rangeMedia.forEach((m: any) => newSet.add(m.id!));
-                                } else {
-                                  rangeMedia.forEach((m: any) => newSet.delete(m.id!));
-                                }
-                                return newSet;
-                              });
-                            } else {
-                              handleToggleSelectMedia(media.id!);
-                            }
-                            lastSelectedMediaIndexRef.current = index;
-                          }}
-                          className={`absolute left-2.5 top-2.5 z-10 flex h-6 w-6 items-center justify-center rounded-md border transition-all ${
-                            isSelected
-                              ? "border-[#E31E24] bg-[#E31E24] text-white shadow-sm"
-                              : "border-[#D1D5DB] bg-white/90 text-transparent opacity-90 group-hover:opacity-100 hover:border-[#E31E24]"
-                          }`}
-                          title={isSelected ? "Deselect image" : "Select image"}
+                          onClick={handleDeletePdfCatalogue}
+                          disabled={uploadingPdf}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-[#FCA5A5] bg-white px-3 py-1.5 text-[12px] font-medium text-red-600 hover:bg-red-50 transition shadow-xs disabled:opacity-50"
                         >
-                          <Check size={14} className={isSelected ? "opacity-100" : "opacity-0"} />
+                          <Trash2 size={13} />
+                          <span>Remove</span>
                         </button>
-                      )}
-
-                      {/* Primary / Cover Badge */}
-                      {isCover && (
-                        <span className="absolute right-2.5 top-2.5 z-10 rounded-full bg-[#1A1A1A]/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-sm shadow-sm">
-                          Cover
-                        </span>
-                      )}
-
-                      {/* Image Thumbnail Container */}
-                      <div
-                        onClick={() => setPreviewMediaIndex(index)}
-                        className="relative aspect-square w-full cursor-pointer overflow-hidden bg-[#F7F7F7]"
-                      >
-                        <img
-                          src={media.url}
-                          alt={media.altText ?? product.title}
-                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
-                        {/* Hover Overlay with Preview Icon */}
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
-                          <span className="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-[12px] font-medium text-[#1A1A1A] shadow-md backdrop-blur-sm">
-                            <ZoomIn size={14} /> View
-                          </span>
-                        </div>
                       </div>
+                    </div>
+                  </div>
+                ) : (
+                  <label
+                    onDragOver={handlePdfDragOver}
+                    onDragLeave={handlePdfDragLeave}
+                    onDrop={handlePdfDrop}
+                    className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 text-center cursor-pointer transition ${
+                      isDragOverPdf
+                        ? "border-[#E31E24] bg-red-50/50"
+                        : "border-[#E5E7EB] bg-[#FAFAFA] hover:border-[#D1D5DB] hover:bg-[#F3F4F6]"
+                    }`}
+                  >
+                    <FileText size={28} className={isDragOverPdf ? "text-[#E31E24] mb-2" : "text-[#9CA3AF] mb-2"} />
+                    <p className="text-[13px] font-medium text-[#374151]">
+                      Drag &amp; drop a PDF catalogue here, or <span className="font-semibold text-[#E31E24] underline">browse files</span>
+                    </p>
+                    <p className="mt-1 text-[11.5px] text-[#9CA3AF]">
+                      Supports single PDF catalogue/brochure file.
+                    </p>
+                    <input type="file" accept="application/pdf,.pdf" className="hidden" onChange={handlePdfUpload} disabled={uploadingPdf} />
+                  </label>
+                )}
+              </div>
 
-                      {/* Card Footer Actions */}
-                      <div className="flex items-center justify-between border-t border-[#E6E6E6] bg-white px-3 py-2">
-                        <span className="truncate text-[11.5px] font-medium text-[#6B6B6B]" title={media.altText ?? `Image ${index + 1}`}>
-                          {index + 1}. {media.altText || `Image ${index + 1}`}
+              {/* 2. Product Images Section */}
+              <div>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Product Images</h3>
+                    <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">
+                      Upload and manage product photos for the gallery. First image acts as cover photo.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedMediaIds.size > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleBulkDeleteMedia}
+                        className="flex items-center gap-1.5 rounded-md border border-[#F2C9C9] bg-white px-3 py-2 text-[13px] font-medium text-red-600 hover:bg-red-50 transition-colors shadow-2xs"
+                      >
+                        <Trash2 size={14} />
+                        <span>Delete Selected ({selectedMediaIds.size})</span>
+                      </button>
+                    )}
+
+                    {imageMedia.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSelectAllMedia(imageMedia.map((m: any) => m.id).filter(Boolean))}
+                        className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] transition-colors shadow-2xs"
+                      >
+                        {selectedMediaIds.size === imageMedia.length ? (
+                          <>
+                            <CheckSquare size={14} className="text-[#E31E24]" />
+                            <span>Deselect All</span>
+                          </>
+                        ) : (
+                          <>
+                            <Square size={14} className="text-[#6B6B6B]" />
+                            <span>Select All ({imageMedia.length})</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    <label className="flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs disabled:opacity-60">
+                      {uploadingMedia ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin text-white" />
+                          <span>Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload size={14} />
+                          <span>Upload Images</span>
+                        </>
+                      )}
+                      <input type="file" accept="image/*" multiple className="hidden" onChange={handleMediaUpload} disabled={uploadingMedia} />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Drag & Drop Area */}
+                <label
+                  onDragOver={handleMediaDragOver}
+                  onDragLeave={handleMediaDragLeave}
+                  onDrop={handleMediaDrop}
+                  title="Click anywhere or drag and drop files to upload product images"
+                  className={`group mb-6 flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition-all cursor-pointer select-none ${
+                    uploadingMedia
+                      ? "border-[#E31E24] bg-red-50/30 cursor-not-allowed opacity-75"
+                      : isDragOverMedia
+                      ? "border-[#E31E24] bg-red-50/50 scale-[1.005]"
+                      : "border-[#E6E6E6] bg-[#FAFAFA] hover:border-[#E31E24] hover:bg-[#FFF8F8] hover:shadow-xs"
+                  }`}
+                >
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={handleMediaUpload} disabled={uploadingMedia} />
+                  {uploadingMedia ? (
+                    <div className="flex flex-col items-center py-1">
+                      <Loader2 size={24} className="animate-spin text-[#E31E24] mb-2" />
+                      <p className="text-[13.5px] font-semibold text-[#1A1A1A]">
+                        Uploading {uploadingMediaCount > 0 ? `${uploadingMediaCount} image(s)...` : "images..."}
+                      </p>
+                      <p className="mt-0.5 text-[12px] text-[#6B6B6B]">Please wait while files are being uploaded to the server.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-xs border border-[#E6E6E6] group-hover:border-[#E31E24]/40 group-hover:bg-[#FFF5F5] transition-colors">
+                        <FolderUp size={20} className={isDragOverMedia ? "text-[#E31E24]" : "text-[#6B6B6B] group-hover:text-[#E31E24] transition-colors"} />
+                      </div>
+                      <p className="text-[13.5px] font-medium text-[#1A1A1A]">
+                        Drag &amp; drop product images here, or{" "}
+                        <span className="font-semibold text-[#E31E24] underline group-hover:text-[#B5151B]">
+                          browse files
                         </span>
-                        <div className="flex items-center gap-1">
-                          {!isCover && media.id && (
+                      </p>
+                      <p className="mt-1 text-[12px] text-[#9A9A9A]">
+                        Supports JPG, PNG, WEBP, GIF, SVG. Click anywhere or drag single or multiple images.
+                      </p>
+                    </>
+                  )}
+                </label>
+
+                {/* Product Media Grid */}
+                {imageMedia.length > 0 || uploadingMedia ? (
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                    {imageMedia.map((media: { id?: string; url: string; altText?: string | null }, index: number) => {
+                      const isSelected = media.id ? selectedMediaIds.has(media.id) : false;
+                      const isCover = index === 0;
+
+                      return (
+                        <div
+                          key={media.id ?? media.url}
+                          className={`group relative flex flex-col overflow-hidden rounded-xl border transition-all ${
+                            isSelected
+                              ? "border-[#E31E24] ring-2 ring-[#E31E24]/20 shadow-md"
+                              : "border-[#E6E6E6] bg-white hover:border-[#D1D5DB] hover:shadow-sm"
+                          }`}
+                        >
+                          {/* Selection Checkbox */}
+                          {media.id && (
                             <button
                               type="button"
-                              disabled={settingCoverMediaId !== null}
-                              onClick={() => media.id && handleSetCoverMedia(media.id)}
-                              className="rounded p-1 text-[#6B6B6B] hover:bg-amber-50 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-40 transition-colors cursor-pointer"
-                              title="Set as cover photo"
-                              aria-label="Set as cover photo"
+                              onClick={(e: any) => {
+                                e.stopPropagation();
+                                const isShift = e.shiftKey;
+                                const isChecked = !isSelected;
+                                
+                                if (isShift && lastSelectedMediaIndexRef.current !== null) {
+                                  const start = Math.min(lastSelectedMediaIndexRef.current, index);
+                                  const end = Math.max(lastSelectedMediaIndexRef.current, index);
+                                  const rangeMedia = imageMedia.slice(start, end + 1).filter((m: any) => m.id);
+                                  
+                                  setSelectedMediaIds((prev) => {
+                                    const newSet = new Set(prev);
+                                    if (isChecked) {
+                                      rangeMedia.forEach((m: any) => newSet.add(m.id!));
+                                    } else {
+                                      rangeMedia.forEach((m: any) => newSet.delete(m.id!));
+                                    }
+                                    return newSet;
+                                  });
+                                } else {
+                                  handleToggleSelectMedia(media.id!);
+                                }
+                                lastSelectedMediaIndexRef.current = index;
+                              }}
+                              className={`absolute left-2.5 top-2.5 z-10 flex h-6 w-6 items-center justify-center rounded-md border transition-all ${
+                                isSelected
+                                  ? "border-[#E31E24] bg-[#E31E24] text-white shadow-sm"
+                                  : "border-[#D1D5DB] bg-white/90 text-transparent opacity-90 group-hover:opacity-100 hover:border-[#E31E24]"
+                              }`}
+                              title={isSelected ? "Deselect image" : "Select image"}
                             >
-                              {settingCoverMediaId === media.id ? (
-                                <Loader2 size={13} className="animate-spin text-amber-600" />
-                              ) : (
-                                <Star size={13} />
-                              )}
+                              <Check size={14} className={isSelected ? "opacity-100" : "opacity-0"} />
                             </button>
                           )}
-                          <button
-                            type="button"
+
+                          {/* Primary / Cover Badge */}
+                          {isCover && (
+                            <span className="absolute right-2.5 top-2.5 z-10 rounded-full bg-[#1A1A1A]/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-sm shadow-sm">
+                              Cover
+                            </span>
+                          )}
+
+                          {/* Image Thumbnail Container */}
+                          <div
                             onClick={() => setPreviewMediaIndex(index)}
-                            className="rounded p-1 text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#1A1A1A] cursor-pointer"
-                            title="Inspect image"
+                            className="relative aspect-square w-full cursor-pointer overflow-hidden bg-[#F7F7F7]"
                           >
-                            <Eye size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={!media.id}
-                            onClick={() => media.id && setDeletingMedia(media.id)}
-                            className="rounded p-1 text-[#6B6B6B] hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
-                            title={media.id ? "Delete image" : "Media ID missing"}
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                            <img
+                              src={media.url}
+                              alt={media.altText ?? product.title}
+                              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                            />
+                            {/* Hover Overlay with Preview Icon */}
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
+                              <span className="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-[12px] font-medium text-[#1A1A1A] shadow-md backdrop-blur-sm">
+                                <ZoomIn size={14} /> View
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Card Footer Actions */}
+                          <div className="flex items-center justify-between border-t border-[#E6E6E6] bg-white px-3 py-2">
+                            <span className="truncate text-[11.5px] font-medium text-[#6B6B6B]" title={media.altText ?? `Image ${index + 1}`}>
+                              {index + 1}. {media.altText || `Image ${index + 1}`}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              {!isCover && media.id && (
+                                <button
+                                  type="button"
+                                  disabled={settingCoverMediaId !== null}
+                                  onClick={() => media.id && handleSetCoverMedia(media.id)}
+                                  className="rounded p-1 text-[#6B6B6B] hover:bg-amber-50 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-40 transition-colors cursor-pointer"
+                                  title="Set as cover photo"
+                                  aria-label="Set as cover photo"
+                                >
+                                  {settingCoverMediaId === media.id ? (
+                                    <Loader2 size={13} className="animate-spin text-amber-600" />
+                                  ) : (
+                                    <Star size={13} />
+                                  )}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setPreviewMediaIndex(index)}
+                                className="rounded p-1 text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#1A1A1A] cursor-pointer"
+                                title="Inspect image"
+                              >
+                                <Eye size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={!media.id}
+                                onClick={() => media.id && setDeletingMedia(media.id)}
+                                className="rounded p-1 text-[#6B6B6B] hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                                title={media.id ? "Delete image" : "Media ID missing"}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                      );
+                    })}
 
-                {/* Render Skeleton Cards for images currently being uploaded */}
-                {uploadingMedia &&
-                  Array.from({ length: Math.max(1, uploadingMediaCount) }).map((_, idx) => (
-                    <div
-                      key={`media-skeleton-${idx}`}
-                      className="relative flex flex-col overflow-hidden rounded-xl border border-[#E6E6E6] bg-white shadow-xs"
-                    >
-                      {/* Image Thumbnail Skeleton Box matching project skeleton theme */}
-                      <div className="relative aspect-square w-full bg-[#F0F0F0] animate-pulse flex flex-col items-center justify-center p-4">
-                        <Loader2 size={24} className="animate-spin text-[#E31E24] mb-2" />
-                        <span className="text-[12px] font-medium text-[#6B6B6B]">Uploading...</span>
-                      </div>
+                    {/* Render Skeleton Cards for images currently being uploaded */}
+                    {uploadingMedia &&
+                      Array.from({ length: Math.max(1, uploadingMediaCount) }).map((_, idx) => (
+                        <div
+                          key={`media-skeleton-${idx}`}
+                          className="relative flex flex-col overflow-hidden rounded-xl border border-[#E6E6E6] bg-white shadow-xs"
+                        >
+                          <div className="relative aspect-square w-full bg-[#F0F0F0] animate-pulse flex flex-col items-center justify-center p-4">
+                            <Loader2 size={24} className="animate-spin text-[#E31E24] mb-2" />
+                            <span className="text-[12px] font-medium text-[#6B6B6B]">Uploading...</span>
+                          </div>
 
-                      {/* Footer Skeleton */}
-                      <div className="flex items-center justify-between border-t border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2">
-                        <div className="h-3.5 w-20 rounded bg-[#E0E0E0] animate-pulse" />
-                        <div className="h-3.5 w-4 rounded bg-[#E0E0E0] animate-pulse" />
-                      </div>
-                    </div>
-                  ))}
+                          <div className="flex items-center justify-between border-t border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2">
+                            <div className="h-3.5 w-20 rounded bg-[#E0E0E0] animate-pulse" />
+                            <div className="h-3.5 w-4 rounded bg-[#E0E0E0] animate-pulse" />
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-[#E6E6E6] p-8 text-center">
+                    <ImageIcon size={32} className="mx-auto mb-2 text-[#D1D5DB]" />
+                    <p className="text-[13.5px] font-medium text-[#6B6B6B]">No images uploaded yet.</p>
+                    <p className="mt-0.5 text-[12px] text-[#9A9A9A]">Upload images using the button or drag and drop area above.</p>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="rounded-xl border border-dashed border-[#E6E6E6] p-8 text-center">
-                <ImageIcon size={32} className="mx-auto mb-2 text-[#D1D5DB]" />
-                <p className="text-[13.5px] font-medium text-[#6B6B6B]">No media uploaded yet.</p>
-                <p className="mt-0.5 text-[12px] text-[#9A9A9A]">Upload images using the button or drag and drop area above.</p>
-              </div>
-            )}
-          </div>
-        )}
-
-
-
+            </div>
+          );
+        })()}
 
         {activeTab === 4 && (
           <div className="p-6">

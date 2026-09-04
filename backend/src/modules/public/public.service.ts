@@ -1620,7 +1620,8 @@ async function toPublicProductDetail(
     status: inv.status ?? "OUT_OF_STOCK",
   })).filter((inv: any) => inv.available > 0) ?? [];
 
-  const publicVariants = p.variants.map((v) => {
+  const publicVariants = p.hasVariants
+    ? p.variants.map((v) => {
     const variantPrices = v.prices.map((pr) => ({
       countryCode: pr.country?.code ?? "",
       countryName: pr.country?.name ?? "",
@@ -1686,7 +1687,8 @@ async function toPublicProductDetail(
         status: inv.status,
       })).filter((inv) => inv.available > 0),
     };
-  });
+  })
+    : [];
 
   const highlights = Array.isArray(p.highlights) ? (p.highlights as { title: string; description: string }[]) : [];
   const technicalSpecs = Array.isArray(p.technicalSpecs) ? (p.technicalSpecs as { label: string; value: string }[]) : [];
@@ -1699,7 +1701,8 @@ async function toPublicProductDetail(
     ),
   );
 
-  const configuratorAttributes = p.attributes
+  const configuratorAttributes = p.hasVariants
+    ? p.attributes
     .map((pa) => {
       const allowedValues = pa.allowedValues
         .map((selection) => selection.attributeValue)
@@ -1759,7 +1762,8 @@ async function toPublicProductDetail(
       if (variantAttributeNames.size === 0) return true;
       return variantAttributeNames.has(attribute.name);
     })
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+    : [];
 
   return {
     id: p.id,
@@ -1811,7 +1815,7 @@ async function toPublicProductDetail(
       : "PRICE_ON_REQUEST",
     lowestPrice: computeLowestVariantPrices(
       (p.prices ?? []) as unknown as PriceRecord[],
-      p.variants.map((v) => (v.prices ?? []) as unknown as PriceRecord[]),
+      p.hasVariants ? p.variants.map((v) => (v.prices ?? []) as unknown as PriceRecord[]) : [],
     ),
     moqPricing: (p as any).moqPricing?.map((m: any) => ({
       id: m.id,
