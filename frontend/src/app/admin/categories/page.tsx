@@ -3,10 +3,44 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import * as Yup from "yup";
-import { Archive, AlertCircle, CheckCircle2, Copy, Download, FolderTree, GitFork, Image as ImageIcon, Layers, Pencil, Plus, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
+import {
+  Archive,
+  AlertCircle,
+  CheckCircle2,
+  Copy,
+  Download,
+  FolderTree,
+  GitFork,
+  Image as ImageIcon,
+  Layers,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Search,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, AdminTextarea, AdminRichTextEditor, ConfirmModal, StatCard, StatusBadge, toastMessages, useToast, LoadingButton, AdminBulkActionsBar, DataTable, TableStatusAction } from "@/components/admin/AdminComponents";
+import {
+  AdminInput,
+  AdminListToolbar,
+  AdminSelect,
+  AdminStatsGrid,
+  AdminTextarea,
+  AdminRichTextEditor,
+  StatusBadge,
+  toastMessages,
+  useToast,
+  LoadingButton,
+  AdminBulkActionsBar,
+  AdminDeleteModal,
+  DataTable,
+  Pagination,
+  type Column,
+} from "@/components/admin/AdminComponents";
+import { AdminRowActions, AdminActionButton } from "@/components/admin/AdminRowActions";
 import { Modal } from "@/components/ui/Modal";
 import {
   filterTranslationLanguages,
@@ -23,6 +57,7 @@ import {
   useAdminLanguages,
   useArchiveCategory,
   useDeleteCategory,
+  usePermanentDeleteCategory,
   useDuplicateCategory,
   useCreateCategory,
   useReorderCategories,
@@ -33,6 +68,8 @@ import {
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { slugify } from "@/utils/slugify";
 import { uploadMediaFiles } from "@/utils/uploadMedia";
+import { CATEGORY_DESCRIPTION_MAX_LENGTH } from "@/constants/category.constants";
+import { stripHtmlTags } from "@/utils/sanitize";
 
 interface CategoryTranslation {
   id: string;
@@ -77,8 +114,19 @@ type SpreadsheetPreview = {
   sampleRows: Array<Record<string, unknown>>;
 };
 
-import { CATEGORY_DESCRIPTION_MAX_LENGTH } from "@/constants/category.constants";
-import { stripHtmlTags } from "@/utils/sanitize";
+type ColumnKey = "category" | "products" | "status";
+
+const DEFAULT_COLUMNS: Record<ColumnKey, boolean> = {
+  category: true,
+  products: true,
+  status: true,
+};
+
+const COLUMN_OPTIONS: { key: ColumnKey; label: string }[] = [
+  { key: "category", label: "Category & Slug" },
+  { key: "products", label: "Products" },
+  { key: "status", label: "Status" },
+];
 
 const schema = Yup.object({
   name: Yup.string().trim().required("Name is required"),
@@ -89,7 +137,7 @@ const schema = Yup.object({
     (val) => {
       if (!val) return true;
       return stripHtmlTags(val).length <= CATEGORY_DESCRIPTION_MAX_LENGTH;
-    }
+    },
   ),
   seoTitle: Yup.string(),
   seoDescription: Yup.string(),
@@ -124,10 +172,12 @@ function flattenCategories(categories: Category[]) {
 function collectDescendantIds(categories: Category[], id: string) {
   const descendants = new Set<string>();
   const visit = (parentId: string) => {
-    categories.filter((category) => category.parentId === parentId).forEach((child) => {
-      descendants.add(child.id);
-      visit(child.id);
-    });
+    categories
+      .filter((category) => category.parentId === parentId)
+      .forEach((child) => {
+        descendants.add(child.id);
+        visit(child.id);
+      });
   };
   visit(id);
   return descendants;
@@ -142,8 +192,15 @@ export default function CategoriesPage() {
   const [editing, setEditing] = useState<Category | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(DEFAULT_COLUMNS);
+
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importPreview, setImportPreview] = useState<SpreadsheetPreview | null>(null);
@@ -159,40 +216,8 @@ export default function CategoriesPage() {
   const { showToast, ToastComponent } = useToast();
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
-
-  const handleBulkAction = async () => {
-    if (selectedIds.length === 0 || !bulkAction) return;
-
-    if (bulkAction === "delete") {
-      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected category(ies)? This action cannot be undone.`)) {
-        return;
-      }
-    }
-
-    setBulkSaving(true);
-    try {
-      if (bulkAction === "delete") {
-        await Promise.all(selectedIds.map(id => deleteCategory.mutateAsync(id)));
-        showToast(`Successfully deleted ${selectedIds.length} category(ies).`, "success");
-      } else if (bulkAction === "activate") {
-        await Promise.all(selectedIds.map(id => updateCategory.mutateAsync({ id, status: "ACTIVE" })));
-        showToast(`Successfully activated ${selectedIds.length} category(ies).`, "success");
-      } else if (bulkAction === "deactivate") {
-        await Promise.all(selectedIds.map(id => updateCategory.mutateAsync({ id, status: "INACTIVE" })));
-        showToast(`Successfully deactivated ${selectedIds.length} category(ies).`, "success");
-      }
-      setSelectedIds([]);
-      setBulkAction("");
-      refetch();
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to complete bulk action."), "error");
-    } finally {
-      setBulkSaving(false);
-    }
-  };
 
   const { data: categories = [], isLoading, refetch } = useAdminCategories();
 
@@ -203,11 +228,18 @@ export default function CategoriesPage() {
     const sub = categories.filter((c: Category) => !!c.parentId).length;
     return { total, active, root, sub };
   }, [categories]);
+
+  const deletingCategory = useMemo(
+    () => (deleting ? (categories as Category[]).find((c) => c.id === deleting) : null),
+    [deleting, categories],
+  );
+
   const { data: languages = [] } = useAdminLanguages();
   const { data: countries = [], isLoading: countriesLoading } = useAdminCategoryCountries(editing?.id);
   const createCategory = useCreateCategory();
   const updateCategory = useUpdateCategory();
   const deleteCategory = useDeleteCategory();
+  const permanentDeleteCategory = usePermanentDeleteCategory();
   const duplicateCategory = useDuplicateCategory();
   const archiveCategory = useArchiveCategory();
   const restoreCategory = useRestoreCategory();
@@ -215,37 +247,59 @@ export default function CategoriesPage() {
   const updateCountries = useUpdateCategoryCountries(editing?.id);
 
   const translationLanguages = filterTranslationLanguages(languages);
-  const activeTranslationLang = translationLanguages.find((lang) => lang.id === translationLanguageId) ?? translationLanguages[0];
+  const activeTranslationLang =
+    translationLanguages.find((lang) => lang.id === translationLanguageId) ?? translationLanguages[0];
+
   const filteredCategories = useMemo(() => {
     const query = search.trim().toLowerCase();
     return (categories as Category[]).filter((category) => {
-      const matchesSearch = !query || `${category.name} ${category.slug} ${category.parent?.name || ""}`.toLowerCase().includes(query);
+      const matchesSearch =
+        !query ||
+        `${category.name} ${category.slug} ${category.parent?.name || ""}`.toLowerCase().includes(query);
       const matchesStatus = !statusFilter || category.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
   }, [categories, search, statusFilter]);
-  const rows = useMemo(() => flattenCategories(filteredCategories), [filteredCategories]);
-  const categoryGridClass = "grid w-full min-w-0 gap-3 md:grid-cols-[40px_minmax(320px,1.2fr)_minmax(180px,220px)_90px_120px_168px] md:items-center";
+
+  const allRows = useMemo(() => flattenCategories(filteredCategories), [filteredCategories]);
+
+  // Handle client-side pagination for categories hierarchy
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * limit;
+    return allRows.slice(start, start + limit);
+  }, [allRows, page, limit]);
+
+  const totalPages = Math.ceil(allRows.length / limit) || 1;
 
   useEffect(() => {
     setSelectedIds([]);
   }, [search, statusFilter]);
+
   const countryRows = useMemo(() => countries as CountryAvailability[], [countries]);
   const visibleCountries = useMemo(() => {
     const query = countrySearch.trim().toLowerCase();
     if (!query) return countryRows;
     return countryRows.filter((country) =>
-      `${country.name} ${country.code} ${country.status}`.toLowerCase().includes(query)
+      `${country.name} ${country.code} ${country.status}`.toLowerCase().includes(query),
     );
   }, [countryRows, countrySearch]);
   const enabledCountryCount = countryRows.filter((country) => countryOverrides[country.id] ?? country.enabled).length;
-  const excludedParentIds = useMemo(() => editing ? collectDescendantIds(categories, editing.id) : new Set<string>(), [categories, editing]);
-  const parentOptions = useMemo(() => [
-    { value: "", label: "No parent" },
-    ...flattenCategories(categories)
-      .filter((category) => category.id !== editing?.id && !excludedParentIds.has(category.id))
-      .map((category) => ({ value: category.id, label: `${"  ".repeat(category.depth)}${category.depth ? "- " : ""}${category.name}` })),
-  ], [categories, editing?.id, excludedParentIds]);
+  const excludedParentIds = useMemo(
+    () => (editing ? collectDescendantIds(categories, editing.id) : new Set<string>()),
+    [categories, editing],
+  );
+  const parentOptions = useMemo(
+    () => [
+      { value: "", label: "No parent" },
+      ...flattenCategories(categories)
+        .filter((category) => category.id !== editing?.id && !excludedParentIds.has(category.id))
+        .map((category) => ({
+          value: category.id,
+          label: `${"  ".repeat(category.depth)}${category.depth ? "- " : ""}${category.name}`,
+        })),
+    ],
+    [categories, editing?.id, excludedParentIds],
+  );
 
   const form = useAdminForm({
     enableReinitialize: true,
@@ -260,7 +314,7 @@ export default function CategoriesPage() {
       status: editing?.status || "ACTIVE",
     },
     validationSchema: schema,
-    onSubmit: async (values, { setSubmitting, resetForm, setStatus }) => {
+    onSubmit: async (values, { setStatus }) => {
       setStatus("");
       try {
         const payload = {
@@ -275,10 +329,12 @@ export default function CategoriesPage() {
         };
         if (editing) {
           await updateCategory.mutateAsync({ id: editing.id, ...payload });
-          await updateCountries.mutateAsync((countries as CountryAvailability[]).map((country) => ({
-            countryId: country.id,
-            enabled: countryOverrides[country.id] ?? country.enabled,
-          })));
+          await updateCountries.mutateAsync(
+            (countries as CountryAvailability[]).map((country) => ({
+              countryId: country.id,
+              enabled: countryOverrides[country.id] ?? country.enabled,
+            })),
+          );
           showToast("Category updated.");
           setEditing(null);
         } else {
@@ -292,8 +348,6 @@ export default function CategoriesPage() {
         const message = getAdminErrorMessage(error, "Failed to save category.");
         setStatus(message);
         showToast(message, "error");
-      } finally {
-        
       }
     },
   });
@@ -326,7 +380,7 @@ export default function CategoriesPage() {
     try {
       const results = await uploadMediaFiles([file], {
         entityType: "CATEGORY",
-        entityId: editing?.id || undefined
+        entityId: editing?.id || undefined,
       });
       const uploaded = results[0];
       if (uploaded?.url) form.setFieldValue("image", uploaded.url);
@@ -342,19 +396,64 @@ export default function CategoriesPage() {
     if (!deleting) return;
     try {
       await deleteCategory.mutateAsync(deleting);
-      showToast("Category deleted.");
+      showToast("Category soft-deleted and moved to Archive.");
+      setDeleting(null);
       refetch();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to delete category."), "error");
-    } finally {
+    }
+  };
+
+  const handlePermanentDelete = async () => {
+    if (!deleting) return;
+    try {
+      await permanentDeleteCategory.mutateAsync(deleting);
+      showToast("Category permanently deleted from database.");
       setDeleting(null);
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to permanently delete category."), "error");
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkSaving(true);
+    try {
+      await Promise.all(selectedIds.map((id) => deleteCategory.mutateAsync(id)));
+      showToast(`Successfully soft-deleted ${selectedIds.length} category(ies).`);
+      setSelectedIds([]);
+      setBulkAction("");
+      setShowBulkDeleteModal(false);
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to delete categories."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  const handleBulkPermanentDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkSaving(true);
+    try {
+      await Promise.all(selectedIds.map((id) => permanentDeleteCategory.mutateAsync(id)));
+      showToast(`Successfully permanently deleted ${selectedIds.length} category(ies).`);
+      setSelectedIds([]);
+      setBulkAction("");
+      setShowBulkDeleteModal(false);
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to permanently delete categories."), "error");
+    } finally {
+      setBulkSaving(false);
     }
   };
 
   const handleDuplicate = async (id: string) => {
     try {
       await duplicateCategory.mutateAsync(id);
-      showToast("Category duplicated.");
+      showToast("Category duplicated successfully.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to duplicate category."), "error");
     }
@@ -378,7 +477,9 @@ export default function CategoriesPage() {
   const exportCategories = async () => {
     try {
       const response = await adminApi.get("/categories/export", { responseType: "blob" });
-      const blob = new Blob([response.data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const blob = new Blob([response.data], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -409,7 +510,11 @@ export default function CategoriesPage() {
       const response = await adminApi.post("/categories/import/preview", formData);
       const report = response.data?.data as SpreadsheetPreview;
       setImportPreview(report);
-      setImportMessage(report.invalidRows > 0 ? "Fix the validation issues before importing." : "Preview looks good. You can import now.");
+      setImportMessage(
+        report.invalidRows > 0
+          ? "Fix the validation issues before importing."
+          : "Preview looks good. You can import now.",
+      );
     } catch (error) {
       setImportMessage(getAdminErrorMessage(error, "Failed to preview spreadsheet."));
       setImportPreview(null);
@@ -450,7 +555,12 @@ export default function CategoriesPage() {
     }
   };
 
-  const saveCategoryTranslation = async (categoryId: string, languageId: string, field: "name" | "description", value: string) => {
+  const saveCategoryTranslation = async (
+    categoryId: string,
+    languageId: string,
+    field: "name" | "description",
+    value: string,
+  ) => {
     try {
       await adminApi.put(`/translations/categories/${categoryId}/${languageId}`, { [field]: value.trim() });
       showToast(toastMessages.translationSaved);
@@ -499,21 +609,17 @@ export default function CategoriesPage() {
   };
 
   const runBulk = async (action: string) => {
-    if (selectedIds.length === 0) return;
+    if (selectedIds.length === 0 || !action) return;
 
     if (action === "delete") {
-      if (!window.confirm(`Are you sure you want to permanently delete the ${selectedIds.length} selected category(ies)? This action cannot be undone.`)) {
-        return;
-      }
+      setShowBulkDeleteModal(true);
+      return;
     }
 
     setBulkSaving(true);
     setBulkAction(action);
     try {
-      if (action === "delete") {
-        await Promise.all(selectedIds.map((id) => deleteCategory.mutateAsync(id)));
-        showToast(`Successfully deleted ${selectedIds.length} category(ies).`);
-      } else if (action === "activate") {
+      if (action === "activate") {
         await Promise.all(selectedIds.map((id) => updateCategory.mutateAsync({ id, status: "ACTIVE" })));
         showToast(`Successfully activated ${selectedIds.length} category(ies).`);
       } else if (action === "deactivate") {
@@ -530,163 +636,298 @@ export default function CategoriesPage() {
     }
   };
 
-  const columns = useMemo(
-    () => [
-      {
-        key: "preview",
-        label: "PREVIEW",
-        width: "76px",
-        render: (row: CategoryRow) => (
-          <div className="flex h-10 w-14 items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(allRows.map((r) => r.id));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const columns: Column<CategoryRow>[] = [
+    {
+      key: "category",
+      label: "Category & Slug",
+      render: (row) => (
+        <div
+          className="flex items-center gap-3 py-1 min-w-0"
+          style={{ paddingLeft: `${Math.min(row.depth, 4) * 16}px` }}
+        >
+          <div className="flex h-10 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
             {row.image ? (
               <img src={row.image} alt={row.name} className="h-full w-full object-cover" />
             ) : (
               <ImageIcon size={18} className="text-[#9A9A9A]" />
             )}
           </div>
-        ),
-      },
-      {
-        key: "title",
-        label: "TITLE & SLUG",
-        width: "auto",
-        render: (row: CategoryRow) => (
-          <div className="flex min-w-0 items-center gap-2" style={{ paddingLeft: `${Math.min(row.depth, 4) * 14}px` }}>
-            <div className="min-w-0 space-y-0.5">
-              <div className="truncate text-[13.5px] font-semibold text-[#1A1A1A]">{row.name}</div>
-              <div className="flex items-center gap-2 text-[11.5px] text-[#888]">
-                <code className="font-mono text-[#6B6B6B]">/{row.slug}</code>
-                {row.parent && <span className="text-gray-400">• Child of {row.parent.name}</span>}
-              </div>
+          <div className="min-w-0 space-y-0.5">
+            <div className="truncate text-[13.5px] font-semibold text-[#1A1A1A] leading-snug">
+              {row.name}
+            </div>
+            <div className="flex items-center gap-2 text-[11.5px] text-[#888] leading-snug">
+              <code className="font-mono text-[#6B6B6B]">/{row.slug}</code>
+              {row.parent && <span className="text-gray-400">• Child of {row.parent.name}</span>}
             </div>
           </div>
-        ),
-      },
-      {
-        key: "products",
-        label: "PRODUCTS",
-        width: "120px",
-        render: (row: CategoryRow) => (
-          <span className="text-[12.5px] font-medium text-[#555]">
-            {row._count.products} {row._count.products === 1 ? "product" : "products"}
-          </span>
-        ),
-      },
-      {
-        key: "status",
-        label: "STATUS",
-        width: "110px",
-      },
-      {
-        key: "actions",
-        label: "ACTIONS",
-        width: "140px",
-        render: (row: CategoryRow) => (
-          <div className="flex items-center justify-end gap-1.5">
-            {canCreate && (
-              <button
-                type="button"
-                onClick={() => handleDuplicate(row.id)}
-                className="flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#555] hover:bg-gray-50 hover:text-[#1A1A1A] transition-colors"
-                title="Duplicate category"
-              >
-                <Copy size={13} />
-              </button>
-            )}
-            {canUpdate && (
-              <button
-                type="button"
-                onClick={() => handleArchiveToggle(row)}
-                className="flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#555] hover:bg-gray-50 hover:text-[#1A1A1A] transition-colors"
-                title={row.status === "ACTIVE" ? "Archive category" : "Restore category"}
-              >
-                {row.status === "ACTIVE" ? <Archive size={13} /> : <RotateCcw size={13} />}
-              </button>
-            )}
-            {canUpdate && (
-              <button
-                type="button"
-                onClick={() => openEditor(row)}
-                className="flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#555] hover:bg-gray-50 hover:text-[#1A1A1A] transition-colors"
-                title="Edit category"
-              >
-                <Pencil size={13} />
-              </button>
-            )}
-            {canDelete && (
-              <button
-                type="button"
-                onClick={() => setDeleting(row.id)}
-                className="flex h-8 w-8 items-center justify-center rounded border border-[#E6E6E6] bg-white text-red-500 hover:bg-red-50 transition-colors"
-                title="Delete category"
-              >
-                <Trash2 size={13} />
-              </button>
-            )}
-          </div>
-        ),
-      },
-    ],
-    [canCreate, canUpdate, canDelete, handleDuplicate, handleArchiveToggle, openEditor],
+        </div>
+      ),
+    },
+    {
+      key: "products",
+      label: "Products",
+      width: "140px",
+      render: (row) => (
+        <span className="text-[12.5px] font-medium text-[#555]">
+          {row._count?.products ?? 0} {row._count?.products === 1 ? "product" : "products"}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      width: "120px",
+      render: (row) => <StatusBadge status={row.status} />,
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      width: "150px",
+      render: (row) => (
+        <AdminRowActions
+          extra={
+            <>
+              {canCreate && (
+                <AdminActionButton
+                  action={{
+                    title: "Duplicate category",
+                    onClick: () => handleDuplicate(row.id),
+                    icon: <Copy size={13} />,
+                  }}
+                  defaultIcon={<Copy size={13} />}
+                  defaultTitle="Duplicate"
+                />
+              )}
+              {canUpdate && (
+                <AdminActionButton
+                  action={{
+                    title: row.status === "ACTIVE" ? "Archive category" : "Restore category",
+                    onClick: () => handleArchiveToggle(row),
+                    icon: row.status === "ACTIVE" ? <Archive size={13} /> : <RotateCcw size={13} />,
+                  }}
+                  defaultIcon={<Archive size={13} />}
+                  defaultTitle="Archive"
+                />
+              )}
+            </>
+          }
+          edit={
+            canUpdate
+              ? {
+                  title: "Edit category",
+                  onClick: () => openEditor(row),
+                }
+              : undefined
+          }
+          delete={
+            canDelete
+              ? {
+                  title: "Delete category",
+                  onClick: () => setDeleting(row.id),
+                }
+              : undefined
+          }
+        />
+      ),
+    },
+  ];
+
+  const filteredColumns = useMemo(
+    () => columns.filter((col) => col.key === "actions" || visibleColumns[col.key as ColumnKey] !== false),
+    [visibleColumns, canCreate, canUpdate, canDelete],
   );
 
   return (
-    <AdminLayout title="Categories" breadcrumb={[{ label: "Categories" }]}>
-      <AdminStatsGrid
-        stats={[
-          { title: "Total Categories", value: categoryStats.total, subtitle: "Catalog taxonomy structure", icon: <FolderTree size={18} /> },
-          { title: "Active Categories", value: categoryStats.active, subtitle: "Visible on navigation & catalog", icon: <CheckCircle2 size={18} />, color: "bg-green-600" },
-          { title: "Top-Level Categories", value: categoryStats.root, subtitle: "Root catalog categories", icon: <Layers size={18} />, color: "bg-indigo-600" },
-          { title: "Sub-Categories", value: categoryStats.sub, subtitle: "Child & nested categories", icon: <GitFork size={18} />, color: "bg-blue-600" }
-        ]}
-        isLoading={isLoading}
-      />
+    <AdminLayout title="Categories" breadcrumb={[{ label: "Admin", href: "/admin" }, { label: "Catalog" }, { label: "Categories" }]}>
+      <div className="space-y-5">
+        {/* 1. TOP KPI STATS GRID */}
+        <AdminStatsGrid
+          stats={[
+            {
+              title: "Total Categories",
+              value: categoryStats.total,
+              subtitle: "Catalog taxonomy structure",
+              icon: <FolderTree size={18} />,
+            },
+            {
+              title: "Active Categories",
+              value: categoryStats.active,
+              subtitle: "Visible on navigation & catalog",
+              icon: <CheckCircle2 size={18} />,
+              color: "bg-green-600",
+            },
+            {
+              title: "Top-Level Categories",
+              value: categoryStats.root,
+              subtitle: "Root catalog categories",
+              icon: <Layers size={18} />,
+              color: "bg-indigo-600",
+            },
+            {
+              title: "Sub-Categories",
+              value: categoryStats.sub,
+              subtitle: "Child & nested categories",
+              icon: <GitFork size={18} />,
+              color: "bg-blue-600",
+            },
+          ]}
+          isLoading={isLoading}
+        />
 
-      <AdminListToolbar
-        search={{
-          value: search,
-          onChange: setSearch,
-          placeholder: "Search categories...",
-          widthClassName: "w-[220px]",
-        }}
-        leftExtra={
-          <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-            className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13.5px] outline-none hover:border-[#D1D1D1]"
-          >
-            <option value="">All status</option>
-            <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Inactive</option>
-          </select>
-        }
-        exportAction={{
-          onClick: exportCategories,
-          label: "Export Excel",
-        }}
-        importAction={canCreate ? {
-          onClick: openImportDialog,
-          label: "Import Excel",
-        } : undefined}
-        refresh={{
-          onRefresh: refetch,
-          isRefreshing: isLoading,
-        }}
-        primaryAction={canCreate ? {
-          onClick: openCreateModal,
-          label: "Add category",
-        } : undefined}
-      />
+        {/* 2. STANDARDIZED LIST TOOLBAR */}
+        <AdminListToolbar
+          search={{
+            value: search,
+            onChange: setSearch,
+            placeholder: "Search categories...",
+            widthClassName: "w-[240px]",
+          }}
+          filters={{
+            showFilters,
+            onToggle: () => setShowFilters(!showFilters),
+            activeCount: statusFilter ? 1 : 0,
+          }}
+          columns={{
+            visibleColumns,
+            onToggleColumn: (key: string) =>
+              setVisibleColumns((current) => ({
+                ...current,
+                [key as ColumnKey]: current[key as ColumnKey] === false ? true : false,
+              })),
+            options: COLUMN_OPTIONS,
+          }}
+          exportAction={{
+            onClick: exportCategories,
+            label: "Export Excel",
+          }}
+          importAction={
+            canCreate
+              ? {
+                  onClick: openImportDialog,
+                  label: "Import Excel",
+                }
+              : undefined
+          }
+          refresh={{
+            onRefresh: () => {
+              void refetch().then(() => showToast("Categories refreshed."));
+            },
+            isRefreshing: isLoading,
+          }}
+          primaryAction={
+            canCreate
+              ? {
+                  onClick: openCreateModal,
+                  label: "Add Category",
+                  icon: <Plus size={14} />,
+                }
+              : undefined
+          }
+          onResetFilters={() => {
+            setSearch("");
+            setStatusFilter("");
+            setPage(1);
+          }}
+          filterPanel={
+            <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
+              <AdminSelect
+                label="Status"
+                value={statusFilter}
+                onChange={(event) => {
+                  setStatusFilter(event.target.value);
+                  setPage(1);
+                }}
+                options={[
+                  { value: "", label: "All Statuses" },
+                  { value: "ACTIVE", label: "Active" },
+                  { value: "INACTIVE", label: "Inactive" },
+                ]}
+              />
+            </div>
+          }
+        />
+
         <input
           ref={fileInputRef}
           type="file"
           accept=".xlsx,.xls,.csv"
           className="hidden"
-      onChange={(event) => {
+          onChange={(event) => {
             void handleImportFile(event.target.files?.[0] || undefined);
             event.currentTarget.value = "";
           }}
         />
+
+        {/* 3. FULL-WIDTH DATA TABLE */}
+        <DataTable<CategoryRow>
+          title="Category Hierarchy"
+          columns={filteredColumns}
+          data={paginatedRows}
+          rowKey="id"
+          isLoading={isLoading}
+          emptyMessage={
+            search || statusFilter
+              ? "No categories matched your search or filters."
+              : "No categories found. Create your first category."
+          }
+          enableSelection={true}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          totalItems={allRows.length}
+          currentPage={page}
+          pageSize={limit}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          onPageSizeChange={(newLimit) => {
+            setLimit(newLimit);
+            setPage(1);
+          }}
+          pageSizeOptions={[10, 25, 50, 100]}
+          onSelectAll={handleSelectAll}
+          enableReorder={canUpdate && !search && !statusFilter}
+          onReorder={handleReorder}
+          disabledReorder={reorderCategories.isPending}
+          onToggleStatus={toggleStatus}
+          statusLoadingId={updateCategory.isPending ? ((updateCategory.variables as any)?.id ?? null) : null}
+          renderBulkActions={(selectedIds) => (
+            <AdminBulkActionsBar
+              selectedCount={selectedIds.length}
+              onClear={() => setSelectedIds([])}
+              actionType={bulkAction}
+              onActionTypeChange={setBulkAction}
+              actions={[
+                { value: "activate", label: "Enable" },
+                { value: "deactivate", label: "Disable" },
+                { value: "delete", label: "Delete" },
+              ]}
+              onApply={() => runBulk(bulkAction)}
+              applyLoading={bulkSaving}
+              applyDisabled={!bulkAction || selectedIds.length === 0}
+            />
+          )}
+        />
+
+        {/* 4. BOTTOM PAGINATION */}
+        <div className="flex items-center justify-end mt-4">
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            alwaysShow={true}
+          />
+        </div>
+      </div>
+
+      {/* CATEGORY EDIT MODAL */}
       <Modal
         open={showEditor}
         onClose={closeEditor}
@@ -694,7 +935,11 @@ export default function CategoriesPage() {
         panelClassName="max-w-5xl max-h-[85vh]"
         footer={
           <div className="flex items-center justify-end gap-2.5 w-full">
-            <button type="button" onClick={closeEditor} className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors">
+            <button
+              type="button"
+              onClick={closeEditor}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors"
+            >
               Cancel
             </button>
             {(!editing || categoryEditorTab === "content") && (
@@ -737,14 +982,36 @@ export default function CategoriesPage() {
           {(!editing || categoryEditorTab === "content") && (
             <div className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <AdminInput label="Name" placeholder="e.g. Metal Brackets" value={form.values.name} onChange={(e) => handleNameChange(e.target.value)} onBlur={form.handleBlur} name="name" error={form.errors.name as string} />
-                <AdminInput label="Slug" placeholder="metal-brackets" value={form.values.slug} onChange={(e) => { setSlugEdited(true); form.setFieldValue("slug", slugify(e.target.value)); }} onBlur={form.handleBlur} name="slug" error={form.errors.slug as string} />
+                <AdminInput
+                  label="Name"
+                  placeholder="e.g. Metal Brackets"
+                  value={form.values.name}
+                  onChange={(e) => handleNameChange(e.target.value)}
+                  onBlur={form.handleBlur}
+                  name="name"
+                  error={form.errors.name as string}
+                />
+                <AdminInput
+                  label="Slug"
+                  placeholder="metal-brackets"
+                  value={form.values.slug}
+                  onChange={(e) => {
+                    setSlugEdited(true);
+                    form.setFieldValue("slug", slugify(e.target.value));
+                  }}
+                  onBlur={form.handleBlur}
+                  name="slug"
+                  error={form.errors.slug as string}
+                />
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <AdminSelect label="Parent category" options={parentOptions} {...form.getFieldProps("parentId")} />
                 <AdminSelect
                   label="Status"
-                  options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]}
+                  options={[
+                    { value: "ACTIVE", label: "Active" },
+                    { value: "INACTIVE", label: "Inactive" },
+                  ]}
                   {...form.getFieldProps("status")}
                 />
               </div>
@@ -762,18 +1029,33 @@ export default function CategoriesPage() {
                 <h4 className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">SEO</h4>
                 <div className="grid gap-4 md:grid-cols-2">
                   <AdminInput label="Meta Title" placeholder="Browser/search title" {...form.getFieldProps("seoTitle")} />
-                  <AdminTextarea label="Meta Description" rows={2} placeholder="Short search description" {...form.getFieldProps("seoDescription")} />
+                  <AdminTextarea
+                    label="Meta Description"
+                    rows={2}
+                    placeholder="Short search description"
+                    {...form.getFieldProps("seoDescription")}
+                  />
                 </div>
               </div>
               <div className="grid gap-4 md:grid-cols-[120px_1fr]">
                 <div className="flex h-[92px] w-[120px] items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
-                  {form.values.image ? <img src={form.values.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={22} className="text-[#9A9A9A]" />}
+                  {form.values.image ? (
+                    <img src={form.values.image} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <ImageIcon size={22} className="text-[#9A9A9A]" />
+                  )}
                 </div>
                 <div className="space-y-2">
                   <AdminInput label="Image URL" placeholder="/uploads/category.jpg" {...form.getFieldProps("image")} />
                   <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]">
                     <Upload size={14} /> {uploadingImage ? "Uploading..." : "Upload image"}
-                    <input type="file" accept="image/*" className="hidden" disabled={uploadingImage} onChange={(e) => handleImageUpload(e.target.files?.[0])} />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={uploadingImage}
+                      onChange={(e) => handleImageUpload(e.target.files?.[0])}
+                    />
                   </label>
                 </div>
               </div>
@@ -787,9 +1069,7 @@ export default function CategoriesPage() {
                         New categories start invisible everywhere until countries are enabled here. Use search for long country lists.
                       </p>
                     </div>
-                    <span className="text-[12px] text-[#9A9A9A]">
-                      {enabledCountryCount} enabled
-                    </span>
+                    <span className="text-[12px] text-[#9A9A9A]">{enabledCountryCount} enabled</span>
                   </div>
                   {countriesLoading ? (
                     <div className="h-20 animate-pulse rounded-md bg-[#F2F2F2]" />
@@ -806,26 +1086,36 @@ export default function CategoriesPage() {
                           className="h-9 lg:max-w-[360px]"
                         />
                         <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#6B6B6B]">
-                          <span>Showing {visibleCountries.length} of {countryRows.length}</span>
+                          <span>
+                            Showing {visibleCountries.length} of {countryRows.length}
+                          </span>
                           <button
                             type="button"
                             className="rounded border border-[#E6E6E6] px-2.5 py-1 font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]"
-                            onClick={() => setCountryOverrides((current) => {
-                              const next = { ...current };
-                              visibleCountries.forEach((country) => { next[country.id] = true; });
-                              return next;
-                            })}
+                            onClick={() =>
+                              setCountryOverrides((current) => {
+                                const next = { ...current };
+                                visibleCountries.forEach((country) => {
+                                  next[country.id] = true;
+                                });
+                                return next;
+                              })
+                            }
                           >
                             Enable visible
                           </button>
                           <button
                             type="button"
                             className="rounded border border-[#E6E6E6] px-2.5 py-1 font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]"
-                            onClick={() => setCountryOverrides((current) => {
-                              const next = { ...current };
-                              visibleCountries.forEach((country) => { next[country.id] = false; });
-                              return next;
-                            })}
+                            onClick={() =>
+                              setCountryOverrides((current) => {
+                                const next = { ...current };
+                                visibleCountries.forEach((country) => {
+                                  next[country.id] = false;
+                                });
+                                return next;
+                              })
+                            }
                           >
                             Disable visible
                           </button>
@@ -837,16 +1127,26 @@ export default function CategoriesPage() {
                         ) : (
                           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                             {visibleCountries.map((country) => (
-                              <label key={country.id} className="flex items-center justify-between gap-3 rounded-md border border-[#E6E6E6] px-3 py-2">
+                              <label
+                                key={country.id}
+                                className="flex items-center justify-between gap-3 rounded-md border border-[#E6E6E6] px-3 py-2"
+                              >
                                 <span className="min-w-0">
-                                  <span className="block truncate text-[13px] font-medium text-[#1A1A1A]">{country.name}</span>
-                                  <span className="text-[11.5px] text-[#9A9A9A]">{country.code}{country.status !== "ACTIVE" ? ` · ${country.status}` : ""}</span>
+                                  <span className="block truncate text-[13px] font-medium text-[#1A1A1A]">
+                                    {country.name}
+                                  </span>
+                                  <span className="text-[11.5px] text-[#9A9A9A]">
+                                    {country.code}
+                                    {country.status !== "ACTIVE" ? ` · ${country.status}` : ""}
+                                  </span>
                                 </span>
                                 <input
                                   type="checkbox"
                                   className="h-4 w-4 accent-[#E31E24]"
                                   checked={countryOverrides[country.id] ?? country.enabled}
-                                  onChange={(e) => setCountryOverrides((current) => ({ ...current, [country.id]: e.target.checked }))}
+                                  onChange={(e) =>
+                                    setCountryOverrides((current) => ({ ...current, [country.id]: e.target.checked }))
+                                  }
                                 />
                               </label>
                             ))}
@@ -865,8 +1165,9 @@ export default function CategoriesPage() {
             </div>
           )}
 
-          {editing && categoryEditorTab === "translations" && (
-            activeTranslationLang ? (
+          {editing &&
+            categoryEditorTab === "translations" &&
+            (activeTranslationLang ? (
               <div className="space-y-4 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
                 <div className="border-b border-[#E6E6E6] pb-3">
                   <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">
@@ -895,17 +1196,19 @@ export default function CategoriesPage() {
                         maxLength={CATEGORY_DESCRIPTION_MAX_LENGTH}
                         defaultValue={translation?.description || ""}
                         englishReference={editing.description || ""}
-                        onSave={(value) => saveCategoryTranslation(editing.id, activeTranslationLang.id, "description", value)}
+                        onSave={(value) =>
+                          saveCategoryTranslation(editing.id, activeTranslationLang.id, "description", value)
+                        }
                       />
                     </>
                   );
                 })()}
               </div>
-            ) : null
-          )}
+            ) : null)}
         </form>
       </Modal>
 
+      {/* ADD CATEGORY MODAL */}
       <Modal
         open={showCreateModal}
         onClose={closeCreateModal}
@@ -913,7 +1216,11 @@ export default function CategoriesPage() {
         panelClassName="max-w-4xl max-h-[85vh]"
         footer={
           <div className="flex items-center justify-end gap-2.5 w-full">
-            <button type="button" onClick={closeCreateModal} className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors">
+            <button
+              type="button"
+              onClick={closeCreateModal}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors"
+            >
               Cancel
             </button>
             <LoadingButton
@@ -972,7 +1279,10 @@ export default function CategoriesPage() {
               <AdminSelect label="Parent category" options={parentOptions} {...form.getFieldProps("parentId")} />
               <AdminSelect
                 label="Status"
-                options={[{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive" }]}
+                options={[
+                  { value: "ACTIVE", label: "Active" },
+                  { value: "INACTIVE", label: "Inactive" },
+                ]}
                 {...form.getFieldProps("status")}
               />
             </div>
@@ -992,19 +1302,34 @@ export default function CategoriesPage() {
               <h4 className="mb-3 text-[13px] font-semibold text-[#1A1A1A]">SEO</h4>
               <div className="grid gap-4 md:grid-cols-2">
                 <AdminInput label="Meta Title" placeholder="Browser/search title" {...form.getFieldProps("seoTitle")} />
-                <AdminTextarea label="Meta Description" rows={2} placeholder="Short search description" {...form.getFieldProps("seoDescription")} />
+                <AdminTextarea
+                  label="Meta Description"
+                  rows={2}
+                  placeholder="Short search description"
+                  {...form.getFieldProps("seoDescription")}
+                />
               </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-[120px_1fr]">
               <div className="flex h-[92px] w-[120px] items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
-                {form.values.image ? <img src={form.values.image} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={22} className="text-[#9A9A9A]" />}
+                {form.values.image ? (
+                  <img src={form.values.image} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <ImageIcon size={22} className="text-[#9A9A9A]" />
+                )}
               </div>
               <div className="space-y-2">
                 <AdminInput label="Image URL" placeholder="/uploads/category.jpg" {...form.getFieldProps("image")} />
                 <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]">
                   <Upload size={14} /> {uploadingImage ? "Uploading..." : "Upload image"}
-                  <input type="file" accept="image/*" className="hidden" disabled={uploadingImage} onChange={(e) => handleImageUpload(e.target.files?.[0])} />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={uploadingImage}
+                    onChange={(e) => handleImageUpload(e.target.files?.[0])}
+                  />
                 </label>
               </div>
             </div>
@@ -1012,47 +1337,35 @@ export default function CategoriesPage() {
         </form>
       </Modal>
 
-      <DataTable
-        title="Categories List"
-        columns={columns}
-        data={rows}
-        rowKey="id"
-        isLoading={isLoading}
-        emptyMessage="No categories found."
-        enableSelection={true}
-        selectedIds={selectedIds}
-        onSelectionChange={setSelectedIds}
-        enableReorder={canUpdate && !search && !statusFilter}
-        onReorder={handleReorder}
-        disabledReorder={reorderCategories.isPending}
-        onToggleStatus={toggleStatus}
-        statusLoadingId={updateCategory.isPending ? ((updateCategory.variables as any)?.id ?? null) : null}
-        renderBulkActions={(selectedIds) => (
-          <AdminBulkActionsBar
-            selectedCount={selectedIds.length}
-            onClear={() => setSelectedIds([])}
-            actionType={bulkAction}
-            onActionTypeChange={setBulkAction}
-            actions={[
-              { value: "activate", label: "Enable" },
-              { value: "deactivate", label: "Disable" },
-              { value: "delete", label: "Delete" },
-            ]}
-            onApply={() => runBulk(bulkAction)}
-            applyLoading={bulkSaving}
-          />
-        )}
+      {/* SINGLE DELETE MODAL */}
+      <AdminDeleteModal
+        open={Boolean(deleting)}
+        onClose={() => setDeleting(null)}
+        itemName={deletingCategory?.name}
+        itemType="Category"
+        onSoftDelete={handleDelete}
+        onPermanentDelete={handlePermanentDelete}
+        isSoftDeleting={deleteCategory.isPending}
+        isPermanentDeleting={permanentDeleteCategory.isPending}
+        softDeleteDescription="Hides this category from the active storefront and catalog, safely moving it to the Archive while preserving historical product links."
+        permanentDeleteDescription="Physically removes this category from the database. Blocked by system guards if active products or child categories reference it."
       />
 
-      <ConfirmModal
-        open={!!deleting}
-        title="Delete category?"
-        message="This soft deletes the category. Deletion is blocked if products or child categories still reference it."
-        onConfirm={handleDelete}
-        onCancel={() => setDeleting(null)}
-        isLoading={deleteCategory.isPending}
+      {/* BULK DELETE MODAL */}
+      <AdminDeleteModal
+        open={showBulkDeleteModal}
+        onClose={() => setShowBulkDeleteModal(false)}
+        itemName={`${selectedIds.length} selected categories`}
+        itemType="Categories (Bulk)"
+        onSoftDelete={handleBulkDelete}
+        onPermanentDelete={handleBulkPermanentDelete}
+        isSoftDeleting={bulkSaving}
+        isPermanentDeleting={bulkSaving}
+        softDeleteDescription="Hides the selected categories from the active storefront and moves them to the Archive."
+        permanentDeleteDescription="Physically removes the selected categories from the database. Blocked if products or child categories reference them."
       />
 
+      {/* EXCEL IMPORT MODAL */}
       <Modal
         open={importOpen}
         onClose={() => setImportOpen(false)}
@@ -1121,7 +1434,11 @@ export default function CategoriesPage() {
               Parsing file preview...
             </div>
           )}
-          {importMessage ? <div className="rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2 text-[13px] text-[#1A1A1A]">{importMessage}</div> : null}
+          {importMessage ? (
+            <div className="rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2 text-[13px] text-[#1A1A1A]">
+              {importMessage}
+            </div>
+          ) : null}
           {importPreview ? (
             <div className="space-y-4 rounded-lg border border-[#E6E6E6] bg-white p-4">
               <div className="grid gap-3 md:grid-cols-4">
@@ -1139,7 +1456,9 @@ export default function CategoriesPage() {
                 </div>
                 <div className="rounded border border-[#E6E6E6] p-3">
                   <div className="text-[11px] uppercase tracking-wide text-[#9A9A9A]">Warnings</div>
-                  <div className="mt-1 text-[20px] font-semibold text-amber-600">{importPreview.duplicateWarnings.length}</div>
+                  <div className="mt-1 text-[20px] font-semibold text-amber-600">
+                    {importPreview.duplicateWarnings.length}
+                  </div>
                 </div>
               </div>
               {importPreview.issues.length > 0 ? (
@@ -1147,8 +1466,12 @@ export default function CategoriesPage() {
                   <h4 className="mb-2 text-[13px] font-semibold text-[#1A1A1A]">Validation Issues</h4>
                   <div className="max-h-48 overflow-y-auto rounded border border-[#E6E6E6]">
                     {importPreview.issues.map((issue, index) => (
-                      <div key={`${issue.row}-${issue.field}-${index}`} className="border-b border-[#F0F0F0] px-3 py-2 text-[13px] last:border-b-0">
-                        <span className="font-semibold text-[#E31E24]">Row {issue.row}</span> <span className="text-[#6B6B6B]">[{issue.field}]</span> {issue.message}
+                      <div
+                        key={`${issue.row}-${issue.field}-${index}`}
+                        className="border-b border-[#F0F0F0] px-3 py-2 text-[13px] last:border-b-0"
+                      >
+                        <span className="font-semibold text-[#E31E24]">Row {issue.row}</span>{" "}
+                        <span className="text-[#6B6B6B]">[{issue.field}]</span> {issue.message}
                       </div>
                     ))}
                   </div>

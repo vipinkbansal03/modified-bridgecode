@@ -166,7 +166,12 @@ export async function updateCollection(id: string, input: CollectionInput) {
 
 export async function deleteCollection(id: string) {
   await getCollection(id);
-  await prisma.collection.delete({ where: { id } });
+  return prisma.$transaction(async (tx) => {
+    await tx.collectionProduct.deleteMany({ where: { collectionId: id } });
+    await tx.collectionCountry.deleteMany({ where: { collectionId: id } });
+    await tx.discountCollection.deleteMany({ where: { collectionId: id } });
+    return tx.collection.delete({ where: { id } });
+  });
 }
 
 export async function archiveCollection(id: string) {

@@ -17,5 +17,6 @@ router.put("/:id", requirePermission("categories.manage"), C.update);
 router.post("/:id/duplicate", requirePermission("categories.manage"), C.duplicate);
 router.post("/:id/archive", requirePermission("categories.manage"), C.archive);
 router.post("/:id/restore", requirePermission("categories.manage"), C.restore);
+router.delete("/:id/permanent", requirePermission("categories.manage"), C.permanentDelete);
 router.delete("/:id", requirePermission("categories.manage"), C.remove);
 export default router;

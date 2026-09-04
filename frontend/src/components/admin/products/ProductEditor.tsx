@@ -4957,13 +4957,18 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               </div>
               <AdminSelect label="Category" options={catOptions} {...form.getFieldProps("categoryId")} error={form.errors.categoryId as string} required />
               <div>
-                <AdminMultiSelect
+                <AdminMultiSearchableSelect
                   label="Active Country"
-                  options={countryRows.map((c: any) => ({ value: c.id, label: c.name }))}
-                  value={form.values.activeCountryIds as string[]}
-                  onChange={(val) => form.setFieldValue("activeCountryIds", val)}
+                  values={form.values.activeCountryIds ?? []}
+                  onValuesChange={(values) => form.setFieldValue("activeCountryIds", values)}
+                  options={countryRows.map((c: any) => ({
+                    value: c.id,
+                    label: `${c.name} (${c.code || c.countryCode || ""})`.trim(),
+                  }))}
+                  placeholder="Select countries"
+                  allowSelectAll
+                  selectAllLabel="All countries"
                   error={form.errors.activeCountryIds as string}
-                  required
                 />
               </div>
               <AdminSelect

@@ -5,11 +5,13 @@ import { useQueries } from "@tanstack/react-query";
 import { Download, Eye, Filter, Plus, RefreshCw, Search, SquareCheckBig, Trash2, Upload, X, SlidersHorizontal, Pencil } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { formatDate, formatDateTime } from "@/utils/formatDate";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import {
   AdminInput,
   AdminSelect,
   AdminMultiSelect,
+  AdminRowActions,
   ConfirmModal,
   DataTable,
   Pagination,
@@ -150,9 +152,7 @@ function formatMoney(value: number | string | null | undefined, currencySymbol?:
   return `${prefix}${Number.isFinite(amount) ? amount.toFixed(2) : String(value)}`;
 }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString();
-}
+// Standard formatDate imported from @/utils/formatDate
 
 function TaxVariantsDropdown({
   selectedProductIds,
@@ -221,6 +221,7 @@ export default function AdminTaxPage() {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TaxRule | null>(null);
+  const [viewingRule, setViewingRule] = useState<TaxRule | null>(null);
   const [bulkAction, setBulkAction] = useState<"ENABLE" | "DISABLE" | "DELETE" | "">("");
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importReport, setImportReport] = useState<SpreadsheetReport | null>(null);
@@ -477,38 +478,28 @@ export default function AdminTaxPage() {
         label: "Actions",
         width: "120px",
         render: (row) => (
-          <div className="flex items-center justify-start gap-1.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-            {canUpdate && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => openEdit(row)}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-                  title="Edit rule"
-                >
-                  <Pencil size={13} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleStatusToggle(row)}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-                  title={row.status === "ACTIVE" ? "Disable rule" : "Enable rule"}
-                >
-                  <RefreshCw size={13} />
-                </button>
-              </>
-            )}
-            {canDelete && (
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(row)}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"
-                title="Delete rule"
-              >
-                <Trash2 size={13} />
-              </button>
-            )}
-          </div>
+          <AdminRowActions
+            view={{
+              onClick: () => setViewingRule(row),
+              title: "View tax rule details",
+            }}
+            edit={
+              canUpdate
+                ? {
+                    onClick: () => openEdit(row),
+                    title: "Edit tax rule",
+                  }
+                : undefined
+            }
+            delete={
+              canDelete
+                ? {
+                    onClick: () => setDeleteTarget(row),
+                    title: "Delete tax rule",
+                  }
+                : undefined
+            }
+          />
         ),
       },
   ], [canUpdate, canDelete]);
@@ -695,7 +686,7 @@ export default function AdminTaxPage() {
                   </div>
                   <div className="mt-2.5 flex items-center justify-between">
                     <span className="text-[11.5px] text-[#9A9A9A]">
-                      {new Date(row.updatedAt).toLocaleDateString()}
+                      {formatDate(row.updatedAt)}
                     </span>
                     <StatusBadge status={row.status} />
                   </div>
@@ -853,7 +844,7 @@ export default function AdminTaxPage() {
         />
 
         {/* FULL-WIDTH DATA TABLE MATCHING ORDERS / PRODUCTS PATTERN */}
-        <div className="rounded-xl border border-[#E6E6E6] bg-white overflow-hidden shadow-xs">
+        <div className="">
           <DataTable<TaxRule>
             title="Tax Rules List"
             columns={filteredColumns}
@@ -1004,6 +995,114 @@ export default function AdminTaxPage() {
             </button>
           </div>
         </div>
+      </Modal>
+
+      {/* READ-ONLY TAX RULE VIEW MODAL */}
+      <Modal
+        open={!!viewingRule}
+        onClose={() => setViewingRule(null)}
+        title={viewingRule?.name ?? "Tax Rule Details"}
+        subtitle="Detailed configuration and scope settings for this tax rule."
+        size="2xl"
+        footer={
+          <div className="flex items-center justify-between gap-3 w-full">
+            <span className="text-[12px] text-[#6B6B6B]">
+              Tax Rule ID: <span className="font-mono text-[#1A1A1A]">{viewingRule?.id}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setViewingRule(null)}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        }
+      >
+        {viewingRule && (
+          <div className="p-6 space-y-5">
+            {/* Primary Details Grid */}
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Rule Name</span>
+                <p className="mt-1 text-[14px] font-semibold text-[#1A1A1A] truncate" title={viewingRule.name}>{viewingRule.name}</p>
+              </div>
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Rule Type</span>
+                <p className="mt-1 text-[14px] font-semibold text-[#1A1A1A]">{viewingRule.type.replace("_", " ")}</p>
+              </div>
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Tax Rate</span>
+                <p className="mt-1 text-[14px] font-bold text-[#E31E24]">{Number(viewingRule.percentage).toFixed(2)}%</p>
+              </div>
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Tax Mode</span>
+                <p className="mt-1 text-[13.5px] font-medium text-[#1A1A1A] capitalize">{viewingRule.taxMode?.toLowerCase() || "Exclusive"}</p>
+              </div>
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Status</span>
+                <div className="mt-1"><StatusBadge status={viewingRule.status} /></div>
+              </div>
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Priority</span>
+                <p className="mt-1 text-[13.5px] font-semibold text-[#1A1A1A]">{viewingRule.sortOrder ?? 0}</p>
+              </div>
+            </div>
+
+            {/* Countries Scope */}
+            <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4 space-y-2">
+              <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Target Countries</span>
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {viewingRule.countries && viewingRule.countries.length > 0 ? (
+                  viewingRule.countries.map((c) => (
+                    <span key={c.id} className="inline-flex items-center gap-1 rounded-md border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] font-medium text-[#1A1A1A]">
+                      {c.name} ({c.code})
+                    </span>
+                  ))
+                ) : (
+                  <span className="inline-flex items-center rounded-md border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] font-medium text-[#1A1A1A]">
+                    All Countries (Global)
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Applicability Scope (Categories, Products, Variants) */}
+            <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4 space-y-3">
+              <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Scope & Applicability</span>
+              {(!viewingRule.products?.length && !viewingRule.categories?.length && !viewingRule.variants?.length) ? (
+                <p className="text-[13px] text-[#6B6B6B]">Global — Applies to all products and categories.</p>
+              ) : (
+                <div className="space-y-2 text-[12.5px]">
+                  {Boolean(viewingRule.categories?.length) && (
+                    <div>
+                      <span className="font-semibold text-[#1A1A1A]">Categories: </span>
+                      <span className="text-[#555]">{viewingRule.categories?.map((cat) => cat.name).join(", ")}</span>
+                    </div>
+                  )}
+                  {Boolean(viewingRule.products?.length) && (
+                    <div>
+                      <span className="font-semibold text-[#1A1A1A]">Products: </span>
+                      <span className="text-[#555]">{viewingRule.products?.map((p) => p.title).join(", ")}</span>
+                    </div>
+                  )}
+                  {Boolean(viewingRule.variants?.length) && (
+                    <div>
+                      <span className="font-semibold text-[#1A1A1A]">Variants: </span>
+                      <span className="text-[#555]">{viewingRule.variants?.map((v) => `${v.title}${v.sku ? ` [${v.sku}]` : ""}`).join(", ")}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Timestamps */}
+            <div className="flex items-center justify-between border-t border-[#F0F0F0] pt-3 text-[12px] text-[#9A9A9A]">
+              <span>Created: {viewingRule.createdAt ? new Date(viewingRule.createdAt).toLocaleString() : "—"}</span>
+              <span>Last Modified: {viewingRule.updatedAt ? new Date(viewingRule.updatedAt).toLocaleString() : "—"}</span>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* IMPORT TAX RULES MODAL */}

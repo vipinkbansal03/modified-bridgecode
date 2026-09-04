@@ -17,6 +17,7 @@ router.put("/:id/tier", requirePermission("customers.manage"), C.updateTier);
 router.put("/:id/role", requirePermission("customers.manage"), C.updateRole);
 router.post("/:id/approve", requirePermission("customers.manage"), C.approve);
 router.post("/:id/reject", requirePermission("customers.manage"), C.reject);
+router.post("/:id/restore", requirePermission("customers.manage"), C.restore);
 router.delete("/:id", requirePermission("customers.manage"), C.remove);
 
 export default router;

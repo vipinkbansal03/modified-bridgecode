@@ -117,8 +117,15 @@ export async function listOrders(query: {
     };
   }
 
+  const isDeleted = query.deleted === "true" || query.deleted === "1";
   const sortDir = query.sortDir === "asc" ? "asc" : "desc";
   const orderBy = (() => {
+    if (query.sortBy === "deletedAt") {
+      return [{ deletedAt: sortDir }, { createdAt: "desc" }];
+    }
+    if (isDeleted && !query.sortBy) {
+      return [{ deletedAt: "desc" }, { createdAt: "desc" }];
+    }
     switch (query.sortBy) {
       case "orderNumber":
         return [{ orderNumber: sortDir }, { createdAt: "desc" }];
@@ -136,7 +143,7 @@ export async function listOrders(query: {
         return [{ updatedAt: sortDir }, { createdAt: "desc" }];
       case "createdAt":
       default:
-        return [{ createdAt: sortDir }];
+        return isDeleted ? [{ deletedAt: "desc" }, { createdAt: "desc" }] : [{ createdAt: sortDir }];
     }
   })();
 
@@ -605,6 +612,21 @@ export async function softDeleteOrder(id: string) {
   const updated = await prisma.order.update({
     where: { id },
     data: { deletedAt: new Date() },
+  });
+
+  return updated;
+}
+
+export async function restoreOrder(id: string) {
+  const existing = await prisma.order.findUnique({
+    where: { id },
+  });
+  if (!existing) throw new AppError("Order not found.", 404);
+  if (!existing.deletedAt) throw new AppError("Order is already active.", 400);
+
+  const updated = await prisma.order.update({
+    where: { id },
+    data: { deletedAt: null },
   });
 
   return updated;

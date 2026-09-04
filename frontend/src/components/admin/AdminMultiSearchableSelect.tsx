@@ -364,7 +364,7 @@ export function AdminMultiSearchableSelect({
             <div
               ref={menuRef}
               role="listbox"
-              className="z-[10000] origin-top animate-admin-select-dropdown flex flex-col overflow-hidden rounded-md border border-[#E6E6E6] bg-white shadow-lg animate-in fade-in zoom-in-95 duration-100"
+              className="z-[100000] origin-top animate-admin-select-dropdown flex flex-col overflow-hidden rounded-md border border-[#E6E6E6] bg-white shadow-lg animate-in fade-in zoom-in-95 duration-100"
               style={{
                 position: "fixed",
                 top: menuStyle.top !== undefined ? menuStyle.top : "auto",
@@ -435,7 +435,7 @@ export function AdminMultiSearchableSelect({
                               )}
                             >
                               {isSelected && (
-                                <span className="text-[10px] font-bold leading-none">✓</span>
+                                <span className="text-[10px] font-bold leading-none text-white">✓</span>
                               )}
                             </div>
 

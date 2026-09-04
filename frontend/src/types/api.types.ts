@@ -48,6 +48,7 @@ export interface ApiAttributeValue {
 export interface ApiAttribute {
   id: string;
   name: string;
+  slug?: string;
   role: "DROPDOWN" | "X_GRID" | "Y_GRID";
   displayType?: "DROPDOWN" | "X_GRID" | "Y_GRID";
   status: string;

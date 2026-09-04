@@ -2,12 +2,38 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Clock3, Download, Filter, History, Layers, Search, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
+import {
+  Clock3,
+  Download,
+  Filter,
+  History,
+  Layers,
+  Search,
+  SlidersHorizontal,
+  Trash2,
+  Upload,
+  X,
+  AlertTriangle,
+  Package,
+} from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, Pagination, StatCard, StatusBadge, useToast, AdminBulkActionsBar, AdminDeleteModal, DataTable, LoadingButton } from "@/components/admin/AdminComponents";
+import { formatDate, formatDateTime } from "@/utils/formatDate";
+import {
+  AdminInput,
+  AdminListToolbar,
+  AdminSelect,
+  AdminStatsGrid,
+  Pagination,
+  StatusBadge,
+  useToast,
+  AdminBulkActionsBar,
+  AdminDeleteModal,
+  DataTable,
+  LoadingButton,
+} from "@/components/admin/AdminComponents";
+import { AdminRowActions, AdminActionButton } from "@/components/admin/AdminRowActions";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
-import { RefreshButton } from "@/components/admin/RefreshButton";
 import { Modal } from "@/components/ui/Modal";
 import {
   useAdminInventory,
@@ -79,7 +105,15 @@ const DEFAULT_COLUMNS: Record<InventoryColumnKey, boolean> = {
   updated: true,
 };
 
-const STORAGE_KEY = "admin-inventory-columns-v1";
+const COLUMN_OPTIONS: { key: InventoryColumnKey; label: string }[] = [
+  { key: "warehouse", label: "Warehouse" },
+  { key: "reserved", label: "Reserved Stock" },
+  { key: "threshold", label: "Low Stock At" },
+  { key: "status", label: "Status" },
+  { key: "updated", label: "Updated Date" },
+];
+
+const STORAGE_KEY = "admin-inventory-columns-v2";
 
 function formatReason(reason?: string | null) {
   if (!reason) return "Unspecified";
@@ -146,10 +180,9 @@ export default function InventoryPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
-  const [sortBy, setSortBy] = useState("product");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortBy, setSortBy] = useState("updatedAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [lastSelectedGroupId, setLastSelectedGroupId] = useState<string | null>(null);
   const [limit, setLimit] = useState(20);
   const [warehouseFilterId, setWarehouseFilterId] = useState("");
   const [productFilterId, setProductFilterId] = useState("");
@@ -159,7 +192,6 @@ export default function InventoryPage() {
   const [historyRow, setHistoryRow] = useState<InventoryRow | null>(null);
   const [bulkStock, setBulkStock] = useState("");
   const [bulkThreshold, setBulkThreshold] = useState("");
-  const [bulkWarehouseId, setBulkWarehouseId] = useState("");
   const [bulkAction, setBulkAction] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -168,7 +200,7 @@ export default function InventoryPage() {
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  
+
   const [warehouseAssignModalOpen, setWarehouseAssignModalOpen] = useState(false);
   const [warehouseAssignSelections, setWarehouseAssignSelections] = useState<Record<string, boolean>>({});
   const [warehouseAssignStocks, setWarehouseAssignStocks] = useState<Record<string, string>>({});
@@ -238,7 +270,6 @@ export default function InventoryPage() {
   const { data, isLoading, refetch, isFetching } = inventoryQuery;
   const dashboard = useAdminInventoryDashboard();
 
-
   const { data: recentAdjustments, isLoading: recentLoading } = useAdminInventoryAdjustments({ page: 1, limit: 8 });
   const { data: rowAdjustments, isLoading: rowHistoryLoading } = useAdminVariantInventoryAdjustments(historyRow?.variantId ?? undefined, { page: 1, limit: 25 });
   const updateInv = useUpdateInventory();
@@ -249,21 +280,9 @@ export default function InventoryPage() {
   const alerts = useAdminInventoryAlerts();
 
   const rows = (data?.data ?? []) as InventoryRow[];
-  const groupedRows = useMemo(() => {
-    const groupsMap = new Map<string, InventoryRow[]>();
-    for (const row of rows) {
-      const key = row.variantId || row.product?.id || row.id;
-      if (!groupsMap.has(key)) {
-        groupsMap.set(key, []);
-      }
-      groupsMap.get(key)!.push(row);
-    }
-    return Array.from(groupsMap.values());
-  }, [rows]);
   const recentRows = (recentAdjustments?.data ?? []) as Adjustment[];
   const historyRows = (rowAdjustments?.data ?? []) as Adjustment[];
 
-  const allVisibleSelected = rows.length > 0 && rows.every((row) => selectedIds.includes(row.id));
   const selectedCount = selectedIds.length;
   const totalPages = data?.pagination?.totalPages || 1;
 
@@ -289,10 +308,10 @@ export default function InventoryPage() {
         width: "280px",
         render: (row) => (
           <div className="py-0.5 min-w-0">
-            <div className="font-semibold text-[#1A1A1A] leading-snug">
+            <div className="font-semibold text-[#1A1A1A] leading-snug truncate">
               {row.product?.title || "Unknown product"}
             </div>
-            <div className="mt-0.5 text-[12px] text-[#6B6B6B] leading-snug">
+            <div className="mt-0.5 text-[12px] text-[#6B6B6B] leading-snug truncate">
               {row.variant?.title || (row.variantId ? row.product?.brand : "Main Stock")}
             </div>
           </div>
@@ -330,7 +349,7 @@ export default function InventoryPage() {
       },
     ];
 
-    if (visibleColumns.warehouse) {
+    if (visibleColumns.warehouse !== false) {
       cols.push({
         key: "warehouse",
         label: "Warehouse",
@@ -339,12 +358,12 @@ export default function InventoryPage() {
           const warehouseLabel = row.warehouse
             ? `${row.warehouse.name}${row.warehouse.state ? ` (${row.warehouse.state})` : ""}`
             : "Base / Default";
-          return <span className="text-[13px] text-[#555] leading-snug block">{warehouseLabel}</span>;
+          return <span className="text-[13px] text-[#555] leading-snug block truncate">{warehouseLabel}</span>;
         },
       });
     }
 
-    if (visibleColumns.reserved) {
+    if (visibleColumns.reserved !== false) {
       cols.push({
         key: "reserved",
         label: "Reserved Stock",
@@ -353,7 +372,7 @@ export default function InventoryPage() {
       });
     }
 
-    if (visibleColumns.threshold) {
+    if (visibleColumns.threshold !== false) {
       cols.push({
         key: "threshold",
         label: "Low Stock At",
@@ -379,7 +398,7 @@ export default function InventoryPage() {
       });
     }
 
-    if (visibleColumns.status) {
+    if (visibleColumns.status !== false) {
       cols.push({
         key: "status",
         label: "Status",
@@ -388,14 +407,14 @@ export default function InventoryPage() {
       });
     }
 
-    if (visibleColumns.updated) {
+    if (visibleColumns.updated !== false) {
       cols.push({
         key: "updated",
         label: "Updated Date",
         width: "110px",
         render: (row) => (
           <span className="text-[12.5px] text-[#6B6B6B]">
-            {new Date(row.updatedAt).toLocaleDateString()}
+            {formatDate(row.updatedAt)}
           </span>
         ),
       });
@@ -406,29 +425,33 @@ export default function InventoryPage() {
       label: "Actions",
       width: "140px",
       render: (row) => (
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => setHistoryRow(row)}
-            disabled={!row.variantId}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12px] font-semibold text-[#444] hover:border-[#E31E24] hover:text-[#E31E24] hover:bg-[#FFF7F7] disabled:opacity-40 disabled:hover:border-[#E6E6E6] disabled:hover:bg-white disabled:hover:text-[#444] shadow-xs transition-colors whitespace-nowrap"
-            title="Stock History"
-          >
-            <History size={13} /> History
-          </button>
-          {row.warehouseId ? (
-            <button
-              type="button"
-              onClick={() => setUnassignTarget(row)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:border-[#E31E24] hover:text-[#E31E24] hover:bg-[#FFF7F7] shadow-xs transition-colors flex-shrink-0"
-              title="Unassign Warehouse"
-            >
-              <Trash2 size={13} />
-            </button>
-          ) : (
-            <div className="w-8 flex-shrink-0" />
-          )}
-        </div>
+        <AdminRowActions
+          extra={
+            <AdminActionButton
+              action={{
+                onClick: () => setHistoryRow(row),
+                disabled: !row.variantId,
+                title: "Stock History",
+                icon: (
+                  <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold">
+                    <History size={12} /> History
+                  </span>
+                ),
+                className: "w-auto px-2 h-7",
+              }}
+              defaultIcon={<History size={13} />}
+              defaultTitle="Stock History"
+            />
+          }
+          delete={
+            row.warehouseId
+              ? {
+                  title: "Unassign Warehouse",
+                  onClick: () => setUnassignTarget(row),
+                }
+              : undefined
+          }
+        />
       ),
     });
 
@@ -450,9 +473,7 @@ export default function InventoryPage() {
         },
         responseType: "blob",
       });
-      const blob = new Blob([response.data], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
+      const blob = new Blob([response.data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -478,7 +499,7 @@ export default function InventoryPage() {
   const previewImport = async (file?: File) => {
     if (!file) return;
     setImportFile(file);
-    setImportMessage("Previewing spreadsheet...");
+    setImportMessage("Validating spreadsheet preview...");
     setImportPreview(null);
     const formData = new FormData();
     formData.append("file", file);
@@ -486,7 +507,7 @@ export default function InventoryPage() {
       const response = await adminApi.post("/inventory/import/preview", formData);
       const report = response.data?.data as SpreadsheetReport;
       setImportPreview(report);
-      setImportMessage(report.invalidRows > 0 ? "Fix the validation issues before importing." : "Preview looks good. You can import now.");
+      setImportMessage(report.invalidRows > 0 ? "Fix the spreadsheet issues before importing." : "Preview generated successfully.");
     } catch (error) {
       setImportMessage(getAdminErrorMessage(error, "Failed to preview spreadsheet."));
       setImportPreview(null);
@@ -500,102 +521,109 @@ export default function InventoryPage() {
       const formData = new FormData();
       formData.append("file", importFile);
       const response = await adminApi.post("/inventory/import", formData);
-      const result = response.data?.data as { created: number; updated: number; report: SpreadsheetReport };
-      showToast(`Imported ${result.created} created and ${result.updated} updated inventory rows.`);
+      const result = response.data?.data as { updated: number; report: SpreadsheetReport };
+      showToast(`Import complete. ${result.updated} inventory records updated.`);
       setImportOpen(false);
       setImportFile(null);
       setImportPreview(null);
-      setImportMessage("");
       refetch();
     } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to import inventory spreadsheet."), "error");
+      showToast(getAdminErrorMessage(error, "Failed to import spreadsheet."), "error");
     } finally {
       setImporting(false);
     }
   };
 
-  const applyBulkUpdate = async () => {
-    let stockValue: number | undefined = undefined;
-    let thresholdValue: number | undefined = undefined;
-    let warehouseId: string | undefined | null = undefined;
+  const handleSelectAll = async (checked: boolean) => {
+    if (checked) {
+      const visibleIds = rows.map((row) => row.id);
+      try {
+        const res = await adminApi.get("/inventory", {
+          params: {
+            search: search || undefined,
+            status: status || undefined,
+            sortBy,
+            sortDir,
+            warehouseId: warehouseFilterId || undefined,
+            productId: productFilterId || undefined,
+            variantId: variantFilterId || undefined,
+            limit: 999999,
+            ignoreMaxLimit: "true",
+          },
+        });
+        const allIds = (res.data.data ?? []).map((row: any) => row.id);
+        setSelectedIds(allIds);
+        showToast(`Selected all ${allIds.length} inventory items across all pages.`, "success");
+      } catch {
+        setSelectedIds(visibleIds);
+      }
+    } else {
+      setSelectedIds([]);
+    }
+  };
 
-    if (bulkAction === "stock") {
-      stockValue = bulkStock.trim() === "" ? undefined : Number(bulkStock);
-      if (stockValue === undefined) {
-        showToast("Enter stock value.", "error");
-        return;
-      }
-      if (!Number.isInteger(stockValue) || stockValue < 0) {
-        showToast("Stock must be a positive integer.", "error");
-        return;
-      }
-    } else if (bulkAction === "threshold") {
-      thresholdValue = bulkThreshold.trim() === "" ? undefined : Number(bulkThreshold);
-      if (thresholdValue === undefined) {
-        showToast("Enter threshold value.", "error");
-        return;
-      }
-      if (!Number.isInteger(thresholdValue) || thresholdValue < 0) {
-        showToast("Threshold must be a positive integer.", "error");
-        return;
-      }
-    } else if (bulkAction === "delete") {
+  const applyBulkUpdate = async () => {
+    if (!selectedIds.length || !bulkAction) return;
+
+    if (bulkAction === "delete") {
       setShowBulkDeleteModal(true);
       return;
-    } else {
-      showToast("Select a bulk action to apply.", "error");
+    }
+
+    if (bulkAction === "warehouse") {
+      setWarehouseAssignSelections({});
+      setWarehouseAssignStocks({});
+      setWarehouseAssignModalOpen(true);
       return;
     }
 
     try {
-      await bulkUpdate.mutateAsync({
-        ids: selectedIds,
-        ...(stockValue !== undefined ? { stock: stockValue } : {}),
-        ...(thresholdValue !== undefined ? { lowStockThreshold: thresholdValue } : {}),
-        ...(warehouseId !== undefined ? { warehouseId } : {}),
-      });
+      if (bulkAction === "stock") {
+        if (!bulkStock) {
+          showToast("Please enter a stock quantity.", "error");
+          return;
+        }
+        await bulkUpdate.mutateAsync({
+          ids: selectedIds,
+          stock: Number(bulkStock),
+        });
+        showToast(`Updated stock for ${selectedIds.length} inventory item(s).`);
+      } else if (bulkAction === "threshold") {
+        if (!bulkThreshold) {
+          showToast("Please enter a low stock threshold.", "error");
+          return;
+        }
+        await bulkUpdate.mutateAsync({
+          ids: selectedIds,
+          lowStockThreshold: Number(bulkThreshold),
+        });
+        showToast(`Updated low stock threshold for ${selectedIds.length} inventory item(s).`);
+      }
+
       setSelectedIds([]);
+      setBulkAction("");
       setBulkStock("");
       setBulkThreshold("");
-      setBulkWarehouseId("");
-      setBulkAction("");
-      showToast("Selected inventory rows updated.");
+      refetch();
     } catch (error) {
-      showToast(getAdminErrorMessage(error, "Bulk inventory update failed."), "error");
+      showToast(getAdminErrorMessage(error, "Bulk action failed."), "error");
     }
   };
 
   const handleWarehouseAssignSubmit = async () => {
-    const selectedWarehouseIds = Object.keys(warehouseAssignSelections).filter((id) => warehouseAssignSelections[id]);
-    if (selectedWarehouseIds.length === 0) {
+    const selectedWarehouseIds = Object.keys(warehouseAssignSelections).filter(id => warehouseAssignSelections[id]);
+    if (!selectedWarehouseIds.length) {
       showToast("Please select at least one warehouse.", "error");
       return;
     }
 
-    for (const wId of selectedWarehouseIds) {
-      const stockStr = warehouseAssignStocks[wId]?.trim();
-      const stockVal = stockStr ? parseInt(stockStr) : null;
-      if (stockStr && (isNaN(stockVal as number) || (stockVal as number) < 0)) {
-        showToast("Please enter a valid stock level.", "error");
-        return;
-      }
-    }
-
     setBulkSaving(true);
     try {
-      const uniqueVariantIds = Array.from(
-        new Set(
-          rows
-            .filter((inv) => selectedIds.includes(inv.id))
-            .map((inv) => inv.variantId)
-            .filter(Boolean)
-        )
-      ) as string[];
+      const selectedRows = rows.filter(r => selectedIds.includes(r.id));
+      const uniqueVariantIds = Array.from(new Set(selectedRows.map(r => r.variantId).filter(Boolean))) as string[];
 
       for (const wId of selectedWarehouseIds) {
-        const stockStr = warehouseAssignStocks[wId]?.trim();
-        const stockVal = stockStr ? parseInt(stockStr) : null;
-
+        const stockVal = warehouseAssignStocks[wId] ? Number(warehouseAssignStocks[wId]) : null;
         await Promise.all(
           uniqueVariantIds.map((vId) => {
             let finalStock = 0;
@@ -625,362 +653,433 @@ export default function InventoryPage() {
       setBulkSaving(false);
     }
   };
+
+  const handleResetFilters = () => {
+    setSearchInput("");
+    setSearch("");
+    setStatus("");
+    setWarehouseFilterId("");
+    setProductFilterId("");
+    setVariantFilterId("");
+    setSortBy("updatedAt");
+    setSortDir("desc");
+    setLimit(20);
+    setPage(1);
+  };
+
   if (authLoading || !hasPermission("inventory.view")) {
     return null;
   }
 
   return (
-    <AdminLayout title="Inventory" breadcrumb={[{ label: "Inventory" }]}>
-      <AdminStatsGrid
-        stats={[
-          { title: "Tracked Items", value: tinyNumber(dashboard.data?.totals?.trackedItems ?? 0), icon: <Layers size={18} /> },
-          { title: "Total Stock", value: tinyNumber(dashboard.data?.totals?.totalStock ?? 0), icon: <Clock3 size={18} />, color: "bg-blue-600" },
-          { title: "Reserved Stock", value: tinyNumber(dashboard.data?.totals?.reservedStock ?? 0), icon: <Clock3 size={18} />, color: "bg-slate-600" },
-          { title: "Low Stock", value: tinyNumber(dashboard.data?.totals?.lowStockCount ?? 0), icon: <History size={18} />, color: "bg-orange-500" },
-          { title: "Out of Stock", value: tinyNumber(dashboard.data?.totals?.outOfStockCount ?? 0), icon: <X size={18} />, color: "bg-red-500" }
-        ]}
-        isLoading={dashboard.isLoading}
-      />
+    <AdminLayout title="Inventory" breadcrumb={[{ label: "Admin", href: "/admin" }, { label: "Inventory" }]}>
+      <div className="space-y-5">
+        {/* 1. TOP KPI STATS GRID */}
+        <AdminStatsGrid
+          stats={[
+            {
+              title: "Tracked Items",
+              value: tinyNumber(dashboard.data?.totals?.trackedItems ?? 0),
+              subtitle: "Active catalog variants",
+              icon: <Layers size={18} />,
+              isLoading: dashboard.isLoading,
+            },
+            {
+              title: "Total Stock",
+              value: tinyNumber(dashboard.data?.totals?.totalStock ?? 0),
+              subtitle: "Units across all warehouses",
+              icon: <Clock3 size={18} />,
+              color: "bg-blue-600",
+              isLoading: dashboard.isLoading,
+            },
+            {
+              title: "Reserved Stock",
+              value: tinyNumber(dashboard.data?.totals?.reservedStock ?? 0),
+              subtitle: "Allocated to orders",
+              icon: <Clock3 size={18} />,
+              color: "bg-slate-600",
+              isLoading: dashboard.isLoading,
+            },
+            {
+              title: "Low Stock",
+              value: tinyNumber(dashboard.data?.totals?.lowStockCount ?? 0),
+              subtitle: "Below alert threshold",
+              icon: <History size={18} />,
+              color: "bg-orange-500",
+              isLoading: dashboard.isLoading,
+            },
+            {
+              title: "Out of Stock",
+              value: tinyNumber(dashboard.data?.totals?.outOfStockCount ?? 0),
+              subtitle: "Requires replenishment",
+              icon: <X size={18} />,
+              color: "bg-red-500",
+              isLoading: dashboard.isLoading,
+            },
+          ]}
+        />
 
-      <AdminListToolbar
-        search={{
-          value: searchInput,
-          onChange: setSearchInput,
-          placeholder: "Search inventory...",
-          widthClassName: "w-[260px]",
-        }}
-        filters={{
-          showFilters,
-          onToggle: () => setShowFilters(!showFilters),
-          activeCount: [status, warehouseFilterId, productFilterId, variantFilterId, sortBy !== "updatedAt" ? sortBy : ""].filter(Boolean).length,
-        }}
-        columns={{
-          visibleColumns,
-          onToggleColumn: (key) => setVisibleColumns((current) => ({ ...current, [key]: !current[key as InventoryColumnKey] })),
-          options: (Object.keys(DEFAULT_COLUMNS) as InventoryColumnKey[]).map((k) => ({
-            key: k,
-            label: k === "warehouse" ? "Warehouse" : k === "reserved" ? "Reserved Stock" : k === "threshold" ? "Low Stock At" : k === "status" ? "Status" : "Updated Date",
-          })),
-        }}
-        exportAction={{
-          onClick: () => exportInventory(selectedCount > 0),
-          label: selectedCount > 0 ? `Export Selected (${selectedCount})` : "Export Excel",
-          disabled: exporting,
-        }}
-        importAction={canUpdate ? {
-          onClick: openImportDialog,
-          label: "Import Excel",
-        } : undefined}
-        refresh={{
-          onRefresh: refetch,
-          isRefreshing: isFetching,
-        }}
-        onResetFilters={() => {
-          setStatus("");
-          setWarehouseFilterId("");
-          setProductFilterId("");
-          setVariantFilterId("");
-          setSortBy("updatedAt");
-          setSortDir("desc");
-          setPage(1);
-        }}
-        filterPanel={
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            <AdminMultiSearchableSelect
-              label="Product"
-              values={productFilterId ? productFilterId.split(",").filter(Boolean) : []}
-              onValuesChange={(vals) => {
-                setProductFilterId(vals.join(","));
-                setVariantFilterId("");
-                setPage(1);
-              }}
-              options={productOptions}
-              placeholder="Select products"
-              allowSelectAll
-              selectAllLabel="All products"
-            />
-            <AdminMultiSearchableSelect
-              label="Variant"
-              values={variantFilterId ? variantFilterId.split(",").filter(Boolean) : []}
-              onValuesChange={(vals) => {
-                setVariantFilterId(vals.join(","));
-                setPage(1);
-              }}
-              options={variantOptions}
-              placeholder="Select variants"
-              allowSelectAll
-              selectAllLabel="All variants"
-            />
-            <AdminSelect
-              label="Warehouse"
-              value={warehouseFilterId}
-              onChange={(event) => {
-                setWarehouseFilterId(event.target.value);
-                setPage(1);
-              }}
-              options={[
-                { value: "", label: "All Warehouses" },
-                ...warehouses.map((w: any) => ({
-                  value: w.id,
-                  label: `${w.name}${w.state ? ` (${w.state})` : ""}${w.country?.code ? ` [${w.country.code}]` : ""}`,
-                })),
-              ]}
-            />
-            <AdminSelect
-              label="Status"
-              value={status}
-              onChange={(event) => {
-                setStatus(event.target.value);
-                setPage(1);
-              }}
-              options={[
-                { value: "", label: "All Status" },
-                { value: "IN_STOCK", label: "In Stock" },
-                { value: "LOW_STOCK", label: "Low Stock" },
-                { value: "OUT_OF_STOCK", label: "Out of Stock" },
-                { value: "BACKORDER", label: "Backorder" },
-              ]}
-            />
-            <AdminSelect
-              label="Sort By"
-              value={sortBy}
-              onChange={(event) => setSortBy(event.target.value)}
-              options={[
-                { value: "updatedAt", label: "Updated Date" },
-                { value: "product", label: "Product" },
-                { value: "variant", label: "Variant" },
-                { value: "sku", label: "SKU" },
-                { value: "stock", label: "Stock" },
-                { value: "reservedStock", label: "Reserved Stock" },
-                { value: "lowStockThreshold", label: "Low Stock Threshold" },
-                { value: "status", label: "Status" },
-              ]}
-            />
-            <AdminSelect
-              label="Sort Direction"
-              value={sortDir}
-              onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
-              options={[
-                { value: "desc", label: "Descending" },
-                { value: "asc", label: "Ascending" },
-              ]}
-            />
-          </div>
-        }
-      />
+        {/* 2. STANDARDIZED LIST TOOLBAR */}
+        <AdminListToolbar
+          search={{
+            value: searchInput,
+            onChange: setSearchInput,
+            placeholder: "Search inventory...",
+            widthClassName: "w-[240px]",
+          }}
+          filters={{
+            showFilters,
+            onToggle: () => setShowFilters(!showFilters),
+            activeCount: [status, warehouseFilterId, productFilterId, variantFilterId, sortBy !== "updatedAt" ? sortBy : ""].filter(Boolean).length,
+          }}
+          columns={{
+            visibleColumns,
+            onToggleColumn: (key) =>
+              setVisibleColumns((current) => ({
+                ...current,
+                [key as InventoryColumnKey]: current[key as InventoryColumnKey] === false ? true : false,
+              })),
+            options: COLUMN_OPTIONS,
+          }}
+          exportAction={{
+            onClick: () => exportInventory(selectedCount > 0),
+            label: selectedCount > 0 ? `Export Selected (${selectedCount})` : "Export Excel",
+            disabled: exporting,
+          }}
+          importAction={
+            canUpdate
+              ? {
+                  onClick: openImportDialog,
+                  label: "Import Excel",
+                }
+              : undefined
+          }
+          refresh={{
+            onRefresh: () => {
+              void refetch().then(() => showToast("Inventory refreshed."));
+            },
+            isRefreshing: isFetching,
+          }}
+          onResetFilters={handleResetFilters}
+          filterPanel={
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              <AdminMultiSearchableSelect
+                label="Product"
+                values={productFilterId ? productFilterId.split(",").filter(Boolean) : []}
+                onValuesChange={(vals) => {
+                  setProductFilterId(vals.join(","));
+                  setVariantFilterId("");
+                  setPage(1);
+                }}
+                options={productOptions}
+                placeholder="Select products"
+                allowSelectAll
+                selectAllLabel="All products"
+              />
+              <AdminMultiSearchableSelect
+                label="Variant"
+                values={variantFilterId ? variantFilterId.split(",").filter(Boolean) : []}
+                onValuesChange={(vals) => {
+                  setVariantFilterId(vals.join(","));
+                  setPage(1);
+                }}
+                options={variantOptions}
+                placeholder="Select variants"
+                allowSelectAll
+                selectAllLabel="All variants"
+              />
+              <AdminSelect
+                label="Warehouse"
+                value={warehouseFilterId}
+                onChange={(event) => {
+                  setWarehouseFilterId(event.target.value);
+                  setPage(1);
+                }}
+                options={[
+                  { value: "", label: "All Warehouses" },
+                  ...warehouses.map((w: any) => ({
+                    value: w.id,
+                    label: `${w.name}${w.state ? ` (${w.state})` : ""}${w.country?.code ? ` [${w.country.code}]` : ""}`,
+                  })),
+                ]}
+              />
+              <AdminSelect
+                label="Status"
+                value={status}
+                onChange={(event) => {
+                  setStatus(event.target.value);
+                  setPage(1);
+                }}
+                options={[
+                  { value: "", label: "All Statuses" },
+                  { value: "IN_STOCK", label: "In Stock" },
+                  { value: "LOW_STOCK", label: "Low Stock" },
+                  { value: "OUT_OF_STOCK", label: "Out of Stock" },
+                  { value: "BACKORDER", label: "Backorder" },
+                ]}
+              />
+              <AdminSelect
+                label="Sort By"
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+                options={[
+                  { value: "updatedAt", label: "Updated Date" },
+                  { value: "product", label: "Product" },
+                  { value: "variant", label: "Variant" },
+                  { value: "sku", label: "SKU" },
+                  { value: "stock", label: "Stock" },
+                  { value: "reservedStock", label: "Reserved Stock" },
+                  { value: "lowStockThreshold", label: "Low Stock Threshold" },
+                  { value: "status", label: "Status" },
+                ]}
+              />
+              <AdminSelect
+                label="Direction"
+                value={sortDir}
+                onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+                options={[
+                  { value: "desc", label: "Descending" },
+                  { value: "asc", label: "Ascending" },
+                ]}
+              />
+            </div>
+          }
+        />
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".xlsx,.xls,.csv"
-        className="hidden"
-        onChange={(event) => {
-          void previewImport(event.target.files?.[0] || undefined);
-          event.currentTarget.value = "";
-        }}
-      />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          className="hidden"
+          onChange={(event) => {
+            void previewImport(event.target.files?.[0] || undefined);
+            event.currentTarget.value = "";
+          }}
+        />
 
-      {/* Tabs */}
-      <div className="mb-6 flex border-b border-[#E6E6E6]">
-        <button
-          type="button"
-          onClick={() => setActiveTab("levels")}
-          className={`border-b-2 px-6 py-2.5 text-[14px] font-semibold transition-colors ${
-            activeTab === "levels"
-              ? "border-[#E31E24] text-[#E31E24]"
-              : "border-transparent text-[#6B6B6B] hover:text-[#1A1A1A]"
-          }`}
-        >
-          Stock Levels
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("alerts")}
-          className={`border-b-2 px-6 py-2.5 text-[14px] font-semibold transition-colors flex items-center gap-1.5 ${
-            activeTab === "alerts"
-              ? "border-[#E31E24] text-[#E31E24]"
-              : "border-transparent text-[#6B6B6B] hover:text-[#1A1A1A]"
-          }`}
-        >
-          Low Stock Alerts
-          {alerts.data && alerts.data.length > 0 && (
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#E31E24] px-1 text-[10.5px] font-bold text-white">
-              {alerts.data.length}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("activity")}
-          className={`border-b-2 px-6 py-2.5 text-[14px] font-semibold transition-colors ${
-            activeTab === "activity"
-              ? "border-[#E31E24] text-[#E31E24]"
-              : "border-transparent text-[#6B6B6B] hover:text-[#1A1A1A]"
-          }`}
-        >
-          Recent Stock Activity
-        </button>
+        {/* 3. TABS NAVIGATION */}
+        <div className="flex border-b border-[#E6E6E6]">
+          <button
+            type="button"
+            onClick={() => setActiveTab("levels")}
+            className={`border-b-2 px-6 py-2.5 text-[14px] font-semibold transition-colors cursor-pointer ${
+              activeTab === "levels"
+                ? "border-[#E31E24] text-[#E31E24]"
+                : "border-transparent text-[#6B6B6B] hover:text-[#1A1A1A]"
+            }`}
+          >
+            Stock Levels
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("alerts")}
+            className={`border-b-2 px-6 py-2.5 text-[14px] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
+              activeTab === "alerts"
+                ? "border-[#E31E24] text-[#E31E24]"
+                : "border-transparent text-[#6B6B6B] hover:text-[#1A1A1A]"
+            }`}
+          >
+            Low Stock Alerts
+            {alerts.data && alerts.data.length > 0 && (
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#E31E24] px-1 text-[10.5px] font-bold text-white">
+                {alerts.data.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("activity")}
+            className={`border-b-2 px-6 py-2.5 text-[14px] font-semibold transition-colors cursor-pointer ${
+              activeTab === "activity"
+                ? "border-[#E31E24] text-[#E31E24]"
+                : "border-transparent text-[#6B6B6B] hover:text-[#1A1A1A]"
+            }`}
+          >
+            Recent Stock Activity
+          </button>
+        </div>
+
+        {/* TAB 1: STOCK LEVELS */}
+        {activeTab === "levels" && (
+          <>
+            <DataTable<InventoryRow>
+              title="Stock Levels"
+              columns={columns}
+              data={rows}
+              rowKey="id"
+              isLoading={isLoading}
+              emptyMessage={
+                search || status || warehouseFilterId || productFilterId || variantFilterId
+                  ? "No inventory records matched your search or filters."
+                  : "No inventory records found."
+              }
+              enableSelection={canUpdate}
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
+              totalItems={data?.pagination?.total ?? 0}
+              currentPage={page}
+              pageSize={limit}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => {
+                setLimit(size);
+                setPage(1);
+              }}
+              pageSizeOptions={[20, 50, 100, 500]}
+              onSelectAll={handleSelectAll}
+              renderBulkActions={(selectedIds) => (
+                <AdminBulkActionsBar
+                  selectedCount={selectedIds.length}
+                  onClear={() => setSelectedIds([])}
+                  actionType={bulkAction}
+                  onActionTypeChange={(val) => {
+                    setBulkAction(val);
+                    if (val === "warehouse") {
+                      setWarehouseAssignSelections({});
+                      setWarehouseAssignStocks({});
+                      setWarehouseAssignModalOpen(true);
+                    }
+                  }}
+                  actions={[
+                    { value: "stock", label: "Update Stock" },
+                    { value: "threshold", label: "Update Threshold" },
+                    { value: "warehouse", label: "Assign Warehouse" },
+                    { value: "delete", label: "Delete Selected" },
+                  ]}
+                  onApply={() => void applyBulkUpdate()}
+                  applyLoading={bulkUpdate.isPending}
+                  applyDisabled={!bulkAction || selectedIds.length === 0}
+                  renderExtraSelectors={() => (
+                    <>
+                      {bulkAction === "stock" && (
+                        <input
+                          type="text"
+                          placeholder="Stock qty"
+                          value={bulkStock}
+                          onChange={(e) => setBulkStock(e.target.value.replace(/\D/g, ""))}
+                          className="h-8 w-24 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] outline-none focus:border-[#E31E24] shadow-sm"
+                        />
+                      )}
+                      {bulkAction === "threshold" && (
+                        <input
+                          type="text"
+                          placeholder="Threshold qty"
+                          value={bulkThreshold}
+                          onChange={(e) => setBulkThreshold(e.target.value.replace(/\D/g, ""))}
+                          className="h-8 w-28 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] outline-none focus:border-[#E31E24] shadow-sm"
+                        />
+                      )}
+                    </>
+                  )}
+                />
+              )}
+            />
+
+            {/* BOTTOM PAGINATION */}
+            <div className="flex items-center justify-end mt-4">
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+                alwaysShow={true}
+              />
+            </div>
+          </>
+        )}
+
+        {/* TAB 2: LOW STOCK ALERTS */}
+        {activeTab === "alerts" && (
+          <section className="rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-2xs">
+            <div className="mb-4 flex items-center justify-between gap-3 border-b border-[#E6E6E6] pb-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={17} className="text-[#E31E24]" />
+                <h2 className="text-[15px] font-bold text-[#1A1A1A]">Low Stock Alerts</h2>
+              </div>
+              <span className="text-[12.5px] font-medium text-[#6B6B6B]">
+                {alerts.isLoading ? "Loading..." : `${(alerts.data ?? []).length} item${(alerts.data ?? []).length === 1 ? "" : "s"} below threshold`}
+              </span>
+            </div>
+            {alerts.isLoading ? (
+              <div className="py-8 text-center text-[13px] text-[#9A9A9A]">Loading low stock alerts...</div>
+            ) : (alerts.data ?? []).length === 0 ? (
+              <div className="py-8 text-center text-[13px] text-[#9A9A9A]">No low stock alerts right now. All inventory items are within safe levels.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-[13px]">
+                  <thead className="bg-[#F8F8F8] text-[#9A9A9A] border-b border-[#E6E6E6]">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left font-semibold">Product</th>
+                      <th className="px-4 py-2.5 text-left font-semibold">Variant</th>
+                      <th className="px-4 py-2.5 text-left font-semibold">Stock</th>
+                      <th className="px-4 py-2.5 text-left font-semibold">Threshold</th>
+                      <th className="px-4 py-2.5 text-left font-semibold">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E6E6E6]">
+                    {(alerts.data ?? []).map((item: InventoryRow) => (
+                      <tr key={item.id} className="hover:bg-[#FAFAFA] transition-colors">
+                        <td className="px-4 py-2.5 font-medium text-[#1A1A1A]">{item.product?.title ?? "Unknown product"}</td>
+                        <td className="px-4 py-2.5 text-[#555]">{item.variant?.title ?? "Main stock"}</td>
+                        <td className="px-4 py-2.5 font-semibold text-[#E31E24]">{item.stock}</td>
+                        <td className="px-4 py-2.5 text-[#555]">{item.lowStockThreshold}</td>
+                        <td className="px-4 py-2.5"><StatusBadge status={item.status} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* TAB 3: RECENT STOCK ACTIVITY */}
+        {activeTab === "activity" && (
+          <section className="rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-2xs">
+            <div className="mb-4 flex items-center justify-between gap-3 border-b border-[#E6E6E6] pb-3">
+              <div className="flex items-center gap-2">
+                <Clock3 size={17} className="text-[#E31E24]" />
+                <h2 className="text-[15px] font-bold text-[#1A1A1A]">Recent Stock Activity</h2>
+              </div>
+              <span className="text-[12.5px] font-medium text-[#6B6B6B]">Audit log of inventory adjustments</span>
+            </div>
+            {recentLoading ? (
+              <div className="py-8 text-center text-[13px] text-[#9A9A9A]">Loading recent activity...</div>
+            ) : (
+              <AdjustmentRows adjustments={recentRows} emptyMessage="No stock adjustments recorded yet." />
+            )}
+          </section>
+        )}
       </div>
 
-      {activeTab === "alerts" && (
-        <section className="mb-6 rounded-lg border border-[#E6E6E6] bg-white p-5">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <History size={17} className="text-[#E31E24]" />
-              <h2 className="text-[15px] font-semibold text-[#1A1A1A]">Low Stock Alerts</h2>
-            </div>
-            <span className="text-[12.5px] text-[#9A9A9A]">
-              {alerts.isLoading ? "Loading..." : `${(alerts.data ?? []).length} alert${(alerts.data ?? []).length === 1 ? "" : "s"}`}
-            </span>
+      {/* STOCK HISTORY MODAL */}
+      <Modal
+        open={Boolean(historyRow)}
+        onClose={() => setHistoryRow(null)}
+        title="Stock History Audit"
+        subtitle={historyRow ? `${historyRow.product.title} / ${historyRow.variant?.title ?? "Variant"}` : undefined}
+        size="2xl"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={() => setHistoryRow(null)}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Close
+            </button>
           </div>
-          {alerts.isLoading ? (
-            <div className="py-4 text-[13px] text-[#9A9A9A]">Loading low stock alerts...</div>
-          ) : (alerts.data ?? []).length === 0 ? (
-            <div className="py-4 text-[13px] text-[#9A9A9A]">No low stock alerts right now.</div>
+        }
+      >
+        <div className="p-6">
+          {rowHistoryLoading ? (
+            <div className="py-4 text-center text-[13px] text-[#9A9A9A]">Loading history...</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-[13px]">
-                <thead className="bg-[#F8F8F8] text-[#9A9A9A]">
-                  <tr>
-                    <th className="px-4 py-2 text-left">Product</th>
-                    <th className="px-4 py-2 text-left">Variant</th>
-                    <th className="px-4 py-2 text-left">Stock</th>
-                    <th className="px-4 py-2 text-left">Threshold</th>
-                    <th className="px-4 py-2 text-left">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E6E6E6]">
-                  {(alerts.data ?? []).map((item: InventoryRow) => (
-                    <tr key={item.id} className="hover:bg-[#FAFAFA]">
-                      <td className="px-4 py-2 font-medium text-[#1A1A1A]">{item.product?.title ?? "Unknown product"}</td>
-                      <td className="px-4 py-2 text-[#555]">{item.variant?.title ?? "Main stock"}</td>
-                      <td className="px-4 py-2 text-[#555]">{item.stock}</td>
-                      <td className="px-4 py-2 text-[#555]">{item.lowStockThreshold}</td>
-                      <td className="px-4 py-2"><StatusBadge status={item.status} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <AdjustmentRows adjustments={historyRows} emptyMessage="No stock adjustments recorded for this variant." />
           )}
-        </section>
-      )}
+        </div>
+      </Modal>
 
-      {activeTab === "levels" && (
-        <DataTable<InventoryRow>
-          columns={columns}
-          data={rows}
-          rowKey="id"
-          isLoading={isLoading}
-          emptyMessage="No inventory records found."
-          enableSelection={canUpdate}
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-          totalItems={data?.pagination?.total ?? 0}
-          currentPage={page}
-          pageSize={limit}
-          totalPages={totalPages}
-          onPageChange={setPage}
-          onPageSizeChange={(size) => {
-            setLimit(size);
-            setPage(1);
-          }}
-          pageSizeOptions={[20, 50, 100, 500]}
-          onSelectAll={async (checked) => {
-            if (checked) {
-              const visibleIds = rows.map((row) => row.id);
-              try {
-                const res = await adminApi.get("/inventory", {
-                  params: {
-                    search: search || undefined,
-                    status: status || undefined,
-                    sortBy,
-                    sortDir,
-                    warehouseId: warehouseFilterId || undefined,
-                    productId: productFilterId || undefined,
-                    variantId: variantFilterId || undefined,
-                    limit: 999999,
-                    ignoreMaxLimit: "true",
-                  },
-                });
-                const allIds = (res.data.data ?? []).map((row: any) => row.id);
-                setSelectedIds(allIds);
-                showToast(`Selected all ${allIds.length} inventory items across all pages.`, "success");
-              } catch {
-                setSelectedIds(visibleIds);
-              }
-            } else {
-              setSelectedIds([]);
-            }
-          }}
-          renderBulkActions={(selectedIds) => (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center justify-center rounded-full bg-[#FEF2F2] border border-red-100 px-2.5 py-0.5 text-[11.5px] font-semibold text-red-600 min-w-[84px]">
-                {selectedIds.length} selected
-              </span>
-              <select
-                value={bulkAction}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setBulkAction(val);
-                  if (val === "warehouse") {
-                    setWarehouseAssignSelections({});
-                    setWarehouseAssignStocks({});
-                    setWarehouseAssignModalOpen(true);
-                  }
-                }}
-                className="h-8 rounded-md border border-[#D1D5DB] bg-white px-3 text-[12.5px] text-[#1F2937] outline-none focus:border-[#E31E24] cursor-pointer"
-              >
-                <option value="">Choose Bulk Action</option>
-                <option value="stock">Update stock</option>
-                <option value="threshold">Update low stock threshold</option>
-                <option value="warehouse">Assign warehouse</option>
-                <option value="delete">Delete selected</option>
-              </select>
-
-              {bulkAction === "stock" && (
-                <input
-                  type="text"
-                  placeholder="Stock"
-                  value={bulkStock}
-                  onChange={(e) => setBulkStock(e.target.value.replace(/\D/g, ""))}
-                  className="h-8 w-24 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] outline-none focus:border-[#E31E24] shadow-sm"
-                />
-              )}
-              {bulkAction === "threshold" && (
-                <input
-                  type="text"
-                  placeholder="Threshold"
-                  value={bulkThreshold}
-                  onChange={(e) => setBulkThreshold(e.target.value.replace(/\D/g, ""))}
-                  className="h-8 w-28 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] outline-none focus:border-[#E31E24] shadow-sm"
-                />
-              )}
-
-              <button
-                type="button"
-                onClick={() => void applyBulkUpdate()}
-                disabled={bulkUpdate.isPending || selectedIds.length === 0 || !bulkAction}
-                className="h-8 rounded-md bg-[#E31E24] hover:bg-[#B5151B] px-4 text-[12.5px] font-semibold text-white disabled:opacity-40 disabled:hover:bg-[#E31E24] disabled:cursor-not-allowed transition-all shadow-sm flex items-center justify-center min-w-[80px]"
-              >
-                {bulkUpdate.isPending ? "Applying..." : "Apply"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedIds([]);
-                  setBulkAction("");
-                }}
-                className="inline-flex h-8 items-center gap-1 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12px] text-[#555] hover:bg-gray-50"
-              >
-                <X size={13} /> Clear
-              </button>
-            </div>
-          )}
-        />
-      )}
-
+      {/* WAREHOUSE ASSIGN MODAL */}
       <Modal
         open={warehouseAssignModalOpen}
         onClose={() => { setWarehouseAssignModalOpen(false); setBulkAction(""); }}
@@ -996,14 +1095,15 @@ export default function InventoryPage() {
             >
               Cancel
             </button>
-            <button
+            <LoadingButton
               type="button"
               onClick={handleWarehouseAssignSubmit}
-              disabled={bulkSaving}
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
+              loading={bulkSaving}
+              loadingText="Assigning..."
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
             >
-              {bulkSaving ? "Assigning..." : "Assign"}
-            </button>
+              Assign Warehouses
+            </LoadingButton>
           </div>
         }
       >
@@ -1027,11 +1127,11 @@ export default function InventoryPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="Stock"
+                  placeholder="Stock qty"
                   disabled={!warehouseAssignSelections[w.id]}
                   value={warehouseAssignStocks[w.id] ?? ""}
                   onChange={(event) => setWarehouseAssignStocks(prev => ({ ...prev, [w.id]: event.target.value.replace(/\D/g, "") }))}
-                  className="w-24 h-8 px-2 rounded-md border border-[#E6E6E6] text-[12.5px] outline-none disabled:bg-[#FAFAFA] text-center focus:border-[#E31E24]"
+                  className="w-28 h-8 px-2 rounded-md border border-[#E6E6E6] text-[12.5px] outline-none disabled:bg-[#FAFAFA] text-center focus:border-[#E31E24]"
                 />
               </div>
             ))}
@@ -1039,47 +1139,7 @@ export default function InventoryPage() {
         </div>
       </Modal>
 
-      {activeTab === "activity" && (
-        <section className="mt-6 rounded-lg border border-[#E6E6E6] bg-white p-5">
-          <div className="mb-3 flex items-center gap-2">
-            <Clock3 size={17} className="text-[#E31E24]" />
-            <h2 className="text-[15px] font-semibold text-[#1A1A1A]">Recent Stock Activity</h2>
-          </div>
-          {recentLoading ? (
-            <div className="py-4 text-[13px] text-[#9A9A9A]">Loading recent activity...</div>
-          ) : (
-            <AdjustmentRows adjustments={recentRows} emptyMessage="No stock adjustments recorded yet." />
-          )}
-        </section>
-      )}
-
-      <Modal
-        open={Boolean(historyRow)}
-        onClose={() => setHistoryRow(null)}
-        title="Stock History"
-        subtitle={historyRow ? `${historyRow.product.title} / ${historyRow.variant?.title ?? "Variant"}` : undefined}
-        size="2xl"
-        footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <button
-              type="button"
-              onClick={() => setHistoryRow(null)}
-              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
-            >
-              Close
-            </button>
-          </div>
-        }
-      >
-        <div className="p-6">
-          {rowHistoryLoading ? (
-            <div className="py-4 text-[13px] text-[#9A9A9A]">Loading history...</div>
-          ) : (
-            <AdjustmentRows adjustments={historyRows} emptyMessage="No stock adjustments recorded for this variant." />
-          )}
-        </div>
-      </Modal>
-
+      {/* EXCEL IMPORT MODAL */}
       <Modal
         open={importOpen}
         onClose={() => setImportOpen(false)}
@@ -1184,13 +1244,13 @@ export default function InventoryPage() {
                   <table className="w-full min-w-[900px] text-[13px]">
                     <thead className="bg-[#F8F8F8] text-[#9A9A9A]">
                       <tr>
-                        <th className="px-4 py-2 text-left">Row</th>
-                        <th className="px-4 py-2 text-left">Variant ID</th>
-                        <th className="px-4 py-2 text-left">Variant SKU</th>
-                        <th className="px-4 py-2 text-left">Product SKU</th>
-                        <th className="px-4 py-2 text-left">Stock</th>
-                        <th className="px-4 py-2 text-left">Reserved Stock</th>
-                        <th className="px-4 py-2 text-left">Low Stock At</th>
+                        <th className="px-4 py-2 text-left font-semibold">Row</th>
+                        <th className="px-4 py-2 text-left font-semibold">Variant ID</th>
+                        <th className="px-4 py-2 text-left font-semibold">Variant SKU</th>
+                        <th className="px-4 py-2 text-left font-semibold">Product SKU</th>
+                        <th className="px-4 py-2 text-left font-semibold">Stock</th>
+                        <th className="px-4 py-2 text-left font-semibold">Reserved Stock</th>
+                        <th className="px-4 py-2 text-left font-semibold">Low Stock At</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E6E6E6]">
@@ -1214,6 +1274,7 @@ export default function InventoryPage() {
         </div>
       </Modal>
 
+      {/* UNASSIGN SINGLE WAREHOUSE MODAL */}
       <AdminDeleteModal
         open={Boolean(unassignTarget)}
         onClose={() => setUnassignTarget(null)}
@@ -1243,6 +1304,7 @@ export default function InventoryPage() {
         }}
       />
 
+      {/* BULK DELETE MODAL */}
       <AdminDeleteModal
         open={showBulkDeleteModal}
         onClose={() => setShowBulkDeleteModal(false)}

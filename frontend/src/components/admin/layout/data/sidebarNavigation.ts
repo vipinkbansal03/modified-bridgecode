@@ -1,5 +1,6 @@
 import {
   AlignLeft,
+  Archive,
   Award,
   Calculator,
   CreditCard,
@@ -118,7 +119,8 @@ export const sidebarSections: SidebarSection[] = [
         icon: Truck,
         permission: "shipping.view",
         subItems: [
-          { label: "Providers & Zones", href: "/admin/shipping", permission: "shipping.view" },
+          { label: "Providers", href: "/admin/shipping", permission: "shipping.view" },
+          { label: "Zones", href: "/admin/shipping/zones", permission: "shipping.view" },
           { label: "Boxes", href: "/admin/shipping/boxes", permission: "shipping.view" },
         ],
       },
@@ -148,6 +150,7 @@ export const sidebarSections: SidebarSection[] = [
     title: "Platform",
     items: [
       { label: "Media Library", href: "/admin/media", icon: Image, permission: "media.view" },
+      { label: "Archive", href: "/admin/archive", icon: Archive },
       { label: "Translations", href: "/admin/translations", icon: Languages, permission: "translations.view" },
       { label: "AI Tools", href: "/admin/ai-tools", icon: Sparkles, permission: "ai.view" },
       { label: "Payments", href: "/admin/payments", icon: CreditCard, permission: "payments.view" },

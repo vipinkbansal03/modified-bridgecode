@@ -10,7 +10,52 @@ import { sidebarSections } from "./data/sidebarNavigation";
 import { cn } from "@/utils/cn";
 
 const SIDEBAR_SCROLL_STORAGE_KEY = "admin_sidebar_scroll_top";
+const SIDEBAR_EXPANDED_STORAGE_KEY = "admin_sidebar_expanded_menus";
 let inMemorySidebarScrollTop = 0;
+let inMemoryExpandedMenus: Record<string, boolean> = {};
+
+function getBestActiveHref(currentPath: string): string | null {
+  let bestHref: string | null = null;
+  let bestLength = 0;
+
+  sidebarSections.forEach((section) => {
+    section.items.forEach((item) => {
+      const evaluateHref = (href?: string) => {
+        if (!href) return;
+        const isMatch =
+          currentPath === href ||
+          (href !== "/admin/dashboard" && currentPath.startsWith(href + "/"));
+        if (isMatch && href.length > bestLength) {
+          bestHref = href;
+          bestLength = href.length;
+        }
+      };
+
+      evaluateHref(item.href);
+      item.subItems?.forEach((sub) => evaluateHref(sub.href));
+    });
+  });
+
+  return bestHref;
+}
+
+function getActiveParentMenus(currentPath: string): Record<string, boolean> {
+  const activeMap: Record<string, boolean> = {};
+  const bestHref = getBestActiveHref(currentPath);
+  if (!bestHref) return activeMap;
+
+  sidebarSections.forEach((section) => {
+    section.items.forEach((item) => {
+      if (item.subItems) {
+        const hasActiveSub = item.subItems.some((sub) => sub.href === bestHref);
+        if (hasActiveSub) {
+          activeMap[item.label] = true;
+        }
+      }
+    });
+  });
+  return activeMap;
+}
 
 interface AdminSidebarProps {
   open: boolean;
@@ -20,28 +65,18 @@ interface AdminSidebarProps {
 export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
   const { user, hasPermission, logout } = useAdminAuth();
-  const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
+  const bestActiveHref = useMemo(() => getBestActiveHref(pathname), [pathname]);
+  const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>(() => {
+    return getActiveParentMenus(pathname);
+  });
   const navRef = useRef<HTMLElement | null>(null);
 
-  // Auto-expand menu folders that contain the active path
+  // Auto-expand menu folders that contain the active path on route change
   useEffect(() => {
-    const initial: Record<string, boolean> = {};
-    sidebarSections.forEach((section) => {
-      section.items.forEach((item) => {
-        if (item.subItems) {
-          const hasActiveSub = item.subItems.some(
-            (sub) => pathname === sub.href || (sub.href !== "/admin/dashboard" && pathname.startsWith(sub.href + "/")),
-          );
-          if (hasActiveSub) {
-            initial[item.label] = true;
-          }
-        }
-      });
-    });
-    setExpandedMenus((prev) => ({ ...initial, ...prev }));
+    setExpandedMenus(getActiveParentMenus(pathname));
   }, [pathname]);
 
-  // Restore scroll position and ensure active element is in view
+  // Restore scroll position on route change or initial load
   useEffect(() => {
     const nav = navRef.current;
     if (!nav) return;
@@ -57,31 +92,31 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
 
     if (targetScroll > 0) {
       nav.scrollTop = targetScroll;
+    } else {
+      // 2. Only reveal active element if there is no saved user scroll position
+      const frameId = requestAnimationFrame(() => {
+        const activeEl = nav.querySelector<HTMLElement>('[data-sidebar-active="true"]');
+        if (!activeEl) return;
+
+        const navRect = nav.getBoundingClientRect();
+        const activeRect = activeEl.getBoundingClientRect();
+
+        // Check if active item is outside current viewport with safe padding
+        const isAbove = activeRect.top < navRect.top + 10;
+        const isBelow = activeRect.bottom > navRect.bottom - 10;
+
+        if (isAbove || isBelow) {
+          activeEl.scrollIntoView({ block: "nearest", behavior: "auto" });
+          inMemorySidebarScrollTop = nav.scrollTop;
+          try {
+            sessionStorage.setItem(SIDEBAR_SCROLL_STORAGE_KEY, String(nav.scrollTop));
+          } catch {}
+        }
+      });
+
+      return () => cancelAnimationFrame(frameId);
     }
-
-    // 2. Check if the active item is currently outside the visible viewport
-    const frameId = requestAnimationFrame(() => {
-      const activeEl = nav.querySelector<HTMLElement>('[data-sidebar-active="true"]');
-      if (!activeEl) return;
-
-      const navRect = nav.getBoundingClientRect();
-      const activeRect = activeEl.getBoundingClientRect();
-
-      // Check if active item is outside current viewport with safe padding
-      const isAbove = activeRect.top < navRect.top + 10;
-      const isBelow = activeRect.bottom > navRect.bottom - 10;
-
-      if (isAbove || isBelow) {
-        activeEl.scrollIntoView({ block: "nearest", behavior: "auto" });
-        inMemorySidebarScrollTop = nav.scrollTop;
-        try {
-          sessionStorage.setItem(SIDEBAR_SCROLL_STORAGE_KEY, String(nav.scrollTop));
-        } catch {}
-      }
-    });
-
-    return () => cancelAnimationFrame(frameId);
-  }, [pathname, expandedMenus]);
+  }, [pathname]);
 
   const handleNavScroll = (e: React.UIEvent<HTMLElement>) => {
     const top = e.currentTarget.scrollTop;
@@ -103,7 +138,10 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
   };
 
   const toggleMenu = (label: string) => {
-    setExpandedMenus((prev) => ({ ...prev, [label]: !prev[label] }));
+    setExpandedMenus((prev) => ({
+      ...prev,
+      [label]: !prev[label],
+    }));
   };
 
   // Filter sections and items based on permissions
@@ -186,18 +224,14 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
                 {section.items.map((item) => {
                   const Icon = item.icon;
 
-                  // Check if this item link is active
-                  const isLinkActive = item.href
-                    ? pathname === item.href ||
-                      (item.href !== "/admin/dashboard" && (pathname.startsWith(item.href + "/") || pathname === item.href))
-                    : false;
-
+                  // Check if this item link is active (only if exact/best match)
+                  const isLinkActive = item.href ? item.href === bestActiveHref : false;
                   const isFolderExpanded = !!expandedMenus[item.label];
 
                   // Folders / Expandable items
                   if (item.subItems) {
                     const isAnySubActive = item.subItems.some(
-                      (sub) => pathname === sub.href || (sub.href !== "/admin/dashboard" && pathname.startsWith(sub.href + "/")),
+                      (sub) => sub.href === bestActiveHref,
                     );
 
                     return (
@@ -208,7 +242,7 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
                           className={cn(
                             "w-full flex items-center gap-3 px-5 py-2 text-[13px] transition-colors text-left",
                             isAnySubActive
-                              ? "text-white font-medium bg-white/10"
+                              ? "text-white font-medium hover:bg-white/5"
                               : "text-white/60 hover:bg-white/5 hover:text-white",
                           )}
                         >
@@ -227,9 +261,7 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
                         {isFolderExpanded && (
                           <div className="bg-black/20 py-1 ml-5 border-l border-white/5 pl-2 space-y-[1px]">
                             {item.subItems.map((sub) => {
-                              const subActive =
-                                pathname === sub.href ||
-                                (sub.href !== "/admin/dashboard" && pathname.startsWith(sub.href + "/"));
+                              const subActive = sub.href === bestActiveHref;
                               return (
                                 <Link
                                   key={sub.href}

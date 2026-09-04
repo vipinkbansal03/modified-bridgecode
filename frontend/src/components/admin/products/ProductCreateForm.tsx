@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState, type ChangeEvent } from "react";
+import { useRef, useState, useEffect, type ChangeEvent } from "react";
 import * as Yup from "yup";
-import { AdminInput, AdminSelect, AdminMultiSelect, AdminTextarea, useToast, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminTextarea, useToast, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { useAdminCategories, useAdminCountries, useCreateProduct } from "@/hooks/admin/useAdminHooks";
 import { cn } from "@/utils/cn";
 import { getAdminErrorMessage } from "@/services/adminApi";
@@ -12,7 +13,7 @@ const schema = Yup.object({
   title: Yup.string().required("Title is required"),
   slug: Yup.string(),
   categoryId: Yup.string().required("Category is required"),
-  activeCountryIds: Yup.array().of(Yup.string()).min(1, "Active Country is required").required("Active Country is required"),
+  activeCountryIds: Yup.array().of(Yup.string()),
   status: Yup.string().required("Status is required"),
   productCode: Yup.string(),
   sku: Yup.string(),
@@ -85,7 +86,7 @@ export function ProductCreateForm({
       title: "",
       slug: "",
       categoryId: "",
-      activeCountryIds: [],
+      activeCountryIds: [] as string[],
       status: "DRAFT",
       productCode: "",
       sku: "",
@@ -103,7 +104,13 @@ export function ProductCreateForm({
     validationSchema: schema,
     onSubmit: async (values) => {
       try {
-        const product = (await createProduct.mutateAsync(values)) as CreateProductResponse;
+        const payload = {
+          ...values,
+          activeCountryIds: values.activeCountryIds?.length
+            ? values.activeCountryIds
+            : countries.map((c: any) => c.id),
+        };
+        const product = (await createProduct.mutateAsync(payload)) as CreateProductResponse;
         const productId = product.data?.id;
 
         if (!productId) {
@@ -198,13 +205,15 @@ export function ProductCreateForm({
                 />
 
                 <div className="z-[1000] relative">
-                  <AdminMultiSelect
+                  <AdminMultiSearchableSelect
                     label="Active Country"
-                    options={countryOptions.filter(o => o.value !== "")}
-                    value={form.values.activeCountryIds as string[]}
-                    onChange={(val) => form.setFieldValue("activeCountryIds", val)}
+                    values={form.values.activeCountryIds ?? []}
+                    onValuesChange={(values) => form.setFieldValue("activeCountryIds", values)}
+                    options={countries.map((c: any) => ({ value: c.id, label: `${c.name} (${c.code || c.countryCode || ""})`.trim() }))}
+                    placeholder="Select countries"
+                    allowSelectAll
+                    selectAllLabel="All countries"
                     error={form.errors.activeCountryIds as string}
-                    required
                   />
                 </div>
 
