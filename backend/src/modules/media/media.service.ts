@@ -5,23 +5,55 @@ import { StorageProvider } from "@prisma/client";
 import fs from "fs";
 import { deletePublicMediaVariants, getMediaUrl, getPreset, optimizeAndUploadPublicImage } from "../../shared/media";
 
-export async function listMedia(query: { page?: string; limit?: string; entityType?: string; entityId?: string; purpose?: string; uncategorized?: string }) {
+export async function listMedia(query: {
+  page?: string;
+  limit?: string;
+  search?: string;
+  type?: string;
+  entityType?: string;
+  entityId?: string;
+  purpose?: string;
+  uncategorized?: string;
+}) {
   const { page, limit, skip } = getPagination(query);
   const where: any = {};
   
   if (query.uncategorized === "true" || query.entityType === "UNCATEGORIZED") {
     where.entityType = null;
-  } else {
-    if (query.entityType) where.entityType = query.entityType;
+  } else if (query.entityType && query.entityType !== "ALL") {
+    where.entityType = query.entityType;
     
-    if (query.entityType && query.entityId) {
+    if (query.entityId) {
       where.entityId = query.entityId;
       if (query.purpose) {
         where.purpose = query.purpose;
       }
-    } else if (query.entityType && !query.entityId) {
-      where.entityId = null;
     }
+  }
+
+  // Filter by media type: all | image | document | video
+  if (query.type && query.type.toLowerCase() !== "all") {
+    const t = query.type.toLowerCase();
+    if (t === "image") {
+      where.type = "IMAGE";
+    } else if (t === "document") {
+      where.type = { in: ["DOCUMENT", "PDF"] };
+    } else if (t === "video") {
+      where.type = "VIDEO";
+    }
+  }
+
+  // Search filter across original name, filename, title, alt text, description, tags
+  if (query.search && query.search.trim()) {
+    const term = query.search.trim();
+    where.OR = [
+      { originalName: { contains: term, mode: "insensitive" } },
+      { filename: { contains: term, mode: "insensitive" } },
+      { title: { contains: term, mode: "insensitive" } },
+      { altText: { contains: term, mode: "insensitive" } },
+      { description: { contains: term, mode: "insensitive" } },
+      { tags: { contains: term, mode: "insensitive" } },
+    ];
   }
 
   const [data, total] = await Promise.all([

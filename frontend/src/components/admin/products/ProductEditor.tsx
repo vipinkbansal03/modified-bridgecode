@@ -12,6 +12,8 @@ import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect"
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
 import { uploadMediaFiles } from "@/utils/uploadMedia";
+import MediaSelectorModal from "@/components/admin/media/MediaSelectorModal";
+import type { MediaItem } from "@/services/mediaService";
 import { BulkVariantImportWizard } from "@/components/admin/products/BulkVariantImportWizard";
 import { ProductPaymentOverridesTab } from "@/components/admin/products/ProductPaymentOverridesTab";
 import { RefreshButton } from "@/components/admin/RefreshButton";
@@ -644,6 +646,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [uploadingMediaCount, setUploadingMediaCount] = useState(0);
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [isDragOverPdf, setIsDragOverPdf] = useState(false);
+  const [pdfMediaSelectorOpen, setPdfMediaSelectorOpen] = useState(false);
+  const [imageMediaSelectorOpen, setImageMediaSelectorOpen] = useState(false);
+  const [infoImageSelectorOpen, setInfoImageSelectorOpen] = useState(false);
+  const [specDiagramSelectorOpen, setSpecDiagramSelectorOpen] = useState(false);
   const [deletingMedia, setDeletingMedia] = useState<string | null>(null);
   const [settingCoverMediaId, setSettingCoverMediaId] = useState<string | null>(null);
   const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set());
@@ -661,6 +667,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [packageDescription, setPackageDescription] = useState("");
   const [packageImage, setPackageImage] = useState("");
   const [uploadingPackageImage, setUploadingPackageImage] = useState(false);
+  const [packageMediaSelectorOpen, setPackageMediaSelectorOpen] = useState(false);
   const [packageSortOrder, setPackageSortOrder] = useState(0);
   const [packageStatus, setPackageStatus] = useState("ACTIVE");
 
@@ -4135,6 +4142,56 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     if (isDragOverPdf) setIsDragOverPdf(false);
   };
 
+  const handleAttachCatalogueFromMedia = async (media: MediaItem) => {
+    try {
+      setUploadingPdf(true);
+      const pdfMedia = (product?.media ?? []).filter(
+        (m: any) => m.type === "PDF" || m.mimeType?.includes("pdf") || m.url?.toLowerCase().endsWith(".pdf")
+      );
+      if (pdfMedia.length > 0 && productId && productId !== "new") {
+        await Promise.all(
+          pdfMedia.map((m: any) =>
+            m.id ? adminApi.delete(`/products/${productId}/media/${m.id}`).catch(() => {}) : Promise.resolve()
+          )
+        );
+      }
+
+      if (productId && productId !== "new") {
+        if (media.id) {
+          await adminApi.post(`/products/${productId}/media`, {
+            mediaIds: [media.id],
+          });
+        }
+        await adminApi.put(`/products/${productId}`, { catalogueUrl: media.url }).catch(() => {});
+        refetch();
+      }
+      showToast("Product catalogue PDF linked successfully.");
+    } catch (err) {
+      showToast(getAdminErrorMessage(err, "Failed to link catalogue PDF."), "error");
+    } finally {
+      setUploadingPdf(false);
+      setPdfMediaSelectorOpen(false);
+    }
+  };
+
+  const handleAttachProductImageFromMedia = async (media: MediaItem) => {
+    try {
+      setUploadingMedia(true);
+      if (productId && productId !== "new" && media.id) {
+        await adminApi.post(`/products/${productId}/media`, {
+          mediaIds: [media.id],
+        });
+        refetch();
+      }
+      showToast("Image added to product gallery.");
+    } catch (err) {
+      showToast(getAdminErrorMessage(err, "Failed to attach image to product gallery."), "error");
+    } finally {
+      setUploadingMedia(false);
+      setImageMediaSelectorOpen(false);
+    }
+  };
+
   const handleToggleSelectMedia = (mediaId: string) => {
     setSelectedMediaIds((prev) => {
       const next = new Set(prev);
@@ -5088,36 +5145,21 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               <div>
                 <label className="mb-1 block text-[13.5px] font-medium text-[#1A1A1A]">Information Image</label>
                 <div className="mt-1.5 flex items-center gap-3">
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/gif,image/webp"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (event) => {
-                          const result = event.target?.result as string;
-                          form.setFieldValue("informationImage", result);
-                        };
-                        reader.readAsDataURL(file);
-                      }
-                    }}
-                    className="hidden"
-                    id="information-image-upload"
-                  />
-                  <label
-                    htmlFor="information-image-upload"
-                    className="cursor-pointer rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5]"
+                  <button
+                    type="button"
+                    onClick={() => setInfoImageSelectorOpen(true)}
+                    className="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
                   >
-                    Upload Image
-                  </label>
+                    <ImageIcon size={14} />
+                    <span>Browse Media Library</span>
+                  </button>
                   {form.values.informationImage && (
                     <div className="relative h-12 w-12">
                       <img src={form.values.informationImage} alt="Information preview" className="h-full w-full rounded-md object-cover" />
                       <button
                         type="button"
                         onClick={() => form.setFieldValue("informationImage", "")}
-                        className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white hover:bg-[#B5151B]"
+                        className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white hover:bg-[#B5151B] text-xs"
                       >
                         ×
                       </button>
@@ -5189,23 +5231,16 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   </p>
                 </div>
 
-                <label className="inline-flex items-center justify-center gap-2 rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shrink-0 shadow-2xs">
-                  <Upload size={15} />
-                  {uploadingSpecDiagrams ? "Uploading..." : "Upload Diagrams"}
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    className="hidden"
-                    disabled={uploadingSpecDiagrams}
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files.length > 0) {
-                        void handleUploadSpecDiagrams(e.target.files);
-                        e.target.value = "";
-                      }
-                    }}
-                  />
-                </label>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setSpecDiagramSelectorOpen(true)}
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+                  >
+                    <ImageIcon size={14} />
+                    <span>Browse Media Library</span>
+                  </button>
+                </div>
               </div>
 
               {form.values.specImages && form.values.specImages.length > 0 ? (
@@ -5246,13 +5281,16 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   ))}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#E5E7EB] bg-[#FAFAFA] py-8 px-4 text-center">
+                <div
+                  onClick={() => setSpecDiagramSelectorOpen(true)}
+                  className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#E5E7EB] bg-[#FAFAFA] py-8 px-4 text-center cursor-pointer hover:bg-red-50/20 hover:border-[#E31E24]/50 transition-colors"
+                >
                   <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-[#E31E24]">
-                    <Upload size={20} />
+                    <ImageIcon size={20} />
                   </div>
-                  <p className="text-[13.5px] font-semibold text-[#1A1A1A]">No Specification Diagrams Uploaded</p>
+                  <p className="text-[13.5px] font-semibold text-[#1A1A1A]">No Specification Diagrams Attached</p>
                   <p className="mt-1 text-[12px] text-[#6B6B6B] max-w-sm">
-                    Click <strong>Upload Diagrams</strong> above to select and upload multiple technical diagrams and charts at once.
+                    Click <strong>Browse Media Library</strong> to select or upload technical diagrams and charts.
                   </p>
                 </div>
               )}
@@ -5391,21 +5429,16 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs disabled:opacity-60">
-                      {uploadingPdf ? (
-                        <>
-                          <Loader2 size={13} className="animate-spin text-white" />
-                          <span>Uploading PDF...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload size={13} />
-                          <span>{catalogueDoc ? "Replace Catalogue PDF" : "Upload Catalogue PDF"}</span>
-                        </>
-                      )}
-                      <input type="file" accept="application/pdf,.pdf" className="hidden" onChange={handlePdfUpload} disabled={uploadingPdf} />
-                    </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPdfMediaSelectorOpen(true)}
+                      disabled={uploadingPdf}
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs disabled:opacity-60"
+                    >
+                      <FileText size={13} />
+                      <span>Browse Media Library</span>
+                    </button>
                   </div>
                 </div>
 
@@ -5427,6 +5460,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPdfMediaSelectorOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F3F4F6] transition shadow-xs cursor-pointer"
+                        >
+                          <FileText size={13} className="text-[#E31E24]" />
+                          <span>Choose Another</span>
+                        </button>
                         <a
                           href={catalogueDoc.url}
                           target="_blank"
@@ -5449,7 +5490,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     </div>
                   </div>
                 ) : (
-                  <label
+                  <div
+                    onClick={() => setPdfMediaSelectorOpen(true)}
                     onDragOver={handlePdfDragOver}
                     onDragLeave={handlePdfDragLeave}
                     onDrop={handlePdfDrop}
@@ -5461,13 +5503,12 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   >
                     <FileText size={28} className={isDragOverPdf ? "text-[#E31E24] mb-2" : "text-[#9CA3AF] mb-2"} />
                     <p className="text-[13px] font-medium text-[#374151]">
-                      Drag &amp; drop a PDF catalogue here, or <span className="font-semibold text-[#E31E24] underline">browse files</span>
+                      Drag &amp; drop a PDF catalogue here, or <span className="font-semibold text-[#E31E24] underline">browse Media Library</span>
                     </p>
                     <p className="mt-1 text-[11.5px] text-[#9CA3AF]">
-                      Supports single PDF catalogue/brochure file.
+                      Select from existing files or upload a new PDF brochure.
                     </p>
-                    <input type="file" accept="application/pdf,.pdf" className="hidden" onChange={handlePdfUpload} disabled={uploadingPdf} />
-                  </label>
+                  </div>
                 )}
               </div>
 
@@ -5513,29 +5554,24 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       </button>
                     )}
 
-                    <label className="flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs disabled:opacity-60">
-                      {uploadingMedia ? (
-                        <>
-                          <Loader2 size={14} className="animate-spin text-white" />
-                          <span>Uploading...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload size={14} />
-                          <span>Upload Images</span>
-                        </>
-                      )}
-                      <input type="file" accept="image/*" multiple className="hidden" onChange={handleMediaUpload} disabled={uploadingMedia} />
-                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setImageMediaSelectorOpen(true)}
+                      className="flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+                    >
+                      <ImageIcon size={14} />
+                      <span>Browse Media Library</span>
+                    </button>
                   </div>
                 </div>
 
-                {/* Drag & Drop Area */}
-                <label
+                {/* Media Library Dropzone */}
+                <div
+                  onClick={() => setImageMediaSelectorOpen(true)}
                   onDragOver={handleMediaDragOver}
                   onDragLeave={handleMediaDragLeave}
                   onDrop={handleMediaDrop}
-                  title="Click anywhere or drag and drop files to upload product images"
+                  title="Click to browse Media Library or drag and drop files"
                   className={`group mb-6 flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition-all cursor-pointer select-none ${
                     uploadingMedia
                       ? "border-[#E31E24] bg-red-50/30 cursor-not-allowed opacity-75"
@@ -5544,7 +5580,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       : "border-[#E6E6E6] bg-[#FAFAFA] hover:border-[#E31E24] hover:bg-[#FFF8F8] hover:shadow-xs"
                   }`}
                 >
-                  <input type="file" accept="image/*" multiple className="hidden" onChange={handleMediaUpload} disabled={uploadingMedia} />
                   {uploadingMedia ? (
                     <div className="flex flex-col items-center py-1">
                       <Loader2 size={24} className="animate-spin text-[#E31E24] mb-2" />
@@ -5561,15 +5596,15 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       <p className="text-[13.5px] font-medium text-[#1A1A1A]">
                         Drag &amp; drop product images here, or{" "}
                         <span className="font-semibold text-[#E31E24] underline group-hover:text-[#B5151B]">
-                          browse files
+                          browse Media Library
                         </span>
                       </p>
                       <p className="mt-1 text-[12px] text-[#9A9A9A]">
-                        Supports JPG, PNG, WEBP, GIF, SVG. Click anywhere or drag single or multiple images.
+                        Supports JPG, PNG, WEBP, GIF, SVG. Click anywhere to select or upload via Media Library.
                       </p>
                     </>
                   )}
-                </label>
+                </div>
 
                 {/* Product Media Grid */}
                 {imageMedia.length > 0 || uploadingMedia ? (
@@ -8608,17 +8643,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       </div>
                     )}
                     <div className="flex flex-wrap items-center gap-2 border-t border-[#E6E6E6] px-3 py-3">
-                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5]">
-                        <Upload size={14} />
-                        {uploadingPackageImage ? "Uploading..." : "Upload image"}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(event) => void uploadPackageImage(event.target.files?.[0])}
-                          disabled={uploadingPackageImage}
-                        />
-                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setPackageMediaSelectorOpen(true)}
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+                      >
+                        <ImageIcon size={14} />
+                        <span>Browse Media Library</span>
+                      </button>
                       <button
                         type="button"
                         onClick={() => setPackageImage("")}
@@ -10700,6 +10732,58 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         </div>
       </Modal>
 
+      <MediaSelectorModal
+        open={pdfMediaSelectorOpen}
+        title="Media Library"
+        initialType="document"
+        onClose={() => setPdfMediaSelectorOpen(false)}
+        onSelect={handleAttachCatalogueFromMedia}
+      />
+
+      <MediaSelectorModal
+        open={imageMediaSelectorOpen}
+        title="Media Library"
+        initialType="image"
+        onClose={() => setImageMediaSelectorOpen(false)}
+        onSelect={handleAttachProductImageFromMedia}
+      />
+
+      <MediaSelectorModal
+        open={infoImageSelectorOpen}
+        title="Media Library"
+        initialType="image"
+        onClose={() => setInfoImageSelectorOpen(false)}
+        onSelect={(media) => {
+          form.setFieldValue("informationImage", media.url);
+          setInfoImageSelectorOpen(false);
+          showToast("Information image updated.");
+        }}
+      />
+
+      <MediaSelectorModal
+        open={specDiagramSelectorOpen}
+        title="Media Library"
+        initialType="image"
+        onClose={() => setSpecDiagramSelectorOpen(false)}
+        onSelect={(media) => {
+          const existing = form.values.specImages || [];
+          form.setFieldValue("specImages", [...existing, { url: media.url, title: media.originalName }]);
+          setSpecDiagramSelectorOpen(false);
+          showToast("Specification diagram added.");
+        }}
+      />
+
+      <MediaSelectorModal
+        open={packageMediaSelectorOpen}
+        title="Media Library"
+        initialType="image"
+        onClose={() => setPackageMediaSelectorOpen(false)}
+        onSelect={(media) => {
+          setPackageImage(media.url);
+          setPackageMediaSelectorOpen(false);
+          showToast("Package image selected.");
+        }}
+      />
 
       {ToastComponent}
     </>

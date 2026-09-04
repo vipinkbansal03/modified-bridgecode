@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowLeft, Edit2, Plus, Save, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, Edit2, ImageIcon, Plus, Save, Trash2, Upload, X } from "lucide-react";
 import {
   AdminInput,
   AdminListToolbar,
@@ -30,6 +30,7 @@ import {
 import { getAdminErrorMessage } from "@/services/adminApi";
 import { slugify } from "@/utils/slugify";
 import { uploadMediaFiles } from "@/utils/uploadMedia";
+import { MediaSelectorModal } from "@/components/admin/media/MediaSelectorModal";
 
 type Blog = {
   id: string;
@@ -85,6 +86,7 @@ export function BlogPostsTab() {
   const [slugEdited, setSlugEdited] = useState(false);
   const [showSeo, setShowSeo] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [mediaModalOpen, setMediaModalOpen] = useState(false);
 
   const { showToast, ToastComponent } = useToast();
 
@@ -560,25 +562,13 @@ export function BlogPostsTab() {
                       No image selected
                     </div>
                   )}
-                  <label
-                    className={`inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[12.5px] font-semibold text-[#333] hover:bg-gray-50 ${
-                      uploading ? "opacity-50 pointer-events-none" : ""
-                    }`}
+                  <button
+                    type="button"
+                    onClick={() => setMediaModalOpen(true)}
+                    className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
                   >
-                    {uploading ? (
-                      <span className="inline-block animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent w-3.5 h-3.5" />
-                    ) : (
-                      <Upload size={14} />
-                    )}
-                    {uploading ? "Uploading..." : "Upload Image"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(event) => upload(event.target.files?.[0])}
-                      disabled={uploading}
-                    />
-                  </label>
+                    <ImageIcon size={14} /> Browse Media Library
+                  </button>
                   <AdminInput
                     label="Or Image URL"
                     value={form.featuredImage}
@@ -718,6 +708,14 @@ export function BlogPostsTab() {
         onCancel={() => setShowBulkDeleteModal(false)}
         isLoading={bulkBlogs.isPending}
         onConfirm={handleConfirmBulkDelete}
+      />
+
+      <MediaSelectorModal
+        isOpen={mediaModalOpen}
+        onClose={() => setMediaModalOpen(false)}
+        onSelect={(media) => setField("featuredImage", media.url)}
+        title="Select Blog Featured Image"
+        acceptTypes={["IMAGE"]}
       />
 
       {ToastComponent}

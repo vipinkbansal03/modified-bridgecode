@@ -21,10 +21,12 @@ import {
   Save,
   Trash2,
   Upload,
+  ImageIcon,
   CheckCircle,
   XCircle,
   Lock,
 } from "lucide-react";
+import { MediaSelectorModal } from "@/components/admin/media/MediaSelectorModal";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
@@ -302,6 +304,7 @@ function CmsPagesManagementContent() {
 
   const [savingSeo, setSavingSeo] = useState(false);
   const [uploadingSeoAsset, setUploadingSeoAsset] = useState<string | null>(null);
+  const [mediaModalOpen, setMediaModalOpen] = useState(false);
 
   useEffect(() => {
     if (selectedPage) {
@@ -845,24 +848,14 @@ function CmsPagesManagementContent() {
                           )}
 
                           {canUpdate && (
-                            <label className={cn(
-                              "inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors shadow-2xs",
-                              uploadingSeoAsset === "ogImage" ? "bg-gray-400 cursor-not-allowed" : "bg-[#E31E24] hover:bg-[#B5151B]"
-                            )}>
-                              <Upload size={13} />
-                              <span>{uploadingSeoAsset === "ogImage" ? "Uploading..." : seoForm.ogImage ? "Replace Image" : "Upload Social Image"}</span>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) uploadSeoImage("ogImage", file);
-                                  e.target.value = "";
-                                }}
-                                disabled={uploadingSeoAsset === "ogImage"}
-                              />
-                            </label>
+                            <button
+                              type="button"
+                              onClick={() => setMediaModalOpen(true)}
+                              className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#E31E24] px-3.5 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+                            >
+                              <ImageIcon size={13} />
+                              <span>Browse Media Library</span>
+                            </button>
                           )}
                           <AdminInput
                             label="Image URL"
@@ -881,6 +874,14 @@ function CmsPagesManagementContent() {
           )}
         </div>
       )}
+
+      <MediaSelectorModal
+        isOpen={mediaModalOpen}
+        onClose={() => setMediaModalOpen(false)}
+        onSelect={(media) => setSeoForm((prev) => ({ ...prev, ogImage: media.url }))}
+        title="Select Social Share Image"
+        acceptTypes={["IMAGE"]}
+      />
     </AdminLayout>
   );
 }

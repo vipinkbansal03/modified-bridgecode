@@ -70,6 +70,7 @@ import { slugify } from "@/utils/slugify";
 import { uploadMediaFiles } from "@/utils/uploadMedia";
 import { CATEGORY_DESCRIPTION_MAX_LENGTH } from "@/constants/category.constants";
 import { stripHtmlTags } from "@/utils/sanitize";
+import MediaSelectorModal from "@/components/admin/media/MediaSelectorModal";
 
 interface CategoryTranslation {
   id: string;
@@ -212,6 +213,7 @@ export default function CategoriesPage() {
   const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
   const [countrySearch, setCountrySearch] = useState("");
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [categoryMediaOpen, setCategoryMediaOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { showToast, ToastComponent } = useToast();
 
@@ -1047,16 +1049,15 @@ export default function CategoriesPage() {
                 </div>
                 <div className="space-y-2">
                   <AdminInput label="Image URL" placeholder="/uploads/category.jpg" {...form.getFieldProps("image")} />
-                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]">
-                    <Upload size={14} /> {uploadingImage ? "Uploading..." : "Upload image"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      disabled={uploadingImage}
-                      onChange={(e) => handleImageUpload(e.target.files?.[0])}
-                    />
-                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCategoryMediaOpen(true)}
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+                    >
+                      <ImageIcon size={14} /> Browse Media Library
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1321,16 +1322,15 @@ export default function CategoriesPage() {
               </div>
               <div className="space-y-2">
                 <AdminInput label="Image URL" placeholder="/uploads/category.jpg" {...form.getFieldProps("image")} />
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]">
-                  <Upload size={14} /> {uploadingImage ? "Uploading..." : "Upload image"}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    disabled={uploadingImage}
-                    onChange={(e) => handleImageUpload(e.target.files?.[0])}
-                  />
-                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCategoryMediaOpen(true)}
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+                  >
+                    <ImageIcon size={14} /> Browse Media Library
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1481,6 +1481,15 @@ export default function CategoriesPage() {
           ) : null}
         </div>
       </Modal>
+      <MediaSelectorModal
+        open={categoryMediaOpen}
+        onClose={() => setCategoryMediaOpen(false)}
+        initialType="image"
+        onSelect={(media) => {
+          form.setFieldValue("image", media.url);
+          showToast("Category image selected.");
+        }}
+      />
       {ToastComponent}
     </AdminLayout>
   );

@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState, useCallback } from "react";
-import { ArrowLeft, Edit2, GripVertical, Plus, Save, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, Edit2, GripVertical, Plus, Save, Trash2, Upload, X, Image as ImageIcon } from "lucide-react";
 import { AdminInput, AdminSelect, ConfirmModal, StatusBadge, useToast, LoadingButton, DataTable, TableStatusAction, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { Modal } from "@/components/ui/Modal";
+import MediaSelectorModal from "@/components/admin/media/MediaSelectorModal";
 import { useAdminBanners, useAdminCountries, useBulkBanners, useCreateBanner, useDeleteBanner, useReorderBanners, useUpdateBanner } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
@@ -108,6 +109,10 @@ export default function BannersPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [uploading, setUploading] = useState<"image" | "mobileImage" | null>(null);
   const [previewUrls, setPreviewUrls] = useState<{ image?: string; mobileImage?: string }>({});
+  const [mediaSelector, setMediaSelector] = useState<{ open: boolean; field: "image" | "mobileImage" }>({
+    open: false,
+    field: "image",
+  });
 
 
   const { showToast, ToastComponent } = useToast();
@@ -821,28 +826,16 @@ export default function BannersPage() {
                       }}
                       placeholder="banners/uuid-desktop.webp or https://..."
                     />
-                    <label
-                      className={`mt-3 inline-flex cursor-pointer items-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-3.5 py-2 text-[12.5px] font-semibold text-[#333] hover:bg-gray-50 ${
-                        uploading === field ? "opacity-50 pointer-events-none" : ""
-                      }`}
-                    >
-                      {uploading === field ? (
-                        <span
-                          className="inline-block animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent w-3.5 h-3.5"
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <Upload size={14} />
-                      )}
-                      {uploading === field ? "Optimizing & Uploading..." : "Upload Image File"}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        disabled={uploading !== null}
-                        className="hidden"
-                        onChange={(event) => upload(field, event.target.files?.[0])}
-                      />
-                    </label>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setMediaSelector({ open: true, field })}
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+                      >
+                        <ImageIcon size={14} />
+                        Browse Media Library
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -879,6 +872,18 @@ export default function BannersPage() {
         onCancel={() => setShowBulkDeleteModal(false)}
         isLoading={bulkBanners.isPending}
         onConfirm={handleConfirmBulkDelete}
+      />
+
+      <MediaSelectorModal
+        open={mediaSelector.open}
+        onClose={() => setMediaSelector((prev) => ({ ...prev, open: false }))}
+        initialType="image"
+        onSelect={(media) => {
+          const field = mediaSelector.field;
+          set(field, media.url);
+          setPreviewUrls((prev) => ({ ...prev, [field]: media.url }));
+          showToast("Banner image selected.");
+        }}
       />
 
       {ToastComponent}

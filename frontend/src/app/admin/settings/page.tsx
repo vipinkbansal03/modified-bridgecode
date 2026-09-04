@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Globe, Search, BarChart2, Megaphone, Share2, ShieldCheck, Code2, Cookie, MessageCircle, Mail,
-  CheckCircle2, AlertCircle, Eye, EyeOff, Save, RefreshCw, Lock, Upload, Plus, Trash2, ArrowUp, ArrowDown, Scale, Info,
+  CheckCircle2, AlertCircle, Eye, EyeOff, Save, RefreshCw, Lock, Upload, Plus, Trash2, ArrowUp, ArrowDown, Scale, Info, ImageIcon,
 } from "lucide-react";
+import { MediaSelectorModal } from "@/components/admin/media/MediaSelectorModal";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminTextarea, AdminSelect, useToast, LoadingButton, AdminStickySaveBar } from "@/components/admin/AdminComponents";
@@ -366,6 +367,9 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const [mediaTarget, setMediaTarget] = useState<
+    { type: "setting"; key: "general.logo" | "general.mobile_logo" | "general.favicon" } | { type: "slide"; index: number } | null
+  >(null);
   const shouldScrollToNewSlideRef = useRef(false);
   const newestSlideRef = useRef<HTMLDivElement | null>(null);
   const [savedSettings, setSavedSettings] = useState<SettingMap>({});
@@ -714,17 +718,14 @@ export default function SettingsPage() {
                           onChange={(e) => set("general.logo", e.target.value)}
                           placeholder="e.g. /uploads/modortho/branding/logo.png"
                         />
-                        <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-xs font-semibold text-[#374151] shadow-2xs hover:bg-[#F9FAFB]">
-                          <Upload size={14} />
-                          <span>{uploadingKey === "general.logo" ? "Uploading…" : "Upload"}</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => void handleSettingImageUpload("general.logo", e)}
-                            disabled={Boolean(uploadingKey)}
-                          />
-                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setMediaTarget({ type: "setting", key: "general.logo" })}
+                          className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-[#B5151B] transition-colors"
+                        >
+                          <ImageIcon size={14} />
+                          <span>Browse Media Library</span>
+                        </button>
                       </div>
                     </FieldRow>
 
@@ -745,17 +746,14 @@ export default function SettingsPage() {
                           onChange={(e) => set("general.mobile_logo", e.target.value)}
                           placeholder="e.g. /uploads/modortho/branding/mobile-logo.png"
                         />
-                        <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-xs font-semibold text-[#374151] shadow-2xs hover:bg-[#F9FAFB]">
-                          <Upload size={14} />
-                          <span>{uploadingKey === "general.mobile_logo" ? "Uploading…" : "Upload"}</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => void handleSettingImageUpload("general.mobile_logo", e)}
-                            disabled={Boolean(uploadingKey)}
-                          />
-                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setMediaTarget({ type: "setting", key: "general.mobile_logo" })}
+                          className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-[#B5151B] transition-colors"
+                        >
+                          <ImageIcon size={14} />
+                          <span>Browse Media Library</span>
+                        </button>
                       </div>
                     </FieldRow>
                   </div>
@@ -790,17 +788,14 @@ export default function SettingsPage() {
                           <RefreshCw size={13} />
                         </button>
                       )}
-                      <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-xs font-semibold text-[#374151] shadow-2xs hover:bg-[#F9FAFB]">
-                        <Upload size={14} />
-                        <span>{uploadingKey === "general.favicon" ? "Uploading…" : "Upload"}</span>
-                        <input
-                          type="file"
-                          accept="image/*,.ico"
-                          className="hidden"
-                          onChange={(e) => void handleSettingImageUpload("general.favicon", e)}
-                          disabled={Boolean(uploadingKey)}
-                        />
-                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setMediaTarget({ type: "setting", key: "general.favicon" })}
+                        className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-[#B5151B] transition-colors"
+                      >
+                        <ImageIcon size={14} />
+                        <span>Browse Media Library</span>
+                      </button>
                     </div>
                   </FieldRow>
                 </div>
@@ -1305,19 +1300,14 @@ export default function SettingsPage() {
                               }
                               placeholder="/auth/login1.jpg"
                             />
-                            <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-[#1A1A1A] px-3.5 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#333]">
-                              <Upload size={14} />
-                              {uploadingKey === uploadKey ? "Uploading…" : "Upload"}
-                              <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                disabled={uploadingKey === uploadKey}
-                                onChange={(event) =>
-                                  handleSlideImageUpload(index, event)
-                                }
-                              />
-                            </label>
+                            <button
+                              type="button"
+                              onClick={() => setMediaTarget({ type: "slide", index })}
+                              className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#B5151B] shadow-2xs"
+                            >
+                              <ImageIcon size={14} />
+                              <span>Browse Media Library</span>
+                            </button>
                           </div>
 
                           {slide.image && (
@@ -1478,6 +1468,23 @@ export default function SettingsPage() {
           </fieldset>
         </div>
       </div>
+
+      <MediaSelectorModal
+        isOpen={mediaTarget !== null}
+        onClose={() => setMediaTarget(null)}
+        onSelect={(media) => {
+          if (!mediaTarget) return;
+          if (mediaTarget.type === "setting") {
+            set(mediaTarget.key, media.url);
+            showToast("Image selected. Click 'Save Settings' to apply changes.", "success");
+          } else if (mediaTarget.type === "slide") {
+            updateLoginSlide(mediaTarget.index, "image", media.url);
+            showToast("Slide image selected.", "success");
+          }
+        }}
+        title="Select Media Image"
+        acceptTypes={["IMAGE"]}
+      />
     </AdminLayout>
   );
 }
