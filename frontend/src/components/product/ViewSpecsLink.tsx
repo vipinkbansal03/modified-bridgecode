@@ -22,7 +22,7 @@ export function ViewSpecsLink() {
     <a
       href="#product-specifications"
       onClick={handleClick}
-      className="inline-flex items-center gap-1 text-[13px] font-medium text-[#6B7280] hover:text-[#E31E24] transition-colors underline decoration-dotted underline-offset-4 pt-1.5"
+      className="inline-flex items-center gap-1 text-[13px] font-medium text-[#6B7280] hover:text-[#E31E24] transition-colors underline decoration-dotted underline-offset-4 py-1.5"
     >
       <span>View full specifications</span>
       <ChevronDown size={14} className="text-[#9CA3AF]" />

@@ -161,14 +161,16 @@ export function SimpleInquiryPanel({ product, productId }: SimpleInquiryPanelPro
               <Mail size={15} /> Request Pricing <ArrowRight size={14} />
             </button>
           )}
-          <a
-            href={product.catalogueUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2.5 rounded-pill border border-line bg-offwhite px-4 py-3 text-[13.5px] font-medium text-ink hover:border-steel-2"
-          >
-            <FileText size={15} className="text-brand" /> Download Product Catalogue
-          </a>
+          {product.catalogueUrl && (
+            <a
+              href={product.catalogueUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2.5 rounded-pill border border-line bg-offwhite px-4 py-3 text-[13.5px] font-medium text-ink hover:border-steel-2"
+            >
+              <FileText size={15} className="text-brand" /> Download Product Catalogue
+            </a>
+          )}
         </div>
         {!productId && (
           <p className="mt-3 max-w-[480px] text-xs leading-relaxed text-steel-2">

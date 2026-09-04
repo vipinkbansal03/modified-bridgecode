@@ -325,15 +325,17 @@ export function BulkOrderPanel({ product, productId }: BulkOrderPanelProps) {
         </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-        <a
-          href={product.catalogueUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2.5 rounded-md border border-line bg-white px-4 py-3.5 text-[13.5px] font-medium text-ink hover:border-steel-2"
-        >
-          <FileText size={16} className="text-brand" /> Download Product Catalogue
-        </a>
+      <div className={`mt-6 grid grid-cols-1 gap-3.5 ${product.catalogueUrl ? "sm:grid-cols-2" : "sm:grid-cols-1"}`}>
+        {product.catalogueUrl && (
+          <a
+            href={product.catalogueUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2.5 rounded-md border border-line bg-white px-4 py-3.5 text-[13.5px] font-medium text-ink hover:border-steel-2"
+          >
+            <FileText size={16} className="text-brand" /> Download Product Catalogue
+          </a>
+        )}
         <a
           href="/quality-certifications"
           className="flex items-center gap-2.5 rounded-md border border-line bg-white px-4 py-3.5 text-[13.5px] font-medium text-ink hover:border-steel-2"
