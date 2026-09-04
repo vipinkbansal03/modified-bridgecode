@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -75,7 +75,7 @@ interface DeletingItem {
   name: string;
 }
 
-export default function AdminArchivePage() {
+function AdminArchiveContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { hasPermission } = useAdminAuth();
@@ -1560,5 +1560,19 @@ export default function AdminArchivePage() {
         />
       </div>
     </AdminLayout>
+  );
+}
+
+export default function AdminArchivePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center bg-[#F2F2F2]">
+          <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
+        </div>
+      }
+    >
+      <AdminArchiveContent />
+    </Suspense>
   );
 }
