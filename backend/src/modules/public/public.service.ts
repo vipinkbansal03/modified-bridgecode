@@ -374,8 +374,7 @@ export async function publicGetProduct(
     },
   });
 
-  if (!product || (product.hasVariants && product.variants.length === 0))
-    throw new AppError("Product not found.", 404);
+  if (!product) throw new AppError("Product not found.", 404);
 
   const now = new Date();
   const startOfCurrentDay = new Date(now);
@@ -452,7 +451,7 @@ export async function publicGetProduct(
 
   const baseTierPricing = product.tierPricing.map((t) => ({
     id: t.id,
-    tier: { id: t.tier.id, name: t.tier.name },
+    tier: { id: t.tier?.id ?? "", name: t.tier?.name ?? "" },
     discountPercent: t.discountPercent != null ? Number(t.discountPercent) : null,
     fixedPrice: t.fixedPrice != null ? Number(t.fixedPrice) : null,
   }));
@@ -469,7 +468,7 @@ export async function publicGetProduct(
   const allTierPricing = [...baseTierPricing, ...promoTierPricing];
   const tierGroups: Record<string, typeof allTierPricing> = {};
   for (const tp of allTierPricing) {
-    const key = tp.tier.id;
+    const key = tp.tier?.id ?? "default";
     if (!tierGroups[key]) tierGroups[key] = [];
     tierGroups[key].push(tp);
   }
@@ -1239,12 +1238,12 @@ type CategoryTextSource = {
   translations?: CategoryTranslationSnapshot[];
 };
 
-function getCategoryText(category: CategoryTextSource) {
-  const translation = category.translations?.[0];
+function getCategoryText(category?: CategoryTextSource | null) {
+  const translation = category?.translations?.[0];
 
   return {
-    name: translation?.name || category.name,
-    description: translation?.description || category.description || null,
+    name: translation?.name || category?.name || "",
+    description: translation?.description || category?.description || null,
   };
 }
 
@@ -1524,10 +1523,10 @@ type PublicProductDetailRecord = {
 };
 
 function buildPublicPriceBreakdown(pr: {
-  country: { code: string; dutyPercentage?: Prisma.Decimal | number };
+  country?: { code?: string; dutyPercentage?: Prisma.Decimal | number | null } | null;
   mrp: Prisma.Decimal | number;
 }) {
-  const dutyPercentage = Number(pr.country.dutyPercentage) || 0;
+  const dutyPercentage = Number(pr?.country?.dutyPercentage) || 0;
   if (dutyPercentage <= 0) return undefined;
   const mrp = Number(pr.mrp);
   return {

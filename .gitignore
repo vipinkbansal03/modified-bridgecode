@@ -19,6 +19,8 @@ pnpm-debug.log*
 .env.*
 !.env.example
 !.env.*.example
+*.pem
+**/firebase-service-account*.json
 
 # Dependency / build artifacts
 **/node_modules/

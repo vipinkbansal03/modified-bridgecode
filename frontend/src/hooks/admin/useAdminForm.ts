@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useToast } from "@/components/admin/AdminComponents";
+import { useToast as useSharedToast } from "@/components/ui/ToastProvider";
 
 export interface UseAdminFormOptions<T> {
   enableReinitialize?: boolean;
@@ -124,6 +124,8 @@ export function useAdminForm<T extends Record<string, any>>({
     if (onClose) onClose();
   }, [onClose]);
 
+  const { showToast } = useSharedToast();
+
   const handleSubmit = useCallback(
     async (e?: React.FormEvent) => {
       if (e) e.preventDefault();
@@ -139,6 +141,16 @@ export function useAdminForm<T extends Record<string, any>>({
         setTouched(newTouched);
 
         const firstErrorField = Object.keys(newErrors)[0];
+        const firstErrorMessage = newErrors[firstErrorField as keyof T];
+        if (firstErrorMessage) {
+          showToast(
+            typeof firstErrorMessage === "string"
+              ? `Please check "${firstErrorField}": ${firstErrorMessage}`
+              : "Please correct the errors in the form before saving.",
+            "error"
+          );
+        }
+
         if (firstErrorField) {
           setTimeout(() => {
             const el = document.getElementById(`field-${firstErrorField}`);
@@ -158,7 +170,7 @@ export function useAdminForm<T extends Record<string, any>>({
         setIsSubmitting(false);
       }
     },
-    [values, runValidation, touched, onSubmit, reset]
+    [values, runValidation, touched, onSubmit, reset, showToast]
   );
 
   const getFieldProps = useCallback(

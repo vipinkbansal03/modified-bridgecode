@@ -111,15 +111,32 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
   const specImages = useMemo(() => {
     const list: Array<{ url: string; title: string }> = [];
 
-    const rawSpecs = apiProduct?.technicalSpecs || product.technicalSpecs;
+    let rawSpecs = apiProduct?.technicalSpecs ?? product.technicalSpecs;
+    if (typeof rawSpecs === "string") {
+      try {
+        rawSpecs = JSON.parse(rawSpecs);
+      } catch {
+        // ignore
+      }
+    }
+
+    const normalizeUrl = (u?: string | null) => {
+      if (!u) return "";
+      let trimmed = u.trim();
+      trimmed = trimmed.replace(/^http:\/\/(?:localhost|127\.0\.0\.1):4000(\/uploads\/)/i, "$1");
+      if (trimmed.startsWith("/") || trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("data:")) {
+        return trimmed;
+      }
+      return `/${trimmed}`;
+    };
 
     // 1. Dedicated Specification Diagrams from { images: [...] }
     if (rawSpecs && typeof rawSpecs === "object" && Array.isArray((rawSpecs as any).images)) {
       (rawSpecs as any).images.forEach((img: any, idx: number) => {
         const url = typeof img === "string" ? img : img?.url;
         if (url && typeof url === "string" && url.trim()) {
-          const cleanUrl = url.replace(/^http:\/\/(?:localhost|127\.0\.0\.1):4000(\/uploads\/)/i, "$1");
-          if (!list.some((existing) => existing.url === cleanUrl)) {
+          const cleanUrl = normalizeUrl(url);
+          if (cleanUrl && !list.some((existing) => existing.url === cleanUrl)) {
             list.push({
               url: cleanUrl,
               title: (typeof img === "object" && img.title) || `Specification Diagram ${idx + 1}`,
@@ -133,8 +150,8 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
     if (Array.isArray(rawSpecs)) {
       rawSpecs.forEach((spec: any, idx: number) => {
         if (spec && typeof spec === "object" && spec.image && typeof spec.image === "string" && spec.image.trim()) {
-          const cleanUrl = spec.image.replace(/^http:\/\/(?:localhost|127\.0\.0\.1):4000(\/uploads\/)/i, "$1");
-          if (!list.some((existing) => existing.url === cleanUrl)) {
+          const cleanUrl = normalizeUrl(spec.image);
+          if (cleanUrl && !list.some((existing) => existing.url === cleanUrl)) {
             list.push({
               url: cleanUrl,
               title: spec.label ? `${spec.label}: ${spec.value || "Diagram"}` : `Specification Diagram ${idx + 1}`,
@@ -732,22 +749,24 @@ function useMemoHighlights(product: ProductDetail, apiProduct?: ApiProductDetail
 }
 
 function useMemoSpecs(product: ProductDetail, apiProduct?: ApiProductDetail | null) {
-  const specs: Record<string, string> = {
-    Brand: "Modern Orthodontics",
-    Material: "Medical Grade Stainless Steel",
-    "Base Type": "80-Mesh Contoured Base",
-    System: "Roth / MBT Compatible",
-    "Slot Size": '.018" / .022"',
-  };
+  let rawSpecs = apiProduct?.technicalSpecs ?? product.technicalSpecs;
+  if (typeof rawSpecs === "string") {
+    try {
+      rawSpecs = JSON.parse(rawSpecs);
+    } catch {
+      // ignore
+    }
+  }
 
-  const rawSpecs = apiProduct?.technicalSpecs || product.technicalSpecs;
   const specList = Array.isArray(rawSpecs)
     ? rawSpecs
     : Array.isArray((rawSpecs as any)?.specs)
       ? (rawSpecs as any).specs
       : null;
 
-  if (Array.isArray(specList)) {
+  const specs: Record<string, string> = {};
+
+  if (Array.isArray(specList) && specList.length > 0) {
     specList.forEach((item: any) => {
       if (item && typeof item === "object") {
         const key = item.label || item.key || item.name;
@@ -770,6 +789,16 @@ function useMemoSpecs(product: ProductDetail, apiProduct?: ApiProductDetail | nu
         }
       }
     });
+  }
+
+  if (Object.keys(specs).length === 0) {
+    return {
+      Brand: "Modern Orthodontics",
+      Material: "Medical Grade Stainless Steel",
+      "Base Type": "80-Mesh Contoured Base",
+      System: "Roth / MBT Compatible",
+      "Slot Size": '.018" / .022"',
+    };
   }
 
   return specs;

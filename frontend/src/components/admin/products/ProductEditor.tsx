@@ -84,28 +84,28 @@ const ALL_TABS: TabConfig[] = [
 ];
 
 const basicSchema = Yup.object({
-  title: Yup.string().required("Required"),
-  slug: Yup.string(),
-  categoryId: Yup.string().required("Required"),
-  activeCountryIds: Yup.array().of(Yup.string()).min(1, "Required").required("Required"),
-  status: Yup.string().required(),
-  productCode: Yup.string(),
-  sku: Yup.string(),
-  brand: Yup.string(),
-  shortDescription: Yup.string().max(300),
-  description: Yup.string(),
-  informationImage: Yup.string(),
-  informationDescription: Yup.string().max(200),
-  isFeatured: Yup.boolean(),
-  hasVariants: Yup.boolean(),
-  seoTitle: Yup.string().max(60),
-  seoDescription: Yup.string().max(160),
-  seoKeywords: Yup.string(),
-  highlights: Yup.array().of(Yup.object({ title: Yup.string(), description: Yup.string(), image: Yup.string() })),
+  title: Yup.string().required("Title is required"),
+  slug: Yup.string().optional(),
+  categoryId: Yup.string().required("Category is required"),
+  activeCountryIds: Yup.array().of(Yup.string()).optional(),
+  status: Yup.string().optional(),
+  productCode: Yup.string().optional(),
+  sku: Yup.string().optional(),
+  brand: Yup.string().optional(),
+  shortDescription: Yup.string().max(300).optional(),
+  description: Yup.string().optional(),
+  informationImage: Yup.string().optional(),
+  informationDescription: Yup.string().max(200).optional(),
+  isFeatured: Yup.boolean().optional(),
+  hasVariants: Yup.boolean().optional(),
+  seoTitle: Yup.string().max(60).optional(),
+  seoDescription: Yup.string().max(160).optional(),
+  seoKeywords: Yup.string().optional(),
+  highlights: Yup.array().optional(),
   technicalSpecs: Yup.mixed().optional(),
-  specImages: Yup.array().of(Yup.object({ url: Yup.string(), title: Yup.string() })).optional(),
-  warranty: Yup.array().of(Yup.string()),
-  primaryFeatures: Yup.array().of(Yup.object({ title: Yup.string(), description: Yup.string() })),
+  specImages: Yup.array().optional(),
+  warranty: Yup.array().optional(),
+  primaryFeatures: Yup.array().optional(),
 });
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -3686,10 +3686,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       showToast("Choose an attribute to map.", "error");
       return;
     }
-    if (!newMappingValueIds.length) {
-      showToast("Choose at least one allowed value for this product.", "error");
-      return;
-    }
 
     try {
       const existingMappings = toProductAttributePayload(mappedAttributeRows);
@@ -4496,17 +4492,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       })
       .filter(Boolean) as { attributeId: string; attributeValueIds: string[] }[];
 
-    if (!generateAttributeIds.length) {
-      showToast("Add at least one attribute before generating variants.", "error");
-      return;
-    }
-
-    const missingSelections = variantGenerationCatalog
-      .filter((attribute) => generateAttributeIds.includes(attribute.id))
-      .some((attribute) => !(generateSelectionMap[attribute.id] ?? []).length);
-
-    if (missingSelections) {
-      showToast("Please select at least one value for each attribute, or remove the attribute.", "error");
+    if (!selectedAttributes.length) {
+      showToast("Select at least one attribute value to generate variants.", "error");
       return;
     }
 
@@ -8043,7 +8030,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                   </span>
                                 ))
                               ) : (
-                                <span className="text-[12px] text-[#9A9A9A]">No allowed values selected.</span>
+                                <span className="rounded-full bg-[#EBF5FF] text-[#1E40AF] px-2 py-0.5 text-[11.5px] font-medium">All attribute values allowed</span>
                               )}
                             </div>
                           </div>

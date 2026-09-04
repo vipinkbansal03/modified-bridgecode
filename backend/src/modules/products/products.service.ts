@@ -1642,6 +1642,9 @@ export async function addProductMedia(
   if (mediaIds && mediaIds.length > 0) {
     const existingMedia = await prisma.media.findMany({ where: { id: { in: mediaIds } } });
     existingMedia.forEach((media, i) => {
+      if (!media.url || media.url.startsWith("temporary/")) {
+        throw new AppError("Product media cannot be linked before upload confirmation produces a final URL.", 400);
+      }
       results.push({
         url: media.url,
         publicId: media.publicId,
@@ -1898,24 +1901,13 @@ export async function generateVariants(
     if (!attributeGroups.length) {
       attributeGroups = productAttributeMappings.map((mapping) => ({
         attributeId: mapping.attributeId,
-        attributeValueIds: mapping.allowedValues.map((allowedValue) => allowedValue.attributeValueId),
+        attributeValueIds: mapping.allowedValues.length
+          ? mapping.allowedValues.map((allowedValue) => allowedValue.attributeValueId)
+          : mapping.attribute.values.map((v) => v.id),
       }));
     }
 
     const mappedAttributeById = new Map(productAttributeMappings.map((mapping) => [mapping.attributeId, mapping]));
-    const mappedRequiredAttributeIds = productAttributeMappings
-      .filter((mapping) => mapping.required)
-      .map((mapping) => mapping.attributeId);
-    const requestedAttributeIds = new Set(attributeGroups.map((group) => group.attributeId));
-
-    const missingRequired = mappedRequiredAttributeIds.find((attributeId) => !requestedAttributeIds.has(attributeId));
-    if (missingRequired) {
-      const mapping = mappedAttributeById.get(missingRequired);
-      throw new AppError(
-        `Include required mapped attribute "${mapping?.attribute.name ?? missingRequired}" before generating variants.`,
-        400,
-      );
-    }
 
     for (const group of attributeGroups) {
       const mapping = mappedAttributeById.get(group.attributeId);
@@ -1927,12 +1919,14 @@ export async function generateVariants(
       }
 
       const allowedValueIds = new Set(mapping.allowedValues.map((allowedValue) => allowedValue.attributeValueId));
-      const unmappedValue = group.attributeValueIds.find((attributeValueId) => !allowedValueIds.has(attributeValueId));
-      if (unmappedValue) {
-        throw new AppError(
-          `Value "${unmappedValue}" is not mapped for "${mapping.attribute.name}". Add it to Product Attributes before generating variants.`,
-          400,
-        );
+      if (allowedValueIds.size > 0) {
+        const unmappedValue = group.attributeValueIds.find((attributeValueId) => !allowedValueIds.has(attributeValueId));
+        if (unmappedValue) {
+          throw new AppError(
+            `Value "${unmappedValue}" is not mapped for "${mapping.attribute.name}". Add it to Product Attributes before generating variants.`,
+            400,
+          );
+        }
       }
     }
   }

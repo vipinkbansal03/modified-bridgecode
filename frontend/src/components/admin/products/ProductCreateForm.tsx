@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect, type ChangeEvent } from "react";
 import * as Yup from "yup";
-import { AdminInput, AdminSelect, AdminTextarea, useToast, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminTextarea, AdminRichTextEditor, useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { useAdminCategories, useAdminCountries, useCreateProduct } from "@/hooks/admin/useAdminHooks";
 import { cn } from "@/utils/cn";
@@ -330,12 +330,12 @@ export function ProductCreateForm({
                 value={form.values.shortDescription}
                 onChange={(e) => form.setFieldValue("shortDescription", e.target.value)}
               />
-              <AdminTextarea
+              <AdminRichTextEditor
                 label="Full Description"
-                rows={7}
-                placeholder="Detailed product description..."
+                placeholder="Enter detailed clinical product description..."
                 value={form.values.description}
-                onChange={(e) => form.setFieldValue("description", e.target.value)}
+                onChange={(value) => form.setFieldValue("description", value)}
+                className="min-h-[220px]"
               />
             </div>
           )}

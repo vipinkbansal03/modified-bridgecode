@@ -50,7 +50,7 @@ export const confirm = asyncHandler(async (req: AuthRequest, res: Response) => {
 });
 
 export const config = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const storageProvider = process.env.AWS_REGION && process.env.AWS_S3_BUCKET ? "S3" : "LOCAL";
+  const storageProvider = (process.env.STORAGE_PROVIDER || "").toLowerCase() === "s3" ? "S3" : "LOCAL";
   return ApiResponse.success(res, "Media config.", { storageProvider });
 });
 
