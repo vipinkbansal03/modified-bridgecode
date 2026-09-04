@@ -32,6 +32,11 @@ export const softDelete = asyncHandler(async (req: AuthRequest, res: Response) =
   return ApiResponse.success(res, "Order soft-deleted successfully.", result);
 });
 
+export const restore = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await S.restoreOrder(String(req.params.id));
+  return ApiResponse.success(res, "Order restored successfully.", result);
+});
+
 export const permanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
   const result = await S.permanentDeleteOrder(String(req.params.id));
   return ApiResponse.success(res, "Test order permanently deleted successfully.", result);

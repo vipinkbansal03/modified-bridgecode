@@ -180,7 +180,7 @@ function LoginForm() {
           }
         >
           <div className="mb-8">
-            <h1 className="font-serif text-[34px] font-semibold leading-tight text-[#111]">
+            <h1 className="text-[34px] font-semibold leading-tight text-[#111]">
               {loginSettings?.heading || "Customer Login"}
             </h1>
             <p className="mt-2 text-[14px] text-[#8A8A8A]">

@@ -120,6 +120,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             pauseOnHover
             icon={false}
             toastClassName="modortho-toast"
+            style={{ zIndex: 100050 }}
           />
         )}
       </ToastContext.Provider>

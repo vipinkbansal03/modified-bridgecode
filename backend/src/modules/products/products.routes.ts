@@ -26,6 +26,7 @@ router.delete("/:id/moq-pricing/:ruleId", requirePermission("products.update"), 
 router.get("/:id", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.getOne);
 router.put("/:id", requirePermission("products.update"), C.update);
 router.post("/:id/duplicate", requirePermission("products.update"), C.duplicate);
+router.post("/:id/restore", requirePermission("products.update", "products.manage"), C.restore);
 router.delete("/:id/permanent", requirePermission("products.delete", "products.manage"), C.permanentDelete);
 router.delete("/:id", requirePermission("products.delete"), C.remove);
 router.put("/:id/shipping-info", requirePermission("products.update"), C.updateShippingInfo);
@@ -34,6 +35,7 @@ router.put("/:id/packages/:packageId", requirePermission("products.update"), C.u
 router.delete("/:id/packages/:packageId", requirePermission("products.update"), C.deletePackage);
 
 router.post("/:id/media", requirePermission("products.update"), upload.array("files", 10), C.uploadMedia);
+router.put("/:id/media/:mediaId/cover", requirePermission("products.update"), C.setCoverMedia);
 router.delete("/:id/media/:mediaId", requirePermission("products.update"), C.removeMedia);
 
 router.get("/:id/attributes", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listAttribs);

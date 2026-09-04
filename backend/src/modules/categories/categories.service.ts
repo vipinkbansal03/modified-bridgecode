@@ -107,10 +107,11 @@ function parseCategoryRow(raw: Record<string, string>): CategorySpreadsheetRow {
   };
 }
 
-export async function listCategories() {
+export async function listCategories(query?: { deleted?: boolean | string }) {
+  const isDeleted = query?.deleted === true || query?.deleted === "true";
   return prisma.category.findMany({
-    where: { deletedAt: null },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    where: { deletedAt: isDeleted ? { not: null } : null },
+    orderBy: isDeleted ? [{ deletedAt: "desc" }, { updatedAt: "desc" }] : [{ sortOrder: "asc" }, { name: "asc" }],
     include: categoryInclude,
   });
 }
@@ -240,6 +241,49 @@ export async function deleteCategory(id: string) {
   });
 }
 
+export async function permanentDeleteCategory(id: string) {
+  const category = await prisma.category.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      _count: {
+        select: {
+          products: true,
+          children: true,
+          discounts: true,
+          taxRules: true,
+        },
+      },
+    },
+  });
+  if (!category) throw new AppError("Category not found.", 404);
+
+  if (category._count.products > 0) {
+    throw new AppError(
+      `Cannot permanently delete category "${category.name}": referenced by ${category._count.products} product(s). Please reassign or delete the products first.`,
+      400,
+    );
+  }
+  if (category._count.children > 0) {
+    throw new AppError(
+      `Cannot permanently delete category "${category.name}": it has ${category._count.children} child sub-category(ies). Please reassign or delete them first.`,
+      400,
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await tx.categoryCountry.deleteMany({ where: { categoryId: id } });
+    await tx.categoryTranslation.deleteMany({ where: { categoryId: id } });
+    await tx.discountCategory.deleteMany({ where: { categoryId: id } });
+    await tx.category.update({
+      where: { id },
+      data: { taxRules: { set: [] } },
+    });
+    return tx.category.delete({ where: { id } });
+  });
+}
+
 export async function archiveCategory(id: string) {
   await getCategory(id);
   return prisma.category.update({ where: { id }, data: { status: "INACTIVE" } });
@@ -248,6 +292,7 @@ export async function archiveCategory(id: string) {
 export async function restoreCategory(id: string) {
   const current = await prisma.category.findFirst({ where: { id } });
   if (!current) throw new AppError("Category not found.", 404);
+  if (!current.deletedAt) throw new AppError("Category is already active.", 400);
 
   const baseSlug = current.slug.replace(/-deleted-\d+$/, "");
   const slugConflict = await prisma.category.findFirst({
@@ -319,7 +364,10 @@ export async function duplicateCategory(id: string) {
       });
     }
 
-    return getCategory(category.id);
+    return tx.category.findFirst({
+      where: { id: category.id },
+      include: categoryInclude,
+    });
   });
 }
 

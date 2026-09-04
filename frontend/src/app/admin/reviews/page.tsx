@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
-import { Star, CheckCircle2, Trash2, MessageSquare, ExternalLink } from "lucide-react";
 import Link from "next/link";
+import { Star, CheckCircle2, Trash2, MessageSquare, ExternalLink } from "lucide-react";
+import { AdminLayout } from "@/components/admin/layout/AdminLayout";
+import { getAdminErrorMessage } from "@/services/adminApi";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   AdminStatsGrid,
@@ -13,8 +13,19 @@ import {
   LoadingButton,
   DataTable,
   StatusBadge,
+  Pagination,
+  AdminSelect,
+  AdminInput,
   useToast,
 } from "@/components/admin/AdminComponents";
+import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
+import {
+  useAdminReviews,
+  useUpdateReviewStatus,
+  useDeleteReview,
+  useAdminProducts,
+  useAdminCategories,
+} from "@/hooks/admin/useAdminHooks";
 import { cn } from "@/utils/cn";
 
 interface ReviewItem {
@@ -36,71 +47,115 @@ interface ReviewItem {
 export default function AdminReviewsPage() {
   const { showToast, ToastComponent } = useToast();
   const { hasPermission } = useAdminAuth();
-  const canUpdate = hasPermission("reviews.update");
-  const canDelete = hasPermission("reviews.delete");
+  const canUpdate = hasPermission("reviews.update") || hasPermission("products.update");
+  const canDelete = hasPermission("reviews.delete") || hasPermission("products.delete");
 
-  const [reviews, setReviews] = useState<ReviewItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [ratingFilter, setRatingFilter] = useState<string>("");
+  const [productFilter, setProductFilter] = useState<string>("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+  const [sortBy, setSortBy] = useState<string>("createdAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [showFilters, setShowFilters] = useState(false);
+
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingLoading, setDeletingLoading] = useState(false);
 
-  const fetchReviews = async (searchQuery: string) => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (searchQuery) params.set("search", searchQuery);
-      if (statusFilter !== "ALL") params.set("status", statusFilter);
-
-      const res = await adminApi.get(`/reviews?${params.toString()}`);
-      if (res.data?.success) {
-        setReviews(res.data.data || []);
-      }
-    } catch (err) {
-      console.error("Failed to fetch reviews", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Debounce search input (300ms)
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
+      setPage(1);
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
 
-  useEffect(() => {
-    fetchReviews(debouncedSearch);
-  }, [debouncedSearch, statusFilter]);
+  // Data queries
+  const { data, isLoading, isFetching, refetch } = useAdminReviews({
+    page,
+    limit,
+    search: debouncedSearch.trim() || undefined,
+    status: statusFilter !== "ALL" ? statusFilter : undefined,
+    ratingOverall: ratingFilter ? Number(ratingFilter) : undefined,
+    productId: productFilter || undefined,
+    categoryId: categoryFilter || undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+    sortBy,
+    sortDir,
+  });
 
-  const reviewStats = useMemo(() => {
-    const total = reviews.length;
-    const approved = reviews.filter((r) => r.status === "APPROVED").length;
-    const pending = reviews.filter((r) => r.status === "PENDING").length;
-    const avgScore =
-      total > 0
-        ? (
-            reviews.reduce((acc, r) => acc + (r.ratingOverall || 5), 0) /
-            total
-          ).toFixed(1)
-        : "0.0";
-    return { total, approved, pending, avgScore };
-  }, [reviews]);
+  const { data: productsData } = useAdminProducts({ limit: 1000, sortBy: "title", sortDir: "asc" });
+  const { data: categoriesData } = useAdminCategories();
+
+  // Mutations
+  const updateStatusMutation = useUpdateReviewStatus();
+  const deleteReviewMutation = useDeleteReview();
+
+  const reviews = useMemo(() => (data?.data ?? []) as ReviewItem[], [data?.data]);
+  const pagination = data?.pagination ?? { page: 1, limit: 20, total: 0, totalPages: 1 };
+  const stats = data?.stats ?? {
+    total: 0,
+    approved: 0,
+    pending: 0,
+    rejected: 0,
+    avgScore: 0,
+  };
+
+  const productOptions = useMemo(() => {
+    const list = ((productsData as any)?.data ?? []) as any[];
+    return list.map((p) => ({
+      value: p.id,
+      label: `${p.title}${p.productCode ? ` (${p.productCode})` : ""}`,
+    }));
+  }, [productsData]);
+
+  const categoryOptions = useMemo(() => {
+    const list = (categoriesData ?? []) as any[];
+    return list.map((c) => ({
+      value: c.id,
+      label: c.name,
+    }));
+  }, [categoriesData]);
+
+  const activeFilterCount = useMemo(() => {
+    return [
+      statusFilter !== "ALL" ? statusFilter : "",
+      ratingFilter,
+      productFilter,
+      categoryFilter,
+      dateFrom,
+      dateTo,
+      sortBy !== "createdAt" || sortDir !== "desc" ? "custom-sort" : "",
+    ].filter(Boolean).length;
+  }, [statusFilter, ratingFilter, productFilter, categoryFilter, dateFrom, dateTo, sortBy, sortDir]);
+
+  const handleResetFilters = () => {
+    setSearch("");
+    setDebouncedSearch("");
+    setStatusFilter("ALL");
+    setRatingFilter("");
+    setProductFilter("");
+    setCategoryFilter("");
+    setDateFrom("");
+    setDateTo("");
+    setSortBy("createdAt");
+    setSortDir("desc");
+    setPage(1);
+  };
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     setUpdatingId(id);
     try {
-      const res = await adminApi.patch(`/reviews/${id}/status`, { status: newStatus });
-      if (res.data?.success) {
-        setReviews((prev) =>
-          prev.map((r) => (r.id === id ? { ...r, status: newStatus as any } : r))
-        );
-        showToast(`Review ${newStatus.toLowerCase()} successfully.`);
-      }
+      await updateStatusMutation.mutateAsync({ id, status: newStatus });
+      showToast(`Review ${newStatus.toLowerCase()} successfully.`);
     } catch (err) {
       console.error("Failed to update status", err);
       showToast(getAdminErrorMessage(err, "Failed to update status."), "error");
@@ -113,11 +168,8 @@ export default function AdminReviewsPage() {
     if (!deletingId) return;
     setDeletingLoading(true);
     try {
-      const res = await adminApi.delete(`/reviews/${deletingId}`);
-      if (res.data?.success) {
-        setReviews((prev) => prev.filter((r) => r.id !== deletingId));
-        showToast("Review deleted successfully.");
-      }
+      await deleteReviewMutation.mutateAsync(deletingId);
+      showToast("Review deleted successfully.");
     } catch (err) {
       console.error("Failed to delete review", err);
       showToast(getAdminErrorMessage(err, "Failed to delete review."), "error");
@@ -132,19 +184,30 @@ export default function AdminReviewsPage() {
       {
         key: "product",
         label: "Product",
-        width: "220px",
+        width: "240px",
         render: (rev: ReviewItem) => (
-          <div className="min-w-0 pr-3">
-            <span className="font-semibold text-[#1A1A1A] block truncate text-[13px]" title={rev.productTitle}>
-              {rev.productTitle}
-            </span>
-            <Link
-              href={`/products/${rev.productSlug}`}
-              target="_blank"
-              className="inline-flex items-center gap-1 text-[11.5px] text-[#E31E24] hover:underline mt-0.5 font-medium"
-            >
-              View Page <ExternalLink size={11} />
-            </Link>
+          <div className="flex items-center gap-2.5 min-w-0 pr-3">
+            {rev.productImage ? (
+              <img
+                src={rev.productImage}
+                alt={rev.productTitle}
+                className="h-9 w-9 flex-none rounded object-cover border border-[#E6E6E6]"
+              />
+            ) : null}
+            <div className="min-w-0">
+              <span className="font-semibold text-[#1A1A1A] block truncate text-[13px]" title={rev.productTitle}>
+                {rev.productTitle}
+              </span>
+              {rev.productSlug && (
+                <Link
+                  href={`/products/${rev.productSlug}`}
+                  target="_blank"
+                  className="inline-flex items-center gap-1 text-[11.5px] text-[#E31E24] hover:underline mt-0.5 font-medium"
+                >
+                  View Page <ExternalLink size={11} />
+                </Link>
+              )}
+            </div>
           </div>
         ),
       },
@@ -158,9 +221,6 @@ export default function AdminReviewsPage() {
             {rev.customerEmail && (
               <span className="text-[11.5px] text-[#6B6B6B] block truncate">{rev.customerEmail}</span>
             )}
-            <span className="inline-flex items-center gap-1 mt-1 text-[10.5px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-              ✓ Verified Buyer
-            </span>
           </div>
         ),
       },
@@ -272,35 +332,49 @@ export default function AdminReviewsPage() {
       <div className="space-y-5">
         <AdminStatsGrid
           stats={[
-            { title: "Total Reviews", value: reviewStats.total, subtitle: "Customer feedback entries", icon: <MessageSquare size={18} /> },
-            { title: "Approved Reviews", value: reviewStats.approved, subtitle: "Published on product pages", icon: <CheckCircle2 size={18} />, color: "bg-green-600" },
-            { title: "Pending Reviews", value: reviewStats.pending, subtitle: "Awaiting moderation", icon: <Star size={18} />, color: "bg-amber-600" },
-            { title: "Average Score", value: `${reviewStats.avgScore} ★`, subtitle: "Overall average rating", icon: <Star size={18} />, color: "bg-gray-600" },
+            { title: "Total Reviews", value: stats.total, subtitle: "Customer feedback entries", icon: <MessageSquare size={18} /> },
+            { title: "Approved Reviews", value: stats.approved, subtitle: "Published on product pages", icon: <CheckCircle2 size={18} />, color: "bg-green-600" },
+            { title: "Pending Reviews", value: stats.pending, subtitle: "Awaiting moderation", icon: <Star size={18} />, color: "bg-amber-600" },
+            { title: "Average Score", value: `${stats.avgScore} ★`, subtitle: "Overall average rating", icon: <Star size={18} />, color: "bg-gray-600" },
           ]}
-          isLoading={loading}
+          isLoading={isLoading}
         />
 
         <AdminListToolbar
           search={{
             value: search,
             onChange: setSearch,
-            placeholder: "Search customer, email, text...",
+            placeholder: "Search customer, email, text, product...",
             widthClassName: "w-[240px]",
+          }}
+          filters={{
+            showFilters,
+            onToggle: () => setShowFilters(!showFilters),
+            activeCount: activeFilterCount,
+          }}
+          refresh={{
+            onRefresh: () => {
+              void refetch().then(() => showToast("Reviews refreshed."));
+            },
+            isRefreshing: isFetching,
           }}
           leftExtra={
             <div className="flex items-center gap-1.5 overflow-x-auto">
               {[
-                { id: "ALL", label: "All Reviews", count: reviewStats.total },
-                { id: "APPROVED", label: "Approved", count: reviewStats.approved },
-                { id: "PENDING", label: "Pending", count: reviewStats.pending },
-                { id: "REJECTED", label: "Rejected", count: reviews.filter((r) => r.status === "REJECTED").length },
+                { id: "ALL", label: "All Reviews", count: stats.total },
+                { id: "PENDING", label: "Pending", count: stats.pending },
+                { id: "APPROVED", label: "Approved", count: stats.approved },
+                { id: "REJECTED", label: "Rejected", count: stats.rejected },
               ].map((tab) => {
                 const isSelected = statusFilter === tab.id;
                 return (
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => setStatusFilter(tab.id)}
+                    onClick={() => {
+                      setStatusFilter(tab.id);
+                      setPage(1);
+                    }}
                     className={cn(
                       "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-semibold transition-all cursor-pointer",
                       isSelected
@@ -324,8 +398,106 @@ export default function AdminReviewsPage() {
           }
           rightExtra={
             <span className="text-[12.5px] font-semibold text-[#6B6B6B]">
-              Total Reviews: {reviews.length}
+              Total: {pagination.total} {pagination.total === 1 ? "review" : "reviews"}
             </span>
+          }
+          onResetFilters={handleResetFilters}
+          filterPanel={
+            <div className="grid gap-3.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              <AdminSearchableSelect
+                label="Product"
+                value={productFilter}
+                onChange={(e) => {
+                  setProductFilter(e.target.value);
+                  setPage(1);
+                }}
+                options={[{ value: "", label: "All Products" }, ...productOptions]}
+                placeholder="All Products"
+                searchPlaceholder="Search product..."
+              />
+
+              <AdminSelect
+                label="Overall Rating"
+                value={ratingFilter}
+                onChange={(e) => {
+                  setRatingFilter(e.target.value);
+                  setPage(1);
+                }}
+                options={[
+                  { value: "", label: "All Ratings" },
+                  { value: "5", label: "5 Stars (★★★★★)" },
+                  { value: "4", label: "4 Stars (★★★★☆)" },
+                  { value: "3", label: "3 Stars (★★★☆☆)" },
+                  { value: "2", label: "2 Stars (★★☆☆☆)" },
+                  { value: "1", label: "1 Star (★☆☆☆☆)" },
+                ]}
+              />
+
+              <AdminSelect
+                label="Product Category"
+                value={categoryFilter}
+                onChange={(e) => {
+                  setCategoryFilter(e.target.value);
+                  setPage(1);
+                }}
+                options={[
+                  { value: "", label: "All Categories" },
+                  ...categoryOptions,
+                ]}
+              />
+
+              <AdminSelect
+                label="Sort Order"
+                value={`${sortBy}-${sortDir}`}
+                onChange={(e) => {
+                  const [newSortBy, newSortDir] = e.target.value.split("-");
+                  setSortBy(newSortBy);
+                  setSortDir(newSortDir as "asc" | "desc");
+                  setPage(1);
+                }}
+                options={[
+                  { value: "createdAt-desc", label: "Newest First" },
+                  { value: "createdAt-asc", label: "Oldest First" },
+                  { value: "ratingOverall-desc", label: "Highest Rating" },
+                  { value: "ratingOverall-asc", label: "Lowest Rating" },
+                ]}
+              />
+
+              <AdminInput
+                label="Date From"
+                type="date"
+                value={dateFrom}
+                onChange={(e) => {
+                  setDateFrom(e.target.value);
+                  setPage(1);
+                }}
+              />
+
+              <AdminInput
+                label="Date To"
+                type="date"
+                value={dateTo}
+                onChange={(e) => {
+                  setDateTo(e.target.value);
+                  setPage(1);
+                }}
+              />
+
+              <AdminSelect
+                label="Page Size"
+                value={String(limit)}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setPage(1);
+                }}
+                options={[
+                  { value: "10", label: "10 per page" },
+                  { value: "20", label: "20 per page" },
+                  { value: "50", label: "50 per page" },
+                  { value: "100", label: "100 per page" },
+                ]}
+              />
+            </div>
           }
         />
 
@@ -336,9 +508,19 @@ export default function AdminReviewsPage() {
           columns={columns}
           data={reviews}
           rowKey="id"
-          isLoading={loading}
-          emptyMessage="No customer reviews match your search or filter."
+          isLoading={isLoading}
+          emptyMessage="No customer reviews match your search or filter criteria."
         />
+
+        {pagination.totalPages > 1 && (
+          <div className="mt-4 flex justify-end">
+            <Pagination
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              onPageChange={(newPage) => setPage(newPage)}
+            />
+          </div>
+        )}
       </div>
 
       <ConfirmModal
@@ -355,3 +537,4 @@ export default function AdminReviewsPage() {
     </AdminLayout>
   );
 }
+

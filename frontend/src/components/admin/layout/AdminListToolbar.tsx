@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Search, Filter, SlidersHorizontal, Download, Upload, Plus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { RefreshButton } from "@/components/admin/RefreshButton";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/utils/cn";
 
 export interface AdminListToolbarProps {
@@ -87,8 +88,8 @@ export function AdminListToolbar({
   const hasRightItems = Boolean(exportAction || importAction || refresh || primaryAction || rightExtra);
 
   return (
-    <div className={cn("adminListToolbar mb-5 space-y-3", className)}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-h-[42px]">
+    <div className={cn("adminListToolbar mb-4 space-y-3", className)}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between min-h-[42px]">
         {/* LEFT SLOT */}
         {hasLeftItems ? (
           <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
@@ -130,9 +131,11 @@ export function AdminListToolbar({
 
             {columns && columns.options && (
               <details className="relative shrink-0">
-                <summary className="list-none cursor-pointer rounded-md border border-[#E6E6E6] bg-white h-10 px-3.5 text-[13.5px] font-medium text-[#555555] outline-none flex items-center gap-2 hover:bg-[#FAFAFA] hover:border-[#D1D1D1] transition-all">
-                  <SlidersHorizontal size={14} /> Columns
-                </summary>
+                <Tooltip content="Manage column visibility" side="top">
+                  <summary className="list-none cursor-pointer rounded-md border border-[#E6E6E6] bg-white h-10 px-3.5 text-[13.5px] font-medium text-[#555555] outline-none flex items-center gap-2 hover:bg-[#FAFAFA] hover:border-[#D1D1D1] transition-all">
+                    <SlidersHorizontal size={14} /> Columns
+                  </summary>
+                </Tooltip>
                 <div className="absolute left-0 z-30 mt-2 w-[240px] rounded-md border border-[#E6E6E6] bg-white p-3 shadow-lg">
                   <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wide text-[#9A9A9A]">
                     <Filter size={12} /> Visibility
@@ -160,7 +163,7 @@ export function AdminListToolbar({
 
         {/* RIGHT SLOT */}
         {hasRightItems && (
-          <div className="flex items-center justify-start sm:justify-end gap-2 shrink-0">
+          <div className="flex items-start justify-start sm:justify-end gap-2 shrink-0">
             {rightExtra}
 
             {exportAction && (

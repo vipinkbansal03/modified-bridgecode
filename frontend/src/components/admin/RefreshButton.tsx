@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { RotateCw } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 export interface RefreshButtonProps {
   onRefresh: () => void | Promise<unknown>;
@@ -75,26 +76,27 @@ export function RefreshButton({
 
   return (
     <div className={cn("inline-flex flex-col items-center justify-center gap-0.5 min-w-[54px]", className)}>
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={activeRefreshing}
-        title={`Refresh List (Last updated: ${timeAgo})`}
-        aria-label="Refresh list"
-        className={cn(
-          "flex items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#1A1A1A] hover:bg-[#F2F2F2] hover:border-[#D1D1D1] disabled:cursor-not-allowed transition-all outline-none shadow-xs group",
-          buttonSizeClass,
-          activeRefreshing && "border-red-200 bg-red-50/30"
-        )}
-      >
-        <RotateCw
-          size={iconSize}
+      <Tooltip content={activeRefreshing ? "Refreshing list..." : "Refresh list"} side="top">
+        <button
+          type="button"
+          onClick={handleClick}
+          disabled={activeRefreshing}
+          aria-label="Refresh list"
           className={cn(
-            "transition-all duration-300",
-            activeRefreshing ? "animate-spin text-[#E31E24]" : "text-[#555] group-hover:text-[#1A1A1A] group-hover:rotate-45"
+            "flex items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#1A1A1A] hover:bg-[#F2F2F2] hover:border-[#D1D1D1] disabled:cursor-not-allowed transition-all outline-none shadow-xs group",
+            buttonSizeClass,
+            activeRefreshing && "border-red-200 bg-red-50/30"
           )}
-        />
-      </button>
+        >
+          <RotateCw
+            size={iconSize}
+            className={cn(
+              "transition-all duration-300",
+              activeRefreshing ? "animate-spin text-[#E31E24]" : "text-[#555] group-hover:text-[#1A1A1A] group-hover:rotate-45"
+            )}
+          />
+        </button>
+      </Tooltip>
       {showTimeAgo && (
         <span
           className={cn(

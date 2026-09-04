@@ -65,6 +65,11 @@ export const remove = asyncHandler(async (req: AuthRequest, res: Response) => {
   return ApiResponse.success(res, "Customer deleted.");
 });
 
+export const restore = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const customer = await CustomersService.restoreCustomer(String(req.params.id));
+  return ApiResponse.success(res, "Customer restored.", customer);
+});
+
 export const updateAddress = asyncHandler(async (req: AuthRequest, res: Response) => {
   const updated = await CustomersService.updateCustomerAddress(
     String(req.params.id),

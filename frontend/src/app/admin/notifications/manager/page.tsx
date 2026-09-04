@@ -197,7 +197,7 @@ export default function NotificationManagerPage() {
         <div className="bg-white border border-[#E6E6E6] rounded-lg p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-sm">
           <div>
             <div className="text-[11px] font-bold tracking-widest text-[#7A7A7A] uppercase">CENTRALIZED CONTROL</div>
-            <h1 className="text-xl font-medium mt-1 font-serif text-[#1A1A1A]">Notification Manager</h1>
+            <h1 className="text-xl font-semibold mt-1 text-[#1A1A1A]">Notification Manager</h1>
             <p className="text-[13px] text-[#6B6B6B] mt-1.5 max-w-xl">Turn notifications on or off, choose channels, and decide which users should receive each update.</p>
           </div>
           <div className="flex gap-4">

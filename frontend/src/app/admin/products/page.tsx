@@ -3,10 +3,22 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { AdminListToolbar, AdminStatsGrid, Column, AdminDeleteModal, DataTable, Pagination, StatCard, StatusBadge, useToast, LoadingButton, AdminBulkActionsBar, AdminMultiSelect } from "@/components/admin/AdminComponents";
-import { RefreshButton } from "@/components/admin/RefreshButton";
+import {
+  AdminListToolbar,
+  AdminStatsGrid,
+  Column,
+  AdminDeleteModal,
+  DataTable,
+  Pagination,
+  StatusBadge,
+  useToast,
+  LoadingButton,
+  AdminBulkActionsBar,
+  AdminMultiSelect,
+  AdminSelect,
+} from "@/components/admin/AdminComponents";
+import { AdminRowActions, AdminActionButton } from "@/components/admin/AdminRowActions";
 import { toSortOrderPayload } from "@/components/admin/SortableList";
 import { Modal } from "@/components/ui/Modal";
 import {
@@ -22,8 +34,21 @@ import {
   useAdminWarehouses,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
+import { formatDate } from "@/utils/formatDate";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { Archive, CheckCircle2, Copy, Download, Eye, ExternalLink, FileText, Filter, Layers, Package, Pencil, Plus, RotateCcw, Search, SlidersHorizontal, Trash2, Upload, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  Copy,
+  ExternalLink,
+  FileText,
+  Package,
+  Pencil,
+  Plus,
+  Trash2,
+  Upload,
+  XCircle,
+  Eye,
+} from "lucide-react";
 
 interface ProductRow {
   id: string;
@@ -48,7 +73,7 @@ interface ProductRow {
 
 type BulkAction = "enable" | "disable" | "assignCategory" | "assignCountries" | "assignCollections" | "assignWarehouse" | "delete";
 
-type ColumnKey = "image" | "name" | "sku" | "brand" | "category" | "status" | "countries" | "inventory" | "price" | "updated" | "actions";
+type ColumnKey = "product" | "sku" | "brand" | "category" | "status" | "countries" | "inventory" | "price" | "updated";
 
 type SpreadsheetIssue = { row: number; field: string; message: string };
 type SpreadsheetPreview = {
@@ -61,8 +86,7 @@ type SpreadsheetPreview = {
 };
 
 const DEFAULT_COLUMNS: Record<ColumnKey, boolean> = {
-  image: true,
-  name: true,
+  product: true,
   sku: true,
   brand: true,
   category: true,
@@ -71,10 +95,21 @@ const DEFAULT_COLUMNS: Record<ColumnKey, boolean> = {
   inventory: true,
   price: true,
   updated: true,
-  actions: true,
 };
 
-const PRODUCT_COLUMNS_STORAGE_KEY = "admin-products-columns-v2";
+const COLUMN_OPTIONS: { key: ColumnKey; label: string }[] = [
+  { key: "product", label: "Product" },
+  { key: "sku", label: "SKU" },
+  { key: "brand", label: "Brand" },
+  { key: "category", label: "Category" },
+  { key: "status", label: "Status" },
+  { key: "countries", label: "Country Availability" },
+  { key: "inventory", label: "Inventory" },
+  { key: "price", label: "Price" },
+  { key: "updated", label: "Updated Date" },
+];
+
+const PRODUCT_COLUMNS_STORAGE_KEY = "admin-products-columns-v3";
 
 export default function AdminProductsPage() {
   const { hasPermission, isLoading: authLoading } = useAdminAuth();
@@ -91,7 +126,7 @@ export default function AdminProductsPage() {
   const canCreate = hasPermission("products.create");
 
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(20);
+  const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -100,6 +135,7 @@ export default function AdminProductsPage() {
   const [sortBy, setSortBy] = useState("sortOrder");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
   const handleSelectAll = async (checked: boolean) => {
     if (!checked) {
       setSelectedIds([]);
@@ -125,6 +161,7 @@ export default function AdminProductsPage() {
       showToast("Failed to select all products.", "error");
     }
   };
+
   const [bulkAction, setBulkAction] = useState<BulkAction>("enable");
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const [bulkCountryIds, setBulkCountryIds] = useState<string[]>([]);
@@ -153,7 +190,7 @@ export default function AdminProductsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, status, categoryId, warehouseFilterId, sortBy, sortDir, limit]);
 
   useEffect(() => {
     try {
@@ -170,7 +207,17 @@ export default function AdminProductsPage() {
     localStorage.setItem(PRODUCT_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
   }, [columnsReady, visibleColumns]);
 
-  const { data, isLoading, refetch, isFetching } = useAdminProducts({ page, search: debouncedSearch, status, categoryId: categoryId || undefined, warehouseId: warehouseFilterId || undefined, limit, sortBy, sortDir });
+  const { data, isLoading, refetch, isFetching } = useAdminProducts({
+    page,
+    search: debouncedSearch || undefined,
+    status: status || undefined,
+    categoryId: categoryId || undefined,
+    warehouseId: warehouseFilterId || undefined,
+    limit,
+    sortBy,
+    sortDir,
+  });
+
   const { data: totalStats, isLoading: totalLoading } = useAdminProducts({ limit: 1 });
   const { data: activeStats, isLoading: activeLoading } = useAdminProducts({ status: "ACTIVE", limit: 1 });
   const { data: draftStats, isLoading: draftLoading } = useAdminProducts({ status: "DRAFT", limit: 1 });
@@ -184,6 +231,7 @@ export default function AdminProductsPage() {
       inactive: inactiveStats?.pagination?.total ?? 0,
     };
   }, [totalStats, activeStats, draftStats, inactiveStats]);
+
   const { data: categories = [] } = useAdminCategories();
   const { data: countries = [] } = useAdminCountries();
   const { data: warehouses = [] } = useAdminWarehouses({ limit: 30 });
@@ -197,96 +245,115 @@ export default function AdminProductsPage() {
 
   const products = useMemo(() => (data?.data ?? []) as ProductRow[], [data?.data]);
 
+  const getInventorySummary = (product: ProductRow) => {
+    const totals = product.inventories.reduce(
+      (acc, inventory) => {
+        acc.stock += inventory.stock;
+        acc.available += Math.max(0, inventory.stock - inventory.reservedStock);
+        return acc;
+      },
+      { stock: 0, available: 0 },
+    );
+    return totals;
+  };
+
+  const formatPrice = (product: ProductRow) => {
+    const price = product.prices[0];
+    if (!price) return "—";
+    return `${price.currency.symbol}${Number(price.sellingPrice).toFixed(2)}`;
+  };
+
   const columns: Column<ProductRow>[] = useMemo(() => {
     const cols: Column<ProductRow>[] = [];
 
-    if (visibleColumns.image) {
+    if (visibleColumns.product !== false) {
       cols.push({
-        key: "image",
-        label: "Image",
-        width: "72px",
-        render: (product) =>
-          product.media[0] ? (
-            <img src={product.media[0].url} alt={product.title} className="h-10 w-10 flex-none rounded object-cover" />
-          ) : (
-            <div className="flex h-10 w-10 items-center justify-center rounded bg-[#F2F2F2] text-[#9A9A9A]">
-              <Layers size={16} />
-            </div>
-          ),
-      });
-    }
-
-    if (visibleColumns.name) {
-      cols.push({
-        key: "name",
-        label: "Product Name",
+        key: "product",
+        label: "Product",
         width: "280px",
         render: (product) => (
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="truncate text-[13.5px] font-medium text-[#1A1A1A]">{product.title}</span>
-              {product.isFeatured && (
-                <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10.5px] font-semibold text-amber-700 border border-amber-200">
-                  Featured
+          <div className="flex items-center gap-3 min-w-0">
+            {product.media[0] ? (
+              <img
+                src={product.media[0].url}
+                alt={product.title}
+                className="h-10 w-10 flex-none rounded object-cover border border-[#E6E6E6]"
+              />
+            ) : (
+              <div className="flex h-10 w-10 flex-none items-center justify-center rounded bg-[#F2F2F2] text-[#9A9A9A] border border-[#E6E6E6]">
+                <Package size={16} />
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="truncate text-[13.5px] font-medium text-[#1A1A1A] block">
+                  {product.title}
                 </span>
-              )}
+                {product.isFeatured && (
+                  <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10.5px] font-semibold text-amber-700 border border-amber-200 shrink-0">
+                    Featured
+                  </span>
+                )}
+              </div>
+              <div className="truncate text-[11.5px] text-[#9A9A9A]">
+                {product.productCode || product.sku || product.id}
+              </div>
             </div>
-            <div className="truncate text-[11.5px] text-[#9A9A9A]">{product.productCode || product.id}</div>
           </div>
         ),
       });
     }
 
-    if (visibleColumns.sku) {
+    if (visibleColumns.sku !== false) {
       cols.push({
         key: "sku",
         label: "SKU",
-        width: "130px",
+        width: "120px",
         render: (product) => <span className="truncate text-[13px] text-[#555]">{product.sku || "—"}</span>,
       });
     }
 
-    if (visibleColumns.brand) {
+    if (visibleColumns.brand !== false) {
       cols.push({
         key: "brand",
         label: "Brand",
-        width: "150px",
+        width: "130px",
         render: (product) => <span className="truncate text-[13px] text-[#555]">{product.brand || "—"}</span>,
       });
     }
 
-    if (visibleColumns.category) {
+    if (visibleColumns.category !== false) {
       cols.push({
         key: "category",
         label: "Category",
-        width: "160px",
+        width: "140px",
         render: (product) => <span className="truncate text-[13px] text-[#555]">{product.category?.name || "Uncategorized"}</span>,
       });
     }
 
-    if (visibleColumns.status) {
+    if (visibleColumns.status !== false) {
       cols.push({
         key: "status",
         label: "Status",
-        width: "120px",
+        width: "100px",
         render: (product) => <StatusBadge status={product.status} />,
       });
     }
 
-    if (visibleColumns.countries) {
+    if (visibleColumns.countries !== false) {
       cols.push({
         key: "countries",
         label: "Country Availability",
-        width: "130px",
-        render: (product) => <span className="text-[13px] text-[#555]">{product.countries.length}</span>,
+        width: "120px",
+        render: (product) => <span className="text-[13px] text-[#555] font-medium">{product.countries.length}</span>,
       });
     }
 
-    if (visibleColumns.inventory) {
+    if (visibleColumns.inventory !== false) {
       cols.push({
         key: "inventory",
         label: "Inventory",
-        width: "120px",
+        width: "110px",
         render: (product) => {
           const inventory = getInventorySummary(product);
           return <span className="text-[13px] text-[#555]">{inventory.available} / {inventory.stock}</span>;
@@ -294,61 +361,76 @@ export default function AdminProductsPage() {
       });
     }
 
-    if (visibleColumns.price) {
+    if (visibleColumns.price !== false) {
       cols.push({
         key: "price",
         label: "Price",
-        width: "120px",
-        render: (product) => <span className="text-[13px] text-[#555]">{formatPrice(product)}</span>,
+        width: "100px",
+        render: (product) => <span className="text-[13px] text-[#555] font-medium">{formatPrice(product)}</span>,
       });
     }
 
-    if (visibleColumns.updated) {
+    if (visibleColumns.updated !== false) {
       cols.push({
         key: "updated",
         label: "Updated Date",
-        width: "140px",
-        render: (product) => <span className="text-[13px] text-[#555]">{new Date(product.updatedAt).toLocaleDateString()}</span>,
+        width: "110px",
+        render: (product) => <span className="text-[12px] text-[#777]">{formatDate(product.updatedAt)}</span>,
       });
     }
 
-    if (visibleColumns.actions) {
-      cols.push({
-        key: "actions",
-        label: "Actions",
-        width: "168px",
-        render: (product) => (
-          <div className="flex items-center justify-start gap-1.5" onClick={(e) => e.stopPropagation()}>
-            {product.slug ? (
-              <Link href={`/products/${product.slug}`} target="_blank" className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Preview on website">
-                <ExternalLink size={13} />
-              </Link>
-            ) : (
-              <span title="Product slug missing" className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded border border-[#E6E6E6] text-[#C4C4C4]">
-                <ExternalLink size={13} />
-              </span>
-            )}
-            {canUpdate && (
-              <button type="button" onClick={() => handleDuplicate(product.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]" title="Duplicate product">
-                <Copy size={13} />
-              </button>
-            )}
-            <Link
-              href={`/admin/products/${product.id}/edit`}
-              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-              title={canUpdate ? "Edit product" : "View product"}
-            >
-              {canUpdate ? <Pencil size={13} /> : <Eye size={13} />}
-            </Link>
-            {canDelete && (
-              <button type="button" onClick={() => setDeleting(product.id)} className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50" title="Delete product">
-                <Trash2 size={13} />
-              </button>
-            )}
-          </div>
-        ),
-      });
-    }
+    cols.push({
+      key: "actions",
+      label: "Actions",
+      width: "140px",
+      render: (product) => (
+        <AdminRowActions
+          view={
+            product.slug
+              ? {
+                  title: "View on Storefront",
+                  href: `/products/${product.slug}`,
+                  target: "_blank",
+                  icon: <ExternalLink size={13} />,
+                }
+              : undefined
+          }
+          edit={
+            canUpdate
+              ? {
+                  title: "Edit Product",
+                  href: `/admin/products/${product.id}/edit`,
+                }
+              : {
+                  title: "View Product",
+                  href: `/admin/products/${product.id}/edit`,
+                  icon: <Eye size={13} />,
+                }
+          }
+          extra={
+            canUpdate ? (
+              <AdminActionButton
+                action={{
+                  onClick: () => handleDuplicate(product.id),
+                  title: "Duplicate Product",
+                  icon: <Copy size={13} />,
+                }}
+                defaultIcon={<Copy size={13} />}
+                defaultTitle="Duplicate Product"
+              />
+            ) : null
+          }
+          delete={
+            canDelete
+              ? {
+                  title: "Delete Product",
+                  onClick: () => setDeleting(product.id),
+                }
+              : undefined
+          }
+        />
+      ),
+    });
 
     return cols;
   }, [visibleColumns, canUpdate, canDelete]);
@@ -447,24 +529,6 @@ export default function AdminProductsPage() {
     }
   };
 
-  const getInventorySummary = (product: ProductRow) => {
-    const totals = product.inventories.reduce(
-      (acc, inventory) => {
-        acc.stock += inventory.stock;
-        acc.available += Math.max(0, inventory.stock - inventory.reservedStock);
-        return acc;
-      },
-      { stock: 0, available: 0 },
-    );
-    return totals;
-  };
-
-  const formatPrice = (product: ProductRow) => {
-    const price = product.prices[0];
-    if (!price) return "—";
-    return `${price.currency.symbol}${Number(price.sellingPrice).toFixed(2)}`;
-  };
-
   const exportProducts = async (selectedOnly = false) => {
     try {
       const params = {
@@ -536,40 +600,83 @@ export default function AdminProductsPage() {
     }
   };
 
+  const handleResetFilters = () => {
+    setSearch("");
+    setDebouncedSearch("");
+    setStatus("");
+    setCategoryId("");
+    setWarehouseFilterId("");
+    setSortBy("sortOrder");
+    setSortDir("asc");
+    setLimit(10);
+    setPage(1);
+  };
+
   if (authLoading || !hasPermission("products.view")) {
     return null;
   }
 
   return (
-    <AdminLayout title="Products" breadcrumb={[{ label: "Products" }]}>
-      <AdminStatsGrid
-        stats={[
-          { title: "Total Products", value: productStats.total, subtitle: "All catalog items", icon: <Package size={18} />, isLoading: totalLoading },
-          { title: "Active Products", value: productStats.active, subtitle: "Currently live on storefront", icon: <CheckCircle2 size={18} />, color: "bg-green-600", isLoading: activeLoading },
-          { title: "Draft Products", value: productStats.draft, subtitle: "Unpublished drafts", icon: <FileText size={18} />, color: "bg-amber-600", isLoading: draftLoading },
-          { title: "Inactive Products", value: productStats.inactive, subtitle: "Disabled / hidden", icon: <XCircle size={18} />, color: "bg-gray-600", isLoading: inactiveLoading }
-        ]}
-      />
+    <AdminLayout title="Products" breadcrumb={[{ label: "Admin", href: "/admin" }, { label: "Products" }]}>
+      <div className="space-y-5">
+        {/* 1. TOP KPI SUMMARY GRID */}
+        <AdminStatsGrid
+          stats={[
+            {
+              title: "Total Products",
+              value: productStats.total,
+              subtitle: "All catalog items",
+              icon: <Package size={18} />,
+              isLoading: totalLoading,
+            },
+            {
+              title: "Active Products",
+              value: productStats.active,
+              subtitle: "Currently live on storefront",
+              icon: <CheckCircle2 size={18} />,
+              color: "bg-green-600",
+              isLoading: activeLoading,
+            },
+            {
+              title: "Draft Products",
+              value: productStats.draft,
+              subtitle: "Unpublished drafts",
+              icon: <FileText size={18} />,
+              color: "bg-amber-600",
+              isLoading: draftLoading,
+            },
+            {
+              title: "Inactive Products",
+              value: productStats.inactive,
+              subtitle: "Disabled / hidden",
+              icon: <XCircle size={18} />,
+              color: "bg-gray-600",
+              isLoading: inactiveLoading,
+            },
+          ]}
+        />
 
+        {/* 2. STANDARDIZED LIST TOOLBAR */}
         <AdminListToolbar
           search={{
             value: search,
-            onChange: (val: string) => {
-              setSearch(val);
-              setPage(1);
-            },
+            onChange: setSearch,
             placeholder: "Search products...",
-            widthClassName: "w-[220px]",
+            widthClassName: "w-[240px]",
           }}
           filters={{
             showFilters,
-            onToggle: () => setShowFilters(!showFilters),
+            onToggle: () => setShowFilters((prev) => !prev),
             activeCount: [status, categoryId, warehouseFilterId, sortBy !== "sortOrder" ? sortBy : ""].filter(Boolean).length,
           }}
           columns={{
             visibleColumns,
-            onToggleColumn: (key: string) => setVisibleColumns((current) => ({ ...current, [key]: !current[key as ColumnKey] })),
-            options: (Object.keys(DEFAULT_COLUMNS) as ColumnKey[]).map((k) => ({ key: k, label: k })),
+            onToggleColumn: (key: string) =>
+              setVisibleColumns((current) => ({
+                ...current,
+                [key as ColumnKey]: current[key as ColumnKey] === false ? true : false,
+              })),
+            options: COLUMN_OPTIONS,
           }}
           exportAction={{
             onClick: () => exportProducts(selectedIds.length > 0),
@@ -585,81 +692,91 @@ export default function AdminProductsPage() {
             },
             isRefreshing: isFetching,
           }}
-          primaryAction={canCreate ? { href: "/admin/products/create", label: "New Product" } : undefined}
-          onResetFilters={() => {
-            setStatus("");
-            setCategoryId("");
-            setWarehouseFilterId("");
-            setSortBy("sortOrder");
-            setSortDir("asc");
-            setPage(1);
-          }}
+          primaryAction={
+            canCreate
+              ? {
+                  href: "/admin/products/create",
+                  label: "New Product",
+                  icon: <Plus size={15} />,
+                }
+              : undefined
+          }
+          onResetFilters={handleResetFilters}
           filterPanel={
-            <div className="flex flex-wrap items-center gap-3">
-              <select
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+              <AdminSelect
+                label="Status"
                 value={status}
                 onChange={(e) => {
                   setStatus(e.target.value);
                   setPage(1);
                 }}
-                className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
-              >
-                <option value="">All Status</option>
-                <option value="DRAFT">Draft</option>
-                <option value="ACTIVE">Active</option>
-                <option value="INACTIVE">Inactive</option>
-                <option value="ARCHIVED">Archived</option>
-              </select>
-              <select
+                options={[
+                  { value: "", label: "All Statuses" },
+                  { value: "DRAFT", label: "Draft" },
+                  { value: "ACTIVE", label: "Active" },
+                  { value: "INACTIVE", label: "Inactive" },
+                  { value: "ARCHIVED", label: "Archived" },
+                ]}
+              />
+              <AdminSelect
+                label="Category"
                 value={categoryId}
                 onChange={(e) => {
                   setCategoryId(e.target.value);
                   setPage(1);
                 }}
-                className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
-              >
-                <option value="">All Categories</option>
-                {categories.map((category: { id: string; name: string }) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-              <select
+                options={[
+                  { value: "", label: "All Categories" },
+                  ...categories.map((category: { id: string; name: string }) => ({
+                    value: category.id,
+                    label: category.name,
+                  })),
+                ]}
+              />
+              <AdminSelect
+                label="Warehouse"
                 value={warehouseFilterId}
                 onChange={(e) => {
                   setWarehouseFilterId(e.target.value);
                   setPage(1);
                 }}
-                className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
-              >
-                <option value="">All Warehouses</option>
-                {(warehouses.data ?? warehouses).map((w: any) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
-                  </option>
-                ))}
-              </select>
-              <select
+                options={[
+                  { value: "", label: "All Warehouses" },
+                  ...(warehouses.data ?? warehouses).map((w: any) => ({
+                    value: w.id,
+                    label: `${w.name}${w.state ? ` (${w.state})` : ""}${w.country?.code ? ` [${w.country.code}]` : ""}`,
+                  })),
+                ]}
+              />
+              <AdminSelect
+                label="Sort By"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]"
-              >
-                <option value="sortOrder">Sort order</option>
-                <option value="title">Name</option>
-                <option value="sku">SKU</option>
-                <option value="brand">Brand</option>
-                <option value="category">Category</option>
-                <option value="status">Status</option>
-                <option value="updatedAt">Updated date</option>
-              </select>
-              <select value={sortDir} onChange={(e) => setSortDir(e.target.value as "asc" | "desc")} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[13.5px] outline-none min-w-[140px]">
-                <option value="asc">Ascending</option>
-                <option value="desc">Descending</option>
-              </select>
+                options={[
+                  { value: "sortOrder", label: "Custom Sort Order" },
+                  { value: "title", label: "Product Name" },
+                  { value: "sku", label: "SKU" },
+                  { value: "brand", label: "Brand" },
+                  { value: "category", label: "Category" },
+                  { value: "status", label: "Status" },
+                  { value: "updatedAt", label: "Updated Date" },
+                ]}
+              />
+              <AdminSelect
+                label="Direction"
+                value={sortDir}
+                onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
+                options={[
+                  { value: "asc", label: "Ascending" },
+                  { value: "desc", label: "Descending" },
+                ]}
+              />
             </div>
           }
         />
+
+        {/* HIDDEN IMPORT INPUT */}
         <input
           ref={fileInputRef}
           type="file"
@@ -671,107 +788,134 @@ export default function AdminProductsPage() {
           }}
         />
 
-      <DataTable<ProductRow>
-        title="Product Catalog"
-        columns={columns}
-        data={products}
-        rowKey="id"
-        isLoading={isLoading}
-        emptyMessage="No products found. Create your first product."
-        enableSelection={true}
-        selectedIds={selectedIds}
-        onSelectionChange={setSelectedIds}
-        enableReorder={canUpdate && sortBy === "sortOrder"}
-        onReorder={handleReorder}
-        disabledReorder={reorderProducts.isPending}
-        rowTooltip={canUpdate && sortBy === "sortOrder" ? "Drag product to reorder" : undefined}
-        totalItems={data?.pagination?.total ?? 0}
-        currentPage={page}
-        pageSize={limit}
-        totalPages={data?.pagination?.totalPages || 1}
-        onPageChange={setPage}
-        onPageSizeChange={setLimit}
-        pageSizeOptions={[10, 25, 50, 100]}
-        onSelectAll={handleSelectAll}
-        renderBulkActions={(selectedIds) => (
-          <AdminBulkActionsBar
-            selectedCount={selectedIds.length}
-            onClear={() => setSelectedIds([])}
-            actionType={bulkAction}
-            onActionTypeChange={(val) => {
-              const action = val as BulkAction;
-              setBulkAction(action);
-              if (action === "assignWarehouse") {
-                if (selectedIds.length === 0) {
-                  showToast("Please select at least one product first.", "error");
-                  setTimeout(() => setBulkAction("enable"), 0);
-                  return;
+        {/* 3. FULL-WIDTH DATA TABLE WITH BULK ACTIONS */}
+        <DataTable<ProductRow>
+          title="Product Catalog"
+          columns={columns}
+          data={products}
+          rowKey="id"
+          isLoading={isLoading}
+          emptyMessage={
+            debouncedSearch || status || categoryId || warehouseFilterId
+              ? "No products matched your search or filter."
+              : "No products found. Create your first product."
+          }
+          enableSelection={true}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          enableReorder={canUpdate && sortBy === "sortOrder"}
+          onReorder={handleReorder}
+          disabledReorder={reorderProducts.isPending}
+          rowTooltip={canUpdate && sortBy === "sortOrder" ? "Drag product to reorder" : undefined}
+          totalItems={data?.pagination?.total ?? 0}
+          currentPage={page}
+          pageSize={limit}
+          totalPages={data?.pagination?.totalPages || 1}
+          onPageChange={setPage}
+          onPageSizeChange={(newLimit) => {
+            setLimit(newLimit);
+            setPage(1);
+          }}
+          pageSizeOptions={[10, 25, 50, 100]}
+          onSelectAll={handleSelectAll}
+          renderBulkActions={(selectedIds) => (
+            <AdminBulkActionsBar
+              selectedCount={selectedIds.length}
+              onClear={() => setSelectedIds([])}
+              actionType={bulkAction}
+              onActionTypeChange={(val) => {
+                const action = val as BulkAction;
+                setBulkAction(action);
+                if (action === "assignWarehouse") {
+                  if (selectedIds.length === 0) {
+                    showToast("Please select at least one product first.", "error");
+                    setTimeout(() => setBulkAction("enable"), 0);
+                    return;
+                  }
+                  setWarehouseAssignSelections({});
+                  setWarehouseAssignModalOpen(true);
                 }
-                setWarehouseAssignSelections({});
-                setWarehouseAssignModalOpen(true);
-              }
-            }}
-            actions={[
-              { value: "enable", label: "Enable" },
-              { value: "disable", label: "Disable" },
-              { value: "assignCategory", label: "Assign category" },
-              { value: "assignCountries", label: "Enable countries" },
-              { value: "assignCollections", label: "Assign collections" },
-              { value: "assignWarehouse", label: "Assign warehouse" },
-              { value: "delete", label: "Delete" },
-            ]}
-            onApply={handleBulkAction}
-            applyLoading={bulkUpdate.isPending}
-            applyDisabled={bulkAction === "assignWarehouse"}
-            renderExtraSelectors={() => (
-              <>
-                {bulkAction === "assignCategory" && (
-                  <select
-                    value={bulkCategoryId}
-                    onChange={(event) => setBulkCategoryId(event.target.value)}
-                    className="h-8 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24] shadow-sm"
-                  >
-                    <option value="">Select category</option>
-                    {categories.map((category: { id: string; name: string }) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {bulkAction === "assignCountries" && (
-                  <div className="w-[180px]">
-                    <AdminMultiSelect
-                      options={countries.map((country: { id: string; code: string; name: string }) => ({ value: country.id, label: `${country.name} (${country.code})` }))}
-                      value={bulkCountryIds}
-                      onChange={setBulkCountryIds}
-                      placeholder="Select active countries..."
-                      className="h-[32px] py-0 px-3 text-[12.5px]"
-                    />
-                  </div>
-                )}
-                {bulkAction === "assignCollections" && (
-                  <div className="w-[180px]">
-                    <AdminMultiSelect
-                      options={(collectionsData?.data ?? []).map((collection: { id: string; name: string }) => ({ value: collection.id, label: collection.name }))}
-                      value={bulkCollectionIds}
-                      onChange={setBulkCollectionIds}
-                      placeholder="Select collections..."
-                      className="h-[32px] py-0 px-3 text-[12.5px]"
-                    />
-                  </div>
-                )}
-              </>
-            )}
+              }}
+              actions={[
+                { value: "enable", label: "Enable" },
+                { value: "disable", label: "Disable" },
+                { value: "assignCategory", label: "Assign category" },
+                { value: "assignCountries", label: "Enable countries" },
+                { value: "assignCollections", label: "Assign collections" },
+                { value: "assignWarehouse", label: "Assign warehouse" },
+                { value: "delete", label: "Delete" },
+              ]}
+              onApply={handleBulkAction}
+              applyLoading={bulkUpdate.isPending}
+              applyDisabled={bulkAction === "assignWarehouse"}
+              renderExtraSelectors={() => (
+                <>
+                  {bulkAction === "assignCategory" && (
+                    <select
+                      value={bulkCategoryId}
+                      onChange={(event) => setBulkCategoryId(event.target.value)}
+                      className="h-8 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24] shadow-sm"
+                    >
+                      <option value="">Select category</option>
+                      {categories.map((category: { id: string; name: string }) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {bulkAction === "assignCountries" && (
+                    <div className="w-[180px]">
+                      <AdminMultiSelect
+                        options={countries.map((country: { id: string; code: string; name: string }) => ({
+                          value: country.id,
+                          label: `${country.name} (${country.code})`,
+                        }))}
+                        value={bulkCountryIds}
+                        onChange={setBulkCountryIds}
+                        placeholder="Select active countries..."
+                        className="h-[32px] py-0 px-3 text-[12.5px]"
+                      />
+                    </div>
+                  )}
+                  {bulkAction === "assignCollections" && (
+                    <div className="w-[180px]">
+                      <AdminMultiSelect
+                        options={(collectionsData?.data ?? []).map((collection: { id: string; name: string }) => ({
+                          value: collection.id,
+                          label: collection.name,
+                        }))}
+                        value={bulkCollectionIds}
+                        onChange={setBulkCollectionIds}
+                        placeholder="Select collections..."
+                        className="h-[32px] py-0 px-3 text-[12.5px]"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+            />
+          )}
+        />
+
+        {/* 4. BOTTOM PAGINATION MATCHING TAX / ORDERS */}
+        <div className="flex items-center justify-end mt-4">
+          <Pagination
+            page={page}
+            totalPages={data?.pagination?.totalPages || 1}
+            onPageChange={setPage}
+            alwaysShow={true}
           />
-        )}
-      />
+        </div>
+      </div>
 
-      <Pagination page={page} totalPages={data?.pagination?.totalPages || 1} onPageChange={setPage} />
-
+      {/* WAREHOUSE ASSIGN MODAL */}
       <Modal
         open={warehouseAssignModalOpen}
-        onClose={() => { setWarehouseAssignModalOpen(false); setBulkAction("enable"); }}
+        onClose={() => {
+          setWarehouseAssignModalOpen(false);
+          setBulkAction("enable");
+        }}
         title="Assign Selected Products to Warehouses"
         panelClassName="max-w-md"
       >
@@ -786,11 +930,13 @@ export default function AdminProductsPage() {
                   <input
                     type="checkbox"
                     checked={warehouseAssignSelections[w.id] || false}
-                    onChange={(e) => setWarehouseAssignSelections(prev => ({ ...prev, [w.id]: e.target.checked }))}
+                    onChange={(e) =>
+                      setWarehouseAssignSelections((prev) => ({ ...prev, [w.id]: e.target.checked }))
+                    }
                     className="rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
                   />
                   <span className="truncate">
-                    {w.name} {w.state ? `(${w.state})` : ''} {w.country?.code ? `[${w.country.code}]` : ''}
+                    {w.name} {w.state ? `(${w.state})` : ""} {w.country?.code ? `[${w.country.code}]` : ""}
                   </span>
                 </label>
               </div>
@@ -799,8 +945,11 @@ export default function AdminProductsPage() {
           <div className="mt-4 flex items-center justify-end gap-3">
             <button
               type="button"
-              onClick={() => { setWarehouseAssignModalOpen(false); setBulkAction("enable"); }}
-              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2]"
+              onClick={() => {
+                setWarehouseAssignModalOpen(false);
+                setBulkAction("enable");
+              }}
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2] cursor-pointer"
             >
               Cancel
             </button>
@@ -809,7 +958,7 @@ export default function AdminProductsPage() {
               onClick={handleProductsWarehouseAssignSubmit}
               loading={bulkUpdate.isPending}
               loadingText="Assigning..."
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B]"
+              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] cursor-pointer"
             >
               Assign
             </LoadingButton>
@@ -817,8 +966,9 @@ export default function AdminProductsPage() {
         </div>
       </Modal>
 
+      {/* SINGLE DELETE MODAL */}
       <AdminDeleteModal
-        open={!!deleting}
+        open={Boolean(deleting)}
         onClose={() => setDeleting(null)}
         itemName={deletingProduct?.title}
         itemType="Product"
@@ -828,6 +978,7 @@ export default function AdminProductsPage() {
         isPermanentDeleting={permanentDeleteMutation.isPending}
       />
 
+      {/* BULK DELETE MODAL */}
       <AdminDeleteModal
         open={showBulkDeleteModal}
         onClose={() => setShowBulkDeleteModal(false)}
@@ -864,6 +1015,7 @@ export default function AdminProductsPage() {
         permanentDeleteDescription={`Physically purges the ${selectedIds.length} selected products from the database. Any product with existing order or quote lines will be blocked.`}
       />
 
+      {/* EXCEL IMPORT MODAL */}
       <Modal
         open={importOpen}
         onClose={() => setImportOpen(false)}
@@ -884,7 +1036,7 @@ export default function AdminProductsPage() {
               onClick={confirmImport}
               loading={importing}
               loadingText="Importing..."
-              disabled={!importFile || !!importPreview?.invalidRows}
+              disabled={!importFile || Boolean(importPreview?.invalidRows)}
               className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
             >
               Import Products

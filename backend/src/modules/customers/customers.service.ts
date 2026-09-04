@@ -34,12 +34,14 @@ type CustomerListQuery = {
   countryId?: string | null;
   sortBy?: string;
   sortDir?: string;
+  deleted?: boolean | string;
 };
 
 export async function listCustomers(query: CustomerListQuery) {
   const { page, limit, skip } = getPagination(query);
+  const isDeleted = query.deleted === true || query.deleted === "true";
   const where = {
-    deletedAt: null,
+    deletedAt: isDeleted ? { not: null } : null,
     ...(query.status && { status: query.status }),
     ...(query.customerType && { customerType: query.customerType }),
     ...(query.approvalStatus && { approvalStatus: query.approvalStatus }),
@@ -63,6 +65,12 @@ export async function listCustomers(query: CustomerListQuery) {
 
   const sortDir = query.sortDir === "asc" ? "asc" : "desc";
   const orderBy = (() => {
+    if (query.sortBy === "deletedAt") {
+      return [{ deletedAt: sortDir }, { createdAt: "desc" }];
+    }
+    if (isDeleted && !query.sortBy) {
+      return [{ deletedAt: "desc" }, { createdAt: "desc" }];
+    }
     switch (query.sortBy) {
       case "email":
         return [{ email: sortDir }, { createdAt: "desc" }];
@@ -74,11 +82,15 @@ export async function listCustomers(query: CustomerListQuery) {
         return [{ customerType: sortDir }, { createdAt: "desc" }];
       case "updatedAt":
         return [{ updatedAt: sortDir }, { createdAt: "desc" }];
+      case "createdAt":
+        return [{ createdAt: sortDir }];
       case "firstName":
       case "lastName":
       case "name":
       default:
-        return [{ firstName: sortDir }, { lastName: sortDir }, { createdAt: "desc" }];
+        return isDeleted
+          ? [{ deletedAt: "desc" }, { createdAt: "desc" }]
+          : [{ firstName: sortDir }, { lastName: sortDir }, { createdAt: "desc" }];
     }
   })();
 
@@ -235,6 +247,40 @@ export async function listCustomerAddresses(id: string) {
 
 export const deleteCustomer = (id: string) =>
   prisma.customer.update({ where: { id }, data: { deletedAt: new Date() } });
+
+export async function restoreCustomer(id: string) {
+  const customer = await prisma.customer.findUnique({
+    where: { id },
+  });
+  if (!customer) throw new AppError("Customer not found.", 404);
+  if (!customer.deletedAt) throw new AppError("Customer is already active.", 400);
+
+  // Email uniqueness collision check against active customers
+  const activeConflict = await prisma.customer.findFirst({
+    where: {
+      email: { equals: customer.email, mode: "insensitive" },
+      deletedAt: null,
+      id: { not: id },
+    },
+  });
+  if (activeConflict) {
+    throw new AppError(
+      `Cannot restore customer: email "${customer.email}" is already registered to another active customer account.`,
+      409,
+    );
+  }
+
+  const restored = await prisma.customer.update({
+    where: { id },
+    data: {
+      deletedAt: null,
+      status: "ACTIVE",
+    },
+    include: { tier: true, customerRole: true, defaultCountry: true },
+  });
+
+  return restored;
+}
 
 export async function updateCustomerAddress(customerId: string, addressId: string, data: any) {
   const addr = await prisma.customerAddress.findFirst({

@@ -2,12 +2,45 @@
 
 import { useEffect, useLayoutEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Edit2, PackageOpen, Plus, Search, Trash2, Warehouse } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Edit2,
+  PackageOpen,
+  Plus,
+  Search,
+  Trash2,
+  Warehouse,
+  CheckCircle2,
+  XCircle,
+  Pencil,
+} from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, AdminMultiSelect, AdminStatsGrid, AdminListToolbar, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
+import {
+  AdminInput,
+  AdminSelect,
+  AdminMultiSelect,
+  AdminStatsGrid,
+  AdminListToolbar,
+  ConfirmModal,
+  DataTable,
+  Pagination,
+  StatusBadge,
+  useToast,
+  LoadingButton,
+  AdminBulkActionsBar,
+  type Column,
+} from "@/components/admin/AdminComponents";
+import { AdminRowActions, AdminActionButton } from "@/components/admin/AdminRowActions";
 import { Modal } from "@/components/ui/Modal";
-import { useAdminWarehouses, useCreateWarehouse, useUpdateWarehouse, useDeleteWarehouse, useAdminCountries } from "@/hooks/admin/useAdminHooks";
+import {
+  useAdminWarehouses,
+  useCreateWarehouse,
+  useUpdateWarehouse,
+  useDeleteWarehouse,
+  useAdminCountries,
+} from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { State } from "country-state-city";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
@@ -58,7 +91,22 @@ const emptyForm: WarehouseFormState = {
   status: "ACTIVE",
 };
 
-// Product Row Component for the Modal
+type ColumnKey = "name" | "location" | "gstin" | "status";
+
+const DEFAULT_COLUMNS: Record<ColumnKey, boolean> = {
+  name: true,
+  location: true,
+  gstin: true,
+  status: true,
+};
+
+const COLUMN_OPTIONS: { key: ColumnKey; label: string }[] = [
+  { key: "name", label: "Warehouse Name" },
+  { key: "location", label: "Location" },
+  { key: "gstin", label: "GSTIN / Tax ID" },
+  { key: "status", label: "Status" },
+];
+
 export default function WarehousesPage() {
   const { hasPermission, isLoading: authLoading } = useAdminAuth();
   const router = useRouter();
@@ -71,12 +119,13 @@ export default function WarehousesPage() {
 
   const canManage = hasPermission("inventory.manage");
   const { showToast, ToastComponent } = useToast();
-  
+
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
-  
+  const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(DEFAULT_COLUMNS);
+
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<WarehouseRow | null>(null);
   const [deleting, setDeleting] = useState<WarehouseRow | null>(null);
@@ -105,9 +154,14 @@ export default function WarehousesPage() {
   const [bulkAction, setBulkAction] = useState("");
   const [bulkLoading, setBulkLoading] = useState(false);
 
-  const { data = { data: [], pagination: { total: 0, totalPages: 1 } }, isLoading, refetch } = useAdminWarehouses({ page, limit, search: debouncedSearch });
+  const {
+    data = { data: [], pagination: { total: 0, totalPages: 1 } },
+    isLoading,
+    refetch,
+    isFetching,
+  } = useAdminWarehouses({ page, limit, search: debouncedSearch });
   const { data: countries = [] } = useAdminCountries();
-  
+
   const createMutation = useCreateWarehouse();
   const updateMutation = useUpdateWarehouse(editing?.id || "");
   const deleteMutation = useDeleteWarehouse();
@@ -157,7 +211,7 @@ export default function WarehousesPage() {
     setBulkLoading(true);
     try {
       const nextStatus = bulkAction === "enable" ? "ACTIVE" : "INACTIVE";
-      await Promise.all(selectedIds.map(id => adminApi.put(`/warehouses/${id}`, { status: nextStatus })));
+      await Promise.all(selectedIds.map((id) => adminApi.put(`/warehouses/${id}`, { status: nextStatus })));
       showToast(`Successfully ${bulkAction}d ${selectedIds.length} warehouse(s).`, "success");
       setSelectedIds([]);
       setBulkAction("");
@@ -179,20 +233,18 @@ export default function WarehousesPage() {
       if (!values.addressLine1) errs.addressLine1 = "Address line 1 is required";
       if (!values.city) errs.city = "City is required";
       if (!values.postalCode) errs.postalCode = "Postal / ZIP code is required";
-      
+
       if (values.gstin) {
         const country = countries.find((c: any) => c.id === values.countryId);
         if (country?.code === "IN" && values.gstin.length !== 15) {
           errs.gstin = "Indian GSTIN must be exactly 15 characters";
         }
       }
-      
+
       if (!values.deliveryZones || values.deliveryZones.length === 0) {
-        // We'll attach this error to the first zone or general if we had a generic error field
-        // Since we don't have a generic error field, we'll assign it to deliveryZones but we might need to display it in the UI.
         errs.deliveryZones = "At least one delivery country must be added" as any;
       } else {
-        const hasEmptyStates = values.deliveryZones.some(z => !z.states || z.states.length === 0);
+        const hasEmptyStates = values.deliveryZones.some((z) => !z.states || z.states.length === 0);
         if (hasEmptyStates) {
           errs.deliveryZones = "Every delivery country must have at least one state selected" as any;
         }
@@ -228,7 +280,7 @@ export default function WarehousesPage() {
         showToast(getAdminErrorMessage(err), "error");
       }
     },
-    onClose: () => setShowForm(false)
+    onClose: () => setShowForm(false),
   });
 
   const selectedCountry = countries.find((c: any) => c.id === form.values.countryId);
@@ -299,25 +351,142 @@ export default function WarehousesPage() {
     indian: data.data?.filter((w: WarehouseRow) => w.country?.code === "IN").length || 0,
   };
 
+  const columns: Column<WarehouseRow>[] = [
+    {
+      key: "name",
+      label: "Warehouse Name",
+      render: (w) => <span className="font-medium text-[#1A1A1A]">{w.name}</span>,
+    },
+    {
+      key: "location",
+      label: "Location",
+      render: (w) => (
+        <div>
+          <div className="text-[#1A1A1A] font-medium">{w.state}</div>
+          <div className="text-[11.5px] text-[#9A9A9A]">{w.country?.name || w.countryId}</div>
+        </div>
+      ),
+    },
+    {
+      key: "gstin",
+      label: "GSTIN / Tax ID",
+      render: (w) =>
+        w.gstin ? (
+          <span className="font-mono text-[#555] font-medium">{w.gstin}</span>
+        ) : (
+          <span className="text-[#9A9A9A] italic">None</span>
+        ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (w) => <StatusBadge status={w.status} />,
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      width: "140px",
+      render: (w) => (
+        <AdminRowActions
+          extra={
+            canManage ? (
+              <AdminActionButton
+                action={{
+                  title: "Assign Products",
+                  onClick: () =>
+                    router.push(`/admin/warehouses/${w.id}/assign?name=${encodeURIComponent(w.name)}`),
+                  icon: <PackageOpen size={13} />,
+                }}
+                defaultIcon={<PackageOpen size={13} />}
+                defaultTitle="Assign Products"
+              />
+            ) : null
+          }
+          edit={
+            canManage
+              ? {
+                  title: "Edit Warehouse",
+                  onClick: () => handleEdit(w),
+                }
+              : undefined
+          }
+          delete={
+            canManage
+              ? {
+                  title: "Delete Warehouse",
+                  onClick: () => setDeleting(w),
+                }
+              : undefined
+          }
+        />
+      ),
+    },
+  ];
+
+  const filteredColumns = useMemo(
+    () => columns.filter((col) => col.key === "actions" || visibleColumns[col.key as ColumnKey] !== false),
+    [visibleColumns, canManage],
+  );
+
   return (
-    <AdminLayout title="Warehouses" breadcrumb={[{ label: "Commerce" }, { label: "Warehouses" }]}>
+    <AdminLayout title="Warehouses" breadcrumb={[{ label: "Admin", href: "/admin" }, { label: "Commerce" }, { label: "Warehouses" }]}>
       <div className="space-y-5">
+        {/* 1. TOP KPI STATS GRID */}
         <AdminStatsGrid
           stats={[
-            { title: "Total Warehouses", value: stats.total, subtitle: "All configured origins", icon: <Warehouse size={18} /> },
-            { title: "Active Warehouses", value: stats.active, subtitle: "Currently available", icon: <Plus size={18} />, color: "bg-green-600" },
-            { title: "Inactive Warehouses", value: stats.inactive, subtitle: "Hidden from routing", icon: <Trash2 size={18} />, color: "bg-gray-600" },
-            { title: "Indian Warehouses", value: stats.indian, subtitle: "Requires GSTIN", icon: <Search size={18} />, color: "bg-[#0F6CBD]" }
+            {
+              title: "Total Warehouses",
+              value: stats.total,
+              subtitle: "All configured origins",
+              icon: <Warehouse size={18} />,
+            },
+            {
+              title: "Active Warehouses",
+              value: stats.active,
+              subtitle: "Currently available",
+              icon: <CheckCircle2 size={18} />,
+              color: "bg-green-600",
+            },
+            {
+              title: "Inactive Warehouses",
+              value: stats.inactive,
+              subtitle: "Hidden from routing",
+              icon: <XCircle size={18} />,
+              color: "bg-gray-600",
+            },
+            {
+              title: "Indian Warehouses",
+              value: stats.indian,
+              subtitle: "Requires GSTIN",
+              icon: <Search size={18} />,
+              color: "bg-[#0F6CBD]",
+            },
           ]}
           isLoading={isLoading}
         />
 
+        {/* 2. STANDARDIZED LIST TOOLBAR */}
         <AdminListToolbar
           search={{
             value: search,
             onChange: setSearch,
             placeholder: "Search warehouses...",
-            widthClassName: "max-w-[280px]",
+            widthClassName: "w-[240px]",
+          }}
+          columns={{
+            visibleColumns,
+            onToggleColumn: (key: string) =>
+              setVisibleColumns((current) => ({
+                ...current,
+                [key as ColumnKey]: current[key as ColumnKey] === false ? true : false,
+              })),
+            options: COLUMN_OPTIONS,
+          }}
+          refresh={{
+            onRefresh: () => {
+              void refetch().then(() => showToast("Warehouses refreshed."));
+            },
+            isRefreshing: isFetching,
           }}
           primaryAction={
             canManage
@@ -328,100 +497,67 @@ export default function WarehousesPage() {
                 }
               : undefined
           }
+          onResetFilters={() => {
+            setSearch("");
+            setDebouncedSearch("");
+            setPage(1);
+          }}
         />
 
-        <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-          <div className="overflow-hidden rounded-lg border border-[#F0F0F0]">
-            <DataTable
-              title="Warehouses"
-              rowKey="id"
-              data={data.data}
-              isLoading={isLoading}
-              emptyMessage="No warehouses found."
-              enableSelection={canManage}
-              selectedIds={selectedIds}
-              onSelectionChange={setSelectedIds}
-              totalItems={data.pagination.total}
-              currentPage={page}
-              pageSize={limit}
-              totalPages={data.pagination.totalPages}
-              onPageChange={setPage}
-              onPageSizeChange={setLimit}
-              pageSizeOptions={[10, 25, 50, 100]}
-              onSelectAll={handleSelectAll}
-              renderBulkActions={(selectedIds) => (
-                <AdminBulkActionsBar
-                  selectedCount={selectedIds.length}
-                  onClear={() => setSelectedIds([])}
-                  actionType={bulkAction}
-                  onActionTypeChange={setBulkAction}
-                  actions={[
-                    { value: "enable", label: "Enable" },
-                    { value: "disable", label: "Disable" },
-                    { value: "delete", label: "Delete" }
-                  ]}
-                  onApply={handleBulkAction}
-                  applyLoading={bulkLoading}
-                />
-              )}
-              columns={[
-                { key: "name", label: "Name", render: (w: any) => <span className="font-medium text-[#1A1A1A]">{w.name}</span> },
-                { key: "location", label: "Location", render: (w: any) => (
-                    <div>
-                      <div className="text-[#1A1A1A]">{w.state}</div>
-                      <div className="text-[11.5px] text-[#9A9A9A]">{w.country?.name || w.countryId}</div>
-                    </div>
-                  )
-                },
-                { key: "gstin", label: "GSTIN", render: (w: any) => w.gstin ? <span className="font-mono text-[#555]">{w.gstin}</span> : <span className="text-[#9A9A9A] italic">None</span> },
-                { key: "status", label: "Status", render: (w: any) => <StatusBadge status={w.status} /> },
-                {
-                  key: "actions",
-                  label: "Actions",
-                  render: (w: any) => (
-                    <div className="flex items-center justify-end gap-2">
-                      {canManage && (
-                        <button
-                          title="Assign Products"
-                          onClick={() => router.push(`/admin/warehouses/${w.id}/assign?name=${encodeURIComponent(w.name)}`)}
-                          className="rounded border border-[#E6E6E6] bg-white p-1.5 text-[#6B6B6B] hover:bg-[#F0F0F0] hover:text-[#1A1A1A]"
-                        >
-                          <PackageOpen size={15} />
-                        </button>
-                      )}
-                      {canManage && (
-                        <button
-                          title="Edit Warehouse"
-                          onClick={() => handleEdit(w)}
-                          className="rounded border border-[#E6E6E6] bg-white p-1.5 text-[#6B6B6B] hover:bg-[#F0F0F0] hover:text-[#1A1A1A]"
-                        >
-                          <Edit2 size={15} />
-                        </button>
-                      )}
-                      {canManage && (
-                        <button
-                          title="Delete Warehouse"
-                          onClick={() => setDeleting(w)}
-                          className="rounded border border-[#E6E6E6] bg-white p-1.5 text-[#E31E24] hover:bg-[#FCE8E8]"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      )}
-                    </div>
-                  ),
-                },
+        {/* 3. FULL-WIDTH DATA TABLE */}
+        <DataTable<WarehouseRow>
+          title="Warehouses List"
+          rowKey="id"
+          data={data.data}
+          isLoading={isLoading}
+          emptyMessage={
+            debouncedSearch ? "No warehouses matched your search." : "No warehouses found. Create your first warehouse."
+          }
+          enableSelection={canManage}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          totalItems={data.pagination.total}
+          currentPage={page}
+          pageSize={limit}
+          totalPages={data.pagination.totalPages}
+          onPageChange={setPage}
+          onPageSizeChange={(newLimit) => {
+            setLimit(newLimit);
+            setPage(1);
+          }}
+          pageSizeOptions={[10, 25, 50, 100]}
+          onSelectAll={handleSelectAll}
+          renderBulkActions={(selectedIds) => (
+            <AdminBulkActionsBar
+              selectedCount={selectedIds.length}
+              onClear={() => setSelectedIds([])}
+              actionType={bulkAction}
+              onActionTypeChange={setBulkAction}
+              actions={[
+                { value: "enable", label: "Enable" },
+                { value: "disable", label: "Disable" },
+                { value: "delete", label: "Delete" },
               ]}
+              onApply={handleBulkAction}
+              applyLoading={bulkLoading}
+              applyDisabled={!bulkAction || selectedIds.length === 0}
             />
-          </div>
-          
-          {data.pagination?.totalPages > 1 && (
-            <div className="mt-4 flex justify-end">
-              <Pagination page={page} totalPages={data.pagination.totalPages} onPageChange={setPage} />
-            </div>
           )}
+          columns={filteredColumns}
+        />
+
+        {/* 4. BOTTOM PAGINATION */}
+        <div className="flex items-center justify-end mt-4">
+          <Pagination
+            page={page}
+            totalPages={data.pagination.totalPages || 1}
+            onPageChange={setPage}
+            alwaysShow={true}
+          />
         </div>
       </div>
 
+      {/* ADD / EDIT WAREHOUSE MODAL */}
       <Modal
         open={showForm}
         onClose={handleRequestClose}
@@ -450,21 +586,21 @@ export default function WarehousesPage() {
         }
       >
         <form id="warehouse-form" onSubmit={form.handleSubmit} className="space-y-5 p-6">
-          <AdminInput 
+          <AdminInput
             id="field-name"
-            label="Warehouse Name" 
-            value={form.values.name} 
-            onChange={(e) => form.handleChange("name", e.target.value)} 
+            label="Warehouse Name"
+            value={form.values.name}
+            onChange={(e) => form.handleChange("name", e.target.value)}
             onBlur={() => form.handleBlur("name")}
             error={form.errors.name}
-            required 
+            required
           />
-          
+
           <div className="grid grid-cols-2 gap-5">
-            <AdminSelect 
+            <AdminSelect
               id="field-countryId"
-              label="Country" 
-              value={form.values.countryId} 
+              label="Country"
+              value={form.values.countryId}
               onChange={(e) => {
                 form.handleChange("countryId", e.target.value);
                 form.handleChange("state", "");
@@ -474,7 +610,7 @@ export default function WarehousesPage() {
               required
               options={[
                 { value: "", label: "Select country..." },
-                ...countries.map((c: any) => ({ value: c.id, label: `${c.name} (${c.code})` }))
+                ...countries.map((c: any) => ({ value: c.id, label: `${c.name} (${c.code})` })),
               ]}
             />
             {statesOfSelectedCountry.length > 0 ? (
@@ -486,61 +622,58 @@ export default function WarehousesPage() {
                 onBlur={() => form.handleBlur("state")}
                 error={form.errors.state}
                 required
-                options={[
-                  { value: "", label: "Select state..." },
-                  ...statesOfSelectedCountry
-                ]}
+                options={[{ value: "", label: "Select state..." }, ...statesOfSelectedCountry]}
               />
             ) : (
-              <AdminInput 
+              <AdminInput
                 id="field-state"
-                label="State / Province" 
-                value={form.values.state} 
-                onChange={(e) => form.handleChange("state", e.target.value)} 
+                label="State / Province"
+                value={form.values.state}
+                onChange={(e) => form.handleChange("state", e.target.value)}
                 onBlur={() => form.handleBlur("state")}
                 error={form.errors.state}
-                required 
+                required
               />
             )}
           </div>
 
           <div className="grid grid-cols-2 gap-5">
-            <AdminInput 
+            <AdminInput
               id="field-addressLine1"
-              label="Address Line 1" 
-              value={form.values.addressLine1} 
-              onChange={(e) => form.handleChange("addressLine1", e.target.value)} 
+              label="Address Line 1"
+              value={form.values.addressLine1}
+              onChange={(e) => form.handleChange("addressLine1", e.target.value)}
               onBlur={() => form.handleBlur("addressLine1")}
               error={form.errors.addressLine1}
               required
               placeholder="Building/Street number"
             />
-            <AdminInput 
+            <AdminInput
               id="field-addressLine2"
-              label="Address Line 2" 
-              value={form.values.addressLine2} 
-              onChange={(e) => form.handleChange("addressLine2", e.target.value)} 
+              label="Address Line 2"
+              value={form.values.addressLine2}
+              onChange={(e) => form.handleChange("addressLine2", e.target.value)}
               onBlur={() => form.handleBlur("addressLine2")}
               placeholder="Apartment, suite, unit (optional)"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-5">
-            <AdminInput 
+            <AdminInput
               id="field-city"
-              label="City" 
-              value={form.values.city} 
-              onChange={(e) => form.handleChange("city", e.target.value)} 
+              label="City"
+              value={form.values.city}
+              onChange={(e) => form.handleChange("city", e.target.value)}
               onBlur={() => form.handleBlur("city")}
               error={form.errors.city}
               required
               placeholder="City name"
             />
-            <AdminInput 
+            <AdminInput
               id="field-postalCode"
-              label="Postal / ZIP Code" 
-              value={form.values.postalCode} 
-              onChange={(e) => form.handleChange("postalCode", e.target.value)} 
+              label="Postal / ZIP Code"
+              value={form.values.postalCode}
+              onChange={(e) => form.handleChange("postalCode", e.target.value)}
               onBlur={() => form.handleBlur("postalCode")}
               error={form.errors.postalCode}
               required
@@ -548,23 +681,23 @@ export default function WarehousesPage() {
             />
           </div>
 
-          <AdminInput 
+          <AdminInput
             id="field-gstin"
-            label="GSTIN / Tax ID (Optional)" 
-            value={form.values.gstin} 
-            onChange={(e) => form.handleChange("gstin", e.target.value)} 
+            label="GSTIN / Tax ID (Optional)"
+            value={form.values.gstin}
+            onChange={(e) => form.handleChange("gstin", e.target.value)}
             onBlur={() => form.handleBlur("gstin")}
             error={form.errors.gstin}
             placeholder="Tax ID (15-char GSTIN for India)"
           />
 
-          <AdminSelect 
-            label="Status" 
-            value={form.values.status} 
+          <AdminSelect
+            label="Status"
+            value={form.values.status}
             onChange={(e) => form.handleChange("status", e.target.value as any)}
             options={[
               { value: "ACTIVE", label: "Active" },
-              { value: "INACTIVE", label: "Inactive" }
+              { value: "INACTIVE", label: "Inactive" },
             ]}
           />
 
@@ -575,17 +708,17 @@ export default function WarehousesPage() {
               </h4>
               <button
                 type="button"
-                onClick={() => form.handleChange("deliveryZones", [...form.values.deliveryZones, { countryId: "", states: [] }])}
+                onClick={() =>
+                  form.handleChange("deliveryZones", [...form.values.deliveryZones, { countryId: "", states: [] }])
+                }
                 className="text-[12px] font-semibold text-[#E31E24] hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <Plus size={14} /> Add Delivery Country
               </button>
             </div>
-            
+
             {form.errors.deliveryZones && (
-              <p className="mb-4 text-[12px] text-red-500">
-                {form.errors.deliveryZones}
-              </p>
+              <p className="mb-4 text-[12px] text-red-500">{form.errors.deliveryZones}</p>
             )}
 
             {form.values.deliveryZones.length === 0 && (
@@ -593,7 +726,7 @@ export default function WarehousesPage() {
                 No delivery zones configured. Click "Add Delivery Country" to start.
               </div>
             )}
-            
+
             <div className="space-y-4">
               {form.values.deliveryZones.map((zone, index) => {
                 const zCountry = countries.find((c: any) => c.id === zone.countryId);
@@ -624,26 +757,28 @@ export default function WarehousesPage() {
                     >
                       <Trash2 size={16} />
                     </button>
-                    
+
                     <div className="pr-8 space-y-4">
-                      <AdminSelect 
-                        label={`Delivery Country ${index + 1}`} 
-                        value={zone.countryId} 
+                      <AdminSelect
+                        label={`Delivery Country ${index + 1}`}
+                        value={zone.countryId}
                         onChange={(e) => {
                           const newZones = [...form.values.deliveryZones];
                           newZones[index] = { ...newZones[index], countryId: e.target.value, states: [] };
                           form.handleChange("deliveryZones", newZones);
-                        }} 
+                        }}
                         options={[
                           { value: "", label: "Select delivery country..." },
-                          ...countries.map((c: any) => ({ value: c.id, label: `${c.name} (${c.code})` }))
+                          ...countries.map((c: any) => ({ value: c.id, label: `${c.name} (${c.code})` })),
                         ]}
                       />
 
                       {zone.countryId && zStates.length > 0 && (
                         <div className="space-y-1.5 relative">
-                          <div className="text-[11px] text-gray-500 mb-2">Select the states in {zCountry?.name} that this warehouse can ship to.</div>
-                          
+                          <div className="text-[11px] text-gray-500 mb-2">
+                            Select the states in {zCountry?.name} that this warehouse can ship to.
+                          </div>
+
                           <AdminMultiSelect
                             label="Delivery States (Required)"
                             options={zStates}
@@ -658,7 +793,7 @@ export default function WarehousesPage() {
                           />
                         </div>
                       )}
-                      
+
                       {zone.countryId && zStates.length === 0 && (
                         <div className="text-[12px] text-gray-500 italic p-2 bg-white rounded-md border border-gray-200">
                           No states configured for {zCountry?.name}. Wait for states to load, or change the country.
@@ -673,6 +808,7 @@ export default function WarehousesPage() {
         </form>
       </Modal>
 
+      {/* CONFIRM DISCARD MODAL */}
       <ConfirmModal
         open={showDiscardConfirm}
         title="Discard Unsaved Changes?"
@@ -687,6 +823,7 @@ export default function WarehousesPage() {
         onCancel={() => setShowDiscardConfirm(false)}
       />
 
+      {/* BULK DELETE CONFIRM MODAL */}
       <ConfirmModal
         open={showBulkDeleteConfirm}
         title="Delete Selected Warehouses"
@@ -698,14 +835,18 @@ export default function WarehousesPage() {
         onCancel={() => setShowBulkDeleteConfirm(false)}
       />
 
+      {/* SINGLE DELETE CONFIRM MODAL */}
       <ConfirmModal
-        open={!!deleting}
+        open={Boolean(deleting)}
         title="Delete Warehouse"
         message={`Are you sure you want to delete ${deleting?.name}? This action cannot be undone.`}
+        danger={true}
+        confirmText="Delete Warehouse"
         onConfirm={handleDelete}
         onCancel={() => setDeleting(null)}
         isLoading={deleteMutation.isPending}
       />
+
       {ToastComponent}
     </AdminLayout>
   );

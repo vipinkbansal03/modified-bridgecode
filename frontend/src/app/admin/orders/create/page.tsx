@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
@@ -126,12 +127,12 @@ export default function CreateOrderPage() {
         { label: "Create" },
       ]}
     >
-      <button
-        onClick={() => router.back()}
-        className="mb-5 flex items-center gap-1.5 text-[13.5px] text-[#6B6B6B] hover:text-[#111]"
+      <Link
+        href="/admin/orders"
+        className="mb-5 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-[#6B6B6B] hover:text-[#111] transition-colors cursor-pointer"
       >
         <ArrowLeft size={14} /> Back
-      </button>
+      </Link>
       <form onSubmit={submit} className="space-y-5">
         <div className="rounded-lg border border-[#E6E6E6] bg-white p-5">
           <h3 className="mb-4 text-[14px] font-semibold text-[#111]">

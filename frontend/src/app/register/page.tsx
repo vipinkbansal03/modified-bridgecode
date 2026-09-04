@@ -299,7 +299,7 @@ export default function RegisterPage() {
         <div className="w-full max-w-[620px]">
           <div className="mb-5 flex flex-col-reverse gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 flex-1">
-              <h1 className="font-serif text-[24px] sm:text-[28px] lg:text-[30px] font-semibold leading-tight text-[#111]">
+              <h1 className="text-[24px] sm:text-[28px] lg:text-[30px] font-semibold leading-tight text-[#111]">
                 Create customer account
               </h1>
               <p className="mt-1 text-[12.5px] sm:text-[13px] text-[#8A8A8A] leading-normal">

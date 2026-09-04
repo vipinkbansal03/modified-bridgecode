@@ -40,7 +40,7 @@ export async function uploadMediaFiles(
         purpose,
       });
 
-      const { uploadUrl, mediaId, key } = presignRes.data.data;
+      const { uploadUrl, mediaId } = presignRes.data.data;
 
       // Upload directly to S3
       const uploadResponse = await fetch(uploadUrl, {
@@ -56,8 +56,11 @@ export async function uploadMediaFiles(
       // Confirm upload with backend
       const confirmRes = await adminApi.post("/media/confirm", { mediaId });
       const confirmedUrl = confirmRes.data?.data?.url;
+      if (!confirmedUrl || confirmedUrl.startsWith("temporary/")) {
+        throw new Error(`Upload confirmation did not return a final media URL for ${file.name}`);
+      }
 
-      results.push({ url: confirmedUrl || key || "", mediaId });
+      results.push({ url: confirmedUrl, mediaId });
     }
   } 
   

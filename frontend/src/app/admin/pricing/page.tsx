@@ -1270,6 +1270,39 @@ export default function PricingPage() {
       />
 
       <div className="space-y-5">
+        {/* RECENTLY UPDATED */}
+        {dashboard?.recentlyUpdatedRules?.length ? (
+          <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-[13.5px] font-semibold text-[#1A1A1A]">Recently Updated</h3>
+                <p className="text-[12px] text-[#6B6B6B]">Quick access to latest modified pricing rules.</p>
+              </div>
+              <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-medium text-[#6B6B6B]">
+                {dashboard.recentlyUpdatedRules.length} items
+              </span>
+            </div>
+            <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              {dashboard.recentlyUpdatedRules.slice(0, 4).map((row: PricingRuleRow) => (
+                <div key={row.id} className="rounded-lg border border-[#E6E6E6] p-3 bg-[#FAFAFA] flex flex-col justify-between min-h-[90px]">
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-semibold text-[#1A1A1A]" title={row.ruleName}>{row.ruleName}</div>
+                    <div className="text-[11.5px] text-[#9A9A9A] mt-1 truncate" title={row.product?.title}>
+                      {ruleTypeLabels[row.ruleType as Exclude<PricingRuleType, "ALL">]} · {row.product?.title}
+                    </div>
+                  </div>
+                  <div className="mt-2.5 flex items-center justify-between">
+                    <span className="text-[11.5px] text-[#9A9A9A]">
+                      {new Date(row.updatedAt).toLocaleDateString()}
+                    </span>
+                    <StatusBadge status={row.status} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <AdminListToolbar
           search={{
             value: searchInput,
@@ -1509,40 +1542,6 @@ export default function PricingPage() {
           />
 
           <Pagination page={pagination.page} totalPages={pagination.totalPages ?? 1} onPageChange={setPage} />
-
-        {dashboard?.recentlyUpdatedRules?.length ? (
-          <div className="rounded-xl border border-[#E6E6E6] bg-white p-4 shadow-sm">
-            <details className="group">
-              <summary className="flex cursor-pointer items-center justify-between font-semibold text-[14px] text-[#1A1A1A] list-none select-none">
-                <span className="flex items-center gap-2">
-                  <RefreshCw size={14} className="text-[#6B6B6B]" />
-                  Recent Updates
-                </span>
-                <span className="text-[#9A9A9A] transition-transform group-open:rotate-180">
-                  <ChevronDown size={16} />
-                </span>
-              </summary>
-              <div className="mt-4 space-y-3 pt-4 border-t border-[#E6E6E6] grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {dashboard.recentlyUpdatedRules.slice(0, 4).map((row: PricingRuleRow) => (
-                  <div key={row.id} className="rounded-lg border border-[#E6E6E6] p-3 bg-[#FAFAFA] flex flex-col justify-between min-h-[90px]">
-                    <div className="min-w-0">
-                      <div className="truncate text-[13px] font-semibold text-[#1A1A1A]" title={row.ruleName}>{row.ruleName}</div>
-                      <div className="text-[11.5px] text-[#9A9A9A] mt-1 truncate" title={row.product?.title}>
-                        {ruleTypeLabels[row.ruleType as Exclude<PricingRuleType, "ALL">]} · {row.product?.title}
-                      </div>
-                    </div>
-                    <div className="mt-2.5 flex items-center justify-between">
-                      <span className="text-[11.5px] text-[#9A9A9A]">
-                        {new Date(row.updatedAt).toLocaleDateString()}
-                      </span>
-                      <StatusBadge status={row.status} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </details>
-          </div>
-        ) : null}
       </div>
 
       <Modal

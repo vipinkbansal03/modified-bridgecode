@@ -1,12 +1,22 @@
 "use client";
 
-import { useState, useEffect, useLayoutEffect, useCallback, useRef, createContext, useContext, type ReactNode } from "react";
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useRef,
+  createContext,
+  useContext,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
+  AlertCircle,
   CheckCircle2,
   XCircle,
   Info,
@@ -42,9 +52,22 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
-import { adminApi } from "@/services/adminApi";
-import { ToastProvider, useToast as useSharedToast } from "@/components/ui/ToastProvider";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
+import {
+  ToastProvider,
+  useToast as useSharedToast,
+} from "@/components/ui/ToastProvider";
 export { Modal, type ModalProps } from "@/components/ui/Modal";
+export { Tooltip, type TooltipProps } from "@/components/ui/Tooltip";
+import { Tooltip } from "@/components/ui/Tooltip";
+export {
+  AdminRowActions,
+  AdminActionButton,
+  createActionsColumn,
+  type AdminRowActionsProps,
+  type AdminRowActionConfig,
+  type AdminActionButtonProps,
+} from "@/components/admin/AdminRowActions";
 
 // ─── DataTable ────────────────────────────────────────────
 
@@ -61,7 +84,7 @@ export interface Column<T> {
   onToggleStatus?: (row: T) => void | Promise<void>;
 }
 
-interface DataTableProps<T> {
+export interface DataTableProps<T> {
   columns: Column<T>[];
   data: T[];
   isLoading?: boolean;
@@ -103,6 +126,10 @@ interface DataTableProps<T> {
   onPageSizeChange?: (size: number) => void;
   pageSizeOptions?: number[];
   onSelectAll?: (checked: boolean) => void | Promise<void>;
+
+  // Optional Bottom Pagination slot
+  bottomPagination?: React.ReactNode;
+  className?: string;
 }
 
 export function DataTable<T>({
@@ -135,106 +162,138 @@ export function DataTable<T>({
   onPageSizeChange,
   pageSizeOptions,
   onSelectAll,
+  bottomPagination,
+  className,
 }: DataTableProps<T>) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
 
-  const totalColumns = columns.length + (enableReorder ? 1 : 0) + (enableSelection ? 1 : 0);
-
-  if (isLoading) {
-    return (
-      <div className="rounded-lg border border-[#E6E6E6] bg-white overflow-hidden">
-        <div className="divide-y divide-[#E6E6E6]">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="flex gap-4 px-4 py-3.5">
-              {(enableReorder || enableSelection) && (
-                <div className="h-4 w-6 animate-pulse rounded bg-[#E6E6E6]" />
-              )}
-              {columns.map((_, j) => (
-                <div key={j} className="h-4 flex-1 animate-pulse rounded bg-[#E6E6E6]" />
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
+  const totalColumns =
+    columns.length + (enableReorder ? 1 : 0) + (enableSelection ? 1 : 0);
   const hasBulkActionsActive = enableSelection && !!renderBulkActions;
   const isUnifiedToolbar = totalItems !== undefined;
+  const hasMetaCard = Boolean(
+    title || description || hasBulkActionsActive || totalItems !== undefined,
+  );
 
   return (
-    <div className="rounded-lg border border-[#E6E6E6] bg-white overflow-hidden flex flex-col">
-      {(title || description || hasBulkActionsActive || totalItems !== undefined) && (
-        <>
+    <>
+      {/* 1. SEPARATE META / BULK-ACTION CARD */}
+      {hasMetaCard && (
+        <div className="rounded-xl border border-[#E6E6E6] bg-white px-4 h-[52px] shadow-2xs flex items-center justify-between overflow-x-auto transition-all mb-4">
           {isUnifiedToolbar ? (
-            <div className="border-b border-[#E6E6E6] bg-white px-4 flex items-center justify-between h-[56px] overflow-x-auto transition-all">
-              <div className="flex items-center gap-3 w-full shrink-0">
-                <span className="text-[13px] font-bold text-[#1A1A1A] whitespace-nowrap">{title || "List"}</span>
+            <div className="flex items-center justify-between w-full shrink-0">
+              {/* 1. LEFT INFORMATION GROUP */}
+              <div className="flex items-center gap-2.5 shrink-0">
+                <span className="text-[13px] font-bold text-[#1A1A1A] whitespace-nowrap">
+                  {title || "List"}
+                </span>
 
-                {/* Showing Count */}
-                {totalItems !== undefined && currentPage !== undefined && pageSize !== undefined && (
-                  <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">
-                    Showing {totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalItems)} of {totalItems}
-                  </span>
-                )}
+                {/* Showing Count - Natural width */}
+                {totalItems !== undefined &&
+                  currentPage !== undefined &&
+                  pageSize !== undefined && (
+                    <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">
+                      Showing{" "}
+                      {totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1}–
+                      {Math.min(currentPage * pageSize, totalItems)} of{" "}
+                      {totalItems}
+                    </span>
+                  )}
+              </div>
 
-                {/* Page Size Select */}
-                {pageSize !== undefined && onPageSizeChange && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <select
-                      value={pageSize}
-                      onChange={(e) => onPageSizeChange(Number(e.target.value))}
-                      className="h-8 rounded-md border border-[#E6E6E6] bg-white px-2 text-[12px] text-[#1A1A1A] outline-none shadow-xs cursor-pointer"
-                    >
-                      {(pageSizeOptions || [10, 25, 50, 100]).map((opt) => (
-                        <option key={opt} value={opt}>{opt}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {/* Prev / Next Buttons */}
-                {currentPage !== undefined && totalPages !== undefined && onPageChange && (
-                  <div className="flex items-center gap-1.5 ml-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-                      disabled={currentPage === 1}
-                      className="h-8 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12px] hover:bg-[#F5F5F5] disabled:opacity-40 shadow-xs cursor-pointer"
-                    >
-                      Prev
-                    </button>
-                    <span className="text-[12.5px] text-[#1A1A1A] font-semibold whitespace-nowrap">{currentPage}/{totalPages}</span>
-                    <button
-                      type="button"
-                      onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-                      disabled={currentPage === totalPages}
-                      className="h-8 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12px] hover:bg-[#F5F5F5] disabled:opacity-40 shadow-xs cursor-pointer"
-                    >
-                      Next
-                    </button>
-                  </div>
-                )}
-
-                {/* Bulk Actions container */}
+              {/* 2. RIGHT GROUP (BULK ACTIONS + PAGINATION) */}
+              <div className="ml-auto flex items-center gap-3 shrink-0">
+                {/* Bulk Actions */}
                 {hasBulkActionsActive && (
-                  <div className="flex items-center gap-2 border-l border-[#E6E6E6] pl-3 ml-1 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                     {renderBulkActions!(selectedIds)}
+                  </div>
+                )}
+
+                {/* Pagination Controls */}
+                {((pageSize !== undefined && onPageSizeChange) ||
+                  (currentPage !== undefined &&
+                    totalPages !== undefined &&
+                    onPageChange)) && (
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 shrink-0",
+                      hasBulkActionsActive && "border-l border-[#E6E6E6] pl-3",
+                    )}
+                  >
+                    {/* Page Size Select */}
+                    {pageSize !== undefined && onPageSizeChange && (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <select
+                          value={pageSize}
+                          onChange={(e) =>
+                            onPageSizeChange(Number(e.target.value))
+                          }
+                          aria-label="Select page size"
+                          className="h-8 rounded-md border border-[#E6E6E6] bg-white px-2 text-[12px] text-[#1A1A1A] outline-none shadow-xs cursor-pointer hover:border-[#D1D1D1] transition-colors"
+                        >
+                          {(pageSizeOptions || [10, 25, 50, 100]).map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Prev / Next Buttons & Page Indicator */}
+                    {currentPage !== undefined &&
+                      totalPages !== undefined &&
+                      onPageChange && (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Tooltip content="Previous page" side="top">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onPageChange(Math.max(1, currentPage - 1))
+                              }
+                              disabled={currentPage <= 1}
+                              aria-label="Previous page"
+                              className="inline-flex h-8 min-w-[46px] items-center justify-center rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] disabled:opacity-40 disabled:hover:bg-white shadow-xs transition-colors cursor-pointer disabled:cursor-not-allowed select-none"
+                            >
+                              Prev
+                            </button>
+                          </Tooltip>
+                          <span className="inline-flex min-w-[32px] items-center justify-center text-[12.5px] text-[#1A1A1A] font-semibold whitespace-nowrap text-center select-none">
+                            {currentPage}/{totalPages}
+                          </span>
+                          <Tooltip content="Next page" side="top">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onPageChange(
+                                  Math.min(totalPages, currentPage + 1),
+                                )
+                              }
+                              disabled={currentPage >= totalPages}
+                              aria-label="Next page"
+                              className="inline-flex h-8 min-w-[46px] items-center justify-center rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] disabled:opacity-40 disabled:hover:bg-white shadow-xs transition-colors cursor-pointer disabled:cursor-not-allowed select-none"
+                            >
+                              Next
+                            </button>
+                          </Tooltip>
+                        </div>
+                      )}
                   </div>
                 )}
 
                 {/* Extra header actions if any */}
                 {headerActions && (
-                  <div className="ml-auto flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                     {headerActions}
                   </div>
                 )}
               </div>
             </div>
           ) : (
-            <div className="border-b border-[#E6E6E6] bg-white px-4 flex items-center justify-between h-[56px] transition-all">
+            <div className="flex items-center justify-between w-full">
               {hasBulkActionsActive ? (
                 <div className="flex items-center justify-between gap-3 w-full animate-fade-in">
                   {renderBulkActions!(selectedIds)}
@@ -242,221 +301,386 @@ export function DataTable<T>({
               ) : (
                 <div className="flex items-center justify-between w-full">
                   <div>
-                    {title && <h3 className="text-[14.5px] font-bold text-[#1A1A1A]">{title}</h3>}
-                    {description && <p className="mt-0.5 text-[12px] text-[#6B6B6B]">{description}</p>}
+                    {title && (
+                      <h3 className="text-[14.5px] font-bold text-[#1A1A1A]">
+                        {title}
+                      </h3>
+                    )}
+                    {description && (
+                      <p className="mt-0.5 text-[12px] text-[#6B6B6B]">
+                        {description}
+                      </p>
+                    )}
                   </div>
                   {headerActions}
                 </div>
               )}
             </div>
           )}
-        </>
+        </div>
       )}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-[#F8F8F8] border-b border-[#E6E6E6]">
-            <tr>
-              {enableReorder && (
-                <th className="px-2 py-3 w-9 text-center" />
-              )}
-              {enableSelection && (
-                <th className="px-2 py-3 w-9 text-center">
-                  <input
-                    type="checkbox"
-                    checked={data.length > 0 && (selectedIds.length === data.length || (totalItems !== undefined && selectedIds.length >= totalItems))}
-                    onChange={(e) => {
-                      if (onSelectAll) {
-                        void onSelectAll(e.target.checked);
-                      } else if (onSelectionChange) {
-                        if (e.target.checked) {
-                          onSelectionChange(data.map((item) => String(item[rowKey])));
-                        } else {
-                          onSelectionChange([]);
-                        }
-                      }
-                    }}
-                    className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24] cursor-pointer"
-                  />
-                </th>
-              )}
-              {columns.map((col) => {
-                const alignClass = col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left";
-                return (
-                  <th
-                    key={String(col.key)}
-                    className={cn("px-4 py-3 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]", alignClass)}
-                    style={col.width ? { width: col.width } : undefined}
-                  >
-                    {col.label}
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#E6E6E6]">
-            {data.length === 0 ? (
-              <tr>
-                <td colSpan={totalColumns} className="px-4 py-12 text-center text-[#9A9A9A] text-[13.5px]">
-                  {emptyMessage}
-                </td>
-              </tr>
-            ) : (
-              data.map((row) => {
-                const tooltip = typeof rowTooltip === "function" ? rowTooltip(row) : rowTooltip;
-                const rowId = String(row[rowKey]);
-                return (
-                  <tr
-                    key={rowId}
-                    draggable={enableReorder && !disabledReorder}
-                    onDragStart={() => {
-                      if (enableReorder) setDraggingId(rowId);
-                    }}
-                    onDragEnd={() => {
-                      setDraggingId(null);
-                      setOverId(null);
-                    }}
-                    onDragOver={(e) => {
-                      if (enableReorder) {
-                        e.preventDefault();
-                        setOverId(rowId);
-                      }
-                    }}
-                    onDrop={(e) => {
-                      if (enableReorder) {
-                        e.preventDefault();
-                        const fromId = draggingId;
-                        const toId = rowId;
-                        if (fromId && toId && fromId !== toId) {
-                          const fromIndex = data.findIndex((item) => String(item[rowKey]) === fromId);
-                          const toIndex = data.findIndex((item) => String(item[rowKey]) === toId);
-                          if (fromIndex >= 0 && toIndex >= 0) {
-                            const next = [...data];
-                            const [moved] = next.splice(fromIndex, 1);
-                            next.splice(toIndex, 0, moved);
-                            onReorder?.(next);
+      <div className={cn("w-full space-y-3.5 flex flex-col", className)}>
+        {/* 2. SEPARATE TABLE CARD */}
+        <div className="rounded-xl border border-[#E6E6E6] bg-white overflow-hidden shadow-2xs relative">
+          {isLoading && data.length > 0 && (
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-[#E31E24] animate-pulse z-10" />
+          )}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-[#F8F8F8] border-b border-[#E6E6E6]">
+                <tr>
+                  {enableReorder && (
+                    <th className="px-2 py-3 w-9 text-center" />
+                  )}
+                  {enableSelection && (
+                    <th className="px-2 py-3 w-9 text-center">
+                      <Tooltip content="Select all" side="top">
+                        <input
+                          type="checkbox"
+                          aria-label="Select all"
+                          checked={
+                            data.length > 0 &&
+                            (selectedIds.length === data.length ||
+                              (totalItems !== undefined &&
+                                selectedIds.length >= totalItems))
                           }
-                        }
-                        setDraggingId(null);
-                        setOverId(null);
-                      }
-                    }}
-                    onClick={() => onRowClick?.(row)}
-                    title={tooltip}
-                    className={cn(
-                      "transition-colors",
-                      onRowClick ? "cursor-pointer hover:bg-[#FFF8F8]" : "hover:bg-[#FAFAFA]",
-                      draggingId === rowId && "opacity-50",
-                      overId === rowId && draggingId && draggingId !== rowId && "bg-red-50 border-y-2 border-dashed border-[#E31E24]"
-                    )}
-                  >
-                    {enableReorder && (
-                      <td className="px-2 py-3 w-9 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 text-center">
-                        <div className="flex justify-center items-center">
-                          <GripVertical size={18} />
-                        </div>
-                      </td>
-                    )}
-                    {enableSelection && (
-                      <td className="px-2 py-3 w-9 text-center" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-center items-center">
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.includes(rowId)}
-                            onChange={(e) => {
-                              if (!onSelectionChange) return;
-                              const isShiftPressed = (e.nativeEvent as any).shiftKey;
-                              const isSelected = selectedIds.includes(rowId);
-
-                              if (isShiftPressed && lastSelectedId !== null) {
-                                const ids = data.map((item) => String(item[rowKey]));
-                                const prevIndex = ids.indexOf(lastSelectedId);
-                                const currIndex = ids.indexOf(rowId);
-
-                                if (prevIndex !== -1 && currIndex !== -1) {
-                                  const start = Math.min(prevIndex, currIndex);
-                                  const end = Math.max(prevIndex, currIndex);
-                                  const rangeIds = ids.slice(start, end + 1);
-
-                                  if (!isSelected) {
-                                    onSelectionChange(Array.from(new Set([...selectedIds, ...rangeIds])));
-                                  } else {
-                                    onSelectionChange(selectedIds.filter((x) => !rangeIds.includes(x)));
-                                  }
-                                  setLastSelectedId(rowId);
-                                  return;
-                                }
-                              }
-
-                              if (isSelected) {
-                                onSelectionChange(selectedIds.filter((x) => x !== rowId));
+                          onChange={(e) => {
+                            if (onSelectAll) {
+                              void onSelectAll(e.target.checked);
+                            } else if (onSelectionChange) {
+                              if (e.target.checked) {
+                                onSelectionChange(
+                                  data.map((item) => String(item[rowKey])),
+                                );
                               } else {
-                                onSelectionChange([...selectedIds, rowId]);
+                                onSelectionChange([]);
                               }
-                              setLastSelectedId(rowId);
-                            }}
-                            className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24] cursor-pointer"
-                          />
-                        </div>
-                      </td>
-                    )}
-                    {columns.map((col) => {
-                      const isStatusCol = col.key === "status" || col.enableStatusToggle === true;
-                      const toggleHandler = col.onToggleStatus || (isStatusCol && onToggleStatus ? onToggleStatus : undefined);
-
-                      let cellContent: ReactNode;
-
-                      if (toggleHandler) {
-                        const rawStatus = col.getStatus
-                          ? col.getStatus(row)
-                          : (row as Record<string, unknown>)[String(col.key)];
-                        const isLoading = col.isStatusLoading
-                          ? col.isStatusLoading(row)
-                          : isStatusLoading
-                            ? isStatusLoading(row)
-                            : statusLoadingId === rowId;
-                        const isDisabled = col.isStatusDisabled
-                          ? col.isStatusDisabled(row)
-                          : isStatusDisabled
-                            ? isStatusDisabled(row)
-                            : false;
-
-                        cellContent = (
-                          <TableStatusAction
-                            status={rawStatus as string | boolean}
-                            loading={isLoading}
-                            disabled={isDisabled}
-                            onToggle={() => toggleHandler(row)}
-                          />
-                        );
-                      } else if (col.render) {
-                        cellContent = col.render(row);
-                      } else if (col.key === "status") {
-                        const rawStatus = (row as Record<string, unknown>)[String(col.key)];
-                        cellContent = <StatusBadge status={rawStatus as string | boolean} />;
-                      } else {
-                        cellContent = String((row as Record<string, unknown>)[String(col.key)] ?? "");
-                      }
-
-                      const alignClass = col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left";
-
-                      return (
-                        <td
-                          key={String(col.key)}
-                          className={cn("px-4 py-3 text-[13.5px] text-[#1A1A1A]", alignClass)}
-                          style={col.width ? { width: col.width } : undefined}
-                        >
-                          {cellContent}
+                            }
+                          }}
+                          className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24] cursor-pointer"
+                        />
+                      </Tooltip>
+                    </th>
+                  )}
+                  {columns.map((col) => {
+                    const alignClass =
+                      col.align === "right"
+                        ? "text-right"
+                        : col.align === "center"
+                          ? "text-center"
+                          : "text-left";
+                    return (
+                      <th
+                        key={String(col.key)}
+                        className={cn(
+                          "px-4 py-3 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]",
+                          alignClass,
+                        )}
+                        style={col.width ? { width: col.width } : undefined}
+                      >
+                        {col.label}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody className={cn("divide-y divide-[#E6E6E6] transition-opacity duration-150", isLoading && data.length > 0 && "opacity-60")}>
+                {isLoading && data.length === 0 ? (
+                  Array.from({ length: Math.min(pageSize || 5, 5) }).map((_, i) => (
+                    <tr key={i} className="h-[53px]">
+                      {enableReorder && (
+                        <td className="px-2 py-3 w-9 text-center">
+                          <div className="h-4 w-4 animate-pulse rounded bg-[#E6E6E6] mx-auto" />
                         </td>
-                      );
-                    })}
+                      )}
+                      {enableSelection && (
+                        <td className="px-2 py-3 w-9 text-center">
+                          <div className="h-4 w-4 animate-pulse rounded bg-[#E6E6E6] mx-auto" />
+                        </td>
+                      )}
+                      {columns.map((col, j) => {
+                        const alignClass =
+                          col.align === "right"
+                            ? "text-right"
+                            : col.align === "center"
+                              ? "text-center"
+                              : "text-left";
+                        return (
+                          <td
+                            key={String(col.key || j)}
+                            className={cn("px-4 py-3.5", alignClass)}
+                            style={col.width ? { width: col.width } : undefined}
+                          >
+                            <div
+                              className={cn(
+                                "h-4 animate-pulse rounded bg-[#E6E6E6]",
+                                col.align === "right"
+                                  ? "ml-auto w-16"
+                                  : col.align === "center"
+                                    ? "mx-auto w-16"
+                                    : "w-3/4 max-w-[140px]",
+                              )}
+                            />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))
+                ) : data.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={totalColumns}
+                      className="px-4 py-12 text-center text-[#9A9A9A] text-[13.5px]"
+                    >
+                      {emptyMessage}
+                    </td>
                   </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                ) : (
+                  data.map((row) => {
+                    const tooltip =
+                      typeof rowTooltip === "function"
+                        ? rowTooltip(row)
+                        : rowTooltip;
+                    const rowId = String(row[rowKey]);
+                    return (
+                      <tr
+                        key={rowId}
+                        draggable={enableReorder && !disabledReorder}
+                        onDragStart={() => {
+                          if (enableReorder) setDraggingId(rowId);
+                        }}
+                        onDragEnd={() => {
+                          setDraggingId(null);
+                          setOverId(null);
+                        }}
+                        onDragOver={(e) => {
+                          if (enableReorder) {
+                            e.preventDefault();
+                            setOverId(rowId);
+                          }
+                        }}
+                        onDrop={(e) => {
+                          if (enableReorder) {
+                            e.preventDefault();
+                            const fromId = draggingId;
+                            const toId = rowId;
+                            if (fromId && toId && fromId !== toId) {
+                              const fromIndex = data.findIndex(
+                                (item) => String(item[rowKey]) === fromId,
+                              );
+                              const toIndex = data.findIndex(
+                                (item) => String(item[rowKey]) === toId,
+                              );
+                              if (fromIndex >= 0 && toIndex >= 0) {
+                                const next = [...data];
+                                const [moved] = next.splice(fromIndex, 1);
+                                next.splice(toIndex, 0, moved);
+                                onReorder?.(next);
+                              }
+                            }
+                            setDraggingId(null);
+                            setOverId(null);
+                          }
+                        }}
+                        onClick={() => onRowClick?.(row)}
+                        title={tooltip}
+                        className={cn(
+                          "transition-colors",
+                          onRowClick
+                            ? "cursor-pointer hover:bg-[#FFF8F8]"
+                            : "hover:bg-[#FAFAFA]",
+                          draggingId === rowId && "opacity-50",
+                          overId === rowId &&
+                            draggingId &&
+                            draggingId !== rowId &&
+                            "bg-red-50 border-y-2 border-dashed border-[#E31E24]",
+                        )}
+                      >
+                        {enableReorder && (
+                          <td className="px-2 py-3 w-9 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 text-center">
+                            <div className="flex justify-center items-center">
+                              <Tooltip content="Drag to reorder" side="top">
+                                <span className="inline-flex cursor-grab active:cursor-grabbing">
+                                  <GripVertical size={18} />
+                                </span>
+                              </Tooltip>
+                            </div>
+                          </td>
+                        )}
+                        {enableSelection && (
+                          <td
+                            className="px-2 py-3 w-9 text-center"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex justify-center items-center">
+                              <Tooltip content="Select row" side="top">
+                                <input
+                                  type="checkbox"
+                                  aria-label="Select row"
+                                  checked={selectedIds.includes(rowId)}
+                                  onChange={(e) => {
+                                    if (!onSelectionChange) return;
+                                    const isShiftPressed = (e.nativeEvent as any)
+                                      .shiftKey;
+                                    const isSelected =
+                                      selectedIds.includes(rowId);
+
+                                    if (
+                                      isShiftPressed &&
+                                      lastSelectedId !== null
+                                    ) {
+                                      const ids = data.map((item) =>
+                                        String(item[rowKey]),
+                                      );
+                                      const prevIndex =
+                                        ids.indexOf(lastSelectedId);
+                                      const currIndex = ids.indexOf(rowId);
+
+                                      if (prevIndex !== -1 && currIndex !== -1) {
+                                        const start = Math.min(
+                                          prevIndex,
+                                          currIndex,
+                                        );
+                                        const end = Math.max(
+                                          prevIndex,
+                                          currIndex,
+                                        );
+                                        const rangeIds = ids.slice(
+                                          start,
+                                          end + 1,
+                                        );
+
+                                        if (!isSelected) {
+                                          onSelectionChange(
+                                            Array.from(
+                                              new Set([
+                                                ...selectedIds,
+                                                ...rangeIds,
+                                              ]),
+                                            ),
+                                          );
+                                        } else {
+                                          onSelectionChange(
+                                            selectedIds.filter(
+                                              (x) => !rangeIds.includes(x),
+                                            ),
+                                          );
+                                        }
+                                        setLastSelectedId(rowId);
+                                        return;
+                                      }
+                                    }
+
+                                    if (isSelected) {
+                                      onSelectionChange(
+                                        selectedIds.filter((x) => x !== rowId),
+                                      );
+                                    } else {
+                                      onSelectionChange([...selectedIds, rowId]);
+                                    }
+                                    setLastSelectedId(rowId);
+                                  }}
+                                  className="rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24] cursor-pointer"
+                                />
+                              </Tooltip>
+                            </div>
+                          </td>
+                        )}
+                        {columns.map((col) => {
+                          const isStatusCol =
+                            col.key === "status" ||
+                            col.enableStatusToggle === true;
+                          const toggleHandler =
+                            col.onToggleStatus ||
+                            (isStatusCol && onToggleStatus
+                              ? onToggleStatus
+                              : undefined);
+
+                          let cellContent: ReactNode;
+
+                          if (toggleHandler) {
+                            const rawStatus = col.getStatus
+                              ? col.getStatus(row)
+                              : (row as Record<string, unknown>)[
+                                  String(col.key)
+                                ];
+                            const isLoading = col.isStatusLoading
+                              ? col.isStatusLoading(row)
+                              : isStatusLoading
+                                ? isStatusLoading(row)
+                                : statusLoadingId === rowId;
+                            const isDisabled = col.isStatusDisabled
+                              ? col.isStatusDisabled(row)
+                              : isStatusDisabled
+                                ? isStatusDisabled(row)
+                                : false;
+
+                            cellContent = (
+                              <TableStatusAction
+                                status={rawStatus as string | boolean}
+                                loading={isLoading}
+                                disabled={isDisabled}
+                                onToggle={() => toggleHandler(row)}
+                              />
+                            );
+                          } else if (col.render) {
+                            cellContent = col.render(row);
+                          } else if (col.key === "status") {
+                            const rawStatus = (row as Record<string, unknown>)[
+                              String(col.key)
+                            ];
+                            cellContent = (
+                              <StatusBadge
+                                status={rawStatus as string | boolean}
+                              />
+                            );
+                          } else {
+                            cellContent = String(
+                              (row as Record<string, unknown>)[
+                                String(col.key)
+                              ] ?? "",
+                            );
+                          }
+
+                          const alignClass =
+                            col.align === "right"
+                              ? "text-right"
+                              : col.align === "center"
+                                ? "text-center"
+                                : "text-left";
+
+                          return (
+                            <td
+                              key={String(col.key)}
+                              className={cn(
+                                "px-4 py-3 text-[13.5px] text-[#1A1A1A]",
+                                alignClass,
+                              )}
+                              style={
+                                col.width ? { width: col.width } : undefined
+                              }
+                            >
+                              {cellContent}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* 3. OPTIONAL BOTTOM PAGINATION */}
+        {bottomPagination && (
+          <div className="flex items-center justify-end">
+            {bottomPagination}
+          </div>
+        )}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -495,15 +719,16 @@ export function TableStatusAction({
   const tooltip = isCurrentlyActive ? tooltipActive : tooltipInactive;
 
   return (
-    <StatusBadge
-      status={isCurrentlyActive ? "ACTIVE" : "INACTIVE"}
-      label={label}
-      loading={loading}
-      disabled={disabled}
-      onClick={onToggle}
-      title={tooltip}
-      className={className}
-    />
+    <Tooltip content={tooltip} side="top" disabled={disabled || loading}>
+      <StatusBadge
+        status={isCurrentlyActive ? "ACTIVE" : "INACTIVE"}
+        label={label}
+        loading={loading}
+        disabled={disabled}
+        onClick={onToggle}
+        className={className}
+      />
+    </Tooltip>
   );
 }
 
@@ -541,11 +766,18 @@ export function AdminSectionTable<T>({
   className,
 }: AdminSectionTableProps<T>) {
   return (
-    <div className={cn("rounded-xl border border-[#E6E6E6] bg-white p-5 space-y-4", className)}>
+    <div
+      className={cn(
+        "rounded-xl border border-[#E6E6E6] bg-white p-5 space-y-4",
+        className,
+      )}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-[14px] font-semibold text-[#1A1A1A]">{title}</h3>
-          {description && <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">{description}</p>}
+          {description && (
+            <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">{description}</p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {actionButtons}
@@ -576,23 +808,48 @@ export function AdminSectionTable<T>({
 
 // ─── Pagination ───────────────────────────────────────────
 
-interface PaginationProps {
+export interface PaginationProps {
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
+  alwaysShow?: boolean;
+  className?: string;
 }
 
-export function Pagination({ page, totalPages, onPageChange }: PaginationProps) {
-  if (totalPages <= 1) return null;
+export function Pagination({
+  page,
+  totalPages,
+  onPageChange,
+  alwaysShow = false,
+  className,
+}: PaginationProps) {
+  if (totalPages <= 1 && !alwaysShow) return null;
+  const safeTotalPages = Math.max(1, totalPages || 1);
   return (
-    <div className="flex items-center justify-end gap-2 pt-4">
-      <button disabled={page <= 1} onClick={() => onPageChange(page - 1)} className="flex items-center gap-1 rounded border border-[#E6E6E6] px-2.5 py-1.5 text-[13px] disabled:opacity-40 hover:bg-[#F2F2F2]">
-        <ChevronLeft size={14} /> Prev
-      </button>
-      <span className="text-[13px] text-[#6B6B6B]">Page {page} of {totalPages}</span>
-      <button disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} className="flex items-center gap-1 rounded border border-[#E6E6E6] px-2.5 py-1.5 text-[13px] disabled:opacity-40 hover:bg-[#F2F2F2]">
-        Next <ChevronRight size={14} />
-      </button>
+    <div className={cn("flex items-center justify-end gap-2", className)}>
+      <Tooltip content="Previous page" side="top">
+        <button
+          disabled={page <= 1}
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+          aria-label="Previous page"
+          className="inline-flex h-8 min-w-[72px] items-center justify-center gap-1 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[13px] font-medium text-[#1A1A1A] disabled:text-[#9A9A9A] disabled:opacity-40 disabled:hover:bg-white hover:bg-[#F2F2F2] transition-colors cursor-pointer disabled:cursor-not-allowed shadow-xs select-none"
+        >
+          <ChevronLeft size={14} /> Prev
+        </button>
+      </Tooltip>
+      <span className="text-[13px] text-[#6B6B6B] px-1 font-medium select-none min-w-[85px] text-center">
+        Page {page} of {safeTotalPages}
+      </span>
+      <Tooltip content="Next page" side="top">
+        <button
+          disabled={page >= safeTotalPages}
+          onClick={() => onPageChange(Math.min(safeTotalPages, page + 1))}
+          aria-label="Next page"
+          className="inline-flex h-8 min-w-[72px] items-center justify-center gap-1 rounded-md border border-[#E6E6E6] bg-white px-2.5 text-[13px] font-medium text-[#1A1A1A] disabled:text-[#9A9A9A] disabled:opacity-40 disabled:hover:bg-white hover:bg-[#F2F2F2] transition-colors cursor-pointer disabled:cursor-not-allowed shadow-xs select-none"
+        >
+          Next <ChevronRight size={14} />
+        </button>
+      </Tooltip>
     </div>
   );
 }
@@ -647,11 +904,21 @@ export function StatusBadge({
 }: StatusBadgeProps) {
   const isBool = typeof status === "boolean";
   const normalizedStatus = isBool
-    ? (status ? "ACTIVE" : "INACTIVE")
+    ? status
+      ? "ACTIVE"
+      : "INACTIVE"
     : String(status || "").toUpperCase();
 
-  const displayLabel = label || (isBool ? (status ? "Active" : "Inactive") : String(status || "").replace(/_/g, " "));
-  const style = STATUS_STYLES[normalizedStatus] || "bg-gray-50 text-gray-600 border-gray-200";
+  const displayLabel =
+    label ||
+    (isBool
+      ? status
+        ? "Active"
+        : "Inactive"
+      : String(status || "").replace(/_/g, " "));
+  const style =
+    STATUS_STYLES[normalizedStatus] ||
+    "bg-gray-50 text-gray-600 border-gray-200";
 
   const isClickable = !!onClick || interactive === true;
   const isCurrentlyActive = normalizedStatus === "ACTIVE" || status === true;
@@ -663,7 +930,7 @@ export function StatusBadge({
   const finalTitle = title ?? defaultTooltip;
 
   if (isClickable) {
-    return (
+    const buttonElement = (
       <button
         type="button"
         onClick={(e) => {
@@ -673,7 +940,6 @@ export function StatusBadge({
           }
         }}
         disabled={disabled || loading}
-        title={finalTitle}
         className={cn(
           "relative inline-flex min-w-[78px] shrink-0 items-center justify-center text-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium transition-all select-none focus:outline-none",
           style,
@@ -682,7 +948,7 @@ export function StatusBadge({
             : loading
               ? "opacity-75 cursor-wait"
               : "cursor-pointer hover:opacity-85 hover:shadow-xs",
-          className
+          className,
         )}
       >
         <span className={cn(loading && "invisible")}>{displayLabel}</span>
@@ -696,6 +962,16 @@ export function StatusBadge({
         )}
       </button>
     );
+
+    if (finalTitle) {
+      return (
+        <Tooltip content={finalTitle} side="top" disabled={disabled || loading}>
+          {buttonElement}
+        </Tooltip>
+      );
+    }
+
+    return buttonElement;
   }
 
   return (
@@ -704,7 +980,7 @@ export function StatusBadge({
       className={cn(
         "inline-flex min-w-[78px] shrink-0 items-center justify-center text-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium",
         style,
-        className
+        className,
       )}
     >
       {displayLabel}
@@ -726,16 +1002,16 @@ interface ConfirmModalProps {
   loadingText?: string;
 }
 
-export function ConfirmModal({ 
-  open, 
-  title, 
-  message, 
-  onConfirm, 
-  onCancel, 
-  isLoading, 
+export function ConfirmModal({
+  open,
+  title,
+  message,
+  onConfirm,
+  onCancel,
+  isLoading,
   danger = true,
   confirmText = "Confirm",
-  loadingText
+  loadingText,
 }: ConfirmModalProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -753,25 +1029,45 @@ export function ConfirmModal({
   const finalLoadingText = loadingText || defaultLoadingText;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/60 px-4 backdrop-blur-xs">
+    <div className="fixed inset-0 z-[100010] flex items-center justify-center bg-black/60 px-4 backdrop-blur-xs">
       <div className="w-full max-w-[400px] rounded-xl bg-white p-6 shadow-xl">
         <div className="flex items-start gap-3 mb-4">
-          {danger && <AlertTriangle size={20} className="flex-none text-red-500 mt-0.5" />}
+          {danger && (
+            <AlertTriangle
+              size={20}
+              className="flex-none text-red-500 mt-0.5"
+            />
+          )}
           <div>
-            <h3 className="text-[16px] font-semibold text-[#1A1A1A]">{title}</h3>
+            <h3 className="text-[16px] font-semibold text-[#1A1A1A]">
+              {title}
+            </h3>
             <p className="mt-1 text-[13.5px] text-[#6B6B6B]">{message}</p>
           </div>
         </div>
         <div className="flex gap-2.5 justify-end">
-          <button onClick={onCancel} className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2]">Cancel</button>
+          <button
+            onClick={onCancel}
+            className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13.5px] font-medium hover:bg-[#F2F2F2]"
+          >
+            Cancel
+          </button>
           <button
             onClick={onConfirm}
             disabled={isLoading}
-            className={cn("rounded-md px-4 py-2 text-[13.5px] font-medium text-white disabled:opacity-50", danger ? "bg-red-600 hover:bg-red-700" : "bg-[#E31E24] hover:bg-[#B5151B]")}
+            className={cn(
+              "rounded-md px-4 py-2 text-[13.5px] font-medium text-white disabled:opacity-50",
+              danger
+                ? "bg-red-600 hover:bg-red-700"
+                : "bg-[#E31E24] hover:bg-[#B5151B]",
+            )}
           >
             {isLoading ? (
               <span className="flex items-center justify-center gap-1.5">
-                <span className="inline-block animate-spin rounded-full border-2 border-white border-t-transparent w-3.5 h-3.5" aria-hidden="true" />
+                <span
+                  className="inline-block animate-spin rounded-full border-2 border-white border-t-transparent w-3.5 h-3.5"
+                  aria-hidden="true"
+                />
                 <span>{finalLoadingText}</span>
               </span>
             ) : (
@@ -781,7 +1077,7 @@ export function ConfirmModal({
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }
 
@@ -800,6 +1096,8 @@ export interface AdminDeleteModalProps {
   softDeleteDescription?: string;
   permanentDeleteDescription?: string;
   warningMessage?: string;
+  errorMessage?: string | null;
+  onClearError?: () => void;
 }
 
 export function AdminDeleteModal({
@@ -815,8 +1113,11 @@ export function AdminDeleteModal({
   softDeleteDescription,
   permanentDeleteDescription,
   warningMessage,
+  errorMessage,
+  onClearError,
 }: AdminDeleteModalProps) {
   const [deleteType, setDeleteType] = useState<"soft" | "permanent">("soft");
+  const [localError, setLocalError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -830,25 +1131,35 @@ export function AdminDeleteModal({
   useEffect(() => {
     if (open) {
       setDeleteType("soft");
+      setLocalError(null);
+      if (onClearError) onClearError();
     }
-  }, [open]);
+  }, [open, onClearError]);
 
   if (!open || !mounted) return null;
 
   const activeLoading = isSoftDeleting || isPermanentDeleting || isLoading;
+  const displayedError = errorMessage || localError;
 
   const handleConfirm = async () => {
-    if (deleteType === "soft") {
-      await onSoftDelete();
-    } else if (onPermanentDelete) {
-      await onPermanentDelete();
+    setLocalError(null);
+    if (onClearError) onClearError();
+    try {
+      if (deleteType === "soft") {
+        await onSoftDelete();
+      } else if (onPermanentDelete) {
+        await onPermanentDelete();
+      }
+    } catch (err: unknown) {
+      const msg = getAdminErrorMessage(err, "Failed to complete deletion.");
+      setLocalError(msg);
     }
   };
 
   const displayName = itemName ? `"${itemName}"` : itemType.toLowerCase();
 
   return createPortal(
-    <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/60 px-4 backdrop-blur-xs">
+    <div className="fixed inset-0 z-[100010] flex items-center justify-center bg-black/60 px-4 backdrop-blur-xs">
       <div className="w-full max-w-[500px] rounded-2xl bg-white p-6 shadow-2xl animate-fade-in border border-[#E6E6E6]">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 pb-3 border-b border-[#F0F0F0]">
@@ -862,7 +1173,10 @@ export function AdminDeleteModal({
               </h3>
               {itemName ? (
                 <p className="text-[13px] font-medium text-[#6B6B6B] truncate max-w-[340px]">
-                  Target: <span className="font-semibold text-[#1A1A1A]">{itemName}</span>
+                  Target:{" "}
+                  <span className="font-semibold text-[#1A1A1A]">
+                    {itemName}
+                  </span>
                 </p>
               ) : null}
             </div>
@@ -873,23 +1187,31 @@ export function AdminDeleteModal({
             disabled={activeLoading}
             className="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-40"
           >
-            <span className="sr-only">Close</span>
-            ✕
+            <span className="sr-only">Close</span>✕
           </button>
         </div>
 
         {/* Description / Warning */}
         <div className="py-3">
           <p className="text-[13px] leading-5 text-[#6B6B6B]">
-            {warningMessage || `Choose the deletion method for this ${itemType.toLowerCase()}. Soft Delete is recommended for maintaining catalog and historical integrity.`}
+            {warningMessage ||
+              `Choose the deletion method for this ${itemType.toLowerCase()}. Soft Delete is recommended for maintaining catalog and historical integrity.`}
           </p>
         </div>
+
+        {/* In-Modal Error Banner */}
+        {displayedError ? (
+          <div className="mb-3.5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-[12.5px] leading-relaxed text-red-700 animate-fade-in shadow-2xs">
+            <AlertCircle size={17} className="mt-0.5 shrink-0 text-red-600" />
+            <div className="flex-1 font-medium">{displayedError}</div>
+          </div>
+        ) : null}
 
         {/* Options */}
         <div className="space-y-3">
           {/* Option 1: Soft Delete (Default / Recommended) */}
           <div
-            onClick={() => !activeLoading && setDeleteType("soft")}
+            onClick={() => { if (!activeLoading) { setDeleteType("soft"); setLocalError(null); } }}
             className={`cursor-pointer rounded-xl border p-3.5 transition-all ${
               deleteType === "soft"
                 ? "border-[#1A1A1A] bg-neutral-50/80 ring-1 ring-[#1A1A1A]"
@@ -905,7 +1227,9 @@ export function AdminDeleteModal({
                       : "border-neutral-300 bg-white"
                   }`}
                 >
-                  {deleteType === "soft" && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                  {deleteType === "soft" && (
+                    <div className="h-1.5 w-1.5 rounded-full bg-white" />
+                  )}
                 </div>
               </div>
               <div className="flex-1 min-w-0">
@@ -918,7 +1242,8 @@ export function AdminDeleteModal({
                   </span>
                 </div>
                 <p className="mt-1 text-[12px] leading-relaxed text-[#6B6B6B]">
-                  {softDeleteDescription || `Hides ${displayName} from the active storefront and admin catalog while safely retaining historical orders, quotes, and reports.`}
+                  {softDeleteDescription ||
+                    `Hides ${displayName} from the active storefront and admin catalog while safely retaining historical orders, quotes, and reports.`}
                 </p>
               </div>
             </div>
@@ -927,7 +1252,7 @@ export function AdminDeleteModal({
           {/* Option 2: Permanent Delete (Hard Delete) - Rendered if onPermanentDelete exists */}
           {onPermanentDelete ? (
             <div
-              onClick={() => !activeLoading && setDeleteType("permanent")}
+              onClick={() => { if (!activeLoading) { setDeleteType("permanent"); setLocalError(null); } }}
               className={`cursor-pointer rounded-xl border p-3.5 transition-all ${
                 deleteType === "permanent"
                   ? "border-red-500 bg-red-50/50 ring-1 ring-red-500"
@@ -943,7 +1268,9 @@ export function AdminDeleteModal({
                         : "border-neutral-300 bg-white"
                     }`}
                   >
-                    {deleteType === "permanent" && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                    {deleteType === "permanent" && (
+                      <div className="h-1.5 w-1.5 rounded-full bg-white" />
+                    )}
                   </div>
                 </div>
                 <div className="flex-1 min-w-0">
@@ -956,7 +1283,8 @@ export function AdminDeleteModal({
                     </span>
                   </div>
                   <p className="mt-1 text-[12px] leading-relaxed text-[#6B6B6B]">
-                    {permanentDeleteDescription || `Physically removes ${displayName} from the database. Blocked by system guards if orders or dependencies reference it.`}
+                    {permanentDeleteDescription ||
+                      `Physically removes ${displayName} from the database. Blocked by system guards if orders or dependencies reference it.`}
                   </p>
                 </div>
               </div>
@@ -982,22 +1310,31 @@ export function AdminDeleteModal({
               "rounded-lg px-4 py-2 text-[13px] font-semibold text-white transition-colors shadow-2xs disabled:opacity-50 flex items-center justify-center gap-2",
               deleteType === "soft"
                 ? "bg-[#1A1A1A] hover:bg-neutral-800"
-                : "bg-[#E31E24] hover:bg-[#B5151B]"
+                : "bg-[#E31E24] hover:bg-[#B5151B]",
             )}
           >
             {activeLoading ? (
               <>
-                <span className="inline-block animate-spin rounded-full border-2 border-white border-t-transparent w-3.5 h-3.5" aria-hidden="true" />
-                <span>{deleteType === "soft" ? "Archiving..." : "Deleting permanently..."}</span>
+                <span
+                  className="inline-block animate-spin rounded-full border-2 border-white border-t-transparent w-3.5 h-3.5"
+                  aria-hidden="true"
+                />
+                <span>
+                  {deleteType === "soft"
+                    ? "Archiving..."
+                    : "Deleting permanently..."}
+                </span>
               </>
+            ) : deleteType === "soft" ? (
+              `Soft Delete ${itemType}`
             ) : (
-              deleteType === "soft" ? `Soft Delete ${itemType}` : `Permanently Delete ${itemType}`
+              `Permanently Delete ${itemType}`
             )}
           </button>
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }
 
@@ -1008,7 +1345,14 @@ interface AdminInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   error?: string;
 }
 
-export function AdminInput({ label, error, className, onChange, type, ...props }: AdminInputProps) {
+export function AdminInput({
+  label,
+  error,
+  className,
+  onChange,
+  type,
+  ...props
+}: AdminInputProps) {
   const isNumeric = type === "number";
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1017,7 +1361,9 @@ export function AdminInput({ label, error, className, onChange, type, ...props }
       val = val.replace(/[^0-9.]/g, "");
       const dotIndex = val.indexOf(".");
       if (dotIndex !== -1) {
-        val = val.substring(0, dotIndex + 1) + val.substring(dotIndex + 1).replace(/\./g, "");
+        val =
+          val.substring(0, dotIndex + 1) +
+          val.substring(dotIndex + 1).replace(/\./g, "");
       }
       e.target.value = val;
     }
@@ -1040,8 +1386,10 @@ export function AdminInput({ label, error, className, onChange, type, ...props }
         onChange={handleChange}
         className={cn(
           "w-full rounded-md border bg-white px-3.5 py-2.5 text-[14px] text-[#1A1A1A] outline-none transition-colors placeholder:text-[#9A9A9A]",
-          error ? "border-red-400 focus:border-red-500" : "border-[#E6E6E6] focus:border-[#E31E24]",
-          className
+          error
+            ? "border-red-400 focus:border-red-500"
+            : "border-[#E6E6E6] focus:border-[#E31E24]",
+          className,
         )}
       />
       {error && <p className="text-[12px] text-red-500">{error}</p>}
@@ -1057,16 +1405,32 @@ interface AdminSelectProps extends React.SelectHTMLAttributes<HTMLSelectElement>
   options: { value: string; label: string }[];
 }
 
-export function AdminSelect({ label, error, options, className, ...props }: AdminSelectProps) {
+export function AdminSelect({
+  label,
+  error,
+  options,
+  className,
+  ...props
+}: AdminSelectProps) {
   const { value, defaultValue, onChange, onBlur, disabled, name, id } = props;
   const [isOpen, setIsOpen] = useState(false);
-  const [internalValue, setInternalValue] = useState(String(defaultValue ?? ""));
+  const [internalValue, setInternalValue] = useState(
+    String(defaultValue ?? ""),
+  );
   const rootRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const [menuStyle, setMenuStyle] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
+  const [menuStyle, setMenuStyle] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
   const selectedValue = String(value ?? internalValue ?? "");
-  const selectedOption = options.find((option) => option.value === selectedValue);
+  const selectedOption = options.find(
+    (option) => option.value === selectedValue,
+  );
 
   const updateMenuPosition = useCallback(() => {
     if (!buttonRef.current) return;
@@ -1078,12 +1442,21 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
     const spaceBelow = viewportHeight - rect.bottom - gap - edge;
     const spaceAbove = rect.top - gap - edge;
     const openUp = spaceBelow < 180 && spaceAbove > spaceBelow;
-    const maxHeight = Math.max(160, Math.min(320, openUp ? spaceAbove : spaceBelow));
-    const longestLabel = options.reduce((max, option) => Math.max(max, option.label.length), 0);
+    const maxHeight = Math.max(
+      160,
+      Math.min(320, openUp ? spaceAbove : spaceBelow),
+    );
+    const longestLabel = options.reduce(
+      (max, option) => Math.max(max, option.label.length),
+      0,
+    );
     const contentMinWidth = Math.min(320, Math.max(168, longestLabel * 8 + 48));
     const width = Math.max(rect.width, contentMinWidth);
-    const left = Math.max(edge, Math.min(rect.left, viewportWidth - width - edge));
-    
+    const left = Math.max(
+      edge,
+      Math.min(rect.left, viewportWidth - width - edge),
+    );
+
     if (openUp) {
       const bottom = viewportHeight - rect.top + gap;
       setMenuStyle({ bottom, left, width, maxHeight });
@@ -1096,7 +1469,12 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node;
-      if (rootRef.current && !rootRef.current.contains(target) && menuRef.current && !menuRef.current.contains(target)) {
+      if (
+        rootRef.current &&
+        !rootRef.current.contains(target) &&
+        menuRef.current &&
+        !menuRef.current.contains(target)
+      ) {
         setIsOpen(false);
       }
     }
@@ -1159,18 +1537,25 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
         <span className={cn("truncate", !selectedOption && "text-[#9A9A9A]")}>
           {selectedOption?.label ?? options[0]?.label ?? "Select"}
         </span>
-        <ChevronDown size={15} className={cn("shrink-0 text-[#9A9A9A] transition", isOpen && "rotate-180")} />
+        <ChevronDown
+          size={15}
+          className={cn(
+            "shrink-0 text-[#9A9A9A] transition",
+            isOpen && "rotate-180",
+          )}
+        />
       </button>
       {isOpen && menuStyle && typeof document !== "undefined"
         ? createPortal(
             <div
               ref={menuRef}
               role="listbox"
-              className="z-[10000] origin-top animate-admin-select-dropdown overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg"
+              className="z-[100000] origin-top animate-admin-select-dropdown overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg"
               style={{
                 position: "fixed",
                 top: menuStyle.top !== undefined ? menuStyle.top : "auto",
-                bottom: menuStyle.bottom !== undefined ? menuStyle.bottom : "auto",
+                bottom:
+                  menuStyle.bottom !== undefined ? menuStyle.bottom : "auto",
                 left: menuStyle.left,
                 width: menuStyle.width,
                 maxHeight: menuStyle.maxHeight,
@@ -1186,7 +1571,9 @@ export function AdminSelect({ label, error, options, className, ...props }: Admi
                   onClick={() => selectOption(option.value)}
                   className={cn(
                     "w-full cursor-pointer whitespace-nowrap px-3.5 py-2 text-left text-[13.5px] transition hover:bg-[#F7F7F7]",
-                    option.value === selectedValue ? "bg-red-50 text-[#E31E24]" : "text-[#1A1A1A]",
+                    option.value === selectedValue
+                      ? "bg-red-50 text-[#E31E24]"
+                      : "text-[#1A1A1A]",
                   )}
                 >
                   {option.label}
@@ -1230,13 +1617,19 @@ export function AdminMultiSelect({
   selectAllLabel = "Select All",
   required,
   id,
-  onBlur
+  onBlur,
 }: AdminMultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const [menuStyle, setMenuStyle] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
+  const [menuStyle, setMenuStyle] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
 
   const currentValues = value || selectedValues || [];
 
@@ -1250,7 +1643,10 @@ export function AdminMultiSelect({
     const spaceBelow = viewportHeight - rect.bottom - gap - edge;
     const spaceAbove = rect.top - gap - edge;
     const openUp = spaceBelow < 180 && spaceAbove > spaceBelow;
-    const maxHeight = Math.max(160, Math.min(320, openUp ? spaceAbove : spaceBelow));
+    const maxHeight = Math.max(
+      160,
+      Math.min(320, openUp ? spaceAbove : spaceBelow),
+    );
     const width = rect.width;
     const left = rect.left;
 
@@ -1305,7 +1701,7 @@ export function AdminMultiSelect({
         const start = Math.min(lastIndex, currentIndex);
         const end = Math.max(lastIndex, currentIndex);
         const rangeValues = options.slice(start, end + 1).map((o) => o.value);
-        
+
         const lastIsChecked = currentValues.includes(lastSelectedId);
         if (lastIsChecked) {
           next = Array.from(new Set([...currentValues, ...rangeValues]));
@@ -1326,12 +1722,13 @@ export function AdminMultiSelect({
     setLastSelectedId(val);
   };
 
-  const displayedText = currentValues.length > 0
-    ? options
-        .filter((o) => currentValues.includes(o.value))
-        .map((o) => o.label)
-        .join(", ")
-    : placeholder;
+  const displayedText =
+    currentValues.length > 0
+      ? options
+          .filter((o) => currentValues.includes(o.value))
+          .map((o) => o.label)
+          .join(", ")
+      : placeholder;
 
   const allSelected = options.every((o) => currentValues.includes(o.value));
 
@@ -1352,33 +1749,46 @@ export function AdminMultiSelect({
         className={cn(
           "flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border bg-white px-3.5 py-2.5 text-left text-[14px] text-[#1A1A1A] outline-none transition",
           error ? "border-red-400" : "border-[#E6E6E6] focus:border-[#E31E24]",
-          className
+          className,
         )}
       >
-        <span className={cn("truncate", currentValues.length === 0 && "text-[#9A9A9A]")}>
+        <span
+          className={cn(
+            "truncate",
+            currentValues.length === 0 && "text-[#9A9A9A]",
+          )}
+        >
           {displayedText}
         </span>
-        <ChevronDown size={15} className={cn("shrink-0 text-[#9A9A9A] transition", isOpen && "rotate-180")} />
+        <ChevronDown
+          size={15}
+          className={cn(
+            "shrink-0 text-[#9A9A9A] transition",
+            isOpen && "rotate-180",
+          )}
+        />
       </button>
 
       {isOpen && menuStyle && typeof document !== "undefined"
         ? createPortal(
             <div
               ref={menuRef}
-              className="z-[10000] origin-top overflow-y-auto rounded-md border border-[#E6E6E6] bg-white shadow-lg flex flex-col"
+              className="z-[100000] origin-top overflow-y-auto rounded-md border border-[#E6E6E6] bg-white shadow-lg flex flex-col"
               style={{
                 position: "fixed",
                 top: menuStyle.top !== undefined ? menuStyle.top : "auto",
-                bottom: menuStyle.bottom !== undefined ? menuStyle.bottom : "auto",
+                bottom:
+                  menuStyle.bottom !== undefined ? menuStyle.bottom : "auto",
                 left: menuStyle.left,
                 width: menuStyle.width,
                 maxHeight: menuStyle.maxHeight,
               }}
             >
               {options.length > 1 && (
-                <div className="flex items-center justify-between border-b border-[#F0F0F0] px-3.5 py-1.5 bg-[#FAF9F9] shrink-0 sticky top-0 z-10">
+                <div className="border-b border-[#F0F0F0] bg-[#FAF9F9] shrink-0 sticky top-0 z-10">
                   <button
                     type="button"
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => {
                       if (allSelected) {
                         onChange([]);
@@ -1386,9 +1796,37 @@ export function AdminMultiSelect({
                         onChange(options.map((o) => o.value));
                       }
                     }}
-                    className="text-xs font-semibold text-[#E31E24] hover:text-[#B5151B] transition cursor-pointer select-none"
+                    className="w-full cursor-pointer px-3.5 py-2 text-left text-[13.5px] transition flex items-center gap-2.5 hover:bg-[#F2F2F2]"
                   >
-                    {selectAllLabel}
+                    <div
+                      className={cn(
+                        "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors bg-white",
+                        allSelected
+                          ? "border-[#E31E24]"
+                          : "border-[#D1D5DB]",
+                      )}
+                    >
+                      {allSelected && (
+                        <svg
+                          width="10"
+                          height="8"
+                          viewBox="0 0 10 8"
+                          fill="none"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            d="M1 4L3.5 6.5L9 1"
+                            stroke="#E31E24"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <span className="text-[13px] font-semibold text-[#1A1A1A]">
+                      {selectAllLabel}
+                    </span>
                   </button>
                 </div>
               )}
@@ -1401,18 +1839,40 @@ export function AdminMultiSelect({
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={(e) => toggleOption(option.value, e.shiftKey)}
-                      className={cn(
-                        "w-full cursor-pointer px-3.5 py-2 text-left text-[13.5px] transition flex items-center gap-2.5",
-                        isSelected ? "bg-red-50" : "hover:bg-[#F7F7F7]"
-                      )}
+                      className="w-full cursor-pointer px-3.5 py-2 text-left text-[13.5px] transition flex items-center gap-2.5 hover:bg-[#F7F7F7]"
                     >
-                      <div className={cn(
-                        "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
-                        isSelected ? "border-[#E31E24] bg-[#E31E24]" : "border-[#D1D5DB] bg-white"
-                      )}>
-                        {isSelected && <svg width="10" height="8" viewBox="0 0 10 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      <div
+                        className={cn(
+                          "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors bg-white",
+                          isSelected
+                            ? "border-[#E31E24]"
+                            : "border-[#D1D5DB]",
+                        )}
+                      >
+                        {isSelected && (
+                          <svg
+                            width="10"
+                            height="8"
+                            viewBox="0 0 10 8"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              d="M1 4L3.5 6.5L9 1"
+                              stroke="#E31E24"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        )}
                       </div>
-                      <span className={cn("truncate", isSelected ? "text-[#E31E24] font-medium" : "text-[#1A1A1A]")}>
+                      <span
+                        className={cn(
+                          "truncate text-[13.5px] text-[#1A1A1A]",
+                          isSelected && "font-medium",
+                        )}
+                      >
                         {option.label}
                       </span>
                     </button>
@@ -1425,7 +1885,7 @@ export function AdminMultiSelect({
                 </div>
               )}
             </div>,
-            document.body
+            document.body,
           )
         : null}
       {error && <p className="text-[12px] text-red-500">{error}</p>}
@@ -1440,11 +1900,27 @@ interface AdminTextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaEl
   error?: string;
 }
 
-export function AdminTextarea({ label, error, className, ...props }: AdminTextareaProps) {
+export function AdminTextarea({
+  label,
+  error,
+  className,
+  ...props
+}: AdminTextareaProps) {
   return (
     <div className="space-y-1.5">
-      {label && <label className="block text-[13px] font-medium text-[#1A1A1A]">{label}</label>}
-      <textarea {...props} className={cn("w-full rounded-md border bg-white px-3.5 py-2.5 text-[14px] text-[#1A1A1A] outline-none resize-y", error ? "border-red-400" : "border-[#E6E6E6] focus:border-[#E31E24]", className)} />
+      {label && (
+        <label className="block text-[13px] font-medium text-[#1A1A1A]">
+          {label}
+        </label>
+      )}
+      <textarea
+        {...props}
+        className={cn(
+          "w-full rounded-md border bg-white px-3.5 py-2.5 text-[14px] text-[#1A1A1A] outline-none resize-y",
+          error ? "border-red-400" : "border-[#E6E6E6] focus:border-[#E31E24]",
+          className,
+        )}
+      />
       {error && <p className="text-[12px] text-red-500">{error}</p>}
     </div>
   );
@@ -1454,8 +1930,45 @@ function sanitizeRichText(html: string) {
   if (typeof window === "undefined") return html;
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
-  const allowedTags = new Set(["B", "STRONG", "I", "EM", "U", "P", "BR", "DIV", "SPAN", "UL", "OL", "LI", "A", "H1", "H2", "H3", "BLOCKQUOTE", "PRE", "CODE", "IMG", "FIGURE", "FIGCAPTION", "BUTTON"]);
-  const allowedAttrs = new Set(["href", "target", "rel", "src", "alt", "width", "height", "class", "style", "contenteditable", "onclick", "title"]);
+  const allowedTags = new Set([
+    "B",
+    "STRONG",
+    "I",
+    "EM",
+    "U",
+    "P",
+    "BR",
+    "DIV",
+    "SPAN",
+    "UL",
+    "OL",
+    "LI",
+    "A",
+    "H1",
+    "H2",
+    "H3",
+    "BLOCKQUOTE",
+    "PRE",
+    "CODE",
+    "IMG",
+    "FIGURE",
+    "FIGCAPTION",
+    "BUTTON",
+  ]);
+  const allowedAttrs = new Set([
+    "href",
+    "target",
+    "rel",
+    "src",
+    "alt",
+    "width",
+    "height",
+    "class",
+    "style",
+    "contenteditable",
+    "onclick",
+    "title",
+  ]);
 
   function clean(node: ChildNode) {
     if (node.nodeType === Node.ELEMENT_NODE) {
@@ -1546,18 +2059,25 @@ export function AdminRichTextEditor({
   const plainText = stripHtmlTags(value);
   const charCount = plainText.length;
   const isOverLimit = Boolean(maxLength && charCount > maxLength);
-  const isAtLimit = Boolean(maxLength && charCount >= maxLength && !isOverLimit);
+  const isAtLimit = Boolean(
+    maxLength && charCount >= maxLength && !isOverLimit,
+  );
   const [hitLimitShake, setHitLimitShake] = useState(false);
 
   useEffect(() => {
-    if (editorMode === "visual" && editorRef.current && editorRef.current.innerHTML !== value) {
+    if (
+      editorMode === "visual" &&
+      editorRef.current &&
+      editorRef.current.innerHTML !== value
+    ) {
       editorRef.current.innerHTML = value;
       // Ensure all images inside editor have a cross (X) delete button
       const imgs = editorRef.current.querySelectorAll("img");
       imgs.forEach((img) => {
         if (!img.parentElement?.classList.contains("img-wrapper")) {
           const wrapper = document.createElement("span");
-          wrapper.className = "img-wrapper relative inline-block my-2 mr-3 align-bottom group select-none";
+          wrapper.className =
+            "img-wrapper relative inline-block my-2 mr-3 align-bottom group select-none";
           wrapper.setAttribute("contenteditable", "false");
 
           const btn = document.createElement("button");
@@ -1583,7 +2103,12 @@ export function AdminRichTextEditor({
   const saveCursorLocation = () => {
     if (typeof window === "undefined") return;
     const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0 && editorRef.current && editorRef.current.contains(sel.anchorNode)) {
+    if (
+      sel &&
+      sel.rangeCount > 0 &&
+      editorRef.current &&
+      editorRef.current.contains(sel.anchorNode)
+    ) {
       savedRangeRef.current = sel.getRangeAt(0).cloneRange();
     }
   };
@@ -1602,9 +2127,16 @@ export function AdminRichTextEditor({
     const sel = window.getSelection();
     let range: Range | null = null;
 
-    if (savedRangeRef.current && editorRef.current.contains(savedRangeRef.current.commonAncestorContainer)) {
+    if (
+      savedRangeRef.current &&
+      editorRef.current.contains(savedRangeRef.current.commonAncestorContainer)
+    ) {
       range = savedRangeRef.current;
-    } else if (sel && sel.rangeCount > 0 && editorRef.current.contains(sel.anchorNode)) {
+    } else if (
+      sel &&
+      sel.rangeCount > 0 &&
+      editorRef.current.contains(sel.anchorNode)
+    ) {
       range = sel.getRangeAt(0);
     }
 
@@ -1641,7 +2173,8 @@ export function AdminRichTextEditor({
     if (deleteBtn) {
       e.preventDefault();
       e.stopPropagation();
-      const wrapper = deleteBtn.closest(".img-wrapper") || deleteBtn.parentElement;
+      const wrapper =
+        deleteBtn.closest(".img-wrapper") || deleteBtn.parentElement;
       if (wrapper && editorRef.current?.contains(wrapper)) {
         wrapper.remove();
       } else {
@@ -1670,9 +2203,15 @@ export function AdminRichTextEditor({
     ) {
       return;
     }
-    const selection = typeof window !== "undefined" ? window.getSelection() : null;
-    const hasSelection = selection && !selection.isCollapsed && selection.toString().length > 0;
-    if (!hasSelection && charCount >= maxLength && (e.key.length === 1 || e.key === "Enter")) {
+    const selection =
+      typeof window !== "undefined" ? window.getSelection() : null;
+    const hasSelection =
+      selection && !selection.isCollapsed && selection.toString().length > 0;
+    if (
+      !hasSelection &&
+      charCount >= maxLength &&
+      (e.key.length === 1 || e.key === "Enter")
+    ) {
       e.preventDefault();
       setHitLimitShake(true);
       setTimeout(() => setHitLimitShake(false), 1000);
@@ -1694,7 +2233,9 @@ export function AdminRichTextEditor({
       showToast("Please enter a valid link URL.", "error");
       return;
     }
-    const targetAttr = linkNewTab ? ' target="_blank" rel="noopener noreferrer"' : "";
+    const targetAttr = linkNewTab
+      ? ' target="_blank" rel="noopener noreferrer"'
+      : "";
     const textToUse = linkText.trim() || linkUrl.trim();
     const linkHtml = `<a href="${linkUrl.trim()}"${targetAttr} class="text-[#E31E24] underline underline-offset-2 font-medium">${textToUse}</a>`;
     insertHtmlAtSavedCursor(linkHtml);
@@ -1713,7 +2254,10 @@ export function AdminRichTextEditor({
 
   const handleSelectFile = (file: File) => {
     if (!file.type.startsWith("image/")) {
-      showToast("Please select a valid image file (PNG, JPG, WEBP, GIF).", "error");
+      showToast(
+        "Please select a valid image file (PNG, JPG, WEBP, GIF).",
+        "error",
+      );
       return;
     }
     setSelectedImgFile(file);
@@ -1733,12 +2277,18 @@ export function AdminRichTextEditor({
     try {
       const formData = new FormData();
       formData.append("entityType", mediaContext?.entityType || "SYSTEM");
-      if (mediaContext?.entityId) formData.append("entityId", mediaContext.entityId);
+      if (mediaContext?.entityId)
+        formData.append("entityId", mediaContext.entityId);
       formData.append("purpose", "RICH_TEXT_IMAGE");
       formData.append("files", selectedImgFile);
       const res = await adminApi.post("/media", formData);
-      const mediaItem = Array.isArray(res.data?.data) ? res.data.data[0] : res.data?.data || res.data;
-      const url = mediaItem?.url || mediaItem?.location || (typeof mediaItem === "string" ? mediaItem : "");
+      const mediaItem = Array.isArray(res.data?.data)
+        ? res.data.data[0]
+        : res.data?.data || res.data;
+      const url =
+        mediaItem?.url ||
+        mediaItem?.location ||
+        (typeof mediaItem === "string" ? mediaItem : "");
       if (url) {
         const cleanImgHtml = `<span class="img-wrapper relative inline-block my-2 mr-3 align-bottom group select-none" contenteditable="false"><img src="${url}" alt="${imgAltInput.trim() || selectedImgFile.name || "Product Image"}" class="max-h-56 max-w-full w-auto inline-block rounded-lg border border-[#E5E7EB] bg-white p-1.5 shadow-2xs" /><button type="button" class="img-delete-btn absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white text-[11px] font-bold shadow-md hover:bg-[#B5151B] transition-transform hover:scale-110 cursor-pointer" title="Remove image">✕</button></span><p><br></p>`;
         insertHtmlAtSavedCursor(cleanImgHtml);
@@ -1772,7 +2322,9 @@ export function AdminRichTextEditor({
     <div className="space-y-1.5">
       {label && (
         <div className="flex items-center justify-between">
-          <label className="block text-[13px] font-semibold text-[#1A1A1A]">{label}</label>
+          <label className="block text-[13px] font-semibold text-[#1A1A1A]">
+            {label}
+          </label>
           <div className="flex items-center gap-1 rounded-md border border-[#E2E8F0] bg-[#F8FAFC] p-0.5 text-[11.5px] font-medium shadow-2xs">
             <button
               type="button"
@@ -1809,7 +2361,7 @@ export function AdminRichTextEditor({
             : isAtLimit
               ? "border-amber-400 ring-1 ring-amber-400"
               : "border-[#CBD5E1] focus-within:border-[#E31E24] focus-within:ring-2 focus-within:ring-[#E31E24]/10",
-          className
+          className,
         )}
       >
         {/* Toolbar Header */}
@@ -2066,31 +2618,46 @@ export function AdminRichTextEditor({
           <div className="flex items-center gap-1.5">
             {isOverLimit ? (
               <span className="inline-flex items-center gap-1 rounded bg-red-50 px-2 py-0.5 font-semibold text-red-700 border border-red-200">
-                ⚠️ Limit exceeded by {charCount - (maxLength ?? 0)} characters. Please shorten text before saving.
+                ⚠️ Limit exceeded by {charCount - (maxLength ?? 0)} characters.
+                Please shorten text before saving.
               </span>
             ) : isAtLimit ? (
               <span
                 className={cn(
                   "inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 font-semibold text-amber-800 border border-amber-200 transition-all",
-                  hitLimitShake && "ring-2 ring-amber-400 font-bold scale-[1.02]"
+                  hitLimitShake &&
+                    "ring-2 ring-amber-400 font-bold scale-[1.02]",
                 )}
               >
-                ⚠️ Maximum limit reached ({maxLength}/{maxLength} chars). Further typing is blocked.
+                ⚠️ Maximum limit reached ({maxLength}/{maxLength} chars).
+                Further typing is blocked.
               </span>
             ) : (
               <span className="text-[#888]">
-                {maxLength ? `${maxLength - charCount} characters remaining` : "Introductory text (plain text counted)"}
+                {maxLength
+                  ? `${maxLength - charCount} characters remaining`
+                  : "Introductory text (plain text counted)"}
               </span>
             )}
           </div>
-          <span className={cn("font-medium", isOverLimit ? "text-red-600 font-bold" : isAtLimit ? "text-amber-700 font-semibold" : "text-[#888]")}>
+          <span
+            className={cn(
+              "font-medium",
+              isOverLimit
+                ? "text-red-600 font-bold"
+                : isAtLimit
+                  ? "text-amber-700 font-semibold"
+                  : "text-[#888]",
+            )}
+          >
             {charCount} {maxLength ? `/ ${maxLength}` : ""} chars
           </span>
         </div>
       )}
 
       {/* Link Inserter Modal */}
-      {linkModalOpen && typeof document !== "undefined" &&
+      {linkModalOpen &&
+        typeof document !== "undefined" &&
         createPortal(
           <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
             <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl space-y-4">
@@ -2110,7 +2677,9 @@ export function AdminRichTextEditor({
 
               <div className="space-y-3">
                 <div>
-                  <label className="block text-[12.5px] font-semibold text-[#374151] mb-1">Link URL</label>
+                  <label className="block text-[12.5px] font-semibold text-[#374151] mb-1">
+                    Link URL
+                  </label>
                   <input
                     type="url"
                     value={linkUrl}
@@ -2121,7 +2690,9 @@ export function AdminRichTextEditor({
                 </div>
 
                 <div>
-                  <label className="block text-[12.5px] font-semibold text-[#374151] mb-1">Display Text</label>
+                  <label className="block text-[12.5px] font-semibold text-[#374151] mb-1">
+                    Display Text
+                  </label>
                   <input
                     type="text"
                     value={linkText}
@@ -2160,11 +2731,12 @@ export function AdminRichTextEditor({
               </div>
             </div>
           </div>,
-          document.body
+          document.body,
         )}
 
       {/* Image Inserter Modal */}
-      {imgModalOpen && typeof document !== "undefined" &&
+      {imgModalOpen &&
+        typeof document !== "undefined" &&
         createPortal(
           <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
             <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl space-y-4">
@@ -2223,7 +2795,9 @@ export function AdminRichTextEditor({
                         {selectedImgFile?.name}
                       </div>
                       <div className="text-[11px] text-[#64748B]">
-                        {selectedImgFile ? `${(selectedImgFile.size / 1024).toFixed(1)} KB` : ""}
+                        {selectedImgFile
+                          ? `${(selectedImgFile.size / 1024).toFixed(1)} KB`
+                          : ""}
                       </div>
                       <button
                         type="button"
@@ -2242,7 +2816,9 @@ export function AdminRichTextEditor({
                       <p className="text-[13px] font-semibold text-[#334155]">
                         Click or drag & drop image to select
                       </p>
-                      <p className="text-[11.5px] text-[#94A3B8] mt-0.5">PNG, JPG, WEBP, GIF up to 10MB</p>
+                      <p className="text-[11.5px] text-[#94A3B8] mt-0.5">
+                        PNG, JPG, WEBP, GIF up to 10MB
+                      </p>
                     </div>
                   )}
                   <input
@@ -2258,7 +2834,9 @@ export function AdminRichTextEditor({
                   />
 
                   <div>
-                    <label className="block text-[12px] font-medium text-[#64748B] mb-1">Alt description (optional)</label>
+                    <label className="block text-[12px] font-medium text-[#64748B] mb-1">
+                      Alt description (optional)
+                    </label>
                     <input
                       type="text"
                       value={imgAltInput}
@@ -2271,7 +2849,9 @@ export function AdminRichTextEditor({
               ) : (
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-[12.5px] font-semibold text-[#374151] mb-1">Image URL</label>
+                    <label className="block text-[12.5px] font-semibold text-[#374151] mb-1">
+                      Image URL
+                    </label>
                     <input
                       type="url"
                       value={imgUrlInput}
@@ -2286,14 +2866,18 @@ export function AdminRichTextEditor({
                       <img
                         src={imgUrlInput.trim()}
                         alt="URL preview"
-                        onError={(e) => ((e.target as HTMLElement).style.display = "none")}
+                        onError={(e) =>
+                          ((e.target as HTMLElement).style.display = "none")
+                        }
                         className="max-h-28 rounded object-contain"
                       />
                     </div>
                   )}
 
                   <div>
-                    <label className="block text-[12px] font-medium text-[#64748B] mb-1">Alt description (optional)</label>
+                    <label className="block text-[12px] font-medium text-[#64748B] mb-1">
+                      Alt description (optional)
+                    </label>
                     <input
                       type="text"
                       value={imgAltInput}
@@ -2342,7 +2926,7 @@ export function AdminRichTextEditor({
               </div>
             </div>
           </div>,
-          document.body
+          document.body,
         )}
 
       {error && <p className="text-[12px] text-red-500">{error}</p>}
@@ -2361,21 +2945,44 @@ interface StatCardProps {
   isLoading?: boolean;
 }
 
-export function StatCard({ title, value, subtitle, icon, color = "bg-[#E31E24]", isLoading }: StatCardProps) {
+export function StatCard({
+  title,
+  value,
+  subtitle,
+  icon,
+  color = "bg-[#E31E24]",
+  isLoading,
+}: StatCardProps) {
   const isLongString = typeof value === "string" && value.length > 12;
   return (
     <div className="rounded-xl bg-white border border-[#E6E6E6] p-5">
       <div className="flex items-start justify-between">
         <div>
-          <div className="text-[12.5px] font-medium uppercase tracking-wide text-[#9A9A9A]">{title}</div>
+          <div className="text-[12.5px] font-medium uppercase tracking-wide text-[#9A9A9A]">
+            {title}
+          </div>
           {isLoading ? (
             <div className="mt-2 h-7 w-20 animate-pulse rounded bg-[#E6E6E6]" />
           ) : (
-            <div className={cn("mt-1.5 font-bold text-[#1A1A1A]", isLongString ? "text-[18px]" : "text-[26px]")}>{value}</div>
+            <div
+              className={cn(
+                "mt-1.5 font-bold text-[#1A1A1A]",
+                isLongString ? "text-[18px]" : "text-[26px]",
+              )}
+            >
+              {value}
+            </div>
           )}
-          {subtitle && <div className="mt-1 text-[12px] text-[#9A9A9A]">{subtitle}</div>}
+          {subtitle && (
+            <div className="mt-1 text-[12px] text-[#9A9A9A]">{subtitle}</div>
+          )}
         </div>
-        <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg text-white", color)}>
+        <div
+          className={cn(
+            "flex h-10 w-10 items-center justify-center rounded-lg text-white",
+            color,
+          )}
+        >
           {icon}
         </div>
       </div>
@@ -2414,6 +3021,3 @@ export { default as LoadingButton } from "@/components/ui/LoadingSpinner/Loading
 export { default as Spinner } from "@/components/ui/LoadingSpinner/Spinner";
 export { AdminBulkActionsBar } from "./AdminBulkActionsBar";
 export { RefreshButton } from "@/components/admin/RefreshButton";
-
-
-

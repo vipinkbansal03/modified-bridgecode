@@ -1118,7 +1118,7 @@ export default function WhatsAppTemplatesPage() {
         
         {/* Page title and description matching reference */}
         <div className="mb-6">
-          <h1 className="text-2xl font-serif text-[#1A1A1A]">WhatsApp Template Builder</h1>
+          <h1 className="text-2xl font-bold text-[#1A1A1A]">WhatsApp Template Builder</h1>
           <p className="text-[13px] text-[#6B6B6B] mt-1">Build Tata WhatsApp templates dynamically, preview them live, and keep a separate list of saved template records.</p>
         </div>
 
@@ -1139,7 +1139,7 @@ export default function WhatsAppTemplatesPage() {
             <section className="wa-template-list-panel border border-[#E6E6E6] rounded-lg shadow-sm">
               <div className="wa-template-list-head flex flex-col gap-3">
                 <div>
-                  <h3 className="font-serif">Template Library</h3>
+                  <h3 className="font-semibold text-[15px] text-[#1A1A1A]">Template Library</h3>
                   <p>Saved records are stored separately from normal media and can be reopened for editing or test sends.</p>
                 </div>
                 <div className="wa-template-search w-full border border-[#E6E6E6] rounded px-3">
@@ -1212,7 +1212,7 @@ export default function WhatsAppTemplatesPage() {
                 <div className="wa-template-hero rounded-lg shadow-sm border border-[#E6E6E6] bg-white p-6">
                   <div>
                     <div className="wa-template-kicker text-[10px] font-bold text-[#7A7A7A] uppercase tracking-widest mb-1">Template Viewer</div>
-                    <h2 className="text-2xl font-serif text-[#1A1A1A] font-semibold mb-2">Browse WhatsApp templates, preview their content, and send test messages.</h2>
+                    <h2 className="text-2xl text-[#1A1A1A] font-semibold mb-2">Browse WhatsApp templates, preview their content, and send test messages.</h2>
                     <p className="text-[13.5px] text-[#6B6B6B] leading-relaxed">Select a template from the library to view its components and send a test to any number.</p>
                   </div>
                   <div className="wa-template-hero-actions mt-4 flex gap-2">
@@ -1229,19 +1229,19 @@ export default function WhatsAppTemplatesPage() {
                 <div className="wa-template-stats rounded-lg grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="wa-stat-card border border-[#E6E6E6] rounded p-4 bg-white shadow-sm flex flex-col gap-1.5">
                     <span className="text-[9px] font-bold text-[#7A7A7A] uppercase tracking-wider">Total Templates</span>
-                    <strong className="text-3xl font-serif font-bold text-[#1A1A1A]">{templates.length}</strong>
+                    <strong className="text-3xl font-bold text-[#1A1A1A]">{templates.length}</strong>
                   </div>
                   <div className="wa-stat-card border border-[#E6E6E6] rounded p-4 bg-white shadow-sm flex flex-col gap-1.5">
                     <span className="text-[9px] font-bold text-[#7A7A7A] uppercase tracking-wider">Saved Status</span>
-                    <strong className="text-3xl font-serif font-bold text-[#1A1A1A]">{templates.length}</strong>
+                    <strong className="text-3xl font-bold text-[#1A1A1A]">{templates.length}</strong>
                   </div>
                   <div className="wa-stat-card border border-[#E6E6E6] rounded p-4 bg-white shadow-sm flex flex-col gap-1.5">
                     <span className="text-[9px] font-bold text-[#7A7A7A] uppercase tracking-wider">Draft Components</span>
-                    <strong className="text-3xl font-serif font-bold text-[#1A1A1A]">{draft.components.length}</strong>
+                    <strong className="text-3xl font-bold text-[#1A1A1A]">{draft.components.length}</strong>
                   </div>
                   <div className="wa-stat-card border border-[#E6E6E6] rounded p-4 bg-white shadow-sm flex flex-col gap-1.5">
                     <span className="text-[9px] font-bold text-[#7A7A7A] uppercase tracking-wider">Selected</span>
-                    <strong className="text-[15px] truncate font-serif font-bold text-[#1A1A1A] block mt-1">{selectedTemplate ? selectedTemplate.name : "None Selected"}</strong>
+                    <strong className="text-[15px] truncate font-bold text-[#1A1A1A] block mt-1">{selectedTemplate ? selectedTemplate.name : "None Selected"}</strong>
                   </div>
                 </div>
 
@@ -1252,7 +1252,7 @@ export default function WhatsAppTemplatesPage() {
                 
                 <div className="wa-template-editor-head border-b border-[#E6E6E6] pb-4 flex justify-between items-center">
                   <div>
-                    <h3 className="text-xl font-serif text-[#1A1A1A]">{selectedId ? "View Template" : "Create Template"}</h3>
+                    <h3 className="text-xl font-bold text-[#1A1A1A]">{selectedId ? "View Template" : "Create Template"}</h3>
                     <p className="text-[13px] text-[#6B6B6B] mt-1">{selectedId ? "Read template content and send a test message to any number." : "Build Smartflo payloads with dynamic components and live WhatsApp preview."}</p>
                   </div>
                   

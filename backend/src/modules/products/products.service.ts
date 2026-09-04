@@ -177,6 +177,7 @@ type ProductListQuery = {
   sortDir?: string;
   ids?: string[];
   warehouseId?: string;
+  deleted?: boolean | string;
 };
 
 type VariantListQuery = {
@@ -458,9 +459,11 @@ function buildProductWhere(query: {
   status?: string;
   ids?: string[];
   warehouseId?: string;
+  deleted?: boolean | string;
 }): Prisma.ProductWhereInput {
+  const isDeleted = query.deleted === true || query.deleted === "true";
   return {
-    deletedAt: null,
+    deletedAt: isDeleted ? { not: null } : null,
     ...(query.search && {
       OR: [
         { title: { contains: query.search, mode: "insensitive" } },
@@ -536,10 +539,13 @@ export async function listProducts(query: ProductListQuery) {
   const { page, limit, skip } = getPagination(query);
   const where: Prisma.ProductWhereInput = buildProductWhere(query);
 
-  const sortBy = query.sortBy || "sortOrder";
+  const isDeleted = query.deleted === "true" || query.deleted === true;
+  const sortBy = query.sortBy || (isDeleted ? "deletedAt" : "sortOrder");
   const sortDir = query.sortDir === "asc" ? "asc" : "desc";
   const orderBy: Prisma.ProductOrderByWithRelationInput[] =
-    sortBy === "title"
+    sortBy === "deletedAt"
+      ? [{ deletedAt: sortDir as Prisma.SortOrder }, { updatedAt: "desc" }]
+      : sortBy === "title"
       ? [{ title: sortDir as Prisma.SortOrder }, { createdAt: "desc" }]
       : sortBy === "sku"
       ? [{ sku: sortDir as Prisma.SortOrder }, { createdAt: "desc" }]
@@ -551,6 +557,8 @@ export async function listProducts(query: ProductListQuery) {
       ? [{ updatedAt: sortDir as Prisma.SortOrder }]
       : sortBy === "category"
       ? [{ category: { name: sortDir as Prisma.SortOrder } }, { createdAt: "desc" }]
+      : isDeleted
+      ? [{ deletedAt: "desc" }, { updatedAt: "desc" }]
       : [{ sortOrder: "asc" }, { createdAt: "desc" }];
 
   const [data, total] = await Promise.all([
@@ -790,6 +798,78 @@ export async function deleteProduct(id: string) {
     data: {
       deletedAt: new Date(),
     },
+  });
+}
+
+export async function restoreProduct(id: string) {
+  const product = await prisma.product.findUnique({
+    where: { id },
+    include: { category: true },
+  });
+  if (!product) throw new AppError("Product not found.", 404);
+  if (!product.deletedAt) throw new AppError("Product is already active.", 400);
+
+  // Validate Category state: cannot restore if category is soft-deleted
+  if (product.category.deletedAt) {
+    throw new AppError(
+      `Cannot restore product: its category "${product.category.name}" is currently archived. Please restore the category first.`,
+      400,
+    );
+  }
+
+  // Handle SKU uniqueness conflicts if another active product has the same SKU
+  if (product.sku) {
+    const skuConflict = await prisma.product.findFirst({
+      where: {
+        sku: product.sku,
+        deletedAt: null,
+        id: { not: id },
+      },
+    });
+    if (skuConflict) {
+      throw new AppError(
+        `Cannot restore product: SKU "${product.sku}" is already in use by another active product "${skuConflict.title}".`,
+        409,
+      );
+    }
+  }
+
+  // Handle Slug uniqueness conflicts
+  if (product.slug) {
+    const slugConflict = await prisma.product.findFirst({
+      where: {
+        slug: product.slug,
+        deletedAt: null,
+        id: { not: id },
+      },
+    });
+    if (slugConflict) {
+      const nextSlug = `${product.slug}-restored-${Date.now()}`;
+      return prisma.$transaction(async (tx) => {
+        const restored = await tx.product.update({
+          where: { id },
+          data: {
+            deletedAt: null,
+            status: "ACTIVE",
+            slug: nextSlug,
+          },
+        });
+        await syncStorefrontVisibility(tx, restored.id, "ACTIVE", product.status);
+        return restored;
+      });
+    }
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const restored = await tx.product.update({
+      where: { id },
+      data: {
+        deletedAt: null,
+        status: "ACTIVE",
+      },
+    });
+    await syncStorefrontVisibility(tx, restored.id, "ACTIVE", product.status);
+    return restored;
   });
 }
 
@@ -1562,6 +1642,9 @@ export async function addProductMedia(
   if (mediaIds && mediaIds.length > 0) {
     const existingMedia = await prisma.media.findMany({ where: { id: { in: mediaIds } } });
     existingMedia.forEach((media, i) => {
+      if (!media.url || media.url.startsWith("temporary/")) {
+        throw new AppError("Product media cannot be linked before upload confirmation produces a final URL.", 400);
+      }
       results.push({
         url: media.url,
         publicId: media.publicId,
@@ -1596,14 +1679,72 @@ export async function addProductMedia(
   return prisma.productMedia.findMany({ where: { productId } });
 }
 
+// ─── Set cover product media ──────────────────────────────
+
+export async function setProductCoverMedia(productId: string, mediaId: string) {
+  await getProduct(productId);
+
+  const targetMedia = await prisma.productMedia.findUnique({
+    where: { id: mediaId },
+  });
+
+  if (!targetMedia || targetMedia.productId !== productId) {
+    throw new AppError("Media not found for this product.", 404);
+  }
+
+  // Fetch all media for this product ordered by current sortOrder, then createdAt
+  const allMedia = await prisma.productMedia.findMany({
+    where: { productId },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+
+  // Reorder: targetMedia first (sortOrder: 0), all others sequentially (1, 2, 3...)
+  const otherMedia = allMedia.filter((m) => m.id !== mediaId);
+  const reordered = [targetMedia, ...otherMedia];
+
+  await prisma.$transaction(
+    reordered.map((m, index) =>
+      prisma.productMedia.update({
+        where: { id: m.id },
+        data: { sortOrder: index },
+      })
+    )
+  );
+
+  return prisma.productMedia.findMany({
+    where: { productId },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+}
+
 // ─── Delete product media ─────────────────────────────────
 
 export async function deleteProductMedia(mediaId: string) {
   const media = await prisma.productMedia.findUnique({ where: { id: mediaId } });
   if (!media) throw new AppError("Media not found.", 404);
+  const productId = media.productId;
   await deleteFile(media.publicId || media.url, media.storageProvider);
   await prisma.media.deleteMany({ where: { url: media.url } });
-  return prisma.productMedia.delete({ where: { id: mediaId } });
+  await prisma.productMedia.delete({ where: { id: mediaId } });
+
+  // Re-index remaining media to ensure clean sequential sortOrder (0, 1, 2...)
+  const remaining = await prisma.productMedia.findMany({
+    where: { productId },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+
+  if (remaining.length > 0) {
+    await prisma.$transaction(
+      remaining.map((m, index) =>
+        prisma.productMedia.update({
+          where: { id: m.id },
+          data: { sortOrder: index },
+        })
+      )
+    );
+  }
+
+  return remaining;
 }
 
 // ─── Assign attributes to product ────────────────────────

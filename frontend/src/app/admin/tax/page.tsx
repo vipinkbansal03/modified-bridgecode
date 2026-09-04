@@ -5,11 +5,13 @@ import { useQueries } from "@tanstack/react-query";
 import { Download, Eye, Filter, Plus, RefreshCw, Search, SquareCheckBig, Trash2, Upload, X, SlidersHorizontal, Pencil } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { formatDate, formatDateTime } from "@/utils/formatDate";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import {
   AdminInput,
   AdminSelect,
   AdminMultiSelect,
+  AdminRowActions,
   ConfirmModal,
   DataTable,
   Pagination,
@@ -21,6 +23,7 @@ import {
   LoadingButton,
   type Column,
 } from "@/components/admin/AdminComponents";
+import { AdminBulkActionsBar } from "@/components/admin/AdminBulkActionsBar";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
@@ -149,9 +152,7 @@ function formatMoney(value: number | string | null | undefined, currencySymbol?:
   return `${prefix}${Number.isFinite(amount) ? amount.toFixed(2) : String(value)}`;
 }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString();
-}
+// Standard formatDate imported from @/utils/formatDate
 
 function TaxVariantsDropdown({
   selectedProductIds,
@@ -217,7 +218,10 @@ export default function AdminTaxPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TaxRule | null>(null);
+  const [viewingRule, setViewingRule] = useState<TaxRule | null>(null);
   const [bulkAction, setBulkAction] = useState<"ENABLE" | "DISABLE" | "DELETE" | "">("");
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importReport, setImportReport] = useState<SpreadsheetReport | null>(null);
@@ -345,7 +349,7 @@ export default function AdminTaxPage() {
 
   const [visibleColumns, setVisibleColumns] = useState(visibleColumnsDefault);
 
-  const columns: Column<TaxRule>[] = [
+  const columns: Column<TaxRule>[] = useMemo(() => [
       {
         key: "name",
         label: "Rule Name",
@@ -357,11 +361,11 @@ export default function AdminTaxPage() {
           </div>
         ),
       },
-      { key: "type", label: "Rule Type", width: "140px", render: (row) => row.type.replace("_", " ") },
+      { key: "type", label: "Rule Type", width: "120px", render: (row) => <span className="whitespace-nowrap">{row.type.replace("_", " ")}</span> },
       {
         key: "country",
         label: "Countries",
-        width: "180px",
+        width: "160px",
         render: (row) => (
           <div>
             {row.countries?.length ? (
@@ -373,7 +377,7 @@ export default function AdminTaxPage() {
                 ))}
               </div>
             ) : (
-              <span className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+              <span className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 whitespace-nowrap">
                 All countries
               </span>
             )}
@@ -383,7 +387,7 @@ export default function AdminTaxPage() {
       {
         key: "applicability" as any,
         label: "Applicability",
-        width: "260px",
+        width: "240px",
         render: (row) => {
           const hasCategories = row.categories && row.categories.length > 0;
           const hasProducts = row.products && row.products.length > 0;
@@ -391,7 +395,7 @@ export default function AdminTaxPage() {
 
           if (!hasCategories && !hasProducts && !hasVariants) {
             return (
-              <span className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+              <span className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 whitespace-nowrap">
                 🌍 Global (All Products)
               </span>
             );
@@ -458,47 +462,47 @@ export default function AdminTaxPage() {
       {
         key: "percentage",
         label: "Tax %",
-        width: "110px",
-        render: (row) => <span className="font-medium text-[#1A1A1A]">{Number(row.percentage).toFixed(2)}%</span>,
+        width: "100px",
+        render: (row) => <span className="font-medium text-[#1A1A1A] whitespace-nowrap">{Number(row.percentage).toFixed(2)}%</span>,
       },
-      { key: "status", label: "Status", width: "120px" },
-      { key: "sortOrder", label: "Priority", width: "100px" },
+      { key: "status", label: "Status", width: "110px" },
+      { key: "sortOrder", label: "Priority", width: "90px", render: (row) => <span className="whitespace-nowrap">{row.sortOrder ?? 0}</span> },
       {
         key: "updatedAt",
         label: "Updated Date",
-        width: "130px",
-        render: (row) => <span className="text-[#1A1A1A]">{formatDate(row.updatedAt)}</span>,
+        width: "120px",
+        render: (row) => <span className="text-[#1A1A1A] whitespace-nowrap">{formatDate(row.updatedAt)}</span>,
       },
       {
         key: "actions",
         label: "Actions",
-        width: "200px",
+        width: "120px",
         render: (row) => (
-          <div className="flex flex-wrap items-center gap-1.5">
-            {canUpdate && (
-              <>
-                <button type="button" onClick={() => openEdit(row)} className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]" title="Edit rule">
-                  <Pencil size={15} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleStatusToggle(row)}
-                  className="rounded border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                  title={row.status === "ACTIVE" ? "Disable rule" : "Enable rule"}
-                >
-                  <RefreshCw size={15} />
-                </button>
-              </>
-            )}
-            {canDelete && (
-              <button type="button" onClick={() => setDeleteTarget(row)} className="rounded border border-[#F2D7D7] p-2 text-[#E31E24] hover:bg-[#FFF5F5]" title="Delete rule">
-                <Trash2 size={15} />
-              </button>
-            )}
-          </div>
+          <AdminRowActions
+            view={{
+              onClick: () => setViewingRule(row),
+              title: "View tax rule details",
+            }}
+            edit={
+              canUpdate
+                ? {
+                    onClick: () => openEdit(row),
+                    title: "Edit tax rule",
+                  }
+                : undefined
+            }
+            delete={
+              canDelete
+                ? {
+                    onClick: () => setDeleteTarget(row),
+                    title: "Delete tax rule",
+                  }
+                : undefined
+            }
+          />
         ),
       },
-  ];
+  ], [canUpdate, canDelete]);
 
   function openCreate() {
     form.reset();
@@ -620,63 +624,33 @@ export default function AdminTaxPage() {
       showToast("Tax rules imported.");
       setImportFile(null);
       setImportReport(null);
+      setShowImportModal(false);
       await refetch();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to import tax spreadsheet."), "error");
     }
   }
 
-  const filteredColumns = columns.filter((column) => {
-    if (column.key === "name") return visibleColumns.name;
-    if (column.key === "type") return visibleColumns.type;
-    if (column.key === "country") return visibleColumns.country;
-    if (column.key === "percentage") return visibleColumns.percentage;
-    if (column.key === "status") return visibleColumns.status;
-    if (column.key === "sortOrder") return visibleColumns.sortOrder;
-    if (column.key === "updatedAt") return visibleColumns.updatedAt;
-    return true;
-  });
-
-  const finalColumns = useMemo(() => {
-    const list = [...filteredColumns];
-    if (canUpdate) {
-      list.unshift({
-        key: "select" as any,
-        label: (
-          <input
-            type="checkbox"
-            checked={rules.length > 0 && rules.every((row) => selectedIds.includes(row.id))}
-            onChange={(event) => {
-              const checked = event.target.checked;
-              setSelectedIds(checked ? rules.map((row) => row.id) : []);
-            }}
-            className="h-4 w-4 accent-[#E31E24]"
-          />
-        ),
-        width: "50px",
-        render: (row) => (
-          <input
-            type="checkbox"
-            checked={selectedIds.includes(row.id)}
-            onChange={(event) => {
-              const checked = event.target.checked;
-              setSelectedIds((current) =>
-                checked ? Array.from(new Set([...current, row.id])) : current.filter((id) => id !== row.id)
-              );
-            }}
-            className="h-4 w-4 accent-[#E31E24]"
-          />
-        ),
-      });
-    }
-    return list;
-  }, [filteredColumns, canUpdate, rules, selectedIds]);
+  const filteredColumns = useMemo(() => {
+    return columns.filter((column) => {
+      if (column.key === "name") return visibleColumns.name;
+      if (column.key === "type") return visibleColumns.type;
+      if (column.key === "country") return visibleColumns.country;
+      if ((column.key as any) === "applicability") return (visibleColumns as any).applicability;
+      if (column.key === "percentage") return visibleColumns.percentage;
+      if (column.key === "status") return visibleColumns.status;
+      if (column.key === "sortOrder") return visibleColumns.sortOrder;
+      if (column.key === "updatedAt") return visibleColumns.updatedAt;
+      return true;
+    });
+  }, [columns, visibleColumns]);
 
   const previewResult = preview as TaxPreview | undefined;
 
   return (
     <AdminLayout title="Tax Configuration" breadcrumb={[{ label: "Tax" }]}>
       <div className="space-y-5">
+        {/* KPI STATS */}
         <AdminStatsGrid
           stats={[
             { title: "Total Rules", value: dashboard?.totalRules ?? 0, subtitle: "All configured tax rules", icon: <Filter size={18} />, isLoading: dashboardLoading },
@@ -685,6 +659,44 @@ export default function AdminTaxPage() {
           ]}
         />
 
+        {/* RECENTLY UPDATED */}
+        {dashboard?.recentlyUpdatedRules?.length ? (
+          <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-[13.5px] font-semibold text-[#1A1A1A]">Recently Updated</h3>
+                <p className="text-[12px] text-[#6B6B6B]">Quick access to latest modified tax rules.</p>
+              </div>
+              <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-medium text-[#6B6B6B]">
+                {dashboard.recentlyUpdatedRules.length} items
+              </span>
+            </div>
+            <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              {dashboard.recentlyUpdatedRules.slice(0, 4).map((row) => (
+                <div
+                  key={row.id}
+                  onClick={() => openEdit(row)}
+                  className="rounded-lg border border-[#E6E6E6] p-3 bg-[#FAFAFA] flex flex-col justify-between min-h-[90px] cursor-pointer hover:border-[#D6D6D6] transition-colors"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-semibold text-[#1A1A1A]" title={row.name}>{row.name}</div>
+                    <div className="text-[11.5px] text-[#9A9A9A] mt-1 truncate">
+                      {row.type.replace("_", " ")} · {row.countries?.map((c) => c.name).join(", ") || "All countries"}
+                    </div>
+                  </div>
+                  <div className="mt-2.5 flex items-center justify-between">
+                    <span className="text-[11.5px] text-[#9A9A9A]">
+                      {formatDate(row.updatedAt)}
+                    </span>
+                    <StatusBadge status={row.status} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {/* TOOLBAR */}
         <AdminListToolbar
           search={{
             value: search,
@@ -693,6 +705,7 @@ export default function AdminTaxPage() {
               setSearch(val);
             },
             placeholder: "Search tax rules...",
+            widthClassName: "w-[240px]",
           }}
           filters={{
             showFilters: showFilters,
@@ -716,11 +729,45 @@ export default function AdminTaxPage() {
                 [key]: !current[key as keyof typeof current],
               }));
             },
+            options: [
+              { key: "name", label: "Rule Name" },
+              { key: "type", label: "Rule Type" },
+              { key: "country", label: "Countries" },
+              { key: "applicability", label: "Applicability" },
+              { key: "percentage", label: "Tax %" },
+              { key: "status", label: "Status" },
+              { key: "sortOrder", label: "Priority" },
+              { key: "updatedAt", label: "Updated Date" },
+            ],
           }}
           exportAction={{
             onClick: () => void handleExport(selectedIds.length > 0),
-            label: selectedIds.length > 0 ? `Export Selected (${selectedIds.length})` : "Export",
+            label: selectedIds.length > 0 ? `Export Selected (${selectedIds.length})` : "Export Excel",
           }}
+          importAction={
+            canUpdate
+              ? {
+                  onClick: () => setShowImportModal(true),
+                  label: "Import Excel",
+                }
+              : undefined
+          }
+          refresh={{
+            onRefresh: () => {
+              void refetch().then(() => showToast("Tax rules refreshed."));
+            },
+            isRefreshing: isLoading,
+          }}
+          leftExtra={
+            <button
+              type="button"
+              onClick={() => setShowPreviewModal(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] font-semibold text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              <Eye size={13} className="text-[#E31E24]" />
+              <span>Tax Preview</span>
+            </button>
+          }
           primaryAction={
             canCreate
               ? {
@@ -796,214 +843,386 @@ export default function AdminTaxPage() {
           }
         />
 
-        {selectedIds.length > 0 && canUpdate && (
-          <div className="rounded-xl border border-dashed border-[#E31E24]/30 bg-[#FFF5F5]/30 p-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="text-[13px] font-semibold text-[#E31E24]">{selectedIds.length} rows selected</span>
-              <div className="h-4 w-[1px] bg-[#E6E6E6]" />
-              <div className="flex flex-wrap items-center gap-2">
-                <AdminSelect
-                  label=""
-                  value={bulkAction}
-                  onChange={(event) => setBulkAction(event.target.value as "ENABLE" | "DISABLE" | "DELETE" | "")}
-                  options={[
-                    { value: "", label: "Choose action" },
-                    { value: "ENABLE", label: "Enable" },
-                    { value: "DISABLE", label: "Disable" },
-                    { value: "DELETE", label: "Delete" },
-                  ]}
-                />
-                <button type="button" onClick={handleBulkAction} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-                  Apply
-                </button>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => void handleExport(true)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
-                <Download size={13} /> Export selected
-              </button>
-              <button type="button" onClick={() => setSelectedIds([])} className="text-[13px] font-medium text-[#6B6B6B] hover:text-[#E31E24] hover:underline">
-                Clear selection
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.95fr)]">
-          <div className="space-y-5">
-            <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-              <DataTable<TaxRule>
-                columns={finalColumns}
-                data={rules}
-                rowKey="id"
-                isLoading={isLoading}
-                emptyMessage="No tax rules configured."
-                onToggleStatus={canUpdate ? handleStatusToggle : undefined}
-                statusLoadingId={updateRule.isPending ? ((updateRule.variables as any)?.id ?? null) : null}
-                isStatusDisabled={() => !canUpdate}
+        {/* FULL-WIDTH DATA TABLE MATCHING ORDERS / PRODUCTS PATTERN */}
+        <div className="">
+          <DataTable<TaxRule>
+            title="Tax Rules List"
+            columns={filteredColumns}
+            data={rules}
+            rowKey="id"
+            isLoading={isLoading}
+            emptyMessage="No tax rules configured."
+            enableSelection={canUpdate}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+            onToggleStatus={canUpdate ? handleStatusToggle : undefined}
+            statusLoadingId={updateRule.isPending ? ((updateRule.variables as any)?.id ?? null) : null}
+            isStatusDisabled={() => !canUpdate}
+            totalItems={pagination.total ?? 0}
+            currentPage={page}
+            pageSize={limit}
+            totalPages={pagination.totalPages || 1}
+            onPageChange={setPage}
+            onPageSizeChange={(newLimit) => {
+              setLimit(newLimit);
+              setPage(1);
+            }}
+            pageSizeOptions={[10, 20, 50, 100]}
+            onSelectAll={(checked) => setSelectedIds(checked ? rules.map((r) => r.id) : [])}
+            renderBulkActions={(selectedIds) => (
+              <AdminBulkActionsBar
+                selectedCount={selectedIds.length}
+                onClear={() => setSelectedIds([])}
+                actionType={bulkAction}
+                onActionTypeChange={(val) => setBulkAction(val as "ENABLE" | "DISABLE" | "DELETE" | "")}
+                actions={[
+                  { value: "ENABLE", label: "Mark active" },
+                  { value: "DISABLE", label: "Mark inactive" },
+                  { value: "DELETE", label: "Delete selected" },
+                ]}
+                onApply={handleBulkAction}
+                applyLoading={bulkTaxRules.isPending}
+                applyDisabled={!bulkAction || selectedIds.length === 0}
               />
-              <Pagination
-                page={pagination.page}
-                totalPages={pagination.totalPages || 1}
-                onPageChange={setPage}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-5">
-            <div className="rounded-xl border border-[#E6E6E6] bg-white p-4 shadow-sm">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Tax Preview</h3>
-                  <p className="mt-1 text-[12.5px] text-[#6B6B6B]">Resolver-backed preview for the selected country and subtotal.</p>
-                </div>
-                <button type="button" onClick={() => setPreviewForm(emptyPreview)} className="text-[12.5px] font-medium text-[#E31E24] hover:underline">
-                  Reset
-                </button>
-              </div>
-              <div className="grid gap-3">
-                <AdminMultiSearchableSelect
-                  label="Country"
-                  values={previewForm.countryId ? [previewForm.countryId] : []}
-                  onValuesChange={(values) => setPreviewForm((current) => ({ ...current, countryId: values[0] ?? "" }))}
-                  options={(countries as any[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
-                  placeholder="Select country"
-                  allowSelectAll
-                  selectAllLabel="All countries"
-                />
-                <AdminInput
-                  label="Subtotal"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={previewForm.subtotal}
-                  onChange={(event) => setPreviewForm((current) => ({ ...current, subtotal: event.target.value }))}
-                />
-              </div>
-              <div className="mt-4 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
-                {previewLoading ? (
-                  <p className="text-[13px] text-[#6B6B6B]">Loading preview...</p>
-                ) : previewError ? (
-                  <p className="text-[13px] text-red-600">{getAdminErrorMessage(previewError, "Preview failed.")}</p>
-                ) : previewResult ? (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
-                        <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Subtotal</div>
-                        <div className="font-semibold text-[#1A1A1A]">
-                          {formatMoney(previewResult.subtotal, previewResult.country.currency?.symbol)}
-                        </div>
-                      </div>
-                      <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
-                        <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Tax amount</div>
-                        <div className="font-semibold text-[#E31E24]">
-                          {formatMoney(previewResult.taxAmount, previewResult.country.currency?.symbol)}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2">
-                      <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Final total</div>
-                      <div className="font-semibold text-[#1A1A1A]">
-                        {formatMoney(previewResult.total, previewResult.country.currency?.symbol)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Applied rules</div>
-                      <ul className="mt-2 space-y-2">
-                        {previewResult.appliedRules.map((rule) => (
-                          <li key={rule.id} className="rounded-md border border-[#E6E6E6] bg-white px-3 py-2 text-[12.5px] text-[#1A1A1A]">
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="font-medium">{rule.name}</span>
-                              <span className="text-[#6B6B6B]">{rule.percentage.toFixed(2)}%</span>
-                            </div>
-                            <div className="mt-1 text-[#9A9A9A]">
-                              {formatMoney(rule.amountBefore, previewResult.country.currency?.symbol)} → {formatMoney(rule.amountAfter, previewResult.country.currency?.symbol)}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-[13px] text-[#6B6B6B]">Choose a country and subtotal to preview tax.</p>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Import / Export</h3>
-                  <p className="mt-1 text-[12.5px] text-[#6B6B6B]">Uses the existing spreadsheet utility with validation before commit.</p>
-                </div>
-                <button type="button" onClick={() => void handleExport(false)} className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
-                  <Download size={14} /> Export
-                </button>
-              </div>
-              {canUpdate ? (
-                <div className="mt-4 grid gap-3">
-                  <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-[#D6D6D6] bg-[#FAFAFA] px-4 py-3">
-                    <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(event) => setImportFile(event.target.files?.[0] ?? null)} />
-                    <div className="min-w-0">
-                      <div className="text-[13px] font-medium text-[#1A1A1A]">{importFile ? importFile.name : "Choose file"}</div>
-                      <div className="mt-0.5 text-[12px] text-[#6B6B6B]">Preview before import.</div>
-                    </div>
-                    <Upload size={16} className="shrink-0 text-[#E31E24]" />
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    <button type="button" onClick={() => void handleImportPreview()} disabled={previewTaxImport.isPending} className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] disabled:opacity-50">
-                      <Eye size={14} /> Preview
-                    </button>
-                    <button type="button" onClick={() => void handleImportCommit()} disabled={importTaxRules.isPending} className="inline-flex items-center gap-2 rounded-md bg-[#E31E24] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50">
-                      <Upload size={14} /> Import
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-4 grid gap-3">
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center text-[13px] text-[#6B6B6B]">
-                    Importing is disabled (No edit permission)
-                  </div>
-                </div>
-              )}
-              {importReport ? (
-                <div className="mt-4 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3 text-[12.5px] text-[#1A1A1A]">
-                  <div className="font-semibold">Import preview ready</div>
-                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-[12px] text-[#6B6B6B]">{JSON.stringify(importReport, null, 2)}</pre>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-              <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Recent Updates</h3>
-              <div className="mt-3 space-y-2">
-                {dashboard?.recentlyUpdatedRules?.length ? (
-                  dashboard.recentlyUpdatedRules.slice(0, 5).map((row) => (
-                    <button
-                      key={row.id}
-                      type="button"
-                      onClick={() => openEdit(row)}
-                      className="w-full rounded-lg border border-[#E6E6E6] px-3 py-2 text-left transition hover:bg-[#FAFAFA]"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="truncate text-[13px] font-medium text-[#1A1A1A]">{row.name}</div>
-                          <div className="text-[11.5px] text-[#9A9A9A]">
-                            {row.type.replace("_", " ")} · {row.countries?.map(c => c.name).join(", ") || "—"}
-                          </div>
-                        </div>
-                        <StatusBadge status={row.status} />
-                      </div>
-                    </button>
-                  ))
-                ) : (
-                  <p className="text-[13px] text-[#6B6B6B]">No recent tax changes yet.</p>
-                )}
-              </div>
-            </div>
+            )}
+          />
+          <div className="border-t border-[#E6E6E6] px-4 py-3 bg-white">
+            <Pagination
+              page={pagination.page}
+              totalPages={pagination.totalPages || 1}
+              onPageChange={setPage}
+              alwaysShow={true}
+            />
           </div>
         </div>
       </div>
+      {/* TAX PREVIEW MODAL */}
+      <Modal open={showPreviewModal} onClose={() => setShowPreviewModal(false)} title="Tax Preview Calculator" panelClassName="max-w-xl">
+        <div className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-[13px] text-[#6B6B6B]">Resolver-backed preview for the selected country and subtotal.</p>
+            <button
+              type="button"
+              onClick={() => setPreviewForm(emptyPreview)}
+              className="text-[12.5px] font-medium text-[#E31E24] hover:underline cursor-pointer"
+            >
+              Reset
+            </button>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <AdminMultiSearchableSelect
+              label="Country"
+              values={previewForm.countryId ? [previewForm.countryId] : []}
+              onValuesChange={(values) => setPreviewForm((current) => ({ ...current, countryId: values[0] ?? "" }))}
+              options={(countries as any[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+              placeholder="Select country"
+              allowSelectAll={false}
+            />
+            <AdminInput
+              label="Subtotal"
+              type="number"
+              min="0"
+              step="0.01"
+              value={previewForm.subtotal}
+              onChange={(event) => setPreviewForm((current) => ({ ...current, subtotal: event.target.value }))}
+            />
+          </div>
+
+          <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
+            {previewLoading ? (
+              <div className="flex items-center justify-center py-6 text-[13px] text-[#6B6B6B]">
+                <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
+                Calculating tax preview...
+              </div>
+            ) : previewError ? (
+              <p className="text-[13px] text-red-600">{getAdminErrorMessage(previewError, "Preview failed.")}</p>
+            ) : previewResult ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-md border border-[#E6E6E6] bg-white px-3.5 py-2.5">
+                    <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Subtotal</div>
+                    <div className="mt-0.5 text-[15px] font-semibold text-[#1A1A1A]">
+                      {formatMoney(previewResult.subtotal, previewResult.country.currency?.symbol)}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-[#E6E6E6] bg-white px-3.5 py-2.5">
+                    <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Tax Amount</div>
+                    <div className="mt-0.5 text-[15px] font-semibold text-[#E31E24]">
+                      {formatMoney(previewResult.taxAmount, previewResult.country.currency?.symbol)}
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-md border border-[#E6E6E6] bg-white px-3.5 py-2.5">
+                  <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Final Total</div>
+                  <div className="mt-0.5 text-[16px] font-bold text-[#1A1A1A]">
+                    {formatMoney(previewResult.total, previewResult.country.currency?.symbol)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11.5px] uppercase tracking-wide text-[#9A9A9A]">Applied Tax Rules ({previewResult.appliedRules.length})</div>
+                  {previewResult.appliedRules.length > 0 ? (
+                    <ul className="mt-2 space-y-2 max-h-48 overflow-y-auto">
+                      {previewResult.appliedRules.map((rule) => (
+                        <li key={rule.id} className="rounded-md border border-[#E6E6E6] bg-white px-3.5 py-2 text-[12.5px] text-[#1A1A1A]">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="font-semibold">{rule.name}</span>
+                            <span className="font-medium text-[#E31E24]">{rule.percentage.toFixed(2)}% ({rule.type})</span>
+                          </div>
+                          <div className="mt-1 text-[11.5px] text-[#9A9A9A]">
+                            Base: {formatMoney(rule.amountBefore, previewResult.country.currency?.symbol)} → With Tax: {formatMoney(rule.amountAfter, previewResult.country.currency?.symbol)}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-[12.5px] text-[#6B6B6B]">No tax rules matched for this country and subtotal.</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-[13px] text-[#6B6B6B]">Choose a country and subtotal to preview tax calculation.</p>
+            )}
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              onClick={() => setShowPreviewModal(false)}
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#555] hover:bg-[#F2F2F2] cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* READ-ONLY TAX RULE VIEW MODAL */}
+      <Modal
+        open={!!viewingRule}
+        onClose={() => setViewingRule(null)}
+        title={viewingRule?.name ?? "Tax Rule Details"}
+        subtitle="Detailed configuration and scope settings for this tax rule."
+        size="2xl"
+        footer={
+          <div className="flex items-center justify-between gap-3 w-full">
+            <span className="text-[12px] text-[#6B6B6B]">
+              Tax Rule ID: <span className="font-mono text-[#1A1A1A]">{viewingRule?.id}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setViewingRule(null)}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        }
+      >
+        {viewingRule && (
+          <div className="p-6 space-y-5">
+            {/* Primary Details Grid */}
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Rule Name</span>
+                <p className="mt-1 text-[14px] font-semibold text-[#1A1A1A] truncate" title={viewingRule.name}>{viewingRule.name}</p>
+              </div>
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Rule Type</span>
+                <p className="mt-1 text-[14px] font-semibold text-[#1A1A1A]">{viewingRule.type.replace("_", " ")}</p>
+              </div>
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Tax Rate</span>
+                <p className="mt-1 text-[14px] font-bold text-[#E31E24]">{Number(viewingRule.percentage).toFixed(2)}%</p>
+              </div>
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Tax Mode</span>
+                <p className="mt-1 text-[13.5px] font-medium text-[#1A1A1A] capitalize">{viewingRule.taxMode?.toLowerCase() || "Exclusive"}</p>
+              </div>
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Status</span>
+                <div className="mt-1"><StatusBadge status={viewingRule.status} /></div>
+              </div>
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Priority</span>
+                <p className="mt-1 text-[13.5px] font-semibold text-[#1A1A1A]">{viewingRule.sortOrder ?? 0}</p>
+              </div>
+            </div>
+
+            {/* Countries Scope */}
+            <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4 space-y-2">
+              <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Target Countries</span>
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {viewingRule.countries && viewingRule.countries.length > 0 ? (
+                  viewingRule.countries.map((c) => (
+                    <span key={c.id} className="inline-flex items-center gap-1 rounded-md border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] font-medium text-[#1A1A1A]">
+                      {c.name} ({c.code})
+                    </span>
+                  ))
+                ) : (
+                  <span className="inline-flex items-center rounded-md border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] font-medium text-[#1A1A1A]">
+                    All Countries (Global)
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Applicability Scope (Categories, Products, Variants) */}
+            <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4 space-y-3">
+              <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Scope & Applicability</span>
+              {(!viewingRule.products?.length && !viewingRule.categories?.length && !viewingRule.variants?.length) ? (
+                <p className="text-[13px] text-[#6B6B6B]">Global — Applies to all products and categories.</p>
+              ) : (
+                <div className="space-y-2 text-[12.5px]">
+                  {Boolean(viewingRule.categories?.length) && (
+                    <div>
+                      <span className="font-semibold text-[#1A1A1A]">Categories: </span>
+                      <span className="text-[#555]">{viewingRule.categories?.map((cat) => cat.name).join(", ")}</span>
+                    </div>
+                  )}
+                  {Boolean(viewingRule.products?.length) && (
+                    <div>
+                      <span className="font-semibold text-[#1A1A1A]">Products: </span>
+                      <span className="text-[#555]">{viewingRule.products?.map((p) => p.title).join(", ")}</span>
+                    </div>
+                  )}
+                  {Boolean(viewingRule.variants?.length) && (
+                    <div>
+                      <span className="font-semibold text-[#1A1A1A]">Variants: </span>
+                      <span className="text-[#555]">{viewingRule.variants?.map((v) => `${v.title}${v.sku ? ` [${v.sku}]` : ""}`).join(", ")}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Timestamps */}
+            <div className="flex items-center justify-between border-t border-[#F0F0F0] pt-3 text-[12px] text-[#9A9A9A]">
+              <span>Created: {viewingRule.createdAt ? new Date(viewingRule.createdAt).toLocaleString() : "—"}</span>
+              <span>Last Modified: {viewingRule.updatedAt ? new Date(viewingRule.updatedAt).toLocaleString() : "—"}</span>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* IMPORT TAX RULES MODAL */}
+      <Modal
+        open={showImportModal}
+        onClose={() => {
+          setShowImportModal(false);
+          setImportFile(null);
+          setImportReport(null);
+        }}
+        title="Import Tax Rules"
+        panelClassName="max-w-2xl"
+      >
+        <div className="p-6 space-y-4">
+          <p className="text-[13px] text-[#6B6B6B]">
+            Upload an Excel (.xlsx, .xls) or CSV spreadsheet to bulk import tax rules. You can preview and validate data before committing.
+          </p>
+
+          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-[#D6D6D6] bg-[#FAFAFA] p-4 hover:border-[#E31E24] transition-colors">
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              onChange={(event) => {
+                setImportFile(event.target.files?.[0] ?? null);
+                setImportReport(null);
+              }}
+            />
+            <div className="min-w-0">
+              <div className="text-[13px] font-medium text-[#1A1A1A]">
+                {importFile ? importFile.name : "Choose spreadsheet file (.xlsx, .xls, .csv)"}
+              </div>
+              <div className="mt-0.5 text-[12px] text-[#6B6B6B]">
+                {importFile ? `${(importFile.size / 1024).toFixed(1)} KB` : "Click to select a file from your computer"}
+              </div>
+            </div>
+            <Upload size={18} className="shrink-0 text-[#E31E24]" />
+          </label>
+
+          {previewTaxImport.isPending && (
+            <div className="flex items-center gap-2 text-[13px] text-[#6B6B6B]">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
+              Parsing and validating spreadsheet...
+            </div>
+          )}
+
+          {importReport && (
+            <div className="space-y-3 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="rounded border border-[#E6E6E6] bg-white p-3">
+                  <div className="text-[11.5px] font-semibold text-[#9A9A9A]">Total Rows</div>
+                  <div className="mt-1 text-[20px] font-semibold text-[#1A1A1A]">{importReport.totalRows}</div>
+                </div>
+                <div className="rounded border border-[#E6E6E6] bg-white p-3">
+                  <div className="text-[11.5px] font-semibold text-[#9A9A9A]">Valid Rows</div>
+                  <div className="mt-1 text-[20px] font-semibold text-emerald-600">{importReport.validRows}</div>
+                </div>
+                <div className="rounded border border-[#E6E6E6] bg-white p-3">
+                  <div className="text-[11.5px] font-semibold text-[#9A9A9A]">Invalid Rows</div>
+                  <div className="mt-1 text-[20px] font-semibold text-red-600">{importReport.invalidRows}</div>
+                </div>
+                <div className="rounded border border-[#E6E6E6] bg-white p-3">
+                  <div className="text-[11.5px] font-semibold text-[#9A9A9A]">Warnings</div>
+                  <div className="mt-1 text-[20px] font-semibold text-amber-600">{importReport.duplicateWarnings?.length ?? 0}</div>
+                </div>
+              </div>
+
+              {importReport.issues && importReport.issues.length > 0 && (
+                <div>
+                  <h4 className="mb-2 text-[13px] font-semibold text-[#1A1A1A]">Validation Issues</h4>
+                  <div className="max-h-48 overflow-y-auto rounded border border-[#E6E6E6] bg-white">
+                    {importReport.issues.map((issue, index) => (
+                      <div key={`${issue.row}-${issue.field}-${index}`} className="border-b border-[#F0F0F0] px-3 py-2 text-[12.5px] last:border-b-0">
+                        <span className="font-semibold text-[#E31E24]">Row {issue.row}</span> <span className="text-[#6B6B6B]">[{issue.field}]</span>: {issue.message}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2.5 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                setShowImportModal(false);
+                setImportFile(null);
+                setImportReport(null);
+              }}
+              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#555] hover:bg-[#F2F2F2] cursor-pointer"
+            >
+              Cancel
+            </button>
+            {importReport ? (
+              <LoadingButton
+                type="button"
+                onClick={handleImportCommit}
+                loading={importTaxRules.isPending}
+                loadingText="Importing..."
+                disabled={!importFile || importReport.invalidRows > 0}
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50 cursor-pointer"
+              >
+                Commit Import ({importReport.validRows} rules)
+              </LoadingButton>
+            ) : (
+              <LoadingButton
+                type="button"
+                onClick={handleImportPreview}
+                loading={previewTaxImport.isPending}
+                loadingText="Validating..."
+                disabled={!importFile}
+                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50 cursor-pointer"
+              >
+                Validate Spreadsheet
+              </LoadingButton>
+            )}
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         open={showForm}

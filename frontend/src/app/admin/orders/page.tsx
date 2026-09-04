@@ -6,7 +6,22 @@ import { useRouter } from "next/navigation";
 import { Clock3, Eye, Filter, Pencil, Plus, Search, ShoppingCart, Trash2, Truck, Wallet } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column, AdminBulkActionsBar, ConfirmModal } from "@/components/admin/AdminComponents";
+import {
+  AdminInput,
+  AdminListToolbar,
+  AdminSelect,
+  AdminStatsGrid,
+  DataTable,
+  Pagination,
+  StatCard,
+  StatusBadge,
+  useToast,
+  type Column,
+  AdminBulkActionsBar,
+  ConfirmModal,
+  AdminRowActions,
+  AdminActionButton,
+} from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { useAdminCountries, useAdminOrders, useAdminProducts, useOrderAnalytics, useUpdateOrderStatus, useUpdatePaymentStatus, useDeleteOrder, usePermanentDeleteOrder } from "@/hooks/admin/useAdminHooks";
@@ -225,98 +240,121 @@ export default function OrdersPage() {
     setPage(1);
   };
 
-  const columns: Column<OrderRow>[] = [
-    {
-      key: "orderNumber",
-      label: "Order",
-      render: (row) => (
-        <div className="min-w-[180px]">
-          <div className="font-mono text-[13px] font-semibold text-[#1A1A1A]">{row.orderNumber}</div>
-          <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">{formatDate(row.createdAt)}</div>
-        </div>
-      ),
-    },
-    {
-      key: "customerName",
-      label: "Customer",
-      render: (row) => (
-        <div className="min-w-[220px]">
-          <div className="font-medium text-[#1A1A1A]">{row.customerName}</div>
-          <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">{row.customerEmail}</div>
-        </div>
-      ),
-    },
-    { key: "country", label: "Country", render: (row) => row.country?.code ?? "-" },
-    { key: "items", label: "Items", render: (row) => row._count?.items ?? 0 },
-    { key: "status", label: "Order Status", render: (row) => <StatusBadge status={row.status} /> },
-    { key: "paymentStatus", label: "Payment Status", render: (row) => <StatusBadge status={row.paymentStatus} /> },
-    { key: "paymentMethod", label: "Payment Mode", render: (row) => formatPaymentMethod(row.paymentMethod) },
-    { key: "total", label: "Total", render: (row) => formatMoney(row.total, row.currency) },
-    {
-      key: "shippingProvider",
-      label: "Shipping",
-      render: (row) => row.shippingProvider || row.shippingZone?.provider?.displayName || "-",
-    },
-    {
-      key: "actions",
-      label: "Actions",
-      width: "160px",
-      render: (row) => (
-        <div className="flex items-center gap-1.5">
-          <Link
-            href={`/admin/orders/${row.id}`}
-            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-            title="View order"
-          >
-            <Eye size={13} />
-          </Link>
-          {canUpdate && !row.deletedAt && (
-            <Link
-              href={`/admin/orders/${row.id}?mode=edit`}
-              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-              title="Edit order"
-            >
-              <Pencil size={13} />
-            </Link>
-          )}
-          {!row.deletedAt && (
-            <Link
-              href={`/admin/orders/${row.id}?mode=edit`}
-              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-              title="Shipping"
-            >
-              <Truck size={13} />
-            </Link>
-          )}
-          {canDelete && !row.deletedAt && (
-            <button
-              type="button"
-              onClick={() => setSoftDeleteTarget(row)}
-              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-600 hover:bg-red-50"
-              title="Soft-delete order"
-            >
-              <Trash2 size={13} />
-            </button>
-          )}
-          {row.deletedAt && (
-            <span className="rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
-              Soft-deleted
-            </span>
-          )}
-          {canDelete && row.deletedAt && row.isTest && (
-            <button
-              type="button"
-              onClick={() => setPermanentDeleteTarget(row)}
-              className="flex h-7 px-2 items-center justify-center rounded border border-red-200 bg-red-50 text-[11px] font-medium text-red-600 hover:bg-red-100"
-              title="Permanently delete test order"
-            >
-              Delete Permanently
-            </button>
-          )}
-        </div>
-      ),
-    },
-  ];
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
+    orderNumber: true,
+    customerName: true,
+    country: true,
+    items: true,
+    status: true,
+    paymentStatus: true,
+    paymentMethod: true,
+    total: true,
+    shippingProvider: true,
+    actions: true,
+  });
+
+  const columns = useMemo<Column<OrderRow>[]>(
+    () => [
+      {
+        key: "orderNumber",
+        label: "Order",
+        render: (row) => (
+          <div className="min-w-[180px]">
+            <div className="font-mono text-[13px] font-semibold text-[#1A1A1A]">{row.orderNumber}</div>
+            <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">{formatDate(row.createdAt)}</div>
+          </div>
+        ),
+      },
+      {
+        key: "customerName",
+        label: "Customer",
+        render: (row) => (
+          <div className="min-w-[220px]">
+            <div className="font-medium text-[#1A1A1A]">{row.customerName}</div>
+            <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">{row.customerEmail}</div>
+          </div>
+        ),
+      },
+      { key: "country", label: "Country", render: (row) => row.country?.code ?? "-" },
+      { key: "items", label: "Items", render: (row) => row._count?.items ?? 0 },
+      { key: "status", label: "Order Status", render: (row) => <StatusBadge status={row.status} /> },
+      { key: "paymentStatus", label: "Payment Status", render: (row) => <StatusBadge status={row.paymentStatus} /> },
+      { key: "paymentMethod", label: "Payment Mode", render: (row) => formatPaymentMethod(row.paymentMethod) },
+      { key: "total", label: "Total", render: (row) => formatMoney(row.total, row.currency) },
+      {
+        key: "shippingProvider",
+        label: "Shipping",
+        render: (row) => row.shippingProvider || row.shippingZone?.provider?.displayName || "-",
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        width: "160px",
+        align: "right",
+        render: (row) => (
+          <AdminRowActions
+            align="right"
+            view={{
+              href: `/admin/orders/${row.id}`,
+              title: "View order details",
+            }}
+            edit={
+              canUpdate && !row.deletedAt
+                ? {
+                    href: `/admin/orders/${row.id}?mode=edit`,
+                    title: "Edit order",
+                  }
+                : undefined
+            }
+            extra={
+              <>
+                {!row.deletedAt && (
+                  <AdminActionButton
+                    action={{
+                      href: `/admin/orders/${row.id}?mode=edit`,
+                      title: "Manage shipping",
+                      icon: <Truck size={13} />,
+                    }}
+                    defaultIcon={<Truck size={13} />}
+                    defaultTitle="Shipping"
+                  />
+                )}
+                {row.deletedAt && (
+                  <span className="rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500 whitespace-nowrap">
+                    Soft-deleted
+                  </span>
+                )}
+                {canDelete && row.deletedAt && row.isTest && (
+                  <button
+                    type="button"
+                    onClick={() => setPermanentDeleteTarget(row)}
+                    className="flex h-7 px-2 items-center justify-center rounded border border-red-200 bg-red-50 text-[11px] font-medium text-red-600 hover:bg-red-100 whitespace-nowrap cursor-pointer transition-colors"
+                    title="Permanently delete test order"
+                  >
+                    Delete Permanently
+                  </button>
+                )}
+              </>
+            }
+            delete={
+              canDelete && !row.deletedAt
+                ? {
+                    onClick: () => setSoftDeleteTarget(row),
+                    title: "Delete order",
+                  }
+                : undefined
+            }
+          />
+        ),
+      },
+    ],
+    [canUpdate, canDelete],
+  );
+
+  const filteredColumns = useMemo(
+    () => columns.filter((col) => col.key === "actions" || visibleColumns[String(col.key)] !== false),
+    [columns, visibleColumns],
+  );
 
   if (authLoading || !hasPermission("orders.view")) {
     return null;
@@ -346,6 +384,26 @@ export default function OrdersPage() {
             showFilters,
             onToggle: () => setShowFilters((prev) => !prev),
             activeCount: [status, paymentStatus, paymentMethod, countryId, productId, dateFrom, dateTo].filter(Boolean).length,
+          }}
+          columns={{
+            visibleColumns,
+            onToggleColumn: (key: string) => {
+              setVisibleColumns((current) => ({
+                ...current,
+                [key]: !current[key],
+              }));
+            },
+            options: [
+              { key: "orderNumber", label: "Order" },
+              { key: "customerName", label: "Customer" },
+              { key: "country", label: "Country" },
+              { key: "items", label: "Items" },
+              { key: "status", label: "Order Status" },
+              { key: "paymentStatus", label: "Payment Status" },
+              { key: "paymentMethod", label: "Payment Mode" },
+              { key: "total", label: "Total" },
+              { key: "shippingProvider", label: "Shipping" },
+            ],
           }}
           refresh={{
             onRefresh: () => {
@@ -484,10 +542,10 @@ export default function OrdersPage() {
           }
         />
 
-        <div className="rounded-xl border border-[#E6E6E6] bg-white">
+        <div>
           <DataTable<OrderRow>
             title={deletedView === "deleted" ? "Soft-Deleted Orders" : "Orders List"}
-            columns={columns}
+            columns={filteredColumns}
             data={orders}
             rowKey="id"
             isLoading={isLoading}
@@ -555,7 +613,7 @@ export default function OrdersPage() {
               />
             )}
           />
-          <div className="border-t border-[#E6E6E6] px-4 py-3">
+          <div className="flex items-center justify-end mt-4">
             <Pagination page={pagination.page} totalPages={pagination.totalPages || 1} onPageChange={setPage} />
           </div>
         </div>

@@ -45,6 +45,14 @@ export const remove = asyncHandler(async (req: AuthRequest, res: Response) => {
   return ApiResponse.success(res, "Product deleted.");
 });
 
+export const restore = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const product = await ProductService.restoreProduct(req.params.id as string);
+  await prisma.activityLog.create({
+    data: { userId: req.user!.id, action: "PRODUCT_RESTORED", entityType: "Product", entityId: product.id },
+  });
+  return ApiResponse.success(res, "Product restored.", product);
+});
+
 export const permanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
   await ProductService.permanentDeleteProduct(req.params.id as string);
   return ApiResponse.success(res, "Product permanently deleted.");
@@ -126,6 +134,11 @@ export const uploadMedia = asyncHandler(async (req: AuthRequest, res: Response) 
   
   await ProductService.addProductMedia(req.params.id as string, files, altTexts, mediaIds);
   return ApiResponse.success(res, "Media uploaded.");
+});
+
+export const setCoverMedia = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await ProductService.setProductCoverMedia(req.params.id as string, req.params.mediaId as string);
+  return ApiResponse.success(res, "Cover image updated.", result);
 });
 
 export const removeMedia = asyncHandler(async (req: AuthRequest, res: Response) => {

@@ -126,7 +126,7 @@ export function Modal({
               <div className="flex items-center justify-between border-b border-[#F0F0F0] bg-white px-7 py-5 md:px-8 md:py-5.5 shrink-0">
                 <div className="flex-1 min-w-0 pr-4">
                   {typeof title === "string" ? (
-                    <h3 className="font-serif text-[22px] md:text-[24px] font-normal text-[#1A1A1A] tracking-normal truncate">
+                    <h3 className="text-[18px] md:text-[20px] font-semibold text-[#1A1A1A] tracking-tight truncate">
                       {title}
                     </h3>
                   ) : (

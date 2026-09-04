@@ -14,7 +14,8 @@
     "start": "next start",
     "start:staging": "APP_ENV=staging DOTENV_CONFIG_PATH=.env.staging DOTENV_CONFIG_OVERRIDE=true DOTENV_CONFIG_QUIET=true node --require=dotenv/config node_modules/next/dist/bin/next start -p 4000",
     "start:production": "APP_ENV=production DOTENV_CONFIG_PATH=.env.production DOTENV_CONFIG_OVERRIDE=true DOTENV_CONFIG_QUIET=true node --require=dotenv/config node_modules/next/dist/bin/next start -p 3000",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:upload-media": "node scripts/test-upload-media-contract.cjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.0",

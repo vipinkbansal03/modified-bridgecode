@@ -423,34 +423,34 @@ export default function CmsFooterPage() {
       />
 
       {/* Top Navigation Tabs Header Card */}
-      <div className="mb-5 rounded-xl border border-[#E6E6E6] bg-white p-4 shadow-xs">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap gap-2">
+      <div className="mb-5 rounded-xl border border-[#E6E6E6] bg-white p-3 sm:p-4 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-1.5 rounded-lg border border-[#E6E6E6] bg-gray-50/80 p-1">
             <button
               type="button"
               onClick={() => setActiveTab("settings")}
-              className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-[13.5px] font-semibold transition-colors ${
+              className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-[12.5px] font-medium transition-all ${
                 activeTab === "settings"
-                  ? "border-[#E31E24] text-[#E31E24]"
-                  : "border-transparent text-[#666] hover:text-[#1A1A1A]"
+                  ? "bg-white text-[#1A1A1A] font-semibold shadow-2xs"
+                  : "text-[#6B6B6B] hover:text-[#1A1A1A] hover:bg-white/50"
               }`}
             >
-              <SlidersHorizontal size={15} />
+              <SlidersHorizontal size={14} />
               Footer Settings
             </button>
 
             <button
               type="button"
               onClick={() => setActiveTab("navigation")}
-              className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-[13.5px] font-semibold transition-colors ${
+              className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-[12.5px] font-medium transition-all ${
                 activeTab === "navigation"
-                  ? "border-[#E31E24] text-[#E31E24]"
-                  : "border-transparent text-[#666] hover:text-[#1A1A1A]"
+                  ? "bg-white text-[#1A1A1A] font-semibold shadow-2xs"
+                  : "text-[#6B6B6B] hover:text-[#1A1A1A] hover:bg-white/50"
               }`}
             >
-              <Layers size={15} />
+              <Layers size={14} />
               Navigation Columns (Menus Overview)
-              <span className="ml-1 rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-medium text-gray-700">
+              <span className="ml-1 rounded-full bg-gray-200 px-1.5 py-0.5 text-[11px] font-medium text-gray-700">
                 {footerMenuRows.length}
               </span>
             </button>
@@ -458,13 +458,13 @@ export default function CmsFooterPage() {
             <button
               type="button"
               onClick={() => setActiveTab("translations")}
-              className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-[13.5px] font-semibold transition-colors ${
+              className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-[12.5px] font-medium transition-all ${
                 activeTab === "translations"
-                  ? "border-[#E31E24] text-[#E31E24]"
-                  : "border-transparent text-[#666] hover:text-[#1A1A1A]"
+                  ? "bg-white text-[#1A1A1A] font-semibold shadow-2xs"
+                  : "text-[#6B6B6B] hover:text-[#1A1A1A] hover:bg-white/50"
               }`}
             >
-              <Languages size={15} />
+              <Languages size={14} />
               Translations
             </button>
           </div>
@@ -474,13 +474,13 @@ export default function CmsFooterPage() {
               href="/"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E6E6E6] bg-white px-3.5 py-2 text-[12.5px] font-medium text-[#1A1A1A] hover:bg-gray-50 transition-colors shadow-2xs"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] font-medium text-[#1A1A1A] hover:bg-gray-50 transition-colors shadow-2xs"
             >
               <ExternalLink size={13} /> View Live Footer
             </a>
             <Link
               href="/admin/cms/menus"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E6E6E6] bg-white px-3.5 py-2 text-[12.5px] font-medium text-[#0F6CBD] hover:bg-blue-50 transition-colors shadow-2xs"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] font-medium text-[#0F6CBD] hover:bg-blue-50 transition-colors shadow-2xs"
             >
               <Layers size={13} /> Manage Menus
             </Link>
