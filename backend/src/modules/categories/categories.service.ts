@@ -52,7 +52,9 @@ type CategoryInput = {
 type CategorySpreadsheetRow = {
   name: string;
   slug?: string | null;
+  parentCategory?: string | null;
   parentSlug?: string | null;
+  parent?: string | null;
   status?: string | null;
   sortOrder?: number | null;
   image?: string | null;
@@ -86,23 +88,43 @@ function parseBooleanList(value: string | null | undefined) {
   const normalized = String(value ?? "").trim();
   if (!normalized) return [];
   return normalized
-    .split(/[;,|]/)
-    .map((code) => code.trim().toUpperCase())
+    .split(/[,;|]/)
+    .map((code) => {
+      let c = code.trim().toUpperCase();
+      if (c === "ALL" || c === "GLOBAL" || c === "*" || c === "ALL COUNTRIES") return "ALL";
+      const parenMatch = c.match(/\(([A-Z]{2,3})\)$/);
+      if (parenMatch) c = parenMatch[1];
+      return c;
+    })
     .filter(Boolean);
 }
 
-function parseCategoryRow(raw: Record<string, string>): CategorySpreadsheetRow {
-  const sortOrder = String(raw.sortOrder ?? "").trim();
+function parseCategoryRow(raw: Record<string, any>): CategorySpreadsheetRow {
+  const safeStr = (v: any) => (v !== undefined && v !== null ? String(v).trim() : "");
+  const sortOrder = safeStr(raw.sortOrder);
+  const parentVal = safeStr(
+    raw.parentCategory ||
+    raw.parent ||
+    raw.parentName ||
+    raw.parentSlug ||
+    raw.parent_category ||
+    raw["Parent Category"] ||
+    raw["Parent"] ||
+    raw["Parent Slug"] ||
+    raw["parent_slug"]
+  );
+
   return {
-    name: raw.name?.trim() || "",
-    slug: raw.slug?.trim() || null,
-    parentSlug: raw.parentSlug?.trim() || null,
-    status: raw.status?.trim().toUpperCase() || null,
+    name: safeStr(raw.name || raw.categoryName || raw["Category Name"]),
+    slug: safeStr(raw.slug) || null,
+    parentCategory: parentVal || null,
+    parentSlug: parentVal || null,
+    status: safeStr(raw.status).toUpperCase() || null,
     sortOrder: sortOrder ? Number(sortOrder) : null,
-    image: raw.image?.trim() || null,
-    description: raw.description?.trim() || null,
-    seoTitle: raw.seoTitle?.trim() || null,
-    seoDescription: raw.seoDescription?.trim() || null,
+    image: safeStr(raw.image) || null,
+    description: safeStr(raw.description) || null,
+    seoTitle: safeStr(raw.seoTitle) || null,
+    seoDescription: safeStr(raw.seoDescription) || null,
     countryCodes: parseBooleanList(raw.countryCodes),
   };
 }
@@ -423,7 +445,7 @@ export async function updateCategoryCountries(categoryId: string, items: { count
 const CATEGORY_EXPORT_COLUMNS = [
   { key: "name", header: "name" },
   { key: "slug", header: "slug" },
-  { key: "parentSlug", header: "parentSlug" },
+  { key: "parentCategory", header: "parentCategory" },
   { key: "status", header: "status" },
   { key: "sortOrder", header: "sortOrder" },
   { key: "image", header: "image" },
@@ -444,7 +466,9 @@ async function previewCategoryRows(rows: Record<string, string>[]) {
   const seenSlug = new Map<string, number>();
   const seenNameByParent = new Map<string, number>();
   const slugs = new Set<string>();
+  const parentIdentifiers = new Set<string>();
   const fileRowBySlug = new Map<string, number>();
+  const fileRowByName = new Map<string, number>();
   const countryCodes = new Set<string>();
 
   for (const [index, row] of parsed.entries()) {
@@ -465,6 +489,7 @@ async function previewCategoryRows(rows: Record<string, string>[]) {
     }
     const slug = slugify(row.slug || row.name);
     fileRowBySlug.set(slug, rowNumber);
+    fileRowByName.set(row.name.toLowerCase(), rowNumber);
     const seenSlugRow = seenSlug.get(slug);
     if (seenSlugRow) {
       const message = `Duplicate slug '${slug}' found on rows ${seenSlugRow} and ${rowNumber}.`;
@@ -483,39 +508,88 @@ async function previewCategoryRows(rows: Record<string, string>[]) {
       seenNameByParent.set(parentKey, rowNumber);
     }
     slugs.add(slug);
-    row.countryCodes?.forEach((code) => countryCodes.add(code));
+    if (row.parentSlug) {
+      parentIdentifiers.add(row.parentSlug.toLowerCase());
+      parentIdentifiers.add(slugify(row.parentSlug));
+    }
+    row.countryCodes?.forEach((code) => {
+      const u = code.trim().toUpperCase();
+      if (u === "ALL" || u === "GLOBAL" || u === "*" || u === "ALL COUNTRIES") return;
+      countryCodes.add(code);
+    });
   }
 
-  const [existingCategories, countries] = await Promise.all([
+  const [existingCategories, existingParents, countries] = await Promise.all([
     prisma.category.findMany({
       where: { slug: { in: Array.from(slugs) }, deletedAt: null },
-      select: { slug: true, id: true, status: true },
+      select: { slug: true, id: true, name: true, status: true },
     }),
+    parentIdentifiers.size
+      ? prisma.category.findMany({
+          where: {
+            deletedAt: null,
+            OR: [
+              { slug: { in: Array.from(parentIdentifiers) } },
+              { name: { in: Array.from(parentIdentifiers), mode: "insensitive" } },
+            ],
+          },
+          select: { slug: true, id: true, name: true, status: true },
+        })
+      : Promise.resolve([]),
     prisma.country.findMany({ where: { code: { in: Array.from(countryCodes) } }, select: { code: true, status: true } }),
   ]);
 
-  const categoryBySlug = new Map(existingCategories.map((category) => [category.slug, category]));
+  const allKnownCategories = [...existingCategories, ...existingParents];
+  const categoryBySlug = new Map(allKnownCategories.map((category) => [category.slug.toLowerCase(), category]));
+  const categoryByName = new Map(allKnownCategories.map((category) => [category.name.toLowerCase(), category]));
   const countryByCode = new Map(countries.map((country) => [country.code, country]));
   const previewRows: Array<CategorySpreadsheetRow & { row: number }> = [];
 
   for (const [index, row] of parsed.entries()) {
     const rowNumber = index + 2;
     const slug = slugify(row.slug || row.name);
-    const parentSlug = row.parentSlug ? slugify(row.parentSlug) : null;
-    const parentExists = parentSlug ? categoryBySlug.get(parentSlug) : null;
-    const parentInFile = parentSlug ? fileRowBySlug.has(parentSlug) : false;
-    if (parentSlug && !parentExists && !parentInFile) {
-      issues.push({ row: rowNumber, field: "parentSlug", message: `Parent category '${row.parentSlug}' was not found.` });
+    let resolvedParentName: string | null = null;
+    let resolvedParentSlug: string | null = null;
+
+    if (row.parentSlug) {
+      const pRaw = row.parentSlug.trim();
+      const pSlug = slugify(pRaw);
+      const pLower = pRaw.toLowerCase();
+
+      const parentExists = categoryBySlug.get(pSlug) || categoryByName.get(pLower) || categoryBySlug.get(pLower);
+      const parentInFile = fileRowBySlug.has(pSlug) || fileRowByName.has(pLower);
+
+      if (!parentExists && !parentInFile) {
+        issues.push({ row: rowNumber, field: "parentCategory", message: `Parent category '${row.parentSlug}' was not found.` });
+      } else if (parentExists) {
+        if (parentExists.status !== "ACTIVE") {
+          issues.push({ row: rowNumber, field: "parentCategory", message: `Parent category '${row.parentSlug}' is inactive.` });
+        }
+        resolvedParentName = parentExists.name;
+        resolvedParentSlug = parentExists.slug;
+      } else if (parentInFile) {
+        const inFileName = [...fileRowByName.entries()].find(([k]) => k === pLower || slugify(k) === pSlug);
+        resolvedParentName = inFileName ? inFileName[0] : pRaw;
+        resolvedParentSlug = pSlug;
+      }
     }
-    if (parentExists && parentExists.status !== "ACTIVE") {
-      issues.push({ row: rowNumber, field: "parentSlug", message: `Parent category '${row.parentSlug}' is inactive.` });
-    }
+
     row.countryCodes?.forEach((code) => {
+      const u = code.trim().toUpperCase();
+      if (u === "ALL" || u === "GLOBAL" || u === "*" || u === "ALL COUNTRIES") return;
       const country = countryByCode.get(code);
       if (!country) issues.push({ row: rowNumber, field: "countryCodes", message: `Country '${code}' was not found.` });
       else if (country.status !== "ACTIVE") issues.push({ row: rowNumber, field: "countryCodes", message: `Country '${code}' is inactive.` });
     });
-    previewRows.push({ ...row, row: rowNumber, slug });
+
+    previewRows.push({
+      ...row,
+      row: rowNumber,
+      slug,
+      parentCategory: resolvedParentName ?? resolvedParentSlug ?? row.parentSlug ?? "",
+      parentSlug: resolvedParentSlug ?? row.parentSlug ?? "",
+      parent: resolvedParentName ?? resolvedParentSlug ?? row.parentSlug ?? "",
+    });
   }
 
   return { parsed, issues, duplicateWarnings, categoryBySlug, previewRows, fileRowBySlug };
@@ -526,7 +600,7 @@ export async function exportCategoriesSpreadsheet() {
     where: { deletedAt: null },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     include: {
-      parent: { select: { slug: true } },
+      parent: { select: { slug: true, name: true } },
       countries: { where: { enabled: true }, include: { country: { select: { code: true } } } },
     },
   });
@@ -535,7 +609,7 @@ export async function exportCategoriesSpreadsheet() {
     categories.map((category) => ({
       name: category.name,
       slug: category.slug,
-      parentSlug: category.parent?.slug ?? "",
+      parentCategory: category.parent?.name ?? category.parent?.slug ?? "",
       status: category.status,
       sortOrder: category.sortOrder,
       image: category.image ?? "",
@@ -549,6 +623,42 @@ export async function exportCategoriesSpreadsheet() {
   );
 }
 
+export function generateSampleCategoriesTemplate() {
+  const sampleRows = [
+    {
+      name: "Brackets",
+      slug: "brackets",
+      parentCategory: "",
+      status: "ACTIVE",
+      sortOrder: 1,
+      image: "https://example.com/images/brackets.jpg",
+      description: "High quality orthodontic brackets.",
+      seoTitle: "Orthodontic Brackets",
+      seoDescription: "Explore our wide range of brackets.",
+      countryCodes: "ALL",
+    },
+    {
+      name: "Metal Brackets",
+      slug: "metal-brackets",
+      parentCategory: "Brackets",
+      status: "ACTIVE",
+      sortOrder: 1,
+      image: "https://example.com/images/metal-brackets.jpg",
+      description: "Stainless steel orthodontic metal brackets.",
+      seoTitle: "Metal Brackets",
+      seoDescription: "High-grade stainless steel orthodontic brackets.",
+      countryCodes: "IN, US",
+    },
+  ];
+
+  return writeSpreadsheetBuffer(
+    sampleRows,
+    "Categories",
+    CATEGORY_EXPORT_COLUMNS.map((column) => ({ key: column.key, header: column.header })),
+  );
+}
+
+
 export async function previewCategoryImport(filePath: string) {
   const rows = readSpreadsheetRows(filePath);
   const preview = await previewCategoryRows(rows);
@@ -559,13 +669,29 @@ export async function previewCategoryImport(filePath: string) {
     issues: preview.issues,
     duplicateWarnings: preview.duplicateWarnings,
     sampleRows: preview.previewRows.slice(0, 10),
+    rows: preview.previewRows.map((r) => {
+      const rowIssues = preview.issues.filter((iss) => iss.row === r.row);
+      return {
+        ...r,
+        rowNumber: r.row,
+        isValid: rowIssues.length === 0,
+        errors: rowIssues.map((iss) => (iss.field ? `[${iss.field}] ${iss.message}` : iss.message)),
+        countryCodes: Array.isArray(r.countryCodes) ? r.countryCodes.join(", ") : (r.countryCodes || ""),
+      };
+    }),
   };
 }
 
 async function syncCategoryCountries(tx: Prisma.TransactionClient, categoryId: string, countryCodes: string[]) {
   if (!countryCodes.length) return;
-  const countries = await tx.country.findMany({ where: { code: { in: countryCodes } }, select: { id: true, code: true } });
-  if (countries.length !== countryCodes.length) throw new AppError("One or more countries were not found.", 400);
+  const isAll = countryCodes.some((c) => {
+    const u = c.trim().toUpperCase();
+    return u === "ALL" || u === "GLOBAL" || u === "*" || u === "ALL COUNTRIES";
+  });
+  const countries = isAll
+    ? await tx.country.findMany({ where: { status: "ACTIVE" }, select: { id: true, code: true } })
+    : await tx.country.findMany({ where: { code: { in: countryCodes } }, select: { id: true, code: true } });
+  if (!isAll && countries.length !== countryCodes.length) throw new AppError("One or more countries were not found.", 400);
   await Promise.all(
     countries.map((country) =>
       tx.categoryCountry.upsert({
@@ -577,19 +703,19 @@ async function syncCategoryCountries(tx: Prisma.TransactionClient, categoryId: s
   );
 }
 
-export async function importCategoriesSpreadsheet(filePath: string) {
-  const rows = readSpreadsheetRows(filePath);
+export async function importCategoriesSpreadsheet(filePathOrRows: string | any[]) {
+  const rows = Array.isArray(filePathOrRows) ? filePathOrRows : readSpreadsheetRows(filePathOrRows);
   const preview = await previewCategoryRows(rows);
-  if (preview.issues.length > 0) {
+  if (typeof filePathOrRows === "string" && preview.issues.length > 0) {
     throw new AppError(`Import validation failed with ${preview.issues.length} issue(s).`, 400);
   }
 
   const summary = { created: 0, updated: 0 };
-  const nowSuffix = Date.now().toString().slice(-6);
   const rowMap = new Map<string, CategorySpreadsheetRow>();
   preview.parsed.forEach((row) => {
     const slug = slugify(row.slug || row.name);
     rowMap.set(slug, row);
+    rowMap.set(row.name.toLowerCase(), row);
   });
   const depthMemo = new Map<string, number>();
   const visitStack = new Set<string>();
@@ -615,32 +741,84 @@ export async function importCategoriesSpreadsheet(filePath: string) {
   });
 
   await prisma.$transaction(async (tx) => {
+    const createdBySlug = new Map<string, string>();
+    const createdByName = new Map<string, string>();
+
     for (const [index, row] of sortedRows.entries()) {
       const slug = slugify(row.slug || row.name);
-      const existing = await tx.category.findFirst({ where: { slug, deletedAt: null } });
-      const parentSlug = row.parentSlug ? slugify(row.parentSlug) : null;
-      const parent = parentSlug ? await tx.category.findFirst({ where: { slug: parentSlug, deletedAt: null }, select: { id: true } }) : null;
+      const existing = await tx.category.findFirst({
+        where: {
+          OR: [
+            { slug },
+            { name: { equals: row.name.trim(), mode: "insensitive" } },
+          ],
+          deletedAt: null,
+        },
+      });
+
+      let parentId: string | null = null;
+      if (row.parentSlug) {
+        const pRaw = row.parentSlug.trim();
+        const pSlug = slugify(pRaw);
+        const pLower = pRaw.toLowerCase();
+
+        if (createdBySlug.has(pSlug)) {
+          parentId = createdBySlug.get(pSlug)!;
+        } else if (createdByName.has(pLower)) {
+          parentId = createdByName.get(pLower)!;
+        } else {
+          const parent = await tx.category.findFirst({
+            where: {
+              OR: [
+                { slug: pSlug },
+                { slug: pLower },
+                { name: { equals: pRaw, mode: "insensitive" } },
+              ],
+              deletedAt: null,
+            },
+            select: { id: true },
+          });
+          if (parent) parentId = parent.id;
+        }
+      }
+
+      let finalSlug = slug;
+      if (!existing) {
+        let counter = 1;
+        while (await tx.category.findFirst({ where: { slug: finalSlug, deletedAt: null } })) {
+          finalSlug = `${slug}-${counter++}`;
+        }
+      } else {
+        finalSlug = existing.slug;
+      }
+
       const baseData = {
         name: row.name.trim(),
-        slug: existing ? existing.slug : `${slug}-${nowSuffix}-${index + 1}`,
+        slug: finalSlug,
         description: row.description || null,
         seoTitle: row.seoTitle || null,
         seoDescription: row.seoDescription || null,
-        parentId: parent?.id ?? null,
+        parentId,
         image: row.image || null,
         status: (row.status as never) || "ACTIVE",
         sortOrder: row.sortOrder ?? 0,
       };
 
+      let categoryId: string;
       if (existing) {
         await tx.category.update({ where: { id: existing.id }, data: baseData });
+        categoryId = existing.id;
         if (row.countryCodes?.length) await syncCategoryCountries(tx, existing.id, row.countryCodes);
         summary.updated += 1;
       } else {
         const created = await tx.category.create({ data: baseData });
+        categoryId = created.id;
         if (row.countryCodes?.length) await syncCategoryCountries(tx, created.id, row.countryCodes);
         summary.created += 1;
       }
+
+      createdBySlug.set(finalSlug, categoryId);
+      createdByName.set(row.name.trim().toLowerCase(), categoryId);
     }
   });
 

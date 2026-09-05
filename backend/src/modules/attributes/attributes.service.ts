@@ -1,6 +1,7 @@
-import { AttributeRole, Prisma } from "@prisma/client";
+import { AttributeRole, AttributeStatus, GridRole, Prisma } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { AppError, slugify } from "../../utils/apiResponse";
+import { readSpreadsheetRows, writeSpreadsheetBuffer } from "../../utils/spreadsheet";
 
 type ValueInput = {
   value?: string;
@@ -427,4 +428,414 @@ export async function reorderAttributeValues(
     ),
   );
   return listAttributeValues(attributeId);
+}
+
+// ─── SPREADSHEET EXPORT & IMPORT ──────────────────────────────────────────────
+
+export const ATTRIBUTE_EXPORT_COLUMNS = [
+  { key: "attributeName", header: "attributeName" },
+  { key: "slug", header: "slug" },
+  { key: "displayType", header: "displayType" },
+  { key: "status", header: "status" },
+  { key: "sortOrder", header: "sortOrder" },
+  { key: "values", header: "values" },
+] as const;
+
+function getRowField(row: Record<string, any>, ...possibleKeys: string[]): string {
+  if (!row || typeof row !== "object") return "";
+  for (const key of possibleKeys) {
+    const val = row[key];
+    if (val !== undefined && val !== null) {
+      if (Array.isArray(val)) {
+        const joined = val.map((v) => String(v).trim()).filter(Boolean).join(", ");
+        if (joined) return joined;
+      } else {
+        const str = String(val).trim();
+        if (str !== "" && str !== "[object Object]") return str;
+      }
+    }
+  }
+  const rowEntries = Object.entries(row);
+  for (const key of possibleKeys) {
+    const cleanKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const found = rowEntries.find(
+      ([k]) => k.toLowerCase().replace(/[^a-z0-9]/g, "") === cleanKey,
+    );
+    if (found && found[1] !== undefined && found[1] !== null) {
+      const val = found[1];
+      if (Array.isArray(val)) {
+        const joined = val.map((v) => String(v).trim()).filter(Boolean).join(", ");
+        if (joined) return joined;
+      } else {
+        const str = String(val).trim();
+        if (str !== "" && str !== "[object Object]") return str;
+      }
+    }
+  }
+  return "";
+}
+
+function normalizeRole(roleStr: string): AttributeRole {
+  const upper = roleStr.toUpperCase().trim().replace(/[^A-Z0-9]/g, "_").replace(/_+/g, "_");
+  if (upper.includes("X_GRID") || upper === "XGRID" || upper.includes("X_AXIS") || upper === "COLUMN") return "X_GRID";
+  if (upper.includes("Y_GRID") || upper === "YGRID" || upper.includes("Y_AXIS") || upper === "ROW") return "Y_GRID";
+  return "DROPDOWN";
+}
+
+function normalizeStatus(stStr: string): AttributeStatus {
+  const upper = stStr.toUpperCase().trim();
+  if (upper === "INACTIVE" || upper === "DISABLED" || upper === "FALSE" || upper === "0") return "INACTIVE";
+  return "ACTIVE";
+}
+
+export async function exportAttributesSpreadsheet() {
+  const attributes = await prisma.attribute.findMany({
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    include: {
+      values: {
+        orderBy: [{ sortOrder: "asc" }, { value: "asc" }],
+      },
+    },
+  });
+
+  // Exactly 1 row per attribute
+  const rows = attributes.map((attr) => {
+    const valuesString = attr.values
+      .map((v) => {
+        const priceAdj = Number(v.priceAdjustment);
+        if (priceAdj > 0) {
+          return `${v.value} (+${priceAdj})`;
+        }
+        return v.value;
+      })
+      .join(", ");
+
+    return {
+      attributeName: attr.name,
+      slug: attr.slug,
+      displayType: attr.role,
+      status: attr.status,
+      sortOrder: attr.sortOrder,
+      values: valuesString,
+    };
+  });
+
+  return writeSpreadsheetBuffer(
+    rows,
+    "Attributes",
+    ATTRIBUTE_EXPORT_COLUMNS.map((c) => ({ key: c.key, header: c.header })),
+  );
+}
+
+export function generateSampleAttributesTemplate() {
+  const sampleRows = [
+    {
+      attributeName: "Slot",
+      slug: "slot",
+      displayType: "X_GRID",
+      status: "ACTIVE",
+      sortOrder: 1,
+      values: ".018, .022 (+15)",
+    },
+    {
+      attributeName: "Hook",
+      slug: "hook",
+      displayType: "Y_GRID",
+      status: "ACTIVE",
+      sortOrder: 2,
+      values: "None, Hook 3, Hook 4 (+8), Hook 5 (+12)",
+    },
+    {
+      attributeName: "Prescription",
+      slug: "prescription",
+      displayType: "DROPDOWN",
+      status: "ACTIVE",
+      sortOrder: 3,
+      values: "MBT, Roth, Alexander (+12), Standard Edgewise",
+    },
+    {
+      attributeName: "Wire Size",
+      slug: "wire-size",
+      displayType: "X_GRID",
+      status: "ACTIVE",
+      sortOrder: 4,
+      values: ".014, .016, .018, .018 x .025, .019 x .025 (+20)",
+    },
+    {
+      attributeName: "Arch",
+      slug: "arch",
+      displayType: "Y_GRID",
+      status: "ACTIVE",
+      sortOrder: 5,
+      values: "Upper, Lower",
+    },
+    {
+      attributeName: "Material",
+      slug: "material",
+      displayType: "DROPDOWN",
+      status: "ACTIVE",
+      sortOrder: 6,
+      values: "Stainless Steel, Titanium (+25), Ceramic (+40)",
+    },
+    {
+      attributeName: "Size",
+      slug: "size",
+      displayType: "DROPDOWN",
+      status: "ACTIVE",
+      sortOrder: 7,
+      values: ".012, .014 (+6), .016 (+12)",
+    },
+    {
+      attributeName: "Pack Size",
+      slug: "pack-size",
+      displayType: "DROPDOWN",
+      status: "ACTIVE",
+      sortOrder: 8,
+      values: "Single, 5 Pack (+35), 10 Pack (+60)",
+    },
+  ];
+
+  return writeSpreadsheetBuffer(
+    sampleRows,
+    "Attributes",
+    ATTRIBUTE_EXPORT_COLUMNS.map((c) => ({ key: c.key, header: c.header })),
+  );
+}
+
+export async function previewAttributeImport(filePath: string) {
+  const rawRows = readSpreadsheetRows(filePath);
+  const issues: Array<{ row: number; field: string; message: string }> = [];
+  const duplicateWarnings: string[] = [];
+  const previewRows: Record<string, unknown>[] = [];
+
+  const seenAttrNames = new Set<string>();
+
+  rawRows.forEach((row, index) => {
+    const rowNumber = index + 2;
+    const attrName = getRowField(row, "attributeName", "name", "attribute", "attribute_name", "title");
+    const roleStr = getRowField(row, "displayType", "role", "display_type", "type", "gridAxis");
+    const valuesStr = getRowField(row, "values", "value", "options", "attributeValues", "allowedValues");
+
+    if (!attrName) {
+      issues.push({ row: rowNumber, field: "attributeName", message: "Attribute name is required." });
+    } else {
+      const lower = attrName.toLowerCase();
+      if (seenAttrNames.has(lower)) {
+        duplicateWarnings.push(`Duplicate attribute '${attrName}' found on row ${rowNumber}.`);
+      } else {
+        seenAttrNames.add(lower);
+      }
+    }
+
+    if (roleStr) {
+      const upper = roleStr.toUpperCase().trim().replace(/[^A-Z0-9]/g, "_").replace(/_+/g, "_");
+      const isValidRole =
+        upper.includes("X_GRID") ||
+        upper === "XGRID" ||
+        upper.includes("X_AXIS") ||
+        upper === "COLUMN" ||
+        upper.includes("Y_GRID") ||
+        upper === "YGRID" ||
+        upper.includes("Y_AXIS") ||
+        upper === "ROW" ||
+        upper.includes("DROPDOWN") ||
+        upper.includes("DROP_DOWN") ||
+        upper === "SELECT";
+      if (!isValidRole) {
+        issues.push({
+          row: rowNumber,
+          field: "displayType",
+          message: `Invalid display type '${roleStr}'. Must be DROPDOWN, X_GRID, or Y_GRID.`,
+        });
+      }
+    }
+
+    const valList = valuesStr ? valuesStr.split(",").map((s: string) => s.trim()).filter(Boolean) : [];
+    const valueCount = valList.length;
+    const rawSortOrder = Number(getRowField(row, "sortOrder", "attributeSortOrder", "order", "sort"));
+    const sortOrder = Number.isFinite(rawSortOrder) ? rawSortOrder : 0;
+
+    const rowIssues = issues
+      .filter((i) => i.row === rowNumber)
+      .map((i) => (i.field ? `[${i.field}] ${i.message}` : i.message));
+
+    const roleVal = roleStr ? normalizeRole(roleStr) : "DROPDOWN";
+    previewRows.push({
+      row: rowNumber,
+      rowNumber,
+      attributeName: attrName,
+      name: attrName,
+      slug: getRowField(row, "slug", "attributeSlug"),
+      displayType: roleVal,
+      role: roleVal,
+      status: normalizeStatus(getRowField(row, "status", "attributeStatus")),
+      sortOrder,
+      values: valuesStr,
+      valueCount,
+      isValid: rowIssues.length === 0,
+      errors: rowIssues,
+    });
+  });
+
+  return {
+    totalRows: rawRows.length,
+    validRows: Math.max(0, rawRows.length - issues.length),
+    invalidRows: issues.length,
+    issues,
+    duplicateWarnings,
+    sampleRows: previewRows.slice(0, 10),
+    rows: previewRows,
+  };
+}
+
+export async function importAttributesSpreadsheet(filePathOrRows: string | any[]) {
+  const rawRows: Record<string, any>[] = Array.isArray(filePathOrRows)
+    ? filePathOrRows
+    : readSpreadsheetRows(filePathOrRows);
+
+  if (rawRows.length === 0) {
+    throw new AppError("Uploaded spreadsheet or rows list is empty.", 400);
+  }
+
+  if (typeof filePathOrRows === "string") {
+    const preview = await previewAttributeImport(filePathOrRows);
+    if (preview.issues.length > 0) {
+      throw new AppError(`Spreadsheet validation failed with ${preview.issues.length} issue(s).`, 400);
+    }
+  }
+
+  const summary = {
+    createdAttributes: 0,
+    updatedAttributes: 0,
+    createdValues: 0,
+    updatedValues: 0,
+    totalProcessed: rawRows.length,
+  };
+
+  await prisma.$transaction(async (tx) => {
+    for (const [index, row] of rawRows.entries()) {
+      const attrName = getRowField(row, "attributeName", "name", "attribute", "attribute_name", "title");
+      if (!attrName) continue;
+
+      const slugProvided = getRowField(row, "slug", "attributeSlug");
+      const roleStr = getRowField(row, "displayType", "role", "display_type", "type", "gridAxis");
+      const attrStatusStr = getRowField(row, "status", "attributeStatus", "state");
+      const attrSortStr = getRowField(row, "sortOrder", "attributeSortOrder", "order", "sort");
+      const valuesStr = getRowField(row, "values", "value", "options", "attributeValues", "allowedValues");
+
+      const role = normalizeRole(roleStr || "DROPDOWN");
+      const status = normalizeStatus(attrStatusStr || "ACTIVE");
+      const sortOrder = attrSortStr ? parseInt(attrSortStr, 10) || 0 : index + 1;
+      const attrSlug = slugProvided ? slugify(slugProvided) : slugify(attrName);
+      const finalAttrSlug = attrSlug || `attr-${index + 1}`;
+
+      let attribute = await tx.attribute.findFirst({
+        where: {
+          OR: [
+            { name: { equals: attrName, mode: "insensitive" } },
+            { slug: finalAttrSlug },
+          ],
+        },
+      });
+
+      if (attribute) {
+        attribute = await tx.attribute.update({
+          where: { id: attribute.id },
+          data: {
+            name: attrName,
+            role,
+            status,
+            sortOrder,
+          },
+        });
+        summary.updatedAttributes++;
+      } else {
+        let uniqueSlug = finalAttrSlug;
+        let counter = 1;
+        while (await tx.attribute.findUnique({ where: { slug: uniqueSlug } })) {
+          uniqueSlug = `${finalAttrSlug}-${counter++}`;
+        }
+        attribute = await tx.attribute.create({
+          data: {
+            name: attrName,
+            slug: uniqueSlug,
+            role,
+            status,
+            sortOrder,
+          },
+        });
+        summary.createdAttributes++;
+      }
+
+      // If values are provided, parse and upsert them
+      if (valuesStr) {
+        const rawValueItems = valuesStr.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+
+        for (const [vIdx, rawItem] of rawValueItems.entries()) {
+          let valName = rawItem;
+          let priceAdj = 0;
+
+          // Check if format is "Name (+12)" or "Name (12)"
+          const priceMatch = rawItem.match(/^(.*?)\s*\(\+?([0-9.]+)\)$/);
+          if (priceMatch) {
+            valName = priceMatch[1].trim();
+            priceAdj = parseFloat(priceMatch[2]) || 0;
+          }
+
+          if (!valName) continue;
+
+          const rawValSlug = slugify(valName);
+          const valSlug = rawValSlug || `val-${vIdx + 1}`;
+          const existingVal = await tx.attributeValue.findFirst({
+            where: {
+              attributeId: attribute.id,
+              OR: [
+                { value: { equals: valName, mode: "insensitive" } },
+                { slug: valSlug },
+              ],
+            },
+          });
+
+          const valSortOrder = vIdx + 1;
+
+          if (existingVal) {
+            await tx.attributeValue.update({
+              where: { id: existingVal.id },
+              data: {
+                value: valName,
+                status: "ACTIVE",
+                sortOrder: valSortOrder,
+                priceAdjustment: new Prisma.Decimal(priceAdj),
+              },
+            });
+            summary.updatedValues++;
+          } else {
+            let uniqueValSlug = valSlug;
+            let valCounter = 1;
+            while (
+              await tx.attributeValue.findFirst({
+                where: { attributeId: attribute.id, slug: uniqueValSlug },
+              })
+            ) {
+              uniqueValSlug = `${valSlug}-${valCounter++}`;
+            }
+
+            await tx.attributeValue.create({
+              data: {
+                attributeId: attribute.id,
+                value: valName,
+                slug: uniqueValSlug,
+                status: "ACTIVE",
+                sortOrder: valSortOrder,
+                priceAdjustment: new Prisma.Decimal(priceAdj),
+              },
+            });
+            summary.createdValues++;
+          }
+        }
+      }
+    }
+  });
+
+  return summary;
 }

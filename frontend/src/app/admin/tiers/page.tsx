@@ -32,6 +32,7 @@ import {
   useToast,
   LoadingButton,
 } from "@/components/admin/AdminComponents";
+import { AdminImportWizard, WizardColumnDef, WizardExpectedColumn } from "@/components/admin/AdminImportWizard";
 import { Modal } from "@/components/ui/Modal";
 import {
   useAdminCountries,
@@ -47,7 +48,7 @@ import {
   useUpdateTier,
   useUpdateTierCountries,
 } from "@/hooks/admin/useAdminHooks";
-import { getAdminErrorMessage } from "@/services/adminApi";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
 type TierRow = {
   id: string;
@@ -111,6 +112,13 @@ const visibleColumnsDefault = {
   actions: true,
 };
 
+const tierExpectedColumns: WizardExpectedColumn[] = [
+  { name: "name", required: true, hint: "Tier display name" },
+  { name: "status", hint: "ACTIVE or INACTIVE" },
+  { name: "sortOrder", hint: "Priority sort order (0, 1, 2...)" },
+  { name: "countryCodes", hint: "All countries (ALL) or comma-separated 2-letter ISO country codes" },
+];
+
 function formatDate(value?: string) {
   if (!value) return " — ";
   return new Date(value).toLocaleDateString();
@@ -155,11 +163,6 @@ export default function AdminTiersPage() {
 
   // Import Spreadsheet Modal state
   const [importOpen, setImportOpen] = useState(false);
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importReport, setImportReport] = useState<SpreadsheetReport | null>(null);
-  const [importMessage, setImportMessage] = useState("");
-  const [importing, setImporting] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useAdminForm({
     initialValues: emptyForm,
@@ -199,6 +202,42 @@ export default function AdminTiersPage() {
 
   const { data: dashboardData, isLoading: dashboardLoading } = useAdminTierDashboard();
   const { data: countries = [] } = useAdminCountries();
+
+  const wizardCountryOptions = useMemo(() => {
+    const list = (countries || [])
+      .filter((c: any) => c.status === "ACTIVE" || !c.status)
+      .map((c: any) => ({
+        label: `${c.name} (${c.code.toUpperCase()})`,
+        value: c.code.toUpperCase(),
+      }));
+    return [
+      { label: "All countries", value: "ALL" },
+      ...list,
+    ];
+  }, [countries]);
+
+  const tierWizardColumns = useMemo<WizardColumnDef[]>(() => [
+    { key: "name", header: "Tier Name", required: true, minWidth: "160px", placeholder: "e.g. Wholesale Gold" },
+    {
+      key: "status",
+      header: "Status",
+      type: "select",
+      minWidth: "110px",
+      options: [
+        { label: "Active", value: "ACTIVE" },
+        { label: "Inactive", value: "INACTIVE" },
+      ],
+    },
+    { key: "sortOrder", header: "Sort Order", type: "number", minWidth: "100px" },
+    {
+      key: "countryCodes",
+      header: "Countries",
+      type: "multiselect",
+      options: wizardCountryOptions,
+      minWidth: "160px",
+      placeholder: "All countries or IN, US...",
+    },
+  ], [wizardCountryOptions]);
   const tiersQuery = useAdminTiersPaged({
     page,
     limit,
@@ -418,42 +457,17 @@ export default function AdminTiersPage() {
     }
   };
 
-  const handleImportPreview = async (file: File) => {
+  const downloadSampleTemplate = async () => {
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const report = (await previewTierImport.mutateAsync(formData)) as SpreadsheetReport;
-      setImportReport(report);
-      setImportMessage(report.invalidRows > 0 ? "Fix the validation issues before importing." : "Preview looks good. You can import now.");
+      const response = await adminApi.get("/tiers/sample-template", { responseType: "blob" });
+      downloadBlob(response.data as Blob, "tiers-template.xlsx");
     } catch (error) {
-      setImportMessage(getAdminErrorMessage(error, "Failed to preview tier spreadsheet."));
-      setImportReport(null);
+      showToast(getAdminErrorMessage(error, "Failed to download sample template."), "error");
     }
   };
 
-  const handleImport = async () => {
-    if (!importFile) {
-      showToast("Choose a spreadsheet first.", "error");
-      return;
-    }
 
-    try {
-      setImporting(true);
-      const formData = new FormData();
-      formData.append("file", importFile);
-      await importTiers.mutateAsync(formData);
-      showToast("Tiers imported.");
-      setImportFile(null);
-      setImportReport(null);
-      setImportMessage("");
-      setImportOpen(false);
-      tiersQuery.refetch();
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to import tiers."), "error");
-    } finally {
-      setImporting(false);
-    }
-  };
+
 
   const columns: Column<TierRow>[] = [
     {
@@ -992,135 +1006,26 @@ export default function AdminTiersPage() {
         </Modal>
 
         {/* IMPORT SPREADSHEET MODAL */}
-        <Modal
+        <AdminImportWizard
           open={importOpen}
-          onClose={() => {
-            setImportOpen(false);
-            setImportFile(null);
-            setImportReport(null);
-            setImportMessage("");
-          }}
+          onClose={() => setImportOpen(false)}
           title="Import Tiers Spreadsheet"
-          subtitle="Upload an Excel (.xlsx, .xls) or CSV spreadsheet to create or update pricing tiers in bulk."
-          size="2xl"
-          footer={
-            <div className="flex items-center justify-end gap-2.5 w-full">
-              <button
-                type="button"
-                onClick={() => {
-                  setImportOpen(false);
-                  setImportFile(null);
-                  setImportReport(null);
-                  setImportMessage("");
-                }}
-                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <LoadingButton
-                type="button"
-                onClick={handleImport}
-                loading={importing || importTiers.isPending}
-                loadingText="Importing..."
-                disabled={!importFile || (importReport !== null && importReport.invalidRows > 0)}
-                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
-              >
-                Import Tiers
-              </LoadingButton>
-            </div>
-          }
-        >
-          <div className="space-y-4 p-6">
-            <div className="rounded-lg border-2 border-dashed border-[#E6E6E6] bg-[#FAFAFA] p-6 text-center hover:bg-[#F5F5F5] transition-colors">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                className="hidden"
-                id="tier-import-file"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    setImportFile(file);
-                    void handleImportPreview(file);
-                  }
-                }}
-              />
-              <label htmlFor="tier-import-file" className="cursor-pointer">
-                <Upload size={28} className="mx-auto text-[#9A9A9A] mb-2" />
-                <span className="text-[13.5px] font-semibold text-[#1A1A1A] block">
-                  {importFile ? importFile.name : "Click to select spreadsheet"}
-                </span>
-                <span className="text-[12px] text-[#9A9A9A] mt-1 block">
-                  XLSX, XLS or CSV files supported
-                </span>
-              </label>
-              {importFile && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setImportFile(null);
-                    setImportReport(null);
-                    setImportMessage("");
-                    if (fileInputRef.current) fileInputRef.current.value = "";
-                  }}
-                  className="mt-2 text-[12px] font-medium text-red-600 hover:underline inline-block cursor-pointer"
-                >
-                  Remove file
-                </button>
-              )}
-            </div>
-
-            {previewTierImport.isPending && (
-              <div className="flex items-center gap-2 text-[13px] text-[#6B6B6B]">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
-                Validating and previewing spreadsheet...
-              </div>
-            )}
-
-            {importReport && (
-              <div className="space-y-3 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                  <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
-                    <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Total Rows</div>
-                    <div className="mt-1 text-[18px] font-bold text-[#1A1A1A]">{importReport.totalRows}</div>
-                  </div>
-                  <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
-                    <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Valid Rows</div>
-                    <div className="mt-1 text-[18px] font-bold text-emerald-600">{importReport.validRows}</div>
-                  </div>
-                  <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
-                    <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Invalid Rows</div>
-                    <div className="mt-1 text-[18px] font-bold text-red-600">{importReport.invalidRows}</div>
-                  </div>
-                  <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
-                    <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Duplicates</div>
-                    <div className="mt-1 text-[18px] font-bold text-amber-600">{importReport.duplicateWarnings.length}</div>
-                  </div>
-                </div>
-
-                {importReport.issues.length > 0 && (
-                  <div>
-                    <h4 className="mb-1.5 text-[12.5px] font-semibold text-[#1A1A1A]">Validation Issues</h4>
-                    <div className="max-h-40 overflow-y-auto rounded border border-[#E6E6E6] bg-white divide-y divide-[#F0F0F0]">
-                      {importReport.issues.map((issue, index) => (
-                        <div key={`${issue.row}-${issue.field}-${index}`} className="px-3 py-2 text-[12px] text-red-600">
-                          <span className="font-semibold">Row {issue.row} [{issue.field}]:</span> {issue.message}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {importMessage && !importReport && (
-              <div className="rounded-md bg-red-50 border border-red-200 p-3 text-[12.5px] text-red-700">
-                {importMessage}
-              </div>
-            )}
-          </div>
-        </Modal>
+          subtitle="Upload an Excel (.xlsx, .xls) or CSV spreadsheet to create or update pricing tiers with live preview & direct inline editing."
+          entityName="pricing tiers"
+          columns={tierWizardColumns}
+          expectedColumns={tierExpectedColumns}
+          sampleTemplateUrl="/tiers/sample-template"
+          sampleTemplateFilename="tiers-template.xlsx"
+          previewEndpoint="/tiers/import/preview"
+          executeEndpoint="/tiers/import"
+          onSuccess={(result) => {
+            showToast(
+              `Import complete: ${result?.created ?? 0} created, ${result?.updated ?? 0} updated.`,
+              "success"
+            );
+            tiersQuery.refetch();
+          }}
+        />
 
         {/* CONFIRM DELETE MODALS */}
         <ConfirmModal

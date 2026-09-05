@@ -62,16 +62,54 @@ type PriceImportRow = {
   productId?: string;
   productCode?: string;
   productSlug?: string;
+  productTitle?: string;
   variantId?: string;
   variantSku?: string;
   countryId?: string;
   countryCode?: string;
+  countryName?: string;
   mrp?: string | number;
   sellingPrice?: string | number;
   dealerPrice?: string | number;
   distributorPrice?: string | number;
+  doctorRetailerPrice?: string | number;
   status?: string;
 };
+
+function getRowField(row: Record<string, any>, ...possibleKeys: string[]): string {
+  if (!row || typeof row !== "object") return "";
+  for (const key of possibleKeys) {
+    const val = row[key];
+    if (val !== undefined && val !== null) {
+      if (Array.isArray(val)) {
+        const joined = val.map((v) => String(v).trim()).filter(Boolean).join(", ");
+        if (joined) return joined;
+      } else {
+        const str = String(val).trim();
+        if (str !== "" && str !== "[object Object]") return str;
+      }
+    }
+  }
+  const rowEntries = Object.entries(row);
+  for (const key of possibleKeys) {
+    const cleanKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+    for (const [rowK, rowVal] of rowEntries) {
+      const cleanRowK = rowK.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (cleanKey === cleanRowK) {
+        if (rowVal !== undefined && rowVal !== null) {
+          if (Array.isArray(rowVal)) {
+            const joined = rowVal.map((v) => String(v).trim()).filter(Boolean).join(", ");
+            if (joined) return joined;
+          } else {
+            const str = String(rowVal).trim();
+            if (str !== "" && str !== "[object Object]") return str;
+          }
+        }
+      }
+    }
+  }
+  return "";
+}
 
 type NormalizedPricingRow = {
   id: string;
@@ -127,7 +165,9 @@ function normalizeSearch(value?: string | null) {
 
 function toDecimal(value: string | number | null | undefined) {
   if (value === undefined || value === null || value === "") return null;
-  const parsed = Number(value);
+  const clean = typeof value === "string" ? value.replace(/[^0-9.-]+/g, "") : value;
+  if (clean === "" || clean === null || clean === undefined) return null;
+  const parsed = Number(clean);
   if (!Number.isFinite(parsed) || parsed < 0) throw new AppError("Pricing values must be non-negative numbers.", 400);
   return roundMoney(parsed);
 }
@@ -413,9 +453,9 @@ async function collectPricingRows(query: PricingListQuery) {
   const status = query.status ? normalizeStatus(query.status) : null;
 
   const ids = query.ids?.filter(Boolean) ?? [];
-  const countryIdsFilter = query.countryId
+  const countryIdsFilter = query.countryId && query.countryId !== "ALL"
     ? (() => {
-        const parsedIds = query.countryId.split(",").map((s) => s.trim()).filter(Boolean);
+        const parsedIds = query.countryId.split(",").map((s) => s.trim()).filter((s) => Boolean(s) && s !== "ALL");
         return parsedIds.length > 1 ? { countryId: { in: parsedIds } } : parsedIds.length === 1 ? { countryId: parsedIds[0] } : {};
       })()
     : {};
@@ -893,21 +933,57 @@ async function resolvePricingPreview(input: PricingPreviewInput) {
   });
 }
 
-async function previewPriceImport(filePath: string) {
-  const rows = readSpreadsheetRows(filePath).map((row) => ({
-    productId: row.productId?.trim() || undefined,
-    productCode: row.productCode?.trim() || undefined,
-    productSlug: row.productSlug?.trim() || undefined,
-    variantId: row.variantId?.trim() || undefined,
-    variantSku: row.variantSku?.trim() || undefined,
-    countryId: row.countryId?.trim() || undefined,
-    countryCode: row.countryCode?.trim().toUpperCase() || undefined,
-    mrp: row.mrp,
-    sellingPrice: row.sellingPrice,
-    dealerPrice: row.dealerPrice,
-    distributorPrice: row.distributorPrice,
-    status: row.status?.trim().toUpperCase() || undefined,
-  })) as PriceImportRow[];
+async function previewPriceImport(filePathOrRows: string | Record<string, unknown>[]) {
+  const rawRows = typeof filePathOrRows === "string" ? readSpreadsheetRows(filePathOrRows) : filePathOrRows;
+  const rows = rawRows.map((raw) => {
+    const row = raw as Record<string, any>;
+    const productId = getRowField(row, "productId", "product_id", "id");
+    const productCode = getRowField(row, "productCode", "product_code", "code");
+    const productSlug = getRowField(row, "productSlug", "product_slug", "slug");
+    const productTitle = getRowField(row, "productTitle", "product_title", "productName", "product_name", "product", "title");
+
+    const variantId = getRowField(row, "variantId", "variant_id");
+    const variantSku = getRowField(row, "variantSku", "variant_sku", "sku", "variant");
+
+    const countryId = getRowField(row, "countryId", "country_id");
+    const countryCode = getRowField(row, "countryCode", "country_code", "country", "isoCode");
+    const countryName = getRowField(row, "countryName", "country_name");
+
+    const mrp = getRowField(row, "mrp", "maxRetailPrice", "maximumRetailPrice");
+    const sellingPrice = getRowField(row, "sellingPrice", "selling_price", "price", "salePrice");
+    const dealerPrice = getRowField(row, "dealerPrice", "dealer_price", "wholesalePrice");
+    const distributorPrice = getRowField(
+      row,
+      "doctorRetailerPrice",
+      "doctorPrice",
+      "retailerPrice",
+      "doctor_retailer_price",
+      "doctor_price",
+      "retailer_price",
+      "doctor/retailer price",
+      "distributorPrice",
+      "distributor_price"
+    );
+    const status = getRowField(row, "status", "state");
+
+    return {
+      productId: productId || undefined,
+      productCode: productCode || undefined,
+      productSlug: productSlug || undefined,
+      productTitle: productTitle || undefined,
+      variantId: variantId || undefined,
+      variantSku: variantSku || undefined,
+      countryId: countryId || undefined,
+      countryCode: countryCode ? countryCode.toUpperCase() : undefined,
+      countryName: countryName || undefined,
+      mrp: mrp !== "" ? mrp : undefined,
+      sellingPrice: sellingPrice !== "" ? sellingPrice : undefined,
+      dealerPrice: dealerPrice !== "" ? dealerPrice : undefined,
+      distributorPrice: distributorPrice !== "" ? distributorPrice : undefined,
+      doctorRetailerPrice: distributorPrice !== "" ? distributorPrice : undefined,
+      status: status ? status.toUpperCase() : undefined,
+    } as PriceImportRow;
+  });
 
   const issues: SpreadsheetIssue[] = [];
   const duplicateWarnings: string[] = [];
@@ -916,14 +992,16 @@ async function previewPriceImport(filePath: string) {
   const productIds = new Set<string>();
   const productCodes = new Set<string>();
   const productSlugs = new Set<string>();
+  const productTitles = new Set<string>();
   const variantIds = new Set<string>();
   const variantSkus = new Set<string>();
   const countryIds = new Set<string>();
   const countryCodes = new Set<string>();
+  const countryNames = new Set<string>();
 
   for (const [index, row] of rows.entries()) {
     const rowNumber = index + 2;
-    const key = `${row.productId ?? row.productCode ?? row.productSlug ?? ""}:${row.variantId ?? row.variantSku ?? ""}:${row.countryId ?? row.countryCode ?? ""}`;
+    const key = `${row.productId ?? row.productCode ?? row.productSlug ?? row.productTitle ?? ""}:${row.variantId ?? row.variantSku ?? ""}:${row.countryId ?? row.countryCode ?? row.countryName ?? ""}`;
     if (seen.has(key)) {
       const message = `Duplicate pricing row detected on row ${rowNumber}.`;
       issues.push({ row: rowNumber, field: "row", message });
@@ -931,11 +1009,11 @@ async function previewPriceImport(filePath: string) {
     }
     seen.add(key);
 
-    if (!row.productId && !row.productCode && !row.productSlug) {
-      issues.push({ row: rowNumber, field: "productId", message: "Provide productId, productCode, or productSlug." });
+    if (!row.productId && !row.productCode && !row.productSlug && !row.productTitle) {
+      issues.push({ row: rowNumber, field: "productCode", message: "Provide productCode, productTitle, or slug." });
     }
-    if (!row.countryId && !row.countryCode) {
-      issues.push({ row: rowNumber, field: "countryId", message: "Provide countryId or countryCode." });
+    if (!row.countryId && !row.countryCode && !row.countryName) {
+      issues.push({ row: rowNumber, field: "countryCode", message: "Provide country code or country name." });
     }
     if (row.mrp === undefined || row.mrp === "") issues.push({ row: rowNumber, field: "mrp", message: "MRP is required." });
     if (row.sellingPrice === undefined || row.sellingPrice === "") issues.push({ row: rowNumber, field: "sellingPrice", message: "Selling price is required." });
@@ -943,10 +1021,12 @@ async function previewPriceImport(filePath: string) {
     if (row.productId) productIds.add(row.productId);
     if (row.productCode) productCodes.add(row.productCode);
     if (row.productSlug) productSlugs.add(row.productSlug);
+    if (row.productTitle) productTitles.add(row.productTitle);
     if (row.variantId) variantIds.add(row.variantId);
     if (row.variantSku) variantSkus.add(row.variantSku);
     if (row.countryId) countryIds.add(row.countryId);
     if (row.countryCode) countryCodes.add(row.countryCode);
+    if (row.countryName) countryNames.add(row.countryName);
   }
 
   const [products, variants, countries, existing] = await Promise.all([
@@ -957,6 +1037,7 @@ async function previewPriceImport(filePath: string) {
           ...(productIds.size ? [{ id: { in: Array.from(productIds) } }] : []),
           ...(productCodes.size ? [{ productCode: { in: Array.from(productCodes) } }] : []),
           ...(productSlugs.size ? [{ slug: { in: Array.from(productSlugs) } }] : []),
+          ...(productTitles.size ? [{ title: { in: Array.from(productTitles), mode: "insensitive" as const } }] : []),
         ],
       },
       select: { id: true, title: true, sku: true, productCode: true, slug: true, status: true },
@@ -975,6 +1056,8 @@ async function previewPriceImport(filePath: string) {
         OR: [
           ...(countryIds.size ? [{ id: { in: Array.from(countryIds) } }] : []),
           ...(countryCodes.size ? [{ code: { in: Array.from(countryCodes) } }] : []),
+          ...(countryCodes.size ? [{ name: { in: Array.from(countryCodes), mode: "insensitive" as const } }] : []),
+          ...(countryNames.size ? [{ name: { in: Array.from(countryNames), mode: "insensitive" as const } }] : []),
         ],
       },
       select: { id: true, name: true, code: true, status: true },
@@ -1003,53 +1086,101 @@ async function previewPriceImport(filePath: string) {
 
   const productById = new Map(products.map((item) => [item.id, item]));
   const productBySku = new Map(products.filter((item) => item.sku).map((item) => [item.sku as string, item]));
-  const productByCode = new Map(products.filter((item) => item.productCode).map((item) => [item.productCode as string, item]));
+  const productByCode = new Map(products.filter((item) => item.productCode).map((item) => [(item.productCode as string).toUpperCase(), item]));
   const productBySlug = new Map(products.filter((item) => item.slug).map((item) => [item.slug as string, item]));
+  const productByTitle = new Map(products.map((item) => [item.title.toLowerCase(), item]));
+
   const variantById = new Map(variants.map((item) => [item.id, item]));
   const variantBySku = new Map(variants.filter((item) => item.sku).map((item) => [item.sku as string, item]));
+
   const countryById = new Map(countries.map((item) => [item.id, item]));
-  const countryByCode = new Map(countries.map((item) => [item.code, item]));
+  const countryByCode = new Map(countries.map((item) => [item.code.toUpperCase(), item]));
+  const countryByName = new Map(countries.map((item) => [item.name.toLowerCase(), item]));
   const existingByKey = new Set(existing.map((item) => `${item.productId}:${item.variantId ?? ""}:${item.countryId}`));
+
+  const previewRows: any[] = [];
 
   for (const [index, row] of rows.entries()) {
     const rowNumber = index + 2;
     const product =
       (row.productId ? productById.get(row.productId) : null) ||
-      (row.productCode ? productByCode.get(row.productCode) : null) ||
+      (row.productCode ? productByCode.get(row.productCode.toUpperCase()) : null) ||
       (row.productSlug ? productBySlug.get(row.productSlug) : null) ||
+      (row.productTitle ? productByTitle.get(row.productTitle.toLowerCase()) : null) ||
       null;
     const variant =
       (row.variantId ? variantById.get(row.variantId) : null) ||
       (row.variantSku ? variantBySku.get(row.variantSku) : null) ||
       null;
-    const country =
-      (row.countryId ? countryById.get(row.countryId) : null) ||
-      (row.countryCode ? countryByCode.get(row.countryCode) : null) ||
-      null;
+    const rawCountryCode = String(row.countryCode || "").trim();
+    const rawCountryName = String(row.countryName || "").trim();
+    const rawCountryId = String(row.countryId || "").trim();
+    const isAllCountries =
+      rawCountryCode.toUpperCase() === "ALL" ||
+      rawCountryCode.toUpperCase() === "GLOBAL" ||
+      rawCountryCode === "*" ||
+      rawCountryName.toUpperCase() === "ALL" ||
+      rawCountryName.toLowerCase() === "all countries" ||
+      rawCountryCode.toLowerCase() === "all countries" ||
+      rawCountryId.toUpperCase() === "ALL";
+
+    const subCodes = rawCountryCode.split(/[,;|]/).map((s) => {
+      let c = s.trim().toUpperCase();
+      if (c === "ALL" || c === "GLOBAL" || c === "*" || c === "ALL COUNTRIES") return "ALL";
+      const parenMatch = c.match(/\(([A-Z]{2,3})\)$/);
+      if (parenMatch) c = parenMatch[1];
+      return c;
+    }).filter(Boolean);
+
+    let country: any = null;
+    if (isAllCountries || subCodes.includes("ALL")) {
+      country = { id: "ALL", code: "ALL", name: "All countries", status: "ACTIVE" };
+    } else if (subCodes.length > 1) {
+      const resolved: Array<typeof countries[0]> = [];
+      for (const c of subCodes) {
+        const found = countryByCode.get(c) || countryByName.get(c.toLowerCase());
+        if (found) resolved.push(found);
+      }
+      if (resolved.length === subCodes.length) {
+        const inactive = resolved.find((c) => c.status !== "ACTIVE");
+        country = inactive || {
+          id: "MULTI",
+          code: resolved.map((c) => c.code).join(", "),
+          name: resolved.map((c) => c.name).join(", "),
+          status: "ACTIVE",
+        };
+      }
+    } else {
+      country =
+        (row.countryId ? countryById.get(row.countryId) : null) ||
+        (row.countryCode ? countryByCode.get(rawCountryCode.toUpperCase()) : null) ||
+        (row.countryName ? countryByName.get(rawCountryName.toLowerCase()) : null) ||
+        (row.countryCode ? countryByName.get(rawCountryCode.toLowerCase()) : null) ||
+        null;
+    }
 
     if (!product) {
-      issues.push({ row: rowNumber, field: "product", message: "Product was not found." });
+      issues.push({ row: rowNumber, field: "productCode", message: "Product was not found." });
     } else if (product.status !== "ACTIVE") {
-      issues.push({ row: rowNumber, field: "product", message: "Product is inactive." });
+      issues.push({ row: rowNumber, field: "productCode", message: "Product is inactive." });
     }
 
     if (variant) {
       if (!product || variant.productId !== product.id) {
-        issues.push({ row: rowNumber, field: "variant", message: "Variant does not belong to the selected product." });
+        issues.push({ row: rowNumber, field: "variantSku", message: "Variant does not belong to the selected product." });
       }
       if (variant.status !== "ACTIVE") {
-        issues.push({ row: rowNumber, field: "variant", message: "Variant is inactive." });
+        issues.push({ row: rowNumber, field: "variantSku", message: "Variant is inactive." });
       }
     }
 
     if (!country) {
-      issues.push({ row: rowNumber, field: "country", message: "Country was not found." });
+      issues.push({ row: rowNumber, field: "countryCode", message: "Country was not found." });
     } else if (country.status !== "ACTIVE") {
-      issues.push({ row: rowNumber, field: "country", message: "Country is inactive." });
+      issues.push({ row: rowNumber, field: "countryCode", message: "Country is inactive." });
     }
 
-    const priceKey = `${product?.id ?? row.productId ?? row.productCode ?? row.productSlug}:${variant?.id ?? row.variantId ?? row.variantSku ?? ""}:${country?.id ?? row.countryId ?? row.countryCode}`;
-    if (product && country && existingByKey.has(`${product.id}:${variant?.id ?? row.variantId ?? ""}:${country.id}`)) {
+    if (product && country && country.id !== "ALL" && existingByKey.has(`${product.id}:${variant?.id ?? row.variantId ?? ""}:${country.id}`)) {
       duplicateWarnings.push(`Row ${rowNumber} matches an existing pricing rule.`);
     }
 
@@ -1057,17 +1188,35 @@ async function previewPriceImport(filePath: string) {
     for (const field of numericFields) {
       const raw = row[field];
       if (raw !== undefined && raw !== "") {
-        const parsed = Number(raw);
+        const clean = typeof raw === "string" ? raw.replace(/[^0-9.-]+/g, "") : raw;
+        const parsed = Number(clean);
         if (!Number.isFinite(parsed) || parsed < 0) {
-          issues.push({ row: rowNumber, field, message: `${field} must be a non-negative number.` });
+          const displayField = field === "distributorPrice" ? "Doctor / Retailer price" : field;
+          issues.push({ row: rowNumber, field, message: `${displayField} must be a non-negative number.` });
         }
       }
     }
-    void priceKey;
+
+    previewRows.push({
+      ...row,
+      productId: product?.id ?? row.productId,
+      productCode: product?.productCode ?? row.productCode ?? "",
+      productTitle: product?.title ?? row.productTitle ?? "",
+      variantSku: variant?.sku ?? row.variantSku ?? "",
+      countryId: country?.id ?? row.countryId,
+      countryCode: country ? country.code.toUpperCase() : (row.countryCode ?? ""),
+      countryName: country?.name ?? row.countryName ?? "",
+      mrp: row.mrp,
+      sellingPrice: row.sellingPrice,
+      dealerPrice: row.dealerPrice,
+      distributorPrice: row.distributorPrice,
+      doctorRetailerPrice: row.distributorPrice,
+      status: row.status ?? "ACTIVE",
+    });
   }
 
   return {
-    rows,
+    rows: previewRows,
     issues,
     duplicateWarnings,
   };
@@ -1113,74 +1262,152 @@ function exportRows(rows: NormalizedPricingRow[]) {
   );
 }
 
-async function importPriceSpreadsheet(filePath: string) {
-  const rows = readSpreadsheetRows(filePath);
-  const preview = await previewPriceImport(filePath);
+async function importPriceSpreadsheet(filePathOrRows: string | Record<string, unknown>[]) {
+  const rawRows = typeof filePathOrRows === "string" ? readSpreadsheetRows(filePathOrRows) : filePathOrRows;
+  const preview = await previewPriceImport(filePathOrRows);
   if (preview.issues.length > 0) {
     throw new AppError(`Import validation failed with ${preview.issues.length} issue(s).`, 400);
   }
 
   const summary = { created: 0, updated: 0 };
   await prisma.$transaction(async (tx) => {
-    for (const row of rows as PriceImportRow[]) {
+    for (const raw of rawRows) {
+      const row = raw as Record<string, any>;
+      const productId = getRowField(row, "productId", "product_id", "id");
+      const productCode = getRowField(row, "productCode", "product_code", "code");
+      const productSlug = getRowField(row, "productSlug", "product_slug", "slug");
+      const productTitle = getRowField(row, "productTitle", "product_title", "productName", "product_name", "product", "title");
+
+      const variantId = getRowField(row, "variantId", "variant_id");
+      const variantSku = getRowField(row, "variantSku", "variant_sku", "sku", "variant");
+
+      const countryId = getRowField(row, "countryId", "country_id");
+      const countryCode = getRowField(row, "countryCode", "country_code", "country", "isoCode");
+      const countryName = getRowField(row, "countryName", "country_name");
+
+      const rawMrp = getRowField(row, "mrp", "maxRetailPrice", "maximumRetailPrice");
+      const rawSelling = getRowField(row, "sellingPrice", "selling_price", "price", "salePrice");
+      const rawDealer = getRowField(row, "dealerPrice", "dealer_price", "wholesalePrice");
+      const rawDistributor = getRowField(
+        row,
+        "doctorRetailerPrice",
+        "doctorPrice",
+        "retailerPrice",
+        "doctor_retailer_price",
+        "doctor_price",
+        "retailer_price",
+        "doctor/retailer price",
+        "distributorPrice",
+        "distributor_price"
+      );
+      const rawStatus = getRowField(row, "status", "state");
+
       const product =
-        (row.productId ? await tx.product.findUnique({ where: { id: row.productId }, select: { id: true, status: true } }) : null) ||
-        (row.productCode ? await tx.product.findFirst({ where: { productCode: row.productCode, deletedAt: null }, select: { id: true, status: true } }) : null) ||
-        (row.productSlug ? await tx.product.findFirst({ where: { slug: row.productSlug, deletedAt: null }, select: { id: true, status: true } }) : null);
+        (productId ? await tx.product.findUnique({ where: { id: productId }, select: { id: true, status: true } }) : null) ||
+        (productCode ? await tx.product.findFirst({ where: { productCode: { equals: productCode, mode: "insensitive" }, deletedAt: null }, select: { id: true, status: true } }) : null) ||
+        (productSlug ? await tx.product.findFirst({ where: { slug: { equals: productSlug, mode: "insensitive" }, deletedAt: null }, select: { id: true, status: true } }) : null) ||
+        (productTitle ? await tx.product.findFirst({ where: { title: { equals: productTitle, mode: "insensitive" }, deletedAt: null }, select: { id: true, status: true } }) : null);
       if (!product) throw new AppError("Product not found during import.", 400);
 
       const variant =
-        (row.variantId ? await tx.productVariant.findUnique({ where: { id: row.variantId }, select: { id: true, productId: true, status: true } }) : null) ||
-        (row.variantSku ? await tx.productVariant.findFirst({ where: { sku: row.variantSku, deletedAt: null }, select: { id: true, productId: true, status: true } }) : null);
+        (variantId ? await tx.productVariant.findUnique({ where: { id: variantId }, select: { id: true, productId: true, status: true } }) : null) ||
+        (variantSku ? await tx.productVariant.findFirst({ where: { sku: { equals: variantSku, mode: "insensitive" }, deletedAt: null }, select: { id: true, productId: true, status: true } }) : null);
 
       if (variant && variant.productId !== product.id) throw new AppError("Variant does not belong to selected product.", 400);
 
-      const country =
-        (row.countryId ? await tx.country.findUnique({ where: { id: row.countryId }, select: { id: true, status: true } }) : null) ||
-        (row.countryCode ? await tx.country.findFirst({ where: { code: row.countryCode }, select: { id: true, status: true } }) : null);
-      if (!country) throw new AppError("Country not found during import.", 400);
+      const rawCountryCode = String(countryCode || "").trim();
+      const rawCountryName = String(countryName || "").trim();
+      const rawCountryId = String(countryId || "").trim();
+      const isAllCountries =
+        rawCountryCode.toUpperCase() === "ALL" ||
+        rawCountryCode.toUpperCase() === "GLOBAL" ||
+        rawCountryCode === "*" ||
+        rawCountryName.toUpperCase() === "ALL" ||
+        rawCountryName.toLowerCase() === "all countries" ||
+        rawCountryCode.toLowerCase() === "all countries" ||
+        rawCountryId.toUpperCase() === "ALL";
 
-      const normalizedMrp = toDecimal(row.mrp);
-      const normalizedSellingPrice = toDecimal(row.sellingPrice);
-      const normalizedDealerPrice = toDecimal(row.dealerPrice);
-      const normalizedDistributorPrice = toDecimal(row.distributorPrice);
+      let targetCountries: Array<{ id: string; currencyId?: string | null; status: string }> = [];
+      const subCodes = rawCountryCode.split(/[,;|]/).map((s) => {
+        let c = s.trim().toUpperCase();
+        if (c === "ALL" || c === "GLOBAL" || c === "*" || c === "ALL COUNTRIES") return "ALL";
+        const parenMatch = c.match(/\(([A-Z]{2,3})\)$/);
+        if (parenMatch) c = parenMatch[1];
+        return c;
+      }).filter(Boolean);
+
+      if (isAllCountries || subCodes.includes("ALL")) {
+        targetCountries = await tx.country.findMany({
+          where: { status: "ACTIVE" },
+          select: { id: true, currencyId: true, status: true },
+        });
+        if (!targetCountries.length) throw new AppError("No active countries found for import.", 400);
+      } else if (subCodes.length > 1) {
+        targetCountries = await tx.country.findMany({
+          where: {
+            code: { in: subCodes, mode: "insensitive" },
+          },
+          select: { id: true, currencyId: true, status: true },
+        });
+        if (targetCountries.length !== subCodes.length) {
+          throw new AppError("One or more countries not found during import.", 400);
+        }
+      } else {
+        const country =
+          (countryId ? await tx.country.findUnique({ where: { id: countryId }, select: { id: true, currencyId: true, status: true } }) : null) ||
+          (countryCode ? await tx.country.findFirst({ where: { code: { equals: countryCode, mode: "insensitive" } }, select: { id: true, currencyId: true, status: true } }) : null) ||
+          (countryName ? await tx.country.findFirst({ where: { name: { equals: countryName, mode: "insensitive" } }, select: { id: true, currencyId: true, status: true } }) : null) ||
+          (countryCode ? await tx.country.findFirst({ where: { name: { equals: countryCode, mode: "insensitive" } }, select: { id: true, currencyId: true, status: true } }) : null);
+        if (!country) throw new AppError("Country not found during import.", 400);
+        targetCountries = [country];
+      }
+
+      const normalizedMrp = toDecimal(rawMrp);
+      const normalizedSellingPrice = toDecimal(rawSelling);
+      const normalizedDealerPrice = toDecimal(rawDealer);
+      const normalizedDistributorPrice = toDecimal(rawDistributor);
       if (normalizedMrp == null || normalizedSellingPrice == null) throw new AppError("MRP and selling price are required.", 400);
 
-      const existing = await tx.productPrice.findFirst({
-        where: { productId: product.id, variantId: variant?.id ?? null, countryId: country.id },
-        select: { id: true },
-      });
+      const baseCurrency = await tx.currency.findFirst({ where: { isBase: true }, select: { id: true } });
 
-      if (existing) {
-        await tx.productPrice.update({
-          where: { id: existing.id },
-          data: {
-            mrp: normalizedMrp,
-            sellingPrice: normalizedSellingPrice,
-            dealerPrice: normalizedDealerPrice,
-            distributorPrice: normalizedDistributorPrice,
-            status: normalizeStatus(row.status ?? "ACTIVE"),
-          },
-        });
-        summary.updated += 1;
-      } else {
-        const baseCurrency = await tx.currency.findFirst({ where: { isBase: true }, select: { id: true } });
-        if (!baseCurrency) throw new AppError("Base currency not configured.", 400);
+      for (const targetCountry of targetCountries) {
+        const effectiveCurrencyId = targetCountry.currencyId || baseCurrency?.id;
+        if (!effectiveCurrencyId) throw new AppError("Base currency not configured.", 400);
 
-        await tx.productPrice.create({
-          data: {
-            productId: product.id,
-            variantId: variant?.id ?? null,
-            countryId: country.id,
-            currencyId: baseCurrency.id,
-            mrp: normalizedMrp,
-            sellingPrice: normalizedSellingPrice,
-            dealerPrice: normalizedDealerPrice,
-            distributorPrice: normalizedDistributorPrice,
-            status: normalizeStatus(row.status ?? "ACTIVE"),
-          },
+        const existing = await tx.productPrice.findFirst({
+          where: { productId: product.id, variantId: variant?.id ?? null, countryId: targetCountry.id },
+          select: { id: true },
         });
-        summary.created += 1;
+
+        if (existing) {
+          await tx.productPrice.update({
+            where: { id: existing.id },
+            data: {
+              currencyId: effectiveCurrencyId,
+              mrp: normalizedMrp,
+              sellingPrice: normalizedSellingPrice,
+              dealerPrice: normalizedDealerPrice,
+              distributorPrice: normalizedDistributorPrice,
+              status: normalizeStatus(rawStatus || "ACTIVE"),
+            },
+          });
+          summary.updated += 1;
+        } else {
+          await tx.productPrice.create({
+            data: {
+              productId: product.id,
+              variantId: variant?.id ?? null,
+              countryId: targetCountry.id,
+              currencyId: effectiveCurrencyId,
+              mrp: normalizedMrp,
+              sellingPrice: normalizedSellingPrice,
+              dealerPrice: normalizedDealerPrice,
+              distributorPrice: normalizedDistributorPrice,
+              status: normalizeStatus(rawStatus || "ACTIVE"),
+            },
+          });
+          summary.created += 1;
+        }
       }
     }
   });
@@ -1390,9 +1617,90 @@ export async function exportPricingSpreadsheet(query: PricingListQuery) {
   return exportRows(result.data);
 }
 
+export function generateSamplePricingTemplate() {
+  const sampleRows = [
+    {
+      productTitle: "MBT 022 Bracket System",
+      productCode: "BRK-MBT-22",
+      productSlug: "metal-bracket-mbt-022",
+      variantSku: "VAR-MB-001-U",
+      countryCode: "IN",
+      mrp: "1200",
+      sellingPrice: "950",
+      dealerPrice: "850",
+      doctorRetailerPrice: "750",
+      distributorPrice: "750",
+      status: "ACTIVE",
+    },
+    {
+      productTitle: "NiTi Archwire Upper 016",
+      productCode: "WIR-NT-16U",
+      productSlug: "niti-archwire-upper-016",
+      variantSku: "VAR-NW-002-STD",
+      countryCode: "US",
+      mrp: "25",
+      sellingPrice: "19.50",
+      dealerPrice: "16",
+      doctorRetailerPrice: "14",
+      distributorPrice: "14",
+      status: "ACTIVE",
+    },
+    {
+      productTitle: "Bondable Buccal Tube 1st Molar",
+      productCode: "TUB-BND-01",
+      productSlug: "bondable-buccal-tube",
+      variantSku: "VAR-TB-001",
+      countryCode: "ALL",
+      mrp: "100",
+      sellingPrice: "80",
+      dealerPrice: "70",
+      doctorRetailerPrice: "60",
+      distributorPrice: "60",
+      status: "ACTIVE",
+    },
+  ];
+
+  return writeSpreadsheetBuffer(
+    sampleRows,
+    "Pricing",
+    [
+      { key: "productTitle", header: "productTitle" },
+      { key: "productCode", header: "productCode" },
+      { key: "productSlug", header: "productSlug" },
+      { key: "variantSku", header: "variantSku" },
+      { key: "countryCode", header: "countryCode" },
+      { key: "mrp", header: "mrp" },
+      { key: "sellingPrice", header: "sellingPrice" },
+      { key: "dealerPrice", header: "dealerPrice" },
+      { key: "doctorRetailerPrice", header: "doctorRetailerPrice" },
+      { key: "status", header: "status" },
+    ],
+  );
+}
+
+
 export async function previewPricingImport(filePath: string) {
   const preview = await previewPriceImport(filePath);
   removeTempFile(filePath);
+
+  const issuesByRow = new Map<number, string[]>();
+  for (const issue of preview.issues) {
+    const list = issuesByRow.get(issue.row) || [];
+    list.push(`${issue.field}: ${issue.message}`);
+    issuesByRow.set(issue.row, list);
+  }
+
+  const previewRows = preview.rows.map((row, index) => {
+    const rowNumber = index + 2;
+    const rowErrors = issuesByRow.get(rowNumber) || [];
+    return {
+      rowNumber,
+      isValid: rowErrors.length === 0,
+      errors: rowErrors,
+      ...row,
+    };
+  });
+
   return {
     totalRows: preview.rows.length,
     validRows: Math.max(0, preview.rows.length - preview.issues.length),
@@ -1400,11 +1708,12 @@ export async function previewPricingImport(filePath: string) {
     issues: preview.issues,
     duplicateWarnings: preview.duplicateWarnings,
     sampleRows: preview.rows.slice(0, 10).map((row, index) => ({ row: index + 2, ...row })),
-  } satisfies SpreadsheetPreview;
+    rows: previewRows,
+  };
 }
 
-export async function importPricingSpreadsheet(filePath: string) {
-  return importPriceSpreadsheet(filePath);
+export async function importPricingSpreadsheet(filePathOrRows: string | Record<string, unknown>[]) {
+  return importPriceSpreadsheet(filePathOrRows);
 }
 
 export async function createTierPricing(productId: string, data: Record<string, unknown>) {

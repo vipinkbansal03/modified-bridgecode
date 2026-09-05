@@ -29,6 +29,14 @@ export const exportSpreadsheet = asyncHandler(async (_req: AuthRequest, res: Res
   return res.status(200).send(buffer);
 });
 
+export const downloadSampleTemplate = asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const buffer = S.generateSampleCategoriesTemplate();
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", 'attachment; filename="categories-template.xlsx"');
+  return res.status(200).send(buffer);
+});
+
+
 export const previewImport = asyncHandler(async (req: AuthRequest, res: Response) => {
   const file = req.file as Express.Multer.File | undefined;
   if (!file) return ApiResponse.success(res, "No file uploaded.", { totalRows: 0, validRows: 0, invalidRows: 0, issues: ["No spreadsheet file provided."] });
@@ -40,6 +48,12 @@ export const previewImport = asyncHandler(async (req: AuthRequest, res: Response
 });
 
 export const importSpreadsheet = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const rows = req.body?.rows;
+  if (Array.isArray(rows) && rows.length > 0) {
+    const result = await S.importCategoriesSpreadsheet(rows);
+    return ApiResponse.success(res, "Categories imported successfully.", result);
+  }
+
   const file = req.file as Express.Multer.File | undefined;
   if (!file) return ApiResponse.success(res, "No file uploaded.", { created: 0, updated: 0, report: { totalRows: 0, validRows: 0, invalidRows: 0, issues: ["No spreadsheet file provided."], duplicateWarnings: [], sampleRows: [] } });
   try {

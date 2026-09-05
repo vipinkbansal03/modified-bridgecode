@@ -94,6 +94,11 @@ export default function PaymentsPage() {
         if (!prev) return prev;
         return {
           ...prev,
+          paymentMethods: prev.paymentMethods.map((pm) =>
+            pm.id === paymentMethodId && !currentEnabled
+              ? { ...pm, isEnabled: true }
+              : pm,
+          ),
           matrix: prev.matrix.map((row) => {
             if (row.countryId !== countryId) return row;
             return {
@@ -111,6 +116,54 @@ export default function PaymentsPage() {
       showToast("Payment method country setting updated.", "success");
     } catch {
       showToast("Could not update payment method setting.", "error");
+    } finally {
+      setUpdatingCell(null);
+    }
+  };
+
+  const handleToggleGlobal = async (
+    paymentMethodId: string,
+    newEnabled: boolean,
+  ) => {
+    if (!canUpdate) {
+      showToast("You do not have permission to update payment settings.", "error");
+      return;
+    }
+
+    const cellKey = `global:${paymentMethodId}`;
+    setUpdatingCell(cellKey);
+    try {
+      await adminApi.put("/payment-methods/global", {
+        paymentMethodId,
+        isEnabled: newEnabled,
+        applyToAllCountries: true,
+      });
+
+      // Optimistic update: update payment method global status and all country rows
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          paymentMethods: prev.paymentMethods.map((pm) =>
+            pm.id === paymentMethodId ? { ...pm, isEnabled: newEnabled } : pm,
+          ),
+          matrix: prev.matrix.map((row) => ({
+            ...row,
+            methods: row.methods.map((m) =>
+              m.id === paymentMethodId ? { ...m, isEnabled: newEnabled } : m,
+            ),
+          })),
+        };
+      });
+
+      showToast(
+        newEnabled
+          ? "Payment gateway enabled across all countries."
+          : "Payment gateway disabled across all countries.",
+        "success",
+      );
+    } catch {
+      showToast("Could not update global payment gateway settings.", "error");
     } finally {
       setUpdatingCell(null);
     }
@@ -164,6 +217,11 @@ export default function PaymentsPage() {
                 <span className="rounded bg-[#EFEFEF] px-1.5 py-0.5 text-[10px] uppercase font-mono text-[#6B6B6B]">
                   {pm.type}
                 </span>
+                {!pm.isEnabled && (
+                  <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+                    Globally Disabled
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -213,12 +271,86 @@ export default function PaymentsPage() {
                           <span className="text-[10px] font-normal normal-case text-[#9A9A9A]">
                             {pm.name}
                           </span>
+                          {!pm.isEnabled && (
+                            <span className="rounded bg-red-100 px-1.5 py-0.2 text-[9px] font-semibold normal-case text-red-700">
+                              Globally Disabled
+                            </span>
+                          )}
                         </div>
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E6E6E6]">
+                  {/* Master Switch Row - Apply to All Countries */}
+                  <tr className="bg-[#F8F9FB] border-b-2 border-[#E5E7EB]">
+                    <td className="px-5 py-3.5 font-semibold text-[#1A1A1A]">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">🌐</span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-[13px] text-[#1A1A1A]">
+                              All Countries (Global Switch)
+                            </span>
+                            <span className="rounded bg-[#E5E7EB] px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-[#4B5563]">
+                              Master
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[#6B6B6B]">
+                            Toggle all countries at once
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+
+                    {(data?.paymentMethods ?? []).map((pm) => {
+                      const activeCount = (data?.matrix ?? []).filter((row) =>
+                        row.methods.find((m) => m.id === pm.id)?.isEnabled,
+                      ).length;
+                      const totalCount = data?.matrix?.length ?? 0;
+                      const isAllEnabled = pm.isEnabled && activeCount === totalCount && totalCount > 0;
+                      const isUpdating = updatingCell === `global:${pm.id}`;
+
+                      return (
+                        <td
+                          key={`master-${pm.id}`}
+                          className="px-5 py-3.5 text-center align-middle"
+                        >
+                          <div className="inline-flex flex-col items-center gap-1">
+                            <label
+                              className="inline-flex cursor-pointer items-center justify-center"
+                              title={`Toggle ${pm.name} for all countries`}
+                            >
+                              <input
+                                type="checkbox"
+                                disabled={isUpdating || !canUpdate}
+                                checked={isAllEnabled}
+                                onChange={() =>
+                                  handleToggleGlobal(pm.id, !isAllEnabled)
+                                }
+                                className="sr-only peer"
+                              />
+                              <div className="relative h-5 w-9 rounded-full bg-[#D1D5DB] transition-colors peer-checked:bg-[#E31E24] peer-disabled:opacity-50">
+                                <span
+                                  className={`absolute top-0.5 left-0.5 h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    isAllEnabled ? "translate-x-4" : ""
+                                  }`}
+                                />
+                              </div>
+                            </label>
+                            <span className="text-[9.5px] font-medium text-[#6B6B6B]">
+                              {isAllEnabled
+                                ? "All Active"
+                                : activeCount > 0
+                                ? `${activeCount}/${totalCount} Active`
+                                : "All Disabled"}
+                            </span>
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+
                   {filteredMatrix.map((row) => (
                     <tr
                       key={row.countryId}
@@ -235,6 +367,8 @@ export default function PaymentsPage() {
                       </td>
 
                       {row.methods.map((method) => {
+                        const globalPm = (data?.paymentMethods ?? []).find((p) => p.id === method.id);
+                        const isGloballyDisabled = globalPm ? !globalPm.isEnabled : false;
                         const cellKey = `${method.id}:${row.countryId}`;
                         const isUpdating = updatingCell === cellKey;
 

@@ -7,6 +7,7 @@ import {
   getAvailablePaymentMethodsForCountry,
   initiatePaymentForOrder,
   updateAdminPaymentMethodCountry,
+  updateAdminPaymentMethodGlobal,
   verifyPaymentForOrder,
 } from "./paymentMethods.service";
 
@@ -29,6 +30,16 @@ export async function updateAdminPaymentMethodCountryController(req: AuthRequest
     Boolean(isEnabled),
   );
   return ApiResponse.success(res, "Payment method country settings updated.", updated);
+}
+
+export async function updateAdminPaymentMethodGlobalController(req: AuthRequest, res: Response) {
+  const { paymentMethodId, isEnabled, applyToAllCountries } = req.body;
+  const updated = await updateAdminPaymentMethodGlobal(
+    paymentMethodId,
+    Boolean(isEnabled),
+    applyToAllCountries !== undefined ? Boolean(applyToAllCountries) : true,
+  );
+  return ApiResponse.success(res, "Global payment method settings updated.", updated);
 }
 
 export async function initiateCustomerOrderPaymentController(req: CustomerAuthRequest, res: Response) {

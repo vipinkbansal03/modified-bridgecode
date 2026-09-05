@@ -7,6 +7,7 @@ router.use(protect);
 router.get("/", requirePermission("categories.view", "categories.manage"), C.list);
 router.post("/", requirePermission("categories.manage"), C.create);
 router.get("/export", requirePermission("categories.view", "categories.manage"), C.exportSpreadsheet);
+router.get("/sample-template", requirePermission("categories.view", "categories.manage"), C.downloadSampleTemplate);
 router.post("/import/preview", requirePermission("categories.manage"), upload.single("file"), C.previewImport);
 router.post("/import", requirePermission("categories.manage"), upload.single("file"), C.importSpreadsheet);
 router.put("/reorder", requirePermission("categories.manage"), C.reorder);

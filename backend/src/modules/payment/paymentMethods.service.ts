@@ -136,7 +136,84 @@ export async function updateAdminPaymentMethodCountry(
     },
   });
 
+  if (isEnabled) {
+    await prisma.paymentMethod.update({
+      where: { id: paymentMethodId },
+      data: { isEnabled: true },
+    });
+  }
+
   return mapping;
+}
+
+export async function updateAdminPaymentMethodGlobal(
+  paymentMethodId: string,
+  isEnabled: boolean,
+  applyToAllCountries: boolean = true,
+) {
+  const pm = await prisma.paymentMethod.update({
+    where: { id: paymentMethodId },
+    data: { isEnabled },
+  });
+
+  if (applyToAllCountries) {
+    const countries = await prisma.country.findMany({
+      where: { status: "ACTIVE" },
+      select: { id: true },
+    });
+
+    await prisma.$transaction(
+      countries.map((c) =>
+        prisma.paymentMethodCountry.upsert({
+          where: {
+            paymentMethodId_countryId: {
+              paymentMethodId,
+              countryId: c.id,
+            },
+          },
+          update: { isEnabled },
+          create: {
+            paymentMethodId,
+            countryId: c.id,
+            isEnabled,
+          },
+        })
+      )
+    );
+  }
+
+  // Keep System Configuration settings in sync
+  if (pm.code === "RAZORPAY") {
+    await prisma.setting.upsert({
+      where: { key: "payment.razorpay_enabled" },
+      update: { value: isEnabled ? "true" : "false" },
+      create: {
+        key: "payment.razorpay_enabled",
+        value: isEnabled ? "true" : "false",
+        group: "payment",
+        label: "Razorpay Enabled",
+        type: "boolean",
+        isSecret: false,
+        isEnabled: true,
+      },
+    });
+  } else if (pm.code === "STRIPE") {
+    await prisma.setting.upsert({
+      where: { key: "payment.stripe_enabled" },
+      update: { value: isEnabled ? "true" : "false" },
+      create: {
+        key: "payment.stripe_enabled",
+        value: isEnabled ? "true" : "false",
+        group: "payment",
+        label: "Stripe Enabled",
+        type: "boolean",
+        isSecret: false,
+        isEnabled: true,
+      },
+    });
+  }
+
+  return pm;
 }
 
 export async function initiatePaymentForOrder(
@@ -198,6 +275,10 @@ export async function initiatePaymentForOrder(
     where: { code: paymentMethodCode.toUpperCase() },
     include: { configs: true },
   });
+
+  if (!pm || !pm.isEnabled) {
+    throw new AppError("The selected payment method is currently disabled.", 400);
+  }
 
   const configMap: Record<string, string> = {};
   if (pm) {

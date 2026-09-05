@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as Yup from "yup";
@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Copy,
+  Download,
   ExternalLink,
   GripVertical,
   Layers,
@@ -18,9 +19,11 @@ import {
   Sliders,
   Tag,
   Trash2,
+  Upload,
   XCircle,
   Zap,
 } from "lucide-react";
+import { adminApi } from "@/services/adminApi";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
@@ -40,6 +43,7 @@ import { AttributeRoleBadge } from "@/components/admin/attributes/AttributeRoleB
 import { AttributeValueEditors } from "@/components/admin/attributes/AttributeValueEditors";
 import { SortableList, toSortOrderPayload } from "@/components/admin/SortableList";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
+import { AdminImportWizard, WizardColumnDef } from "@/components/admin/AdminImportWizard";
 import { Modal } from "@/components/ui/Modal";
 import {
   useAdminAttribute,
@@ -59,6 +63,15 @@ import type { ApiAttribute } from "@/types/api.types";
 
 type EditorMode = "create" | "edit" | null;
 type ColumnKey = "name" | "role" | "status" | "values" | "sortOrder";
+
+interface SpreadsheetPreview {
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  issues: Array<{ row: number; field: string; message: string }>;
+  duplicateWarnings: string[];
+  sampleRows: Array<Record<string, unknown>>;
+}
 
 const DEFAULT_COLUMNS: Record<ColumnKey, boolean> = {
   name: true,
@@ -81,6 +94,47 @@ const attributeSchema = Yup.object({
   role: Yup.string().oneOf(["DROPDOWN", "X_GRID", "Y_GRID"]).required("Display type is required"),
   status: Yup.string().oneOf(["ACTIVE", "INACTIVE"]).required("Status is required"),
 });
+
+const attributeWizardColumns: WizardColumnDef[] = [
+  { key: "name", header: "Attribute Name", required: true, minWidth: "170px" },
+  {
+    key: "role",
+    header: "Display Type",
+    required: true,
+    type: "select",
+    options: [
+      { label: "Dropdown", value: "DROPDOWN" },
+      { label: "X-Axis Grid", value: "X_GRID" },
+      { label: "Y-Axis Grid", value: "Y_GRID" },
+    ],
+    minWidth: "150px",
+  },
+  {
+    key: "status",
+    header: "Status",
+    required: true,
+    type: "select",
+    options: [
+      { label: "Active", value: "ACTIVE" },
+      { label: "Inactive", value: "INACTIVE" },
+    ],
+    minWidth: "120px",
+  },
+  {
+    key: "values",
+    header: "Attribute Values",
+    required: true,
+    minWidth: "280px",
+    placeholder: "e.g. MBT, Roth, Alexander (+10)",
+  },
+];
+
+const attributeExpectedColumns = [
+  { name: "attributeName", required: true, hint: "Attribute Name (or name), e.g. Slot" },
+  { name: "displayType", required: true, hint: "Display Type (or role): DROPDOWN, X_GRID, Y_GRID" },
+  { name: "status", hint: "ACTIVE or INACTIVE" },
+  { name: "values", required: true, hint: "Comma-separated values, e.g. .018, .022 (+15)" },
+];
 
 export default function AttributesPage() {
   const { hasPermission } = useAdminAuth();
@@ -113,6 +167,36 @@ export default function AttributesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  const [importOpen, setImportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const exportAttributes = async () => {
+    try {
+      setExporting(true);
+      const response = await adminApi.get("/attributes/export", { responseType: "blob" });
+      const blob = new Blob([response.data], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `attributes-export-${Date.now()}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      showToast("Attributes exported successfully.", "success");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to export attributes."), "error");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const openImportDialog = () => {
+    setImportOpen(true);
+  };
 
   const { data: editingAttribute, isLoading: editLoading } = useAdminAttribute(editingId ?? "");
 
@@ -415,6 +499,19 @@ export default function AttributesPage() {
               })),
             options: COLUMN_OPTIONS,
           }}
+          exportAction={{
+            onClick: exportAttributes,
+            label: "Export Excel",
+            isLoading: exporting,
+          }}
+          importAction={
+            canCreate
+              ? {
+                  onClick: openImportDialog,
+                  label: "Import Excel",
+                }
+              : undefined
+          }
           refresh={{
             onRefresh: () => {
               void refetch().then(() => showToast("Attributes refreshed."));
@@ -788,6 +885,28 @@ export default function AttributesPage() {
         isPermanentDeleting={bulkSaving}
         softDeleteDescription="Hides the selected attributes from the catalog while preserving associations."
         permanentDeleteDescription="Physically deletes the selected attributes from the database."
+      />
+
+      {/* EXCEL IMPORT WIZARD */}
+      <AdminImportWizard
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        title="Import Attributes Excel"
+        subtitle="Upload an .xlsx or .csv file to bulk create or update attributes with live preview & direct inline editing."
+        entityName="attributes"
+        columns={attributeWizardColumns}
+        expectedColumns={attributeExpectedColumns}
+        sampleTemplateUrl="/attributes/sample-template"
+        sampleTemplateFilename="attributes-template.xlsx"
+        previewEndpoint="/attributes/import/preview"
+        executeEndpoint="/attributes/import"
+        onSuccess={(result) => {
+          showToast(
+            `Import complete: ${result?.createdAttributes ?? result?.created ?? 0} created, ${result?.updatedAttributes ?? result?.updated ?? 0} updated.`,
+            "success"
+          );
+          refetch();
+        }}
       />
 
       {ToastComponent}

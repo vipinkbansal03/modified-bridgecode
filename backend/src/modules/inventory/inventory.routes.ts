@@ -9,6 +9,7 @@ router.get("/dashboard", requirePermission("inventory.view", "inventory.manage")
 router.get("/alerts", requirePermission("inventory.view", "inventory.manage"), C.alerts);
 router.get("/adjustments", requirePermission("inventory.view", "inventory.manage"), C.listAdjustments);
 router.get("/export", requirePermission("inventory.view", "inventory.manage"), C.exportSpreadsheet);
+router.get("/sample-template", requirePermission("inventory.view", "inventory.manage"), C.downloadSampleTemplate);
 router.post("/import/preview", requirePermission("inventory.manage"), upload.single("file"), C.previewImport);
 router.post("/import", requirePermission("inventory.manage"), upload.single("file"), C.importSpreadsheet);
 router.post("/bulk", requirePermission("inventory.manage"), C.bulkUpdate);

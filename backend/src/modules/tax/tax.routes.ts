@@ -24,6 +24,7 @@ router.get("/", requirePermission("tax.view", "tax.manage"), TaxController.list)
 router.get("/dashboard", requirePermission("tax.view", "tax.manage"), TaxController.dashboard);
 router.get("/preview", requirePermission("tax.view", "tax.manage"), TaxController.preview);
 router.get("/export", requirePermission("tax.view", "tax.manage"), TaxController.exportSpreadsheet);
+router.get("/sample-template", requirePermission("tax.view", "tax.manage"), TaxController.downloadSampleTemplate);
 router.post("/import/preview", requirePermission("tax.manage"), upload.single("file"), TaxController.previewImport);
 router.post("/import", requirePermission("tax.manage"), upload.single("file"), TaxController.importSpreadsheet);
 router.post("/bulk", requirePermission("tax.manage"), TaxController.bulk);

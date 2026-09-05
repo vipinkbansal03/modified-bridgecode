@@ -1,5 +1,6 @@
 import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
+import { getSettingValue } from "../settings/settings.service";
 
 type ProductContentInput = {
   title: string;
@@ -118,8 +119,10 @@ async function translateJson<T extends Record<string, unknown>>({
     throw new AppError("Only the OpenAI AI provider is currently supported.", 400);
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = (await getSettingValue("ai.openai_api_key")) || process.env.OPENAI_API_KEY;
   if (!apiKey) throw new AppError("OPENAI_API_KEY is not configured.", 400);
+
+  const model = (await getSettingValue("ai.openai_model")) || process.env.OPENAI_MODEL || "gpt-4o-mini";
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -128,7 +131,7 @@ async function translateJson<T extends Record<string, unknown>>({
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      model,
       temperature: 0.2,
       response_format: { type: "json_object" },
       messages: [

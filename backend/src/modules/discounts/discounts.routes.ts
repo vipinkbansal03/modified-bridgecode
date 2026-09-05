@@ -10,6 +10,7 @@ router.use(protect);
 router.get("/", requirePermission("discounts.view", "discounts.manage"), DiscountsController.list);
 router.get("/dashboard", requirePermission("discounts.view", "discounts.manage"), DiscountsController.dashboard);
 router.get("/export", requirePermission("discounts.view", "discounts.manage"), DiscountsController.exportSpreadsheet);
+router.get("/sample-template", requirePermission("discounts.view", "discounts.manage"), DiscountsController.downloadSampleTemplate);
 router.post("/import/preview", requirePermission("discounts.manage"), upload.single("file"), DiscountsController.previewImport);
 router.post("/import", requirePermission("discounts.manage"), upload.single("file"), DiscountsController.importSpreadsheet);
 router.post("/", requirePermission("discounts.manage"), DiscountsController.create);

@@ -15,6 +15,7 @@ import { uploadMediaFiles } from "@/utils/uploadMedia";
 import MediaSelectorModal from "@/components/admin/media/MediaSelectorModal";
 import type { MediaItem } from "@/services/mediaService";
 import { BulkVariantImportWizard } from "@/components/admin/products/BulkVariantImportWizard";
+import { AdminImportWizard, WizardColumnDef } from "@/components/admin/AdminImportWizard";
 import { ProductPaymentOverridesTab } from "@/components/admin/products/ProductPaymentOverridesTab";
 import { RefreshButton } from "@/components/admin/RefreshButton";
 import {
@@ -246,6 +247,34 @@ type VariantRow = {
     attributeValue?: { id?: string; value: string };
   }[];
 };
+
+const productAttributeWizardColumns: WizardColumnDef[] = [
+  { key: "attributeName", header: "Attribute Name", required: true, minWidth: "170px" },
+  {
+    key: "role",
+    header: "Display Type",
+    type: "select",
+    options: [
+      { label: "Dropdown", value: "DROPDOWN" },
+      { label: "X-Axis Grid", value: "X_GRID" },
+      { label: "Y-Axis Grid", value: "Y_GRID" },
+    ],
+    minWidth: "150px",
+  },
+  {
+    key: "allowedValues",
+    header: "Allowed Values",
+    required: true,
+    minWidth: "280px",
+    placeholder: "e.g. MBT, Roth, Alexander",
+  },
+];
+
+const productAttributeExpectedColumns = [
+  { name: "attributeName", required: true, hint: "Name of attribute to map" },
+  { name: "role", hint: "DROPDOWN, X_GRID, or Y_GRID" },
+  { name: "allowedValues", required: true, hint: "Comma-separated allowed values" },
+];
 
 function ProductBaseInventoryEditor({
   productId,
@@ -1066,6 +1095,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [newMappingValueIds, setNewMappingValueIds] = useState<string[]>([]);
   const [draggingAttributeId, setDraggingAttributeId] = useState<string | null>(null);
   const [overAttributeId, setOverAttributeId] = useState<string | null>(null);
+  const [attrImportOpen, setAttrImportOpen] = useState(false);
+  const [attrExporting, setAttrExporting] = useState(false);
   const [bulkEditMode, setBulkEditMode] = useState(false);
   const [bulkCountryIds, setBulkCountryIds] = useState<string[]>(["ALL"]);
   const [variantTableDisplayCountryId, setVariantTableDisplayCountryId] = useState("");
@@ -3803,6 +3834,36 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to reorder attributes."), "error");
     }
+  };
+
+  const handleExportProductAttributes = async () => {
+    setAttrExporting(true);
+    try {
+      const response = await adminApi.get(`/products/${productId}/attributes/export`, {
+        responseType: "blob",
+      });
+      downloadBlob(response.data as Blob, `product-${product.slug || productId}-attributes.xlsx`);
+      showToast("Product attributes exported successfully.", "success");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to export product attributes."), "error");
+    } finally {
+      setAttrExporting(false);
+    }
+  };
+
+  const downloadProductAttributesSampleTemplate = async () => {
+    try {
+      const response = await adminApi.get(`/products/${productId}/attributes/sample-template`, {
+        responseType: "blob",
+      });
+      downloadBlob(response.data as Blob, "product-attributes-template.xlsx");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to download sample template."), "error");
+    }
+  };
+
+  const openProductAttributesImportDialog = () => {
+    setAttrImportOpen(true);
   };
 
   const roleBadgeClass = (role: AttributeRole) =>
@@ -8187,7 +8248,30 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   Mapping attributes here defines which values are valid for this product. Future variant generation uses these mapped attributes by default; products with no mappings can still use the global catalog.
                 </p>
               </div>
-              <RefreshButton onRefresh={handleRefreshAll} isRefreshing={isRefreshingProduct} className="shrink-0" />
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleExportProductAttributes}
+                  disabled={attrExporting || mappedAttributeRows.length === 0}
+                  className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] transition-colors disabled:opacity-40 cursor-pointer"
+                  title="Export mapped attributes to Excel"
+                >
+                  <Download size={14} />
+                  {attrExporting ? "Exporting..." : "Export Excel"}
+                </button>
+                {canManageAttributes && (
+                  <button
+                    type="button"
+                    onClick={openProductAttributesImportDialog}
+                    className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] transition-colors cursor-pointer"
+                    title="Import attributes from Excel"
+                  >
+                    <Upload size={14} />
+                    Import Excel
+                  </button>
+                )}
+                <RefreshButton onRefresh={handleRefreshAll} isRefreshing={isRefreshingProduct} className="shrink-0" />
+              </div>
             </div>
 
             <div className={cn("grid gap-4", canManageAttributes ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-1")}>
@@ -10782,6 +10866,28 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           setPackageImage(media.url);
           setPackageMediaSelectorOpen(false);
           showToast("Package image selected.");
+        }}
+      />
+
+      {/* PRODUCT ATTRIBUTES EXCEL IMPORT WIZARD */}
+      <AdminImportWizard
+        open={attrImportOpen}
+        onClose={() => setAttrImportOpen(false)}
+        title="Import Product Attributes Excel"
+        subtitle="Upload an .xlsx or .csv file to map attributes and allowed values with live preview & direct inline editing."
+        entityName="product attributes"
+        columns={productAttributeWizardColumns}
+        expectedColumns={productAttributeExpectedColumns}
+        sampleTemplateUrl={`/products/${productId}/attributes/sample-template`}
+        sampleTemplateFilename="product-attributes-template.xlsx"
+        previewEndpoint={`/products/${productId}/attributes/import/preview`}
+        executeEndpoint={`/products/${productId}/attributes/import`}
+        onSuccess={(result) => {
+          showToast(
+            `Import complete: ${result?.created ?? 0} created, ${result?.updated ?? 0} updated.`,
+            "success"
+          );
+          refetchProductAttributes();
         }}
       />
 

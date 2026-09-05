@@ -7,6 +7,7 @@ import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { AdminInput, AdminSelect, AdminStatsGrid, AdminListToolbar, ConfirmModal, Pagination, StatCard, StatusBadge, useToast, LoadingButton, DataTable, type Column } from "@/components/admin/AdminComponents";
 import { AdminBulkActionsBar } from "@/components/admin/AdminBulkActionsBar";
+import { AdminImportWizard, WizardColumnDef, WizardExpectedColumn } from "@/components/admin/AdminImportWizard";
 import { Modal } from "@/components/ui/Modal";
 import {
   useAdminCurrencyDashboard,
@@ -89,6 +90,42 @@ const columnDefaults = {
   updatedAt: true,
 } as const;
 
+const currencyWizardColumns: WizardColumnDef[] = [
+  { key: "code", header: "Code", required: true, minWidth: "90px", placeholder: "e.g. USD" },
+  { key: "name", header: "Currency Name", required: true, minWidth: "150px", placeholder: "e.g. US Dollar" },
+  { key: "symbol", header: "Symbol", required: true, minWidth: "90px", placeholder: "e.g. $" },
+  { key: "exchangeRate", header: "Exchange Rate", required: true, type: "number", minWidth: "120px" },
+  {
+    key: "isBase",
+    header: "Is Base",
+    type: "select",
+    minWidth: "100px",
+    options: [
+      { label: "No", value: "false" },
+      { label: "Yes", value: "true" },
+    ],
+  },
+  {
+    key: "status",
+    header: "Status",
+    type: "select",
+    minWidth: "110px",
+    options: [
+      { label: "Active", value: "ACTIVE" },
+      { label: "Inactive", value: "INACTIVE" },
+    ],
+  },
+];
+
+const currencyExpectedColumns: WizardExpectedColumn[] = [
+  { name: "code", required: true, hint: "3-letter ISO code (e.g. USD, EUR, INR)" },
+  { name: "name", required: true, hint: "Currency display name" },
+  { name: "symbol", required: true, hint: "Currency symbol (e.g. $, €, ₹)" },
+  { name: "exchangeRate", required: true, hint: "Exchange rate against base currency" },
+  { name: "isBase", hint: "true or false" },
+  { name: "status", hint: "ACTIVE or INACTIVE" },
+];
+
 function formatDate(value?: string) {
   if (!value) return "-";
   return new Date(value).toLocaleDateString();
@@ -146,10 +183,6 @@ export default function CurrenciesPage() {
   const [visibleColumns, setVisibleColumns] = useState({ ...columnDefaults });
   const [showForm, setShowForm] = useState(false);
   const [deleting, setDeleting] = useState<CurrencyRow | null>(null);
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importReport, setImportReport] = useState<ImportReport | null>(null);
-  const [importMessage, setImportMessage] = useState("");
-  const [importing, setImporting] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [dismissedSyncAt, setDismissedSyncAt] = useState<string | null>(null);
 
@@ -479,6 +512,16 @@ export default function CurrenciesPage() {
     }
   }
 
+  async function downloadSampleTemplate() {
+    try {
+      const response = await adminApi.get("/currencies/sample-template", { responseType: "blob" });
+      downloadBlob(response.data as Blob, "currencies-template.xlsx");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to download sample template."), "error");
+    }
+  }
+
+
   async function handleSyncRates() {
     try {
       const result = await syncCurrencyRates.mutateAsync();
@@ -491,44 +534,7 @@ export default function CurrenciesPage() {
     }
   }
 
-  async function handleImportPreview(fileToPreview?: File) {
-    const file = fileToPreview || importFile;
-    if (!file) {
-      showToast("Choose a spreadsheet first.", "error");
-      return;
-    }
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const report = (await previewCurrencyImport.mutateAsync(formData)) as ImportReport;
-      setImportReport(report);
-      setImportMessage(report.invalidRows > 0 ? "Fix validation issues before importing." : "Preview looks clean.");
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to preview currency spreadsheet."), "error");
-    }
-  }
 
-  async function handleImport() {
-    if (!importFile) {
-      showToast("Choose a spreadsheet first.", "error");
-      return;
-    }
-    try {
-      setImporting(true);
-      const formData = new FormData();
-      formData.append("file", importFile);
-      await importCurrencies.mutateAsync(formData);
-      showToast("Currencies imported.");
-      setImportFile(null);
-      setImportReport(null);
-      setImportMessage("");
-      setShowImportModal(false);
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to import currencies."), "error");
-    } finally {
-      setImporting(false);
-    }
-  }
 
   if (authLoading || !hasPermission("currencies.view")) {
     return null;
@@ -848,139 +854,26 @@ export default function CurrenciesPage() {
         </div>
 
         {/* IMPORT SPREADSHEET MODAL */}
-        <Modal
+        <AdminImportWizard
           open={showImportModal}
-          onClose={() => {
-            setShowImportModal(false);
-            setImportFile(null);
-            setImportReport(null);
-            setImportMessage("");
-          }}
+          onClose={() => setShowImportModal(false)}
           title="Import Currencies Spreadsheet"
-          panelClassName="max-w-2xl"
-        >
-          <div className="space-y-4 p-6">
-            <p className="text-[13px] text-[#6B6B6B]">
-              Upload an Excel (.xlsx, .xls) or CSV spreadsheet to create or update currency records in bulk.
-            </p>
-
-            <div className="rounded-lg border-2 border-dashed border-[#E6E6E6] bg-[#FAFAFA] p-6 text-center hover:bg-[#F5F5F5] transition-colors">
-              <input
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                className="hidden"
-                id="currency-import-file"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    setImportFile(file);
-                    setImportReport(null);
-                    setImportMessage("");
-                    void handleImportPreview(file);
-                  }
-                }}
-              />
-              <label htmlFor="currency-import-file" className="cursor-pointer block">
-                <Upload className="mx-auto h-8 w-8 text-[#9A9A9A]" />
-                <span className="mt-2 block text-[13px] font-semibold text-[#1A1A1A]">
-                  {importFile ? importFile.name : "Choose spreadsheet file"}
-                </span>
-                <span className="mt-0.5 block text-[11.5px] text-[#9A9A9A]">
-                  XLSX, XLS or CSV files supported
-                </span>
-              </label>
-              {importFile && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setImportFile(null);
-                    setImportReport(null);
-                    setImportMessage("");
-                  }}
-                  className="mt-2 text-[12px] font-medium text-red-600 hover:underline inline-block cursor-pointer"
-                >
-                  Remove file
-                </button>
-              )}
-            </div>
-
-            {previewCurrencyImport.isPending && (
-              <div className="flex items-center gap-2 text-[13px] text-[#6B6B6B]">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
-                Validating and previewing spreadsheet...
-              </div>
-            )}
-
-            {importMessage && (
-              <div className="rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3.5 py-2.5 text-[12.5px] text-[#1A1A1A]">
-                {importMessage}
-              </div>
-            )}
-
-            {importReport && (
-              <div className="space-y-3 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
-                    <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Total Rows</div>
-                    <div className="mt-1 text-[18px] font-bold text-[#1A1A1A]">{importReport.totalRows}</div>
-                  </div>
-                  <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
-                    <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Valid Rows</div>
-                    <div className="mt-1 text-[18px] font-bold text-emerald-600">{importReport.validRows}</div>
-                  </div>
-                  <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
-                    <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Invalid Rows</div>
-                    <div className="mt-1 text-[18px] font-bold text-red-600">{importReport.invalidRows}</div>
-                  </div>
-                  <div className="rounded-md border border-[#E6E6E6] bg-white p-3 text-center">
-                    <div className="text-[11px] font-semibold text-[#9A9A9A] uppercase tracking-wide">Warnings</div>
-                    <div className="mt-1 text-[18px] font-bold text-amber-600">{importReport.duplicateWarnings.length}</div>
-                  </div>
-                </div>
-
-                {importReport.issues.length > 0 && (
-                  <div>
-                    <h4 className="mb-1.5 text-[12.5px] font-semibold text-[#1A1A1A]">Validation Issues</h4>
-                    <div className="max-h-40 overflow-y-auto rounded border border-[#E6E6E6] bg-white divide-y divide-[#F0F0F0]">
-                      {importReport.issues.map((issue, idx) => (
-                        <div key={idx} className="flex items-center gap-3 px-3 py-2 text-[12px]">
-                          <span className="font-mono font-semibold text-[#E31E24]">Row {issue.row}</span>
-                          <span className="font-medium text-[#1A1A1A]">{issue.field}</span>
-                          <span className="text-[#6B6B6B]">{issue.message}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-2 border-t border-[#E6E6E6] pt-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowImportModal(false);
-                  setImportFile(null);
-                  setImportReport(null);
-                  setImportMessage("");
-                }}
-                className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] cursor-pointer"
-              >
-                Cancel
-              </button>
-              <LoadingButton
-                type="button"
-                onClick={handleImport}
-                loading={importing || importCurrencies.isPending}
-                loadingText="Importing..."
-                disabled={!importFile || (importReport !== null && importReport.invalidRows > 0)}
-                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50 cursor-pointer"
-              >
-                Import Currencies
-              </LoadingButton>
-            </div>
-          </div>
-        </Modal>
+          subtitle="Upload an Excel (.xlsx, .xls) or CSV spreadsheet to create or update currency records with live preview & direct inline editing."
+          entityName="currencies"
+          columns={currencyWizardColumns}
+          expectedColumns={currencyExpectedColumns}
+          sampleTemplateUrl="/currencies/sample-template"
+          sampleTemplateFilename="currencies-template.xlsx"
+          previewEndpoint="/currencies/import/preview"
+          executeEndpoint="/currencies/import"
+          onSuccess={(result) => {
+            showToast(
+              `Import complete: ${result?.created ?? 0} created, ${result?.updated ?? 0} updated.`,
+              "success"
+            );
+            currenciesQuery.refetch();
+          }}
+        />
 
         <Modal open={showForm} onClose={() => { form.reset(); setShowForm(false); }} title={form.values.id ? "Edit currency" : "Add currency"} panelClassName="max-w-3xl">
           <form onSubmit={form.handleSubmit} className="space-y-6 p-6">

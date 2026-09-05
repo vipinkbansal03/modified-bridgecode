@@ -21,6 +21,7 @@ import {
 import { AdminRowActions, AdminActionButton } from "@/components/admin/AdminRowActions";
 import { toSortOrderPayload } from "@/components/admin/SortableList";
 import { Modal } from "@/components/ui/Modal";
+import { AdminImportWizard, WizardColumnDef } from "@/components/admin/AdminImportWizard";
 import {
   useAdminCategories,
   useAdminCollections,
@@ -39,6 +40,7 @@ import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   CheckCircle2,
   Copy,
+  Download,
   ExternalLink,
   FileText,
   Package,
@@ -111,6 +113,17 @@ const COLUMN_OPTIONS: { key: ColumnKey; label: string }[] = [
 
 const PRODUCT_COLUMNS_STORAGE_KEY = "admin-products-columns-v3";
 
+const productExpectedColumns = [
+  { name: "title", required: true, hint: "Full title of the product" },
+  { name: "categorySlug", required: true, hint: "Category Name (e.g. Brackets) or Category Slug" },
+  { name: "sku", hint: "Unique SKU identifier" },
+  { name: "productCode", hint: "Unique internal product code" },
+  { name: "imageUrl", hint: "Direct image URL or comma-separated image URLs" },
+  { name: "brand", hint: "Brand name, defaults to Modern Orthodontics" },
+  { name: "status", hint: "ACTIVE, INACTIVE, DRAFT, ARCHIVED" },
+  { name: "countryCodes", hint: "All countries (ALL) or comma-separated country codes, e.g. IN, US, GB" },
+];
+
 export default function AdminProductsPage() {
   const { hasPermission, isLoading: authLoading } = useAdminAuth();
   const router = useRouter();
@@ -171,14 +184,9 @@ export default function AdminProductsPage() {
   const [bulkCollectionIds, setBulkCollectionIds] = useState<string[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importPreview, setImportPreview] = useState<SpreadsheetPreview | null>(null);
-  const [importMessage, setImportMessage] = useState("");
-  const [importing, setImporting] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(DEFAULT_COLUMNS);
   const [columnsReady, setColumnsReady] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const { showToast, ToastComponent } = useToast();
 
   useEffect(() => {
@@ -234,6 +242,62 @@ export default function AdminProductsPage() {
 
   const { data: categories = [] } = useAdminCategories();
   const { data: countries = [] } = useAdminCountries();
+
+  const wizardCountryOptions = useMemo(() => {
+    const list = (countries || [])
+      .filter((c: any) => c.status === "ACTIVE" || !c.status)
+      .map((c: any) => ({
+        label: `${c.name} (${c.code.toUpperCase()})`,
+        value: c.code.toUpperCase(),
+      }));
+    return [
+      { label: "All countries", value: "ALL" },
+      ...list,
+    ];
+  }, [countries]);
+
+  const categoryOptions = useMemo(() => {
+    return (categories as Array<{ id: string; name: string; slug: string }>).map((c) => ({
+      label: c.name,
+      value: c.slug,
+    }));
+  }, [categories]);
+
+  const productWizardColumns: WizardColumnDef[] = useMemo(() => [
+    { key: "title", header: "Title", required: true, minWidth: "200px" },
+    { key: "sku", header: "SKU", minWidth: "140px" },
+    { key: "productCode", header: "Product Code", minWidth: "140px" },
+    {
+      key: "categorySlug",
+      header: "Category",
+      required: true,
+      type: "select",
+      options: categoryOptions,
+      minWidth: "160px",
+    },
+    { key: "imageUrl", header: "Image URL", minWidth: "180px", placeholder: "https://..." },
+    { key: "brand", header: "Brand", minWidth: "130px" },
+    {
+      key: "status",
+      header: "Status",
+      type: "select",
+      options: [
+        { label: "Active", value: "ACTIVE" },
+        { label: "Inactive", value: "INACTIVE" },
+        { label: "Draft", value: "DRAFT" },
+        { label: "Archived", value: "ARCHIVED" },
+      ],
+      minWidth: "120px",
+    },
+    {
+      key: "countryCodes",
+      header: "Countries",
+      type: "multiselect",
+      options: wizardCountryOptions,
+      minWidth: "160px",
+      placeholder: "All countries or IN, US...",
+    },
+  ], [categoryOptions, wizardCountryOptions]);
   const { data: warehouses = [] } = useAdminWarehouses({ limit: 30 });
   const { data: collectionsData } = useAdminCollections({ limit: 200 });
   const deleteMutation = useDeleteProduct();
@@ -556,48 +620,7 @@ export default function AdminProductsPage() {
   };
 
   const openImportDialog = () => {
-    setImportPreview(null);
-    setImportMessage("");
-    setImportFile(null);
     setImportOpen(true);
-  };
-
-  const handleImportFile = async (file?: File) => {
-    if (!file) return;
-    setImportFile(file);
-    setImportMessage("Previewing spreadsheet...");
-    setImportPreview(null);
-    const formData = new FormData();
-    formData.append("file", file);
-    try {
-      const response = await adminApi.post("/products/import/preview", formData);
-      const report = response.data?.data as SpreadsheetPreview;
-      setImportPreview(report);
-      setImportMessage(report.invalidRows > 0 ? "Fix the validation issues before importing." : "Preview looks good. You can import now.");
-    } catch (error) {
-      setImportMessage(getAdminErrorMessage(error, "Failed to preview spreadsheet."));
-      setImportPreview(null);
-    }
-  };
-
-  const confirmImport = async () => {
-    if (!importFile) return;
-    setImporting(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", importFile);
-      const response = await adminApi.post("/products/import", formData);
-      const result = response.data?.data as { created: number; updated: number; report: SpreadsheetPreview };
-      showToast(`Imported ${result.created} created and ${result.updated} updated products.`);
-      setImportOpen(false);
-      setImportFile(null);
-      setImportPreview(null);
-      refetch();
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to import spreadsheet."), "error");
-    } finally {
-      setImporting(false);
-    }
   };
 
   const handleResetFilters = () => {
@@ -776,17 +799,6 @@ export default function AdminProductsPage() {
           }
         />
 
-        {/* HIDDEN IMPORT INPUT */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".xlsx,.xls,.csv"
-          className="hidden"
-          onChange={(event) => {
-            void handleImportFile(event.target.files?.[0] || undefined);
-            event.currentTarget.value = "";
-          }}
-        />
 
         {/* 3. FULL-WIDTH DATA TABLE WITH BULK ACTIONS */}
         <DataTable<ProductRow>
@@ -1015,111 +1027,27 @@ export default function AdminProductsPage() {
         permanentDeleteDescription={`Physically purges the ${selectedIds.length} selected products from the database. Any product with existing order or quote lines will be blocked.`}
       />
 
-      {/* EXCEL IMPORT MODAL */}
-      <Modal
+      {/* EXCEL IMPORT WIZARD */}
+      <AdminImportWizard
         open={importOpen}
         onClose={() => setImportOpen(false)}
         title="Import Products Excel"
-        subtitle="Upload an .xlsx or .csv file to bulk create or update catalog products."
-        size="2xl"
-        footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <button
-              type="button"
-              onClick={() => setImportOpen(false)}
-              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <LoadingButton
-              type="button"
-              onClick={confirmImport}
-              loading={importing}
-              loadingText="Importing..."
-              disabled={!importFile || Boolean(importPreview?.invalidRows)}
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
-            >
-              Import Products
-            </LoadingButton>
-          </div>
-        }
-      >
-        <div className="space-y-4 p-6">
-          <p className="text-[13px] leading-5 text-[#6B6B6B]">
-            Upload an <code className="rounded bg-[#F3F4F6] px-1.5 py-0.5 text-[12px] font-mono text-[#1F2937]">.xlsx</code> or <code className="rounded bg-[#F3F4F6] px-1.5 py-0.5 text-[12px] font-mono text-[#1F2937]">.csv</code> file. The first sheet is validated on the server before any product is created or updated.
-          </p>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] cursor-pointer shadow-xs"
-            >
-              <Upload size={14} />
-              {importFile ? importFile.name : "Choose Excel / CSV File"}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.csv"
-              className="hidden"
-              onChange={(e) => handleImportFile(e.target.files?.[0])}
-            />
-            {importFile && (
-              <button
-                type="button"
-                onClick={() => {
-                  setImportFile(null);
-                  setImportPreview(null);
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                }}
-                className="text-[12.5px] text-red-600 hover:underline cursor-pointer"
-              >
-                Remove
-              </button>
-            )}
-          </div>
-          {importing && (
-            <div className="flex items-center gap-2 text-[13px] text-[#6B6B6B]">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
-              Parsing file preview...
-            </div>
-          )}
-          {importPreview ? (
-            <div className="space-y-3 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <div className="rounded border border-[#E6E6E6] bg-white p-3">
-                  <div className="text-[11.5px] font-semibold text-[#9A9A9A]">Total Rows</div>
-                  <div className="mt-1 text-[20px] font-semibold text-[#1A1A1A]">{importPreview.totalRows}</div>
-                </div>
-                <div className="rounded border border-[#E6E6E6] bg-white p-3">
-                  <div className="text-[11.5px] font-semibold text-[#9A9A9A]">Valid Rows</div>
-                  <div className="mt-1 text-[20px] font-semibold text-emerald-600">{importPreview.validRows}</div>
-                </div>
-                <div className="rounded border border-[#E6E6E6] bg-white p-3">
-                  <div className="text-[11.5px] font-semibold text-[#9A9A9A]">Invalid Rows</div>
-                  <div className="mt-1 text-[20px] font-semibold text-red-600">{importPreview.invalidRows}</div>
-                </div>
-                <div className="rounded border border-[#E6E6E6] bg-white p-3">
-                  <div className="text-[11.5px] font-semibold text-[#9A9A9A]">Duplicate Warnings</div>
-                  <div className="mt-1 text-[20px] font-semibold text-amber-600">{importPreview.duplicateWarnings.length}</div>
-                </div>
-              </div>
-              {importPreview.issues.length > 0 ? (
-                <div>
-                  <h4 className="mb-2 text-[13px] font-semibold text-[#1A1A1A]">Validation Issues</h4>
-                  <div className="max-h-48 overflow-y-auto rounded border border-[#E6E6E6]">
-                    {importPreview.issues.map((issue: any, index: number) => (
-                      <div key={`${issue.row}-${issue.field}-${index}`} className="border-b border-[#F0F0F0] px-3 py-2 text-[13px] last:border-b-0">
-                        <span className="font-semibold text-[#E31E24]">Row {issue.row}</span> <span className="text-[#6B6B6B]">[{issue.field}]</span> {issue.message}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </Modal>
+        subtitle="Upload an .xlsx or .csv file to bulk create or update catalog products with live preview & direct inline editing."
+        entityName="products"
+        columns={productWizardColumns}
+        expectedColumns={productExpectedColumns}
+        sampleTemplateUrl="/products/sample-template"
+        sampleTemplateFilename="products-template.xlsx"
+        previewEndpoint="/products/import/preview"
+        executeEndpoint="/products/import"
+        onSuccess={(result) => {
+          showToast(
+            `Import complete: ${result?.created ?? 0} created, ${result?.updated ?? 0} updated.`,
+            "success"
+          );
+          refetch();
+        }}
+      />
 
       {ToastComponent}
     </AdminLayout>

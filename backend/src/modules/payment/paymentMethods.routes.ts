@@ -7,6 +7,7 @@ import {
   getPublicPaymentMethodsController,
   initiateCustomerOrderPaymentController,
   updateAdminPaymentMethodCountryController,
+  updateAdminPaymentMethodGlobalController,
   verifyCustomerOrderPaymentController,
 } from "./paymentMethods.controller";
 
@@ -44,6 +45,11 @@ router.put(
   "/admin/payment-methods/country",
   protect,
   asyncHandler(updateAdminPaymentMethodCountryController),
+);
+router.put(
+  "/admin/payment-methods/global",
+  protect,
+  asyncHandler(updateAdminPaymentMethodGlobalController),
 );
 router.get(
   "/admin/products/:id/payment-overrides",
