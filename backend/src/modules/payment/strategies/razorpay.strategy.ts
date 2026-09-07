@@ -5,13 +5,20 @@ import { prisma } from "../../../config/database";
 import { AppError } from "../../../utils/apiResponse";
 import { PaymentInitiateResult, PaymentStrategy, PaymentVerifyResult } from "../types/payment.types";
 import { reconcilePaymentSuccess, reconcilePaymentFailure } from "../paymentReconciliation.service";
+import { getSettingValue } from "../../settings/settings.service";
 
 export class RazorpayStrategy implements PaymentStrategy {
   readonly code = "RAZORPAY";
 
   async initiatePayment(order: any, config?: Record<string, string>): Promise<PaymentInitiateResult> {
-    const keyId = config?.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID;
-    const keySecret = config?.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET;
+    const keyId =
+      config?.RAZORPAY_KEY_ID ||
+      (await getSettingValue("payment.razorpay_key_id")) ||
+      process.env.RAZORPAY_KEY_ID;
+    const keySecret =
+      config?.RAZORPAY_KEY_SECRET ||
+      (await getSettingValue("payment.razorpay_key_secret")) ||
+      process.env.RAZORPAY_KEY_SECRET;
 
     if (!keyId || !keySecret) {
       throw new AppError("Razorpay credentials are not configured.", 500);
@@ -87,7 +94,10 @@ export class RazorpayStrategy implements PaymentStrategy {
   }
 
   async verifyPayment(order: any, payload: Record<string, unknown>, config?: Record<string, string>): Promise<PaymentVerifyResult> {
-    const keySecret = config?.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET;
+    const keySecret =
+      config?.RAZORPAY_KEY_SECRET ||
+      (await getSettingValue("payment.razorpay_key_secret")) ||
+      process.env.RAZORPAY_KEY_SECRET;
     if (!keySecret) {
       throw new AppError("Razorpay credentials are not configured.", 500);
     }

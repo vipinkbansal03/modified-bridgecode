@@ -26,6 +26,7 @@ import {
 import { AdminBulkActionsBar } from "@/components/admin/AdminBulkActionsBar";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
+import { AdminImportWizard, WizardColumnDef, WizardExpectedColumn } from "@/components/admin/AdminImportWizard";
 import { Modal } from "@/components/ui/Modal";
 import {
   useAdminCountries,
@@ -36,8 +37,6 @@ import {
   useCreateTaxRule,
   useDeleteTaxRule,
   useExportTaxRules,
-  useImportTaxRules,
-  usePreviewTaxImport,
   useUpdateTaxRule,
   useAdminProducts,
   useAdminCategories,
@@ -145,6 +144,16 @@ const visibleColumnsDefault = {
   updatedAt: true,
 };
 
+const taxExpectedColumns: WizardExpectedColumn[] = [
+  { name: "name", required: true, hint: "Tax rule name (e.g. GST Standard 18%)" },
+  { name: "type", required: true, hint: "Tax category: CGST, SGST, VAT, SALES_TAX" },
+  { name: "percentage", required: true, hint: "Tax rate in percent 0 - 100 (e.g. 18)" },
+  { name: "countryCode", required: true, hint: "All countries (ALL) or ISO 2-letter country code (e.g. IN, US, GB)" },
+  { name: "taxMode", hint: "Tax application mode: EXCLUSIVE or INCLUSIVE" },
+  { name: "status", hint: "ACTIVE or INACTIVE" },
+  { name: "sortOrder", hint: "Application priority integer (0, 1, 2...)" },
+];
+
 function formatMoney(value: number | string | null | undefined, currencySymbol?: string | null) {
   if (value === null || value === undefined || value === "") return "—";
   const amount = Number(value);
@@ -223,8 +232,6 @@ export default function AdminTaxPage() {
   const [deleteTarget, setDeleteTarget] = useState<TaxRule | null>(null);
   const [viewingRule, setViewingRule] = useState<TaxRule | null>(null);
   const [bulkAction, setBulkAction] = useState<"ENABLE" | "DISABLE" | "DELETE" | "">("");
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importReport, setImportReport] = useState<SpreadsheetReport | null>(null);
   const [previewForm, setPreviewForm] = useState<PreviewState>(emptyPreview);
   const [productSearch, setProductSearch] = useState("");
 
@@ -241,6 +248,67 @@ export default function AdminTaxPage() {
 
   const { data: dashboardData, isLoading: dashboardLoading } = useAdminTaxDashboard();
   const { data: countries = [] } = useAdminCountries();
+
+  const wizardCountryOptions = useMemo(() => {
+    const list = (countries || [])
+      .filter((c: any) => c.status === "ACTIVE" || !c.status)
+      .map((c: any) => ({
+        label: `${c.name} (${c.code.toUpperCase()})`,
+        value: c.code.toUpperCase(),
+      }));
+    return [
+      { label: "All countries", value: "ALL" },
+      ...list,
+    ];
+  }, [countries]);
+
+  const taxWizardColumns = useMemo<WizardColumnDef[]>(() => [
+    { key: "name", header: "Tax Rule Name", required: true, minWidth: "160px", placeholder: "e.g. GST Standard 18%" },
+    {
+      key: "type",
+      header: "Type",
+      required: true,
+      type: "select",
+      minWidth: "120px",
+      options: [
+        { label: "CGST", value: "CGST" },
+        { label: "SGST", value: "SGST" },
+        { label: "VAT", value: "VAT" },
+        { label: "Sales Tax", value: "SALES_TAX" },
+      ],
+    },
+    { key: "percentage", header: "Percentage (%)", required: true, type: "number", minWidth: "120px", placeholder: "18" },
+    {
+      key: "countryCode",
+      header: "Country",
+      required: true,
+      type: "multiselect",
+      options: wizardCountryOptions,
+      minWidth: "140px",
+      placeholder: "e.g. ALL or IN, US...",
+    },
+    {
+      key: "taxMode",
+      header: "Tax Mode",
+      type: "select",
+      minWidth: "120px",
+      options: [
+        { label: "Exclusive", value: "EXCLUSIVE" },
+        { label: "Inclusive", value: "INCLUSIVE" },
+      ],
+    },
+    {
+      key: "status",
+      header: "Status",
+      type: "select",
+      minWidth: "110px",
+      options: [
+        { label: "Active", value: "ACTIVE" },
+        { label: "Inactive", value: "INACTIVE" },
+      ],
+    },
+    { key: "sortOrder", header: "Priority", type: "number", minWidth: "90px", placeholder: "0" },
+  ], [wizardCountryOptions]);
   const { data: categories = [] } = useAdminCategories();
   const { data: productsData } = useAdminProducts({ limit: 1000 });
   const products = productsData?.data ?? [];
@@ -267,8 +335,6 @@ export default function AdminTaxPage() {
   const deleteRule = useDeleteTaxRule();
   const bulkTaxRules = useBulkTaxRules();
   const exportTaxRules = useExportTaxRules();
-  const previewTaxImport = usePreviewTaxImport();
-  const importTaxRules = useImportTaxRules();
 
   const form = useAdminForm<TaxFormState>({
     initialValues: emptyForm,
@@ -593,41 +659,6 @@ export default function AdminTaxPage() {
       URL.revokeObjectURL(url);
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to export tax rules."), "error");
-    }
-  }
-
-  async function handleImportPreview() {
-    if (!importFile) {
-      showToast("Choose a spreadsheet first.", "error");
-      return;
-    }
-    try {
-      const formData = new FormData();
-      formData.append("file", importFile);
-      const report = (await previewTaxImport.mutateAsync(formData)) as SpreadsheetReport;
-      setImportReport(report);
-      showToast("Import preview ready.");
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to preview tax spreadsheet."), "error");
-    }
-  }
-
-  async function handleImportCommit() {
-    if (!importFile) {
-      showToast("Choose a spreadsheet first.", "error");
-      return;
-    }
-    try {
-      const formData = new FormData();
-      formData.append("file", importFile);
-      await importTaxRules.mutateAsync(formData);
-      showToast("Tax rules imported.");
-      setImportFile(null);
-      setImportReport(null);
-      setShowImportModal(false);
-      await refetch();
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to import tax spreadsheet."), "error");
     }
   }
 
@@ -1105,124 +1136,27 @@ export default function AdminTaxPage() {
         )}
       </Modal>
 
-      {/* IMPORT TAX RULES MODAL */}
-      <Modal
+      {/* IMPORT TAX RULES SPREADSHEET WIZARD */}
+      <AdminImportWizard
         open={showImportModal}
-        onClose={() => {
-          setShowImportModal(false);
-          setImportFile(null);
-          setImportReport(null);
+        onClose={() => setShowImportModal(false)}
+        title="Import Tax Rules Spreadsheet"
+        subtitle="Upload an Excel (.xlsx, .xls) or CSV spreadsheet to create or update tax rules with live preview & direct inline editing."
+        entityName="tax rules"
+        columns={taxWizardColumns}
+        expectedColumns={taxExpectedColumns}
+        sampleTemplateUrl="/tax-rules/sample-template"
+        sampleTemplateFilename="tax-rules-template.xlsx"
+        previewEndpoint="/tax-rules/import/preview"
+        executeEndpoint="/tax-rules/import"
+        onSuccess={(result) => {
+          showToast(
+            `Import complete: ${result?.created ?? 0} created, ${result?.updated ?? 0} updated.`,
+            "success"
+          );
+          refetch();
         }}
-        title="Import Tax Rules"
-        panelClassName="max-w-2xl"
-      >
-        <div className="p-6 space-y-4">
-          <p className="text-[13px] text-[#6B6B6B]">
-            Upload an Excel (.xlsx, .xls) or CSV spreadsheet to bulk import tax rules. You can preview and validate data before committing.
-          </p>
-
-          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-[#D6D6D6] bg-[#FAFAFA] p-4 hover:border-[#E31E24] transition-colors">
-            <input
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              onChange={(event) => {
-                setImportFile(event.target.files?.[0] ?? null);
-                setImportReport(null);
-              }}
-            />
-            <div className="min-w-0">
-              <div className="text-[13px] font-medium text-[#1A1A1A]">
-                {importFile ? importFile.name : "Choose spreadsheet file (.xlsx, .xls, .csv)"}
-              </div>
-              <div className="mt-0.5 text-[12px] text-[#6B6B6B]">
-                {importFile ? `${(importFile.size / 1024).toFixed(1)} KB` : "Click to select a file from your computer"}
-              </div>
-            </div>
-            <Upload size={18} className="shrink-0 text-[#E31E24]" />
-          </label>
-
-          {previewTaxImport.isPending && (
-            <div className="flex items-center gap-2 text-[13px] text-[#6B6B6B]">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
-              Parsing and validating spreadsheet...
-            </div>
-          )}
-
-          {importReport && (
-            <div className="space-y-3 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div className="rounded border border-[#E6E6E6] bg-white p-3">
-                  <div className="text-[11.5px] font-semibold text-[#9A9A9A]">Total Rows</div>
-                  <div className="mt-1 text-[20px] font-semibold text-[#1A1A1A]">{importReport.totalRows}</div>
-                </div>
-                <div className="rounded border border-[#E6E6E6] bg-white p-3">
-                  <div className="text-[11.5px] font-semibold text-[#9A9A9A]">Valid Rows</div>
-                  <div className="mt-1 text-[20px] font-semibold text-emerald-600">{importReport.validRows}</div>
-                </div>
-                <div className="rounded border border-[#E6E6E6] bg-white p-3">
-                  <div className="text-[11.5px] font-semibold text-[#9A9A9A]">Invalid Rows</div>
-                  <div className="mt-1 text-[20px] font-semibold text-red-600">{importReport.invalidRows}</div>
-                </div>
-                <div className="rounded border border-[#E6E6E6] bg-white p-3">
-                  <div className="text-[11.5px] font-semibold text-[#9A9A9A]">Warnings</div>
-                  <div className="mt-1 text-[20px] font-semibold text-amber-600">{importReport.duplicateWarnings?.length ?? 0}</div>
-                </div>
-              </div>
-
-              {importReport.issues && importReport.issues.length > 0 && (
-                <div>
-                  <h4 className="mb-2 text-[13px] font-semibold text-[#1A1A1A]">Validation Issues</h4>
-                  <div className="max-h-48 overflow-y-auto rounded border border-[#E6E6E6] bg-white">
-                    {importReport.issues.map((issue, index) => (
-                      <div key={`${issue.row}-${issue.field}-${index}`} className="border-b border-[#F0F0F0] px-3 py-2 text-[12.5px] last:border-b-0">
-                        <span className="font-semibold text-[#E31E24]">Row {issue.row}</span> <span className="text-[#6B6B6B]">[{issue.field}]</span>: {issue.message}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="flex items-center justify-end gap-2.5 pt-2">
-            <button
-              type="button"
-              onClick={() => {
-                setShowImportModal(false);
-                setImportFile(null);
-                setImportReport(null);
-              }}
-              className="rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#555] hover:bg-[#F2F2F2] cursor-pointer"
-            >
-              Cancel
-            </button>
-            {importReport ? (
-              <LoadingButton
-                type="button"
-                onClick={handleImportCommit}
-                loading={importTaxRules.isPending}
-                loadingText="Importing..."
-                disabled={!importFile || importReport.invalidRows > 0}
-                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50 cursor-pointer"
-              >
-                Commit Import ({importReport.validRows} rules)
-              </LoadingButton>
-            ) : (
-              <LoadingButton
-                type="button"
-                onClick={handleImportPreview}
-                loading={previewTaxImport.isPending}
-                loadingText="Validating..."
-                disabled={!importFile}
-                className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50 cursor-pointer"
-              >
-                Validate Spreadsheet
-              </LoadingButton>
-            )}
-          </div>
-        </div>
-      </Modal>
+      />
 
       <Modal
         open={showForm}

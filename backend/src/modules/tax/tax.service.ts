@@ -505,15 +505,29 @@ const TAX_EXPORT_COLUMNS = [
   { key: "sortOrder", header: "sortOrder" },
 ] as const;
 
-function parseTaxRow(raw: Record<string, string>): TaxSpreadsheetRow {
+function normalizeImportCountryCode(val: any): string {
+  const raw = typeof val === "string" ? val.trim() : (val ? String(val).trim() : "");
+  if (!raw) return "";
+  const parts = raw.split(/[,;|]/).map((p) => {
+    let c = p.trim().toUpperCase();
+    if (c === "ALL" || c === "GLOBAL" || c === "*" || c === "ALL COUNTRIES") return "ALL";
+    const parenMatch = c.match(/\(([A-Z]{2,3})\)$/);
+    if (parenMatch) c = parenMatch[1];
+    return c;
+  }).filter(Boolean);
+  if (parts.includes("ALL")) return "ALL";
+  return parts.join(", ");
+}
+
+function parseTaxRow(raw: Record<string, any>): TaxSpreadsheetRow {
   return {
-    name: raw.name?.trim() || "",
-    type: raw.type?.trim().toUpperCase() || "",
-    percentage: raw.percentage?.trim() || "",
-    countryCode: raw.countryCode?.trim().toUpperCase() || "",
-    status: raw.status?.trim().toUpperCase() || "ACTIVE",
-    taxMode: raw.taxMode?.trim().toUpperCase() || "EXCLUSIVE",
-    sortOrder: raw.sortOrder?.trim() || "0",
+    name: typeof raw.name === "string" ? raw.name.trim() : (raw.name ? String(raw.name) : ""),
+    type: typeof raw.type === "string" ? raw.type.trim().toUpperCase() : (raw.type ? String(raw.type).trim().toUpperCase() : ""),
+    percentage: raw.percentage !== undefined && raw.percentage !== null ? String(raw.percentage).trim() : "",
+    countryCode: normalizeImportCountryCode(raw.countryCode ?? raw.country ?? raw.countryCodes ?? raw.Country),
+    status: typeof raw.status === "string" ? raw.status.trim().toUpperCase() : "ACTIVE",
+    taxMode: typeof raw.taxMode === "string" ? raw.taxMode.trim().toUpperCase() : "EXCLUSIVE",
+    sortOrder: raw.sortOrder !== undefined && raw.sortOrder !== null ? String(raw.sortOrder).trim() : "0",
   };
 }
 
@@ -539,8 +553,9 @@ async function previewTaxRows(rows: Record<string, string>[]) {
 
     if (!row.countryCode) {
       issues.push({ row: rowNumber, field: "countryCode", message: "Country code is required." });
-    } else {
-      countryCodes.add(row.countryCode);
+    } else if (row.countryCode !== "ALL") {
+      const codes = row.countryCode.split(/[,;|]/).map((s) => s.trim().toUpperCase()).filter(Boolean);
+      for (const c of codes) countryCodes.add(c);
     }
 
     if (!STATUS_VALUES.includes(row.status as never)) {
@@ -577,16 +592,26 @@ async function previewTaxRows(rows: Record<string, string>[]) {
 
   for (const [index, row] of parsed.entries()) {
     const rowNumber = index + 2;
-    const country = countryByCode.get(row.countryCode);
-    if (!country) {
-      issues.push({ row: rowNumber, field: "countryCode", message: `Country '${row.countryCode}' was not found.` });
-    } else if (country.status !== "ACTIVE") {
-      issues.push({ row: rowNumber, field: "countryCode", message: `Country '${row.countryCode}' is inactive.` });
+    if (row.countryCode === "ALL") {
+      continue;
     }
+    const codes = row.countryCode.split(/[,;|]/).map((s) => s.trim().toUpperCase()).filter(Boolean);
+    if (!codes.length) {
+      issues.push({ row: rowNumber, field: "countryCode", message: "Country code is required." });
+      continue;
+    }
+    for (const code of codes) {
+      const country = countryByCode.get(code);
+      if (!country) {
+        issues.push({ row: rowNumber, field: "countryCode", message: `Country '${code}' was not found.` });
+      } else if (country.status !== "ACTIVE") {
+        issues.push({ row: rowNumber, field: "countryCode", message: `Country '${code}' is inactive.` });
+      }
 
-    const existing = existingByKey.get(`${row.countryCode}::${row.name.toLowerCase()}`);
-    if (existing) {
-      duplicateWarnings.push(`A matching tax rule already exists for ${row.name} in ${row.countryCode}.`);
+      const existing = existingByKey.get(`${code}::${row.name.toLowerCase()}`);
+      if (existing) {
+        duplicateWarnings.push(`A matching tax rule already exists for ${row.name} in ${code}.`);
+      }
     }
   }
 
@@ -617,9 +642,80 @@ export async function exportTaxSpreadsheet(query: TaxListQuery & { ids?: string 
   );
 }
 
+export function generateSampleTaxTemplate() {
+  const sampleRows = [
+    {
+      name: "Global Default Tax 10%",
+      type: "VAT",
+      percentage: 10,
+      countryCode: "ALL",
+      status: "ACTIVE",
+      sortOrder: 1,
+    },
+    {
+      name: "Standard GST 18%",
+      type: "CGST",
+      percentage: 18,
+      countryCode: "IN",
+      status: "ACTIVE",
+      sortOrder: 2,
+    },
+    {
+      name: "Medical Equipment Reduced GST 12%",
+      type: "CGST",
+      percentage: 12,
+      countryCode: "IN",
+      status: "ACTIVE",
+      sortOrder: 3,
+    },
+    {
+      name: "Standard UK VAT 20%",
+      type: "VAT",
+      percentage: 20,
+      countryCode: "GB",
+      status: "ACTIVE",
+      sortOrder: 4,
+    },
+    {
+      name: "EU Standard VAT 19%",
+      type: "VAT",
+      percentage: 19,
+      countryCode: "DE",
+      status: "ACTIVE",
+      sortOrder: 5,
+    },
+  ];
+
+  return writeSpreadsheetBuffer(
+    sampleRows,
+    "Tax Rules",
+    TAX_EXPORT_COLUMNS.map((column) => ({ key: column.key, header: column.header })),
+  );
+}
+
+
 export async function previewTaxImport(filePath: string) {
   const rows = readSpreadsheetRows(filePath);
   const preview = await previewTaxRows(rows);
+
+  const issuesByRow = new Map<number, string[]>();
+  for (const issue of preview.issues) {
+    const list = issuesByRow.get(issue.row) || [];
+    list.push(`${issue.field}: ${issue.message}`);
+    issuesByRow.set(issue.row, list);
+  }
+
+  const previewRows = preview.parsed.map((row, index) => {
+    const rowNumber = index + 2;
+    const rowErrors = issuesByRow.get(rowNumber) || [];
+    return {
+      rowNumber,
+      isValid: rowErrors.length === 0,
+      errors: rowErrors,
+      ...row,
+    };
+  });
+
   return {
     totalRows: preview.parsed.length,
     validRows: Math.max(0, preview.parsed.length - preview.issues.length),
@@ -627,11 +723,12 @@ export async function previewTaxImport(filePath: string) {
     issues: preview.issues,
     duplicateWarnings: preview.duplicateWarnings,
     sampleRows: preview.parsed.slice(0, 10).map((row, index) => ({ row: index + 2, ...row })),
+    rows: previewRows,
   };
 }
 
-export async function importTaxSpreadsheet(filePath: string) {
-  const rows = readSpreadsheetRows(filePath);
+export async function importTaxSpreadsheet(filePathOrRows: string | Record<string, unknown>[]) {
+  const rows = typeof filePathOrRows === "string" ? readSpreadsheetRows(filePathOrRows) : (filePathOrRows as any);
   const preview = await previewTaxRows(rows);
   if (preview.issues.length > 0) {
     throw new AppError(`Import validation failed with ${preview.issues.length} issue(s).`, 400);
@@ -641,8 +738,15 @@ export async function importTaxSpreadsheet(filePath: string) {
 
   await prisma.$transaction(async (tx) => {
     for (const [index, row] of preview.parsed.entries()) {
-      const country = preview.countryByCode.get(row.countryCode);
-      if (!country) {
+      const isAll = row.countryCode === "ALL";
+      const targetCountries = isAll
+        ? await tx.country.findMany({ where: { status: "ACTIVE" }, select: { id: true, code: true } })
+        : (() => {
+            const codes = String(row.countryCode || "").split(/[,;|]/).map((s) => s.trim().toUpperCase()).filter(Boolean);
+            return codes.map((cd) => preview.countryByCode.get(cd)).filter(Boolean) as Array<{ id: string; code: string }>;
+          })();
+
+      if (!targetCountries.length) {
         throw new AppError(`Country not found during import on row ${index + 2}.`, 400);
       }
 
@@ -654,20 +758,35 @@ export async function importTaxSpreadsheet(filePath: string) {
         sortOrder: Number(row.sortOrder),
       };
 
-      const existing = await tx.taxRule.findFirst({
-        where: { countries: { some: { id: country.id } }, name: payload.name },
-        select: { id: true },
-      });
-
-      if (existing) {
-        await tx.taxRule.update({
-          where: { id: existing.id },
-          data: payload,
+      for (const country of targetCountries) {
+        const existing = await tx.taxRule.findFirst({
+          where: {
+            OR: [
+              { countryId: country.id, name: payload.name },
+              { countries: { some: { countryId: country.id } }, name: payload.name },
+            ],
+          },
+          select: { id: true },
         });
-        summary.updated += 1;
-      } else {
-        await tx.taxRule.create({ data: payload });
-        summary.created += 1;
+
+        if (existing) {
+          await tx.taxRule.update({
+            where: { id: existing.id },
+            data: payload,
+          });
+          summary.updated += 1;
+        } else {
+          await tx.taxRule.create({
+            data: {
+              ...payload,
+              countryId: country.id,
+              countries: {
+                create: [{ countryId: country.id }],
+              },
+            },
+          });
+          summary.created += 1;
+        }
       }
     }
   });

@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, X } from "lucide-react";
+import { ImageIcon, Upload, X } from "lucide-react";
 import { AdminInput, AdminRichTextEditor, AdminSelect, AdminTextarea, useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import { useAdminBlogAuthors, useAdminBlogCategories, useCreateBlog, useUpdateBlog } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { slugify } from "@/utils/slugify";
 import { uploadMediaFiles } from "@/utils/uploadMedia";
+import { MediaSelectorModal } from "@/components/admin/media/MediaSelectorModal";
 
 type Blog = {
   id: string;
@@ -71,6 +72,7 @@ export function BlogEditor({ blog }: { blog?: Blog }) {
   const [slugEdited, setSlugEdited] = useState(Boolean(blog?.slug));
   const [showSeo, setShowSeo] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [mediaModalOpen, setMediaModalOpen] = useState(false);
 
   const set = (key: keyof typeof form, value: unknown) => setForm((prev) => ({ ...prev, [key]: value }));
   const save = async (statusOverride?: string) => {
@@ -153,15 +155,13 @@ export function BlogEditor({ blog }: { blog?: Blog }) {
         <section className="rounded-lg border border-[#E6E6E6] bg-white p-5">
           <h3 className="mb-3 text-[14px] font-semibold">Featured Image</h3>
           {form.featuredImage && <img src={form.featuredImage} alt="" className="mb-3 h-36 w-full rounded-md object-cover" />}
-          <label className={`inline-flex cursor-pointer items-center gap-2 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-semibold ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
-            {uploading ? (
-              <span className="inline-block animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent w-3.5 h-3.5" aria-hidden="true" />
-            ) : (
-              <Upload size={14} />
-            )}
-            {uploading ? "Uploading..." : "Upload image"}
-            <input type="file" accept="image/*" className="hidden" onChange={(event) => upload(event.target.files?.[0])} disabled={uploading} />
-          </label>
+          <button
+            type="button"
+            onClick={() => setMediaModalOpen(true)}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+          >
+            <ImageIcon size={14} /> Browse Media Library
+          </button>
           <AdminInput label="Image URL" value={form.featuredImage} onChange={(event) => set("featuredImage", event.target.value)} className="mt-3" />
         </section>
         <section className="space-y-3 rounded-lg border border-[#E6E6E6] bg-white p-5">
@@ -183,6 +183,13 @@ export function BlogEditor({ blog }: { blog?: Blog }) {
           </div>}
         </section>
       </aside>
+      <MediaSelectorModal
+        isOpen={mediaModalOpen}
+        onClose={() => setMediaModalOpen(false)}
+        onSelect={(media) => set("featuredImage", media.url)}
+        title="Select Featured Image"
+        acceptTypes={["IMAGE"]}
+      />
       {ToastComponent}
     </div>
   );

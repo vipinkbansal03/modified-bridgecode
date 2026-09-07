@@ -64,6 +64,7 @@ import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { formatDate } from "@/utils/formatDate";
 import { slugify } from "@/utils/slugify";
 import { uploadMediaFiles } from "@/utils/uploadMedia";
+import { MediaSelectorModal } from "@/components/admin/media/MediaSelectorModal";
 
 type Product = { id: string; title: string };
 type Collection = {
@@ -166,6 +167,7 @@ export default function CollectionsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editorTab, setEditorTab] = useState<"details" | "countries" | "discounts">("details");
   const [isUploading, setIsUploading] = useState(false);
+  const [mediaModalOpen, setMediaModalOpen] = useState(false);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>("");
   const [slugEdited, setSlugEdited] = useState(false);
 
@@ -1027,16 +1029,13 @@ export default function CollectionsPage() {
                       {...form.getFieldProps("image")}
                       error={form.errors.image as string}
                     />
-                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]">
-                      <Upload size={14} /> {isUploading ? "Uploading..." : "Upload image"}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        disabled={isUploading}
-                        onChange={(e) => handleImageUpload(e.target.files?.[0])}
-                      />
-                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setMediaModalOpen(true)}
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+                    >
+                      <ImageIcon size={14} /> Browse Media Library
+                    </button>
                   </div>
                 </div>
 
@@ -1410,6 +1409,14 @@ export default function CollectionsPage() {
         isPermanentDeleting={bulkSaving}
         softDeleteDescription="Hides the selected collections from the active storefront and admin catalog."
         permanentDeleteDescription="Physically removes the selected collections from the database."
+      />
+
+      <MediaSelectorModal
+        isOpen={mediaModalOpen}
+        onClose={() => setMediaModalOpen(false)}
+        onSelect={(media) => form.setFieldValue("image", media.url)}
+        title="Select Collection Image"
+        acceptTypes={["IMAGE"]}
       />
 
       {ToastComponent}

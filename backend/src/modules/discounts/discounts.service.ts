@@ -627,22 +627,23 @@ const DISCOUNT_EXPORT_COLUMNS = [
   { key: "endDate", header: "endDate" },
 ] as const;
 
-function parseDiscountRow(raw: Record<string, string>): DiscountSpreadsheetRow {
+function parseDiscountRow(raw: Record<string, any>): DiscountSpreadsheetRow {
+  const safeStr = (v: any) => (v !== undefined && v !== null ? String(v).trim() : "");
   return {
-    id: raw.id?.trim() || "",
-    name: raw.name?.trim() || "",
-    type: raw.type?.trim().toUpperCase() || "",
-    status: raw.status?.trim().toUpperCase() || "ACTIVE",
-    tierId: raw.tierId?.trim() || "",
-    minQuantity: raw.minQuantity?.trim() || "",
-    discountPercent: raw.discountPercent?.trim() || "",
-    fixedAmount: raw.fixedAmount?.trim() || "",
-    countryId: raw.countryId?.trim() || "",
-    productId: raw.productId?.trim() || "",
-    collectionId: raw.collectionId?.trim() || "",
-    categoryId: raw.categoryId?.trim() || "",
-    startDate: raw.startDate?.trim() || "",
-    endDate: raw.endDate?.trim() || "",
+    id: safeStr(raw.id),
+    name: safeStr(raw.name),
+    type: safeStr(raw.type).toUpperCase(),
+    status: safeStr(raw.status).toUpperCase() || "ACTIVE",
+    tierId: safeStr(raw.tierId),
+    minQuantity: safeStr(raw.minQuantity),
+    discountPercent: safeStr(raw.discountPercent),
+    fixedAmount: safeStr(raw.fixedAmount),
+    countryId: safeStr(raw.countryId),
+    productId: safeStr(raw.productId),
+    collectionId: safeStr(raw.collectionId),
+    categoryId: safeStr(raw.categoryId),
+    startDate: safeStr(raw.startDate),
+    endDate: safeStr(raw.endDate),
   };
 }
 
@@ -804,9 +805,72 @@ export async function exportDiscountsSpreadsheet(query: DiscountListQuery & { id
   );
 }
 
+export function generateSampleDiscountsTemplate() {
+  const sampleRows = [
+    {
+      id: "",
+      name: "Volume Discount 10%",
+      type: "PERCENTAGE",
+      status: "ACTIVE",
+      tierId: "",
+      minQuantity: "5",
+      discountPercent: "10",
+      fixedAmount: "",
+      countryId: "",
+      productId: "",
+      collectionId: "",
+      categoryId: "",
+      startDate: "2026-01-01T00:00:00.000Z",
+      endDate: "2026-12-31T23:59:59.000Z",
+    },
+    {
+      id: "",
+      name: "Flat 5.00 Off Bulk Orders",
+      type: "FIXED_AMOUNT",
+      status: "ACTIVE",
+      tierId: "",
+      minQuantity: "10",
+      discountPercent: "",
+      fixedAmount: "5.00",
+      countryId: "",
+      productId: "",
+      collectionId: "",
+      categoryId: "",
+      startDate: "2026-01-01T00:00:00.000Z",
+      endDate: "2026-12-31T23:59:59.000Z",
+    },
+  ];
+
+  return writeSpreadsheetBuffer(
+    sampleRows,
+    "Discounts",
+    DISCOUNT_EXPORT_COLUMNS.map((column) => ({ key: column.key, header: column.header })),
+  );
+}
+
+
 export async function previewDiscountImport(filePath: string) {
   const rows = readSpreadsheetRows(filePath);
   const preview = await validateDiscountRows(rows);
+
+  const issuesByRow = new Map<number, string[]>();
+  for (const issue of preview.issues) {
+    const list = issuesByRow.get(issue.row) || [];
+    list.push(`${issue.field}: ${issue.message}`);
+    issuesByRow.set(issue.row, list);
+  }
+
+  const previewRows = preview.parsed.map((row, index) => {
+    const rowNumber = index + 2;
+    const rowErrors = issuesByRow.get(rowNumber) || [];
+    return {
+      rowNumber,
+      isValid: rowErrors.length === 0,
+      errors: rowErrors,
+      ...row,
+    };
+  });
+
   return {
     totalRows: preview.parsed.length,
     validRows: Math.max(0, preview.parsed.length - preview.issues.length),
@@ -814,11 +878,12 @@ export async function previewDiscountImport(filePath: string) {
     issues: preview.issues,
     duplicateWarnings: preview.duplicateWarnings,
     sampleRows: preview.parsed.slice(0, 10).map((row, index) => ({ row: index + 2, ...row })),
+    rows: previewRows,
   };
 }
 
-export async function importDiscountSpreadsheet(filePath: string) {
-  const rows = readSpreadsheetRows(filePath);
+export async function importDiscountSpreadsheet(filePathOrRows: string | Record<string, unknown>[]) {
+  const rows = typeof filePathOrRows === "string" ? readSpreadsheetRows(filePathOrRows) : (filePathOrRows as any);
   const preview = await validateDiscountRows(rows);
   if (preview.issues.length > 0) {
     throw new AppError(`Import validation failed with ${preview.issues.length} issue(s).`, 400);

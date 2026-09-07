@@ -25,7 +25,12 @@ export function DeliveryAddressModal({
   const { showToast } = useToast();
   const { data: addresses = [], isLoading } = useCustomerAddresses(); 
 
-  const { selectedAddress, setSelectedAddress } = useDeliveryAddress();
+  const {
+    selectedAddress,
+    setSelectedAddress,
+    setSelectedPincode,
+    setSelectedCoordinates,
+  } = useDeliveryAddress();
 
   const displayAddresses = useMemo(() => {
     if (
@@ -58,73 +63,209 @@ export function DeliveryAddressModal({
   const [detecting, setDetecting] = useState(false);
   const [searchingPin, setSearchingPin] = useState(false);
 
-  const handleCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      showToast("Geolocation is not supported by your browser.", "warning");
+  const handleCurrentLocation = async () => {
+    setDetecting(true);
+
+    const applyLocation = (params: {
+      city: string;
+      state: string;
+      pincode: string;
+      street?: string;
+      country?: string;
+      countryCode?: string;
+      coords?: { latitude: number; longitude: number };
+    }) => {
+      const { city, state, pincode, street, country = "India", countryCode = "IN", coords } = params;
+      const cleanStreet = street || (city && state ? `${city}, ${state}` : city || state || "Detected Location");
+      const mockAddress: CustomerAddress = {
+        id: `geo-${Date.now()}`,
+        customerId: "",
+        label: "Current Location",
+        fullName: "",
+        phone: "",
+        addressLine1: cleanStreet,
+        addressLine2: null,
+        city: city || "Detected City",
+        state: state || "Detected State",
+        postalCode: pincode || "",
+        countryId: "",
+        country: {
+          id: "",
+          name: country,
+          code: countryCode.toUpperCase(),
+          currencyId: "",
+          symbol: "₹",
+        } as any,
+        isDefault: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      setSelectedAddress(mockAddress);
+      if (pincode) setSelectedPincode?.(pincode);
+      if (coords) setSelectedCoordinates?.(coords);
+      showToast(`Location detected: ${city || state || "Current Location"}`, "success");
+      onClose();
+    };
+
+    const fallbackToIpLocation = async () => {
+      try {
+        const res = await fetch("https://ipwho.is/");
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.success) {
+            applyLocation({
+              city: data.city || "",
+              state: data.region || "",
+              pincode: data.postal || "",
+              street: `${data.city || ""}, ${data.region || ""}`.replace(/^,\s*|,\s*$/g, ""),
+              country: data.country || "India",
+              countryCode: data.country_code || "IN",
+              coords: data.latitude && data.longitude ? { latitude: data.latitude, longitude: data.longitude } : undefined,
+            });
+            return true;
+          }
+        }
+      } catch (err) {
+        console.warn("ipwho.is failed, trying secondary IP fallback:", err);
+      }
+
+      try {
+        const res2 = await fetch("https://ipapi.co/json/");
+        if (res2.ok) {
+          const data2 = await res2.json();
+          if (data2 && data2.city) {
+            applyLocation({
+              city: data2.city || "",
+              state: data2.region || "",
+              pincode: data2.postal || "",
+              street: `${data2.city || ""}, ${data2.region || ""}`.replace(/^,\s*|,\s*$/g, ""),
+              country: data2.country_name || "India",
+              countryCode: data2.country_code || "IN",
+              coords: data2.latitude && data2.longitude ? { latitude: data2.latitude, longitude: data2.longitude } : undefined,
+            });
+            return true;
+          }
+        }
+      } catch (err2) {
+        console.warn("ipapi.co fallback failed:", err2);
+      }
+
+      return false;
+    };
+
+    // Check if secure context is available.
+    // Modern browsers (Chrome, Edge, Firefox) disable navigator.geolocation on HTTP (insecure context),
+    // throwing PERMISSION_DENIED immediately without prompting the user.
+    const isSecure =
+      typeof window !== "undefined" &&
+      (window.isSecureContext ||
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1");
+
+    if (!isSecure || !navigator.geolocation) {
+      const ok = await fallbackToIpLocation();
+      setDetecting(false);
+      if (!ok) {
+        showToast("Unable to detect location automatically. Please enter your PIN code.", "warning");
+      }
       return;
     }
 
-    setDetecting(true);
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         try {
           const { latitude, longitude } = position.coords;
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
-          );
-          const data = await res.json();
-          const address = data.address || {};
-          const city = address.city || address.town || address.village || address.county || "Detected City";
-          const state = address.state || "Detected State";
-          const pincode = address.postcode || "";
+          let resolved = false;
 
-          // Parse display_name to extract only street address components
-          const displayName = data.display_name || "";
-          const parts = displayName.split(",").map((p: string) => p.trim());
-          const streetParts = parts.filter((part: string) => {
-            const low = part.toLowerCase();
-            return (
-              low !== city.toLowerCase() &&
-              low !== state.toLowerCase() &&
-              low !== (address.country || "India").toLowerCase() &&
-              low !== pincode.toLowerCase() &&
-              low !== "india" &&
-              low !== address.country_code?.toLowerCase()
+          try {
+            const bdcRes = await fetch(
+              `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
             );
-          });
-          const cleanStreet = streetParts.join(", ") || "Detected Location";
+            if (bdcRes.ok) {
+              const bdcData = await bdcRes.json();
+              if (bdcData && (bdcData.city || bdcData.locality || bdcData.principalSubdivision)) {
+                const city = bdcData.city || bdcData.locality || "Detected City";
+                const state = bdcData.principalSubdivision || "Detected State";
+                const pincode = bdcData.postcode || "";
+                const country = bdcData.countryName || "India";
+                const countryCode = bdcData.countryCode || "IN";
+                applyLocation({
+                  city,
+                  state,
+                  pincode,
+                  street: `${city}, ${state}`,
+                  country,
+                  countryCode,
+                  coords: { latitude, longitude },
+                });
+                resolved = true;
+              }
+            }
+          } catch (e) {
+            console.warn("BigDataCloud reverse geocoding failed, trying Nominatim:", e);
+          }
 
-          const mockAddress: CustomerAddress = {
-            id: `geo-${Date.now()}`,
-            customerId: "",
-            label: "Current Location",
-            fullName: "",
-            phone: "",
-            addressLine1: cleanStreet,
-            addressLine2: null,
-            city,
-            state,
-            postalCode: pincode,
-            countryId: "",
-            country: { id: "", name: address.country || "India", code: address.country_code?.toUpperCase() || "IN", currencyId: "", symbol: "₹" } as any,
-            isDefault: false,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
+          if (!resolved) {
+            const res = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
+            );
+            const data = await res.json();
+            const address = data.address || {};
+            const city = address.city || address.town || address.village || address.county || "Detected City";
+            const state = address.state || "Detected State";
+            const pincode = address.postcode || "";
 
-          setSelectedAddress(mockAddress);
-          onClose();
+            const displayName = data.display_name || "";
+            const parts = displayName.split(",").map((p: string) => p.trim());
+            const streetParts = parts.filter((part: string) => {
+              const low = part.toLowerCase();
+              return (
+                low !== city.toLowerCase() &&
+                low !== state.toLowerCase() &&
+                low !== (address.country || "India").toLowerCase() &&
+                low !== pincode.toLowerCase() &&
+                low !== "india" &&
+                low !== address.country_code?.toLowerCase()
+              );
+            });
+            const cleanStreet = streetParts.join(", ") || `${city}, ${state}`;
+
+            applyLocation({
+              city,
+              state,
+              pincode,
+              street: cleanStreet,
+              country: address.country || "India",
+              countryCode: address.country_code?.toUpperCase() || "IN",
+              coords: { latitude, longitude },
+            });
+          }
         } catch (error) {
-          console.error("Reverse geocoding error:", error);
-          showToast("Failed to resolve your coordinates to a location.", "error");
+          console.error("Reverse geocoding error, falling back to IP:", error);
+          const ok = await fallbackToIpLocation();
+          if (!ok) {
+            showToast("Failed to resolve your location. Please enter your PIN code.", "error");
+          }
         } finally {
           setDetecting(false);
         }
       },
-      (error) => {
-        console.error("Geolocation error:", error);
-        showToast("Unable to retrieve your location. Please check your browser permission settings.", "warning");
+      async (error) => {
+        console.warn("Browser geolocation failed/denied, falling back to IP:", error);
+        const ok = await fallbackToIpLocation();
         setDetecting(false);
+        if (!ok) {
+          showToast(
+            "Unable to retrieve your location. Please check browser permissions or enter your PIN code.",
+            "warning"
+          );
+        }
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 6000,
+        maximumAge: 300000,
       }
     );
   };

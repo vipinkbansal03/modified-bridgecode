@@ -52,6 +52,14 @@ export const exportSpreadsheet = asyncHandler(async (req: AuthRequest, res: Resp
   return res.send(buffer);
 });
 
+export const downloadSampleTemplate = asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const buffer = S.generateSampleCurrenciesTemplate();
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", 'attachment; filename="currencies-template.xlsx"');
+  return res.send(buffer);
+});
+
+
 export const previewImport = asyncHandler(async (req: AuthRequest, res: Response) => {
   const file = (req as AuthRequest & { file?: { path?: string } }).file;
   if (!file?.path) throw new AppError("File upload failed.", 400);
@@ -63,6 +71,11 @@ export const previewImport = asyncHandler(async (req: AuthRequest, res: Response
 });
 
 export const importSpreadsheet = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const rows = req.body?.rows;
+  if (Array.isArray(rows) && rows.length > 0) {
+    return ApiResponse.success(res, "Currencies imported.", await S.importCurrencySpreadsheet(rows));
+  }
+
   const file = (req as AuthRequest & { file?: { path?: string } }).file;
   if (!file?.path) throw new AppError("File upload failed.", 400);
   try {

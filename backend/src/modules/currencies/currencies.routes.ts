@@ -11,6 +11,7 @@ router.get("/", requirePermission("currencies.view", "currencies.manage"), C.lis
 router.get("/simple", requirePermission("currencies.view", "currencies.manage"), C.simpleList);
 router.get("/dashboard", requirePermission("currencies.view", "currencies.manage"), C.dashboard);
 router.get("/export", requirePermission("currencies.view", "currencies.manage"), C.exportSpreadsheet);
+router.get("/sample-template", requirePermission("currencies.view", "currencies.manage"), C.downloadSampleTemplate);
 router.post("/import/preview", requirePermission("currencies.manage"), upload.single("file"), C.previewImport);
 router.post("/import", requirePermission("currencies.manage"), upload.single("file"), C.importSpreadsheet);
 router.post("/bulk", requirePermission("currencies.manage"), C.bulk);

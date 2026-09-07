@@ -10,6 +10,7 @@ router.get("/", requirePermission("tiers.view", "tiers.manage"), C.list);
 router.get("/simple", requirePermission("tiers.view", "tiers.manage"), C.simpleList);
 router.get("/dashboard", requirePermission("tiers.view", "tiers.manage"), C.dashboard);
 router.get("/export", requirePermission("tiers.view", "tiers.manage"), C.exportSpreadsheet);
+router.get("/sample-template", requirePermission("tiers.view", "tiers.manage"), C.downloadSampleTemplate);
 router.post("/import/preview", requirePermission("tiers.create", "tiers.update", "tiers.manage"), upload.single("file"), C.previewImport);
 router.post("/import", requirePermission("tiers.create", "tiers.update", "tiers.manage"), upload.single("file"), C.importSpreadsheet);
 router.post("/bulk/restore", requirePermission("tiers.update", "tiers.manage"), C.bulkRestore);

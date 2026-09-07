@@ -71,6 +71,14 @@ export const exportSpreadsheet = asyncHandler(async (req: AuthRequest, res: Resp
   return res.send(buffer);
 });
 
+export const downloadSampleTemplate = asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const buffer = TiersService.generateSampleTiersTemplate();
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", 'attachment; filename="tiers-template.xlsx"');
+  return res.send(buffer);
+});
+
+
 export const previewImport = asyncHandler(async (req: AuthRequest, res: Response) => {
   const filePath = (req as AuthRequest & { file?: { path?: string } }).file?.path;
   if (!filePath) throw new AppError("File upload failed.", 400);
@@ -79,6 +87,12 @@ export const previewImport = asyncHandler(async (req: AuthRequest, res: Response
 });
 
 export const importSpreadsheet = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const rows = req.body?.rows;
+  if (Array.isArray(rows) && rows.length > 0) {
+    const report = await TiersService.importTierSpreadsheet(rows);
+    return ApiResponse.success(res, "Tiers imported.", report);
+  }
+
   const filePath = (req as AuthRequest & { file?: { path?: string } }).file?.path;
   if (!filePath) throw new AppError("File upload failed.", 400);
   const report = await TiersService.importTierSpreadsheet(filePath);

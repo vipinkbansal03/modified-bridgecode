@@ -1,8 +1,10 @@
 "use client";
 
 import { useRef, useState, useEffect, type ChangeEvent } from "react";
+import { ImageIcon } from "lucide-react";
 import * as Yup from "yup";
 import { AdminInput, AdminSelect, AdminTextarea, AdminRichTextEditor, useToast, LoadingButton } from "@/components/admin/AdminComponents";
+import { MediaSelectorModal } from "@/components/admin/media/MediaSelectorModal";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { useAdminCategories, useAdminCountries, useCreateProduct } from "@/hooks/admin/useAdminHooks";
 import { cn } from "@/utils/cn";
@@ -67,6 +69,7 @@ export function ProductCreateForm({
   compact = false,
 }: ProductCreateFormProps) {
   const [activeTab, setActiveTab] = useState(0);
+  const [mediaModalOpen, setMediaModalOpen] = useState(false);
   const slugEdited = useRef(false);
   const skuEdited = useRef(false);
   const { showToast, ToastComponent } = useToast();
@@ -269,29 +272,13 @@ export function ProductCreateForm({
                 <div>
                   <label className="mb-1 block text-[13.5px] font-medium text-[#1A1A1A]">Information Image</label>
                   <div className="mt-1.5 flex items-center gap-3">
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/gif,image/webp"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            const result = event.target?.result as string;
-                            form.setFieldValue("informationImage", result);
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                      className="hidden"
-                      id="create-information-image-upload"
-                    />
-                    <label
-                      htmlFor="create-information-image-upload"
-                      className="cursor-pointer rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5]"
+                    <button
+                      type="button"
+                      onClick={() => setMediaModalOpen(true)}
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
                     >
-                      Upload Image
-                    </label>
+                      <ImageIcon size={14} /> Browse Media Library
+                    </button>
                     {form.values.informationImage && (
                       <div className="relative h-12 w-12">
                         <img
@@ -373,6 +360,14 @@ export function ProductCreateForm({
           </div>
         </div>
       </form>
+
+      <MediaSelectorModal
+        isOpen={mediaModalOpen}
+        onClose={() => setMediaModalOpen(false)}
+        onSelect={(media) => form.setFieldValue("informationImage", media.url)}
+        title="Select Information Image"
+        acceptTypes={["IMAGE"]}
+      />
 
       {ToastComponent}
     </>

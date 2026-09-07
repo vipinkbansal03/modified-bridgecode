@@ -42,6 +42,7 @@ import {
 } from "@/components/admin/AdminComponents";
 import { AdminRowActions, AdminActionButton } from "@/components/admin/AdminRowActions";
 import { Modal } from "@/components/ui/Modal";
+import { AdminImportWizard, WizardColumnDef } from "@/components/admin/AdminImportWizard";
 import {
   filterTranslationLanguages,
   NoTranslationLanguagesMessage,
@@ -54,6 +55,7 @@ import { SortableList, toSortOrderPayload } from "@/components/admin/SortableLis
 import {
   useAdminCategories,
   useAdminCategoryCountries,
+  useAdminCountries,
   useAdminLanguages,
   useArchiveCategory,
   useDeleteCategory,
@@ -70,6 +72,7 @@ import { slugify } from "@/utils/slugify";
 import { uploadMediaFiles } from "@/utils/uploadMedia";
 import { CATEGORY_DESCRIPTION_MAX_LENGTH } from "@/constants/category.constants";
 import { stripHtmlTags } from "@/utils/sanitize";
+import MediaSelectorModal from "@/components/admin/media/MediaSelectorModal";
 
 interface CategoryTranslation {
   id: string;
@@ -146,6 +149,15 @@ const schema = Yup.object({
   status: Yup.string().oneOf(["ACTIVE", "INACTIVE"]).required("Status is required"),
 });
 
+const categoryExpectedColumns = [
+  { name: "name", required: true, hint: "Category Name" },
+  { name: "slug", hint: "Unique category slug (optional, auto-generated if empty)" },
+  { name: "parentCategory", hint: "Parent category name or slug if nested (leave blank for root)" },
+  { name: "status", hint: "ACTIVE or INACTIVE" },
+  { name: "sortOrder", hint: "Display ordering index" },
+  { name: "countryCodes", hint: "All countries (ALL) or comma-separated country codes, e.g. IN, US" },
+];
+
 function flattenCategories(categories: Category[]) {
   const byParent = new Map<string | null, Category[]>();
   categories.forEach((category) => {
@@ -202,17 +214,13 @@ export default function CategoriesPage() {
   const [limit, setLimit] = useState(25);
 
   const [importOpen, setImportOpen] = useState(false);
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importPreview, setImportPreview] = useState<SpreadsheetPreview | null>(null);
-  const [importMessage, setImportMessage] = useState("");
-  const [importing, setImporting] = useState(false);
   const [categoryEditorTab, setCategoryEditorTab] = useState<"content" | "translations">("content");
   const [translationLanguageId, setTranslationLanguageId] = useState("");
   const [slugEdited, setSlugEdited] = useState(false);
   const [countryOverrides, setCountryOverrides] = useState<Record<string, boolean>>({});
   const [countrySearch, setCountrySearch] = useState("");
   const [uploadingImage, setUploadingImage] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [categoryMediaOpen, setCategoryMediaOpen] = useState(false);
   const { showToast, ToastComponent } = useToast();
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -232,6 +240,65 @@ export default function CategoriesPage() {
   const deletingCategory = useMemo(
     () => (deleting ? (categories as Category[]).find((c) => c.id === deleting) : null),
     [deleting, categories],
+  );
+
+  const parentCategoryOptions = useMemo(() => {
+    return [
+      { label: "None (Root Category)", value: "" },
+      ...(categories as Category[]).map((c) => ({
+        label: c.name,
+        value: c.slug,
+      })),
+    ];
+  }, [categories]);
+
+  const { data: allCountries = [] } = useAdminCountries();
+
+  const wizardCountryOptions = useMemo(() => {
+    const list = (allCountries || [])
+      .filter((c: any) => c.status === "ACTIVE" || !c.status)
+      .map((c: any) => ({
+        label: `${c.name} (${c.code.toUpperCase()})`,
+        value: c.code.toUpperCase(),
+      }));
+    return [
+      { label: "All countries", value: "ALL" },
+      ...list,
+    ];
+  }, [allCountries]);
+
+  const categoryWizardColumns: WizardColumnDef[] = useMemo(
+    () => [
+      { key: "name", header: "Category Name", required: true, minWidth: "170px" },
+      { key: "slug", header: "Slug", minWidth: "140px", placeholder: "auto-generated if empty" },
+      {
+        key: "parentCategory",
+        header: "Parent Category",
+        type: "select",
+        options: parentCategoryOptions,
+        minWidth: "180px",
+      },
+      {
+        key: "status",
+        header: "Status",
+        type: "select",
+        options: [
+          { label: "Active", value: "ACTIVE" },
+          { label: "Inactive", value: "INACTIVE" },
+        ],
+        minWidth: "120px",
+      },
+      { key: "sortOrder", header: "Sort Order", type: "number", minWidth: "100px" },
+      {
+        key: "countryCodes",
+        header: "Countries",
+        type: "multiselect",
+        options: wizardCountryOptions,
+        minWidth: "160px",
+        placeholder: "All countries or IN, US...",
+      },
+    ],
+    [parentCategoryOptions, wizardCountryOptions]
   );
 
   const { data: languages = [] } = useAdminLanguages();
@@ -492,53 +559,8 @@ export default function CategoriesPage() {
       showToast(getAdminErrorMessage(error, "Failed to export categories."), "error");
     }
   };
-
   const openImportDialog = () => {
-    setImportPreview(null);
-    setImportMessage("");
-    setImportFile(null);
     setImportOpen(true);
-  };
-
-  const handleImportFile = async (file?: File) => {
-    if (!file) return;
-    setImportFile(file);
-    setImportMessage("Previewing spreadsheet...");
-    const formData = new FormData();
-    formData.append("file", file);
-    try {
-      const response = await adminApi.post("/categories/import/preview", formData);
-      const report = response.data?.data as SpreadsheetPreview;
-      setImportPreview(report);
-      setImportMessage(
-        report.invalidRows > 0
-          ? "Fix the validation issues before importing."
-          : "Preview looks good. You can import now.",
-      );
-    } catch (error) {
-      setImportMessage(getAdminErrorMessage(error, "Failed to preview spreadsheet."));
-      setImportPreview(null);
-    }
-  };
-
-  const confirmImport = async () => {
-    if (!importFile) return;
-    setImporting(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", importFile);
-      const response = await adminApi.post("/categories/import", formData);
-      const result = response.data?.data as { created: number; updated: number; report: SpreadsheetPreview };
-      showToast(`Imported ${result.created} created and ${result.updated} updated categories.`);
-      setImportOpen(false);
-      setImportFile(null);
-      setImportPreview(null);
-      refetch();
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to import spreadsheet."), "error");
-    } finally {
-      setImporting(false);
-    }
   };
 
   const handleReorder = async (next: CategoryRow[]) => {
@@ -856,16 +878,6 @@ export default function CategoriesPage() {
           }
         />
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".xlsx,.xls,.csv"
-          className="hidden"
-          onChange={(event) => {
-            void handleImportFile(event.target.files?.[0] || undefined);
-            event.currentTarget.value = "";
-          }}
-        />
 
         {/* 3. FULL-WIDTH DATA TABLE */}
         <DataTable<CategoryRow>
@@ -1047,16 +1059,15 @@ export default function CategoriesPage() {
                 </div>
                 <div className="space-y-2">
                   <AdminInput label="Image URL" placeholder="/uploads/category.jpg" {...form.getFieldProps("image")} />
-                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]">
-                    <Upload size={14} /> {uploadingImage ? "Uploading..." : "Upload image"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      disabled={uploadingImage}
-                      onChange={(e) => handleImageUpload(e.target.files?.[0])}
-                    />
-                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCategoryMediaOpen(true)}
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+                    >
+                      <ImageIcon size={14} /> Browse Media Library
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1321,16 +1332,15 @@ export default function CategoriesPage() {
               </div>
               <div className="space-y-2">
                 <AdminInput label="Image URL" placeholder="/uploads/category.jpg" {...form.getFieldProps("image")} />
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[#E6E6E6] px-3 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]">
-                  <Upload size={14} /> {uploadingImage ? "Uploading..." : "Upload image"}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    disabled={uploadingImage}
-                    onChange={(e) => handleImageUpload(e.target.files?.[0])}
-                  />
-                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCategoryMediaOpen(true)}
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+                  >
+                    <ImageIcon size={14} /> Browse Media Library
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1365,122 +1375,36 @@ export default function CategoriesPage() {
         permanentDeleteDescription="Physically removes the selected categories from the database. Blocked if products or child categories reference them."
       />
 
-      {/* EXCEL IMPORT MODAL */}
-      <Modal
+      {/* EXCEL IMPORT WIZARD */}
+      <AdminImportWizard
         open={importOpen}
         onClose={() => setImportOpen(false)}
         title="Import Categories Excel"
-        subtitle="Upload an .xlsx or .csv file to bulk create or update categories."
-        size="2xl"
-        footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <button
-              type="button"
-              onClick={() => setImportOpen(false)}
-              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <LoadingButton
-              type="button"
-              onClick={confirmImport}
-              loading={importing}
-              loadingText="Importing..."
-              disabled={!importFile || !!importPreview?.invalidRows}
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
-            >
-              Import Categories
-            </LoadingButton>
-          </div>
-        }
-      >
-        <div className="space-y-4 p-6">
-          <p className="text-[13px] leading-5 text-[#6B6B6B]">
-            Upload an <code className="rounded bg-[#F3F4F6] px-1.5 py-0.5 text-[12px] font-mono text-[#1F2937]">.xlsx</code> or <code className="rounded bg-[#F3F4F6] px-1.5 py-0.5 text-[12px] font-mono text-[#1F2937]">.csv</code> file. The first sheet is validated on the server before any category is created or updated.
-          </p>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] cursor-pointer shadow-xs"
-            >
-              <Upload size={14} />
-              {importFile ? importFile.name : "Choose Excel / CSV File"}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.csv"
-              className="hidden"
-              onChange={(e) => handleImportFile(e.target.files?.[0])}
-            />
-            {importFile && (
-              <button
-                type="button"
-                onClick={() => {
-                  setImportFile(null);
-                  setImportPreview(null);
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                }}
-                className="text-[12.5px] text-red-600 hover:underline cursor-pointer"
-              >
-                Remove
-              </button>
-            )}
-          </div>
-          {importing && (
-            <div className="flex items-center gap-2 text-[13px] text-[#6B6B6B]">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#E31E24] border-t-transparent" />
-              Parsing file preview...
-            </div>
-          )}
-          {importMessage ? (
-            <div className="rounded-md border border-[#E6E6E6] bg-[#FAFAFA] px-3 py-2 text-[13px] text-[#1A1A1A]">
-              {importMessage}
-            </div>
-          ) : null}
-          {importPreview ? (
-            <div className="space-y-4 rounded-lg border border-[#E6E6E6] bg-white p-4">
-              <div className="grid gap-3 md:grid-cols-4">
-                <div className="rounded border border-[#E6E6E6] p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-[#9A9A9A]">Rows</div>
-                  <div className="mt-1 text-[20px] font-semibold text-[#1A1A1A]">{importPreview.totalRows}</div>
-                </div>
-                <div className="rounded border border-[#E6E6E6] p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-[#9A9A9A]">Valid</div>
-                  <div className="mt-1 text-[20px] font-semibold text-green-600">{importPreview.validRows}</div>
-                </div>
-                <div className="rounded border border-[#E6E6E6] p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-[#9A9A9A]">Invalid</div>
-                  <div className="mt-1 text-[20px] font-semibold text-red-600">{importPreview.invalidRows}</div>
-                </div>
-                <div className="rounded border border-[#E6E6E6] p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-[#9A9A9A]">Warnings</div>
-                  <div className="mt-1 text-[20px] font-semibold text-amber-600">
-                    {importPreview.duplicateWarnings.length}
-                  </div>
-                </div>
-              </div>
-              {importPreview.issues.length > 0 ? (
-                <div>
-                  <h4 className="mb-2 text-[13px] font-semibold text-[#1A1A1A]">Validation Issues</h4>
-                  <div className="max-h-48 overflow-y-auto rounded border border-[#E6E6E6]">
-                    {importPreview.issues.map((issue, index) => (
-                      <div
-                        key={`${issue.row}-${issue.field}-${index}`}
-                        className="border-b border-[#F0F0F0] px-3 py-2 text-[13px] last:border-b-0"
-                      >
-                        <span className="font-semibold text-[#E31E24]">Row {issue.row}</span>{" "}
-                        <span className="text-[#6B6B6B]">[{issue.field}]</span> {issue.message}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </Modal>
+        subtitle="Upload an .xlsx or .csv file to bulk create or update categories with live preview & direct inline editing."
+        entityName="categories"
+        columns={categoryWizardColumns}
+        expectedColumns={categoryExpectedColumns}
+        sampleTemplateUrl="/categories/sample-template"
+        sampleTemplateFilename="categories-template.xlsx"
+        previewEndpoint="/categories/import/preview"
+        executeEndpoint="/categories/import"
+        onSuccess={(result) => {
+          showToast(
+            `Import complete: ${result?.created ?? 0} created, ${result?.updated ?? 0} updated.`,
+            "success"
+          );
+          refetch();
+        }}
+      />
+      <MediaSelectorModal
+        open={categoryMediaOpen}
+        onClose={() => setCategoryMediaOpen(false)}
+        initialType="image"
+        onSelect={(media) => {
+          form.setFieldValue("image", media.url);
+          showToast("Category image selected.");
+        }}
+      />
       {ToastComponent}
     </AdminLayout>
   );

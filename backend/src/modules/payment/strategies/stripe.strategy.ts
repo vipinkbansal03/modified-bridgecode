@@ -3,6 +3,7 @@ import { PaymentMethodType } from "@prisma/client";
 import { prisma } from "../../../config/database";
 import { AppError } from "../../../utils/apiResponse";
 import { PaymentInitiateResult, PaymentStrategy, PaymentVerifyResult } from "../types/payment.types";
+import { getSettingValue } from "../../settings/settings.service";
 
 const ZERO_DECIMAL_CURRENCIES = new Set([
   "BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA",
@@ -21,7 +22,10 @@ export class StripeStrategy implements PaymentStrategy {
   readonly code = "STRIPE";
 
   async initiatePayment(order: any, config?: Record<string, string>): Promise<PaymentInitiateResult> {
-    const secretKey = config?.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
+    const secretKey =
+      config?.STRIPE_SECRET_KEY ||
+      (await getSettingValue("payment.stripe_secret_key")) ||
+      process.env.STRIPE_SECRET_KEY;
     const successUrlPattern =
       config?.STRIPE_SUCCESS_URL ||
       process.env.STRIPE_SUCCESS_URL ||

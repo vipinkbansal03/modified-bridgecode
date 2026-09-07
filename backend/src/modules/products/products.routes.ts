@@ -12,6 +12,7 @@ router.put("/reorder", requirePermission("products.update", "products.manage"), 
 router.post("/bulk", requirePermission("products.update", "products.delete", "products.manage"), C.bulkUpdate);
 router.post("/bulk/permanent", requirePermission("products.delete", "products.manage"), C.bulkPermanentDelete);
 router.get("/export", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.exportSpreadsheet);
+router.get("/sample-template", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.downloadSampleTemplate);
 router.post("/import/preview", requirePermission("products.create"), upload.single("file"), C.previewImport);
 router.get("/variants", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listVariants);
 router.post("/variants/bulk/permanent", requirePermission("products.delete", "products.manage"), C.bulkPermanentDeleteVariants);
@@ -41,6 +42,10 @@ router.put("/:id/media/:mediaId/cover", requirePermission("products.update"), C.
 router.delete("/:id/media/:mediaId", requirePermission("products.update"), C.removeMedia);
 
 router.get("/:id/attributes", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listAttribs);
+router.get("/:id/attributes/export", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.exportProductAttributes);
+router.get("/:id/attributes/sample-template", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.downloadProductAttributesSampleTemplate);
+router.post("/:id/attributes/import/preview", requirePermission("products.update"), upload.single("file"), C.previewProductAttributesImport);
+router.post("/:id/attributes/import", requirePermission("products.update"), upload.single("file"), C.importProductAttributesSpreadsheet);
 router.post("/:id/attributes", requirePermission("products.update"), C.assignAttribs);
 router.delete("/:id/attributes/:attributeId", requirePermission("products.update"), C.removeAttrib);
 router.post("/:id/generate-variants", requirePermission("products.update"), C.genVariants);

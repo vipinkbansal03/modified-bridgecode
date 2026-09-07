@@ -357,8 +357,14 @@ function parseCountryCodes(value: string | null | undefined) {
   const normalized = String(value ?? "").trim();
   if (!normalized) return [];
   return normalized
-    .split(/[;,|]/)
-    .map((code) => code.trim().toUpperCase())
+    .split(/[,;|]/)
+    .map((code) => {
+      let c = code.trim().toUpperCase();
+      if (c === "ALL" || c === "GLOBAL" || c === "*" || c === "ALL COUNTRIES") return "ALL";
+      const parenMatch = c.match(/\(([A-Z]{2,3})\)$/);
+      if (parenMatch) c = parenMatch[1];
+      return c;
+    })
     .filter(Boolean);
 }
 
@@ -369,11 +375,11 @@ const TIER_EXPORT_COLUMNS = [
   { key: "countryCodes", header: "countryCodes" },
 ] as const;
 
-function parseTierRow(raw: Record<string, string>): TierSpreadsheetRow {
+function parseTierRow(raw: Record<string, any>): TierSpreadsheetRow {
   return {
-    name: raw.name?.trim() || "",
-    status: raw.status?.trim().toUpperCase() || "ACTIVE",
-    sortOrder: raw.sortOrder?.trim() || "0",
+    name: typeof raw.name === "string" ? raw.name.trim() : (raw.name ? String(raw.name) : ""),
+    status: typeof raw.status === "string" ? raw.status.trim().toUpperCase() : "ACTIVE",
+    sortOrder: raw.sortOrder !== undefined && raw.sortOrder !== null ? String(raw.sortOrder).trim() : "0",
     countryCodes: parseCountryCodes(raw.countryCodes),
   };
 }
@@ -406,7 +412,11 @@ async function previewTierRows(rows: Record<string, string>[]) {
       seen.set(key, rowNumber);
     }
     tierNames.add(row.name);
-    row.countryCodes.forEach((code) => countryCodes.add(code));
+    row.countryCodes.forEach((code) => {
+      const u = code.trim().toUpperCase();
+      if (u === "ALL" || u === "GLOBAL" || u === "*" || u === "ALL COUNTRIES") return;
+      countryCodes.add(code);
+    });
   }
 
   const [countries, existing] = await Promise.all([
@@ -420,6 +430,8 @@ async function previewTierRows(rows: Record<string, string>[]) {
   for (const [index, row] of parsed.entries()) {
     const rowNumber = index + 2;
     row.countryCodes.forEach((code) => {
+      const u = code.trim().toUpperCase();
+      if (u === "ALL" || u === "GLOBAL" || u === "*" || u === "ALL COUNTRIES") return;
       const country = countryByCode.get(code);
       if (!country) issues.push({ row: rowNumber, field: "countryCodes", message: `Country '${code}' was not found.` });
       else if (country.status !== "ACTIVE") issues.push({ row: rowNumber, field: "countryCodes", message: `Country '${code}' is inactive.` });
@@ -456,9 +468,61 @@ export async function exportTiersSpreadsheet(query: TierListQuery & { ids?: stri
   );
 }
 
+export function generateSampleTiersTemplate() {
+  const sampleRows = [
+    {
+      name: "Standard",
+      status: "ACTIVE",
+      sortOrder: "1",
+      countryCodes: "ALL",
+    },
+    {
+      name: "Wholesale Silver",
+      status: "ACTIVE",
+      sortOrder: "2",
+      countryCodes: "IN, US",
+    },
+    {
+      name: "Wholesale Gold",
+      status: "ACTIVE",
+      sortOrder: "3",
+      countryCodes: "IN, US, GB",
+    },
+  ];
+
+  return writeSpreadsheetBuffer(
+    sampleRows,
+    "Tiers",
+    TIER_EXPORT_COLUMNS.map((column) => ({ key: column.key, header: column.header })),
+  );
+}
+
+
 export async function previewTierImport(filePath: string) {
   const rows = readSpreadsheetRows(filePath);
   const preview = await previewTierRows(rows);
+
+  const issuesByRow = new Map<number, string[]>();
+  for (const issue of preview.issues) {
+    const list = issuesByRow.get(issue.row) || [];
+    list.push(`${issue.field}: ${issue.message}`);
+    issuesByRow.set(issue.row, list);
+  }
+
+  const previewRows = preview.parsed.map((row, index) => {
+    const rowNumber = index + 2;
+    const rowErrors = issuesByRow.get(rowNumber) || [];
+    return {
+      rowNumber,
+      isValid: rowErrors.length === 0,
+      errors: rowErrors,
+      name: row.name,
+      status: row.status,
+      sortOrder: row.sortOrder,
+      countryCodes: Array.isArray(row.countryCodes) ? row.countryCodes.join(", ") : (row.countryCodes || ""),
+    };
+  });
+
   return {
     totalRows: preview.parsed.length,
     validRows: Math.max(0, preview.parsed.length - preview.issues.length),
@@ -466,11 +530,12 @@ export async function previewTierImport(filePath: string) {
     issues: preview.issues,
     duplicateWarnings: preview.duplicateWarnings,
     sampleRows: preview.parsed.slice(0, 10).map((row, index) => ({ row: index + 2, ...row })),
+    rows: previewRows,
   };
 }
 
-export async function importTierSpreadsheet(filePath: string) {
-  const rows = readSpreadsheetRows(filePath);
+export async function importTierSpreadsheet(filePathOrRows: string | Record<string, unknown>[]) {
+  const rows = typeof filePathOrRows === "string" ? readSpreadsheetRows(filePathOrRows) : (filePathOrRows as any);
   const preview = await previewTierRows(rows);
   if (preview.issues.length > 0) {
     throw new AppError(`Import validation failed with ${preview.issues.length} issue(s).`, 400);
@@ -487,11 +552,17 @@ export async function importTierSpreadsheet(filePath: string) {
         sortOrder: parseSortOrder(row.sortOrder) ?? 0,
       };
 
+      const isAll = row.countryCodes.some((c) => {
+        const u = c.trim().toUpperCase();
+        return u === "ALL" || u === "GLOBAL" || u === "*" || u === "ALL COUNTRIES";
+      });
       const countryIds = row.countryCodes.length
-        ? (await tx.country.findMany({ where: { code: { in: row.countryCodes }, status: "ACTIVE" }, select: { id: true, code: true } }))
-            .map((country) => country.id)
+        ? (isAll
+            ? await tx.country.findMany({ where: { status: "ACTIVE" }, select: { id: true, code: true } })
+            : await tx.country.findMany({ where: { code: { in: row.countryCodes }, status: "ACTIVE" }, select: { id: true, code: true } })
+          ).map((country) => country.id)
         : [];
-      if (row.countryCodes.length && countryIds.length !== row.countryCodes.length) {
+      if (!isAll && row.countryCodes.length && countryIds.length !== row.countryCodes.length) {
         throw new AppError(`One or more countries were not found during import on row ${index + 2}.`, 400);
       }
 

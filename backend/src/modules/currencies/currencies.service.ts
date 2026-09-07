@@ -347,14 +347,14 @@ export async function bulkCurrencies(input: CurrencyBulkInput) {
   return { action, affected: ids.length, status };
 }
 
-function parseCurrencyRow(raw: Record<string, string>) {
+function parseCurrencyRow(raw: Record<string, any>) {
   return {
-    name: raw.name?.trim() || "",
-    code: raw.code?.trim().toUpperCase() || "",
-    symbol: raw.symbol?.trim() || "",
-    exchangeRate: raw.exchangeRate?.trim() || "",
-    isBase: raw.isBase?.trim().toLowerCase() === "true",
-    status: raw.status?.trim().toUpperCase() || "ACTIVE",
+    name: typeof raw.name === "string" ? raw.name.trim() : (raw.name ? String(raw.name) : ""),
+    code: typeof raw.code === "string" ? raw.code.trim().toUpperCase() : (raw.code ? String(raw.code).trim().toUpperCase() : ""),
+    symbol: typeof raw.symbol === "string" ? raw.symbol.trim() : (raw.symbol ? String(raw.symbol) : ""),
+    exchangeRate: raw.exchangeRate !== undefined && raw.exchangeRate !== null ? String(raw.exchangeRate).trim() : "",
+    isBase: String(raw.isBase).trim().toLowerCase() === "true",
+    status: typeof raw.status === "string" ? raw.status.trim().toUpperCase() : "ACTIVE",
   };
 }
 
@@ -419,9 +419,72 @@ export async function exportCurrenciesSpreadsheet(query: CurrencyListQuery & { i
   );
 }
 
+export function generateSampleCurrenciesTemplate() {
+  const sampleRows = [
+    {
+      name: "US Dollar",
+      code: "USD",
+      symbol: "$",
+      exchangeRate: 1,
+      isBase: true,
+      status: "ACTIVE",
+    },
+    {
+      name: "Indian Rupee",
+      code: "INR",
+      symbol: "₹",
+      exchangeRate: 86.50,
+      isBase: false,
+      status: "ACTIVE",
+    },
+    {
+      name: "Euro",
+      code: "EUR",
+      symbol: "€",
+      exchangeRate: 0.92,
+      isBase: false,
+      status: "ACTIVE",
+    },
+    {
+      name: "British Pound",
+      code: "GBP",
+      symbol: "£",
+      exchangeRate: 0.78,
+      isBase: false,
+      status: "ACTIVE",
+    },
+  ];
+
+  return writeSpreadsheetBuffer(
+    sampleRows,
+    "Currencies",
+    CURRENCY_EXPORT_COLUMNS.map((column) => ({ key: column.key, header: column.header })),
+  );
+}
+
+
 export async function previewCurrencyImport(filePath: string) {
   const rows = readSpreadsheetRows(filePath);
   const preview = await validateRows(rows);
+
+  const issuesByRow = new Map<number, string[]>();
+  for (const issue of preview.issues) {
+    const list = issuesByRow.get(issue.row) || [];
+    list.push(`${issue.field}: ${issue.message}`);
+    issuesByRow.set(issue.row, list);
+  }
+
+  const previewRows = preview.parsed.map((row, index) => {
+    const rowNumber = index + 2;
+    const rowErrors = issuesByRow.get(rowNumber) || [];
+    return {
+      rowNumber,
+      isValid: rowErrors.length === 0,
+      errors: rowErrors,
+      ...row,
+    };
+  });
+
   return {
     totalRows: preview.parsed.length,
     validRows: Math.max(0, preview.parsed.length - preview.issues.length),
@@ -429,11 +492,12 @@ export async function previewCurrencyImport(filePath: string) {
     issues: preview.issues,
     duplicateWarnings: preview.duplicateWarnings,
     sampleRows: preview.parsed.slice(0, 10).map((row, index) => ({ row: index + 2, ...row })),
+    rows: previewRows,
   };
 }
 
-export async function importCurrencySpreadsheet(filePath: string) {
-  const rows = readSpreadsheetRows(filePath);
+export async function importCurrencySpreadsheet(filePathOrRows: string | Record<string, unknown>[]) {
+  const rows = typeof filePathOrRows === "string" ? readSpreadsheetRows(filePathOrRows) : (filePathOrRows as any);
   const preview = await validateRows(rows);
   if (preview.issues.length > 0) {
     throw new AppError(`Import validation failed with ${preview.issues.length} issue(s).`, 400);

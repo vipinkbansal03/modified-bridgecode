@@ -91,8 +91,142 @@ export async function upsertSetting(input: SettingInput) {
   });
 }
 
+async function syncShippingProvidersFromSettings() {
+  try {
+    const dhlEnabled = await getSettingValue("shipping.dhl_enabled");
+    const dhlApiKey = await getSettingValue("shipping.dhl_api_key");
+    const dhlApiSecret = await getSettingValue("shipping.dhl_api_secret");
+    const dhlBaseUrl = await getSettingValue("shipping.dhl_base_url");
+
+    if (dhlApiKey || dhlBaseUrl || dhlEnabled) {
+      await prisma.shippingProvider.upsert({
+        where: { name: "DHL" },
+        update: {
+          ...(dhlApiKey && { apiKey: dhlApiKey }),
+          ...(dhlApiSecret && { apiSecret: dhlApiSecret }),
+          ...(dhlBaseUrl && { baseUrl: dhlBaseUrl }),
+          ...(dhlEnabled !== "" && { isEnabled: dhlEnabled === "true" }),
+        },
+        create: {
+          name: "DHL",
+          displayName: "DHL Express",
+          apiKey: dhlApiKey || null,
+          apiSecret: dhlApiSecret || null,
+          baseUrl: dhlBaseUrl || "https://api.dhl.com/mydhlapi",
+          trackingUrl: "https://track.dhl.com/{tracking}",
+          isEnabled: dhlEnabled === "true",
+          config: {},
+        },
+      });
+    }
+
+    const dtdcEnabled = await getSettingValue("shipping.dtdc_enabled");
+    const dtdcApiKey = await getSettingValue("shipping.dtdc_api_key");
+    const dtdcBaseUrl = await getSettingValue("shipping.dtdc_base_url");
+    const dtdcCustomerCode = await getSettingValue("shipping.dtdc_customer_code");
+
+    if (dtdcApiKey || dtdcBaseUrl || dtdcEnabled || dtdcCustomerCode) {
+      await prisma.shippingProvider.upsert({
+        where: { name: "DTDC" },
+        update: {
+          ...(dtdcApiKey && { apiKey: dtdcApiKey }),
+          ...(dtdcBaseUrl && { baseUrl: dtdcBaseUrl }),
+          ...(dtdcEnabled !== "" && { isEnabled: dtdcEnabled === "true" }),
+          ...(dtdcCustomerCode && { config: { customerCode: dtdcCustomerCode } }),
+        },
+        create: {
+          name: "DTDC",
+          displayName: "DTDC Courier",
+          apiKey: dtdcApiKey || null,
+          baseUrl: dtdcBaseUrl || "https://api.dtdc.in",
+          trackingUrl: "https://www.dtdc.in/tracking/{tracking}",
+          isEnabled: dtdcEnabled === "true",
+          config: dtdcCustomerCode ? { customerCode: dtdcCustomerCode } : {},
+        },
+      });
+    }
+  } catch (err) {
+    // Non-blocking sync error
+  }
+}
+
+async function syncPaymentMethodsFromSettings() {
+  try {
+    const rzpEnabled = await getSettingValue("payment.razorpay_enabled");
+    const rzpKeyId = await getSettingValue("payment.razorpay_key_id");
+
+    if (rzpEnabled !== "") {
+      await prisma.paymentMethod.updateMany({
+        where: { code: "RAZORPAY" },
+        data: { isEnabled: rzpEnabled === "true" },
+      });
+    }
+
+    if (rzpKeyId) {
+      const pm = await prisma.paymentMethod.findUnique({ where: { code: "RAZORPAY" } });
+      if (pm) {
+        await prisma.paymentMethodConfig.upsert({
+          where: {
+            paymentMethodId_environment_configKey: {
+              paymentMethodId: pm.id,
+              environment: "PRODUCTION",
+              configKey: "RAZORPAY_KEY_ID",
+            },
+          },
+          update: { configValue: rzpKeyId },
+          create: {
+            paymentMethodId: pm.id,
+            environment: "PRODUCTION",
+            configKey: "RAZORPAY_KEY_ID",
+            configValue: rzpKeyId,
+            isPublic: true,
+          },
+        });
+      }
+    }
+
+    const stripeEnabled = await getSettingValue("payment.stripe_enabled");
+    const stripePublishableKey = await getSettingValue("payment.stripe_publishable_key");
+
+    if (stripeEnabled !== "") {
+      await prisma.paymentMethod.updateMany({
+        where: { code: "STRIPE" },
+        data: { isEnabled: stripeEnabled === "true" },
+      });
+    }
+
+    if (stripePublishableKey) {
+      const pm = await prisma.paymentMethod.findUnique({ where: { code: "STRIPE" } });
+      if (pm) {
+        await prisma.paymentMethodConfig.upsert({
+          where: {
+            paymentMethodId_environment_configKey: {
+              paymentMethodId: pm.id,
+              environment: "PRODUCTION",
+              configKey: "STRIPE_PUBLISHABLE_KEY",
+            },
+          },
+          update: { configValue: stripePublishableKey },
+          create: {
+            paymentMethodId: pm.id,
+            environment: "PRODUCTION",
+            configKey: "STRIPE_PUBLISHABLE_KEY",
+            configValue: stripePublishableKey,
+            isPublic: true,
+          },
+        });
+      }
+    }
+  } catch (err) {
+    // Non-blocking sync error
+  }
+}
+
 export async function upsertMany(inputs: SettingInput[]) {
-  return Promise.all(inputs.map(upsertSetting));
+  const results = await Promise.all(inputs.map(upsertSetting));
+  await syncShippingProvidersFromSettings();
+  await syncPaymentMethodsFromSettings();
+  return results;
 }
 
 // ─── Public tracking endpoint ─────────────────────────────────────────────────

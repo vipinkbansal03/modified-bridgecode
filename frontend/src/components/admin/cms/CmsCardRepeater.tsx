@@ -5,6 +5,7 @@ import { Plus, Trash2, ArrowUp, ArrowDown, Upload, FileText } from "lucide-react
 import { AdminInput, AdminTextarea } from "@/components/admin/AdminComponents";
 import { CmsIconPicker, renderCmsIcon } from "./CmsIconPicker";
 import { uploadMediaFiles } from "@/utils/uploadMedia";
+import { MediaSelectorModal } from "@/components/admin/media/MediaSelectorModal";
 import { cn } from "@/utils/cn";
 import type { CardRepeaterConfig } from "@/config/detailPageConfigs";
 
@@ -38,6 +39,7 @@ export function CmsCardRepeater({
   config,
 }: CmsCardRepeaterProps) {
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
+  const [mediaModalIndex, setMediaModalIndex] = useState<number | null>(null);
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   const pendingScrollIndexRef = useRef<number | null>(null);
@@ -283,17 +285,14 @@ export function CmsCardRepeater({
                           Destination URL / Document
                         </label>
                         {allowFileUpload && (
-                          <label className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#E31E24] hover:text-[#B5151B] cursor-pointer">
-                            <Upload size={12} />
-                            <span>{uploadingIndex === index ? "Uploading..." : "Upload File"}</span>
-                            <input
-                              type="file"
-                              accept=".pdf,.doc,.docx,image/*"
-                              className="hidden"
-                              disabled={uploadingIndex === index}
-                              onChange={(e) => handleFileUpload(index, e)}
-                            />
-                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setMediaModalIndex(index)}
+                            className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#E31E24] hover:text-[#B5151B] cursor-pointer"
+                          >
+                            <FileText size={12} />
+                            <span>Browse Media Library</span>
+                          </button>
                         )}
                       </div>
                       <div className="relative">
@@ -329,6 +328,18 @@ export function CmsCardRepeater({
           <span>Add {itemLabel}</span>
         </button>
       </div>
+
+      <MediaSelectorModal
+        isOpen={mediaModalIndex !== null}
+        onClose={() => setMediaModalIndex(null)}
+        onSelect={(media) => {
+          if (mediaModalIndex !== null) {
+            handleCardChange(mediaModalIndex, { linkUrl: media.url });
+          }
+        }}
+        title={`Select ${itemLabel} File or Document`}
+        acceptTypes={["DOCUMENT", "IMAGE"]}
+      />
     </div>
   );
 }

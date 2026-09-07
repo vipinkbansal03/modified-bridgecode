@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Upload, X, Image as ImageIcon } from "lucide-react";
 import { AdminInput, AdminTextarea } from "@/components/admin/AdminComponents";
 import { uploadMediaFiles } from "@/utils/uploadMedia";
+import { MediaSelectorModal } from "@/components/admin/media/MediaSelectorModal";
 
 export interface CmsHeroValues {
   kicker?: string;
@@ -35,6 +36,7 @@ export function CmsHeroForm({
   imageLabel = "Hero Background Image",
 }: CmsHeroFormProps) {
   const [isUploading, setIsUploading] = useState(false);
+  const [mediaModalOpen, setMediaModalOpen] = useState(false);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -123,17 +125,13 @@ export function CmsHeroForm({
 
             <div className="flex-1 space-y-2 w-full">
               <div className="flex items-center gap-2">
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                  <Upload size={13} className="text-gray-500" />
-                  <span>{isUploading ? "Uploading..." : "Upload New Image"}</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileUpload}
-                    disabled={isUploading}
-                    className="hidden"
-                  />
-                </label>
+                <button
+                  type="button"
+                  onClick={() => setMediaModalOpen(true)}
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+                >
+                  <ImageIcon size={13} /> Browse Media Library
+                </button>
                 {values.image && (
                   <button
                     type="button"
@@ -155,6 +153,14 @@ export function CmsHeroForm({
           </div>
         </div>
       )}
+
+      <MediaSelectorModal
+        isOpen={mediaModalOpen}
+        onClose={() => setMediaModalOpen(false)}
+        onSelect={(media) => onChange({ ...values, image: media.url })}
+        title="Select Hero Image"
+        acceptTypes={["IMAGE"]}
+      />
     </div>
   );
 }

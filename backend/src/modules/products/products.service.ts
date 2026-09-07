@@ -2,7 +2,7 @@ import { prisma } from "../../config/database";
 import { AppError, getPagination, slugify } from "../../utils/apiResponse";
 import { uploadFile, deleteFile } from "../../config/storage";
 import { readSpreadsheetRows, removeTempFile, writeSpreadsheetBuffer } from "../../utils/spreadsheet";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, GridAxis } from "@prisma/client";
 import { setVariantStock } from "../inventory/inventory.service";
 import { assertTierUsable } from "../tiers/tiers.service";
 
@@ -203,12 +203,15 @@ type SpreadsheetPreviewResult = {
   issues: SpreadsheetIssue[];
   duplicateWarnings: string[];
   sampleRows: Record<string, unknown>[];
+  rows?: Record<string, unknown>[];
 };
 
 type ProductImportRow = {
   title: string;
   sku?: string | null;
   productCode?: string | null;
+  imageUrl?: string | null;
+  imageUrls?: string[];
   categorySlug?: string | null;
   brand?: string | null;
   status?: string | null;
@@ -256,17 +259,42 @@ function parseCodeList(value: unknown) {
   const normalized = String(value ?? "").trim();
   if (!normalized) return [];
   return normalized
-    .split(/[;,|]/)
-    .map((code) => code.trim().toUpperCase())
+    .split(/[,;|]/)
+    .map((code) => {
+      let c = code.trim().toUpperCase();
+      if (c === "ALL" || c === "GLOBAL" || c === "*" || c === "ALL COUNTRIES") return "ALL";
+      const parenMatch = c.match(/\(([A-Z]{2,3})\)$/);
+      if (parenMatch) c = parenMatch[1];
+      return c;
+    })
     .filter(Boolean);
 }
 
 function parseProductImportRow(raw: Record<string, string>): ProductImportRow {
+  const rawImage =
+    raw.imageUrl?.trim() ||
+    raw.image?.trim() ||
+    raw.imageUrls?.trim() ||
+    raw.images?.trim() ||
+    raw["image_url"]?.trim() ||
+    raw["Image URL"]?.trim() ||
+    raw["Image"]?.trim() ||
+    null;
+
+  const imageUrls = rawImage
+    ? rawImage
+        .split(/[,;\n]/)
+        .map((u) => u.trim())
+        .filter(Boolean)
+    : [];
+
   return {
     title: raw.title?.trim() || "",
     sku: raw.sku?.trim() || null,
     productCode: raw.productCode?.trim() || null,
-    categorySlug: raw.categorySlug?.trim() || null,
+    imageUrl: rawImage,
+    imageUrls,
+    categorySlug: (raw.categorySlug || raw.category || raw.categoryName || raw.Category || raw["Category Slug"] || raw["category_slug"])?.trim() || null,
     brand: raw.brand?.trim() || null,
     status: raw.status?.trim().toUpperCase() || null,
     sortOrder: parseNumberish(raw.sortOrder),
@@ -1989,6 +2017,339 @@ export async function removeProductAttribute(productId: string, attributeId: str
   return { id: existing.id, productId, attributeId };
 }
 
+// ─── Product Attributes Spreadsheet Export & Import ────────
+
+const PRODUCT_ATTRIBUTE_EXPORT_COLUMNS = [
+  { key: "attributeName", header: "attributeName" },
+  { key: "slug", header: "slug" },
+  { key: "displayType", header: "displayType" },
+  { key: "required", header: "required" },
+  { key: "allowedValues", header: "allowedValues" },
+] as const;
+
+function getProductAttrRowField(row: Record<string, string>, ...fieldNames: string[]) {
+  for (const name of fieldNames) {
+    const direct = row[name];
+    if (direct !== undefined && direct !== "") return String(direct).trim();
+    const lowerKey = Object.keys(row).find((k) => k.toLowerCase() === name.toLowerCase());
+    if (lowerKey && row[lowerKey] !== undefined && row[lowerKey] !== "") {
+      return String(row[lowerKey]).trim();
+    }
+  }
+  return "";
+}
+
+function parseBool(val?: string) {
+  if (!val) return false;
+  const s = val.trim().toLowerCase();
+  return s === "true" || s === "yes" || s === "1";
+}
+
+function normalizeDisplayTypeToGridAxis(str: string): GridAxis | null {
+  const upper = str.toUpperCase().trim().replace(/[- ]/g, "_");
+  if (upper === "X_GRID" || upper === "COLUMN" || upper === "MATRIX_COLUMNS") return "COLUMN";
+  if (upper === "Y_GRID" || upper === "ROW" || upper === "MATRIX_ROWS") return "ROW";
+  return null;
+}
+
+export async function exportProductAttributesSpreadsheet(productId: string) {
+  const product = await getProduct(productId);
+  const mappings = await listProductAttributes(productId);
+
+  const rows = mappings.map((m) => {
+    const allowedValuesStr = m.allowedValues.length
+      ? m.allowedValues.map((av) => av.attributeValue.value).join(", ")
+      : m.attribute.values.map((v) => v.value).join(", ");
+
+    const displayType =
+      m.gridAxis === "COLUMN" ? "X_GRID" : m.gridAxis === "ROW" ? "Y_GRID" : "DROPDOWN";
+
+    return {
+      attributeName: m.attribute.name,
+      slug: m.attribute.slug,
+      displayType,
+      required: m.required ? "TRUE" : "FALSE",
+      allowedValues: allowedValuesStr,
+    };
+  });
+
+  const buffer = writeSpreadsheetBuffer(
+    rows,
+    "Product Attributes",
+    PRODUCT_ATTRIBUTE_EXPORT_COLUMNS.map((c) => ({ key: c.key, header: c.header })),
+  );
+
+  return {
+    buffer,
+    filename: `product-${product.slug || product.id}-attributes.xlsx`,
+  };
+}
+
+export function generateSampleProductAttributesTemplate() {
+  const sampleRows = [
+    {
+      attributeName: "Slot",
+      slug: "slot",
+      displayType: "X_GRID",
+      required: "TRUE",
+      allowedValues: ".018, .022",
+    },
+    {
+      attributeName: "Hook",
+      slug: "hook",
+      displayType: "Y_GRID",
+      required: "TRUE",
+      allowedValues: "None, Hook 3, Hook 4, Hook 5",
+    },
+    {
+      attributeName: "Prescription",
+      slug: "prescription",
+      displayType: "DROPDOWN",
+      required: "TRUE",
+      allowedValues: "MBT, Roth, Alexander",
+    },
+    {
+      attributeName: "Wire Size",
+      slug: "wire-size",
+      displayType: "X_GRID",
+      required: "TRUE",
+      allowedValues: ".018 x .025, .019 x .025",
+    },
+    {
+      attributeName: "Arch",
+      slug: "arch",
+      displayType: "Y_GRID",
+      required: "TRUE",
+      allowedValues: "Upper, Lower",
+    },
+  ];
+
+  return writeSpreadsheetBuffer(
+    sampleRows,
+    "Product Attributes",
+    PRODUCT_ATTRIBUTE_EXPORT_COLUMNS.map((c) => ({ key: c.key, header: c.header })),
+  );
+}
+
+export async function previewProductAttributesImport(productId: string, filePath: string) {
+  await getProduct(productId);
+  const rawRows = readSpreadsheetRows(filePath);
+  const issues: Array<{ row: number; field: string; message: string }> = [];
+  const duplicateWarnings: string[] = [];
+  const previewRows: Record<string, unknown>[] = [];
+  const seenAttr = new Set<string>();
+
+  const allAttributes = await prisma.attribute.findMany({
+    include: { values: { where: { status: "ACTIVE" } } },
+  });
+  const attributeByName = new Map(allAttributes.map((a) => [a.name.toLowerCase(), a]));
+  const attributeBySlug = new Map(allAttributes.map((a) => [a.slug.toLowerCase(), a]));
+
+  for (const [index, row] of rawRows.entries()) {
+    const rowNumber = index + 2;
+    const attrName = getProductAttrRowField(row, "attributeName", "name", "attribute", "attribute_name");
+    const slugStr = getProductAttrRowField(row, "slug", "attributeSlug");
+    const displayTypeStr = getProductAttrRowField(row, "displayType", "role", "gridAxis", "type");
+    const requiredStr = getProductAttrRowField(row, "required", "isRequired");
+    const valuesStr = getProductAttrRowField(row, "allowedValues", "values", "options", "value");
+
+    if (!attrName && !slugStr) {
+      issues.push({ row: rowNumber, field: "attributeName", message: "Attribute name or slug is required." });
+      continue;
+    }
+
+    const key = (attrName || slugStr).toLowerCase();
+    if (seenAttr.has(key)) {
+      duplicateWarnings.push(`Duplicate attribute '${attrName || slugStr}' found on row ${rowNumber}.`);
+    } else {
+      seenAttr.add(key);
+    }
+
+    const matchedAttr =
+      (attrName ? attributeByName.get(attrName.toLowerCase()) : null) ||
+      (slugStr ? attributeBySlug.get(slugStr.toLowerCase()) : null);
+
+    if (!matchedAttr) {
+      issues.push({
+        row: rowNumber,
+        field: "attributeName",
+        message: `Attribute '${attrName || slugStr}' does not exist in catalog.`,
+      });
+    }
+
+    const valueCount = valuesStr
+      ? valuesStr.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean).length
+      : 0;
+
+    previewRows.push({
+      row: rowNumber,
+      attributeName: matchedAttr?.name || attrName || slugStr,
+      slug: matchedAttr?.slug || slugStr,
+      displayType: displayTypeStr
+        ? normalizeDisplayTypeToGridAxis(displayTypeStr) === "COLUMN"
+          ? "X_GRID"
+          : normalizeDisplayTypeToGridAxis(displayTypeStr) === "ROW"
+          ? "Y_GRID"
+          : "DROPDOWN"
+        : "DROPDOWN",
+      required: parseBool(requiredStr),
+      values: valuesStr,
+      valueCount,
+    });
+  }
+
+  return {
+    totalRows: rawRows.length,
+    validRows: Math.max(0, rawRows.length - issues.length),
+    invalidRows: issues.length,
+    issues,
+    duplicateWarnings,
+    sampleRows: previewRows.slice(0, 10),
+    rows: previewRows.map((r) => {
+      const rowIssues = issues.filter((iss) => iss.row === r.row);
+      return {
+        ...r,
+        rowNumber: r.row,
+        isValid: rowIssues.length === 0,
+        errors: rowIssues.map((iss) => (iss.field ? `[${iss.field}] ${iss.message}` : iss.message)),
+        allowedValues: r.values,
+        role: r.displayType,
+      };
+    }),
+  };
+}
+
+export async function importProductAttributesSpreadsheet(productId: string, filePathOrRows: string | any[]) {
+  await getProduct(productId);
+  const rawRows: any[] = Array.isArray(filePathOrRows) ? filePathOrRows : readSpreadsheetRows(filePathOrRows);
+  if (rawRows.length === 0) {
+    throw new AppError("Uploaded spreadsheet is empty.", 400);
+  }
+
+  if (typeof filePathOrRows === "string") {
+    const preview = await previewProductAttributesImport(productId, filePathOrRows);
+    if (preview.issues.length > 0) {
+      throw new AppError(`Spreadsheet validation failed with ${preview.issues.length} issue(s).`, 400);
+    }
+  }
+
+  const allAttributes = await prisma.attribute.findMany({
+    include: { values: true },
+  });
+  const attributeByName = new Map(allAttributes.map((a) => [a.name.toLowerCase(), a]));
+  const attributeBySlug = new Map(allAttributes.map((a) => [a.slug.toLowerCase(), a]));
+
+  const summary = {
+    created: 0,
+    updated: 0,
+    totalProcessed: rawRows.length,
+  };
+
+  await prisma.$transaction(async (tx) => {
+    for (const row of rawRows) {
+      const attrName = getProductAttrRowField(row, "attributeName", "name", "attribute", "attribute_name");
+      const slugStr = getProductAttrRowField(row, "slug", "attributeSlug");
+      const displayTypeStr = getProductAttrRowField(row, "displayType", "role", "gridAxis", "type");
+      const requiredStr = getProductAttrRowField(row, "required", "isRequired");
+      const valuesStr = getProductAttrRowField(row, "allowedValues", "values", "options", "value");
+
+      const matchedAttr =
+        (attrName ? attributeByName.get(attrName.toLowerCase()) : null) ||
+        (slugStr ? attributeBySlug.get(slugStr.toLowerCase()) : null);
+
+      if (!matchedAttr) continue;
+
+      const gridAxis = normalizeDisplayTypeToGridAxis(displayTypeStr);
+      const required = parseBool(requiredStr);
+
+      // Parse allowed values
+      const allowedValueIds: string[] = [];
+      if (valuesStr) {
+        const rawValueItems = valuesStr.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+        for (const rawItem of rawValueItems) {
+          const priceMatch = rawItem.match(/^(.*?)\s*\(\+?([0-9.]+)\)$/);
+          const valName = priceMatch ? priceMatch[1].trim() : rawItem;
+          if (!valName) continue;
+
+          let existingVal = matchedAttr.values.find(
+            (v) =>
+              v.value.toLowerCase() === valName.toLowerCase() ||
+              v.slug.toLowerCase() === slugify(valName).toLowerCase(),
+          );
+
+          if (!existingVal) {
+            const valSlug = slugify(valName);
+            let uniqueSlug = valSlug;
+            let counter = 1;
+            while (
+              await tx.attributeValue.findFirst({ where: { attributeId: matchedAttr.id, slug: uniqueSlug } })
+            ) {
+              uniqueSlug = `${valSlug}-${counter++}`;
+            }
+            existingVal = await tx.attributeValue.create({
+              data: {
+                attributeId: matchedAttr.id,
+                value: valName,
+                slug: uniqueSlug,
+                status: "ACTIVE",
+              },
+            });
+            matchedAttr.values.push(existingVal);
+          }
+          allowedValueIds.push(existingVal.id);
+        }
+      }
+
+      // Upsert product attribute mapping
+      const existingMapping = await tx.productAttribute.findUnique({
+        where: { productId_attributeId: { productId, attributeId: matchedAttr.id } },
+      });
+
+      let productAttributeId: string;
+      if (existingMapping) {
+        await tx.productAttribute.update({
+          where: { id: existingMapping.id },
+          data: {
+            required,
+            gridAxis,
+          },
+        });
+        productAttributeId = existingMapping.id;
+        summary.updated++;
+      } else {
+        const created = await tx.productAttribute.create({
+          data: {
+            productId,
+            attributeId: matchedAttr.id,
+            required,
+            gridAxis,
+          },
+        });
+        productAttributeId = created.id;
+        summary.created++;
+      }
+
+      // Re-assign allowed values for this product attribute
+      await tx.productAttributeValueSelection.deleteMany({
+        where: { productAttributeId },
+      });
+
+      if (allowedValueIds.length > 0) {
+        const uniqueIds = Array.from(new Set(allowedValueIds));
+        await tx.productAttributeValueSelection.createMany({
+          data: uniqueIds.map((id) => ({
+            productAttributeId,
+            attributeValueId: id,
+          })),
+        });
+      }
+    }
+  });
+
+  return summary;
+}
+
+
 // ─── Generate variants from attribute combinations ────────
 
 export async function generateVariants(
@@ -2937,6 +3298,7 @@ const PRODUCT_EXPORT_COLUMNS = [
   { key: "title", header: "title" },
   { key: "sku", header: "sku" },
   { key: "productCode", header: "productCode" },
+  { key: "imageUrl", header: "imageUrl" },
   { key: "categorySlug", header: "categorySlug" },
   { key: "brand", header: "brand" },
   { key: "status", header: "status" },
@@ -3012,11 +3374,25 @@ async function getProductSpreadsheetPreview(rows: Record<string, string>[]) {
     }
 
     if (row.categorySlug) categorySlugs.add(row.categorySlug);
-    row.countryCodes?.forEach((code) => countryCodes.add(code));
+    row.countryCodes?.forEach((code) => {
+      const u = code.trim().toUpperCase();
+      if (u === "ALL" || u === "GLOBAL" || u === "*" || u === "ALL COUNTRIES") return;
+      countryCodes.add(code);
+    });
   }
 
+  const rawCategoryInputs = Array.from(categorySlugs);
   const [categories, countries, existingProducts] = await Promise.all([
-    prisma.category.findMany({ where: { slug: { in: Array.from(categorySlugs) }, deletedAt: null }, select: { id: true, slug: true, status: true } }),
+    prisma.category.findMany({
+      where: {
+        deletedAt: null,
+        OR: [
+          { slug: { in: rawCategoryInputs, mode: "insensitive" } },
+          { name: { in: rawCategoryInputs, mode: "insensitive" } },
+        ],
+      },
+      select: { id: true, name: true, slug: true, status: true },
+    }),
     prisma.country.findMany({ where: { code: { in: Array.from(countryCodes) } }, select: { code: true, status: true } }),
     prisma.product.findMany({
       where: {
@@ -3030,14 +3406,19 @@ async function getProductSpreadsheetPreview(rows: Record<string, string>[]) {
     }),
   ]);
 
-  const categoryBySlug = new Map(categories.map((category) => [category.slug, category]));
+  const categoryBySlug = new Map<string, typeof categories[0]>();
+  for (const category of categories) {
+    categoryBySlug.set(category.slug.toLowerCase(), category);
+    categoryBySlug.set(category.name.toLowerCase(), category);
+  }
   const countryByCode = new Map(countries.map((country) => [country.code, country]));
   const productBySku = new Map(existingProducts.filter((product) => product.sku).map((product) => [product.sku as string, product]));
   const productByCode = new Map(existingProducts.filter((product) => product.productCode).map((product) => [product.productCode as string, product]));
 
   for (const [index, row] of parsedRows.entries()) {
     const rowNumber = index + 2;
-    const category = row.categorySlug ? categoryBySlug.get(row.categorySlug) : null;
+    const categoryKey = row.categorySlug?.toLowerCase().trim();
+    const category = categoryKey ? categoryBySlug.get(categoryKey) : null;
     if (!category) {
       issues.push({ row: rowNumber, field: "categorySlug", message: `Category '${row.categorySlug || ""}' was not found.` });
     } else if (category.status !== "ACTIVE") {
@@ -3045,6 +3426,8 @@ async function getProductSpreadsheetPreview(rows: Record<string, string>[]) {
     }
 
     for (const code of row.countryCodes ?? []) {
+      const u = code.trim().toUpperCase();
+      if (u === "ALL" || u === "GLOBAL" || u === "*" || u === "ALL COUNTRIES") continue;
       const country = countryByCode.get(code);
       if (!country) {
         issues.push({ row: rowNumber, field: "countryCodes", message: `Country '${code}' was not found.` });
@@ -3081,6 +3464,20 @@ export async function previewProductImport(filePath: string) {
   const rows = readSpreadsheetRows(filePath);
   const preview = await getProductSpreadsheetPreview(rows);
   const sampleRows = preview.rows.slice(0, 10).map((row, index) => ({ row: index + 2, ...row }));
+  const previewRows = preview.rows.map((row, index) => {
+    const rowNumber = index + 2;
+    const rowIssues = preview.issues.filter((iss) => iss.row === rowNumber);
+    const categoryKey = row.categorySlug?.toLowerCase().trim();
+    const matchedCategory = categoryKey ? preview.categoryBySlug.get(categoryKey) : null;
+    return {
+      ...row,
+      categorySlug: matchedCategory ? matchedCategory.slug : (row.categorySlug || ""),
+      rowNumber,
+      isValid: rowIssues.length === 0,
+      errors: rowIssues.map((iss) => (iss.field ? `[${iss.field}] ${iss.message}` : iss.message)),
+      countryCodes: Array.isArray(row.countryCodes) ? row.countryCodes.join(", ") : (row.countryCodes || ""),
+    };
+  });
   return {
     totalRows: preview.rows.length,
     validRows: Math.max(0, preview.rows.length - preview.issues.length),
@@ -3088,32 +3485,18 @@ export async function previewProductImport(filePath: string) {
     issues: preview.issues,
     duplicateWarnings: preview.duplicateWarnings,
     sampleRows,
+    rows: previewRows,
   } satisfies SpreadsheetPreviewResult;
 }
 
-function buildProductExportRow(product: {
-  title: string;
-  sku: string | null;
-  productCode: string | null;
-  brand: string;
-  status: string;
-  sortOrder: number;
-  isFeatured: boolean;
-  hasVariants: boolean;
-  shortDescription: string | null;
-  description: string | null;
-  seoTitle: string | null;
-  seoDescription: string | null;
-  seoKeywords: string | null;
-  category: { slug: string };
-  countries: { country: { code: string } }[];
-}) {
+function buildProductExportRow(product: any) {
   return {
     title: product.title,
     sku: product.sku ?? "",
     productCode: product.productCode ?? "",
-    categorySlug: product.category.slug,
-    brand: product.brand,
+    imageUrl: (product.media || []).map((m: any) => m.url).join(", "),
+    categorySlug: product.category?.slug ?? "",
+    brand: product.brand ?? "",
     status: product.status,
     sortOrder: product.sortOrder,
     isFeatured: product.isFeatured ? "TRUE" : "FALSE",
@@ -3123,17 +3506,19 @@ function buildProductExportRow(product: {
     seoTitle: product.seoTitle ?? "",
     seoDescription: product.seoDescription ?? "",
     seoKeywords: product.seoKeywords ?? "",
-    countryCodes: product.countries.map((country) => country.country.code).join(", "),
+    countryCodes: (product.countries || []).map((country: any) => country.country?.code || country.code || "").filter(Boolean).join(", "),
   };
 }
 
 export async function exportProductsSpreadsheet(query: ProductListQuery) {
+  const where = buildProductWhere(query);
   const products = await prisma.product.findMany({
-    where: buildProductWhere(query),
+    where,
     orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
     include: {
       category: { select: { slug: true } },
       countries: { where: { enabled: true }, include: { country: { select: { code: true } } } },
+      media: { orderBy: { sortOrder: "asc" }, select: { url: true } },
     },
   });
 
@@ -3144,10 +3529,95 @@ export async function exportProductsSpreadsheet(query: ProductListQuery) {
   );
 }
 
+export async function generateSampleProductsTemplate() {
+  const existingCategories = await prisma.category.findMany({
+    where: { deletedAt: null, status: "ACTIVE" },
+    select: { name: true, slug: true },
+    take: 2,
+  });
+
+  const cat1 = existingCategories[0]?.name || existingCategories[0]?.slug || "Brackets";
+  const cat2 = existingCategories[1]?.name || existingCategories[1]?.slug || "Wires";
+
+  const sampleRows = [
+    {
+      title: "Metal Bracket MBT .022",
+      sku: "PRD-MB-001",
+      productCode: "BRK-MBT-22",
+      imageUrl: "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=800&q=80",
+      categorySlug: cat1,
+      brand: "Modern Orthodontics",
+      status: "ACTIVE",
+      sortOrder: 1,
+      isFeatured: "true",
+      hasVariants: "true",
+      shortDescription: "Precision engineered metal bracket system.",
+      description: "High performance orthodontic metal bracket with MBT prescription and .022 slot.",
+      seoTitle: "Metal Bracket MBT .022 - Modern Orthodontics",
+      seoDescription: "Shop high quality metal brackets with superior torque control.",
+      seoKeywords: "bracket, mbt, orthodontics, metal bracket",
+      countryCodes: "ALL",
+    },
+    {
+      title: "NiTi Archwire Upper .016",
+      sku: "PRD-NW-002",
+      productCode: "WIR-NT-16U",
+      imageUrl: "https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=800&q=80",
+      categorySlug: cat2,
+      brand: "Modern Orthodontics",
+      status: "ACTIVE",
+      sortOrder: 2,
+      isFeatured: "false",
+      hasVariants: "false",
+      shortDescription: "Super elastic thermal active NiTi archwire.",
+      description: "Delivers continuous gentle force for efficient tooth alignment.",
+      seoTitle: "NiTi Archwire Upper .016 - Modern Orthodontics",
+      seoDescription: "High elastic memory orthodontic NiTi archwire.",
+      seoKeywords: "archwire, niti, upper archwire, wire",
+      countryCodes: "IN, US",
+    },
+  ];
+
+  return writeSpreadsheetBuffer(
+    sampleRows,
+    "Products",
+    PRODUCT_EXPORT_COLUMNS.map((column) => ({ key: column.key, header: column.header })),
+  );
+}
+
+async function syncProductImages(tx: Prisma.TransactionClient, productId: string, imageUrls: string[]) {
+  if (!imageUrls.length) return;
+  const existingMedia = await tx.productMedia.findMany({
+    where: { productId, type: "IMAGE" },
+    select: { id: true, url: true },
+    orderBy: { sortOrder: "asc" },
+  });
+  const existingUrlSet = new Set(existingMedia.map((m) => m.url));
+  const newUrls = imageUrls.filter((url) => !existingUrlSet.has(url));
+  if (newUrls.length > 0) {
+    const startOrder = existingMedia.length;
+    await tx.productMedia.createMany({
+      data: newUrls.map((url, idx) => ({
+        productId,
+        url,
+        type: "IMAGE" as const,
+        sortOrder: startOrder + idx,
+        storageProvider: "LOCAL" as const,
+      })),
+    });
+  }
+}
+
 async function syncProductCountries(tx: Prisma.TransactionClient, productId: string, countryCodes: string[]) {
   if (!countryCodes.length) return;
-  const countries = await tx.country.findMany({ where: { code: { in: countryCodes } }, select: { id: true, code: true } });
-  if (countries.length !== countryCodes.length) throw new AppError("One or more countries were not found.", 400);
+  const isAll = countryCodes.some((c) => {
+    const u = c.trim().toUpperCase();
+    return u === "ALL" || u === "GLOBAL" || u === "*" || u === "ALL COUNTRIES";
+  });
+  const countries = isAll
+    ? await tx.country.findMany({ where: { status: "ACTIVE" }, select: { id: true, code: true } })
+    : await tx.country.findMany({ where: { code: { in: countryCodes } }, select: { id: true, code: true } });
+  if (!isAll && countries.length !== countryCodes.length) throw new AppError("One or more countries were not found.", 400);
   await Promise.all(
     countries.map((country) =>
       tx.productCountry.upsert({
@@ -3159,10 +3629,12 @@ async function syncProductCountries(tx: Prisma.TransactionClient, productId: str
   );
 }
 
-export async function importProductsSpreadsheet(filePath: string) {
-  const rows = readSpreadsheetRows(filePath);
-  const preview = await getProductSpreadsheetPreview(rows);
-  if (preview.issues.length > 0) {
+export async function importProductsSpreadsheet(filePathOrRows: string | any[]) {
+  const rawRows: any[] = Array.isArray(filePathOrRows) ? filePathOrRows : readSpreadsheetRows(filePathOrRows);
+  if (!rawRows.length) throw new AppError("No product rows found.", 400);
+
+  const preview = await getProductSpreadsheetPreview(rawRows);
+  if (typeof filePathOrRows === "string" && preview.issues.length > 0) {
     throw new AppError(`Import validation failed with ${preview.issues.length} issue(s).`, 400);
   }
 
@@ -3172,7 +3644,8 @@ export async function importProductsSpreadsheet(filePath: string) {
 
   await prisma.$transaction(async (tx) => {
     for (const [index, row] of parsedRows.entries()) {
-      const category = row.categorySlug ? preview.categoryBySlug.get(row.categorySlug) : null;
+      const categoryKey = row.categorySlug?.toLowerCase().trim();
+      const category = categoryKey ? preview.categoryBySlug.get(categoryKey) : null;
       if (!category) throw new AppError(`Category '${row.categorySlug || ""}' not found during import.`, 400);
 
       const normalizedSku = row.sku?.trim() || null;
@@ -3208,6 +3681,7 @@ export async function importProductsSpreadsheet(filePath: string) {
           },
         });
         if (row.countryCodes?.length) await syncProductCountries(tx, existing.id, row.countryCodes);
+        if (row.imageUrls?.length) await syncProductImages(tx, existing.id, row.imageUrls);
         summary.updated += 1;
       } else {
         const product = await tx.product.create({
@@ -3230,6 +3704,7 @@ export async function importProductsSpreadsheet(filePath: string) {
           },
         });
         if (row.countryCodes?.length) await syncProductCountries(tx, product.id, row.countryCodes);
+        if (row.imageUrls?.length) await syncProductImages(tx, product.id, row.imageUrls);
         summary.created += 1;
       }
     }

@@ -10,6 +10,7 @@ router.use(protect);
 router.get("/dashboard", requirePermission("pricing.view", "pricing.manage"), C.dashboard);
 router.get("/preview", requirePermission("pricing.view", "pricing.manage"), C.preview);
 router.get("/export", requirePermission("pricing.view", "pricing.manage"), C.exportSpreadsheet);
+router.get("/sample-template", requirePermission("pricing.view", "pricing.manage"), C.downloadSampleTemplate);
 router.post("/import/preview", requirePermission("pricing.manage"), upload.single("file"), C.previewImport);
 router.post("/import", requirePermission("pricing.manage"), upload.single("file"), C.importSpreadsheet);
 router.post("/generate-country-prices", requirePermission("pricing.manage"), C.generateForCountries);

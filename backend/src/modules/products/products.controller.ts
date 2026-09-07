@@ -77,6 +77,14 @@ export const exportSpreadsheet = asyncHandler(async (req: AuthRequest, res: Resp
   return res.status(200).send(buffer);
 });
 
+export const downloadSampleTemplate = asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const buffer = await ProductService.generateSampleProductsTemplate();
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", 'attachment; filename="products-template.xlsx"');
+  return res.status(200).send(buffer);
+});
+
+
 export const reorder = asyncHandler(async (req: AuthRequest, res: Response) => {
   const products = await ProductService.reorderProducts(req.body?.items);
   return ApiResponse.success(res, "Products reordered.", products);
@@ -165,6 +173,65 @@ export const assignAttribs = asyncHandler(async (req: AuthRequest, res: Response
 export const removeAttrib = asyncHandler(async (req: AuthRequest, res: Response) => {
   await ProductService.removeProductAttribute(req.params.id as string, req.params.attributeId as string);
   return ApiResponse.success(res, "Attribute unmapped.");
+});
+
+export const exportProductAttributes = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { buffer, filename } = await ProductService.exportProductAttributesSpreadsheet(req.params.id as string);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  return res.status(200).send(buffer);
+});
+
+export const downloadProductAttributesSampleTemplate = asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const buffer = ProductService.generateSampleProductAttributesTemplate();
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", 'attachment; filename="product-attributes-template.xlsx"');
+  return res.status(200).send(buffer);
+});
+
+export const previewProductAttributesImport = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const file = req.file as Express.Multer.File | undefined;
+  if (!file) {
+    return ApiResponse.success(res, "No file uploaded.", {
+      totalRows: 0,
+      validRows: 0,
+      invalidRows: 0,
+      issues: ["No spreadsheet file provided."],
+      duplicateWarnings: [],
+      sampleRows: [],
+    });
+  }
+
+  try {
+    const report = await ProductService.previewProductAttributesImport(req.params.id as string, file.path);
+    return ApiResponse.success(res, "Product attributes import preview generated.", report);
+  } finally {
+    removeTempFile(file.path);
+  }
+});
+
+export const importProductAttributesSpreadsheet = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const rows = req.body?.rows;
+  if (Array.isArray(rows) && rows.length > 0) {
+    const result = await ProductService.importProductAttributesSpreadsheet(req.params.id as string, rows);
+    return ApiResponse.success(res, "Product attributes imported successfully.", result);
+  }
+
+  const file = req.file as Express.Multer.File | undefined;
+  if (!file) {
+    return ApiResponse.success(res, "No file uploaded.", {
+      created: 0,
+      updated: 0,
+      totalProcessed: 0,
+    });
+  }
+
+  try {
+    const result = await ProductService.importProductAttributesSpreadsheet(req.params.id as string, file.path);
+    return ApiResponse.success(res, "Product attributes imported successfully.", result);
+  } finally {
+    removeTempFile(file.path);
+  }
 });
 
 export const genVariants = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -336,6 +403,12 @@ export const previewImport = asyncHandler(async (req: AuthRequest, res: Response
 });
 
 export const importSpreadsheet = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const rows = req.body?.rows;
+  if (Array.isArray(rows) && rows.length > 0) {
+    const result = await ProductService.importProductsSpreadsheet(rows);
+    return ApiResponse.success(res, "Products imported successfully.", result);
+  }
+
   const file = req.file as Express.Multer.File | undefined;
   if (!file) return ApiResponse.success(res, "No file uploaded.", { created: 0, updated: 0, report: { totalRows: 0, validRows: 0, invalidRows: 0, issues: ["No spreadsheet file provided."], duplicateWarnings: [], sampleRows: [] } });
 

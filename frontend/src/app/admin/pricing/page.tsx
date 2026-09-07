@@ -41,6 +41,7 @@ import {
   LoadingButton,
   AdminBulkActionsBar,
 } from "@/components/admin/AdminComponents";
+import { AdminImportWizard, WizardColumnDef, WizardExpectedColumn } from "@/components/admin/AdminImportWizard";
 import { Modal } from "@/components/ui/Modal";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { AdminRowActions, AdminActionButton } from "@/components/admin/AdminRowActions";
@@ -239,6 +240,18 @@ const defaultColumnVisibility = {
   updatedAt: false,
 };
 
+const pricingExpectedColumns: WizardExpectedColumn[] = [
+  { name: "productTitle", hint: "Product Name / Title (optional if code or slug provided)" },
+  { name: "productCode", hint: "Product Code, Slug, or ID" },
+  { name: "countryCode", required: true, hint: "ISO 2-letter Country code (e.g. IN, US), 'ALL' for all countries, or Country Name" },
+  { name: "mrp", required: true, hint: "Maximum Retail Price" },
+  { name: "sellingPrice", required: true, hint: "Standard Selling Price" },
+  { name: "variantSku", hint: "Variant SKU (optional for parent product)" },
+  { name: "dealerPrice", hint: "B2B Dealer price" },
+  { name: "doctorRetailerPrice", hint: "Doctor / Retailer price (also accepts distributorPrice)" },
+  { name: "status", hint: "ACTIVE or INACTIVE" },
+];
+
 function formatMoney(value: number | null | undefined, currencySymbol?: string | null) {
   if (value == null) return "—";
   const prefix = currencySymbol ?? "";
@@ -347,8 +360,6 @@ export default function PricingPage() {
   const [bulkTierId, setBulkTierId] = useState("");
   const [showAssignDropdown, setShowAssignDropdown] = useState(false);
   const [togglingStatusId, setTogglingStatusId] = useState<string | null>(null);
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importReport, setImportReport] = useState<unknown>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [previewInput, setPreviewInput] = useState<PreviewFormState>(emptyPreview);
@@ -415,6 +426,53 @@ export default function PricingPage() {
 
   const isStatsLoading = dashboardLoading && pricingLoading && !dashboard;
   const { data: countries = [] } = useAdminCountries();
+
+  const wizardCountryOptions = useMemo(() => {
+    const list = (countries as Array<{ id: string; name: string; code: string; status?: string }>)
+      .filter((c) => c.status !== "INACTIVE")
+      .map((c) => ({
+        label: `${c.name} (${c.code.toUpperCase()})`,
+        value: c.code.toUpperCase(),
+      }));
+    return [
+      { label: "All countries", value: "ALL" },
+      ...list,
+    ];
+  }, [countries]);
+
+  const pricingWizardColumns = useMemo<WizardColumnDef[]>(() => [
+    { key: "productTitle", header: "Product", minWidth: "170px", placeholder: "Product name" },
+    { key: "productCode", header: "Product Code", minWidth: "130px", placeholder: "e.g. BRK-MBT-22" },
+    { key: "variantSku", header: "Variant SKU", minWidth: "130px", placeholder: "e.g. VAR-MB-001" },
+    {
+      key: "countryCode",
+      header: "Country",
+      required: true,
+      type: "multiselect",
+      minWidth: "160px",
+      options: wizardCountryOptions,
+    },
+    { key: "mrp", header: "MRP", required: true, type: "number", minWidth: "95px" },
+    { key: "sellingPrice", header: "Selling Price", required: true, type: "number", minWidth: "105px" },
+    { key: "dealerPrice", header: "Dealer Price", type: "number", minWidth: "105px" },
+    {
+      key: "distributorPrice",
+      header: "Doctor / Retailer Price",
+      type: "number",
+      minWidth: "165px",
+      placeholder: "Doctor / Retailer price",
+    },
+    {
+      key: "status",
+      header: "Status",
+      type: "select",
+      minWidth: "110px",
+      options: [
+        { label: "Active", value: "ACTIVE" },
+        { label: "Inactive", value: "INACTIVE" },
+      ],
+    },
+  ], [wizardCountryOptions]);
   const { data: tiers = [] } = useAdminTiers();
   const { data: customerRoles = [] } = useAdminCustomerRoles();
   const [productSearch, setProductSearch] = useState("");
@@ -1162,40 +1220,25 @@ export default function PricingPage() {
     }
   };
 
-  const handleImportPreview = async () => {
-    if (!importFile) {
-      showToast("Choose an Excel file first.", "error");
-      return;
-    }
+  const downloadSampleTemplate = async () => {
     try {
-      const formData = new FormData();
-      formData.append("file", importFile);
-      const report = await previewImport.mutateAsync(formData);
-      setImportReport(report);
-      showToast("Import preview generated.", "success");
+      const response = await adminApi.get("/pricing/sample-template", { responseType: "blob" });
+      const blob = new Blob([response.data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "pricing-template.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
     } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to preview import."), "error");
+      showToast(getAdminErrorMessage(error, "Failed to download sample template."), "error");
     }
   };
 
-  const handleImportCommit = async () => {
-    if (!importFile) {
-      showToast("Choose an Excel file first.", "error");
-      return;
-    }
-    try {
-      const formData = new FormData();
-      formData.append("file", importFile);
-      await importPricing.mutateAsync(formData);
-      showToast("Pricing imported successfully.", "success");
-      setImportFile(null);
-      setImportReport(null);
-      setImportOpen(false);
-      await refetch();
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to import pricing."), "error");
-    }
-  };
+
+
 
   const columns = [
     { key: "ruleName", label: "Rule Name" },
@@ -2123,73 +2166,26 @@ export default function PricingPage() {
         </div>
       </Modal>
 
-      <Modal
+      <AdminImportWizard
         open={importOpen}
-        onClose={() => { setImportOpen(false); setImportFile(null); setImportReport(null); }}
+        onClose={() => setImportOpen(false)}
         title="Import Pricing Rules"
-        subtitle="Upload an Excel (.xlsx, .xls) or CSV file with pricing rules matching the template format."
-        size="2xl"
-        footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <button
-              type="button"
-              onClick={() => {
-                setImportOpen(false);
-                setImportFile(null);
-                setImportReport(null);
-              }}
-              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleImportPreview}
-              disabled={!importFile || previewImport.isPending}
-              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors disabled:opacity-40 cursor-pointer"
-            >
-              {previewImport.isPending ? "Generating Preview..." : "Preview"}
-            </button>
-            <LoadingButton
-              type="button"
-              onClick={handleImportCommit}
-              disabled={!importFile || importPricing.isPending}
-              loading={importPricing.isPending}
-              loadingText="Importing..."
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-40 cursor-pointer shadow-2xs"
-            >
-              Import Rules
-            </LoadingButton>
-          </div>
-        }
-      >
-        <div className="space-y-4 p-6">
-          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-[#D6D6D6] bg-[#FAFAFA] px-4 py-3">
-            <input
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              onChange={(event) => setImportFile(event.target.files?.[0] ?? null)}
-            />
-            <div className="min-w-0">
-              <div className="text-[13px] font-medium text-[#1A1A1A]">{importFile ? importFile.name : "Choose file"}</div>
-              <div className="mt-0.5 text-[12px] text-[#6B6B6B]">Preview before import.</div>
-            </div>
-            <div className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] font-semibold text-[#1A1A1A] hover:bg-[#F5F5F5] shrink-0">
-              Browse
-            </div>
-          </label>
-
-          {importReport ? (
-            <div className="mt-4 rounded-lg bg-gray-50 p-3 max-h-48 overflow-y-auto border border-[#E6E6E6]">
-              <div className="font-semibold text-[13px] text-emerald-800">Import preview ready</div>
-              <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-[11px] text-[#6B6B6B] font-mono">
-                {JSON.stringify(importReport, null, 2)}
-              </pre>
-            </div>
-          ) : null}
-        </div>
-      </Modal>
+        subtitle="Upload an .xlsx or .csv file to bulk configure pricing rules with live preview & direct inline editing."
+        entityName="pricing rules"
+        columns={pricingWizardColumns}
+        expectedColumns={pricingExpectedColumns}
+        sampleTemplateUrl="/pricing/sample-template"
+        sampleTemplateFilename="pricing-template.xlsx"
+        previewEndpoint="/pricing/import/preview"
+        executeEndpoint="/pricing/import"
+        onSuccess={(result) => {
+          showToast(
+            `Import complete: ${result?.created ?? 0} created, ${result?.updated ?? 0} updated.`,
+            "success"
+          );
+          void refetch();
+        }}
+      />
 
       {/* READ-ONLY PRICING RULE VIEW MODAL */}
       <Modal

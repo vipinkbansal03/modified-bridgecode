@@ -652,19 +652,16 @@ export async function getLowStockAlerts() {
   });
 }
 
-function parseInventoryImportRow(row: Record<string, string>) {
-  const variantId = row.variantId?.trim() || "";
-  const variantSku = row.variantSku?.trim() || "";
-  const productSku = row.productSku?.trim() || "";
-
+function parseInventoryImportRow(row: Record<string, any>) {
+  const safeStr = (v: any) => (v !== undefined && v !== null ? String(v).trim() : "");
   return {
-    variantId,
-    variantSku,
-    productSku,
-    warehouseId: row.warehouseId?.trim().toUpperCase() || "",
-    stock: row.stock?.trim() || "",
-    reservedStock: row.reservedStock?.trim() || "",
-    lowStockThreshold: row.lowStockThreshold?.trim() || "",
+    variantId: safeStr(row.variantId),
+    variantSku: safeStr(row.variantSku),
+    productSku: safeStr(row.productSku),
+    warehouseId: safeStr(row.warehouseId).toUpperCase(),
+    stock: safeStr(row.stock),
+    reservedStock: safeStr(row.reservedStock),
+    lowStockThreshold: safeStr(row.lowStockThreshold),
   };
 }
 
@@ -779,13 +776,23 @@ export async function previewInventoryImport(filePath: string) {
     issues: preview.issues,
     duplicateWarnings: preview.duplicateWarnings,
     sampleRows: preview.rows.slice(0, 10).map((row, index) => ({ row: index + 2, ...row })),
+    rows: preview.rows.map((row, index) => {
+      const rowNumber = index + 2;
+      const rowIssues = preview.issues.filter((iss) => iss.row === rowNumber);
+      return {
+        ...row,
+        rowNumber,
+        isValid: rowIssues.length === 0,
+        errors: rowIssues.map((iss) => (iss.field ? `[${iss.field}] ${iss.message}` : iss.message)),
+      };
+    }),
   };
 }
 
-export async function importInventorySpreadsheet(filePath: string) {
-  const rows = readSpreadsheetRows(filePath);
+export async function importInventorySpreadsheet(filePathOrRows: string | any[], adjustedBy?: string) {
+  const rows = Array.isArray(filePathOrRows) ? filePathOrRows : readSpreadsheetRows(filePathOrRows);
   const preview = await previewInventoryImportRows(rows);
-  if (preview.issues.length > 0) {
+  if (typeof filePathOrRows === "string" && preview.issues.length > 0) {
     throw new AppError(`Import validation failed with ${preview.issues.length} issue(s).`, 400);
   }
 
@@ -893,6 +900,44 @@ export async function exportInventorySpreadsheet(query: InventoryListQuery & { i
     INVENTORY_EXPORT_COLUMNS.map((column) => ({ key: column.key, header: column.header })),
   );
 }
+
+export function generateSampleInventoryTemplate() {
+  const sampleRows = [
+    {
+      productTitle: "Metal Bracket MBT .022",
+      productSku: "PRD-MB-001",
+      variantTitle: "MBT .022 Upper",
+      variantSku: "VAR-MB-001-U",
+      warehouseId: "DEFAULT",
+      scope: "GLOBAL",
+      stock: "150",
+      reservedStock: "0",
+      availableStock: "150",
+      lowStockThreshold: "20",
+      status: "ACTIVE",
+    },
+    {
+      productTitle: "NiTi Archwire Upper .016",
+      productSku: "PRD-NW-002",
+      variantTitle: "Standard",
+      variantSku: "VAR-NW-002-STD",
+      warehouseId: "DEFAULT",
+      scope: "GLOBAL",
+      stock: "500",
+      reservedStock: "10",
+      availableStock: "490",
+      lowStockThreshold: "50",
+      status: "ACTIVE",
+    },
+  ];
+
+  return writeSpreadsheetBuffer(
+    sampleRows,
+    "Inventory",
+    INVENTORY_EXPORT_COLUMNS.map((column) => ({ key: column.key, header: column.header })),
+  );
+}
+
 
 
 export async function deleteInventory(id: string) {

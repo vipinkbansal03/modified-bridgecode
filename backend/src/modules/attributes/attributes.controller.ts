@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { asyncHandler, ApiResponse, AppError } from "../../utils/apiResponse";
 import { AuthRequest } from "../../middleware/auth.middleware";
+import { removeTempFile } from "../../utils/spreadsheet";
 import * as S from "./attributes.service";
 import {
   createAttributeSchema,
@@ -97,4 +98,60 @@ export const reorderValues = asyncHandler(async (req: AuthRequest, res: Response
     "Values reordered.",
     await S.reorderAttributeValues(String(req.params.id), items),
   );
+});
+
+export const exportSpreadsheet = asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const buffer = await S.exportAttributesSpreadsheet();
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="attributes-export-${Date.now()}.xlsx"`);
+  return res.status(200).send(buffer);
+});
+
+export const downloadSampleTemplate = asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const buffer = S.generateSampleAttributesTemplate();
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="attributes-template.xlsx"`);
+  return res.status(200).send(buffer);
+});
+
+export const previewImport = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const file = req.file as Express.Multer.File | undefined;
+  if (!file) {
+    return ApiResponse.success(res, "No file uploaded.", {
+      totalRows: 0,
+      validRows: 0,
+      invalidRows: 0,
+      issues: ["No spreadsheet file provided."],
+      duplicateWarnings: [],
+      sampleRows: [],
+    });
+  }
+  try {
+    return ApiResponse.success(res, "Import preview generated.", await S.previewAttributeImport(file.path));
+  } finally {
+    removeTempFile(file.path);
+  }
+});
+
+export const importSpreadsheet = asyncHandler(async (req: AuthRequest, res: Response) => {
+  if (req.body?.rows && Array.isArray(req.body.rows)) {
+    const result = await S.importAttributesSpreadsheet(req.body.rows);
+    return ApiResponse.success(res, "Attributes imported successfully.", result);
+  }
+
+  const file = req.file as Express.Multer.File | undefined;
+  if (!file) {
+    return ApiResponse.success(res, "No file uploaded.", {
+      createdAttributes: 0,
+      updatedAttributes: 0,
+      createdValues: 0,
+      updatedValues: 0,
+      totalProcessed: 0,
+    });
+  }
+  try {
+    return ApiResponse.success(res, "Attributes imported successfully.", await S.importAttributesSpreadsheet(file.path));
+  } finally {
+    removeTempFile(file.path);
+  }
 });

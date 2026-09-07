@@ -35,6 +35,7 @@ import {
 import { AdminRowActions, AdminActionButton } from "@/components/admin/AdminRowActions";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
+import { AdminImportWizard, WizardColumnDef } from "@/components/admin/AdminImportWizard";
 import {
   useAdminInventory,
   useAdminInventoryAdjustments,
@@ -162,6 +163,25 @@ function tinyNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
+const inventoryWizardColumns: WizardColumnDef[] = [
+  { key: "productSku", header: "Product SKU", minWidth: "140px" },
+  { key: "variantSku", header: "Variant SKU", minWidth: "140px" },
+  { key: "stock", header: "Stock", required: true, type: "number", minWidth: "100px" },
+  { key: "reservedStock", header: "Reserved Stock", type: "number", minWidth: "110px" },
+  { key: "lowStockThreshold", header: "Low Stock Alert", type: "number", minWidth: "120px" },
+  { key: "warehouseId", header: "Country / Warehouse", minWidth: "140px", placeholder: "e.g. IN, US" },
+];
+
+const inventoryExpectedColumns = [
+  { name: "stock", required: true, hint: "Available physical stock" },
+  { name: "variantSku", hint: "SKU of specific variant" },
+  { name: "productSku", hint: "SKU of parent product" },
+  { name: "variantId", hint: "Database ID of variant" },
+  { name: "reservedStock", hint: "Reserved quantity" },
+  { name: "lowStockThreshold", hint: "Threshold before low stock warning" },
+  { name: "warehouseId", hint: "Country code (e.g. IN) or warehouse ID" },
+];
+
 export default function InventoryPage() {
   const { hasPermission, isLoading: authLoading } = useAdminAuth();
   const router = useRouter();
@@ -174,7 +194,6 @@ export default function InventoryPage() {
 
   const canUpdate = hasPermission("inventory.update");
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<"levels" | "alerts" | "activity">("levels");
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
@@ -194,10 +213,6 @@ export default function InventoryPage() {
   const [bulkThreshold, setBulkThreshold] = useState("");
   const [bulkAction, setBulkAction] = useState("");
   const [importOpen, setImportOpen] = useState(false);
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importPreview, setImportPreview] = useState<SpreadsheetReport | null>(null);
-  const [importMessage, setImportMessage] = useState("");
-  const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -489,49 +504,26 @@ export default function InventoryPage() {
     }
   };
 
+  const downloadSampleTemplate = async () => {
+    try {
+      const response = await adminApi.get("/inventory/sample-template", { responseType: "blob" });
+      const blob = new Blob([response.data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "inventory-template.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to download sample template."), "error");
+    }
+  };
+
+
   const openImportDialog = () => {
-    setImportPreview(null);
-    setImportMessage("");
-    setImportFile(null);
     setImportOpen(true);
-  };
-
-  const previewImport = async (file?: File) => {
-    if (!file) return;
-    setImportFile(file);
-    setImportMessage("Validating spreadsheet preview...");
-    setImportPreview(null);
-    const formData = new FormData();
-    formData.append("file", file);
-    try {
-      const response = await adminApi.post("/inventory/import/preview", formData);
-      const report = response.data?.data as SpreadsheetReport;
-      setImportPreview(report);
-      setImportMessage(report.invalidRows > 0 ? "Fix the spreadsheet issues before importing." : "Preview generated successfully.");
-    } catch (error) {
-      setImportMessage(getAdminErrorMessage(error, "Failed to preview spreadsheet."));
-      setImportPreview(null);
-    }
-  };
-
-  const confirmImport = async () => {
-    if (!importFile) return;
-    setImporting(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", importFile);
-      const response = await adminApi.post("/inventory/import", formData);
-      const result = response.data?.data as { updated: number; report: SpreadsheetReport };
-      showToast(`Import complete. ${result.updated} inventory records updated.`);
-      setImportOpen(false);
-      setImportFile(null);
-      setImportPreview(null);
-      refetch();
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to import spreadsheet."), "error");
-    } finally {
-      setImporting(false);
-    }
   };
 
   const handleSelectAll = async (checked: boolean) => {
@@ -846,16 +838,7 @@ export default function InventoryPage() {
           }
         />
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".xlsx,.xls,.csv"
-          className="hidden"
-          onChange={(event) => {
-            void previewImport(event.target.files?.[0] || undefined);
-            event.currentTarget.value = "";
-          }}
-        />
+
 
         {/* 3. TABS NAVIGATION */}
         <div className="flex border-b border-[#E6E6E6]">
@@ -1140,139 +1123,23 @@ export default function InventoryPage() {
       </Modal>
 
       {/* EXCEL IMPORT MODAL */}
-      <Modal
+      <AdminImportWizard
         open={importOpen}
         onClose={() => setImportOpen(false)}
-        title="Import Inventory Excel"
-        subtitle="Upload an .xlsx or .csv file to update variant stock levels."
-        size="3xl"
-        footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <button
-              type="button"
-              onClick={() => setImportOpen(false)}
-              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <LoadingButton
-              type="button"
-              onClick={() => void confirmImport()}
-              loading={importing}
-              loadingText="Importing..."
-              disabled={!importFile || (importPreview?.invalidRows ?? 0) > 0}
-              className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
-            >
-              Import Inventory
-            </LoadingButton>
-          </div>
-        }
-      >
-        <div className="space-y-4 p-6">
-          <p className="text-[13px] leading-5 text-[#6B6B6B]">
-            Upload an <code className="rounded bg-[#F3F4F6] px-1.5 py-0.5 text-[12px] font-mono text-[#1F2937]">.xlsx</code> or <code className="rounded bg-[#F3F4F6] px-1.5 py-0.5 text-[12px] font-mono text-[#1F2937]">.csv</code> file with <code className="rounded bg-[#F3F4F6] px-1 py-0.5 text-[11px] font-mono">variantId</code>, <code className="rounded bg-[#F3F4F6] px-1 py-0.5 text-[11px] font-mono">variantSku</code> or <code className="rounded bg-[#F3F4F6] px-1 py-0.5 text-[11px] font-mono">productSku</code>, plus <code className="rounded bg-[#F3F4F6] px-1 py-0.5 text-[11px] font-mono">stock</code>, <code className="rounded bg-[#F3F4F6] px-1 py-0.5 text-[11px] font-mono">reservedStock</code>, and <code className="rounded bg-[#F3F4F6] px-1 py-0.5 text-[11px] font-mono">lowStockThreshold</code>.
-          </p>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7] cursor-pointer shadow-xs"
-            >
-              <Upload size={14} />
-              {importFile ? importFile.name : "Choose Excel / CSV File"}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.csv"
-              className="hidden"
-              onChange={(e) => void previewImport(e.target.files?.[0])}
-            />
-            {importFile && (
-              <button
-                type="button"
-                onClick={() => {
-                  setImportFile(null);
-                  setImportPreview(null);
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                }}
-                className="text-[12.5px] text-red-600 hover:underline cursor-pointer"
-              >
-                Remove
-              </button>
-            )}
-            <span className="text-[13px] text-[#6B6B6B]">{importMessage || "Pick a spreadsheet to preview validation results before importing."}</span>
-          </div>
-
-          {importPreview && (
-            <div className="space-y-4">
-              <AdminStatsGrid
-                stats={[
-                  { title: "Total Rows", value: tinyNumber(importPreview.totalRows), icon: <Clock3 size={18} /> },
-                  { title: "Valid Rows", value: tinyNumber(importPreview.validRows), icon: <History size={18} />, color: "bg-emerald-600" },
-                  { title: "Invalid Rows", value: tinyNumber(importPreview.invalidRows), icon: <X size={18} />, color: "bg-red-500" },
-                  { title: "Duplicates", value: tinyNumber(importPreview.duplicateWarnings.length), icon: <Filter size={18} />, color: "bg-orange-500" }
-                ]}
-              />
-              {importPreview.issues.length > 0 && (
-                <div className="rounded-lg border border-[#F1D6D6] bg-[#FFF8F8] p-4">
-                  <h3 className="mb-3 text-[14px] font-semibold text-[#1A1A1A]">Validation Issues</h3>
-                  <div className="max-h-44 space-y-2 overflow-y-auto text-[13px] text-[#6B6B6B]">
-                    {importPreview.issues.slice(0, 30).map((issue, index) => (
-                      <div key={`${issue.row}-${issue.field}-${index}`} className="rounded border border-[#F1D6D6] bg-white px-3 py-2">
-                        Row {issue.row}, {issue.field}: {issue.message}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {importPreview.duplicateWarnings.length > 0 && (
-                <div className="rounded-lg border border-[#F0E1C0] bg-[#FFFDF6] p-4">
-                  <h3 className="mb-3 text-[14px] font-semibold text-[#1A1A1A]">Duplicate Warnings</h3>
-                  <div className="max-h-40 space-y-2 overflow-y-auto text-[13px] text-[#6B6B6B]">
-                    {importPreview.duplicateWarnings.map((warning, index) => (
-                      <div key={`${warning}-${index}`} className="rounded border border-[#F0E1C0] bg-white px-3 py-2">
-                        {warning}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div className="rounded-lg border border-[#E6E6E6]">
-                <div className="border-b border-[#E6E6E6] px-4 py-3 text-[13px] font-semibold text-[#1A1A1A]">Preview Rows</div>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px] text-[13px]">
-                    <thead className="bg-[#F8F8F8] text-[#9A9A9A]">
-                      <tr>
-                        <th className="px-4 py-2 text-left font-semibold">Row</th>
-                        <th className="px-4 py-2 text-left font-semibold">Variant ID</th>
-                        <th className="px-4 py-2 text-left font-semibold">Variant SKU</th>
-                        <th className="px-4 py-2 text-left font-semibold">Product SKU</th>
-                        <th className="px-4 py-2 text-left font-semibold">Stock</th>
-                        <th className="px-4 py-2 text-left font-semibold">Reserved Stock</th>
-                        <th className="px-4 py-2 text-left font-semibold">Low Stock At</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#E6E6E6]">
-                      {importPreview.sampleRows.map((sample) => (
-                        <tr key={String(sample.row)} className="hover:bg-[#FAFAFA]">
-                          <td className="px-4 py-2">{String(sample.row)}</td>
-                          <td className="px-4 py-2">{String(sample.variantId ?? "")}</td>
-                          <td className="px-4 py-2">{String(sample.variantSku ?? "")}</td>
-                          <td className="px-4 py-2">{String(sample.productSku ?? "")}</td>
-                          <td className="px-4 py-2">{String(sample.stock ?? "")}</td>
-                          <td className="px-4 py-2">{String(sample.reservedStock ?? "")}</td>
-                          <td className="px-4 py-2">{String(sample.lowStockThreshold ?? "")}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </Modal>
+        title="Import Inventory"
+        subtitle="Upload an .xlsx or .csv file to update variant stock levels with live preview & direct inline editing."
+        entityName="inventory records"
+        columns={inventoryWizardColumns}
+        expectedColumns={inventoryExpectedColumns}
+        sampleTemplateUrl="/inventory/sample-template"
+        sampleTemplateFilename="inventory_sample_template.xlsx"
+        previewEndpoint="/inventory/import/preview"
+        executeEndpoint="/inventory/import"
+        onSuccess={(result) => {
+          refetch();
+          showToast(`Import complete. ${result?.updated ?? 0} inventory records updated.`, "success");
+        }}
+      />
 
       {/* UNASSIGN SINGLE WAREHOUSE MODAL */}
       <AdminDeleteModal

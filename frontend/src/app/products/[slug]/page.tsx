@@ -209,7 +209,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             <h6 className="text-[14.5px] font-medium text-ink">{product.title}</h6>
             <div className="flex items-center gap-3">
               {apiProduct?.id && <WishlistButton productId={apiProduct.id} />}
-              <ShareButton title={product.title} />
+              <ShareButton title={product.title} image={product.images?.[0]} />
             </div>
           </div>
 

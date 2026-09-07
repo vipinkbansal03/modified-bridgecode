@@ -1,7 +1,6 @@
 import { logger } from "../../config/logger";
+import { getSettingValue } from "../settings/settings.service";
 
-const SANDBOX_API_KEY = process.env.SANDBOX_API_KEY?.trim();
-const SANDBOX_API_SECRET = process.env.SANDBOX_API_SECRET?.trim();
 const GST_VALIDATION_TIMEOUT_MS = Number(process.env.GST_VALIDATION_TIMEOUT_MS || 7000);
 
 export type GstValidationPayload = {
@@ -16,7 +15,7 @@ export type GstValidationPayload = {
 let cachedToken: string | null = null;
 let tokenExpiryTime = 0;
 
-async function getSandboxToken(): Promise<string> {
+async function getSandboxToken(apiKey: string, apiSecret: string): Promise<string> {
   if (cachedToken && Date.now() < tokenExpiryTime) {
     return cachedToken;
   }
@@ -25,8 +24,8 @@ async function getSandboxToken(): Promise<string> {
     method: "POST",
     headers: {
       "accept": "application/json",
-      "x-api-key": SANDBOX_API_KEY!,
-      "x-api-secret": SANDBOX_API_SECRET!,
+      "x-api-key": apiKey,
+      "x-api-secret": apiSecret,
       "x-api-version": "1.0.0",
     },
   });
@@ -49,10 +48,12 @@ async function getSandboxToken(): Promise<string> {
 
 export async function validateGstinWithApi(gstin: string): Promise<GstValidationPayload> {
   const normalizedGstin = gstin.trim().toUpperCase();
+  const apiKey = (await getSettingValue("tax.sandbox_api_key")) || process.env.SANDBOX_API_KEY?.trim() || "";
+  const apiSecret = (await getSettingValue("tax.sandbox_api_secret")) || process.env.SANDBOX_API_SECRET?.trim() || "";
 
-  if (SANDBOX_API_KEY && SANDBOX_API_SECRET) {
+  if (apiKey && apiSecret) {
     try {
-      const token = await getSandboxToken();
+      const token = await getSandboxToken(apiKey, apiSecret);
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), GST_VALIDATION_TIMEOUT_MS);
 
@@ -63,7 +64,7 @@ export async function validateGstinWithApi(gstin: string): Promise<GstValidation
           "Content-Type": "application/json",
           "accept": "application/json",
           "authorization": token,
-          "x-api-key": SANDBOX_API_KEY,
+          "x-api-key": apiKey,
           "x-api-version": "1.0.0",
         },
         body: JSON.stringify({ gstin: normalizedGstin }),

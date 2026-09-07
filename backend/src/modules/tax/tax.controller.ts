@@ -55,6 +55,14 @@ export const exportSpreadsheet = asyncHandler(async (req: AuthRequest, res: Resp
   return res.status(200).send(buffer);
 });
 
+export const downloadSampleTemplate = asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const buffer = TaxService.generateSampleTaxTemplate();
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", 'attachment; filename="tax-rules-template.xlsx"');
+  return res.status(200).send(buffer);
+});
+
+
 export const previewImport = asyncHandler(async (req: AuthRequest, res: Response) => {
   const file = req.file as Express.Multer.File | undefined;
   if (!file) {
@@ -77,6 +85,12 @@ export const previewImport = asyncHandler(async (req: AuthRequest, res: Response
 });
 
 export const importSpreadsheet = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const rows = req.body?.rows;
+  if (Array.isArray(rows) && rows.length > 0) {
+    const result = await TaxService.importTaxSpreadsheet(rows);
+    return ApiResponse.success(res, "Tax rules imported successfully.", result);
+  }
+
   const file = req.file as Express.Multer.File | undefined;
   if (!file) {
     return ApiResponse.success(res, "No file uploaded.", {
