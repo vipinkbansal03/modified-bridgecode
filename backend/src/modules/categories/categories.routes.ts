@@ -10,6 +10,7 @@ router.get("/export", requirePermission("categories.view", "categories.manage"),
 router.post("/import/preview", requirePermission("categories.manage"), upload.single("file"), C.previewImport);
 router.post("/import", requirePermission("categories.manage"), upload.single("file"), C.importSpreadsheet);
 router.put("/reorder", requirePermission("categories.manage"), C.reorder);
+router.post("/bulk/permanent", requirePermission("categories.manage"), C.bulkPermanentDelete);
 router.get("/:id/countries", requirePermission("categories.view", "categories.manage"), C.listCountries);
 router.put("/:id/countries", requirePermission("categories.manage"), C.updateCountries);
 router.get("/:id", requirePermission("categories.view", "categories.manage"), C.getOne);

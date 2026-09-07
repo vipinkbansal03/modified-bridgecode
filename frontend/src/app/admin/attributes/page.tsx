@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { formatDate } from "@/utils/formatDate";
 import {
   AdminInput,
   AdminListToolbar,
@@ -34,11 +35,14 @@ import {
   LoadingButton,
   AdminBulkActionsBar,
   AdminDeleteModal,
+  DataTable,
+  Pagination,
+  type Column,
 } from "@/components/admin/AdminComponents";
 import { AdminRowActions, AdminActionButton } from "@/components/admin/AdminRowActions";
 import { AttributeRoleBadge } from "@/components/admin/attributes/AttributeRoleBadge";
 import { AttributeValueEditors } from "@/components/admin/attributes/AttributeValueEditors";
-import { SortableList, toSortOrderPayload } from "@/components/admin/SortableList";
+import { toSortOrderPayload } from "@/components/admin/SortableList";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import { Modal } from "@/components/ui/Modal";
 import {
@@ -46,6 +50,7 @@ import {
   useAdminAttributes,
   useCreateAttribute,
   useDeleteAttribute,
+  usePermanentDeleteAttribute,
   useReorderAttributes,
   useUpdateAttribute,
 } from "@/hooks/admin/useAdminHooks";
@@ -58,22 +63,24 @@ import {
 import type { ApiAttribute } from "@/types/api.types";
 
 type EditorMode = "create" | "edit" | null;
-type ColumnKey = "name" | "role" | "status" | "values" | "sortOrder";
+type ColumnKey = "name" | "role" | "values" | "status" | "sortOrder" | "updatedAt";
 
 const DEFAULT_COLUMNS: Record<ColumnKey, boolean> = {
   name: true,
   role: true,
-  status: true,
   values: true,
+  status: true,
   sortOrder: true,
+  updatedAt: true,
 };
 
 const COLUMN_OPTIONS: { key: ColumnKey; label: string }[] = [
   { key: "name", label: "Attribute Name" },
   { key: "role", label: "Display Type" },
-  { key: "status", label: "Status" },
   { key: "values", label: "Values Count" },
-  { key: "sortOrder", label: "Sort Order" },
+  { key: "status", label: "Status" },
+  { key: "sortOrder", label: "Priority / Sort" },
+  { key: "updatedAt", label: "Updated Date" },
 ];
 
 const attributeSchema = Yup.object({
@@ -93,19 +100,27 @@ export default function AttributesPage() {
   const createAttribute = useCreateAttribute();
   const updateAttribute = useUpdateAttribute();
   const deleteAttribute = useDeleteAttribute();
+  const permanentDeleteAttribute = usePermanentDeleteAttribute();
   const reorderAttributes = useReorderAttributes();
   const { showToast, ToastComponent } = useToast();
 
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
+  const [sortBy, setSortBy] = useState("sortOrder");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [showFilters, setShowFilters] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(DEFAULT_COLUMNS);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [page, limit, search, statusFilter, roleFilter, sortBy, sortDir]);
 
   const [editorMode, setEditorMode] = useState<EditorMode>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -165,20 +180,15 @@ export default function AttributesPage() {
   const attributeStats = useMemo(() => {
     const total = attributes.length;
     const active = attributes.filter((a: ApiAttribute) => a.status === "ACTIVE").length;
-    const grid = attributes.filter((a: ApiAttribute) => a.role === "X_GRID" || a.role === "Y_GRID").length;
+    const inactive = attributes.filter((a: ApiAttribute) => a.status === "INACTIVE").length;
     const totalValues = attributes.reduce((acc: number, a: ApiAttribute) => acc + (a.values?.length ?? 0), 0);
-    return { total, active, grid, totalValues };
+    return { total, active, inactive, totalValues };
   }, [attributes]);
-
-  const sorted = useMemo(
-    () => [...attributes].sort((a: ApiAttribute, b: ApiAttribute) => a.sortOrder - b.sortOrder),
-    [attributes],
-  );
 
   const isFiltered = Boolean(search.trim() || statusFilter || roleFilter);
 
   const filteredAttributes = useMemo(() => {
-    return sorted.filter((attr: ApiAttribute) => {
+    return attributes.filter((attr: ApiAttribute) => {
       if (search.trim()) {
         const q = search.trim().toLowerCase();
         const matchesName = attr.name.toLowerCase().includes(q);
@@ -189,7 +199,48 @@ export default function AttributesPage() {
       if (roleFilter && attr.role !== roleFilter) return false;
       return true;
     });
-  }, [sorted, search, statusFilter, roleFilter]);
+  }, [attributes, search, statusFilter, roleFilter]);
+
+  const sortedAttributes = useMemo(() => {
+    const list = [...filteredAttributes];
+    list.sort((a: ApiAttribute, b: ApiAttribute) => {
+      if (sortBy === "sortOrder") {
+        return sortDir === "asc" ? a.sortOrder - b.sortOrder : b.sortOrder - a.sortOrder;
+      }
+      if (sortBy === "name") {
+        return sortDir === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+      }
+      if (sortBy === "updatedAt") {
+        const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+        const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+        return sortDir === "asc" ? dateA - dateB : dateB - dateA;
+      }
+      if (sortBy === "createdAt") {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return sortDir === "asc" ? dateA - dateB : dateB - dateA;
+      }
+      return 0;
+    });
+    return list;
+  }, [filteredAttributes, sortBy, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedAttributes.length / limit));
+  const paginatedAttributes = useMemo(() => {
+    const start = (page - 1) * limit;
+    return sortedAttributes.slice(start, start + limit);
+  }, [sortedAttributes, page, limit]);
+
+  const recentlyUpdatedAttributes = useMemo(() => {
+    if (!attributes.length) return [];
+    const withDate = [...attributes].filter((a: ApiAttribute) => Boolean(a.updatedAt));
+    if (withDate.length > 0) {
+      return withDate
+        .sort((a: ApiAttribute, b: ApiAttribute) => new Date(b.updatedAt!).getTime() - new Date(a.updatedAt!).getTime())
+        .slice(0, 4);
+    }
+    return [...attributes].slice(0, 4);
+  }, [attributes]);
 
   const deletingAttribute = useMemo(
     () => (deletingId ? attributes.find((a: ApiAttribute) => a.id === deletingId) : null),
@@ -257,7 +308,10 @@ export default function AttributesPage() {
       return;
     }
     try {
-      await reorderAttributes.mutateAsync(toSortOrderPayload(next));
+      const start = (page - 1) * limit;
+      const fullReordered = [...sortedAttributes];
+      fullReordered.splice(start, next.length, ...next);
+      await reorderAttributes.mutateAsync(toSortOrderPayload(fullReordered));
       showToast("Attribute order updated.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to reorder attributes."), "error");
@@ -283,15 +337,28 @@ export default function AttributesPage() {
     }
   };
 
-  const handleDelete = async () => {
+  const handleSoftDelete = async () => {
     if (!deletingId) return;
     try {
       await deleteAttribute.mutateAsync(deletingId);
-      showToast("Attribute deleted successfully.");
+      showToast("Attribute archived successfully.");
       setDeletingId(null);
       refetch();
     } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to delete attribute."), "error");
+      showToast(getAdminErrorMessage(error, "Failed to archive attribute."), "error");
+      throw error;
+    }
+  };
+
+  const handlePermanentDelete = async () => {
+    if (!deletingId) return;
+    try {
+      await permanentDeleteAttribute.mutateAsync(deletingId);
+      showToast("Attribute permanently deleted.");
+      setDeletingId(null);
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to permanently delete attribute."), "error");
       throw error;
     }
   };
@@ -301,13 +368,13 @@ export default function AttributesPage() {
     setBulkSaving(true);
     try {
       await Promise.all(selectedIds.map((id) => deleteAttribute.mutateAsync(id)));
-      showToast(`Successfully deleted ${selectedIds.length} attribute(s).`);
+      showToast(`Successfully archived ${selectedIds.length} attribute(s).`);
       setSelectedIds([]);
       setBulkAction("");
       setShowBulkDeleteModal(false);
       refetch();
     } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to complete bulk delete."), "error");
+      showToast(getAdminErrorMessage(error, "Failed to complete bulk archive."), "error");
     } finally {
       setBulkSaving(false);
     }
@@ -346,14 +413,114 @@ export default function AttributesPage() {
   const isSaving = form.isSubmitting || createAttribute.isPending || updateAttribute.isPending;
   const currentRole = editorMode === "edit" ? editingAttribute?.role : null;
 
-  const attributeGridClass =
-    "grid w-full min-w-0 gap-3 md:grid-cols-[40px_minmax(180px,1fr)_130px_90px_90px_60px_100px] md:items-center";
+  const columns: Column<ApiAttribute>[] = useMemo(() => [
+    {
+      key: "name",
+      label: "Attribute Name",
+      width: "240px",
+      render: (row) => (
+        <div className="min-w-0">
+          <Link
+            href={`/admin/attributes/${row.id}`}
+            className="truncate font-semibold text-[#1A1A1A] hover:text-[#E31E24] transition-colors inline-flex items-center gap-1.5"
+          >
+            <span>{row.name}</span>
+            <ExternalLink size={12} className="text-[#9A9A9A] shrink-0" />
+          </Link>
+          <div className="mt-0.5 text-[11.5px] text-[#9A9A9A] font-mono truncate">
+            {row.slug ? `slug: ${row.slug}` : `ID: ${row.id.slice(0, 8)}...`}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "role",
+      label: "Display Type",
+      width: "160px",
+      render: (row) => <AttributeRoleBadge role={row.role} />,
+    },
+    {
+      key: "values",
+      label: "Values",
+      width: "130px",
+      render: (row) => (
+        <Link
+          href={`/admin/attributes/${row.id}`}
+          className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-[#555] hover:text-[#E31E24] hover:underline"
+        >
+          <Tag size={12} className="text-[#9A9A9A]" />
+          <span>{row._count?.values ?? row.values?.length ?? 0} values</span>
+        </Link>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      width: "110px",
+    },
+    {
+      key: "sortOrder",
+      label: "Priority",
+      width: "100px",
+      render: (row) => (
+        <span className="font-mono text-[12px] text-[#888] whitespace-nowrap">
+          #{row.sortOrder}
+        </span>
+      ),
+    },
+    {
+      key: "updatedAt" as any,
+      label: "Updated Date",
+      width: "130px",
+      render: (row) => (
+        <span className="text-[#1A1A1A] whitespace-nowrap text-[12.5px]">
+          {row.updatedAt ? formatDate(row.updatedAt) : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      width: "120px",
+      render: (row) => (
+        <AdminRowActions
+          view={{
+            onClick: () => router.push(`/admin/attributes/${row.id}`),
+            title: "View attribute values and details",
+          }}
+          edit={
+            canUpdate
+              ? {
+                  onClick: () => openEditModal(row.id),
+                  title: "Edit attribute",
+                }
+              : undefined
+          }
+          delete={
+            canDelete
+              ? {
+                  onClick: () => setDeletingId(row.id),
+                  title: "Delete attribute",
+                }
+              : undefined
+          }
+        />
+      ),
+    },
+  ], [canUpdate, canDelete, router]);
+
+  const filteredColumns = useMemo(() => {
+    return columns.filter((column) => {
+      const k = column.key as ColumnKey;
+      if (k in visibleColumns) return visibleColumns[k];
+      return true;
+    });
+  }, [columns, visibleColumns]);
 
   return (
     <AdminLayout
       title="Attributes & Options"
       breadcrumb={[
-        { label: "Admin", href: "/admin" },
         { label: "Catalog" },
         { label: "Attributes" },
       ]}
@@ -365,7 +532,7 @@ export default function AttributesPage() {
             {
               title: "Total Attributes",
               value: attributeStats.total,
-              subtitle: "Product specifications & options",
+              subtitle: "All configured attributes",
               icon: <Sliders size={18} />,
             },
             {
@@ -376,11 +543,11 @@ export default function AttributesPage() {
               color: "bg-green-600",
             },
             {
-              title: "Grid Attributes",
-              value: attributeStats.grid,
-              subtitle: "Generates variant matrices",
-              icon: <Zap size={18} />,
-              color: "bg-indigo-600",
+              title: "Inactive Attributes",
+              value: attributeStats.inactive,
+              subtitle: "Disabled attributes",
+              icon: <XCircle size={18} />,
+              color: "bg-gray-600",
             },
             {
               title: "Attribute Values",
@@ -393,18 +560,58 @@ export default function AttributesPage() {
           isLoading={isLoading}
         />
 
+        {/* RECENTLY UPDATED */}
+        {recentlyUpdatedAttributes.length > 0 ? (
+          <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-[13.5px] font-semibold text-[#1A1A1A]">Recently Updated</h3>
+                <p className="text-[12px] text-[#6B6B6B]">Quick access to latest modified attributes.</p>
+              </div>
+              <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-medium text-[#6B6B6B]">
+                {recentlyUpdatedAttributes.length} items
+              </span>
+            </div>
+            <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              {recentlyUpdatedAttributes.map((attr) => (
+                <div
+                  key={attr.id}
+                  onClick={() => openEditModal(attr.id)}
+                  className="rounded-lg border border-[#E6E6E6] p-3 bg-[#FAFAFA] flex flex-col justify-between min-h-[90px] cursor-pointer hover:border-[#D6D6D6] transition-colors"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-semibold text-[#1A1A1A]" title={attr.name}>{attr.name}</div>
+                    <div className="text-[11.5px] text-[#9A9A9A] mt-1 truncate">
+                      {ATTRIBUTE_DISPLAY_TYPE_LABELS[attr.role as AttributeRole] || attr.role} · {attr._count?.values ?? attr.values?.length ?? 0} values
+                    </div>
+                  </div>
+                  <div className="mt-2.5 flex items-center justify-between">
+                    <span className="text-[11.5px] text-[#9A9A9A]">
+                      {attr.updatedAt ? formatDate(attr.updatedAt) : "—"}
+                    </span>
+                    <StatusBadge status={attr.status} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {/* 2. STANDARDIZED LIST TOOLBAR */}
         <AdminListToolbar
           search={{
             value: search,
-            onChange: setSearch,
+            onChange: (val: string) => {
+              setPage(1);
+              setSearch(val);
+            },
             placeholder: "Search attributes...",
             widthClassName: "w-[240px]",
           }}
           filters={{
             showFilters,
             onToggle: () => setShowFilters(!showFilters),
-            activeCount: (statusFilter ? 1 : 0) + (roleFilter ? 1 : 0),
+            activeCount: [statusFilter, roleFilter].filter(Boolean).length,
           }}
           columns={{
             visibleColumns,
@@ -425,7 +632,7 @@ export default function AttributesPage() {
             canCreate
               ? {
                   onClick: openCreateModal,
-                  label: "New attribute",
+                  label: "Add Attribute",
                   icon: <Plus size={14} />,
                 }
               : undefined
@@ -434,15 +641,21 @@ export default function AttributesPage() {
             setSearch("");
             setStatusFilter("");
             setRoleFilter("");
+            setSortBy("sortOrder");
+            setSortDir("asc");
+            setPage(1);
           }}
           filterPanel={
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <AdminSelect
                 label="Status"
                 value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
+                onChange={(event) => {
+                  setPage(1);
+                  setStatusFilter(event.target.value);
+                }}
                 options={[
-                  { value: "", label: "All Statuses" },
+                  { value: "", label: "All status" },
                   { value: "ACTIVE", label: "Active" },
                   { value: "INACTIVE", label: "Inactive" },
                 ]}
@@ -450,199 +663,107 @@ export default function AttributesPage() {
               <AdminSelect
                 label="Display Type"
                 value={roleFilter}
-                onChange={(event) => setRoleFilter(event.target.value)}
+                onChange={(event) => {
+                  setPage(1);
+                  setRoleFilter(event.target.value);
+                }}
                 options={[
-                  { value: "", label: "All Display Types" },
+                  { value: "", label: "All types" },
                   { value: "DROPDOWN", label: "Dropdown (Single Choice)" },
                   { value: "X_GRID", label: "X-Grid (Matrix Column)" },
                   { value: "Y_GRID", label: "Y-Grid (Matrix Row)" },
+                ]}
+              />
+              <AdminSelect
+                label="Sort By"
+                value={sortBy}
+                onChange={(event) => {
+                  setSortBy(event.target.value);
+                  setPage(1);
+                }}
+                options={[
+                  { value: "sortOrder", label: "Sort Order" },
+                  { value: "name", label: "Attribute Name" },
+                  { value: "updatedAt", label: "Updated Date" },
+                  { value: "createdAt", label: "Created Date" },
+                ]}
+              />
+              <AdminSelect
+                label="Direction"
+                value={sortDir}
+                onChange={(event) => {
+                  setSortDir(event.target.value as "asc" | "desc");
+                  setPage(1);
+                }}
+                options={[
+                  { value: "asc", label: "Ascending" },
+                  { value: "desc", label: "Descending" },
                 ]}
               />
             </div>
           }
         />
 
-        {/* 3. REORDERABLE ATTRIBUTE LIST */}
-        {isLoading ? (
-          <div className="space-y-3">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-16 animate-pulse rounded-lg bg-[#E6E6E6]" />
-            ))}
-          </div>
-        ) : filteredAttributes.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[#E6E6E6] py-12 text-center text-[13.5px] text-[#9A9A9A]">
-            {isFiltered
-              ? "No attributes matched your search or filters."
-              : "No attributes yet. Create your first attribute."}
-          </div>
-        ) : (
-          <div className="rounded-lg border border-[#E6E6E6] bg-white shadow-2xs">
-            {/* Header / Bulk Actions Bar */}
-            <div className="border-b border-[#E6E6E6] bg-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 min-h-[56px] transition-all rounded-t-lg">
-              <div className="flex flex-wrap items-center gap-3 w-full">
-                <span className="text-[13px] font-bold text-[#1A1A1A]">Attributes List</span>
-                <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">
-                  {filteredAttributes.length} {filteredAttributes.length === 1 ? "attribute" : "attributes"}
-                  {isFiltered ? " (Filtered — Drag reorder disabled)" : " (Drag rows to reorder)"}
-                </span>
-
-                <div className="flex items-center gap-2 border-l border-[#E6E6E6] pl-3 ml-2 flex-wrap">
-                  <AdminBulkActionsBar
-                    selectedCount={selectedIds.length}
-                    onClear={() => setSelectedIds([])}
-                    actionType={bulkAction}
-                    onActionTypeChange={setBulkAction}
-                    actions={[
-                      { value: "activate", label: "Enable" },
-                      { value: "deactivate", label: "Disable" },
-                      { value: "delete", label: "Delete" },
-                    ]}
-                    onApply={() => handleBulkAction(bulkAction)}
-                    applyLoading={bulkSaving}
-                    applyDisabled={!bulkAction || selectedIds.length === 0}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Column Headers */}
-            <div className="p-3">
-              <div className="mb-2 hidden items-center gap-2 px-3 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A] md:flex">
-                <span className="w-6 shrink-0" />
-                <div className={`${attributeGridClass} min-w-0 flex-1 pr-3`}>
-                  <div className="flex items-center justify-center">
-                    <input
-                      type="checkbox"
-                      checked={
-                        filteredAttributes.length > 0 &&
-                        selectedIds.length === filteredAttributes.length
-                      }
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedIds(filteredAttributes.map((a) => a.id));
-                        } else {
-                          setSelectedIds([]);
-                        }
-                      }}
-                      className="h-4 w-4 accent-[#E31E24]"
-                    />
-                  </div>
-                  <span>Attribute</span>
-                  <span>Display Type</span>
-                  <span>Status</span>
-                  <span>Values</span>
-                  <span>Sort</span>
-                  <span className="text-right">Actions</span>
-                </div>
-              </div>
-
-              <SortableList
-                className="w-full min-w-0"
-                rowWidthClassName="w-full min-w-0"
-                contentClassName="flex-1 min-w-0 py-2 pr-3"
-                items={filteredAttributes}
-                onReorder={isFiltered ? () => {} : handleReorder}
-                disabled={!canUpdate || isFiltered}
-                renderItem={(attr) => (
-                  <div className={attributeGridClass}>
-                    <div className="flex items-center justify-center">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(attr.id)}
-                        onChange={(e) => {
-                          const isShiftPressed = (e.nativeEvent as any).shiftKey;
-                          const isSelected = selectedIds.includes(attr.id);
-
-                          if (isShiftPressed && lastSelectedId !== null) {
-                            const prevIndex = filteredAttributes.findIndex((a) => a.id === lastSelectedId);
-                            const currIndex = filteredAttributes.findIndex((a) => a.id === attr.id);
-                            if (prevIndex !== -1 && currIndex !== -1) {
-                              const start = Math.min(prevIndex, currIndex);
-                              const end = Math.max(prevIndex, currIndex);
-                              const rangeIds = filteredAttributes.slice(start, end + 1).map((a) => a.id);
-                              if (!isSelected) {
-                                setSelectedIds((prev) => Array.from(new Set([...prev, ...rangeIds])));
-                              } else {
-                                setSelectedIds((prev) => prev.filter((id) => !rangeIds.includes(id)));
-                              }
-                              setLastSelectedId(attr.id);
-                              return;
-                            }
-                          }
-
-                          if (e.target.checked) {
-                            setSelectedIds((prev) => [...prev, attr.id]);
-                          } else {
-                            setSelectedIds((prev) => prev.filter((id) => id !== attr.id));
-                          }
-                          setLastSelectedId(attr.id);
-                        }}
-                        className="h-4 w-4 accent-[#E31E24]"
-                      />
-                    </div>
-
-                    <div className="min-w-0">
-                      <Link
-                        href={`/admin/attributes/${attr.id}`}
-                        className="truncate text-[13.5px] font-semibold text-[#1A1A1A] hover:text-[#E31E24] transition-colors inline-flex items-center gap-1.5"
-                      >
-                        {attr.name}
-                        <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 text-[#9A9A9A]" />
-                      </Link>
-                    </div>
-
-                    <div>
-                      <AttributeRoleBadge role={attr.role} />
-                    </div>
-
-                    <div>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleStatus(attr)}
-                        className="cursor-pointer"
-                        title="Click to toggle status"
-                      >
-                        <StatusBadge status={attr.status} />
-                      </button>
-                    </div>
-
-                    <div>
-                      <Link
-                        href={`/admin/attributes/${attr.id}`}
-                        className="text-[12.5px] font-medium text-[#555] hover:text-[#E31E24] hover:underline"
-                      >
-                        {attr._count?.values ?? attr.values?.length ?? 0} values
-                      </Link>
-                    </div>
-
-                    <span className="text-[12px] font-mono text-[#888]">#{attr.sortOrder}</span>
-
-                    <div className="flex gap-1.5 md:justify-end">
-                      <AdminRowActions
-                        edit={
-                          canUpdate
-                            ? {
-                                title: "Edit attribute",
-                                onClick: () => openEditModal(attr.id),
-                              }
-                            : undefined
-                        }
-                        delete={
-                          canDelete
-                            ? {
-                                title: "Delete attribute",
-                                onClick: () => setDeletingId(attr.id),
-                              }
-                            : undefined
-                        }
-                      />
-                    </div>
-                  </div>
-                )}
+        {/* 3. FULL-WIDTH DATA TABLE WITH BULK ACTIONS */}
+        <div>
+          <DataTable<ApiAttribute>
+            title="Attributes List"
+            columns={filteredColumns}
+            data={paginatedAttributes}
+            rowKey="id"
+            isLoading={isLoading}
+            emptyMessage={
+              isFiltered
+                ? "No attributes matched your search or filters."
+                : "No attributes configured."
+            }
+            enableSelection={canUpdate}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+            onToggleStatus={canUpdate ? handleToggleStatus : undefined}
+            statusLoadingId={updateAttribute.isPending ? ((updateAttribute.variables as any)?.id ?? null) : null}
+            isStatusDisabled={() => !canUpdate}
+            enableReorder={!isFiltered && canUpdate && sortBy === "sortOrder"}
+            onReorder={handleReorder}
+            disabledReorder={reorderAttributes.isPending}
+            rowTooltip={!isFiltered && canUpdate && sortBy === "sortOrder" ? "Drag attribute to reorder" : undefined}
+            totalItems={filteredAttributes.length}
+            currentPage={page}
+            pageSize={limit}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            onPageSizeChange={(newLimit) => {
+              setLimit(newLimit);
+              setPage(1);
+            }}
+            pageSizeOptions={[10, 20, 50, 100]}
+            onSelectAll={(checked) => setSelectedIds(checked ? filteredAttributes.map((a: ApiAttribute) => a.id) : [])}
+            renderBulkActions={(selectedIds) => (
+              <AdminBulkActionsBar
+                selectedCount={selectedIds.length}
+                onClear={() => setSelectedIds([])}
+                actionType={bulkAction}
+                onActionTypeChange={setBulkAction}
+                actions={[
+                  { value: "activate", label: "Mark active" },
+                  { value: "deactivate", label: "Mark inactive" },
+                  { value: "delete", label: "Delete selected" },
+                ]}
+                onApply={() => handleBulkAction(bulkAction)}
+                applyLoading={bulkSaving}
+                applyDisabled={!bulkAction || selectedIds.length === 0}
               />
-            </div>
+            )}
+          />
+          <div className="border-t border-[#E6E6E6] px-4 py-3 bg-white">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              alwaysShow={true}
+            />
           </div>
-        )}
+        </div>
       </div>
 
       {/* ATTRIBUTE CREATE / EDIT MODAL */}
@@ -768,12 +889,14 @@ export default function AttributesPage() {
         onClose={() => setDeletingId(null)}
         itemName={deletingAttribute?.name}
         itemType="Attribute"
-        onSoftDelete={handleDelete}
-        onPermanentDelete={handleDelete}
+        onSoftDelete={handleSoftDelete}
+        onPermanentDelete={handlePermanentDelete}
         isSoftDeleting={deleteAttribute.isPending}
-        isPermanentDeleting={deleteAttribute.isPending}
-        softDeleteDescription="Hides this attribute from the catalog while preserving past orders and product associations."
-        permanentDeleteDescription="Physically deletes this attribute and its values from the database. Blocked if active products or variants reference it."
+        isPermanentDeleting={permanentDeleteAttribute.isPending}
+        permanentDeleteDisabled={!deletingAttribute?.canPermanentDelete}
+        permanentDeleteDisabledReason={deletingAttribute?.permanentDeleteBlockReason || undefined}
+        softDeleteDescription="Hides this attribute from the active catalog while preserving all past variants and historical associations."
+        permanentDeleteDescription="Physically deletes this attribute from the database. Allowed only if zero products, variants, selections, or filter settings reference it."
       />
 
       {/* BULK DELETE MODAL */}
@@ -783,11 +906,10 @@ export default function AttributesPage() {
         itemName={`${selectedIds.length} selected attributes`}
         itemType="Attributes (Bulk)"
         onSoftDelete={handleBulkDelete}
-        onPermanentDelete={handleBulkDelete}
         isSoftDeleting={bulkSaving}
-        isPermanentDeleting={bulkSaving}
-        softDeleteDescription="Hides the selected attributes from the catalog while preserving associations."
-        permanentDeleteDescription="Physically deletes the selected attributes from the database."
+        permanentDeleteDisabled={true}
+        permanentDeleteDisabledReason="Bulk deletion only supports archiving. To permanently delete an attribute, delete it individually from the Archive tab."
+        softDeleteDescription="Hides the selected attributes from the active catalog while preserving associations."
       />
 
       {ToastComponent}

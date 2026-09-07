@@ -2,10 +2,26 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Edit2, Plus, Trash2, X } from "lucide-react";
+import { Edit2, Plus, Trash2, X, Truck, Globe, Package, MapPin, ShieldCheck } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminListToolbar, AdminSelect, ConfirmModal, DataTable, Modal, StatusBadge, useToast, type Column, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
+import {
+  AdminInput,
+  AdminListToolbar,
+  AdminSelect,
+  AdminStatsGrid,
+  ConfirmModal,
+  DataTable,
+  Modal,
+  Pagination,
+  StatusBadge,
+  Tooltip,
+  useToast,
+  type Column,
+  LoadingButton,
+  AdminBulkActionsBar,
+} from "@/components/admin/AdminComponents";
+import { AdminRowActions } from "@/components/admin/AdminRowActions";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { getAdminErrorMessage } from "@/services/adminApi";
 import {
@@ -85,13 +101,33 @@ export default function ShippingZonesPage() {
   const [bulkSaving, setBulkSaving] = useState(false);
   const bulkZones = useBulkShippingZones();
 
-  const { data: zones, isLoading: zonesLoading } = useAdminShippingZones();
+  // Search, filter, sorting and pagination states
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [providerFilter, setProviderFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sortBy, setSortBy] = useState<"provider" | "charge" | "freeAbove" | "estimatedDays">("provider");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [showFilters, setShowFilters] = useState(false);
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const { data: zones, isLoading: zonesLoading, refetch, isFetching } = useAdminShippingZones();
   const { data: providers = [] } = useAdminShippingProviders();
   const { data: countries = [] } = useAdminCountries();
   const createMutation = useCreateShippingZone();
   const updateMutation = useUpdateShippingZone();
   const deleteMutation = useDeleteShippingZone();
   const rateMutation = useGetShippingDefaultRate();
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   const form = useAdminForm<ZoneForm>({
     initialValues: emptyForm,
@@ -133,6 +169,65 @@ export default function ShippingZonesPage() {
   const zoneList: ShippingZone[] = zones ?? [];
   const providerList: Provider[] = providers ?? [];
   const countryList: Country[] = countries ?? [];
+
+  const totals = useMemo(() => {
+    const total = zoneList.length;
+    const active = zoneList.filter((z) => z.status === "ACTIVE").length;
+    const countrySet = new Set<string>();
+    zoneList.forEach((z) => {
+      (z.countries || []).forEach((c) => {
+        if (c.country?.code) countrySet.add(c.country.code);
+      });
+    });
+    const providerSet = new Set(zoneList.map((z) => z.providerId));
+    return {
+      total,
+      active,
+      coveredCountries: countrySet.size,
+      providers: providerSet.size,
+    };
+  }, [zoneList]);
+
+  const filteredZones = useMemo(() => {
+    const query = debouncedSearch.trim().toLowerCase();
+    const result = zoneList.filter((zone) => {
+      const providerName = (zone.provider?.displayName || zone.provider?.name || "").toLowerCase();
+      const countryNames = (zone.countries || [])
+        .map((c) => `${c.country?.name || ""} ${c.country?.code || ""}`)
+        .join(" ")
+        .toLowerCase();
+
+      const matchesSearch = !query || providerName.includes(query) || countryNames.includes(query);
+      const matchesProvider = !providerFilter || zone.providerId === providerFilter;
+      const matchesStatus = !statusFilter || zone.status === statusFilter;
+
+      return matchesSearch && matchesProvider && matchesStatus;
+    });
+
+    result.sort((a, b) => {
+      const direction = sortDir === "asc" ? 1 : -1;
+      if (sortBy === "charge") {
+        return (Number(a.charge || 0) - Number(b.charge || 0)) * direction;
+      }
+      if (sortBy === "freeAbove") {
+        return (Number(a.freeAbove || 0) - Number(b.freeAbove || 0)) * direction;
+      }
+      if (sortBy === "estimatedDays") {
+        return String(a.estimatedDays || "").localeCompare(String(b.estimatedDays || "")) * direction;
+      }
+      const aName = a.provider?.displayName || a.provider?.name || "";
+      const bName = b.provider?.displayName || b.provider?.name || "";
+      return aName.localeCompare(bName) * direction;
+    });
+
+    return result;
+  }, [zoneList, debouncedSearch, providerFilter, statusFilter, sortBy, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredZones.length / pageSize));
+  const paginatedZones = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredZones.slice(start, start + pageSize);
+  }, [filteredZones, page, pageSize]);
 
   const providerOptions = useMemo(
     () => [{ value: "", label: "Select provider" }, ...providerList.map((p) => ({ value: p.id, label: `${p.displayName}${p.isEnabled ? "" : " (disabled)"}` }))],
@@ -248,9 +343,11 @@ export default function ShippingZonesPage() {
         const allCountriesInactive = zone.countries.length > 0 && zone.countries.every((c: any) => c.country.status === "INACTIVE");
         if (allCountriesInactive && zone.status === "ACTIVE") {
           return (
-            <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-inset ring-amber-600/20">
-              INACTIVE (Country Disabled)
-            </span>
+            <Tooltip content="All assigned countries are inactive in country settings" side="top">
+              <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-inset ring-amber-600/20 cursor-default">
+                INACTIVE (Country Disabled)
+              </span>
+            </Tooltip>
           );
         }
         return <StatusBadge status={zone.status} />;
@@ -259,19 +356,27 @@ export default function ShippingZonesPage() {
     {
       key: "actions",
       label: "Actions",
+      width: "110px",
+      align: "left",
       render: (zone) => (
-        <div className="flex items-center gap-2">
-          {canUpdate && (
-            <button onClick={() => openEdit(zone)} className="rounded-md border border-[#E6E6E6] p-2 text-[#6B6B6B] hover:text-[#111]" title="Edit zone">
-              <Edit2 size={14} />
-            </button>
-          )}
-          {canDelete && (
-            <button onClick={() => setDeleteTarget(zone)} className="rounded-md border border-red-100 p-2 text-red-600 hover:bg-red-50" title="Delete zone">
-              <Trash2 size={14} />
-            </button>
-          )}
-        </div>
+        <AdminRowActions
+          edit={
+            canUpdate
+              ? {
+                  onClick: () => openEdit(zone),
+                  title: "Edit shipping zone",
+                }
+              : undefined
+          }
+          delete={
+            canDelete
+              ? {
+                  onClick: () => setDeleteTarget(zone),
+                  title: "Delete shipping zone",
+                }
+              : undefined
+          }
+        />
       ),
     },
   ];
@@ -279,48 +384,186 @@ export default function ShippingZonesPage() {
   return (
     <AdminLayout title="Shipping Zones" breadcrumb={[{ label: "Shipping", href: "/admin/shipping" }, { label: "Zones" }]}>
       <div className="space-y-5">
-        <AdminListToolbar
-          leftExtra={
-            <div className="flex gap-2 border-b border-[#E6E6E6]">
-              <Link href="/admin/shipping" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
-                Providers
-              </Link>
-              <span className="border-b-2 border-[#E31E24] px-4 py-2 text-[13px] font-semibold text-[#111]">Zones</span>
-              <Link href="/admin/shipping/boxes" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
-                Boxes
-              </Link>
-            </div>
-          }
-          primaryAction={canCreate ? { onClick: openCreate, label: "Add Zone" } : undefined}
+        {/* Navigation Sub-Tabs */}
+        <div className="flex items-center gap-2 border-b border-[#E6E6E6] bg-white px-4 pt-2 rounded-t-lg shadow-2xs overflow-x-auto max-w-full scrollbar-thin">
+          <Link
+            href="/admin/shipping"
+            className="flex items-center gap-2 border-b-2 border-transparent text-[#666] hover:border-[#CCC] hover:text-[#1A1A1A] px-3 pb-3 pt-1 text-[13.5px] font-medium shrink-0 whitespace-nowrap transition-colors cursor-pointer"
+          >
+            <Truck size={15} />
+            <span>Providers</span>
+          </Link>
+          <Link
+            href="/admin/shipping/zones"
+            className="flex items-center gap-2 border-b-2 border-[#E31E24] text-[#E31E24] px-3 pb-3 pt-1 text-[13.5px] font-semibold shrink-0 whitespace-nowrap cursor-pointer"
+          >
+            <Globe size={15} />
+            <span>Zones</span>
+            <span className="ml-1 rounded-full bg-[#E31E24]/10 text-[#E31E24] px-2 py-0.5 text-[11px] font-semibold">
+              {totals.total}
+            </span>
+          </Link>
+          <Link
+            href="/admin/shipping/boxes"
+            className="flex items-center gap-2 border-b-2 border-transparent text-[#666] hover:border-[#CCC] hover:text-[#1A1A1A] px-3 pb-3 pt-1 text-[13.5px] font-medium shrink-0 whitespace-nowrap transition-colors cursor-pointer"
+          >
+            <Package size={15} />
+            <span>Boxes</span>
+          </Link>
+        </div>
+
+        {/* KPI Stats Grid */}
+        <AdminStatsGrid
+          stats={[
+            { title: "Total Zones", value: totals.total, subtitle: "Configured shipping zones", icon: <Globe size={18} />, isLoading: zonesLoading },
+            { title: "Active Zones", value: totals.active, subtitle: "Available for checkout", icon: <ShieldCheck size={18} />, color: "bg-emerald-600", isLoading: zonesLoading },
+            { title: "Covered Countries", value: totals.coveredCountries, subtitle: "Unique country destinations", icon: <MapPin size={18} />, color: "bg-sky-600", isLoading: zonesLoading },
+            { title: "Active Carriers", value: totals.providers, subtitle: "Configured providers", icon: <Truck size={18} />, color: "bg-amber-600", isLoading: zonesLoading }
+          ]}
         />
 
-        <DataTable<ShippingZone>
-          title="Zones List"
-          columns={columns}
-          data={zoneList}
-          isLoading={zonesLoading}
-          rowKey="id"
-          emptyMessage="No shipping zones configured."
-          enableSelection={true}
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-          renderBulkActions={(selectedIds) => (
-            <AdminBulkActionsBar
-              selectedCount={selectedIds.length}
-              onClear={() => setSelectedIds([])}
-              actionType={bulkAction}
-              onActionTypeChange={setBulkAction}
-              actions={[
-                { value: "activate", label: "Mark active" },
-                { value: "deactivate", label: "Mark inactive" },
-                { value: "delete", label: "Delete selected" }
-              ]}
-              onApply={handleBulkAction}
-              applyLoading={bulkSaving}
-              applyDisabled={!bulkAction || selectedIds.length === 0}
-            />
-          )}
+        {/* List Toolbar */}
+        <AdminListToolbar
+          search={{
+            value: search,
+            onChange: (val) => {
+              setSearch(val);
+              setPage(1);
+            },
+            placeholder: "Search provider or country...",
+            widthClassName: "w-[260px]",
+          }}
+          filters={{
+            showFilters,
+            onToggle: () => setShowFilters(!showFilters),
+            activeCount: [providerFilter, statusFilter, sortBy !== "provider" ? sortBy : "", sortDir !== "asc" ? sortDir : ""].filter(Boolean).length,
+          }}
+          refresh={{
+            onRefresh: () => void refetch(),
+            isRefreshing: isFetching,
+          }}
+          primaryAction={
+            canCreate
+              ? {
+                  onClick: openCreate,
+                  label: "Add Zone",
+                  icon: <Plus size={14} />,
+                }
+              : undefined
+          }
+          onResetFilters={() => {
+            setSearch("");
+            setProviderFilter("");
+            setStatusFilter("");
+            setSortBy("provider");
+            setSortDir("asc");
+            setPage(1);
+          }}
+          filterPanel={
+            <div className="grid gap-4 md:grid-cols-4 pt-2">
+              <AdminSelect
+                label="Provider"
+                value={providerFilter}
+                onChange={(e) => {
+                  setProviderFilter(e.target.value);
+                  setPage(1);
+                }}
+                options={[
+                  { value: "", label: "All Providers" },
+                  ...providerList.map((p) => ({ value: p.id, label: p.displayName })),
+                ]}
+              />
+              <AdminSelect
+                label="Status"
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPage(1);
+                }}
+                options={[
+                  { value: "", label: "All Statuses" },
+                  { value: "ACTIVE", label: "Active" },
+                  { value: "INACTIVE", label: "Inactive" },
+                ]}
+              />
+              <AdminSelect
+                label="Sort By"
+                value={sortBy}
+                onChange={(e) => {
+                  setSortBy(e.target.value as "provider" | "charge" | "freeAbove" | "estimatedDays");
+                  setPage(1);
+                }}
+                options={[
+                  { value: "provider", label: "Provider" },
+                  { value: "charge", label: "Charge Rate" },
+                  { value: "freeAbove", label: "Free Above Threshold" },
+                  { value: "estimatedDays", label: "Estimated Days" },
+                ]}
+              />
+              <AdminSelect
+                label="Direction"
+                value={sortDir}
+                onChange={(e) => {
+                  setSortDir(e.target.value as "asc" | "desc");
+                  setPage(1);
+                }}
+                options={[
+                  { value: "asc", label: "Ascending" },
+                  { value: "desc", label: "Descending" },
+                ]}
+              />
+            </div>
+          }
         />
+
+        {/* DataTable in rounded-xl container with Bottom Pagination */}
+        <div>
+          <DataTable<ShippingZone>
+            title="Zones List"
+            columns={columns}
+            data={paginatedZones}
+            isLoading={zonesLoading}
+            rowKey="id"
+            emptyMessage="No shipping zones configured."
+            enableSelection={true}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+            totalItems={filteredZones.length}
+            currentPage={page}
+            pageSize={pageSize}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setPage(1);
+            }}
+            pageSizeOptions={[10, 25, 50, 100]}
+            renderBulkActions={(selectedIds) => (
+              <AdminBulkActionsBar
+                selectedCount={selectedIds.length}
+                onClear={() => setSelectedIds([])}
+                actionType={bulkAction}
+                onActionTypeChange={setBulkAction}
+                actions={[
+                  { value: "activate", label: "Mark active" },
+                  { value: "deactivate", label: "Mark inactive" },
+                  { value: "delete", label: "Delete selected" }
+                ]}
+                onApply={handleBulkAction}
+                applyLoading={bulkSaving}
+                applyDisabled={!bulkAction || selectedIds.length === 0}
+              />
+            )}
+          />
+          <div className="border-t border-[#E6E6E6] px-4 py-3 bg-white">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              alwaysShow={true}
+            />
+          </div>
+        </div>
       </div>
 
       <Modal

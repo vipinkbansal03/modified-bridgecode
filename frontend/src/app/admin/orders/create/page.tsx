@@ -49,6 +49,7 @@ export default function CreateOrderPage() {
   const [shippingCharge, setShippingCharge] = useState("0");
   const [discount, setDiscount] = useState("0");
   const [notes, setNotes] = useState("");
+  const [isTest, setIsTest] = useState(false);
   const [lines, setLines] = useState<Line[]>([{ ...emptyLine }]);
   const [productSearch, setProductSearch] = useState("");
   const {
@@ -102,6 +103,7 @@ export default function CreateOrderPage() {
         shippingCharge,
         discount,
         notes,
+        isTest,
         items: lines.map((line) => ({
           productId: line.productId,
           variantId: line.variantId || null,
@@ -268,6 +270,18 @@ export default function CreateOrderPage() {
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
             />
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                id="isTestOrder"
+                type="checkbox"
+                checked={isTest}
+                onChange={(e) => setIsTest(e.target.checked)}
+                className="h-4 w-4 rounded border-[#D0D0D0] text-[#E31E24] focus:ring-[#E31E24] cursor-pointer"
+              />
+              <label htmlFor="isTestOrder" className="text-[13px] font-medium text-[#1A1A1A] cursor-pointer">
+                Mark as Test Order <span className="text-[11.5px] font-normal text-[#777]">(Flags order for testing workflows; allows permanent deletion if unpaid)</span>
+              </label>
+            </div>
           </div>
           <button
             type="submit"

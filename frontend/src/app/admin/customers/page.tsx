@@ -3,11 +3,38 @@
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Eye, Filter, Search, Shield, Store, UserCog, Users, XCircle, Edit2, Trash2 } from "lucide-react";
+import {
+  CheckCircle2,
+  Eye,
+  Filter,
+  Plus,
+  Search,
+  Shield,
+  Store,
+  UserCog,
+  Users,
+  XCircle,
+  Edit2,
+  Trash2,
+} from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, type Column } from "@/components/admin/AdminComponents";
-import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
+import {
+  AdminInput,
+  AdminListToolbar,
+  AdminSelect,
+  AdminStatsGrid,
+  ConfirmModal,
+  DataTable,
+  Pagination,
+  StatusBadge,
+  useToast,
+  type Column,
+} from "@/components/admin/AdminComponents";
+import {
+  AdminRowActions,
+  AdminActionButton,
+} from "@/components/admin/AdminRowActions";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import {
   useAdminCountries,
@@ -18,6 +45,7 @@ import {
   useRejectCustomer,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
+import { cn } from "@/utils/cn";
 
 type CustomerRow = {
   id: string;
@@ -42,7 +70,7 @@ type CustomerListResponse = {
 };
 
 const CUSTOMER_TYPE_OPTIONS = [
-  { value: "", label: "All customer types" },
+  { value: "", label: "All Customer Types" },
   { value: "RETAIL", label: "Retail" },
   { value: "DEALER", label: "Dealer" },
   { value: "DOCTOR", label: "Doctor" },
@@ -50,17 +78,28 @@ const CUSTOMER_TYPE_OPTIONS = [
 ];
 
 const APPROVAL_OPTIONS = [
-  { value: "", label: "All approvals" },
+  { value: "", label: "All Approvals" },
   { value: "ACTIVE", label: "Active" },
-  { value: "PENDING_APPROVAL", label: "Pending approval" },
+  { value: "PENDING_APPROVAL", label: "Pending Approval" },
   { value: "SUSPENDED", label: "Suspended" },
 ];
 
 const STATUS_OPTIONS = [
-  { value: "", label: "All statuses" },
+  { value: "", label: "All Statuses" },
   { value: "ACTIVE", label: "Active" },
   { value: "INACTIVE", label: "Inactive" },
 ];
+
+const visibleColumnsDefault = {
+  name: true,
+  companyName: true,
+  customerRole: true,
+  tier: true,
+  status: true,
+  approvalStatus: true,
+  createdAt: true,
+  actions: true,
+};
 
 function formatDate(value?: string) {
   if (!value) return "-";
@@ -94,6 +133,7 @@ export default function AdminCustomersPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
+  const [visibleColumns, setVisibleColumns] = useState(visibleColumnsDefault);
   const [pendingAction, setPendingAction] = useState<{ customer: CustomerRow; action: "APPROVE" | "REJECT" } | null>(null);
 
   const customerQuery = useAdminCustomers({
@@ -140,7 +180,7 @@ export default function AdminCustomersPage() {
   }, [debouncedSearch, statusFilter, customerTypeFilter, approvalFilter, roleFilter, tierFilter, countryFilter, sortBy, sortDir, limit]);
 
   const roleOptions = useMemo(
-    () => [{ value: "", label: "All roles" }, ...customerRoles.map((role: { id: string; name: string; status?: string }) => ({
+    () => [{ value: "", label: "All Roles" }, ...customerRoles.map((role: { id: string; name: string; status?: string }) => ({
       value: role.id,
       label: role.status === "ACTIVE" ? role.name : `${role.name} (Inactive)`,
     }))],
@@ -148,28 +188,25 @@ export default function AdminCustomersPage() {
   );
 
   const tierOptions = useMemo(
-    () => [{ value: "", label: "All tiers" }, ...tiers.map((tier: { id: string; name: string }) => ({ value: tier.id, label: tier.name }))],
+    () => [{ value: "", label: "All Tiers" }, ...tiers.map((tier: { id: string; name: string }) => ({ value: tier.id, label: tier.name }))],
     [tiers],
-  );
-
-  const countryOptions = useMemo(
-    () => [{ value: "", label: "All countries" }, ...countries.map((country: { id: string; name: string; code: string }) => ({
-      value: country.id,
-      label: `${country.name} (${country.code})`,
-    }))],
-    [countries],
   );
 
   const columns: Column<CustomerRow>[] = [
     {
       key: "name",
       label: "Customer",
+      width: "220px",
       render: (row) => (
-        <div className="min-w-[220px]">
-          <div className="font-medium text-[#1A1A1A]">
+        <div className="min-w-0 pr-3">
+          <Link
+            href={`/admin/customers/${row.id}`}
+            className="text-left font-semibold text-[#1A1A1A] hover:text-[#E31E24] text-[13px] block truncate transition-colors"
+            title={`${row.firstName} ${row.lastName}`}
+          >
             {row.firstName} {row.lastName}
-          </div>
-          <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">{row.email}</div>
+          </Link>
+          <div className="mt-0.5 text-[11.5px] text-[#6B6B6B] truncate">{row.email}</div>
           {row.phone ? <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">{row.phone}</div> : null}
         </div>
       ),
@@ -177,22 +214,40 @@ export default function AdminCustomersPage() {
     {
       key: "companyName",
       label: "Company / Country",
+      width: "180px",
       render: (row) => (
         <div>
-          <div className="text-[13px] text-[#1A1A1A]">{row.companyName || "-"}</div>
-          <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">{row.defaultCountry ? `${row.defaultCountry.name} (${row.defaultCountry.code})` : "No country"}</div>
+          <div className="text-[13px] font-medium text-[#1A1A1A]">{row.companyName || "-"}</div>
+          <div className="mt-0.5 text-[11.5px] text-[#6B6B6B]">{row.defaultCountry ? `${row.defaultCountry.name} (${row.defaultCountry.code})` : "No country"}</div>
         </div>
       ),
     },
-    { key: "customerRole", label: "Role", render: (row) => row.customerRole?.name ?? row.customerType.replace("_", " ") },
-    { key: "tier", label: "Tier", render: (row) => row.tier?.name ?? "-" },
+    {
+      key: "customerRole",
+      label: "Role",
+      width: "120px",
+      render: (row) => (
+        <span className="inline-flex items-center rounded-full border border-[#E6E6E6] bg-[#FAFAFA] px-2.5 py-0.5 text-[11.5px] font-medium text-[#555] whitespace-nowrap">
+          {row.customerRole?.name ?? row.customerType.replace("_", " ")}
+        </span>
+      ),
+    },
+    {
+      key: "tier",
+      label: "Tier",
+      width: "100px",
+      render: (row) => (
+        <span className="text-[12.5px] font-medium text-[#1A1A1A]">{row.tier?.name ?? "-"}</span>
+      ),
+    },
     {
       key: "status",
       label: "Account",
+      width: "110px",
       render: (row) => (
         <StatusBadge
           status={row.status}
-          disabled={!canUpdate}
+          interactive={canUpdate}
           onClick={
             canUpdate
               ? async () => {
@@ -213,10 +268,11 @@ export default function AdminCustomersPage() {
     {
       key: "approvalStatus",
       label: "Approval",
+      width: "110px",
       render: (row) => (
         <StatusBadge
           status={row.approvalStatus}
-          disabled={!canUpdate}
+          interactive={canUpdate}
           onClick={
             canUpdate
               ? async () => {
@@ -238,65 +294,79 @@ export default function AdminCustomersPage() {
         />
       ),
     },
-    { key: "createdAt", label: "Created", render: (row) => formatDate(row.createdAt) },
+    {
+      key: "createdAt",
+      label: "Created",
+      width: "110px",
+      render: (row) => <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">{formatDate(row.createdAt)}</span>,
+    },
     {
       key: "actions",
       label: "Actions",
-      width: "180px",
+      width: "140px",
+      align: "left",
       render: (row) => (
         <div className="flex items-center gap-1.5">
-          <Link
-            href={`/admin/customers/${row.id}`}
-            className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-            title="View details"
-          >
-            <Eye size={13} />
-          </Link>
-          {canUpdate && (
-            <Link
-              href={`/admin/customers/${row.id}`}
-              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-              title="Edit profile"
-            >
-              <Edit2 size={13} />
-            </Link>
-          )}
-          {canDelete && (
-            <button
-              type="button"
-              onClick={() => setDeletingCustomer(row.id)}
-              className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-red-500 hover:bg-red-50"
-              title="Delete account"
-            >
-              <Trash2 size={13} />
-            </button>
-          )}
+          <AdminRowActions
+            view={{
+              onClick: () => router.push(`/admin/customers/${row.id}`),
+              title: "View details",
+            }}
+            edit={
+              canUpdate
+                ? {
+                    onClick: () => router.push(`/admin/customers/${row.id}`),
+                    title: "Edit profile",
+                  }
+                : undefined
+            }
+            delete={
+              canDelete
+                ? {
+                    onClick: () => setDeletingCustomer(row.id),
+                    title: "Delete account",
+                  }
+                : undefined
+            }
+          />
           {canUpdate && row.approvalStatus === "PENDING_APPROVAL" ? (
-            <>
+            <div className="flex items-center gap-1 ml-1">
               <button
                 type="button"
                 onClick={() => setPendingAction({ customer: row, action: "APPROVE" })}
-                className="inline-flex h-7 items-center gap-1 rounded border border-[#CFE8D7] px-2.5 text-[12px] font-medium text-[#1F8F4A] hover:bg-[#F1FBF4]"
-                title="Approve"
+                className="inline-flex h-7 items-center gap-1 rounded border border-[#CFE8D7] px-2 text-[11.5px] font-semibold text-[#1F8F4A] hover:bg-[#F1FBF4] transition-colors cursor-pointer"
+                title="Approve customer"
               >
-                <CheckCircle2 size={13} />
+                <CheckCircle2 size={12} />
                 Approve
               </button>
               <button
                 type="button"
                 onClick={() => setPendingAction({ customer: row, action: "REJECT" })}
-                className="inline-flex h-7 items-center gap-1 rounded border border-[#F2C9C9] px-2.5 text-[12px] font-medium text-[#E31E24] hover:bg-[#FFF5F5]"
-                title="Reject"
+                className="inline-flex h-7 items-center gap-1 rounded border border-[#F2C9C9] px-2 text-[11.5px] font-semibold text-[#E31E24] hover:bg-[#FFF5F5] transition-colors cursor-pointer"
+                title="Reject customer"
               >
-                <XCircle size={13} />
+                <XCircle size={12} />
                 Reject
               </button>
-            </>
+            </div>
           ) : null}
         </div>
       ),
     },
   ];
+
+  const filteredColumns = columns.filter((column) => {
+    if (column.key === "name") return visibleColumns.name;
+    if (column.key === "companyName") return visibleColumns.companyName;
+    if (column.key === "customerRole") return visibleColumns.customerRole;
+    if (column.key === "tier") return visibleColumns.tier;
+    if (column.key === "status") return visibleColumns.status;
+    if (column.key === "approvalStatus") return visibleColumns.approvalStatus;
+    if (column.key === "createdAt") return visibleColumns.createdAt;
+    if (column.key === "actions") return visibleColumns.actions;
+    return true;
+  });
 
   const handleApprovalConfirm = async () => {
     if (!pendingAction) return;
@@ -341,6 +411,8 @@ export default function AdminCustomersPage() {
     roleFilter,
     tierFilter,
     countryFilter,
+    sortBy !== "createdAt" ? sortBy : "",
+    sortDir !== "desc" ? sortDir : "",
   ].filter(Boolean).length;
 
   const resetFilters = () => {
@@ -353,6 +425,7 @@ export default function AdminCustomersPage() {
     setCountryFilter("");
     setSortBy("createdAt");
     setSortDir("desc");
+    setPage(1);
   };
 
   if (authLoading || !hasPermission("customers.view")) {
@@ -362,140 +435,176 @@ export default function AdminCustomersPage() {
   return (
     <AdminLayout title="Users & Customers" breadcrumb={[{ label: "Customers" }]}>
       <div className="space-y-5">
-        {/* Navigation Tabs */}
-        <div className="flex border-b border-[#E6E6E6]">
+        {/* Navigation Sub-Tabs */}
+        <div className="flex items-center gap-2 border-b border-[#E6E6E6] bg-white px-4 pt-2 rounded-t-lg shadow-2xs overflow-x-auto max-w-full scrollbar-thin">
           <Link
             href="/admin/customers"
-            className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-[#E31E24] text-[#E31E24]"
+            className="flex items-center gap-2 border-b-2 border-[#E31E24] text-[#E31E24] px-3 pb-3 pt-1 text-[13.5px] font-medium shrink-0 whitespace-nowrap cursor-pointer"
           >
-            Customers
+            <Users size={15} />
+            <span>Customers</span>
+            <span className="ml-1 rounded-full bg-[#E31E24]/10 text-[#E31E24] px-2 py-0.5 text-[11px] font-semibold">
+              {totals.total}
+            </span>
           </Link>
           {hasPermission("users.view") && (
             <Link
               href="/admin/users"
-              className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors border-transparent text-[#6B7280] hover:text-[#111827]"
+              className="flex items-center gap-2 border-b-2 border-transparent text-[#666] hover:border-[#CCC] hover:text-[#1A1A1A] px-3 pb-3 pt-1 text-[13.5px] font-medium shrink-0 whitespace-nowrap transition-colors cursor-pointer"
             >
-              Staff (Users)
+              <UserCog size={15} />
+              <span>Staff (Users)</span>
             </Link>
           )}
         </div>
+
         <AdminStatsGrid
           stats={[
-            { title: "Total Customers", value: totals.total, subtitle: "All customer records", icon: <Users size={18} /> },
-            { title: "Active Accounts", value: totals.active, subtitle: "Currently enabled", icon: <Shield size={18} />, color: "bg-green-600" },
-            { title: "Pending Approval", value: totals.pending, subtitle: "Wholesale accounts waiting", icon: <UserCog size={18} />, color: "bg-amber-600" },
-            { title: "Wholesale Customers", value: totals.wholesale, subtitle: "Sales-focused accounts", icon: <Store size={18} />, color: "bg-[#0F6CBD]" }
+            { title: "Total Customers", value: totals.total, subtitle: "All customer records", icon: <Users size={18} />, isLoading: customerQuery.isLoading },
+            { title: "Active Accounts", value: totals.active, subtitle: "Currently enabled", icon: <Shield size={18} />, color: "bg-emerald-600", isLoading: customerQuery.isLoading },
+            { title: "Pending Approval", value: totals.pending, subtitle: "Wholesale accounts waiting", icon: <UserCog size={18} />, color: "bg-amber-600", isLoading: customerQuery.isLoading },
+            { title: "Wholesale Customers", value: totals.wholesale, subtitle: "Sales-focused accounts", icon: <Store size={18} />, color: "bg-sky-600", isLoading: customerQuery.isLoading }
           ]}
-          isLoading={customerQuery.isLoading}
         />
 
         <AdminListToolbar
           search={{
             value: search,
-            onChange: setSearch,
+            onChange: (val) => {
+              setSearch(val);
+              setPage(1);
+            },
             placeholder: "Search customer name, email, company, phone...",
-            widthClassName: "max-w-[340px]",
+            widthClassName: "w-[280px]",
           }}
           filters={{
             showFilters: showAdvancedFilters,
             onToggle: () => setShowAdvancedFilters(!showAdvancedFilters),
             activeCount: activeFilterCount,
-            label: "More Filters",
+            label: "Filters",
           }}
-          leftExtra={
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="w-36 shrink-0">
-                <AdminSelect label="" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} options={roleOptions} />
-              </div>
-              <div className="w-40 shrink-0">
-                <AdminSelect label="" value={approvalFilter} onChange={(e) => setApprovalFilter(e.target.value)} options={APPROVAL_OPTIONS} />
-              </div>
-            </div>
-          }
+          columns={{
+            visibleColumns,
+            onToggleColumn: (key) => {
+              setVisibleColumns((current) => ({
+                ...current,
+                [key]: !current[key as keyof typeof current],
+              }));
+            },
+            options: [
+              { key: "name", label: "Customer" },
+              { key: "companyName", label: "Company / Country" },
+              { key: "customerRole", label: "Role" },
+              { key: "tier", label: "Tier" },
+              { key: "status", label: "Account" },
+              { key: "approvalStatus", label: "Approval" },
+              { key: "createdAt", label: "Created Date" },
+              { key: "actions", label: "Actions" },
+            ],
+          }}
           refresh={{
-            onRefresh: customerQuery.refetch,
+            onRefresh: () => {
+              void customerQuery.refetch().then(() => showToast("Customers refreshed."));
+            },
             isRefreshing: customerQuery.isFetching,
           }}
-          primaryAction={hasPermission("customers.create") ? { href: "/admin/customers/create", label: "Add Customer" } : undefined}
-          onResetFilters={resetFilters}
+          primaryAction={hasPermission("customers.create") ? { href: "/admin/customers/create", label: "Add Customer", icon: <Plus size={14} /> } : undefined}
           filterPanel={
-            <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">Account Status</label>
-                <AdminSelect label="" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={STATUS_OPTIONS} />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">Customer Type</label>
-                <AdminSelect label="" value={customerTypeFilter} onChange={(e) => setCustomerTypeFilter(e.target.value)} options={CUSTOMER_TYPE_OPTIONS} />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">Customer Tier</label>
-                <AdminSelect label="" value={tierFilter} onChange={(e) => setTierFilter(e.target.value)} options={tierOptions} />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">Country</label>
-                <AdminMultiSearchableSelect
-                  label=""
-                  values={countryFilter ? countryFilter.split(",").filter(Boolean) : []}
-                  onValuesChange={(values) => setCountryFilter(values.join(","))}
-                  options={(countries as any[]).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
-                  placeholder="Select countries"
-                  allowSelectAll
-                  selectAllLabel="All countries"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">Sort Field</label>
-                <AdminSelect
-                  label=""
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  options={[
-                    { value: "createdAt", label: "Created date" },
-                    { value: "updatedAt", label: "Updated date" },
-                    { value: "firstName", label: "Customer name" },
-                    { value: "email", label: "Email" },
-                  ]}
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">Sort Order</label>
-                <AdminSelect
-                  label=""
-                  value={sortDir}
-                  onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
-                  options={[
-                    { value: "desc", label: "Descending (Newest)" },
-                    { value: "asc", label: "Ascending (Oldest)" },
-                  ]}
-                />
-              </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 pt-2">
+              <AdminSelect
+                label="Account Status"
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPage(1);
+                }}
+                options={STATUS_OPTIONS}
+              />
+              <AdminSelect
+                label="Approval Status"
+                value={approvalFilter}
+                onChange={(e) => {
+                  setApprovalFilter(e.target.value);
+                  setPage(1);
+                }}
+                options={APPROVAL_OPTIONS}
+              />
+              <AdminSelect
+                label="Customer Role"
+                value={roleFilter}
+                onChange={(e) => {
+                  setRoleFilter(e.target.value);
+                  setPage(1);
+                }}
+                options={roleOptions}
+              />
+              <AdminSelect
+                label="Customer Type"
+                value={customerTypeFilter}
+                onChange={(e) => {
+                  setCustomerTypeFilter(e.target.value);
+                  setPage(1);
+                }}
+                options={CUSTOMER_TYPE_OPTIONS}
+              />
+              <AdminSelect
+                label="Customer Tier"
+                value={tierFilter}
+                onChange={(e) => {
+                  setTierFilter(e.target.value);
+                  setPage(1);
+                }}
+                options={tierOptions}
+              />
+              <AdminSelect
+                label="Sort Field"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                options={[
+                  { value: "createdAt", label: "Created Date" },
+                  { value: "updatedAt", label: "Updated Date" },
+                  { value: "firstName", label: "Customer Name" },
+                  { value: "email", label: "Email" },
+                ]}
+              />
+              <AdminSelect
+                label="Sort Order"
+                value={sortDir}
+                onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
+                options={[
+                  { value: "desc", label: "Descending (Newest)" },
+                  { value: "asc", label: "Ascending (Oldest)" },
+                ]}
+              />
             </div>
           }
+          onResetFilters={resetFilters}
         />
-          {/* Row 3: Footer Bar */}
-          <div className="flex items-center justify-between pt-1 text-[12.5px] text-[#6B7280]">
-            <div className="font-semibold text-[#111827]">
-              Showing <span className="text-[#E31E24]">{pagination.total ?? 0}</span> customer records
-            </div>
-            <div className="flex items-center gap-2">
-              <span>Per page:</span>
-              <select
-                value={String(limit)}
-                onChange={(e) => setLimit(Number(e.target.value))}
-                className="h-8 rounded-md border border-[#E5E7EB] bg-white px-2 py-0 text-[12px] font-semibold text-[#111827] outline-none"
-              >
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-              </select>
-            </div>
-          </div>
 
-        <div className="rounded-xl border border-[#E6E6E6] bg-white">
-          <DataTable<CustomerRow> columns={columns} data={customers} rowKey="id" isLoading={customerQuery.isLoading} emptyMessage="No customers found." />
-          <div className="border-t border-[#E6E6E6] px-4 py-3">
-            <Pagination page={pagination.page} totalPages={pagination.totalPages || 1} onPageChange={setPage} />
+        {/* FULL-WIDTH DATA TABLE */}
+        <div className="rounded-xl border border-[#E6E6E6] bg-white overflow-hidden shadow-2xs">
+          <DataTable<CustomerRow>
+            title="Customers List"
+            columns={filteredColumns}
+            data={customers}
+            rowKey="id"
+            isLoading={customerQuery.isLoading}
+            emptyMessage="No customers found."
+            totalItems={pagination.total}
+            currentPage={page}
+            pageSize={limit}
+            totalPages={pagination.totalPages || 1}
+            onPageChange={setPage}
+            onPageSizeChange={setLimit}
+            pageSizeOptions={[10, 25, 50, 100]}
+          />
+          <div className="border-t border-[#E6E6E6] px-4 py-3 bg-white">
+            <Pagination
+              page={page}
+              totalPages={pagination.totalPages || 1}
+              onPageChange={setPage}
+              alwaysShow={true}
+            />
           </div>
         </div>
       </div>
@@ -505,7 +614,7 @@ export default function AdminCustomersPage() {
         title={pendingAction?.action === "APPROVE" ? "Approve customer?" : "Reject customer?"}
         message={
           pendingAction
-            ? `${pendingAction.action === "APPROVE" ? "Approve" : "Reject"} ${pendingAction.customer.firstName} ${pendingAction.customer.lastName}?`
+            ? `${pendingAction.action === "APPROVE" ? "Approve" : "Reject"} account for ${pendingAction.customer.firstName} ${pendingAction.customer.lastName}?`
             : ""
         }
         onConfirm={handleApprovalConfirm}

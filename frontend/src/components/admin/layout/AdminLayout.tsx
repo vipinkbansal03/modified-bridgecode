@@ -43,9 +43,9 @@ export function AdminLayout({ children, title, breadcrumb }: AdminLayoutProps) {
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8F8F8]">
       <AdminSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         <AdminHeader title={title} breadcrumb={breadcrumb} onMenuOpen={() => setSidebarOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-5 sm:p-6 relative z-10">{children}</main>
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-5 sm:p-6 relative z-10 w-full min-w-0">{children}</main>
       </div>
     </div>
   );

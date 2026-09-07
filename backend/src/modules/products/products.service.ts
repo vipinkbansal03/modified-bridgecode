@@ -485,14 +485,20 @@ function buildProductWhere(query: {
 }
 
 function buildVariantWhere(query: VariantListQuery): Prisma.ProductVariantWhereInput {
+  const isArchived = query.status === "ARCHIVED";
   const status = query.status === "ACTIVE" || query.status === "INACTIVE" ? query.status : undefined;
-  const productStatus = query.status === "DRAFT" ? "DRAFT" : query.status === "ARCHIVED" ? "ARCHIVED" : undefined;
+  const productStatus = query.status === "DRAFT" ? "DRAFT" : undefined;
 
   return {
-    product: {
-      deletedAt: null,
-      ...(productStatus && { status: productStatus }),
-    },
+    deletedAt: isArchived ? { not: null } : null,
+    ...(isArchived
+      ? {}
+      : {
+          product: {
+            deletedAt: null,
+            ...(productStatus && { status: productStatus }),
+          },
+        }),
     ...(query.productId && { productId: query.productId }),
     ...(status && { status: status as any }),
     ...(query.search && {
@@ -524,6 +530,8 @@ function buildVariantOrder(query: VariantListQuery): Prisma.ProductVariantOrderB
       return [{ status: sortDir }, { createdAt: "desc" }];
     case "product":
       return [{ product: { title: sortDir } }, { title: "asc" }];
+    case "deletedAt":
+      return [{ deletedAt: sortDir }];
     case "updatedAt":
       return [{ updatedAt: sortDir }];
     case "createdAt":
@@ -617,13 +625,131 @@ export async function listVariants(query: VariantListQuery) {
           take: 1,
           include: { currency: true, country: true },
         },
+        attributeValues: {
+          include: {
+            attribute: { select: { id: true, name: true } },
+            attributeValue: { select: { id: true, value: true } },
+          },
+        },
         _count: { select: { attributeValues: true, countries: true, prices: true } },
       },
     }),
     prisma.productVariant.count({ where }),
   ]);
 
-  return { data, total, page, limit };
+  if (data.length === 0) {
+    return { data: [], total, page, limit };
+  }
+
+  const variantIds = data.map((v) => v.id);
+
+  const [orderItemsGroupBy, quoteItemsGroupBy, adjustmentsGroupBy, inventorySumGroupBy] = await Promise.all([
+    prisma.orderItem.groupBy({
+      by: ["variantId"],
+      where: { variantId: { in: variantIds } },
+      _count: { _all: true },
+    }),
+    prisma.quoteItem.groupBy({
+      by: ["variantId"],
+      where: { variantId: { in: variantIds } },
+      _count: { _all: true },
+    }),
+    prisma.inventoryAdjustment.groupBy({
+      by: ["variantId"],
+      where: { variantId: { in: variantIds } },
+      _count: { _all: true },
+    }),
+    prisma.inventory.groupBy({
+      by: ["variantId"],
+      where: { variantId: { in: variantIds } },
+      _sum: { stock: true, reservedStock: true },
+    }),
+  ]);
+
+  const orderItemsCountMap = new Map<string, number>();
+  (orderItemsGroupBy as { variantId: string | null; _count: { _all: number } }[]).forEach((g) => {
+    if (g.variantId) orderItemsCountMap.set(g.variantId, g._count._all);
+  });
+
+  const quoteItemsCountMap = new Map<string, number>();
+  (quoteItemsGroupBy as { variantId: string | null; _count: { _all: number } }[]).forEach((g) => {
+    if (g.variantId) quoteItemsCountMap.set(g.variantId, g._count._all);
+  });
+
+  const adjustmentsCountMap = new Map<string, number>();
+  (adjustmentsGroupBy as { variantId: string | null; _count: { _all: number } }[]).forEach((g) => {
+    if (g.variantId) adjustmentsCountMap.set(g.variantId, g._count._all);
+  });
+
+  const stockMap = new Map<string, { stock: number; reservedStock: number }>();
+  (inventorySumGroupBy as { variantId: string | null; _sum: { stock: number | null; reservedStock: number | null } }[]).forEach((g) => {
+    if (g.variantId) {
+      stockMap.set(g.variantId, {
+        stock: Math.max(0, g._sum.stock || 0),
+        reservedStock: Math.max(0, g._sum.reservedStock || 0),
+      });
+    }
+  });
+
+  const cartItemsCountMap = new Map<string, number>();
+  if ("cartItem" in prisma) {
+    try {
+      const cartItemsGroupBy = await (prisma as any).cartItem.groupBy({
+        by: ["variantId"],
+        where: { variantId: { in: variantIds } },
+        _count: { _all: true },
+      });
+      (cartItemsGroupBy as { variantId: string | null; _count: { _all: number } }[]).forEach((g) => {
+        if (g.variantId) cartItemsCountMap.set(g.variantId, g._count._all);
+      });
+    } catch {
+      // Cart table does not exist
+    }
+  }
+
+  const enrichedData = data.map((v) => {
+    const orderItemsCount = orderItemsCountMap.get(v.id) || 0;
+    const quoteItemsCount = quoteItemsCountMap.get(v.id) || 0;
+    const adjustmentsCount = adjustmentsCountMap.get(v.id) || 0;
+    const stockInfo = stockMap.get(v.id) || { stock: 0, reservedStock: 0 };
+    const cartItemsCount = cartItemsCountMap.get(v.id) || 0;
+
+    let canPermanentDelete = true;
+    let permanentDeleteBlockReason: string | null = null;
+
+    if (orderItemsCount > 0) {
+      canPermanentDelete = false;
+      permanentDeleteBlockReason = `Referenced by ${orderItemsCount} historical order item(s) and legal tax invoice(s).`;
+    } else if (quoteItemsCount > 0) {
+      canPermanentDelete = false;
+      permanentDeleteBlockReason = `Referenced by ${quoteItemsCount} quote item(s).`;
+    } else if (cartItemsCount > 0) {
+      canPermanentDelete = false;
+      permanentDeleteBlockReason = "Cannot permanently delete this variant because it exists in active customer carts.";
+    } else if (stockInfo.stock > 0 || stockInfo.reservedStock > 0) {
+      canPermanentDelete = false;
+      permanentDeleteBlockReason = `Active stock (${stockInfo.stock} units) or reserved stock (${stockInfo.reservedStock} units) exists. Zero or transfer inventory first.`;
+    } else if (adjustmentsCount > 0) {
+      canPermanentDelete = false;
+      permanentDeleteBlockReason = `Referenced by ${adjustmentsCount} inventory adjustment audit log(s).`;
+    }
+
+    return {
+      ...v,
+      dependencyCounts: {
+        orderItems: orderItemsCount,
+        quoteItems: quoteItemsCount,
+        adjustments: adjustmentsCount,
+        activeStock: stockInfo.stock,
+        reservedStock: stockInfo.reservedStock,
+        cartItems: cartItemsCount,
+      },
+      canPermanentDelete,
+      permanentDeleteBlockReason,
+    };
+  });
+
+  return { data: enrichedData, total, page, limit };
 }
 
 // ─── Get one ─────────────────────────────────────────────
@@ -1975,13 +2101,16 @@ export async function generateVariants(
         const title = buildVariantTitle(combo, pkg?.title);
         const existing = await prisma.productVariant.findFirst({ where: { productId, variantKey } });
         if (existing) {
-          const wasInactive = existing.status === "INACTIVE";
-          if (wasInactive) {
-            await prisma.productPrice.deleteMany({ where: { variantId: existing.id } });
-            await prisma.inventory.deleteMany({ where: { variantId: existing.id } });
-          }
+          const isSoftDeleted = existing.deletedAt !== null;
+          const wasInactive = existing.status === "INACTIVE" || isSoftDeleted;
           const restored = wasInactive
-            ? await prisma.productVariant.update({ where: { id: existing.id }, data: { status: "ACTIVE" } })
+            ? await prisma.productVariant.update({
+                where: { id: existing.id },
+                data: {
+                  status: "ACTIVE",
+                  deletedAt: null,
+                },
+              })
             : existing;
           const existingInventories = await prisma.inventory.findMany({
             where: { variantId: existing.id },
@@ -2502,22 +2631,85 @@ export async function deleteVariant(productId: string, variantId: string) {
   await getVariant(productId, variantId);
   return prisma.productVariant.update({
     where: { id: variantId },
-    data: { deletedAt: new Date() },
+    data: {
+      deletedAt: new Date(),
+      status: "INACTIVE",
+    },
+  });
+}
+
+export async function restoreVariant(productId: string, variantId: string) {
+  const variant = await prisma.productVariant.findFirst({
+    where: { id: variantId, productId },
+  });
+  if (!variant) throw new AppError("Variant not found.", 404);
+  if (!variant.deletedAt) throw new AppError("Variant is not soft-deleted.", 400);
+
+  return prisma.productVariant.update({
+    where: { id: variantId },
+    data: {
+      deletedAt: null,
+      status: "ACTIVE",
+    },
   });
 }
 
 export async function permanentDeleteVariant(productId: string, variantId: string) {
   await getVariant(productId, variantId);
 
-  const [orderItemCount, quoteItemCount, adjustmentCount] = await Promise.all([
+  const [orderItemCount, quoteItemCount, adjustmentCount, inventorySum] = await Promise.all([
     prisma.orderItem.count({ where: { variantId } }),
     prisma.quoteItem.count({ where: { variantId } }),
     prisma.inventoryAdjustment.count({ where: { variantId } }),
+    prisma.inventory.aggregate({
+      where: { variantId },
+      _sum: { stock: true, reservedStock: true },
+    }),
   ]);
 
-  if (orderItemCount > 0 || quoteItemCount > 0 || adjustmentCount > 0) {
+  let cartItemCount = 0;
+  if ("cartItem" in prisma) {
+    try {
+      cartItemCount = await (prisma as any).cartItem.count({ where: { variantId } });
+    } catch {
+      cartItemCount = 0;
+    }
+  }
+
+  const activeStock = Math.max(0, inventorySum._sum.stock || 0);
+  const reservedStock = Math.max(0, inventorySum._sum.reservedStock || 0);
+
+  if (orderItemCount > 0) {
     throw new AppError(
-      `Cannot permanently delete variant: referenced by ${orderItemCount} order item(s), ${quoteItemCount} quote item(s), and ${adjustmentCount} inventory adjustment(s). Use normal delete instead.`,
+      `Cannot permanently delete variant: referenced by ${orderItemCount} historical order item(s) and legal tax invoice(s).`,
+      400,
+    );
+  }
+
+  if (quoteItemCount > 0) {
+    throw new AppError(
+      `Cannot permanently delete variant: referenced by ${quoteItemCount} quote item(s).`,
+      400,
+    );
+  }
+
+  if (cartItemCount > 0) {
+    throw new AppError(
+      "Cannot permanently delete this variant because it exists in active customer carts.",
+      400,
+    );
+  }
+
+  if (activeStock > 0 || reservedStock > 0) {
+    throw new AppError(
+      `Cannot permanently delete variant: active stock (${activeStock} units) or reserved stock (${reservedStock} units) exists. Zero or transfer inventory first.`,
+      400,
+    );
+  }
+
+  if (adjustmentCount > 0) {
+    throw new AppError(
+      `Cannot permanently delete variant: referenced by ${adjustmentCount} inventory adjustment audit log(s).`,
       400,
     );
   }
@@ -3390,4 +3582,78 @@ for (const pc of productCountries) {
   });
 
   return summary;
+}
+
+export async function bulkPermanentDeleteProducts(ids: string[]) {
+  const deletedIds: string[] = [];
+  const blocked: Array<{ id: string; name: string; reason: string }> = [];
+
+  for (const id of ids) {
+    try {
+      const prod = await prisma.product.findUnique({
+        where: { id },
+        select: { id: true, title: true },
+      });
+      if (!prod) {
+        blocked.push({ id, name: id, reason: "Product not found." });
+        continue;
+      }
+      await permanentDeleteProduct(id);
+      deletedIds.push(id);
+    } catch (error: any) {
+      const prod = await prisma.product.findUnique({
+        where: { id },
+        select: { title: true },
+      });
+      blocked.push({
+        id,
+        name: prod?.title || id,
+        reason: error?.message || "Failed to permanently delete product.",
+      });
+    }
+  }
+
+  return {
+    deletedCount: deletedIds.length,
+    blockedCount: blocked.length,
+    deletedIds,
+    blocked,
+  };
+}
+
+export async function bulkPermanentDeleteVariants(ids: string[]) {
+  const deletedIds: string[] = [];
+  const blocked: Array<{ id: string; name: string; reason: string }> = [];
+
+  for (const id of ids) {
+    try {
+      const v = await prisma.productVariant.findUnique({
+        where: { id },
+        select: { id: true, productId: true, title: true, sku: true },
+      });
+      if (!v) {
+        blocked.push({ id, name: id, reason: "Variant not found." });
+        continue;
+      }
+      await permanentDeleteVariant(v.productId, v.id);
+      deletedIds.push(id);
+    } catch (error: any) {
+      const v = await prisma.productVariant.findUnique({
+        where: { id },
+        select: { title: true, sku: true },
+      });
+      blocked.push({
+        id,
+        name: v ? `${v.title} (${v.sku || "No SKU"})` : id,
+        reason: error?.message || "Failed to permanently delete variant.",
+      });
+    }
+  }
+
+  return {
+    deletedCount: deletedIds.length,
+    blockedCount: blocked.length,
+    deletedIds,
+    blocked,
+  };
 }

@@ -13,8 +13,12 @@ router.get("/export", requirePermission("pricing.view", "pricing.manage"), C.exp
 router.post("/import/preview", requirePermission("pricing.manage"), upload.single("file"), C.previewImport);
 router.post("/import", requirePermission("pricing.manage"), upload.single("file"), C.importSpreadsheet);
 router.post("/generate-country-prices", requirePermission("pricing.manage"), C.generateForCountries);
+router.post("/bulk/permanent", requirePermission("pricing.manage"), C.bulkPermanentDelete);
+router.post("/bulk/restore", requirePermission("pricing.manage"), C.bulkRestore);
 router.post("/bulk", requirePermission("pricing.manage"), C.bulk);
 router.post("/:id/duplicate", requirePermission("pricing.manage"), C.duplicate);
+router.post("/:id/restore", requirePermission("pricing.manage"), C.restore);
+router.delete("/:id/permanent", requirePermission("pricing.manage"), C.permanentDelete);
 router.delete("/:id", requirePermission("pricing.manage"), C.remove);
 router.get("/", requirePermission("pricing.view", "pricing.manage"), C.list);
 router.post("/", requirePermission("pricing.manage"), C.create);

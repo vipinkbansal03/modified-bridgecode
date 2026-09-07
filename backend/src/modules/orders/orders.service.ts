@@ -148,7 +148,19 @@ export async function listOrders(query: {
   })();
 
   const [data, total] = await Promise.all([
-    prisma.order.findMany({ where, skip, take: limit, orderBy: orderBy as never, include: { country: true, currency: true, shippingZone: { include: { provider: true, countries: { include: { country: true } } } }, _count: { select: { items: true } } } }),
+    prisma.order.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: orderBy as never,
+      include: {
+        customer: true,
+        country: true,
+        currency: true,
+        shippingZone: { include: { provider: true, countries: { include: { country: true } } } },
+        _count: { select: { items: true } },
+      },
+    }),
     prisma.order.count({ where }),
   ]);
   return { data, total, page, limit };
@@ -158,6 +170,7 @@ export async function getOrder(id: string) {
   const o = await prisma.order.findUnique({
     where: { id },
     include: {
+      customer: true,
       items: { include: { product: true, variant: true, warehouse: true as any } },
       country: true,
       currency: true,
@@ -190,6 +203,7 @@ export async function createAdminOrder(input: {
   shippingCharge?: number | string | null;
   discount?: number | string | null;
   notes?: string | null;
+  isTest?: boolean;
   items: {
     productId: string;
     variantId?: string | null;
@@ -301,9 +315,10 @@ export async function createAdminOrder(input: {
       shippingCharge,
       shippingZoneId: input.shippingZoneId ?? null,
       total,
-      status: "CONFIRMED",
+      status: input.isTest ? "PENDING" : "CONFIRMED",
       paymentStatus: "PENDING",
-      notes: input.notes ? `[Manual admin order] ${input.notes}` : "Manual admin order",
+      isTest: Boolean(input.isTest),
+      notes: input.notes ? (input.isTest ? `[Test order] ${input.notes}` : `[Manual admin order] ${input.notes}`) : (input.isTest ? "Test order" : "Manual admin order"),
       items: {
         create: orderItems.map((item) => ({
           productId: item.product.id,
@@ -648,12 +663,12 @@ export async function permanentDeleteOrder(id: string) {
 
     // Guard 1: Must be explicitly marked as a test order
     if (!order.isTest) {
-      throw new AppError("Cannot permanently delete a real order. Only test orders can be permanently deleted.", 400);
+      throw new AppError("Cannot permanently delete a real order. Real order history and financial records must be retained.", 400);
     }
 
     // Guard 2: No captured or refunded payment
     if (order.paymentStatus === "PAID" || order.paymentStatus === "REFUNDED") {
-      throw new AppError(`Cannot permanently delete order with payment status "${order.paymentStatus}".`, 400);
+      throw new AppError(`Cannot permanently delete order with payment status "${order.paymentStatus}". Financial records must be retained.`, 400);
     }
 
     // Guard 3: Order lifecycle status check
@@ -724,4 +739,41 @@ export async function permanentDeleteOrder(id: string) {
 
     return deleted;
   });
+}
+
+export async function bulkPermanentDeleteOrders(ids: string[]) {
+  const deletedIds: string[] = [];
+  const blocked: Array<{ id: string; name: string; reason: string }> = [];
+
+  for (const id of ids) {
+    try {
+      const order = await prisma.order.findUnique({
+        where: { id },
+        select: { id: true, orderNumber: true },
+      });
+      if (!order) {
+        blocked.push({ id, name: id, reason: "Order not found." });
+        continue;
+      }
+      await permanentDeleteOrder(id);
+      deletedIds.push(id);
+    } catch (error: any) {
+      const order = await prisma.order.findUnique({
+        where: { id },
+        select: { orderNumber: true },
+      });
+      blocked.push({
+        id,
+        name: order?.orderNumber ? `Order #${order.orderNumber}` : id,
+        reason: error?.message || "Failed to permanently delete order.",
+      });
+    }
+  }
+
+  return {
+    deletedCount: deletedIds.length,
+    blockedCount: blocked.length,
+    deletedIds,
+    blocked,
+  };
 }

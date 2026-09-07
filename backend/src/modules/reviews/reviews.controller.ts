@@ -14,6 +14,7 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
   const dateTo = req.query.dateTo ? String(req.query.dateTo) : undefined;
   const sortBy = req.query.sortBy ? String(req.query.sortBy) : undefined;
   const sortDir = req.query.sortDir ? String(req.query.sortDir) : undefined;
+  const deleted = req.query.deleted ? String(req.query.deleted) : undefined;
 
   const result = await S.listReviews({
     page,
@@ -27,6 +28,7 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
     dateTo,
     sortBy,
     sortDir,
+    deleted,
   });
   res.json({
     success: true,
@@ -43,8 +45,34 @@ export const updateStatus = asyncHandler(async (req: Request, res: Response) => 
   res.json({ success: true, message: "Review status updated", data: review });
 });
 
-export const remove = asyncHandler(async (req: Request, res: Response) => {
+export const softDelete = asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);
-  await S.deleteReview(id);
-  res.json({ success: true, message: "Review deleted successfully" });
+  await S.softDeleteReview(id);
+  res.json({ success: true, message: "Review archived successfully" });
+});
+
+export const remove = softDelete;
+
+export const restore = asyncHandler(async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const data = await S.restoreReview(id);
+  res.json({ success: true, message: "Review restored successfully", data });
+});
+
+export const permanentDelete = asyncHandler(async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  await S.permanentDeleteReview(id);
+  res.json({ success: true, message: "Review permanently deleted successfully" });
+});
+
+export const bulkPermanentDelete = asyncHandler(async (req: Request, res: Response) => {
+  const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const result = await S.bulkPermanentDeleteReviews(ids);
+  res.json({ success: true, message: "Bulk permanent delete processed.", data: result });
+});
+
+export const bulkRestore = asyncHandler(async (req: Request, res: Response) => {
+  const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const result = await S.bulkRestoreReviews(ids);
+  res.json({ success: true, message: "Bulk restore processed.", data: result });
 });

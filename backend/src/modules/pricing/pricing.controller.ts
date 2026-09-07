@@ -41,7 +41,38 @@ export const update = asyncHandler(async (req: AuthRequest, res: Response) => {
 
 export const remove = asyncHandler(async (req: AuthRequest, res: Response) => {
   await S.deletePrice(String(req.params.id));
-  return ApiResponse.success(res, "Price deleted.");
+  await prisma.activityLog.create({
+    data: { userId: req.user!.id, action: "PRICING_ARCHIVED", entityType: "Pricing", entityId: String(req.params.id) },
+  });
+  return ApiResponse.success(res, "Pricing rule archived successfully.");
+});
+
+export const restore = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await S.restorePrice(String(req.params.id));
+  await prisma.activityLog.create({
+    data: { userId: req.user!.id, action: "PRICING_RESTORED", entityType: "Pricing", entityId: String(req.params.id) },
+  });
+  return ApiResponse.success(res, "Pricing rule restored successfully.", result);
+});
+
+export const permanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await S.permanentDeletePrice(String(req.params.id));
+  await prisma.activityLog.create({
+    data: { userId: req.user!.id, action: "PRICING_PERMANENTLY_DELETED", entityType: "Pricing", entityId: String(req.params.id) },
+  });
+  return ApiResponse.success(res, "Pricing rule permanently deleted successfully.", result);
+});
+
+export const bulkRestore = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const result = await S.bulkRestorePricing(ids);
+  return ApiResponse.success(res, "Bulk restore processed.", result);
+});
+
+export const bulkPermanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const result = await S.bulkPermanentDeletePricing(ids);
+  return ApiResponse.success(res, "Bulk permanent delete processed.", result);
 });
 
 export const duplicate = asyncHandler(async (req: AuthRequest, res: Response) => {

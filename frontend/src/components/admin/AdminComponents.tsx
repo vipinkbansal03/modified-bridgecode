@@ -1000,6 +1000,7 @@ interface ConfirmModalProps {
   danger?: boolean;
   confirmText?: string;
   loadingText?: string;
+  closeOnClickOutside?: boolean;
 }
 
 export function ConfirmModal({
@@ -1012,6 +1013,7 @@ export function ConfirmModal({
   danger = true,
   confirmText = "Confirm",
   loadingText,
+  closeOnClickOutside = true,
 }: ConfirmModalProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -1023,14 +1025,35 @@ export function ConfirmModal({
     };
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !isLoading) {
+        onCancel();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open, isLoading, onCancel]);
+
   if (!open || !mounted) return null;
 
   const defaultLoadingText = danger ? "Deleting…" : "Confirming…";
   const finalLoadingText = loadingText || defaultLoadingText;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100010] flex items-center justify-center bg-black/60 px-4 backdrop-blur-xs">
-      <div className="w-full max-w-[400px] rounded-xl bg-white p-6 shadow-xl">
+    <div
+      className="fixed inset-0 z-[100010] flex items-center justify-center bg-black/60 px-4 backdrop-blur-xs cursor-pointer"
+      onClick={!isLoading && closeOnClickOutside ? onCancel : undefined}
+    >
+      <div
+        className="w-full max-w-[400px] rounded-xl bg-white p-6 shadow-xl cursor-default"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-start gap-3 mb-4">
           {danger && (
             <AlertTriangle
@@ -1098,6 +1121,12 @@ export interface AdminDeleteModalProps {
   warningMessage?: string;
   errorMessage?: string | null;
   onClearError?: () => void;
+  permanentDeleteDisabled?: boolean;
+  permanentDeleteDisabledReason?: string;
+  initialDeleteType?: "soft" | "permanent";
+  closeOnClickOutside?: boolean;
+  softDeleteButtonText?: string;
+  permanentDeleteButtonText?: string;
 }
 
 export function AdminDeleteModal({
@@ -1115,8 +1144,14 @@ export function AdminDeleteModal({
   warningMessage,
   errorMessage,
   onClearError,
+  permanentDeleteDisabled = false,
+  permanentDeleteDisabledReason,
+  initialDeleteType = "soft",
+  closeOnClickOutside = true,
+  softDeleteButtonText,
+  permanentDeleteButtonText,
 }: AdminDeleteModalProps) {
-  const [deleteType, setDeleteType] = useState<"soft" | "permanent">("soft");
+  const [deleteType, setDeleteType] = useState<"soft" | "permanent">(initialDeleteType);
   const [localError, setLocalError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
@@ -1130,16 +1165,31 @@ export function AdminDeleteModal({
 
   useEffect(() => {
     if (open) {
-      setDeleteType("soft");
+      setDeleteType(initialDeleteType);
       setLocalError(null);
       if (onClearError) onClearError();
     }
-  }, [open, onClearError]);
-
-  if (!open || !mounted) return null;
+  }, [open, onClearError, initialDeleteType]);
 
   const activeLoading = isSoftDeleting || isPermanentDeleting || isLoading;
   const displayedError = errorMessage || localError;
+
+  useEffect(() => {
+    if (!open) return;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !activeLoading) {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open, activeLoading, onClose]);
+
+  if (!open || !mounted) return null;
 
   const handleConfirm = async () => {
     setLocalError(null);
@@ -1147,7 +1197,7 @@ export function AdminDeleteModal({
     try {
       if (deleteType === "soft") {
         await onSoftDelete();
-      } else if (onPermanentDelete) {
+      } else if (onPermanentDelete && !permanentDeleteDisabled) {
         await onPermanentDelete();
       }
     } catch (err: unknown) {
@@ -1159,8 +1209,14 @@ export function AdminDeleteModal({
   const displayName = itemName ? `"${itemName}"` : itemType.toLowerCase();
 
   return createPortal(
-    <div className="fixed inset-0 z-[100010] flex items-center justify-center bg-black/60 px-4 backdrop-blur-xs">
-      <div className="w-full max-w-[500px] rounded-2xl bg-white p-6 shadow-2xl animate-fade-in border border-[#E6E6E6]">
+    <div
+      className="fixed inset-0 z-[100010] flex items-center justify-center bg-black/60 px-4 backdrop-blur-xs cursor-pointer"
+      onClick={!activeLoading && closeOnClickOutside ? onClose : undefined}
+    >
+      <div
+        className="w-full max-w-[500px] rounded-2xl bg-white p-6 shadow-2xl animate-fade-in border border-[#E6E6E6] cursor-default"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-start justify-between gap-3 pb-3 border-b border-[#F0F0F0]">
           <div className="flex items-center gap-2.5">
@@ -1252,21 +1308,35 @@ export function AdminDeleteModal({
           {/* Option 2: Permanent Delete (Hard Delete) - Rendered if onPermanentDelete exists */}
           {onPermanentDelete ? (
             <div
-              onClick={() => { if (!activeLoading) { setDeleteType("permanent"); setLocalError(null); } }}
-              className={`cursor-pointer rounded-xl border p-3.5 transition-all ${
+              onClick={() => {
+                if (!activeLoading) {
+                  setDeleteType("permanent");
+                  setLocalError(null);
+                }
+              }}
+              className={cn(
+                "rounded-xl border p-3.5 transition-all cursor-pointer",
                 deleteType === "permanent"
-                  ? "border-red-500 bg-red-50/50 ring-1 ring-red-500"
-                  : "border-[#E6E6E6] bg-white hover:border-red-200 hover:bg-red-50/20"
-              } ${activeLoading ? "pointer-events-none opacity-60" : ""}`}
+                  ? permanentDeleteDisabled
+                    ? "border-amber-400 bg-amber-50/40 ring-1 ring-amber-400"
+                    : "border-red-500 bg-red-50/50 ring-1 ring-red-500"
+                  : permanentDeleteDisabled
+                  ? "border-[#E6E6E6] bg-white hover:border-amber-300 hover:bg-amber-50/20"
+                  : "border-[#E6E6E6] bg-white hover:border-red-200 hover:bg-red-50/20",
+                activeLoading ? "pointer-events-none opacity-60" : ""
+              )}
             >
               <div className="flex items-start gap-3">
                 <div className="pt-0.5">
                   <div
-                    className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                    className={cn(
+                      "flex h-4 w-4 items-center justify-center rounded-full border",
                       deleteType === "permanent"
-                        ? "border-red-600 bg-red-600"
+                        ? permanentDeleteDisabled
+                          ? "border-amber-600 bg-amber-600"
+                          : "border-red-600 bg-red-600"
                         : "border-neutral-300 bg-white"
-                    }`}
+                    )}
                   >
                     {deleteType === "permanent" && (
                       <div className="h-1.5 w-1.5 rounded-full bg-white" />
@@ -1275,17 +1345,23 @@ export function AdminDeleteModal({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[13.5px] font-semibold text-red-700">
+                    <span className={cn("text-[13.5px] font-semibold", permanentDeleteDisabled ? "text-[#1A1A1A]" : "text-red-700")}>
                       Permanent Delete (Hard Delete)
                     </span>
-                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-800 border border-red-200">
-                      Irreversible
+                    <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold border", permanentDeleteDisabled ? "bg-amber-50 text-amber-800 border-amber-300" : "bg-red-100 text-red-800 border-red-200")}>
+                      {permanentDeleteDisabled ? "Restricted" : "Irreversible"}
                     </span>
                   </div>
                   <p className="mt-1 text-[12px] leading-relaxed text-[#6B6B6B]">
                     {permanentDeleteDescription ||
                       `Physically removes ${displayName} from the database. Blocked by system guards if orders or dependencies reference it.`}
                   </p>
+                  {permanentDeleteDisabled && permanentDeleteDisabledReason && (
+                    <div className="mt-2.5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/90 p-2.5 text-[12px] font-medium leading-relaxed text-amber-900">
+                      <AlertCircle size={15} className="mt-0.5 shrink-0 text-amber-700" />
+                      <span>{permanentDeleteDisabledReason}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1305,12 +1381,15 @@ export function AdminDeleteModal({
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={activeLoading}
+            disabled={activeLoading || (deleteType === "permanent" && permanentDeleteDisabled)}
+            title={deleteType === "permanent" && permanentDeleteDisabled ? permanentDeleteDisabledReason : undefined}
             className={cn(
-              "rounded-lg px-4 py-2 text-[13px] font-semibold text-white transition-colors shadow-2xs disabled:opacity-50 flex items-center justify-center gap-2",
+              "rounded-lg px-4 py-2 text-[13px] font-semibold transition-colors shadow-2xs flex items-center justify-center gap-2",
               deleteType === "soft"
-                ? "bg-[#1A1A1A] hover:bg-neutral-800"
-                : "bg-[#E31E24] hover:bg-[#B5151B]",
+                ? "bg-[#1A1A1A] hover:bg-neutral-800 text-white disabled:opacity-50"
+                : permanentDeleteDisabled
+                ? "bg-neutral-200 text-neutral-400 cursor-not-allowed border border-neutral-300 shadow-none pointer-events-none"
+                : "bg-[#E31E24] hover:bg-[#B5151B] text-white disabled:opacity-50",
             )}
           >
             {activeLoading ? (
@@ -1326,9 +1405,11 @@ export function AdminDeleteModal({
                 </span>
               </>
             ) : deleteType === "soft" ? (
-              `Soft Delete ${itemType}`
+              softDeleteButtonText || `Soft Delete ${itemType}`
+            ) : permanentDeleteDisabled ? (
+              `Permanent Delete Disabled`
             ) : (
-              `Permanently Delete ${itemType}`
+              permanentDeleteButtonText || `Permanently Delete ${itemType}`
             )}
           </button>
         </div>

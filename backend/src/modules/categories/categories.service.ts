@@ -656,3 +656,40 @@ export async function importCategoriesSpreadsheet(filePath: string) {
     },
   };
 }
+
+export async function bulkPermanentDeleteCategories(ids: string[]) {
+  const deletedIds: string[] = [];
+  const blocked: Array<{ id: string; name: string; reason: string }> = [];
+
+  for (const id of ids) {
+    try {
+      const cat = await prisma.category.findUnique({
+        where: { id },
+        select: { id: true, name: true },
+      });
+      if (!cat) {
+        blocked.push({ id, name: id, reason: "Category not found." });
+        continue;
+      }
+      await permanentDeleteCategory(id);
+      deletedIds.push(id);
+    } catch (error: any) {
+      const cat = await prisma.category.findUnique({
+        where: { id },
+        select: { name: true },
+      });
+      blocked.push({
+        id,
+        name: cat?.name || id,
+        reason: error?.message || "Failed to permanently delete category.",
+      });
+    }
+  }
+
+  return {
+    deletedCount: deletedIds.length,
+    blockedCount: blocked.length,
+    deletedIds,
+    blocked,
+  };
+}

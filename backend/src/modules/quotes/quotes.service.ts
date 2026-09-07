@@ -7,9 +7,13 @@ import { sendQuoteConvertedEmail, sendQuoteSentEmail } from "../../utils/email";
 import { reserveOrderInventory } from "../inventory/inventoryReservation.service";
 import { resolveItemFulfillmentWarehouse } from "../warehouse/warehouseResolver.service";
 
-export async function listQuotes(query: { page?: string; limit?: string; status?: string; search?: string; sortBy?: string; sortDir?: string }) {
+export async function listQuotes(query: { page?: string; limit?: string; status?: string; search?: string; sortBy?: string; sortDir?: string; deleted?: string }) {
   const { page, limit, skip } = getPagination(query);
   const where: Record<string, unknown> = {};
+
+  const isDeleted = query.deleted === "true";
+  where.deletedAt = isDeleted ? { not: null } : null;
+
   if (query.status) where.status = query.status as never;
   if (query.search?.trim()) {
     const search = query.search.trim();
@@ -33,6 +37,8 @@ export async function listQuotes(query: { page?: string; limit?: string; status?
         return [{ status: sortDir }, { createdAt: "desc" }];
       case "updatedAt":
         return [{ updatedAt: sortDir }, { createdAt: "desc" }];
+      case "deletedAt":
+        return [{ deletedAt: sortDir }, { createdAt: "desc" }];
       case "country":
         return [{ country: { code: sortDir } }, { createdAt: "desc" }];
       case "createdAt":
@@ -427,8 +433,106 @@ export async function convertToOrder(quoteId: string) {
   return order;
 }
 
-export const deleteQuote = async (id: string) => {
-  await prisma.quoteItem.deleteMany({ where: { quoteId: id } });
-  await prisma.quoteNote.deleteMany({ where: { quoteId: id } });
-  return prisma.quote.delete({ where: { id } });
-};
+export async function softDeleteQuote(id: string) {
+  const existing = await prisma.quote.findUnique({ where: { id } });
+  if (!existing) throw new AppError("Quote not found.", 404);
+  if (existing.deletedAt) throw new AppError("Quote is already archived.", 400);
+
+  return prisma.quote.update({
+    where: { id },
+    data: { deletedAt: new Date() },
+  });
+}
+
+export async function restoreQuote(id: string) {
+  const existing = await prisma.quote.findUnique({ where: { id } });
+  if (!existing) throw new AppError("Quote not found.", 404);
+  if (!existing.deletedAt) throw new AppError("Quote is already active.", 400);
+
+  return prisma.quote.update({
+    where: { id },
+    data: { deletedAt: null },
+  });
+}
+
+export async function permanentDeleteQuote(id: string) {
+  return prisma.$transaction(async (tx) => {
+    const quote = await tx.quote.findUnique({
+      where: { id },
+    });
+
+    if (!quote) throw new AppError("Quote not found.", 404);
+
+    // Guard 1: Converted quotes cannot be permanently deleted
+    if (quote.status === "CONVERTED" || quote.convertedOrderId) {
+      throw new AppError(
+        "Cannot permanently delete a converted quote. Converted quotes are linked to commercial orders and must be retained.",
+        400,
+      );
+    }
+
+    // Guard 2: Cannot delete if linked order exists in DB referencing fromQuoteId
+    const linkedOrder = await tx.order.findFirst({
+      where: { fromQuoteId: id },
+    });
+    if (linkedOrder) {
+      throw new AppError(
+        `Cannot permanently delete quote linked to Order #${linkedOrder.orderNumber}. Commercial history must be retained.`,
+        400,
+      );
+    }
+
+    // Guard 3: Cannot permanently delete SENT or ACCEPTED quotes
+    if (quote.status === "SENT" || quote.status === "ACCEPTED") {
+      throw new AppError(
+        `Cannot permanently delete quote with status "${quote.status}". Retained commercial negotiation history must be preserved.`,
+        400,
+      );
+    }
+
+    // Clean up dependent records in transaction
+    await tx.quoteItem.deleteMany({ where: { quoteId: id } });
+    await tx.quoteNote.deleteMany({ where: { quoteId: id } });
+
+    return tx.quote.delete({ where: { id } });
+  });
+}
+
+export const deleteQuote = softDeleteQuote;
+
+export async function bulkPermanentDeleteQuotes(ids: string[]) {
+  const deletedIds: string[] = [];
+  const blocked: Array<{ id: string; name: string; reason: string }> = [];
+
+  for (const id of ids) {
+    try {
+      const quote = await prisma.quote.findUnique({
+        where: { id },
+        select: { id: true, quoteNumber: true },
+      });
+      if (!quote) {
+        blocked.push({ id, name: id, reason: "Quote not found." });
+        continue;
+      }
+      await permanentDeleteQuote(id);
+      deletedIds.push(id);
+    } catch (error: any) {
+      const quote = await prisma.quote.findUnique({
+        where: { id },
+        select: { quoteNumber: true },
+      });
+      blocked.push({
+        id,
+        name: quote?.quoteNumber ? `Quote #${quote.quoteNumber}` : id,
+        reason: error?.message || "Failed to permanently delete quote.",
+      });
+    }
+  }
+
+  return {
+    deletedCount: deletedIds.length,
+    blockedCount: blocked.length,
+    deletedIds,
+    blocked,
+  };
+}

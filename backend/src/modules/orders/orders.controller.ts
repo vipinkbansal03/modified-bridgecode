@@ -41,3 +41,9 @@ export const permanentDelete = asyncHandler(async (req: AuthRequest, res: Respon
   const result = await S.permanentDeleteOrder(String(req.params.id));
   return ApiResponse.success(res, "Test order permanently deleted successfully.", result);
 });
+
+export const bulkPermanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const result = await S.bulkPermanentDeleteOrders(ids);
+  return ApiResponse.success(res, "Bulk permanent delete processed.", result);
+});

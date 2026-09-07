@@ -10,11 +10,14 @@ import {
   useToast,
   LoadingButton,
   DataTable,
+  Pagination,
   AdminStatsGrid,
   AdminListToolbar,
   AdminSelect,
+  Tooltip,
   type Column,
 } from "@/components/admin/AdminComponents";
+import { AdminRowActions } from "@/components/admin/AdminRowActions";
 import { Modal } from "@/components/ui/Modal";
 import { useAdminRoles } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
@@ -71,6 +74,10 @@ export default function RolesPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [showFilters, setShowFilters] = useState(false);
 
+  // Pagination states
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   // Modal / Editing state
   const [showModal, setShowModal] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
@@ -83,7 +90,10 @@ export default function RolesPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
     return () => window.clearTimeout(timer);
   }, [search]);
 
@@ -117,7 +127,7 @@ export default function RolesPage() {
     return { totalRoles, fullAccessRoles, customRoles, totalUsers };
   }, [roles]);
 
-  const rows = useMemo(() => {
+  const filteredRows = useMemo(() => {
     const value = debouncedSearch.trim().toLowerCase();
     const filtered = roles.filter((role) => {
       const isSuper = role.permissions.includes("*");
@@ -146,6 +156,12 @@ export default function RolesPage() {
 
     return filtered;
   }, [roles, debouncedSearch, accessFilter, sortBy, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, page, pageSize]);
 
   const [enabledModules, setEnabledModules] = useState<Record<string, boolean>>({});
 
@@ -272,15 +288,19 @@ export default function RolesPage() {
             <div className="flex items-center gap-2">
               <span className="text-[13.5px] font-semibold text-[#1A1A1A] truncate">{row.name}</span>
               {isSuper ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-green-700 shrink-0">
-                  <ShieldCheck size={11} />
-                  Full Access
-                </span>
+                <Tooltip content="Super Admin with full unrestricted permissions (*)" side="top">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-green-700 shrink-0 cursor-default">
+                    <ShieldCheck size={11} />
+                    Full Access
+                  </span>
+                </Tooltip>
               ) : (
-                <span className="inline-flex items-center gap-1 rounded-full border border-[#E6E6E6] bg-[#FAFAFA] px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B] shrink-0">
-                  <Shield size={11} />
-                  Custom
-                </span>
+                <Tooltip content="Custom scoped permission set" side="top">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[#E6E6E6] bg-[#FAFAFA] px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-[#6B6B6B] shrink-0 cursor-default">
+                    <Shield size={11} />
+                    Custom
+                  </span>
+                </Tooltip>
               )}
             </div>
           </div>
@@ -328,29 +348,27 @@ export default function RolesPage() {
               const isSuper = row.permissions.includes("*");
               const hasUsers = (row._count?.users || 0) > 0;
               return (
-                <div className="flex items-center justify-start gap-1.5">
-                  {canUpdate && (
-                    <button
-                      type="button"
-                      onClick={() => openEditModal(row)}
-                      className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] transition-colors shadow-2xs cursor-pointer"
-                      title="Edit Permissions"
-                    >
-                      <Edit3 size={13} />
-                    </button>
-                  )}
-                  {canDelete && !isSuper && (
-                    <button
-                      type="button"
-                      onClick={() => setDeletingId(row.id)}
-                      disabled={hasUsers}
-                      className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#E31E24] hover:bg-[#FFF5F5] hover:border-[#F2C9C9] transition-colors shadow-2xs disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
-                      title={hasUsers ? "Cannot delete role with assigned users" : "Delete role"}
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  )}
-                </div>
+                <AdminRowActions
+                  edit={
+                    canUpdate
+                      ? {
+                          onClick: () => openEditModal(row),
+                          title: "Edit role permissions",
+                        }
+                      : undefined
+                  }
+                  delete={
+                    canDelete && !isSuper
+                      ? {
+                          onClick: () => setDeletingId(row.id),
+                          disabled: hasUsers,
+                          title: hasUsers
+                            ? "Cannot delete role with assigned users"
+                            : "Delete role",
+                        }
+                      : undefined
+                  }
+                />
               );
             },
           },
@@ -363,39 +381,46 @@ export default function RolesPage() {
   }
 
   return (
-    <AdminLayout title="Roles & Permissions" breadcrumb={[{ label: "System Roles" }]}>
+    <AdminLayout title="Roles & Permissions" breadcrumb={[{ label: "Roles & Permissions", href: "/admin/roles" }, { label: "System Roles" }]}>
       <div className="space-y-5">
-        {/* Navigation Tabs */}
-        <div className="flex border-b border-[#E6E6E6]">
+        {/* Navigation Sub-Tabs */}
+        <div className="flex items-center gap-2 border-b border-[#E6E6E6] bg-white px-4 pt-2 rounded-t-lg shadow-2xs overflow-x-auto max-w-full scrollbar-thin">
           <Link
             href="/admin/roles"
-            className="px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors border-[#E31E24] text-[#E31E24]"
+            className="flex items-center gap-2 border-b-2 border-[#E31E24] text-[#E31E24] px-3 pb-3 pt-1 text-[13.5px] font-semibold shrink-0 whitespace-nowrap cursor-pointer"
           >
-            System Roles
+            <Shield size={15} />
+            <span>System Roles</span>
+            <span className="ml-1 rounded-full bg-[#E31E24]/10 text-[#E31E24] px-2 py-0.5 text-[11px] font-semibold">
+              {totals.totalRoles}
+            </span>
           </Link>
           <Link
             href="/admin/customer-roles"
-            className="px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors border-transparent text-[#6B7280] hover:text-[#111827]"
+            className="flex items-center gap-2 border-b-2 border-transparent text-[#666] hover:border-[#CCC] hover:text-[#1A1A1A] px-3 pb-3 pt-1 text-[13.5px] font-medium shrink-0 whitespace-nowrap transition-colors cursor-pointer"
           >
-            Customer Roles
+            <Users size={15} />
+            <span>Customer Roles</span>
           </Link>
         </div>
 
         {/* Stat Cards */}
         <AdminStatsGrid
           stats={[
-            { title: "Total Roles", value: totals.totalRoles, subtitle: "Configured system roles", icon: <Shield size={18} /> },
-            { title: "Full Access", value: totals.fullAccessRoles, subtitle: "Super Admin privileges", icon: <ShieldCheck size={18} />, color: "bg-green-600" },
-            { title: "Custom Roles", value: totals.customRoles, subtitle: "Scoped permissions", icon: <ShieldAlert size={18} />, color: "bg-amber-600" },
-            { title: "Assigned Users", value: totals.totalUsers, subtitle: "Active staff assignments", icon: <Users size={18} />, color: "bg-gray-600" }
+            { title: "Total Roles", value: totals.totalRoles, subtitle: "Configured system roles", icon: <Shield size={18} />, isLoading },
+            { title: "Full Access", value: totals.fullAccessRoles, subtitle: "Super Admin privileges", icon: <ShieldCheck size={18} />, color: "bg-emerald-600", isLoading },
+            { title: "Custom Roles", value: totals.customRoles, subtitle: "Scoped permissions", icon: <ShieldAlert size={18} />, color: "bg-amber-600", isLoading },
+            { title: "Assigned Users", value: totals.totalUsers, subtitle: "Active staff assignments", icon: <Users size={18} />, color: "bg-gray-600", isLoading }
           ]}
-          isLoading={isLoading}
         />
 
         <AdminListToolbar
           search={{
             value: search,
-            onChange: setSearch,
+            onChange: (val) => {
+              setSearch(val);
+              setPage(1);
+            },
             placeholder: "Search roles...",
             widthClassName: "w-[240px]",
           }}
@@ -422,13 +447,17 @@ export default function RolesPage() {
             setAccessFilter("");
             setSortBy("name");
             setSortDir("asc");
+            setPage(1);
           }}
           filterPanel={
             <div className="grid gap-4 md:grid-cols-3 pt-2">
               <AdminSelect
                 label="Access Level"
                 value={accessFilter}
-                onChange={(e) => setAccessFilter(e.target.value)}
+                onChange={(e) => {
+                  setAccessFilter(e.target.value);
+                  setPage(1);
+                }}
                 options={[
                   { value: "", label: "All Access Levels" },
                   { value: "FULL", label: "Full Access" },
@@ -438,7 +467,10 @@ export default function RolesPage() {
               <AdminSelect
                 label="Sort By"
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as "name" | "users" | "permissions")}
+                onChange={(e) => {
+                  setSortBy(e.target.value as "name" | "users" | "permissions");
+                  setPage(1);
+                }}
                 options={[
                   { value: "name", label: "Role Name" },
                   { value: "users", label: "Assigned Users" },
@@ -448,7 +480,10 @@ export default function RolesPage() {
               <AdminSelect
                 label="Direction"
                 value={sortDir}
-                onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
+                onChange={(e) => {
+                  setSortDir(e.target.value as "asc" | "desc");
+                  setPage(1);
+                }}
                 options={[
                   { value: "asc", label: "Ascending" },
                   { value: "desc", label: "Descending" },
@@ -458,19 +493,35 @@ export default function RolesPage() {
           }
         />
 
-        {/* DataTable */}
-        <DataTable<Role>
-          title="System Roles List"
-          columns={columns}
-          data={rows}
-          rowKey="id"
-          isLoading={isLoading}
-          emptyMessage="No system roles found."
-          totalItems={rows.length}
-          currentPage={1}
-          pageSize={rows.length || 10}
-          totalPages={1}
-        />
+        {/* DataTable Container with Bottom Pagination */}
+        <div>
+          <DataTable<Role>
+            title="System Roles List"
+            columns={columns}
+            data={paginatedRows}
+            rowKey="id"
+            isLoading={isLoading}
+            emptyMessage="No system roles found."
+            totalItems={filteredRows.length}
+            currentPage={page}
+            pageSize={pageSize}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setPage(1);
+            }}
+            pageSizeOptions={[10, 25, 50, 100]}
+          />
+          <div className="border-t border-[#E6E6E6] px-4 py-3 bg-white">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              alwaysShow={true}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Role Creation / Editing Modal */}

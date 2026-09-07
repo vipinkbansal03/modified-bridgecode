@@ -7,6 +7,8 @@ import {
   Mail,
   Users,
   UserPlus,
+  CheckCircle2,
+  XCircle,
   X,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
@@ -16,6 +18,7 @@ import {
   AdminSelect,
   AdminStatsGrid,
   AdminListToolbar,
+  Pagination,
   StatusBadge,
   useToast,
   ConfirmModal,
@@ -29,6 +32,7 @@ import {
   useUpdateSubscriberStatus,
 } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
+import { cn } from "@/utils/cn";
 
 type SubscriberRow = {
   id: string;
@@ -45,6 +49,14 @@ const addSubscriberSchema = Yup.object({
   email: Yup.string().email("Invalid email").required("Email is required"),
 });
 
+const visibleColumnsDefault = {
+  email: true,
+  status: true,
+  subscribedAt: true,
+  unsubscribedAt: true,
+  actions: true,
+};
+
 export default function NewsletterAdminPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -54,6 +66,7 @@ export default function NewsletterAdminPage() {
   const [sortBy, setSortBy] = useState("subscribedAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [showFilters, setShowFilters] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState(visibleColumnsDefault);
 
   // Manual Add Modal State
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -81,6 +94,12 @@ export default function NewsletterAdminPage() {
     sortDir,
   });
 
+  const { data: allData } = useAdminSubscribers({ limit: 1000 });
+  const allSubscribers = useMemo(
+    () => (allData?.data ?? []) as SubscriberRow[],
+    [allData?.data],
+  );
+
   const subscribers = useMemo(
     () => (data?.data ?? []) as SubscriberRow[],
     [data?.data],
@@ -88,16 +107,12 @@ export default function NewsletterAdminPage() {
   const total = data?.pagination?.total ?? 0;
   const totalPages = data?.pagination?.totalPages ?? 1;
 
+  const totalCount = allSubscribers.length || total;
+  const activeCount = allSubscribers.filter((s) => s.status === "ACTIVE").length;
+  const unsubCount = allSubscribers.filter((s) => s.status === "UNSUBSCRIBED").length;
+
   const createMutation = useCreateSubscriber();
   const updateStatusMutation = useUpdateSubscriberStatus();
-
-  const stats = useMemo(() => {
-    return {
-      total: total,
-      active: subscribers.filter((s) => s.status === "ACTIVE").length,
-      unsubscribed: subscribers.filter((s) => s.status === "UNSUBSCRIBED").length,
-    };
-  }, [subscribers, total]);
 
   const form = useAdminForm({
     initialValues: initialSubscriberValues,
@@ -215,7 +230,7 @@ export default function NewsletterAdminPage() {
           <button
             type="button"
             onClick={() => handleToggleClick(row)}
-            className={`inline-flex h-7 items-center rounded-md px-2.5 text-[12px] font-medium transition-colors shadow-2xs cursor-pointer ${
+            className={`inline-flex h-7 items-center rounded-md px-2.5 text-[12px] font-semibold transition-colors shadow-2xs cursor-pointer ${
               row.status === "ACTIVE"
                 ? "border border-[#F2C9C9] bg-white text-[#E31E24] hover:bg-[#FFF5F5]"
                 : "border border-[#CFE8D7] bg-white text-[#1F8F4A] hover:bg-[#F1FBF4]"
@@ -228,16 +243,65 @@ export default function NewsletterAdminPage() {
     },
   ];
 
+  const filteredColumns = columns.filter((column) => {
+    if (column.key === "email") return visibleColumns.email;
+    if (column.key === "status") return visibleColumns.status;
+    if (column.key === "subscribedAt") return visibleColumns.subscribedAt;
+    if (column.key === "unsubscribedAt") return visibleColumns.unsubscribedAt;
+    if (column.key === "actions") return visibleColumns.actions;
+    return true;
+  });
+
   return (
-    <AdminLayout title="Newsletter Subscribers" breadcrumb={[{ label: "Newsletter Subscribers" }]}>
+    <AdminLayout title="Newsletter Subscribers" breadcrumb={[{ label: "Customers", href: "/admin/customers" }, { label: "Newsletter Subscribers" }]}>
       <div className="space-y-5">
         <AdminStatsGrid
           stats={[
-            { title: "Total List Count", value: stats.total, subtitle: "All registered emails", icon: <Users size={18} />, isLoading },
-            { title: "Active Subscriptions", value: stats.active, subtitle: "Subscribed and active", icon: <Mail size={18} />, color: "bg-green-600", isLoading },
-            { title: "Unsubscriptions", value: stats.unsubscribed, subtitle: "Opted-out subscribers", icon: <X size={18} />, color: "bg-gray-600", isLoading },
+            { title: "Total List Count", value: totalCount, subtitle: "All registered emails", icon: <Mail size={18} />, isLoading },
+            { title: "Active Subscriptions", value: activeCount, subtitle: "Subscribed and active", icon: <CheckCircle2 size={18} />, color: "bg-emerald-600", isLoading },
+            { title: "Unsubscriptions", value: unsubCount, subtitle: "Opted-out subscribers", icon: <XCircle size={18} />, color: "bg-slate-600", isLoading },
           ]}
         />
+
+        {/* Horizontal Navigation Tabs */}
+        <div className="flex items-center gap-2 border-b border-[#E6E6E6] bg-white px-4 pt-2 rounded-t-lg shadow-2xs overflow-x-auto max-w-full scrollbar-thin">
+          {[
+            { id: "", label: "All Subscribers", count: totalCount, icon: <Mail size={15} /> },
+            { id: "ACTIVE", label: "Active", count: activeCount, icon: <CheckCircle2 size={15} /> },
+            { id: "UNSUBSCRIBED", label: "Unsubscribed", count: unsubCount, icon: <XCircle size={15} /> },
+          ].map((tab) => {
+            const isActive = statusFilter === tab.id;
+            return (
+              <button
+                key={tab.id || "ALL"}
+                type="button"
+                onClick={() => {
+                  setStatusFilter(tab.id);
+                  setPage(1);
+                }}
+                className={cn(
+                  "flex items-center gap-2 border-b-2 px-3 pb-3 pt-1 text-[13.5px] font-medium transition-colors cursor-pointer shrink-0 whitespace-nowrap",
+                  isActive
+                    ? "border-[#E31E24] text-[#E31E24]"
+                    : "border-transparent text-[#666] hover:border-[#CCC] hover:text-[#1A1A1A]"
+                )}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+                <span
+                  className={cn(
+                    "ml-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                    isActive
+                      ? "bg-[#E31E24]/10 text-[#E31E24]"
+                      : "bg-[#F0F0F0] text-[#666]"
+                  )}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
         <AdminListToolbar
           search={{
@@ -253,9 +317,28 @@ export default function NewsletterAdminPage() {
             showFilters,
             onToggle: () => setShowFilters(!showFilters),
             activeCount: [statusFilter, sortBy !== "subscribedAt" ? sortBy : "", sortDir !== "desc" ? sortDir : ""].filter(Boolean).length,
+            label: "Filters",
+          }}
+          columns={{
+            visibleColumns,
+            onToggleColumn: (key) => {
+              setVisibleColumns((current) => ({
+                ...current,
+                [key]: !current[key as keyof typeof current],
+              }));
+            },
+            options: [
+              { key: "email", label: "Subscriber Email" },
+              { key: "status", label: "Status" },
+              { key: "subscribedAt", label: "Subscribed Date" },
+              { key: "unsubscribedAt", label: "Unsubscribed Date" },
+              { key: "actions", label: "Actions" },
+            ],
           }}
           refresh={{
-            onRefresh: () => void refetch(),
+            onRefresh: () => {
+              void refetch().then(() => showToast("Subscribers refreshed."));
+            },
             isRefreshing: isFetching,
           }}
           primaryAction={{
@@ -294,41 +377,52 @@ export default function NewsletterAdminPage() {
                 }}
                 options={[
                   { value: "subscribedAt", label: "Subscribed Date" },
-                  { value: "email", label: "Email" },
+                  { value: "email", label: "Email Address" },
                   { value: "status", label: "Status" },
                 ]}
               />
               <AdminSelect
-                label="Direction"
+                label="Sort Direction"
                 value={sortDir}
                 onChange={(e) => {
                   setSortDir(e.target.value as "asc" | "desc");
                   setPage(1);
                 }}
                 options={[
-                  { value: "desc", label: "Descending" },
-                  { value: "asc", label: "Ascending" },
+                  { value: "desc", label: "Descending (Newest)" },
+                  { value: "asc", label: "Ascending (Oldest)" },
                 ]}
               />
             </div>
           }
         />
 
-        <DataTable<SubscriberRow>
-          title="Subscribers List"
-          columns={columns}
-          data={subscribers}
-          rowKey="id"
-          isLoading={isLoading}
-          emptyMessage="No subscribers found."
-          totalItems={total}
-          currentPage={page}
-          pageSize={limit}
-          totalPages={totalPages}
-          onPageChange={setPage}
-          onPageSizeChange={setLimit}
-          pageSizeOptions={[10, 20, 50, 100]}
-        />
+        {/* FULL-WIDTH DATA TABLE */}
+        <div className="rounded-xl border border-[#E6E6E6] bg-white overflow-hidden shadow-2xs">
+          <DataTable<SubscriberRow>
+            title="Subscribers List"
+            columns={filteredColumns}
+            data={subscribers}
+            rowKey="id"
+            isLoading={isLoading}
+            emptyMessage="No subscribers found."
+            totalItems={total}
+            currentPage={page}
+            pageSize={limit}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            onPageSizeChange={setLimit}
+            pageSizeOptions={[10, 20, 50, 100]}
+          />
+          <div className="border-t border-[#E6E6E6] px-4 py-3 bg-white">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              alwaysShow={true}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Manual Add Subscriber Modal */}

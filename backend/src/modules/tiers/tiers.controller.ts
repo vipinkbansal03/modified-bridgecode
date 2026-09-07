@@ -33,8 +33,30 @@ export const update = asyncHandler(async (req: AuthRequest, res: Response) => {
 });
 
 export const remove = asyncHandler(async (req: AuthRequest, res: Response) => {
-  await TiersService.deleteTier(String(req.params.id));
-  return ApiResponse.success(res, "Tier deleted.");
+  await TiersService.archiveTier(String(req.params.id));
+  return ApiResponse.success(res, "Tier archived.");
+});
+
+export const restore = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const tier = await TiersService.restoreTier(String(req.params.id));
+  return ApiResponse.success(res, "Tier restored.", tier);
+});
+
+export const permanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await TiersService.permanentDeleteTier(String(req.params.id));
+  return ApiResponse.success(res, "Tier permanently deleted.");
+});
+
+export const bulkRestore = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const ids = Array.isArray(req.body) ? req.body : req.body?.ids;
+  const result = await TiersService.bulkUpdateTiers({ ids, action: "RESTORE" });
+  return ApiResponse.success(res, "Tier bulk restore completed.", result);
+});
+
+export const bulkPermanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const ids = Array.isArray(req.body) ? req.body : req.body?.ids;
+  const result = await TiersService.bulkUpdateTiers({ ids, action: "PERMANENT_DELETE" });
+  return ApiResponse.success(res, "Tier bulk permanent delete completed.", result);
 });
 
 export const bulk = asyncHandler(async (req: AuthRequest, res: Response) => {

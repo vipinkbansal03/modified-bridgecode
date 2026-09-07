@@ -23,6 +23,7 @@ type PricingListQuery = {
   sortBy?: string;
   sortDir?: string;
   ids?: string[];
+  deleted?: string;
 };
 
 type SpreadsheetIssue = {
@@ -89,6 +90,9 @@ type NormalizedPricingRow = {
   priority: number;
   createdAt: Date;
   updatedAt: Date;
+  deletedAt: Date | null;
+  canPermanentDelete: boolean;
+  permanentDeleteBlockReason: string | null;
   createdBy: string | null;
   product: { id: string; title: string; sku: string | null };
   variant: { id: string; title: string; sku: string | null } | null;
@@ -267,6 +271,9 @@ function mapProductPriceRow(price: Prisma.ProductPriceGetPayload<{
     priority,
     createdAt: price.createdAt,
     updatedAt: price.updatedAt,
+    deletedAt: price.deletedAt ?? null,
+    canPermanentDelete: false,
+    permanentDeleteBlockReason: null,
     createdBy: null,
     product: {
       id: price.product.id,
@@ -326,6 +333,9 @@ function mapTierPriceRow(rule: Prisma.TierPricingGetPayload<{
     priority,
     createdAt: rule.createdAt,
     updatedAt: rule.updatedAt,
+    deletedAt: rule.deletedAt ?? null,
+    canPermanentDelete: false,
+    permanentDeleteBlockReason: null,
     createdBy: null,
     product: {
       id: rule.product.id,
@@ -380,6 +390,9 @@ function mapMoqPriceRow(rule: Prisma.MoqPricingGetPayload<{
     priority,
     createdAt: rule.createdAt,
     updatedAt: rule.updatedAt,
+    deletedAt: rule.deletedAt ?? null,
+    canPermanentDelete: false,
+    permanentDeleteBlockReason: null,
     createdBy: null,
     product: {
       id: rule.product.id,
@@ -407,6 +420,103 @@ function mapMoqPriceRow(rule: Prisma.MoqPricingGetPayload<{
   };
 }
 
+export async function checkSoleActiveBasePrice(
+  priceId: string,
+  action: "archive" | "deactivate" | "delete" = "archive"
+): Promise<{ isSole: boolean; reason?: string }> {
+  const rule = await prisma.productPrice.findUnique({
+    where: { id: priceId },
+    include: {
+      product: {
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          deletedAt: true,
+          hasVariants: true,
+        },
+      },
+      variant: { select: { id: true, title: true, status: true } },
+      country: { select: { id: true, name: true, code: true } },
+    },
+  });
+
+  if (!rule) return { isSole: false };
+
+  // If parent Product is inactive or soft-deleted:
+  // allowing the pricing rule operation (deactivate/archive) is acceptable because the Product
+  // is already unavailable for normal storefront/checkout resolution.
+  const productUnavailable =
+    rule.product.deletedAt !== null ||
+    rule.product.status === "INACTIVE" ||
+    rule.product.status === "ARCHIVED";
+
+  if (productUnavailable) {
+    // Hard-delete safety requirement: active pricing rules cannot be permanently deleted without being archived first.
+    if (action === "delete" && rule.deletedAt === null) {
+      return {
+        isSole: true,
+        reason: "Active pricing rules cannot be permanently deleted. Archive the pricing rule first.",
+      };
+    }
+    return { isSole: false };
+  }
+
+  // If rule is already inactive or archived and action is deactivate/archive:
+  if (action === "deactivate" && rule.status === "INACTIVE") {
+    return { isSole: false };
+  }
+  if (action === "archive" && rule.deletedAt !== null) {
+    return { isSole: false };
+  }
+
+  // Hard-delete requirement: must be archived first
+  if (action === "delete" && rule.deletedAt === null) {
+    return {
+      isSole: true,
+      reason: "Active pricing rules cannot be permanently deleted. Archive the pricing rule first.",
+    };
+  }
+
+  // Exact resolution hierarchy check in the affected country (rule.countryId):
+  // 1. If rule is a VARIANT PRICE (rule.variantId != null):
+  // Context is: (Product rule.productId, Variant rule.variantId, Country rule.countryId).
+  // In the resolver, fallback is: (Product rule.productId, variantId: null, Country rule.countryId, status: "ACTIVE", deletedAt: null).
+  if (rule.variantId !== null) {
+    const activeBaseFallback = await prisma.productPrice.findFirst({
+      where: {
+        productId: rule.productId,
+        variantId: null,
+        countryId: rule.countryId,
+        status: "ACTIVE",
+        deletedAt: null,
+        NOT: { id: rule.id },
+      },
+      select: { id: true },
+    });
+
+    if (activeBaseFallback) {
+      // Active base price fallback exists in the same country!
+      return { isSole: false };
+    }
+
+    // No active base price exists in this country for this product!
+    return {
+      isSole: true,
+      reason: `Cannot ${action} this pricing rule because it is the only active price available for this product/variant. Add another active base price or fallback first.`,
+    };
+  }
+
+  // 2. If rule is a PRODUCT BASE PRICE (rule.variantId == null):
+  // In this country (rule.countryId), this is the authoritative base price and fallback for all variants.
+  // Because of @@unique([productId, variantId, countryId]), no other product-level base price can exist in this country.
+  // Removing it leaves the country without a base price, breaking resolution for the product and any variants without specific prices.
+  return {
+    isSole: true,
+    reason: `Cannot ${action} this pricing rule because it is the only active price available for this product/variant. Add another active base price or fallback first.`,
+  };
+}
+
 async function collectPricingRows(query: PricingListQuery) {
   const search = normalizeSearch(query.search);
   const ruleType = normalizeRuleType(query.ruleType);
@@ -426,12 +536,17 @@ async function collectPricingRows(query: PricingListQuery) {
     minQuantity: query.minQuantity ? Number(query.minQuantity) : undefined,
   };
 
-  const [productPrices, tierPrices, moqPrices] = await Promise.all([
+  const isDeletedQuery = query.deleted === "true";
+  const deletedWhere = isDeletedQuery ? { not: null } : null;
+  const productFilter = isDeletedQuery ? {} : { product: { deletedAt: null } };
+
+  const [productPrices, tierPrices, moqPrices, archivedProductPricesCount, archivedTierPricesCount, archivedMoqPricesCount] = await Promise.all([
     ruleType && !["BASE_PRICE", "VARIANT_PRICE", "CUSTOMER_ROLE_PRICE"].includes(ruleType)
       ? Promise.resolve([])
       : prisma.productPrice.findMany({
           where: {
-            product: { deletedAt: null },
+            deletedAt: deletedWhere,
+            ...productFilter,
             ...(filters.productId ? { productId: filters.productId } : {}),
             ...(filters.variantId ? { variantId: filters.variantId } : {}),
             ...countryIdsFilter,
@@ -462,7 +577,8 @@ async function collectPricingRows(query: PricingListQuery) {
       ? Promise.resolve([])
       : prisma.tierPricing.findMany({
           where: {
-            product: { deletedAt: null },
+            deletedAt: deletedWhere,
+            ...productFilter,
             ...(filters.productId ? { productId: filters.productId } : {}),
             ...(filters.variantId ? { variantId: filters.variantId } : {}),
             ...countryIdsFilter,
@@ -494,7 +610,8 @@ async function collectPricingRows(query: PricingListQuery) {
       ? Promise.resolve([])
       : prisma.moqPricing.findMany({
           where: {
-            product: { deletedAt: null },
+            deletedAt: deletedWhere,
+            ...productFilter,
             ...(filters.productId ? { productId: filters.productId } : {}),
             ...(filters.variantId ? { variantId: filters.variantId } : {}),
             ...countryIdsFilter,
@@ -520,6 +637,9 @@ async function collectPricingRows(query: PricingListQuery) {
           },
           orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
         }),
+    prisma.productPrice.count({ where: { deletedAt: { not: null } } }),
+    prisma.tierPricing.count({ where: { deletedAt: { not: null } } }),
+    prisma.moqPricing.count({ where: { deletedAt: { not: null } } }),
   ]);
 
   const combinedRows: NormalizedPricingRow[] = [
@@ -559,6 +679,42 @@ async function collectPricingRows(query: PricingListQuery) {
   const { page, limit, skip } = getPagination(query);
   const paged = sortedRows.slice(skip, skip + limit);
 
+  await Promise.all(
+    paged.map(async (row) => {
+      if (row.ruleType === "BASE_PRICE" || row.ruleType === "VARIANT_PRICE" || row.ruleType === "CUSTOMER_ROLE_PRICE") {
+        if (!row.deletedAt) {
+          row.canPermanentDelete = false;
+          row.permanentDeleteBlockReason = "Active pricing rules cannot be permanently deleted. Archive the pricing rule first.";
+        } else {
+          const check = await checkSoleActiveBasePrice(row.id, "delete");
+          if (check.isSole) {
+            row.canPermanentDelete = false;
+            row.permanentDeleteBlockReason = check.reason || "Cannot permanently delete sole active pricing rule.";
+          } else {
+            row.canPermanentDelete = true;
+            row.permanentDeleteBlockReason = null;
+          }
+        }
+      } else if (row.ruleType === "TIER_PRICE") {
+        if (!row.deletedAt) {
+          row.canPermanentDelete = false;
+          row.permanentDeleteBlockReason = "Active tier pricing rules cannot be permanently deleted. Archive the rule first.";
+        } else {
+          row.canPermanentDelete = true;
+          row.permanentDeleteBlockReason = null;
+        }
+      } else if (row.ruleType === "MOQ_PRICE") {
+        if (!row.deletedAt) {
+          row.canPermanentDelete = false;
+          row.permanentDeleteBlockReason = "Active MOQ pricing rules cannot be permanently deleted. Archive the rule first.";
+        } else {
+          row.canPermanentDelete = true;
+          row.permanentDeleteBlockReason = null;
+        }
+      }
+    }),
+  );
+
   return {
     data: paged,
     total: sortedRows.length,
@@ -568,6 +724,7 @@ async function collectPricingRows(query: PricingListQuery) {
       totalRules: combinedRows.length,
       activeRules: activeRows.length,
       inactiveRules: combinedRows.length - activeRows.length,
+      archivedRules: archivedProductPricesCount + archivedTierPricesCount + archivedMoqPricesCount,
       countryPricingRules: productPrices.length,
       tierPricingRules: tierPrices.length,
       moqPricingRules: moqPrices.length,
@@ -633,9 +790,31 @@ async function createProductPrice(data: {
 
   const duplicate = await prisma.productPrice.findFirst({
     where: { productId: product.id, variantId: variant?.id ?? null, countryId: country.id },
-    select: { id: true },
+    select: { id: true, deletedAt: true },
   });
-  if (duplicate) throw new AppError("A pricing rule already exists for this product/variant/country combination.", 409);
+  if (duplicate) {
+    if (duplicate.deletedAt) {
+      return prisma.productPrice.update({
+        where: { id: duplicate.id },
+        data: {
+          currencyId: currency.id,
+          mrp,
+          sellingPrice,
+          dealerPrice,
+          distributorPrice,
+          status: normalizeStatus(data.status ?? "ACTIVE"),
+          deletedAt: null,
+        },
+        include: {
+          product: { select: { id: true, title: true, sku: true, status: true } },
+          variant: { select: { id: true, title: true, sku: true, status: true } },
+          country: { select: { id: true, name: true, code: true, status: true } },
+          currency: true,
+        },
+      });
+    }
+    throw new AppError("A pricing rule already exists for this product/variant/country combination.", 409);
+  }
 
   return prisma.productPrice.create({
     data: {
@@ -676,6 +855,13 @@ async function updateProductPrice(
   const existing = await prisma.productPrice.findUnique({ where: { id } });
   if (!existing) throw new AppError("Pricing rule not found.", 404);
 
+  if (data.status && normalizeStatus(data.status) === "INACTIVE" && existing.status === "ACTIVE") {
+    const check = await checkSoleActiveBasePrice(id, "deactivate");
+    if (check.isSole) {
+      throw new AppError(check.reason || "Cannot deactivate this pricing rule because it is the only active price available for this product/variant. Add another active base price or fallback first.", 400);
+    }
+  }
+
   const productId = data.productId ?? existing.productId;
   const countryId = data.countryId ?? existing.countryId;
   const variantId = data.variantId === undefined ? existing.variantId : data.variantId;
@@ -693,6 +879,7 @@ async function updateProductPrice(
       productId,
       variantId: variantId ?? null,
       countryId,
+      deletedAt: null,
       NOT: { id },
     },
     select: { id: true },
@@ -737,9 +924,279 @@ async function updateProductPrice(
 }
 
 async function deleteProductPrice(id: string) {
-  const existing = await prisma.productPrice.findUnique({ where: { id } });
-  if (!existing) throw new AppError("Pricing rule not found.", 404);
-  await prisma.productPrice.delete({ where: { id } });
+  return softDeletePrice(id);
+}
+
+export async function softDeletePrice(id: string) {
+  const pp = await prisma.productPrice.findUnique({
+    where: { id },
+    include: { product: true, variant: true },
+  });
+  if (pp) {
+    if (pp.deletedAt) throw new AppError("Pricing rule is already archived.", 400);
+    const check = await checkSoleActiveBasePrice(id, "archive");
+    if (check.isSole) {
+      throw new AppError(check.reason || "Cannot archive this pricing rule because it is the only active price available for this product/variant. Add another active base price or fallback first.", 400);
+    }
+    return prisma.productPrice.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  const tp = await prisma.tierPricing.findUnique({ where: { id } });
+  if (tp) {
+    if (tp.deletedAt) throw new AppError("Tier pricing rule is already archived.", 400);
+    return prisma.tierPricing.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  const mp = await prisma.moqPricing.findUnique({ where: { id } });
+  if (mp) {
+    if (mp.deletedAt) throw new AppError("MOQ pricing rule is already archived.", 400);
+    return prisma.moqPricing.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  throw new AppError("Pricing rule not found.", 404);
+}
+
+export async function restorePrice(id: string) {
+  const pp = await prisma.productPrice.findUnique({ where: { id } });
+  if (pp) {
+    if (!pp.deletedAt) throw new AppError("Pricing rule is already active.", 400);
+
+    const conflict = await prisma.productPrice.findFirst({
+      where: {
+        productId: pp.productId,
+        variantId: pp.variantId,
+        countryId: pp.countryId,
+        deletedAt: null,
+        NOT: { id },
+      },
+    });
+    if (conflict) {
+      throw new AppError(
+        "Cannot restore this pricing rule because an active pricing rule already exists for this product/variant and country combination.",
+        409,
+      );
+    }
+
+    return prisma.productPrice.update({
+      where: { id },
+      data: { deletedAt: null },
+    });
+  }
+
+  const tp = await prisma.tierPricing.findUnique({ where: { id } });
+  if (tp) {
+    if (!tp.deletedAt) throw new AppError("Tier pricing rule is already active.", 400);
+
+    const conflict = await prisma.tierPricing.findFirst({
+      where: {
+        tierId: tp.tierId,
+        productId: tp.productId,
+        variantId: tp.variantId,
+        countryId: tp.countryId,
+        deletedAt: null,
+        NOT: { id },
+      },
+    });
+    if (conflict) {
+      throw new AppError(
+        "Cannot restore this tier pricing rule because an active rule already exists for this tier, product/variant, and country combination.",
+        409,
+      );
+    }
+
+    return prisma.tierPricing.update({
+      where: { id },
+      data: { deletedAt: null },
+    });
+  }
+
+  const mp = await prisma.moqPricing.findUnique({ where: { id } });
+  if (mp) {
+    if (!mp.deletedAt) throw new AppError("MOQ pricing rule is already active.", 400);
+
+    const conflict = await prisma.moqPricing.findFirst({
+      where: {
+        productId: mp.productId,
+        variantId: mp.variantId,
+        countryId: mp.countryId,
+        minQuantity: mp.minQuantity,
+        deletedAt: null,
+        NOT: { id },
+      },
+    });
+    if (conflict) {
+      throw new AppError(
+        "Cannot restore this MOQ pricing rule because an active rule already exists for this MOQ quantity, product/variant, and country combination.",
+        409,
+      );
+    }
+
+    return prisma.moqPricing.update({
+      where: { id },
+      data: { deletedAt: null },
+    });
+  }
+
+  throw new AppError("Pricing rule not found.", 404);
+}
+
+export async function permanentDeletePrice(id: string) {
+  const pp = await prisma.productPrice.findUnique({
+    where: { id },
+    include: { product: true, variant: true },
+  });
+  if (pp) {
+    if (!pp.deletedAt) {
+      throw new AppError("Cannot permanently delete an active pricing rule. Please archive it first.", 400);
+    }
+    const check = await checkSoleActiveBasePrice(id, "delete");
+    if (check.isSole) {
+      throw new AppError(check.reason || "Cannot permanently delete this pricing rule.", 400);
+    }
+    await prisma.productPrice.delete({ where: { id } });
+    return { success: true };
+  }
+
+  const tp = await prisma.tierPricing.findUnique({ where: { id } });
+  if (tp) {
+    if (!tp.deletedAt) {
+      throw new AppError("Cannot permanently delete an active tier pricing rule. Please archive it first.", 400);
+    }
+    await prisma.tierPricing.delete({ where: { id } });
+    return { success: true };
+  }
+
+  const mp = await prisma.moqPricing.findUnique({ where: { id } });
+  if (mp) {
+    if (!mp.deletedAt) {
+      throw new AppError("Cannot permanently delete an active MOQ pricing rule. Please archive it first.", 400);
+    }
+    await prisma.moqPricing.delete({ where: { id } });
+    return { success: true };
+  }
+
+  throw new AppError("Pricing rule not found.", 404);
+}
+
+export async function bulkPermanentDeletePricing(ids: string[]) {
+  const deletedIds: string[] = [];
+  const blocked: Array<{ id: string; name: string; reason: string }> = [];
+
+  for (const id of ids) {
+    try {
+      const pp = await prisma.productPrice.findUnique({
+        where: { id },
+        include: { product: true, variant: true },
+      });
+      if (pp) {
+        const ruleName = pp.variantId
+          ? `${pp.product.title} / ${pp.variant?.title ?? "Variant"} country price`
+          : `${pp.product.title} country price`;
+
+        if (!pp.deletedAt) {
+          blocked.push({
+            id,
+            name: ruleName,
+            reason: "Cannot permanently delete an active pricing rule. Please archive it first.",
+          });
+          continue;
+        }
+
+        const check = await checkSoleActiveBasePrice(id, "delete");
+        if (check.isSole) {
+          blocked.push({
+            id,
+            name: ruleName,
+            reason: check.reason || "Cannot permanently delete sole active pricing rule.",
+          });
+          continue;
+        }
+
+        await prisma.productPrice.delete({ where: { id } });
+        deletedIds.push(id);
+        continue;
+      }
+
+      const tp = await prisma.tierPricing.findUnique({
+        where: { id },
+        include: { tier: true, product: true },
+      });
+      if (tp) {
+        const ruleName = `${tp.tier.name} tier pricing (${tp.product.title})`;
+        if (!tp.deletedAt) {
+          blocked.push({
+            id,
+            name: ruleName,
+            reason: "Cannot permanently delete an active tier pricing rule. Please archive it first.",
+          });
+          continue;
+        }
+        await prisma.tierPricing.delete({ where: { id } });
+        deletedIds.push(id);
+        continue;
+      }
+
+      const mp = await prisma.moqPricing.findUnique({
+        where: { id },
+        include: { product: true },
+      });
+      if (mp) {
+        const ruleName = `${mp.minQuantity}+ MOQ pricing (${mp.product.title})`;
+        if (!mp.deletedAt) {
+          blocked.push({
+            id,
+            name: ruleName,
+            reason: "Cannot permanently delete an active MOQ pricing rule. Please archive it first.",
+          });
+          continue;
+        }
+        await prisma.moqPricing.delete({ where: { id } });
+        deletedIds.push(id);
+        continue;
+      }
+
+      blocked.push({ id, name: id, reason: "Pricing rule not found." });
+    } catch (err: any) {
+      blocked.push({ id, name: id, reason: err?.message || "Failed to permanently delete pricing rule." });
+    }
+  }
+
+  return {
+    deletedCount: deletedIds.length,
+    blockedCount: blocked.length,
+    deletedIds,
+    blocked,
+  };
+}
+
+export async function bulkRestorePricing(ids: string[]) {
+  const restoredIds: string[] = [];
+  const blocked: Array<{ id: string; name: string; reason: string }> = [];
+
+  for (const id of ids) {
+    try {
+      await restorePrice(id);
+      restoredIds.push(id);
+    } catch (err: any) {
+      blocked.push({ id, name: id, reason: err?.message || "Failed to restore pricing rule." });
+    }
+  }
+
+  return {
+    restoredCount: restoredIds.length,
+    blockedCount: blocked.length,
+    restoredIds,
+    blocked,
+  };
 }
 
 async function duplicateProductPrice(id: string) {
@@ -760,24 +1217,78 @@ async function bulkPricingAction(input: PricingBulkInput) {
   if (!Array.isArray(input.ids) || input.ids.length === 0) throw new AppError("Select at least one pricing rule.", 400);
   const uniqueIds = Array.from(new Set(input.ids));
 
+  if (input.action === "DELETE") {
+    const deletedIds: string[] = [];
+    const blocked: Array<{ id: string; name: string; reason: string }> = [];
+
+    for (const id of uniqueIds) {
+      try {
+        await softDeletePrice(id);
+        deletedIds.push(id);
+      } catch (err: any) {
+        blocked.push({
+          id,
+          name: id,
+          reason: err?.message || "Cannot archive pricing rule.",
+        });
+      }
+    }
+
+    return {
+      affected: deletedIds.length,
+      deletedCount: deletedIds.length,
+      blockedCount: blocked.length,
+      deletedIds,
+      blocked,
+    };
+  }
+
   if (input.ruleType === "BASE_PRICE" || input.ruleType === "VARIANT_PRICE" || input.ruleType === "CUSTOMER_ROLE_PRICE") {
     const rules = await prisma.productPrice.findMany({ where: { id: { in: uniqueIds } } });
     if (rules.length !== uniqueIds.length) throw new AppError("One or more pricing rules were not found.", 404);
 
-    if (input.action === "ENABLE" || input.action === "DISABLE") {
+    if (input.action === "ENABLE") {
       return prisma.$transaction(
         uniqueIds.map((ruleId) =>
           prisma.productPrice.update({
             where: { id: ruleId },
-            data: { status: input.action === "ENABLE" ? "ACTIVE" : "INACTIVE" },
+            data: { status: "ACTIVE" },
           }),
         ),
       );
     }
 
-    if (input.action === "DELETE") {
-      await prisma.productPrice.deleteMany({ where: { id: { in: uniqueIds } } });
-      return { affected: uniqueIds.length };
+    if (input.action === "DISABLE") {
+      const updatedIds: string[] = [];
+      const blocked: Array<{ id: string; name: string; reason: string }> = [];
+
+      for (const rule of rules) {
+        const ruleName = rule.variantId
+          ? "Variant country price"
+          : "Product country price";
+        const check = await checkSoleActiveBasePrice(rule.id, "deactivate");
+        if (check.isSole) {
+          blocked.push({
+            id: rule.id,
+            name: ruleName,
+            reason: check.reason || "Cannot deactivate this pricing rule because it is the only active price available for this product/variant. Add another active base price or fallback first.",
+          });
+        } else {
+          await prisma.productPrice.update({
+            where: { id: rule.id },
+            data: { status: "INACTIVE" },
+          });
+          updatedIds.push(rule.id);
+        }
+      }
+
+      return {
+        affected: updatedIds.length,
+        affectedCount: updatedIds.length,
+        blockedCount: blocked.length,
+        updatedIds,
+        blocked,
+      };
     }
 
     if (input.action === "DUPLICATE") {
@@ -806,11 +1317,6 @@ async function bulkPricingAction(input: PricingBulkInput) {
   if (input.ruleType === "TIER_PRICE") {
     const rules = await prisma.tierPricing.findMany({ where: { id: { in: uniqueIds } } });
     if (rules.length !== uniqueIds.length) throw new AppError("One or more pricing rules were not found.", 404);
-
-    if (input.action === "DELETE") {
-      await prisma.tierPricing.deleteMany({ where: { id: { in: uniqueIds } } });
-      return { affected: uniqueIds.length };
-    }
 
     if (input.action === "DUPLICATE") {
       return rules;
@@ -847,11 +1353,6 @@ async function bulkPricingAction(input: PricingBulkInput) {
   if (input.ruleType === "MOQ_PRICE") {
     const rules = await prisma.moqPricing.findMany({ where: { id: { in: uniqueIds } } });
     if (rules.length !== uniqueIds.length) throw new AppError("One or more pricing rules were not found.", 404);
-
-    if (input.action === "DELETE") {
-      await prisma.moqPricing.deleteMany({ where: { id: { in: uniqueIds } } });
-      return { affected: uniqueIds.length };
-    }
 
     if (input.action === "DUPLICATE") {
       return rules;

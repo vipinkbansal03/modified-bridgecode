@@ -8,6 +8,7 @@ router.use(protect);
 router.get("/", requirePermission("orders.view", "orders.manage"), C.list);
 router.post("/", requirePermission("orders.manage"), C.create);
 router.get("/analytics", requirePermission("orders.view", "orders.manage"), C.analytics);
+router.post("/bulk/permanent", requirePermission("orders.manage"), C.bulkPermanentDelete);
 router.get("/:id/invoice", requirePermission("orders.manage"), C.invoice);
 router.get("/:id", requirePermission("orders.view", "orders.manage"), C.getOne);
 router.put("/:id/status", requirePermission("orders.manage"), C.updateStatus);

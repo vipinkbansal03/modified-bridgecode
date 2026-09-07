@@ -20,6 +20,7 @@ import {
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
+  AdminDeleteModal,
   AdminInput,
   AdminListToolbar,
   AdminSelect,
@@ -33,7 +34,11 @@ import {
 } from "@/components/admin/AdminComponents";
 import { AdminBulkActionsBar } from "@/components/admin/AdminBulkActionsBar";
 import { AdminRowActions } from "@/components/admin/AdminRowActions";
-import { useAdminQuotes, useDeleteAdminQuote } from "@/hooks/admin/useAdminHooks";
+import {
+  useAdminQuotes,
+  useDeleteAdminQuote,
+  usePermanentDeleteAdminQuote,
+} from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
 import { cn } from "@/utils/cn";
 import { formatDate } from "@/utils/formatDate";
@@ -49,6 +54,8 @@ type QuoteRow = {
   total: number | string;
   status: string;
   source?: string;
+  convertedOrderId?: string | null;
+  deletedAt?: string | null;
   createdAt: string;
   updatedAt?: string;
   internalNotes?: { id: string; note: string }[];
@@ -67,8 +74,6 @@ function formatMoney(value: number | string, currency?: QuoteRow["currency"]) {
   return `${prefix}${amount.toFixed(2)}`;
 }
 
-// Standard formatDate imported from @/utils/formatDate
-
 export default function QuotesPage() {
   const { hasPermission, isLoading: authLoading } = useAdminAuth();
   const router = useRouter();
@@ -85,7 +90,8 @@ export default function QuotesPage() {
 
   const { showToast } = useToast();
   const deleteQuote = useDeleteAdminQuote();
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const permanentDeleteQuote = usePermanentDeleteAdminQuote();
+  const [deletingQuote, setDeletingQuote] = useState<QuoteRow | null>(null);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
 
@@ -133,20 +139,7 @@ export default function QuotesPage() {
     setPage(1);
   }, [debouncedSearch, status, sortBy, sortDir, limit]);
 
-  const handleDelete = async () => {
-    if (!deletingId) return;
-    try {
-      await deleteQuote.mutateAsync(deletingId);
-      showToast("Quote deleted successfully.");
-      setSelectedIds((prev) => prev.filter((id) => id !== deletingId));
-    } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to delete quote."), "error");
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const handleBulkDelete = async () => {
+  const handleBulkArchive = async () => {
     if (selectedIds.length === 0) return;
     setIsBulkSubmitting(true);
     let successCount = 0;
@@ -167,15 +160,15 @@ export default function QuotesPage() {
     setBulkAction("");
 
     if (successCount > 0) {
-      showToast(`Successfully deleted ${successCount} quote${successCount > 1 ? "s" : ""}.`);
+      showToast(`Successfully archived ${successCount} quote${successCount > 1 ? "s" : ""}.`);
     }
     if (failCount > 0) {
-      showToast(`Failed to delete ${failCount} quote${failCount > 1 ? "s" : ""}.`, "error");
+      showToast(`Failed to archive ${failCount} quote${failCount > 1 ? "s" : ""}.`, "error");
     }
   };
 
   const handleBulkActionApply = () => {
-    if (bulkAction === "DELETE") {
+    if (bulkAction === "ARCHIVE") {
       setIsBulkDeleting(true);
     }
   };
@@ -303,7 +296,7 @@ export default function QuotesPage() {
             canDelete
               ? {
                   title: "Delete Quote",
-                  onClick: () => setDeletingId(row.id),
+                  onClick: () => setDeletingQuote(row),
                 }
               : undefined
           }
@@ -467,7 +460,7 @@ export default function QuotesPage() {
               onClear={() => setSelectedIds([])}
               actionType={bulkAction}
               onActionTypeChange={setBulkAction}
-              actions={[{ value: "DELETE", label: "Delete Selected" }]}
+              actions={[{ value: "ARCHIVE", label: "Archive Selected" }]}
               onApply={handleBulkActionApply}
               applyDisabled={!bulkAction || selectedIds.length === 0}
             />
@@ -485,26 +478,71 @@ export default function QuotesPage() {
         </div>
       </div>
 
-      {/* SINGLE DELETE CONFIRMATION MODAL */}
-      <ConfirmModal
-        open={Boolean(deletingId)}
-        onCancel={() => setDeletingId(null)}
-        onConfirm={handleDelete}
-        title="Delete Quote Request"
-        message="Are you sure you want to permanently delete this quote request? This action cannot be undone."
-        isLoading={deleteQuote.isPending}
-        danger
+      {/* SINGLE QUOTE DELETE / ARCHIVE MODAL */}
+      <AdminDeleteModal
+        open={Boolean(deletingQuote)}
+        onClose={() => setDeletingQuote(null)}
+        itemName={deletingQuote ? `Quote #${deletingQuote.quoteNumber}` : undefined}
+        itemType="Quote Request"
+        warningMessage="Choose the deletion method for this quote request. Soft Delete is recommended to maintain commercial history, customer records, and communication logs."
+        softDeleteDescription={
+          deletingQuote
+            ? `Hides Quote #${deletingQuote.quoteNumber} from the active quotes list while safely retaining customer inquiry history in the Archive.`
+            : undefined
+        }
+        permanentDeleteDescription={
+          deletingQuote
+            ? `Physically removes Quote #${deletingQuote.quoteNumber} from the database. Blocked for converted, sent, or accepted commercial quotes.`
+            : undefined
+        }
+        permanentDeleteDisabled={
+          Boolean(
+            deletingQuote &&
+              (["SENT", "ACCEPTED", "CONVERTED"].includes(deletingQuote.status) ||
+                Boolean(deletingQuote.convertedOrderId))
+          )
+        }
+        permanentDeleteDisabledReason={
+          deletingQuote?.status === "CONVERTED" || deletingQuote?.convertedOrderId
+            ? "Permanent deletion is not allowed for converted quotes because the quote is linked to a commercial order and must be retained."
+            : ["SENT", "ACCEPTED"].includes(deletingQuote?.status || "")
+            ? "Permanent deletion is not allowed for quotes in SENT or ACCEPTED status because they represent retained commercial negotiation history."
+            : undefined
+        }
+        onSoftDelete={async () => {
+          if (!deletingQuote) return;
+          await deleteQuote.mutateAsync(deletingQuote.id);
+          showToast(`Quote #${deletingQuote.quoteNumber} archived successfully.`, "success");
+          setDeletingQuote(null);
+          refetch();
+        }}
+        onPermanentDelete={async () => {
+          if (!deletingQuote) return;
+          if (
+            ["SENT", "ACCEPTED", "CONVERTED"].includes(deletingQuote.status) ||
+            Boolean(deletingQuote.convertedOrderId)
+          ) {
+            throw new Error("Cannot permanently delete a quote with retained commercial history.");
+          }
+          await permanentDeleteQuote.mutateAsync(deletingQuote.id);
+          showToast(`Quote #${deletingQuote.quoteNumber} permanently deleted.`, "success");
+          setDeletingQuote(null);
+          refetch();
+        }}
+        isPermanentDeleting={permanentDeleteQuote.isPending}
       />
 
-      {/* BULK DELETE CONFIRMATION MODAL */}
+      {/* BULK ARCHIVE CONFIRMATION MODAL */}
       <ConfirmModal
         open={isBulkDeleting}
         onCancel={() => setIsBulkDeleting(false)}
-        onConfirm={handleBulkDelete}
-        title="Delete Selected Quotes"
-        message={`Are you sure you want to permanently delete ${selectedIds.length} selected quote request${selectedIds.length > 1 ? "s" : ""}? This action cannot be undone.`}
+        onConfirm={handleBulkArchive}
+        title="Archive Selected Quotes"
+        message={`Are you sure you want to archive ${selectedIds.length} selected quote request${selectedIds.length > 1 ? "s" : ""}? They will be moved to the Archive and can be restored at any time.`}
+        confirmText={`Archive (${selectedIds.length})`}
+        loadingText="Archiving..."
         isLoading={isBulkSubmitting}
-        danger
+        danger={false}
       />
     </AdminLayout>
   );

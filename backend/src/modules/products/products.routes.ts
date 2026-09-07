@@ -10,9 +10,11 @@ router.get("/", requirePermission("products.view", "products.create", "products.
 router.post("/", requirePermission("products.create"), C.create);
 router.put("/reorder", requirePermission("products.update", "products.manage"), C.reorder);
 router.post("/bulk", requirePermission("products.update", "products.delete", "products.manage"), C.bulkUpdate);
+router.post("/bulk/permanent", requirePermission("products.delete", "products.manage"), C.bulkPermanentDelete);
 router.get("/export", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.exportSpreadsheet);
 router.post("/import/preview", requirePermission("products.create"), upload.single("file"), C.previewImport);
 router.get("/variants", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listVariants);
+router.post("/variants/bulk/permanent", requirePermission("products.delete", "products.manage"), C.bulkPermanentDeleteVariants);
 router.get("/:id/countries", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listCountries);
 router.put("/:id/countries", requirePermission("products.update"), C.updateCountries);
 router.get("/:id/tier-pricing", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listTierPricing);
@@ -52,6 +54,7 @@ router.post("/:id/variants", requirePermission("products.update"), C.createVaria
 router.get("/:id/variants/:variantId/countries", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listVariantCountries);
 router.put("/:id/variants/:variantId/countries", requirePermission("products.update"), C.updateVariantCountries);
 router.put("/:id/variants/:variantId", requirePermission("products.update"), C.updateVariant);
+router.post("/:id/variants/:variantId/restore", requirePermission("products.update", "products.manage"), C.restoreVariant);
 router.delete("/:id/variants/:variantId/permanent", requirePermission("products.delete", "products.manage"), C.permanentDeleteVariant);
 router.delete("/:id/variants/:variantId", requirePermission("products.update", "products.delete"), C.deleteVariant);
 router.post("/:id/variants/:variantId/clone", requirePermission("products.update"), C.cloneVariant);

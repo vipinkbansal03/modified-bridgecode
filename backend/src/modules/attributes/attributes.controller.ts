@@ -18,8 +18,8 @@ function parseBody<T>(schema: { safeParse: (data: unknown) => { success: boolean
   return result.data as T;
 }
 
-export const list = asyncHandler(async (_r: AuthRequest, res: Response) =>
-  ApiResponse.success(res, "OK", await S.listAttributes()),
+export const list = asyncHandler(async (req: AuthRequest, res: Response) =>
+  ApiResponse.success(res, "OK", await S.listAttributes(req.query as { deleted?: string })),
 );
 
 export const getOne = asyncHandler(async (req: AuthRequest, res: Response) =>
@@ -39,6 +39,22 @@ export const update = asyncHandler(async (req: AuthRequest, res: Response) => {
 export const remove = asyncHandler(async (req: AuthRequest, res: Response) => {
   await S.deleteAttribute(String(req.params.id));
   return ApiResponse.success(res, "Deleted.");
+});
+
+export const restore = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await S.restoreAttribute(String(req.params.id));
+  return ApiResponse.success(res, "Attribute restored.");
+});
+
+export const permanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await S.permanentDeleteAttribute(String(req.params.id));
+  return ApiResponse.success(res, "Attribute permanently deleted.");
+});
+
+export const bulkPermanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const result = await S.bulkPermanentDeleteAttributes(ids);
+  return ApiResponse.success(res, "Bulk permanent delete processed.", result);
 });
 
 export const reorder = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -67,6 +83,11 @@ export const updateValue = asyncHandler(async (req: AuthRequest, res: Response) 
 export const removeValue = asyncHandler(async (req: AuthRequest, res: Response) => {
   await S.deleteAttributeValue(String(req.params.valueId));
   return ApiResponse.success(res, "Deleted.");
+});
+
+export const permanentDeleteValue = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await S.permanentDeleteAttributeValue(String(req.params.id), String(req.params.valueId));
+  return ApiResponse.success(res, "Attribute value permanently deleted.");
 });
 
 export const reorderValues = asyncHandler(async (req: AuthRequest, res: Response) => {

@@ -19,6 +19,7 @@ import {
   type Column,
   AdminBulkActionsBar,
   ConfirmModal,
+  AdminDeleteModal,
   AdminRowActions,
   AdminActionButton,
 } from "@/components/admin/AdminComponents";
@@ -89,8 +90,7 @@ export default function OrdersPage() {
   const deleteOrderMutation = useDeleteOrder();
   const permanentDeleteOrderMutation = usePermanentDeleteOrder();
 
-  const [softDeleteTarget, setSoftDeleteTarget] = useState<OrderRow | null>(null);
-  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<OrderRow | null>(null);
+  const [deletingOrder, setDeletingOrder] = useState<OrderRow | null>(null);
   const [deletedView, setDeletedView] = useState<"active" | "deleted">("active");
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -324,22 +324,12 @@ export default function OrdersPage() {
                     Soft-deleted
                   </span>
                 )}
-                {canDelete && row.deletedAt && row.isTest && (
-                  <button
-                    type="button"
-                    onClick={() => setPermanentDeleteTarget(row)}
-                    className="flex h-7 px-2 items-center justify-center rounded border border-red-200 bg-red-50 text-[11px] font-medium text-red-600 hover:bg-red-100 whitespace-nowrap cursor-pointer transition-colors"
-                    title="Permanently delete test order"
-                  >
-                    Delete Permanently
-                  </button>
-                )}
               </>
             }
             delete={
               canDelete && !row.deletedAt
                 ? {
-                    onClick: () => setSoftDeleteTarget(row),
+                    onClick: () => setDeletingOrder(row),
                     title: "Delete order",
                   }
                 : undefined
@@ -619,46 +609,46 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      <ConfirmModal
-        open={!!softDeleteTarget}
-        title="Soft-Delete Order"
-        message={`Are you sure you want to soft-delete order #${softDeleteTarget?.orderNumber}? It will be hidden from the active orders list, but historical customer records and invoices will remain intact.`}
-        confirmText="Soft-Delete Order"
-        danger={true}
-        isLoading={deleteOrderMutation.isPending}
-        onCancel={() => setSoftDeleteTarget(null)}
-        onConfirm={async () => {
-          if (!softDeleteTarget) return;
-          try {
-            await deleteOrderMutation.mutateAsync(softDeleteTarget.id);
-            showToast("Order soft-deleted successfully.", "success");
-            setSoftDeleteTarget(null);
-            refetch();
-          } catch (err) {
-            showToast(getAdminErrorMessage(err, "Failed to soft-delete order."), "error");
-          }
+      <AdminDeleteModal
+        open={Boolean(deletingOrder)}
+        onClose={() => setDeletingOrder(null)}
+        itemName={deletingOrder ? `Order #${deletingOrder.orderNumber}` : undefined}
+        itemType="Order"
+        warningMessage="Choose the deletion method for this order. Soft Delete is recommended for maintaining customer order history, invoices, and financial records."
+        softDeleteDescription={
+          deletingOrder
+            ? `Hides Order #${deletingOrder.orderNumber} from the active orders list while safely retaining customer history, invoices, and accounting records in the Archive.`
+            : undefined
+        }
+        permanentDeleteDescription={
+          deletingOrder
+            ? `Physically removes Order #${deletingOrder.orderNumber} from the database. Allowed only for Draft or Test orders. Blocked by system guards if the order is a real customer order or contains financial transactions.`
+            : undefined
+        }
+        permanentDeleteDisabled={!deletingOrder?.isTest}
+        permanentDeleteDisabledReason="Permanent deletion is restricted to Draft and Test orders only. Real customer orders cannot be permanently deleted to retain financial and audit records."
+        onSoftDelete={async () => {
+          if (!deletingOrder) return;
+          await deleteOrderMutation.mutateAsync(deletingOrder.id);
+          showToast(`Order #${deletingOrder.orderNumber} soft-deleted successfully.`, "success");
+          setDeletingOrder(null);
+          refetch();
         }}
-      />
-
-      <ConfirmModal
-        open={!!permanentDeleteTarget}
-        title="Permanently Delete Test Order"
-        message={`Are you sure you want to PERMANENTLY delete Test Order #${permanentDeleteTarget?.orderNumber}? This will completely remove the order and release any reserved inventory. This action cannot be undone.`}
-        confirmText="Permanently Delete"
-        danger={true}
-        isLoading={permanentDeleteOrderMutation.isPending}
-        onCancel={() => setPermanentDeleteTarget(null)}
-        onConfirm={async () => {
-          if (!permanentDeleteTarget) return;
-          try {
-            await permanentDeleteOrderMutation.mutateAsync(permanentDeleteTarget.id);
-            showToast("Test order permanently deleted successfully.", "success");
-            setPermanentDeleteTarget(null);
-            refetch();
-          } catch (err) {
-            showToast(getAdminErrorMessage(err, "Failed to permanently delete order."), "error");
+        onPermanentDelete={async () => {
+          if (!deletingOrder) return;
+          if (!deletingOrder.isTest) {
+            throw new Error("Cannot permanently delete a real order. Real order history and financial records must be retained. Only Draft or Test orders can be permanently deleted.");
           }
+          if (deletingOrder.paymentStatus === "PAID" || deletingOrder.paymentStatus === "REFUNDED") {
+            throw new Error(`Cannot permanently delete order with payment status "${deletingOrder.paymentStatus}". Financial records must be retained.`);
+          }
+          await permanentDeleteOrderMutation.mutateAsync(deletingOrder.id);
+          showToast(`Test order #${deletingOrder.orderNumber} permanently deleted successfully.`, "success");
+          setDeletingOrder(null);
+          refetch();
         }}
+        isSoftDeleting={deleteOrderMutation.isPending}
+        isPermanentDeleting={permanentDeleteOrderMutation.isPending}
       />
     </AdminLayout>
   );

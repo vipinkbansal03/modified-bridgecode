@@ -43,6 +43,12 @@ export interface ApiAttributeValue {
   tierPrice?: number | string | null;
   dealerPrice?: number | string | null;
   status?: string;
+  dependencyCounts?: {
+    variants: number;
+    productSelections: number;
+  };
+  canPermanentDelete?: boolean;
+  permanentDeleteBlockReason?: string | null;
 }
 
 export interface ApiAttribute {
@@ -57,6 +63,17 @@ export interface ApiAttribute {
   values?: ApiAttributeValue[];
   allowedValueIds?: string[];
   _count?: { values: number };
+  deletedAt?: string | null;
+  dependencyCounts?: {
+    products: number;
+    variants: number;
+    productSelections: number;
+    filterSettings: number;
+  };
+  canPermanentDelete?: boolean;
+  permanentDeleteBlockReason?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ApiVariantInventory {

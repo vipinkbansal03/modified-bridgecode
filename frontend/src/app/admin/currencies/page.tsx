@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Download, Edit2, Filter, Plus, RefreshCw, Search, SlidersHorizontal, SquareCheckBig, Trash2, Upload, X } from "lucide-react";
+import { Coins, Copy, Download, Edit2, Filter, Globe, Plus, RefreshCw, Search, SlidersHorizontal, SquareCheckBig, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, AdminStatsGrid, AdminListToolbar, ConfirmModal, Pagination, StatCard, StatusBadge, useToast, LoadingButton, DataTable, type Column } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminStatsGrid, AdminListToolbar, ConfirmModal, Pagination, StatCard, StatusBadge, Tooltip, useToast, LoadingButton, DataTable, type Column } from "@/components/admin/AdminComponents";
+import { AdminRowActions, AdminActionButton } from "@/components/admin/AdminRowActions";
 import { AdminBulkActionsBar } from "@/components/admin/AdminBulkActionsBar";
 import { Modal } from "@/components/ui/Modal";
 import {
@@ -399,39 +401,40 @@ export default function CurrenciesPage() {
         key: "actions",
         label: "Actions",
         width: "110px",
+        align: "left" as const,
         render: (row) => (
-          <div className="flex items-center justify-start gap-1.5 whitespace-nowrap">
-            {canCreate && (
-              <button
-                type="button"
-                onClick={() => openDuplicate(row)}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] transition-colors cursor-pointer"
-                title="Duplicate currency"
-              >
-                <Copy size={13} />
-              </button>
-            )}
-            {canUpdate && (
-              <button
-                type="button"
-                onClick={() => openEdit(row)}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] transition-colors cursor-pointer"
-                title="Edit currency"
-              >
-                <Edit2 size={13} />
-              </button>
-            )}
-            {canDelete && (
-              <button
-                type="button"
-                onClick={() => setDeleting(row)}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#F2D7D7] bg-white text-[#E31E24] hover:bg-[#FFF5F5] transition-colors cursor-pointer"
-                title="Delete currency"
-              >
-                <Trash2 size={13} />
-              </button>
-            )}
-          </div>
+          <AdminRowActions
+            edit={
+              canUpdate
+                ? {
+                    onClick: () => openEdit(row),
+                    title: "Edit currency",
+                  }
+                : undefined
+            }
+            extra={
+              canCreate ? (
+                <AdminActionButton
+                  action={{
+                    onClick: () => openDuplicate(row),
+                    title: "Duplicate currency",
+                  }}
+                  defaultIcon={<Copy size={13} />}
+                  defaultTitle="Duplicate currency"
+                  variant="default"
+                />
+              ) : null
+            }
+            delete={
+              canDelete
+                ? {
+                    onClick: () => setDeleting(row),
+                    title: row.isBase ? "Base currency cannot be deleted" : "Delete currency",
+                    disabled: row.isBase,
+                  }
+                : undefined
+            }
+          />
         ),
       },
     ],
@@ -535,8 +538,29 @@ export default function CurrenciesPage() {
   }
 
   return (
-    <AdminLayout title="Currencies" breadcrumb={[{ label: "Currencies" }]}>
+    <AdminLayout title="Currencies" breadcrumb={[{ label: "Regions", href: "/admin/countries" }, { label: "Currencies" }]}>
       <div className="space-y-5">
+        {/* Navigation Sub-Tabs */}
+        <div className="flex items-center gap-2 border-b border-[#E6E6E6] bg-white px-4 pt-2 rounded-t-lg shadow-2xs overflow-x-auto max-w-full scrollbar-thin">
+          <Link
+            href="/admin/countries"
+            className="flex items-center gap-2 border-b-2 border-transparent text-[#666] hover:border-[#CCC] hover:text-[#1A1A1A] px-3 pb-3 pt-1 text-[13.5px] font-medium shrink-0 whitespace-nowrap transition-colors cursor-pointer"
+          >
+            <Globe size={15} />
+            <span>Countries</span>
+          </Link>
+          <Link
+            href="/admin/currencies"
+            className="flex items-center gap-2 border-b-2 border-[#E31E24] text-[#E31E24] px-3 pb-3 pt-1 text-[13.5px] font-semibold shrink-0 whitespace-nowrap cursor-pointer"
+          >
+            <Coins size={15} />
+            <span>Currencies</span>
+            <span className="ml-1 rounded-full bg-[#E31E24]/10 text-[#E31E24] px-2 py-0.5 text-[11px] font-semibold">
+              {dashboard?.totalCurrencies ?? pagination.total ?? 0}
+            </span>
+          </Link>
+        </div>
+
         <AdminStatsGrid
           stats={[
             { title: "Total Currencies", value: dashboard?.totalCurrencies ?? 0, subtitle: "All records", icon: <SquareCheckBig size={18} />, isLoading: dashboardLoading },
@@ -616,16 +640,18 @@ export default function CurrenciesPage() {
                 <RefreshCw size={14} className={syncCurrencyRates.isPending ? "animate-spin" : ""} />
                 Sync Rates Now
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setDismissedSyncAt(dashboard?.lastBaseChangedAt || null);
-                }}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-amber-300 text-amber-700 hover:bg-amber-100"
-                title="Dismiss reminder"
-              >
-                <X size={16} />
-              </button>
+              <Tooltip content="Dismiss reminder" side="top">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDismissedSyncAt(dashboard?.lastBaseChangedAt || null);
+                  }}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-amber-300 text-amber-700 hover:bg-amber-100 cursor-pointer"
+                  aria-label="Dismiss reminder"
+                >
+                  <X size={16} />
+                </button>
+              </Tooltip>
             </div>
           </div>
         )}
@@ -795,7 +821,7 @@ export default function CurrenciesPage() {
         />
 
         {/* FULL-WIDTH DATA TABLE WITH UNIFIED SUBHEADER & PAGINATION */}
-        <div className="rounded-xl border border-[#E6E6E6] bg-white overflow-hidden shadow-xs">
+        <div className="rounded-xl border border-[#E6E6E6] bg-white overflow-hidden shadow-2xs">
           <DataTable<CurrencyRow>
             title="Currencies List"
             columns={filteredColumns}

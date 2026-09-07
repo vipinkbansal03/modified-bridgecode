@@ -1,4 +1,5 @@
 import { prisma } from "../../config/database";
+import { AppError } from "../../utils/apiResponse";
 
 export async function listReviews(params: {
   page?: number;
@@ -12,12 +13,19 @@ export async function listReviews(params: {
   dateTo?: string;
   sortBy?: string;
   sortDir?: string;
+  deleted?: string;
 }) {
   const page = Math.max(1, params.page || 1);
   const limit = Math.min(100, Math.max(1, params.limit || 20));
   const skip = (page - 1) * limit;
 
   const where: any = {};
+
+  if (params.deleted === "true") {
+    where.deletedAt = { not: null };
+  } else {
+    where.deletedAt = null;
+  }
 
   if (params.status && params.status !== "ALL") {
     where.status = params.status;
@@ -96,11 +104,12 @@ export async function listReviews(params: {
         },
       }),
       prisma.productReview.count({ where }),
-      prisma.productReview.count(),
-      prisma.productReview.count({ where: { status: "APPROVED" } }),
-      prisma.productReview.count({ where: { status: "PENDING" } }),
-      prisma.productReview.count({ where: { status: "REJECTED" } }),
+      prisma.productReview.count({ where: { deletedAt: null } }),
+      prisma.productReview.count({ where: { status: "APPROVED", deletedAt: null } }),
+      prisma.productReview.count({ where: { status: "PENDING", deletedAt: null } }),
+      prisma.productReview.count({ where: { status: "REJECTED", deletedAt: null } }),
       prisma.productReview.aggregate({
+        where: { deletedAt: null },
         _avg: { ratingOverall: true },
       }),
     ]);
@@ -127,6 +136,7 @@ export async function listReviews(params: {
       ratingOverall: r.ratingOverall,
       feedbackText: r.feedbackText,
       status: r.status,
+      deletedAt: r.deletedAt,
       createdAt: r.createdAt,
     })),
     pagination: {
@@ -147,9 +157,99 @@ export async function updateReviewStatus(id: string, status: string) {
   return review;
 }
 
-export async function deleteReview(id: string) {
-  await prisma.productReview.delete({
+export async function softDeleteReview(id: string) {
+  const existing = await prisma.productReview.findUnique({ where: { id } });
+  if (!existing) throw new AppError("Review not found", 404);
+  if (existing.deletedAt) throw new AppError("Review is already archived.", 400);
+
+  return prisma.productReview.update({
     where: { id },
+    data: { deletedAt: new Date() },
   });
+}
+
+export const deleteReview = softDeleteReview;
+
+export async function restoreReview(id: string) {
+  const existing = await prisma.productReview.findUnique({ where: { id } });
+  if (!existing) throw new AppError("Review not found", 404);
+  if (!existing.deletedAt) throw new AppError("Review is already active.", 400);
+
+  return prisma.productReview.update({
+    where: { id },
+    data: { deletedAt: null },
+  });
+}
+
+export async function permanentDeleteReview(id: string) {
+  const review = await prisma.productReview.findUnique({
+    where: { id },
+    include: { product: { select: { title: true } } },
+  });
+
+  if (!review) throw new AppError("Review not found", 404);
+
+  if (review.status === "APPROVED") {
+    throw new AppError(
+      "Cannot permanently delete an approved review. Approved customer reviews must be retained for integrity.",
+      400
+    );
+  }
+
+  await prisma.productReview.delete({ where: { id } });
   return { success: true };
+}
+
+export async function bulkPermanentDeleteReviews(ids: string[]) {
+  const deletedIds: string[] = [];
+  const blocked: Array<{ id: string; name: string; reason: string }> = [];
+
+  for (const id of ids) {
+    try {
+      const review = await prisma.productReview.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          customerName: true,
+          status: true,
+          product: { select: { title: true } },
+        },
+      });
+      if (!review) {
+        blocked.push({ id, name: id, reason: "Review not found." });
+        continue;
+      }
+      if (review.status === "APPROVED") {
+        blocked.push({
+          id,
+          name: review.customerName || review.product?.title || id,
+          reason: "Cannot permanently delete an approved review. Approved customer reviews must be retained.",
+        });
+        continue;
+      }
+      await prisma.productReview.delete({ where: { id } });
+      deletedIds.push(id);
+    } catch (error: any) {
+      blocked.push({
+        id,
+        name: id,
+        reason: error?.message || "Failed to permanently delete review.",
+      });
+    }
+  }
+
+  return {
+    deletedCount: deletedIds.length,
+    blockedCount: blocked.length,
+    deletedIds,
+    blocked,
+  };
+}
+
+export async function bulkRestoreReviews(ids: string[]) {
+  const result = await prisma.productReview.updateMany({
+    where: { id: { in: ids }, deletedAt: { not: null } },
+    data: { deletedAt: null },
+  });
+  return { restoredCount: result.count };
 }

@@ -293,6 +293,47 @@ export const useAdminVariants = (params?: {
     placeholderData: keepPreviousData,
   });
 
+export const useAdminArchivedVariants = (params?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  sortBy?: string;
+  sortDir?: string;
+}) =>
+  useQuery({
+    queryKey: ["admin-variants", "archived", params],
+    queryFn: () =>
+      adminApi
+        .get("/products/variants", {
+          params: {
+            ...params,
+            status: "ARCHIVED",
+          },
+        })
+        .then((r) => r.data),
+    placeholderData: keepPreviousData,
+  });
+
+export const useRestoreVariant = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      productId: nextProductId,
+      variantId: nextVariantId,
+    }: {
+      productId: string;
+      variantId: string;
+    }) =>
+      adminApi
+        .post(`/products/${nextProductId}/variants/${nextVariantId}/restore`)
+        .then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-variants"] });
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+    },
+  });
+};
+
 export const usePermanentDeleteVariant = (productId?: string, variantId?: string) => {
   const qc = useQueryClient();
   return useMutation({
@@ -306,7 +347,120 @@ export const usePermanentDeleteVariant = (productId?: string, variantId?: string
       adminApi
         .delete(`/products/${nextProductId}/variants/${nextVariantId}/permanent`)
         .then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-variants"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-variants"] });
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+    },
+  });
+};
+
+export interface BulkPermanentDeleteResult {
+  deletedCount: number;
+  blockedCount: number;
+  deletedIds: string[];
+  blocked: Array<{ id: string; name?: string; reason: string }>;
+  summary?: {
+    total: number;
+    succeeded: number;
+    failed: number;
+  };
+}
+
+export const useBulkPermanentDeleteAttributes = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      adminApi
+        .post("/attributes/bulk/permanent", { ids })
+        .then((r) => (r.data?.data ?? r.data) as BulkPermanentDeleteResult),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-attributes"] });
+    },
+  });
+};
+
+export const useBulkPermanentDeleteCategories = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      adminApi
+        .post("/categories/bulk/permanent", { ids })
+        .then((r) => (r.data?.data ?? r.data) as BulkPermanentDeleteResult),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-categories"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-categories"] });
+    },
+  });
+};
+
+export const useBulkPermanentDeleteOrders = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      adminApi
+        .post("/orders/bulk/permanent", { ids })
+        .then((r) => (r.data?.data ?? r.data) as BulkPermanentDeleteResult),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-orders"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-orders"] });
+    },
+  });
+};
+
+export const useBulkPermanentDeleteProducts = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      adminApi
+        .post("/products/bulk/permanent", { ids })
+        .then((r) => (r.data?.data ?? r.data) as BulkPermanentDeleteResult),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-products"] });
+    },
+  });
+};
+
+export const useBulkPermanentDeleteVariants = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      adminApi
+        .post("/products/variants/bulk/permanent", { ids })
+        .then((r) => (r.data?.data ?? r.data) as BulkPermanentDeleteResult),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-variants"] });
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+    },
+  });
+};
+
+export const useBulkPermanentDeleteQuotes = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      adminApi
+        .post("/quotes/bulk/permanent", { ids })
+        .then((r) => (r.data?.data ?? r.data) as BulkPermanentDeleteResult),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-quotes"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-quotes"] });
+    },
+  });
+};
+
+export const useBulkPermanentDeleteWarehouses = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      adminApi
+        .post("/warehouses/bulk/permanent", { ids })
+        .then((r) => (r.data?.data ?? r.data) as BulkPermanentDeleteResult),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-warehouses"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-warehouses"] });
+    },
   });
 };
 
@@ -799,10 +953,19 @@ export const useDeleteCollectionDiscount = (collectionId?: string) => {
 
 // ─── Attributes ───────────────────────────────────────────
 
-export const useAdminAttributes = () =>
+export const useAdminAttributes = (params?: { deleted?: string }) =>
   useQuery({
-    queryKey: ["admin-attributes"],
-    queryFn: () => adminApi.get("/attributes").then((r) => r.data.data),
+    queryKey: ["admin-attributes", params],
+    queryFn: () =>
+      adminApi
+        .get("/attributes", { params })
+        .then((r) => r.data.data),
+  });
+
+export const useAdminArchivedAttributes = () =>
+  useQuery({
+    queryKey: ["admin-archived-attributes"],
+    queryFn: () => adminApi.get("/attributes?deleted=true").then((r) => r.data.data),
   });
 
 export const useAdminAttribute = (id: string) =>
@@ -817,7 +980,10 @@ export const useCreateAttribute = () => {
   return useMutation({
     mutationFn: (data: unknown) =>
       adminApi.post("/attributes", data).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-attributes"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-attributes"] });
+    },
   });
 };
 
@@ -828,6 +994,7 @@ export const useUpdateAttribute = () => {
       adminApi.put(`/attributes/${id}`, data).then((r) => r.data),
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["admin-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-attributes"] });
       qc.invalidateQueries({ queryKey: ["admin-attribute", vars.id] });
     },
   });
@@ -838,7 +1005,34 @@ export const useDeleteAttribute = () => {
   return useMutation({
     mutationFn: (id: string) =>
       adminApi.delete(`/attributes/${id}`).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-attributes"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-attributes"] });
+    },
+  });
+};
+
+export const useRestoreAttribute = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      adminApi.post(`/attributes/${id}/restore`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-attributes"] });
+    },
+  });
+};
+
+export const usePermanentDeleteAttribute = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      adminApi.delete(`/attributes/${id}/permanent`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-attributes"] });
+    },
   });
 };
 
@@ -965,6 +1159,26 @@ export const useDeleteAttributeValue = () => {
     }) =>
       adminApi
         .delete(`/attributes/${attributeId}/values/${valueId}`)
+        .then((r) => r.data),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["admin-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-attribute", vars.attributeId] });
+    },
+  });
+};
+
+export const usePermanentDeleteAttributeValue = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      attributeId,
+      valueId,
+    }: {
+      attributeId: string;
+      valueId: string;
+    }) =>
+      adminApi
+        .delete(`/attributes/${attributeId}/values/${valueId}/permanent`)
         .then((r) => r.data),
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["admin-attributes"] });
@@ -1116,12 +1330,34 @@ export const useAdminPricing = (params?: {
   sortBy?: string;
   sortDir?: string;
   ids?: string[];
+  deleted?: string;
 }) =>
   useQuery({
     queryKey: ["admin-pricing", params],
     queryFn: () =>
       adminApi
         .get("/pricing", { params: { ...params, ids: params?.ids?.join(",") } })
+        .then((r) => r.data),
+    placeholderData: keepPreviousData,
+  });
+
+export const useAdminArchivedPricing = (params?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  ruleType?: string;
+  productId?: string;
+  variantId?: string;
+  countryId?: string;
+  tierId?: string;
+  sortBy?: string;
+  sortDir?: string;
+}) =>
+  useQuery({
+    queryKey: ["admin-archived-pricing", params],
+    queryFn: () =>
+      adminApi
+        .get("/pricing", { params: { ...params, deleted: "true" } })
         .then((r) => r.data),
     placeholderData: keepPreviousData,
   });
@@ -1133,6 +1369,7 @@ export const useCreatePricing = () => {
       adminApi.post("/pricing", data).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-pricing"] });
       qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
     },
   });
@@ -1145,6 +1382,7 @@ export const useUpdatePricing = () => {
       adminApi.put(`/pricing/${id}`, data).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-pricing"] });
       qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
     },
   });
@@ -1157,6 +1395,61 @@ export const useDeletePricing = () => {
       adminApi.delete(`/pricing/${id}`).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
+    },
+  });
+};
+
+export const useRestorePricing = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      adminApi.post(`/pricing/${id}/restore`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
+    },
+  });
+};
+
+export const usePermanentDeletePricing = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      adminApi.delete(`/pricing/${id}/permanent`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
+    },
+  });
+};
+
+export const useBulkRestorePricing = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      adminApi.post("/pricing/bulk/restore", { ids }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
+    },
+  });
+};
+
+export const useBulkPermanentDeletePricing = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      adminApi
+        .post("/pricing/bulk/permanent", { ids })
+        .then((r) => (r.data?.data ?? r.data) as BulkPermanentDeleteResult),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-pricing"] });
       qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
     },
   });
@@ -1169,6 +1462,7 @@ export const useDuplicatePricing = () => {
       adminApi.post(`/pricing/${id}/duplicate`).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-pricing"] });
       qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
     },
   });
@@ -1186,6 +1480,7 @@ export const useBulkPricing = () => {
     }) => adminApi.post("/pricing/bulk", data).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-pricing"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-pricing"] });
       qc.invalidateQueries({ queryKey: ["admin-pricing-dashboard"] });
     },
   });
@@ -1515,10 +1810,26 @@ export const useAdminTiersPaged = (params?: {
   countryId?: string;
   sortBy?: string;
   sortDir?: string;
+  deleted?: string;
 }) =>
   useQuery({
     queryKey: ["admin-tiers-paged", params],
     queryFn: () => adminApi.get("/tiers", { params }).then((r) => r.data),
+    placeholderData: keepPreviousData,
+  });
+
+export const useAdminArchivedTiers = (params?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  countryId?: string;
+  sortBy?: string;
+  sortDir?: string;
+}) =>
+  useQuery({
+    queryKey: ["admin-archived-tiers", params],
+    queryFn: () => adminApi.get("/tiers", { params: { ...params, deleted: "true" } }).then((r) => r.data),
     placeholderData: keepPreviousData,
   });
 
@@ -1530,6 +1841,7 @@ export const useCreateTier = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-tiers"] });
       qc.invalidateQueries({ queryKey: ["admin-tiers-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-tiers"] });
       qc.invalidateQueries({ queryKey: ["admin-tier-dashboard"] });
     },
   });
@@ -1543,12 +1855,13 @@ export const useUpdateTier = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-tiers"] });
       qc.invalidateQueries({ queryKey: ["admin-tiers-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-tiers"] });
       qc.invalidateQueries({ queryKey: ["admin-tier-dashboard"] });
     },
   });
 };
 
-export const useDeleteTier = () => {
+export const useArchiveTier = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
@@ -1556,6 +1869,67 @@ export const useDeleteTier = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-tiers"] });
       qc.invalidateQueries({ queryKey: ["admin-tiers-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-tiers"] });
+      qc.invalidateQueries({ queryKey: ["admin-tier-dashboard"] });
+    },
+  });
+};
+
+export const useDeleteTier = () => useArchiveTier();
+
+export const useRestoreTier = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      adminApi.post(`/tiers/${id}/restore`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-tiers"] });
+      qc.invalidateQueries({ queryKey: ["admin-tiers-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-tiers"] });
+      qc.invalidateQueries({ queryKey: ["admin-tier-dashboard"] });
+    },
+  });
+};
+
+export const usePermanentDeleteTier = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      adminApi.delete(`/tiers/${id}/permanent`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-tiers"] });
+      qc.invalidateQueries({ queryKey: ["admin-tiers-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-tiers"] });
+      qc.invalidateQueries({ queryKey: ["admin-tier-dashboard"] });
+    },
+  });
+};
+
+export const useBulkRestoreTiers = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      adminApi.post("/tiers/bulk/restore", { ids }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-tiers"] });
+      qc.invalidateQueries({ queryKey: ["admin-tiers-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-tiers"] });
+      qc.invalidateQueries({ queryKey: ["admin-tier-dashboard"] });
+    },
+  });
+};
+
+export const useBulkPermanentDeleteTiers = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      adminApi
+        .post("/tiers/bulk/permanent", { ids })
+        .then((r) => (r.data?.data ?? r.data) as BulkPermanentDeleteResult),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-tiers"] });
+      qc.invalidateQueries({ queryKey: ["admin-tiers-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-tiers"] });
       qc.invalidateQueries({ queryKey: ["admin-tier-dashboard"] });
     },
   });
@@ -1566,11 +1940,12 @@ export const useBulkTiers = () => {
   return useMutation({
     mutationFn: (data: {
       ids: string[];
-      action: "ENABLE" | "DISABLE" | "DELETE";
+      action: "ENABLE" | "DISABLE" | "ARCHIVE" | "RESTORE" | "PERMANENT_DELETE" | "DELETE";
     }) => adminApi.post("/tiers/bulk", data).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-tiers"] });
       qc.invalidateQueries({ queryKey: ["admin-tiers-paged"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-tiers"] });
       qc.invalidateQueries({ queryKey: ["admin-tier-dashboard"] });
     },
   });
@@ -1928,6 +2303,22 @@ export const useAdminDiscounts = (params?: {
     placeholderData: keepPreviousData,
   });
 
+export const useAdminArchivedDiscounts = (params?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  type?: string;
+  scope?: string;
+  countryId?: string;
+  sortBy?: string;
+  sortDir?: string;
+}) =>
+  useQuery({
+    queryKey: ["admin-archived-discounts", params],
+    queryFn: () => adminApi.get("/discounts", { params: { ...params, status: "ARCHIVED" } }).then((r) => r.data),
+    placeholderData: keepPreviousData,
+  });
+
 export const useCreateDiscount = () => {
   const qc = useQueryClient();
   return useMutation({
@@ -1935,6 +2326,7 @@ export const useCreateDiscount = () => {
       adminApi.post("/discounts", data).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-discounts"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-discounts"] });
       qc.invalidateQueries({ queryKey: ["admin-discount-dashboard"] });
     },
   });
@@ -1947,18 +2339,74 @@ export const useUpdateDiscount = () => {
       adminApi.put(`/discounts/${id}`, data).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-discounts"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-discounts"] });
       qc.invalidateQueries({ queryKey: ["admin-discount-dashboard"] });
     },
   });
 };
 
-export const useDeleteDiscount = () => {
+export const useArchiveDiscount = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
       adminApi.delete(`/discounts/${id}`).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-discounts"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-discounts"] });
+      qc.invalidateQueries({ queryKey: ["admin-discount-dashboard"] });
+    },
+  });
+};
+
+export const useDeleteDiscount = () => useArchiveDiscount();
+
+export const useRestoreDiscount = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      adminApi.post(`/discounts/${id}/restore`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-discounts"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-discounts"] });
+      qc.invalidateQueries({ queryKey: ["admin-discount-dashboard"] });
+    },
+  });
+};
+
+export const usePermanentDeleteDiscount = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      adminApi.delete(`/discounts/${id}/permanent`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-discounts"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-discounts"] });
+      qc.invalidateQueries({ queryKey: ["admin-discount-dashboard"] });
+    },
+  });
+};
+
+export const useBulkRestoreDiscounts = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      adminApi.post("/discounts/bulk/restore", { ids }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-discounts"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-discounts"] });
+      qc.invalidateQueries({ queryKey: ["admin-discount-dashboard"] });
+    },
+  });
+};
+
+export const useBulkPermanentDeleteDiscounts = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      adminApi.post("/discounts/bulk/permanent", { ids }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-discounts"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-discounts"] });
       qc.invalidateQueries({ queryKey: ["admin-discount-dashboard"] });
     },
   });
@@ -1969,10 +2417,11 @@ export const useBulkDiscounts = () => {
   return useMutation({
     mutationFn: (data: {
       ids: string[];
-      action: "ENABLE" | "DISABLE" | "DELETE";
+      action: "ENABLE" | "DISABLE" | "DELETE" | "ARCHIVE";
     }) => adminApi.post("/discounts/bulk", data).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-discounts"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-discounts"] });
       qc.invalidateQueries({ queryKey: ["admin-discount-dashboard"] });
     },
   });
@@ -2208,6 +2657,7 @@ export const useAdminQuotes = (params?: {
   search?: string;
   sortBy?: string;
   sortDir?: string;
+  deleted?: boolean | string;
 }) =>
   useQuery({
     queryKey: ["admin-quotes", params],
@@ -2215,11 +2665,56 @@ export const useAdminQuotes = (params?: {
     placeholderData: keepPreviousData,
   });
 
+export const useAdminArchivedQuotes = (params?: {
+  page?: number;
+  limit?: number;
+  status?: string;
+  search?: string;
+  sortBy?: string;
+  sortDir?: string;
+}) =>
+  useQuery({
+    queryKey: ["admin-archived-quotes", params],
+    queryFn: () =>
+      adminApi
+        .get("/quotes", { params: { ...params, deleted: "true" } })
+        .then((r) => r.data),
+    placeholderData: keepPreviousData,
+  });
+
 export const useDeleteAdminQuote = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => adminApi.delete(`/quotes/${id}`).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-quotes"] }),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["admin-quotes"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-quotes"] });
+      qc.invalidateQueries({ queryKey: ["admin-quote", id] });
+    },
+  });
+};
+
+export const useRestoreAdminQuote = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.post(`/quotes/${id}/restore`).then((r) => r.data),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["admin-quotes"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-quotes"] });
+      qc.invalidateQueries({ queryKey: ["admin-quote", id] });
+    },
+  });
+};
+
+export const usePermanentDeleteAdminQuote = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.delete(`/quotes/${id}/permanent`).then((r) => r.data),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["admin-quotes"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-quotes"] });
+      qc.invalidateQueries({ queryKey: ["admin-quote", id] });
+    },
   });
 };
 
@@ -2920,10 +3415,18 @@ export const useAddQuoteNote = () => {
 
 // ─── Warehouses ───────────────────────────────────────────
 
-export const useAdminWarehouses = (params?: { page?: number; limit?: number; search?: string }) =>
+export const useAdminWarehouses = (params?: { page?: number; limit?: number; search?: string; deleted?: string }) =>
   useQuery({
     queryKey: ["admin-warehouses", params],
     queryFn: () => adminApi.get("/warehouses", { params }).then((r) => r.data),
+    placeholderData: keepPreviousData,
+  });
+
+export const useAdminArchivedWarehouses = (params?: { page?: number; limit?: number; search?: string }) =>
+  useQuery({
+    queryKey: ["admin-archived-warehouses", params],
+    queryFn: () =>
+      adminApi.get("/warehouses", { params: { ...params, deleted: "true" } }).then((r) => r.data),
     placeholderData: keepPreviousData,
   });
 
@@ -2931,7 +3434,9 @@ export const useCreateWarehouse = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: unknown) => adminApi.post("/warehouses", data).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-warehouses"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-warehouses"] });
+    },
   });
 };
 
@@ -2939,7 +3444,10 @@ export const useUpdateWarehouse = (id: string) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: unknown) => adminApi.put(`/warehouses/${id}`, data).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-warehouses"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-warehouses"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-warehouses"] });
+    },
   });
 };
 
@@ -2947,7 +3455,32 @@ export const useDeleteWarehouse = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => adminApi.delete(`/warehouses/${id}`).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-warehouses"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-warehouses"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-warehouses"] });
+    },
+  });
+};
+
+export const useRestoreWarehouse = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.post(`/warehouses/${id}/restore`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-warehouses"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-warehouses"] });
+    },
+  });
+};
+
+export const usePermanentDeleteWarehouse = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.delete(`/warehouses/${id}/permanent`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-warehouses"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-warehouses"] });
+    },
   });
 };
 
@@ -3071,12 +3604,21 @@ export interface AdminReviewsParams {
   dateTo?: string;
   sortBy?: string;
   sortDir?: string;
+  deleted?: string;
 }
 
 export const useAdminReviews = (params?: AdminReviewsParams) =>
   useQuery({
     queryKey: ["admin-reviews", params],
     queryFn: () => adminApi.get("/reviews", { params }).then((r) => r.data),
+    placeholderData: keepPreviousData,
+  });
+
+export const useAdminArchivedReviews = (params?: AdminReviewsParams) =>
+  useQuery({
+    queryKey: ["admin-archived-reviews", params],
+    queryFn: () =>
+      adminApi.get("/reviews", { params: { ...params, deleted: "true" } }).then((r) => r.data),
     placeholderData: keepPreviousData,
   });
 
@@ -3087,6 +3629,7 @@ export const useUpdateReviewStatus = () => {
       adminApi.patch(`/reviews/${id}/status`, { status }).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-reviews"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-reviews"] });
     },
   });
 };
@@ -3098,6 +3641,57 @@ export const useDeleteReview = () => {
       adminApi.delete(`/reviews/${id}`).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-reviews"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-reviews"] });
+    },
+  });
+};
+
+export const useRestoreReview = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      adminApi.post(`/reviews/${id}/restore`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-reviews"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-reviews"] });
+    },
+  });
+};
+
+export const usePermanentDeleteReview = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      adminApi.delete(`/reviews/${id}/permanent`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-reviews"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-reviews"] });
+    },
+  });
+};
+
+export const useBulkPermanentDeleteReviews = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      adminApi
+        .post("/reviews/bulk/permanent", { ids })
+        .then((r) => (r.data?.data ?? r.data) as BulkPermanentDeleteResult),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-reviews"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-reviews"] });
+    },
+  });
+};
+
+export const useBulkRestoreReviews = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      adminApi.post("/reviews/bulk/restore", { ids }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-reviews"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-reviews"] });
     },
   });
 };

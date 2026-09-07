@@ -18,6 +18,10 @@ import {
   ChevronDown,
   Edit2,
   Copy,
+  RotateCcw,
+  XCircle,
+  Layers,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
@@ -26,6 +30,7 @@ import {
   AdminInput,
   AdminSelect,
   ConfirmModal,
+  AdminDeleteModal,
   DataTable,
   Pagination,
   StatCard,
@@ -37,6 +42,9 @@ import {
   AdminBulkActionsBar,
 } from "@/components/admin/AdminComponents";
 import { Modal } from "@/components/ui/Modal";
+import { Tooltip } from "@/components/ui/Tooltip";
+import { AdminRowActions, AdminActionButton } from "@/components/admin/AdminRowActions";
+import { formatDate } from "@/utils/formatDate";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
@@ -51,6 +59,10 @@ import {
   useBulkPricing,
   useCreatePricing,
   useDeletePricing,
+  useRestorePricing,
+  usePermanentDeletePricing,
+  useBulkRestorePricing,
+  useBulkPermanentDeletePricing,
   useExportPricing,
   useImportPricing,
   usePreviewPricing,
@@ -61,7 +73,7 @@ import {
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
 type PricingRuleType = "ALL" | "BASE_PRICE" | "VARIANT_PRICE" | "TIER_PRICE" | "MOQ_PRICE" | "CUSTOMER_ROLE_PRICE";
-type PricingStatusFilter = "ALL" | "ACTIVE" | "INACTIVE";
+type PricingStatusFilter = "ALL" | "ACTIVE" | "INACTIVE" | "ARCHIVED";
 type PricingSortBy = "updatedAt" | "createdAt" | "ruleName" | "ruleType" | "product" | "country" | "tier" | "basePrice" | "status";
 type PricingSortDir = "desc" | "asc";
 
@@ -86,6 +98,9 @@ type PricingRuleRow = {
   variant: { id: string; title: string; sku: string | null } | null;
   country: { id: string; name: string; code: string } | null;
   tier: { id: string; name: string } | null;
+  deletedAt?: string | null;
+  canPermanentDelete?: boolean;
+  permanentDeleteBlockReason?: string | null;
   details?: {
     currency?: { id: string; code: string; symbol: string } | null;
     mrp?: number | null;
@@ -103,6 +118,7 @@ type PricingDashboard = {
   totalRules: number;
   activeRules: number;
   inactiveRules: number;
+  archivedRules?: number;
   countryPricingRules: number;
   tierPricingRules: number;
   moqPricingRules: number;
@@ -299,7 +315,8 @@ export default function PricingPage() {
       const res = await adminApi.get("/pricing", {
         params: {
           search: search || undefined,
-          status: statusFilter === "ALL" ? undefined : statusFilter,
+          status: statusFilter === "ALL" || statusFilter === "ARCHIVED" ? undefined : statusFilter,
+          deleted: statusFilter === "ARCHIVED" ? "true" : undefined,
           ruleType: ruleTypeFilter === "ALL" ? undefined : ruleTypeFilter,
           countryId: countryFilter || undefined,
           tierId: tierFilter || undefined,
@@ -324,6 +341,7 @@ export default function PricingPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [viewingRule, setViewingRule] = useState<PricingRuleRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PricingRuleRow | null>(null);
   const [bulkCountryId, setBulkCountryId] = useState("");
   const [bulkTierId, setBulkTierId] = useState("");
@@ -334,6 +352,10 @@ export default function PricingPage() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [previewInput, setPreviewInput] = useState<PreviewFormState>(emptyPreview);
+  const [showBulkPermanentModal, setShowBulkPermanentModal] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkPermanentResult, setBulkPermanentResult] = useState<any | null>(null);
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -348,7 +370,8 @@ export default function PricingPage() {
     page,
     limit,
     search: search || undefined,
-    status: statusFilter === "ALL" ? undefined : statusFilter,
+    status: statusFilter === "ALL" || statusFilter === "ARCHIVED" ? undefined : statusFilter,
+    deleted: statusFilter === "ARCHIVED" ? "true" : undefined,
     ruleType: ruleTypeFilter === "ALL" ? undefined : ruleTypeFilter,
     countryId: countryFilter || undefined,
     tierId: tierFilter || undefined,
@@ -366,6 +389,7 @@ export default function PricingPage() {
       totalRules: raw.totalRules ?? 0,
       activeRules: raw.activeRules ?? 0,
       inactiveRules: raw.inactiveRules ?? 0,
+      archivedRules: raw.archivedRules ?? 0,
       countryPricingRules: raw.countryPricingRules ?? 0,
       tierPricingRules: raw.tierPricingRules ?? 0,
       moqPricingRules: raw.moqPricingRules ?? 0,
@@ -411,6 +435,10 @@ export default function PricingPage() {
   const createPricing = useCreatePricing();
   const updatePricing = useUpdatePricing();
   const deletePricing = useDeletePricing();
+  const restorePricing = useRestorePricing();
+  const permanentDeletePricing = usePermanentDeletePricing();
+  const bulkRestorePricing = useBulkRestorePricing();
+  const bulkPermanentDeletePricing = useBulkPermanentDeletePricing();
   const bulkPricing = useBulkPricing();
 
   const form = useAdminForm({
@@ -833,18 +861,135 @@ export default function PricingPage() {
 
   const handleDelete = async (row: PricingRuleRow) => {
     try {
-      if (row.ruleType === "TIER_PRICE") {
-        await adminApi.delete(`/pricing/${row.productId}/tier-pricing/${row.id}`);
-      } else if (row.ruleType === "MOQ_PRICE") {
-        await adminApi.delete(`/pricing/${row.productId}/moq-pricing/${row.id}`);
-      } else {
-        await deletePricing.mutateAsync(row.id);
-      }
-      showToast("Pricing rule deleted.", "success");
+      await deletePricing.mutateAsync(row.id);
+      showToast("Pricing rule archived successfully.", "success");
       setDeleteTarget(null);
       await refetch();
     } catch (error) {
-      showToast(getAdminErrorMessage(error, "Failed to delete pricing rule."), "error");
+      showToast(getAdminErrorMessage(error, "Failed to archive pricing rule."), "error");
+    }
+  };
+
+  const handlePermanentDelete = async (row: PricingRuleRow) => {
+    if (row.canPermanentDelete === false) {
+      showToast(row.permanentDeleteBlockReason || "Permanent deletion is blocked for this pricing rule.", "error");
+      return;
+    }
+    try {
+      await permanentDeletePricing.mutateAsync(row.id);
+      showToast(`Pricing rule "${row.ruleName}" permanently deleted.`, "success");
+      setDeleteTarget(null);
+      await refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to permanently delete pricing rule."), "error");
+    }
+  };
+
+  const handleRestore = async (row: PricingRuleRow) => {
+    try {
+      await restorePricing.mutateAsync(row.id);
+      showToast("Pricing rule restored successfully.", "success");
+      await refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to restore pricing rule."), "error");
+    }
+  };
+
+  const handleBulkRestore = async () => {
+    if (!selectedIds.length) return;
+    try {
+      await bulkRestorePricing.mutateAsync(selectedIds);
+      showToast(`Restored ${selectedIds.length} pricing rule(s).`, "success");
+      setSelectedIds([]);
+      setBulkAction("");
+      await refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to restore pricing rules."), "error");
+    }
+  };
+
+  const handleBulkSoftDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkSaving(true);
+    try {
+      const result = await bulkPricing.mutateAsync({
+        ids: selectedIds,
+        ruleType: selectedRuleType || "BASE_PRICE",
+        action: "DELETE",
+      });
+      const data = (result as any)?.data ?? result;
+      const blocked: Array<{ id: string; name?: string; reason: string }> = Array.isArray(data?.blocked) ? data.blocked : [];
+      const deletedCount = typeof data?.deletedCount === "number" ? data.deletedCount : (Array.isArray(data?.deletedIds) ? data.deletedIds.length : (data?.affected ?? 0));
+      const blockedCount = typeof data?.blockedCount === "number" ? data.blockedCount : blocked.length;
+
+      if (blockedCount === 0 && deletedCount > 0) {
+        showToast(`Successfully archived ${deletedCount} pricing rule(s).`, "success");
+        setSelectedIds([]);
+        setBulkAction("");
+        setShowBulkDeleteModal(false);
+      } else if (deletedCount === 0 && blockedCount > 0) {
+        showToast(blocked[0]?.reason || `All ${blockedCount} selected pricing rules are protected from archiving.`, "error");
+      } else {
+        showToast(`Archived ${deletedCount} rule(s); ${blockedCount} protected sole active rule(s) were preserved.`, "warning");
+        if (Array.isArray(data?.deletedIds)) {
+          setSelectedIds((prev) => prev.filter((id) => !data.deletedIds.includes(id)));
+        }
+        setBulkAction("");
+        setShowBulkDeleteModal(false);
+      }
+      await refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Bulk archive failed."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  const handleConfirmBulkPermanentDelete = async () => {
+    if (selectedIds.length === 0) return;
+    const totalSelected = selectedIds.length;
+    setBulkSaving(true);
+    try {
+      const result = await bulkPermanentDeletePricing.mutateAsync(selectedIds);
+      setBulkSaving(false);
+      setShowBulkPermanentModal(false);
+      setBulkAction("");
+
+      await refetch();
+
+      if (result) {
+        const payload = (result as any)?.data ?? result;
+        const deletedIds: string[] = Array.isArray(payload?.deletedIds) ? payload.deletedIds : [];
+        const blocked: Array<{ id: string; name?: string; reason: string }> = Array.isArray(payload?.blocked) ? payload.blocked : [];
+        const deletedCount = typeof payload?.deletedCount === "number" ? payload.deletedCount : deletedIds.length;
+        const blockedCount = typeof payload?.blockedCount === "number" ? payload.blockedCount : (blocked.length || Math.max(0, totalSelected - deletedCount));
+
+        if (blockedCount > 0 && deletedIds.length > 0) {
+          setSelectedIds((prev) => prev.filter((id) => !deletedIds.includes(id)));
+        } else if (deletedCount > 0 && blockedCount === 0) {
+          setSelectedIds([]);
+        }
+
+        setBulkPermanentResult({
+          totalSelected,
+          deletedCount,
+          blockedCount,
+          deletedIds,
+          blocked,
+          tab: "pricing",
+        });
+
+        if (blockedCount === 0 && deletedCount > 0) {
+          showToast(`Successfully permanently deleted all ${deletedCount} pricing rule(s).`, "success");
+        } else if (deletedCount === 0 && blockedCount > 0) {
+          showToast(`All ${blockedCount} selected pricing rules are protected from permanent deletion.`, "error");
+        } else {
+          showToast(`Permanently deleted ${deletedCount} pricing rule(s); ${blockedCount} protected rule(s) preserved.`, "warning");
+        }
+      }
+    } catch (err) {
+      setBulkSaving(false);
+      showToast(getAdminErrorMessage(err, "Failed to permanently delete pricing rules."), "error");
     }
   };
 
@@ -903,7 +1048,7 @@ export default function PricingPage() {
       showToast("Select at least one rule first.", "error");
       return;
     }
-    if (!selectedRuleType) {
+    if (!selectedRuleType && action !== "DELETE") {
       showToast("Bulk actions require rules from the same type.", "error");
       return;
     }
@@ -913,14 +1058,25 @@ export default function PricingPage() {
     }
 
     try {
-      await bulkPricing.mutateAsync({
+      const result = await bulkPricing.mutateAsync({
         ids: selectedIds,
-        ruleType: selectedRuleType,
+        ruleType: selectedRuleType || "BASE_PRICE",
         action,
         countryId: bulkCountryId || null,
         tierId: bulkTierId || null,
       });
-      showToast("Bulk action completed.", "success");
+      const data = (result as any)?.data ?? result;
+      const blocked: Array<{ id: string; name?: string; reason: string }> = Array.isArray(data?.blocked) ? data.blocked : [];
+      if (blocked.length > 0) {
+        const updatedCount = (data?.updated ?? 0) + (data?.disabled ?? 0) + (data?.deleted ?? 0);
+        if (updatedCount > 0) {
+          showToast(`Action completed for ${updatedCount} rule(s); ${blocked.length} protected rule(s) preserved.`, "warning");
+        } else {
+          showToast(blocked[0]?.reason || `All ${blocked.length} selected rules are protected from this action.`, "error");
+        }
+      } else {
+        showToast("Bulk action completed.", "success");
+      }
       setSelectedIds([]);
       setBulkCountryId("");
       setBulkTierId("");
@@ -1067,9 +1223,14 @@ export default function PricingPage() {
         label: "Rule Name",
         render: (row: PricingRuleRow) => (
           <div className="align-top max-w-[200px]">
-            <div className="font-semibold text-[#1A1A1A] line-clamp-2" title={row.ruleName}>
-              {row.ruleName}
-            </div>
+            <Tooltip content={row.ruleName} side="top">
+              <span
+                onClick={() => setViewingRule(row)}
+                className="font-semibold text-[#1A1A1A] line-clamp-2 cursor-pointer hover:text-[#E31E24] transition-colors"
+              >
+                {row.ruleName}
+              </span>
+            </Tooltip>
             <div className="text-[11.5px] text-[#9A9A9A]">
               Resolution order {ruleResolutionOrder(row.ruleType)}
             </div>
@@ -1088,9 +1249,11 @@ export default function PricingPage() {
         label: "Product",
         render: (row: PricingRuleRow) => (
           <div className="align-top max-w-[200px]">
-            <div className="font-semibold text-[#1A1A1A] line-clamp-2" title={row.product.title}>
-              {row.product.title}
-            </div>
+            <Tooltip content={row.product.title} side="top">
+              <span className="font-semibold text-[#1A1A1A] line-clamp-2 block">
+                {row.product.title}
+              </span>
+            </Tooltip>
             <div className="text-[11.5px] text-[#9A9A9A]">{row.product.sku ?? "No SKU"}</div>
           </div>
         ),
@@ -1098,11 +1261,16 @@ export default function PricingPage() {
       {
         key: "variant",
         label: "Variant",
-        render: (row: PricingRuleRow) => (
-          <div className="align-top text-[#555] max-w-[150px] line-clamp-2" title={row.variant ? row.variant.title : "All Variants"}>
-            {row.variant ? row.variant.title : "All Variants"}
-          </div>
-        ),
+        render: (row: PricingRuleRow) => {
+          const variantTitle = row.variant ? row.variant.title : "All Variants";
+          return (
+            <div className="align-top text-[#555] max-w-[150px]">
+              <Tooltip content={variantTitle} side="top">
+                <span className="line-clamp-2 block">{variantTitle}</span>
+              </Tooltip>
+            </div>
+          );
+        },
       },
       {
         key: "country",
@@ -1200,76 +1368,151 @@ export default function PricingPage() {
       {
         key: "updatedAt",
         label: "Updated Date",
-        render: (row: PricingRuleRow) => {
-          const date = new Date(row.updatedAt);
-          const day = date.getDate();
-          const month = date.toLocaleDateString(undefined, { month: "short" });
-          const year = date.getFullYear();
-          return (
-            <div className="align-top text-[#555] whitespace-nowrap">
-              {`${day} ${month} ${year}`}
-            </div>
-          );
-        },
+        render: (row: PricingRuleRow) => (
+          <div className="align-top text-[#555] whitespace-nowrap">
+            {formatDate(row.updatedAt)}
+          </div>
+        ),
       },
       {
         key: "actions",
         label: "Actions",
         width: "110px",
-        render: (row: PricingRuleRow) => (
-          <div className="inline-flex items-center gap-1 justify-end w-full align-top">
-            {canUpdate && (
-              <button
-                type="button"
-                onClick={() => openEditForm(row)}
-                title="Edit rule"
-                className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F2F2F2] transition-colors"
-              >
-                <Edit2 size={13} />
-              </button>
-            )}
-            {canCreate && (
-              <button
-                type="button"
-                onClick={() => cloneRuleToForm(row)}
-                title="Clone rule"
-                className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] bg-white text-emerald-600 hover:bg-emerald-50 transition-colors"
-              >
-                <Copy size={13} />
-              </button>
-            )}
-            {canDelete && (
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(row)}
-                title="Delete rule"
-                className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] bg-white text-red-500 hover:bg-red-50 transition-colors"
-              >
-                <Trash2 size={13} />
-              </button>
-            )}
-          </div>
-        ),
+        render: (row: PricingRuleRow) => {
+          const isArchived = Boolean(row.deletedAt || statusFilter === "ARCHIVED");
+          if (isArchived) {
+            return (
+              <AdminRowActions
+                view={{
+                  onClick: () => setViewingRule(row),
+                  title: "View pricing rule details",
+                }}
+                extra={
+                  canUpdate ? (
+                    <AdminActionButton
+                      action={{
+                        onClick: () => handleRestore(row),
+                        title: "Restore pricing rule",
+                        icon: <RotateCcw size={13} />,
+                        disabled: restorePricing.isPending,
+                      }}
+                      defaultIcon={<RotateCcw size={13} />}
+                      defaultTitle="Restore pricing rule"
+                    />
+                  ) : undefined
+                }
+                delete={
+                  canDelete
+                    ? {
+                        onClick: () => setDeleteTarget(row),
+                        title: "Permanently delete pricing rule",
+                      }
+                    : undefined
+                }
+              />
+            );
+          }
+
+          return (
+            <AdminRowActions
+              view={{
+                onClick: () => setViewingRule(row),
+                title: "View pricing rule details",
+              }}
+              edit={
+                canUpdate
+                  ? {
+                      onClick: () => openEditForm(row),
+                      title: "Edit pricing rule",
+                    }
+                  : undefined
+              }
+              extra={
+                canCreate ? (
+                  <AdminActionButton
+                    action={{
+                      onClick: () => cloneRuleToForm(row),
+                      title: "Duplicate / Clone rule",
+                    }}
+                    defaultIcon={<Copy size={13} className="text-emerald-600" />}
+                    defaultTitle="Clone rule"
+                    className="hover:bg-emerald-50 hover:border-emerald-200"
+                  />
+                ) : null
+              }
+              delete={
+                canDelete
+                  ? {
+                      onClick: () => setDeleteTarget(row),
+                      title: "Delete pricing rule",
+                    }
+                  : undefined
+              }
+            />
+          );
+        },
       },
     ];
 
     return list.filter((col) => col.key === "actions" || columnVisibility[col.key as keyof typeof columnVisibility]);
-  }, [columnVisibility, canUpdate, canCreate, canDelete]);
+  }, [columnVisibility, canUpdate, canCreate, canDelete, statusFilter, restorePricing.isPending]);
 
   const resolutionPreview = previewData as PricingPreviewResult | undefined;
 
   return (
     <AdminLayout title="Pricing" breadcrumb={[{ label: "Pricing" }]}>
-      <AdminStatsGrid
-        stats={[
-          { title: "Total Pricing Rules", value: dashboard?.totalRules ?? 0, subtitle: "All active pricing records", icon: <SquareCheckBig size={18} />, isLoading: isStatsLoading },
-          { title: "Active Rules", value: dashboard?.activeRules ?? 0, subtitle: "Ready to resolve in checkout", icon: <CheckCircle2 size={18} />, color: "bg-emerald-500", isLoading: isStatsLoading },
-          { title: "Inactive Rules", value: dashboard?.inactiveRules ?? 0, subtitle: "Disabled or archived", icon: <Trash2 size={18} />, color: "bg-slate-500", isLoading: isStatsLoading },
-          { title: "Recently Updated", value: dashboard?.recentlyUpdatedRules?.length ?? 0, subtitle: "Latest touched rules", icon: <RefreshCw size={18} />, color: "bg-[#E31E24]", isLoading: isStatsLoading }
-        ]}
-      />
-
       <div className="space-y-5">
+        <AdminStatsGrid
+          stats={[
+            { title: "Total Pricing Rules", value: dashboard?.totalRules ?? 0, subtitle: "All configured pricing records", icon: <SquareCheckBig size={18} />, isLoading: isStatsLoading },
+            { title: "Active Rules", value: dashboard?.activeRules ?? 0, subtitle: "Ready to resolve in checkout", icon: <CheckCircle2 size={18} />, color: "bg-emerald-500", isLoading: isStatsLoading },
+            { title: "Inactive Rules", value: dashboard?.inactiveRules ?? 0, subtitle: "Disabled rules", icon: <Trash2 size={18} />, color: "bg-slate-500", isLoading: isStatsLoading },
+            { title: "Archived Rules", value: dashboard?.archivedRules ?? 0, subtitle: "Soft-deleted in archive", icon: <RotateCcw size={18} />, color: "bg-amber-600", isLoading: isStatsLoading },
+          ]}
+        />
+
+        {/* Horizontal Navigation Tabs */}
+        <div className="flex items-center gap-2 border-b border-[#E6E6E6] bg-white px-4 pt-2 rounded-t-lg shadow-2xs overflow-x-auto max-w-full scrollbar-thin">
+          {[
+            { id: "ALL", label: "All Pricing Rules", count: dashboard?.totalRules ?? 0, icon: <Layers size={15} /> },
+            { id: "ACTIVE", label: "Active", count: dashboard?.activeRules ?? 0, icon: <CheckCircle2 size={15} /> },
+            { id: "INACTIVE", label: "Inactive", count: dashboard?.inactiveRules ?? 0, icon: <XCircle size={15} /> },
+            { id: "ARCHIVED", label: "Archived / Deleted", count: dashboard?.archivedRules ?? 0, icon: <RotateCcw size={15} /> },
+          ].map((tab) => {
+            const isActive = statusFilter === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  setStatusFilter(tab.id as PricingStatusFilter);
+                  setPage(1);
+                  setSelectedIds([]);
+                }}
+                className={cn(
+                  "flex items-center gap-2 border-b-2 px-3 pb-3 pt-1 text-[13.5px] font-medium transition-colors cursor-pointer shrink-0 whitespace-nowrap",
+                  isActive
+                    ? "border-[#E31E24] text-[#E31E24]"
+                    : "border-transparent text-[#666] hover:border-[#CCC] hover:text-[#1A1A1A]"
+                )}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+                <span
+                  className={cn(
+                    "ml-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                    isActive
+                      ? "bg-[#E31E24]/10 text-[#E31E24]"
+                      : "bg-[#F0F0F0] text-[#666]"
+                  )}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* RECENTLY UPDATED */}
         {dashboard?.recentlyUpdatedRules?.length ? (
           <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
@@ -1284,16 +1527,24 @@ export default function PricingPage() {
             </div>
             <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
               {dashboard.recentlyUpdatedRules.slice(0, 4).map((row: PricingRuleRow) => (
-                <div key={row.id} className="rounded-lg border border-[#E6E6E6] p-3 bg-[#FAFAFA] flex flex-col justify-between min-h-[90px]">
+                <div
+                  key={row.id}
+                  onClick={() => setViewingRule(row)}
+                  className="rounded-lg border border-[#E6E6E6] p-3 bg-[#FAFAFA] flex flex-col justify-between min-h-[90px] cursor-pointer hover:border-[#D6D6D6] transition-colors"
+                >
                   <div className="min-w-0">
-                    <div className="truncate text-[13px] font-semibold text-[#1A1A1A]" title={row.ruleName}>{row.ruleName}</div>
-                    <div className="text-[11.5px] text-[#9A9A9A] mt-1 truncate" title={row.product?.title}>
-                      {ruleTypeLabels[row.ruleType as Exclude<PricingRuleType, "ALL">]} · {row.product?.title}
-                    </div>
+                    <Tooltip content={row.ruleName} side="top">
+                      <div className="truncate text-[13px] font-semibold text-[#1A1A1A]">{row.ruleName}</div>
+                    </Tooltip>
+                    <Tooltip content={row.product?.title || ""} side="top">
+                      <div className="text-[11.5px] text-[#9A9A9A] mt-1 truncate">
+                        {ruleTypeLabels[row.ruleType as Exclude<PricingRuleType, "ALL">]} · {row.product?.title}
+                      </div>
+                    </Tooltip>
                   </div>
                   <div className="mt-2.5 flex items-center justify-between">
                     <span className="text-[11.5px] text-[#9A9A9A]">
-                      {new Date(row.updatedAt).toLocaleDateString()}
+                      {formatDate(row.updatedAt)}
                     </span>
                     <StatusBadge status={row.status} />
                   </div>
@@ -1334,6 +1585,18 @@ export default function PricingPage() {
             },
             options: columns.map((c) => ({ key: c.key, label: c.label })),
           }}
+          leftExtra={
+            <Tooltip content="Simulate real-time checkout pricing" side="top">
+              <button
+                type="button"
+                onClick={() => setPreviewOpen(true)}
+                className="inline-flex h-10 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3.5 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F5F5F5] hover:border-[#D1D1D1] transition-all cursor-pointer shadow-2xs"
+              >
+                <Eye size={14} className="text-[#E31E24]" />
+                <span>Live Preview</span>
+              </button>
+            </Tooltip>
+          }
           primaryAction={
             canCreate
               ? {
@@ -1345,7 +1608,7 @@ export default function PricingPage() {
           }
           exportAction={{
             onClick: () => handleExport(selectedIds.length > 0),
-            label: "Export Excel",
+            label: selectedIds.length > 0 ? `Export Selected (${selectedIds.length})` : "Export Excel",
             disabled: exportPricing.isPending,
           }}
           importAction={
@@ -1357,19 +1620,11 @@ export default function PricingPage() {
               : undefined
           }
           refresh={{
-            onRefresh: refetch,
-            isRefreshing: isFetching,
+            onRefresh: () => {
+              void refetch().then(() => showToast("Pricing rules refreshed.", "success"));
+            },
+            isRefreshing: isFetching || pricingLoading,
           }}
-          rightExtra={
-            <button
-              type="button"
-              onClick={() => setPreviewOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#1A1A1A] hover:bg-[#F5F5F5] transition-colors shadow-2xs"
-            >
-              <Eye size={14} className="text-[#6B6B6B]" />
-              Live Preview
-            </button>
-          }
           filterPanel={
             <div className="space-y-4 pt-2">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1396,6 +1651,7 @@ export default function PricingPage() {
                     { value: "ALL", label: "All statuses" },
                     { value: "ACTIVE", label: "Active" },
                     { value: "INACTIVE", label: "Inactive" },
+                    { value: "ARCHIVED", label: "Archived" },
                   ]}
                 />
                 <AdminMultiSearchableSelect
@@ -1464,16 +1720,16 @@ export default function PricingPage() {
         />
 
           <DataTable
-            title={bulkActionFamily === "base" ? "Base Pricing Rules" : "Override Pricing Rules"}
+            title={statusFilter === "ARCHIVED" ? "Archived Pricing Rules" : bulkActionFamily === "base" ? "Base Pricing Rules" : "Override Pricing Rules"}
             columns={dataTableColumns as any}
             data={ruleRows}
             rowKey="id"
             isLoading={pricingLoading}
-            emptyMessage="No pricing rules found."
+            emptyMessage={statusFilter === "ARCHIVED" ? "No archived pricing rules found." : "No pricing rules found."}
             enableSelection={canUpdate}
             selectedIds={selectedIds}
             onSelectionChange={setSelectedIds}
-            onToggleStatus={toggleStatus}
+            onToggleStatus={statusFilter === "ARCHIVED" ? undefined : toggleStatus}
             statusLoadingId={togglingStatusId}
             totalItems={pagination.total}
             currentPage={page}
@@ -1487,16 +1743,23 @@ export default function PricingPage() {
               if (!canUpdate) return null;
               
               const actions = [];
-              if (bulkActionFamily === "base") {
+              if (statusFilter === "ARCHIVED") {
                 actions.push(
-                  { value: "enable", label: "Enable" },
-                  { value: "disable", label: "Disable" }
+                  { value: "restore", label: "Restore" },
+                  { value: "permanentDelete", label: "Permanently Delete" }
+                );
+              } else {
+                if (bulkActionFamily === "base") {
+                  actions.push(
+                    { value: "enable", label: "Enable" },
+                    { value: "disable", label: "Disable" }
+                  );
+                }
+                actions.push(
+                  { value: "delete", label: "Delete" },
+                  { value: "assignCountryTier", label: "Assign Country & Tier" }
                 );
               }
-              actions.push(
-                { value: "delete", label: "Delete" },
-                { value: "assignCountryTier", label: "Assign Country & Tier" }
-              );
 
               return (
                 <AdminBulkActionsBar
@@ -1506,12 +1769,20 @@ export default function PricingPage() {
                   onActionTypeChange={setBulkAction}
                   actions={actions}
                   onApply={() => {
-                    if (bulkAction === "enable") runBulkAction("ENABLE");
+                    if (bulkAction === "restore") handleBulkRestore();
+                    else if (bulkAction === "permanentDelete") setShowBulkPermanentModal(true);
+                    else if (bulkAction === "enable") runBulkAction("ENABLE");
                     else if (bulkAction === "disable") runBulkAction("DISABLE");
-                    else if (bulkAction === "delete") runBulkAction("DELETE");
+                    else if (bulkAction === "delete") {
+                      if (statusFilter === "ARCHIVED") {
+                        setShowBulkPermanentModal(true);
+                      } else {
+                        setShowBulkDeleteModal(true);
+                      }
+                    }
                     else if (bulkAction === "assignCountryTier") runBulkAssign();
                   }}
-                  applyLoading={bulkPricing.isPending}
+                  applyLoading={bulkPricing.isPending || bulkRestorePricing.isPending || bulkPermanentDeletePricing.isPending}
                   applyDisabled={bulkAction === "assignCountryTier" && !bulkCountryId && !bulkTierId}
                   renderExtraSelectors={() => (
                     <>
@@ -1541,7 +1812,14 @@ export default function PricingPage() {
             }}
           />
 
-          <Pagination page={pagination.page} totalPages={pagination.totalPages ?? 1} onPageChange={setPage} />
+          <div className="border-t border-[#E6E6E6] px-4 py-3 bg-white">
+            <Pagination
+              page={page}
+              totalPages={pagination.totalPages ?? 1}
+              onPageChange={setPage}
+              alwaysShow={true}
+            />
+          </div>
       </div>
 
       <Modal
@@ -1913,14 +2191,404 @@ export default function PricingPage() {
         </div>
       </Modal>
 
-      <ConfirmModal
+      {/* READ-ONLY PRICING RULE VIEW MODAL */}
+      <Modal
+        open={!!viewingRule}
+        onClose={() => setViewingRule(null)}
+        title={viewingRule?.ruleName ?? "Pricing Rule Details"}
+        subtitle="Detailed configuration, scope, and resolution tier for this pricing record."
+        size="2xl"
+        footer={
+          <div className="flex items-center justify-between gap-3 w-full">
+            <span className="text-[12px] text-[#6B6B6B]">
+              Rule ID: <span className="font-mono text-[#1A1A1A]">{viewingRule?.id}</span>
+            </span>
+            <div className="flex items-center gap-2">
+              {canUpdate && viewingRule && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const rule = viewingRule;
+                    setViewingRule(null);
+                    openEditForm(rule);
+                  }}
+                  className="rounded-md bg-[#E31E24] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs"
+                >
+                  Edit Rule
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setViewingRule(null)}
+                className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        }
+      >
+        {viewingRule && (
+          <div className="p-6 space-y-5">
+            {/* Primary Details Grid */}
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Rule Name</span>
+                <p className="mt-1 text-[14px] font-semibold text-[#1A1A1A] truncate">{viewingRule.ruleName}</p>
+              </div>
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Rule Type</span>
+                <p className="mt-1 text-[14px] font-semibold text-[#1A1A1A]">{ruleTypeLabels[viewingRule.ruleType] || viewingRule.ruleType}</p>
+              </div>
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Status</span>
+                <div className="mt-1"><StatusBadge status={viewingRule.status} /></div>
+              </div>
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Base / Selling Price</span>
+                <p className="mt-1 text-[14px] font-bold text-[#E31E24]">
+                  {formatMoney(viewingRule.basePrice, viewingRule.details?.currency?.symbol)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">MRP / List Price</span>
+                <p className="mt-1 text-[13.5px] font-medium text-[#1A1A1A]">
+                  {viewingRule.details?.mrp != null ? formatMoney(viewingRule.details.mrp, viewingRule.details?.currency?.symbol) : "—"}
+                </p>
+              </div>
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Priority / Order</span>
+                <p className="mt-1 text-[13.5px] font-semibold text-[#1A1A1A]">
+                  Priority {viewingRule.priority} (Order {ruleResolutionOrder(viewingRule.ruleType)})
+                </p>
+              </div>
+            </div>
+
+            {/* Scope / Assignment Section */}
+            <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4 space-y-3">
+              <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Scope & Target Assignment</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[13px]">
+                <div>
+                  <span className="text-[#9A9A9A]">Product: </span>
+                  <span className="font-semibold text-[#1A1A1A]">{viewingRule.product?.title || "—"}</span>
+                  {viewingRule.product?.sku && <span className="text-[11.5px] text-[#6B6B6B] ml-1">({viewingRule.product.sku})</span>}
+                </div>
+                <div>
+                  <span className="text-[#9A9A9A]">Variant: </span>
+                  <span className="font-medium text-[#1A1A1A]">{viewingRule.variant?.title || "All Variants"}</span>
+                </div>
+                <div>
+                  <span className="text-[#9A9A9A]">Country: </span>
+                  <span className="font-medium text-[#1A1A1A]">
+                    {viewingRule.country ? `${viewingRule.country.name} (${viewingRule.country.code})` : "All Countries (Global)"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[#9A9A9A]">Customer Tier: </span>
+                  <span className="font-medium text-[#1A1A1A]">{viewingRule.tier?.name || "All Tiers"}</span>
+                </div>
+                <div>
+                  <span className="text-[#9A9A9A]">Customer Role: </span>
+                  <span className="font-medium text-[#1A1A1A]">
+                    {viewingRule.customerRole ? getCustomerRoleLabel(viewingRule.customerRole) : "Global / All Roles"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[#9A9A9A]">Min Quantity (MOQ): </span>
+                  <span className="font-medium text-[#1A1A1A]">{viewingRule.moq ?? "1"}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Additional Pricing & Discount Details if present */}
+            {(viewingRule.details?.dealerPrice != null ||
+              viewingRule.details?.distributorPrice != null ||
+              viewingRule.details?.discountPercent != null ||
+              viewingRule.details?.fixedPrice != null) && (
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4 space-y-2">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#9A9A9A]">Special Pricing Breakdown</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[13px] pt-1">
+                  {viewingRule.details?.discountPercent != null && (
+                    <div>
+                      <span className="text-[#9A9A9A] text-[11.5px] block">Discount</span>
+                      <span className="font-bold text-emerald-600">{Number(viewingRule.details.discountPercent).toFixed(2)}%</span>
+                    </div>
+                  )}
+                  {viewingRule.details?.dealerPrice != null && (
+                    <div>
+                      <span className="text-[#9A9A9A] text-[11.5px] block">Dealer Price</span>
+                      <span className="font-semibold text-[#1A1A1A]">{formatMoney(viewingRule.details.dealerPrice, viewingRule.details?.currency?.symbol)}</span>
+                    </div>
+                  )}
+                  {viewingRule.details?.distributorPrice != null && (
+                    <div>
+                      <span className="text-[#9A9A9A] text-[11.5px] block">Distributor Price</span>
+                      <span className="font-semibold text-[#1A1A1A]">{formatMoney(viewingRule.details.distributorPrice, viewingRule.details?.currency?.symbol)}</span>
+                    </div>
+                  )}
+                  {viewingRule.details?.fixedPrice != null && (
+                    <div>
+                      <span className="text-[#9A9A9A] text-[11.5px] block">Fixed Price</span>
+                      <span className="font-semibold text-[#1A1A1A]">{formatMoney(viewingRule.details.fixedPrice, viewingRule.details?.currency?.symbol)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Timestamps */}
+            <div className="flex items-center justify-between border-t border-[#F0F0F0] pt-3 text-[12px] text-[#9A9A9A]">
+              <span>Created: {viewingRule.createdAt ? formatDate(viewingRule.createdAt) : "—"}</span>
+              <span>Last Modified: {viewingRule.updatedAt ? formatDate(viewingRule.updatedAt) : "—"}</span>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <AdminDeleteModal
         open={!!deleteTarget}
-        title="Delete pricing rule?"
-        message={deleteTarget ? `Delete ${deleteTarget.ruleName}?` : ""}
-        onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
-        onCancel={() => setDeleteTarget(null)}
-        isLoading={deletePricing.isPending}
+        onClose={() => setDeleteTarget(null)}
+        itemName={deleteTarget ? `${deleteTarget.ruleName}` : undefined}
+        itemType="Pricing Rule"
+        warningMessage={
+          deleteTarget?.deletedAt || statusFilter === "ARCHIVED"
+            ? "Choose the deletion method for this pricing rule. Soft Delete is recommended to maintain pricing audit logs and historical sales analytics."
+            : "Choose the deletion method for this pricing rule. Soft Delete hides it from active checkout resolution while preserving pricing logs."
+        }
+        softDeleteDescription={
+          deleteTarget?.deletedAt || statusFilter === "ARCHIVED"
+            ? "This pricing rule is already soft-deleted and stored in the central Archive."
+            : undefined
+        }
+        permanentDeleteDescription={
+          deleteTarget
+            ? `Physically and permanently purges pricing rule "${deleteTarget.ruleName}" from the database. Allowed ONLY if a fallback active base price remains or parent product is inactive/archived.`
+            : undefined
+        }
+        permanentDeleteDisabled={Boolean(deleteTarget && deleteTarget.canPermanentDelete === false)}
+        permanentDeleteDisabledReason={deleteTarget?.permanentDeleteBlockReason ?? undefined}
+        initialDeleteType={
+          deleteTarget?.deletedAt || statusFilter === "ARCHIVED"
+            ? "permanent"
+            : "soft"
+        }
+        onSoftDelete={
+          deleteTarget?.deletedAt || statusFilter === "ARCHIVED"
+            ? () => {
+                showToast("Pricing rule is already archived.");
+                setDeleteTarget(null);
+              }
+            : () => {
+                if (deleteTarget) return handleDelete(deleteTarget);
+              }
+        }
+        onPermanentDelete={() => {
+          if (deleteTarget) return handlePermanentDelete(deleteTarget);
+        }}
+        isSoftDeleting={deletePricing.isPending}
+        isPermanentDeleting={permanentDeletePricing.isPending}
       />
+
+      {/* ─── Bulk Delete Modal (Matching Product / Variant / Review standard) ─── */}
+      <AdminDeleteModal
+        open={showBulkDeleteModal}
+        onClose={() => setShowBulkDeleteModal(false)}
+        itemName={`${selectedIds.length} selected pricing rules`}
+        itemType="Pricing Rules (Bulk)"
+        warningMessage="Choose the deletion method for the selected pricing rules. Soft Delete is recommended for maintaining catalog pricing and quote history."
+        softDeleteDescription={`Hides the ${selectedIds.length} selected pricing rules from active resolution while preserving historical orders, quotes, and audit trails.`}
+        permanentDeleteDescription={`Permanently purges the ${selectedIds.length} selected pricing rules from the database. Any sole active base price rule will be protected.`}
+        onSoftDelete={handleBulkSoftDelete}
+        onPermanentDelete={() => {
+          setShowBulkDeleteModal(false);
+          setShowBulkPermanentModal(true);
+        }}
+        isSoftDeleting={bulkSaving || bulkPricing.isPending}
+        isPermanentDeleting={bulkPermanentDeletePricing.isPending}
+      />
+
+      {/* ─── Bulk Permanent Delete Confirmation Modal ─── */}
+      <Modal
+        open={showBulkPermanentModal}
+        onClose={() => !(bulkSaving || bulkPermanentDeletePricing.isPending) && setShowBulkPermanentModal(false)}
+        title={`Permanently Delete ${selectedIds.length} PRICING Record${selectedIds.length > 1 ? "s" : ""}`}
+        subtitle="Physical database purge with authoritative fallback resolution check."
+        size="md"
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <button
+              type="button"
+              disabled={bulkSaving || bulkPermanentDeletePricing.isPending}
+              onClick={() => setShowBulkPermanentModal(false)}
+              className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={bulkSaving || bulkPermanentDeletePricing.isPending}
+              onClick={handleConfirmBulkPermanentDelete}
+              className="flex items-center gap-1.5 rounded-md bg-red-600 px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-red-700 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
+            >
+              <Trash2 size={14} />
+              {bulkSaving || bulkPermanentDeletePricing.isPending ? "Evaluating & Deleting..." : "Permanently Delete"}
+            </button>
+          </div>
+        }
+      >
+        <div className="p-5 space-y-4">
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-[13px] text-red-900 leading-relaxed">
+            <div className="flex items-center gap-2 font-semibold text-red-800 mb-1">
+              <AlertTriangle size={16} className="text-red-600 shrink-0" />
+              Warning: Irreversible Action
+            </div>
+            You have selected <span className="font-bold">{selectedIds.length}</span> record{selectedIds.length > 1 ? "s" : ""} from the{" "}
+            <span className="font-semibold uppercase tracking-wide">PRICING</span> archive for permanent deletion.
+          </div>
+
+          <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5 text-[12.5px] text-[#555] space-y-2">
+            <span className="font-semibold text-[#1A1A1A] block">Authoritative Data Integrity Protection:</span>
+            <p>
+              Every selected record is individually verified by backend resolver safety rules before deletion.
+            </p>
+            <p>
+              Any base price that is the sole active pricing rule for a product/variant in that country will be <strong className="text-[#1A1A1A]">strictly protected</strong> and skipped.
+            </p>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ─── Bulk Permanent Delete Result Modal ─── */}
+      <Modal
+        open={Boolean(bulkPermanentResult)}
+        onClose={() => setBulkPermanentResult(null)}
+        title={
+          bulkPermanentResult
+            ? bulkPermanentResult.deletedCount === 0
+              ? "Permanent Deletion Blocked"
+              : bulkPermanentResult.blockedCount === 0
+              ? "Permanent Delete Completed"
+              : "Permanent Delete Completed (Mixed Result)"
+            : "Bulk Permanent Deletion Results"
+        }
+        subtitle={
+          bulkPermanentResult
+            ? bulkPermanentResult.deletedCount === 0
+              ? `All ${bulkPermanentResult.blockedCount || bulkPermanentResult.totalSelected} selected records are protected by pricing resolver integrity rules.`
+              : bulkPermanentResult.blockedCount === 0
+              ? `All ${bulkPermanentResult.totalSelected} selected records were permanently purged from the database.`
+              : `${bulkPermanentResult.deletedCount} permanently deleted, ${bulkPermanentResult.blockedCount} protected records preserved.`
+            : "Summary of processed and protected records."
+        }
+        size="lg"
+        footer={
+          <div className="flex items-center justify-end w-full">
+            <button
+              type="button"
+              onClick={() => setBulkPermanentResult(null)}
+              className="rounded-md bg-[#1A1A1A] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-black transition-colors cursor-pointer shadow-2xs"
+            >
+              Close Summary
+            </button>
+          </div>
+        }
+      >
+        {bulkPermanentResult && (
+          <div className="p-5 space-y-4">
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#666] block">
+                  Selected
+                </span>
+                <span className="text-2xl font-bold text-[#1A1A1A]">
+                  {bulkPermanentResult.totalSelected ?? (bulkPermanentResult.deletedCount + bulkPermanentResult.blockedCount)}
+                </span>
+              </div>
+              <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-green-700 block">
+                  Permanently Deleted
+                </span>
+                <span className="text-2xl font-bold text-green-800">
+                  {bulkPermanentResult.deletedCount}
+                </span>
+              </div>
+              <div
+                className={cn(
+                  "rounded-lg border p-3",
+                  bulkPermanentResult.deletedCount === 0
+                    ? "border-red-200 bg-red-50 text-red-800"
+                    : "border-amber-200 bg-amber-50 text-amber-800"
+                )}
+              >
+                <span
+                  className={cn(
+                    "text-[11px] font-semibold uppercase tracking-wider block",
+                    bulkPermanentResult.deletedCount === 0 ? "text-red-700" : "text-amber-700"
+                  )}
+                >
+                  Protected / Skipped
+                </span>
+                <span
+                  className={cn(
+                    "text-2xl font-bold",
+                    bulkPermanentResult.deletedCount === 0 ? "text-red-800" : "text-amber-800"
+                  )}
+                >
+                  {bulkPermanentResult.blockedCount}
+                </span>
+              </div>
+            </div>
+
+            {bulkPermanentResult.blockedCount === 0 && bulkPermanentResult.deletedCount > 0 && (
+              <div className="flex items-center gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50/70 p-3 text-[12.5px] text-emerald-900">
+                <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+                <span>
+                  All {bulkPermanentResult.deletedCount} selected records were permanently removed from the database.
+                </span>
+              </div>
+            )}
+
+            {bulkPermanentResult.deletedCount === 0 && bulkPermanentResult.blockedCount > 0 && (
+              <div className="flex items-center gap-2.5 rounded-lg border border-red-200 bg-red-50/70 p-3 text-[12.5px] text-red-900">
+                <XCircle size={16} className="shrink-0 text-red-600" />
+                <span>
+                  All {bulkPermanentResult.blockedCount} records could not be permanently deleted because they are protected sole active prices or lack required fallbacks.
+                </span>
+              </div>
+            )}
+
+            {bulkPermanentResult.deletedCount > 0 && bulkPermanentResult.blockedCount > 0 && (
+              <div className="flex items-center gap-2.5 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-[12.5px] text-amber-900">
+                <AlertTriangle size={16} className="shrink-0 text-amber-600" />
+                <span>
+                  Partial completion: {bulkPermanentResult.deletedCount} records deleted, {bulkPermanentResult.blockedCount} records preserved by safety rules.
+                </span>
+              </div>
+            )}
+
+            {bulkPermanentResult.blocked && bulkPermanentResult.blocked.length > 0 && (
+              <div className="space-y-2 mt-2">
+                <span className="text-[12px] font-semibold text-[#555] uppercase tracking-wider block">
+                  Protected Records & Reasons
+                </span>
+                <div className="max-h-48 overflow-y-auto rounded-md border border-[#E6E6E6] bg-[#FAFAFA] divide-y divide-[#E6E6E6]">
+                  {bulkPermanentResult.blocked.map((item: any) => (
+                    <div key={item.id} className="p-2.5 text-[12px] flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-[#1A1A1A]">{item.name || item.id}</div>
+                        <div className="text-[#888] text-[11px] mt-0.5">{item.reason}</div>
+                      </div>
+                      <span className="rounded bg-red-100 text-red-700 px-2 py-0.5 text-[10.5px] font-medium shrink-0">
+                        Protected
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
 
       {ToastComponent}
     </AdminLayout>

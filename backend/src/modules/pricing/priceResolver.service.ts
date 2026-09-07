@@ -197,7 +197,7 @@ function selectBestPromotionalDiscount(discounts: PromotionalDiscount[], current
   return { discount: byValue[0].discount, warning };
 }
 
-async function findPromotionalDiscounts(
+export async function findPromotionalDiscounts(
   input: ResolvePriceInput,
   type: DiscountRuleKind,
   productCategoryId: string | null,
@@ -226,6 +226,7 @@ async function findPromotionalDiscounts(
     where: {
       type,
       status: "ACTIVE",
+      deletedAt: null,
       ...(type === "TIER" ? { tierId } : {}),
       ...(type === "MOQ" ? { minQuantity: { lte: input.quantity } } : {}),
       OR: scopeFilters,
@@ -262,6 +263,7 @@ async function findBasePrice(input: ResolvePriceInput) {
       variantId: input.variantId,
       countryId: input.countryId,
       status: "ACTIVE",
+      deletedAt: null,
     });
   }
 
@@ -270,6 +272,7 @@ async function findBasePrice(input: ResolvePriceInput) {
     variantId: null,
     countryId: input.countryId,
     status: "ACTIVE",
+    deletedAt: null,
   });
 
   // Fallbacks: if no price configured for this specific country, look for any active price for variant or product
@@ -278,6 +281,7 @@ async function findBasePrice(input: ResolvePriceInput) {
       productId: input.productId,
       variantId: input.variantId,
       status: "ACTIVE",
+      deletedAt: null,
     });
   }
 
@@ -285,6 +289,7 @@ async function findBasePrice(input: ResolvePriceInput) {
     productId: input.productId,
     variantId: null,
     status: "ACTIVE",
+    deletedAt: null,
   });
 
   for (const where of lookups) {
@@ -327,6 +332,7 @@ async function resolvePricingContext(input: ResolvePriceInput): Promise<Resolved
     select: {
       id: true,
       status: true,
+      deletedAt: true,
       countries: {
         select: {
           countryId: true,
@@ -336,7 +342,7 @@ async function resolvePricingContext(input: ResolvePriceInput): Promise<Resolved
     },
   });
 
-  if (!tier || tier.status !== "ACTIVE") {
+  if (!tier || tier.deletedAt !== null || tier.status !== "ACTIVE") {
     return {
       role,
       tierId: null,
@@ -368,6 +374,7 @@ async function findTierRule(
       variantId: input.variantId,
       countryId: input.countryId,
       tierId,
+      deletedAt: null,
     });
   }
 
@@ -376,6 +383,7 @@ async function findTierRule(
     variantId: null,
     countryId: input.countryId,
     tierId,
+    deletedAt: null,
   });
 
   for (const where of lookups) {
@@ -398,6 +406,7 @@ async function findMoqRule(input: ResolvePriceInput) {
       variantId: input.variantId,
       countryId: input.countryId,
       minQuantity: { lte: input.quantity },
+      deletedAt: null,
       OR: [
         { maxQuantity: null },
         { maxQuantity: { gte: input.quantity } }
@@ -410,6 +419,7 @@ async function findMoqRule(input: ResolvePriceInput) {
     variantId: null,
     countryId: input.countryId,
     minQuantity: { lte: input.quantity },
+    deletedAt: null,
     OR: [
       { maxQuantity: null },
       { maxQuantity: { gte: input.quantity } }

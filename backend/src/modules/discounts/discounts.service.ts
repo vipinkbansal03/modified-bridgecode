@@ -101,6 +101,19 @@ export function formatDiscount<T extends Record<string, any>>(discount: T): T {
   if (Array.isArray(formatted.categories)) {
     formatted.categories = formatted.categories.map((item: any) => item.category ?? item).filter(Boolean);
   }
+
+  const isArchived = Boolean(formatted.deletedAt);
+  formatted.canPermanentDelete = isArchived;
+  formatted.permanentDeleteBlockReason = isArchived
+    ? null
+    : "Permanent Delete is available only for archived discounts. Archive the discount first.";
+  formatted.dependencyCounts = {
+    countries: Array.isArray(formatted.countries) ? formatted.countries.length : 0,
+    products: Array.isArray(formatted.products) ? formatted.products.length : 0,
+    categories: Array.isArray(formatted.categories) ? formatted.categories.length : 0,
+    collections: Array.isArray(formatted.collections) ? formatted.collections.length : 0,
+  };
+
   return formatted;
 }
 
@@ -114,7 +127,8 @@ async function buildDiscountWhere(query: DiscountListQuery) {
   if (type && !isDiscountRuleKind(type)) {
     throw new AppError("Invalid discount type.", 400);
   }
-  if (status && !DISCOUNT_STATUSES.includes(status as Status)) {
+  const isArchived = status === "ARCHIVED";
+  if (status && !isArchived && !DISCOUNT_STATUSES.includes(status as Status)) {
     throw new AppError("Invalid discount status.", 400);
   }
   if (scope && !["PLATFORM", "PRODUCT", "COLLECTION", "CATEGORY"].includes(scope)) {
@@ -125,8 +139,9 @@ async function buildDiscountWhere(query: DiscountListQuery) {
   }
 
   const where: Prisma.DiscountWhereInput = {
+    ...(isArchived ? { deletedAt: { not: null } } : { deletedAt: null }),
     ...(type ? { type: type as never } : {}),
-    ...(status ? { status: status as Status } : {}),
+    ...(!isArchived && status ? { status: status as Status } : {}),
     ...(countryId ? { countries: { some: { countryId } } } : {}),
     ...(scope === "PLATFORM" ? { products: { none: {} }, collections: { none: {} }, categories: { none: {} } } : {}),
     ...(scope === "PRODUCT" ? { products: { some: {} } } : {}),
@@ -307,14 +322,16 @@ export async function listDiscounts(query: DiscountListQuery) {
 
 export async function getDiscountDashboard() {
   const promotionalSupported = await supportsPromotionalDiscountType();
-  const [total, active, inactive, tier, moq, promotional, recentlyUpdated] = await Promise.all([
-    prisma.discount.count(),
-    prisma.discount.count({ where: { status: "ACTIVE" } }),
-    prisma.discount.count({ where: { status: "INACTIVE" } }),
-    prisma.discount.count({ where: { type: "TIER" } }),
-    prisma.discount.count({ where: { type: "MOQ" } }),
-    promotionalSupported ? prisma.discount.count({ where: { type: "PROMOTIONAL" } }) : Promise.resolve(0),
+  const [total, active, inactive, archived, tier, moq, promotional, recentlyUpdated] = await Promise.all([
+    prisma.discount.count({ where: { deletedAt: null } }),
+    prisma.discount.count({ where: { status: "ACTIVE", deletedAt: null } }),
+    prisma.discount.count({ where: { status: "INACTIVE", deletedAt: null } }),
+    prisma.discount.count({ where: { deletedAt: { not: null } } }),
+    prisma.discount.count({ where: { type: "TIER", deletedAt: null } }),
+    prisma.discount.count({ where: { type: "MOQ", deletedAt: null } }),
+    promotionalSupported ? prisma.discount.count({ where: { type: "PROMOTIONAL", deletedAt: null } }) : Promise.resolve(0),
     prisma.discount.findMany({
+      where: { deletedAt: null },
       take: 5,
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       include: discountInclude(),
@@ -325,6 +342,7 @@ export async function getDiscountDashboard() {
     totalDiscounts: total,
     activeDiscounts: active,
     inactiveDiscounts: inactive,
+    archivedDiscounts: archived,
     tierDiscounts: tier,
     moqDiscounts: moq,
     promotionalDiscounts: promotional,
@@ -390,32 +408,206 @@ export async function updateDiscount(id: string, input: DiscountInput) {
   return formatDiscount(updated);
 }
 
-export async function deleteDiscount(id: string) {
+export async function archiveDiscount(id: string) {
+  const discount = await prisma.discount.findUnique({ where: { id } });
+  if (!discount) throw new AppError("Discount not found.", 404);
+  if (discount.deletedAt) throw new AppError("Discount is already archived.", 400);
+
+  const updated = await prisma.discount.update({
+    where: { id },
+    data: { deletedAt: new Date() },
+    include: discountInclude(),
+  });
+  return formatDiscount(updated);
+}
+
+export async function restoreDiscount(id: string) {
+  const discount = await prisma.discount.findUnique({ where: { id } });
+  if (!discount) throw new AppError("Discount not found.", 404);
+  if (!discount.deletedAt) throw new AppError("Discount is not archived.", 400);
+
+  // Validate referenced Tier exists if tierId is populated or required by type
+  if (discount.type === "TIER" && !discount.tierId) {
+    throw new AppError(
+      "Cannot restore discount: Tier-based discount has no assigned tier (referenced tier was removed).",
+      400
+    );
+  }
+  if (discount.tierId) {
+    const tier = await prisma.tier.findUnique({
+      where: { id: discount.tierId },
+      select: { id: true, deletedAt: true },
+    });
+    if (!tier || tier.deletedAt) {
+      throw new AppError(
+        "Cannot restore discount: The referenced tier no longer exists or is archived. Please assign an active tier.",
+        400
+      );
+    }
+  }
+
+  const updated = await prisma.discount.update({
+    where: { id },
+    data: { deletedAt: null },
+    include: discountInclude(),
+  });
+  return formatDiscount(updated);
+}
+
+export async function permanentDeleteDiscount(id: string) {
+  const discount = await prisma.discount.findUnique({
+    where: { id },
+    select: { id: true, name: true, deletedAt: true },
+  });
+  if (!discount) throw new AppError("Discount not found.", 404);
+
+  // Authoritative hard-delete lifecycle guard
+  if (!discount.deletedAt) {
+    throw new AppError("Cannot permanently delete discount: Discount must be archived before it can be permanently deleted.", 400);
+  }
+
   await prisma.discount.delete({ where: { id } });
+  return { id: discount.id, name: discount.name };
+}
+
+export async function deleteDiscount(id: string) {
+  return archiveDiscount(id);
 }
 
 type BulkDiscountInput = {
   ids?: string[];
-  action?: "ENABLE" | "DISABLE" | "DELETE";
+  action?: "ENABLE" | "DISABLE" | "DELETE" | "ARCHIVE";
 };
 
 export async function bulkDiscounts(input: BulkDiscountInput) {
   const ids = Array.isArray(input.ids) ? input.ids.filter(Boolean) : [];
   if (!ids.length) throw new AppError("Select at least one discount.", 400);
-  if (!input.action || !["ENABLE", "DISABLE", "DELETE"].includes(input.action)) {
+  if (!input.action || !["ENABLE", "DISABLE", "DELETE", "ARCHIVE"].includes(input.action)) {
     throw new AppError("Invalid bulk action.", 400);
   }
 
-  if (input.action === "DELETE") {
-    const result = await prisma.discount.deleteMany({ where: { id: { in: ids } } });
+  if (input.action === "DELETE" || input.action === "ARCHIVE") {
+    const result = await prisma.discount.updateMany({
+      where: { id: { in: ids }, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
     return { affected: result.count };
   }
 
   const result = await prisma.discount.updateMany({
-    where: { id: { in: ids } },
+    where: { id: { in: ids }, deletedAt: null },
     data: { status: input.action === "ENABLE" ? "ACTIVE" : "INACTIVE" },
   });
   return { affected: result.count };
+}
+
+export async function bulkRestoreDiscounts(ids: string[]) {
+  const cleanIds = Array.isArray(ids) ? ids.filter(Boolean) : [];
+  if (!cleanIds.length) throw new AppError("Select at least one discount.", 400);
+
+  const discounts = await prisma.discount.findMany({
+    where: { id: { in: cleanIds } },
+    select: { id: true, name: true, type: true, deletedAt: true, tierId: true },
+  });
+
+  const tierIds = Array.from(new Set(discounts.map((d) => d.tierId).filter(Boolean))) as string[];
+  const existingTiers = tierIds.length
+    ? await prisma.tier.findMany({
+        where: { id: { in: tierIds }, deletedAt: null },
+        select: { id: true },
+      })
+    : [];
+  const existingTierSet = new Set(existingTiers.map((t) => t.id));
+
+  const eligibleIds: string[] = [];
+  const blocked: Array<{ id: string; name: string; reason: string }> = [];
+
+  for (const discount of discounts) {
+    if (!discount.deletedAt) {
+      blocked.push({
+        id: discount.id,
+        name: discount.name,
+        reason: "Discount is not archived.",
+      });
+      continue;
+    }
+    if (discount.type === "TIER" && !discount.tierId) {
+      blocked.push({
+        id: discount.id,
+        name: discount.name,
+        reason: "Tier-based discount has no assigned tier (referenced tier was removed).",
+      });
+      continue;
+    }
+    if (discount.tierId && !existingTierSet.has(discount.tierId)) {
+      blocked.push({
+        id: discount.id,
+        name: discount.name,
+        reason: "Referenced tier no longer exists or is archived.",
+      });
+      continue;
+    }
+    eligibleIds.push(discount.id);
+  }
+
+  if (eligibleIds.length > 0) {
+    await prisma.discount.updateMany({
+      where: { id: { in: eligibleIds } },
+      data: { deletedAt: null },
+    });
+  }
+
+  return {
+    restoredCount: eligibleIds.length,
+    blockedCount: blocked.length,
+    restoredIds: eligibleIds,
+    blocked,
+  };
+}
+
+export async function bulkPermanentDeleteDiscounts(ids: string[]) {
+  const cleanIds = Array.isArray(ids) ? ids.filter(Boolean) : [];
+  if (!cleanIds.length) throw new AppError("Select at least one discount.", 400);
+
+  // Batch query candidate records in a single query - zero N+1
+  const discounts = await prisma.discount.findMany({
+    where: { id: { in: cleanIds } },
+    select: { id: true, name: true, deletedAt: true },
+  });
+
+  const discountMap = new Map(discounts.map((d) => [d.id, d]));
+  const eligibleIds: string[] = [];
+  const blocked: Array<{ id: string; name: string; reason: string }> = [];
+
+  for (const id of cleanIds) {
+    const d = discountMap.get(id);
+    if (!d) {
+      blocked.push({ id, name: id, reason: "Discount not found." });
+      continue;
+    }
+    if (!d.deletedAt) {
+      blocked.push({
+        id: d.id,
+        name: d.name,
+        reason: "Permanent Delete is available only for archived discounts. Archive the discount first.",
+      });
+      continue;
+    }
+    eligibleIds.push(d.id);
+  }
+
+  if (eligibleIds.length > 0) {
+    await prisma.discount.deleteMany({
+      where: { id: { in: eligibleIds } },
+    });
+  }
+
+  return {
+    deletedCount: eligibleIds.length,
+    blockedCount: blocked.length,
+    deletedIds: eligibleIds,
+    blocked,
+  };
 }
 
 const DISCOUNT_EXPORT_COLUMNS = [
@@ -472,7 +664,7 @@ function rowToPayload(row: DiscountSpreadsheetRow) {
   };
 }
 
-async function validateDiscountRows(rows: Record<string, string>[]) {
+export async function validateDiscountRows(rows: Record<string, string>[]) {
   const parsed = rows.map(parseDiscountRow);
   const issues: SpreadsheetIssue[] = [];
   const duplicateWarnings: string[] = [];
@@ -513,12 +705,13 @@ async function validateDiscountRows(rows: Record<string, string>[]) {
     if (row.id) ids.add(row.id);
   }
 
-  const [tiers, countries, products, categories, collections] = await Promise.all([
+  const [tiers, countries, products, categories, collections, existingDiscounts] = await Promise.all([
     relatedIds.tierIds.size ? prisma.tier.findMany({ where: { id: { in: Array.from(relatedIds.tierIds) } }, select: { id: true, status: true } }) : Promise.resolve([]),
     relatedIds.countryIds.size ? prisma.country.findMany({ where: { id: { in: Array.from(relatedIds.countryIds) } }, select: { id: true, status: true } }) : Promise.resolve([]),
     relatedIds.productIds.size ? prisma.product.findMany({ where: { id: { in: Array.from(relatedIds.productIds) } }, select: { id: true, status: true } }) : Promise.resolve([]),
     relatedIds.categoryIds.size ? prisma.category.findMany({ where: { id: { in: Array.from(relatedIds.categoryIds) } }, select: { id: true, status: true } }) : Promise.resolve([]),
     relatedIds.collectionIds.size ? prisma.collection.findMany({ where: { id: { in: Array.from(relatedIds.collectionIds) } }, select: { id: true, status: true } }) : Promise.resolve([]),
+    ids.size ? prisma.discount.findMany({ where: { id: { in: Array.from(ids) } }, select: { id: true, deletedAt: true } }) : Promise.resolve([]),
   ]);
 
   const tierById = new Map(tiers.map((tier) => [tier.id, tier]));
@@ -526,9 +719,19 @@ async function validateDiscountRows(rows: Record<string, string>[]) {
   const productById = new Map(products.map((product) => [product.id, product]));
   const categoryById = new Map(categories.map((category) => [category.id, category]));
   const collectionById = new Map(collections.map((collection) => [collection.id, collection]));
+  const archivedDiscountIdSet = new Set(
+    existingDiscounts.filter((d) => d.deletedAt !== null).map((d) => d.id)
+  );
 
   for (const [index, row] of parsed.entries()) {
     const rowNumber = index + 2;
+    if (row.id && archivedDiscountIdSet.has(row.id)) {
+      issues.push({
+        row: rowNumber,
+        field: "id",
+        message: "Discount is archived. Restore the discount before updating via spreadsheet.",
+      });
+    }
     if (row.tierId) {
       const tier = tierById.get(row.tierId);
       if (!tier) issues.push({ row: rowNumber, field: "tierId", message: "Tier not found." });
@@ -569,7 +772,10 @@ async function validateDiscountRows(rows: Record<string, string>[]) {
 
 export async function exportDiscountsSpreadsheet(query: DiscountListQuery & { ids?: string }) {
   const ids = query.ids?.split(",").map((id) => id.trim()).filter(Boolean) ?? [];
-  const where = ids.length ? { id: { in: ids } } : await buildDiscountWhere(query);
+  const isArchived = query.status === "ARCHIVED";
+  const where = ids.length
+    ? { id: { in: ids }, ...(isArchived ? { deletedAt: { not: null } } : { deletedAt: null }) }
+    : await buildDiscountWhere(query);
   const discounts = await prisma.discount.findMany({
     where,
     orderBy: buildDiscountOrderBy(query) as never,

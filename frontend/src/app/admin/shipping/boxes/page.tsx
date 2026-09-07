@@ -2,10 +2,25 @@
 
 import Link from "next/link";
 import { useMemo, useState, useEffect } from "react";
-import { Calculator, Edit2, Plus, Trash2, X } from "lucide-react";
+import { Calculator, Edit2, Plus, Trash2, X, Package, Globe, Truck, ShieldCheck, ShieldAlert, MapPin, Box } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, ConfirmModal, DataTable, StatusBadge, useToast, type Column, AdminListToolbar, LoadingButton, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
+import {
+  AdminInput,
+  AdminSelect,
+  AdminStatsGrid,
+  ConfirmModal,
+  DataTable,
+  Pagination,
+  StatusBadge,
+  Tooltip,
+  useToast,
+  type Column,
+  AdminListToolbar,
+  LoadingButton,
+  AdminBulkActionsBar,
+} from "@/components/admin/AdminComponents";
+import { AdminRowActions } from "@/components/admin/AdminRowActions";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
@@ -14,6 +29,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAdminProducts, useAdminCountries } from "@/hooks/admin/useAdminHooks";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import { Modal } from "@/components/ui/Modal";
+import { cn } from "@/utils/cn";
 
 type BoxFormState = {
   id: string;
@@ -82,6 +98,80 @@ export default function ShippingBoxesPage() {
   const [bulkAction, setBulkAction] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
 
+  // Search, filter, sorting, and pagination
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sortBy, setSortBy] = useState<"name" | "weight" | "volume">("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [showFilters, setShowFilters] = useState(false);
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  const totals = useMemo(() => {
+    const total = boxes.length;
+    const active = boxes.filter((b) => b.isActive).length;
+    const inactive = total - active;
+    const countrySet = new Set<string>();
+    boxes.forEach((b) => {
+      (b.countries || []).forEach((c) => {
+        if (c.country?.code) countrySet.add(c.country.code);
+      });
+    });
+    return {
+      total,
+      active,
+      inactive,
+      supportedCountries: countrySet.size,
+    };
+  }, [boxes]);
+
+  const filteredBoxes = useMemo(() => {
+    const query = debouncedSearch.trim().toLowerCase();
+    const result = boxes.filter((box) => {
+      const boxName = (box.name || "").toLowerCase();
+      const dims = `${box.length}x${box.width}x${box.height}`;
+      const countryCodes = (box.countries || []).map((c) => c.country?.code || "").join(" ").toLowerCase();
+      const matchesSearch = !query || boxName.includes(query) || dims.includes(query) || countryCodes.includes(query);
+      const matchesStatus =
+        !statusFilter ||
+        (statusFilter === "ACTIVE" && box.isActive) ||
+        (statusFilter === "INACTIVE" && !box.isActive);
+
+      return matchesSearch && matchesStatus;
+    });
+
+    result.sort((a, b) => {
+      const direction = sortDir === "asc" ? 1 : -1;
+      if (sortBy === "weight") {
+        return (Number(a.maxWeight || 0) - Number(b.maxWeight || 0)) * direction;
+      }
+      if (sortBy === "volume") {
+        const volA = Number(a.length || 0) * Number(a.width || 0) * Number(a.height || 0);
+        const volB = Number(b.length || 0) * Number(b.width || 0) * Number(b.height || 0);
+        return (volA - volB) * direction;
+      }
+      return (a.name || "").localeCompare(b.name || "") * direction;
+    });
+
+    return result;
+  }, [boxes, debouncedSearch, statusFilter, sortBy, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredBoxes.length / pageSize));
+  const paginatedBoxes = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredBoxes.slice(start, start + pageSize);
+  }, [filteredBoxes, page, pageSize]);
+
   const handleBulkAction = async () => {
     if (!bulkAction || selectedIds.length === 0) return;
     if (bulkAction === "delete") {
@@ -127,6 +217,7 @@ export default function ShippingBoxesPage() {
 
   useEffect(() => {
     setSelectedIds([]);
+    setPage(1);
   }, [activeSubTab]);
 
   useEffect(() => {
@@ -227,42 +318,69 @@ export default function ShippingBoxesPage() {
       render: (row) => row.countries?.map((c) => c.country.code).join(", ") || "—",
     },
     {
-      key: "isActive", label: "Status",
-      render: (row) => <StatusBadge status={row.isActive ? "ACTIVE" : "INACTIVE"} />,
+      key: "isActive",
+      label: "Status",
+      render: (row) => (
+        <Tooltip content={row.isActive ? "Active box (used for automated packing calculations)" : "Inactive box (disabled)"} side="top">
+          <span className="inline-block cursor-default">
+            <StatusBadge status={row.isActive ? "ACTIVE" : "INACTIVE"} />
+          </span>
+        </Tooltip>
+      ),
     },
     {
-      key: "actions", label: "Actions",
+      key: "actions",
+      label: "Actions",
+      width: "160px",
+      align: "left",
       render: (row) => (
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => openEdit(row)}
-            disabled={!canManage}
-            className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5] disabled:opacity-40"
-          >
-            <Edit2 size={12} />
-          </button>
-          <button
-            onClick={async () => {
-              try {
-                await toggleMutation.mutateAsync(row.id);
-                showToast(`${row.name} ${row.isActive ? "deactivated" : "activated"}.`);
-              } catch (error) {
-                showToast(getAdminErrorMessage(error, "Toggle failed."), "error");
-              }
-            }}
-            disabled={!canManage}
-            className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5] disabled:opacity-40"
-          >
-            {row.isActive ? "Deactivate" : "Activate"}
-          </button>
-          <button
-            onClick={() => setDeletingBox(row)}
-            disabled={!canManage}
-            className="rounded border border-[#F2C9C9] px-2 py-1 text-[12px] text-red-600 hover:bg-red-50 disabled:opacity-40"
-          >
-            <Trash2 size={12} />
-          </button>
-        </div>
+        <AdminRowActions
+          edit={
+            canManage
+              ? {
+                  onClick: () => openEdit(row),
+                  title: "Edit box dimensions",
+                }
+              : undefined
+          }
+          extra={
+            canManage ? (
+              <Tooltip
+                content={row.isActive ? "Click to deactivate box" : "Click to activate box"}
+                side="top"
+              >
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await toggleMutation.mutateAsync(row.id);
+                      showToast(`${row.name} ${row.isActive ? "deactivated" : "activated"}.`);
+                    } catch (error) {
+                      showToast(getAdminErrorMessage(error, "Toggle failed."), "error");
+                    }
+                  }}
+                  disabled={toggleMutation.isPending}
+                  className={cn(
+                    "flex h-7 items-center justify-center rounded-md border px-2.5 text-[12px] font-medium transition-colors shadow-2xs cursor-pointer",
+                    row.isActive
+                      ? "border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A]"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                  )}
+                >
+                  {row.isActive ? "Deactivate" : "Activate"}
+                </button>
+              </Tooltip>
+            ) : undefined
+          }
+          delete={
+            canManage
+              ? {
+                  onClick: () => setDeletingBox(row),
+                  title: "Delete box",
+                }
+              : undefined
+          }
+        />
       ),
     },
   ], [canManage, toggleMutation, showToast]);
@@ -270,74 +388,210 @@ export default function ShippingBoxesPage() {
   return (
     <AdminLayout title="Package/Box Management" breadcrumb={[{ label: "Shipping", href: "/admin/shipping" }, { label: "Boxes" }]}>
       <div className="space-y-5">
-        <AdminListToolbar
-          leftExtra={
-            <div className="flex gap-2 border-b border-[#E6E6E6]">
-              <Link href="/admin/shipping" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
-                Providers
-              </Link>
-              <Link href="/admin/shipping/zones" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
-                Zones
-              </Link>
-              <span className="border-b-2 border-[#E31E24] px-4 py-2 text-[13px] font-semibold text-[#111]">Boxes</span>
-            </div>
-          }
-          primaryAction={
-            canManage
-              ? {
-                  onClick: openCreate,
-                  label: "Add Box",
-                  icon: <Plus size={15} />,
-                }
-              : undefined
-          }
+        {/* Navigation Sub-Tabs (Parent) */}
+        <div className="flex items-center gap-2 border-b border-[#E6E6E6] bg-white px-4 pt-2 rounded-t-lg shadow-2xs overflow-x-auto max-w-full scrollbar-thin">
+          <Link
+            href="/admin/shipping"
+            className="flex items-center gap-2 border-b-2 border-transparent text-[#666] hover:border-[#CCC] hover:text-[#1A1A1A] px-3 pb-3 pt-1 text-[13.5px] font-medium shrink-0 whitespace-nowrap transition-colors cursor-pointer"
+          >
+            <Truck size={15} />
+            <span>Providers</span>
+          </Link>
+          <Link
+            href="/admin/shipping/zones"
+            className="flex items-center gap-2 border-b-2 border-transparent text-[#666] hover:border-[#CCC] hover:text-[#1A1A1A] px-3 pb-3 pt-1 text-[13.5px] font-medium shrink-0 whitespace-nowrap transition-colors cursor-pointer"
+          >
+            <Globe size={15} />
+            <span>Zones</span>
+          </Link>
+          <Link
+            href="/admin/shipping/boxes"
+            className="flex items-center gap-2 border-b-2 border-[#E31E24] text-[#E31E24] px-3 pb-3 pt-1 text-[13.5px] font-semibold shrink-0 whitespace-nowrap cursor-pointer"
+          >
+            <Package size={15} />
+            <span>Boxes</span>
+            <span className="ml-1 rounded-full bg-[#E31E24]/10 text-[#E31E24] px-2 py-0.5 text-[11px] font-semibold">
+              {totals.total}
+            </span>
+          </Link>
+        </div>
+
+        {/* KPI Stats Grid */}
+        <AdminStatsGrid
+          stats={[
+            { title: "Total Boxes", value: totals.total, subtitle: "Configured package sizes", icon: <Package size={18} />, isLoading },
+            { title: "Active Boxes", value: totals.active, subtitle: "Available for automated packing", icon: <ShieldCheck size={18} />, color: "bg-emerald-600", isLoading },
+            { title: "Inactive Boxes", value: totals.inactive, subtitle: "Disabled sizes", icon: <ShieldAlert size={18} />, color: "bg-slate-600", isLoading },
+            { title: "Supported Destinations", value: totals.supportedCountries, subtitle: "Assigned countries", icon: <MapPin size={18} />, color: "bg-sky-600", isLoading }
+          ]}
         />
 
-        <div className="flex gap-2 border-b border-[#E6E6E6]">
+        {/* Sub-view switcher tabs */}
+        <div className="flex items-center gap-2 border-b border-[#E6E6E6]">
           <button
             type="button"
             onClick={() => setActiveSubTab("boxes")}
-            className={`px-4 py-2 text-[13px] font-medium ${activeSubTab === "boxes" ? "border-b-2 border-[#E31E24] font-semibold text-[#111]" : "text-[#6B6B6B] hover:text-[#111]"}`}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 text-[13.5px] font-semibold border-b-2 transition-colors cursor-pointer",
+              activeSubTab === "boxes"
+                ? "border-[#E31E24] text-[#E31E24]"
+                : "border-transparent text-[#6B7280] hover:text-[#111827]"
+            )}
           >
-            Package Size
+            <Package size={15} />
+            <span>Package Size</span>
+            <span className={cn(
+              "ml-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+              activeSubTab === "boxes" ? "bg-[#E31E24]/10 text-[#E31E24]" : "bg-[#F3F4F6] text-[#6B7280]"
+            )}>
+              {totals.total}
+            </span>
           </button>
           <button
             type="button"
             onClick={() => setActiveSubTab("preview")}
-            className={`flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium ${activeSubTab === "preview" ? "border-b-2 border-[#E31E24] font-semibold text-[#111]" : "text-[#6B6B6B] hover:text-[#111]"}`}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 text-[13.5px] font-semibold border-b-2 transition-colors cursor-pointer",
+              activeSubTab === "preview"
+                ? "border-[#E31E24] text-[#E31E24]"
+                : "border-transparent text-[#6B7280] hover:text-[#111827]"
+            )}
           >
-            <Calculator size={13} /> Package Preview
+            <Calculator size={15} />
+            <span>Package Preview</span>
           </button>
         </div>
 
         {activeSubTab === "boxes" ? (
-          <DataTable<ApiShippingBox>
-            title="Boxes List"
-            columns={columns}
-            data={boxes}
-            isLoading={isLoading}
-            rowKey="id"
-            emptyMessage="No shipping boxes configured."
-            enableSelection={true}
-            selectedIds={selectedIds}
-            onSelectionChange={setSelectedIds}
-            renderBulkActions={(selectedIds) => (
-              <AdminBulkActionsBar
-                selectedCount={selectedIds.length}
-                onClear={() => setSelectedIds([])}
-                actionType={bulkAction}
-                onActionTypeChange={setBulkAction}
-                actions={[
-                  { value: "activate", label: "Mark active" },
-                  { value: "deactivate", label: "Mark inactive" },
-                  { value: "delete", label: "Delete selected" }
-                ]}
-                onApply={handleBulkAction}
-                applyLoading={bulkSaving}
-                applyDisabled={!bulkAction || selectedIds.length === 0}
+          <div className="space-y-5">
+            <AdminListToolbar
+              search={{
+                value: search,
+                onChange: (val) => {
+                  setSearch(val);
+                  setPage(1);
+                },
+                placeholder: "Search box name, dimensions, country...",
+                widthClassName: "w-[280px]",
+              }}
+              filters={{
+                showFilters,
+                onToggle: () => setShowFilters(!showFilters),
+                activeCount: [statusFilter, sortBy !== "name" ? sortBy : "", sortDir !== "asc" ? sortDir : ""].filter(Boolean).length,
+              }}
+              refresh={{
+                onRefresh: () => void qc.invalidateQueries({ queryKey: ["admin-shipping-boxes"] }),
+                isRefreshing: isLoading,
+              }}
+              primaryAction={
+                canManage
+                  ? {
+                      onClick: openCreate,
+                      label: "Add Box",
+                      icon: <Plus size={14} />,
+                    }
+                  : undefined
+              }
+              onResetFilters={() => {
+                setSearch("");
+                setStatusFilter("");
+                setSortBy("name");
+                setSortDir("asc");
+                setPage(1);
+              }}
+              filterPanel={
+                <div className="grid gap-4 md:grid-cols-3 pt-2">
+                  <AdminSelect
+                    label="Status"
+                    value={statusFilter}
+                    onChange={(e) => {
+                      setStatusFilter(e.target.value);
+                      setPage(1);
+                    }}
+                    options={[
+                      { value: "", label: "All Statuses" },
+                      { value: "ACTIVE", label: "Active" },
+                      { value: "INACTIVE", label: "Inactive" },
+                    ]}
+                  />
+                  <AdminSelect
+                    label="Sort By"
+                    value={sortBy}
+                    onChange={(e) => {
+                      setSortBy(e.target.value as "name" | "weight" | "volume");
+                      setPage(1);
+                    }}
+                    options={[
+                      { value: "name", label: "Box Name" },
+                      { value: "weight", label: "Max Weight" },
+                      { value: "volume", label: "Volume (Dimensions)" },
+                    ]}
+                  />
+                  <AdminSelect
+                    label="Direction"
+                    value={sortDir}
+                    onChange={(e) => {
+                      setSortDir(e.target.value as "asc" | "desc");
+                      setPage(1);
+                    }}
+                    options={[
+                      { value: "asc", label: "Ascending" },
+                      { value: "desc", label: "Descending" },
+                    ]}
+                  />
+                </div>
+              }
+            />
+
+            {/* DataTable in rounded-xl container with Bottom Pagination */}
+            <div>
+              <DataTable<ApiShippingBox>
+                title="Boxes List"
+                columns={columns}
+                data={paginatedBoxes}
+                isLoading={isLoading}
+                rowKey="id"
+                emptyMessage="No shipping boxes configured."
+                enableSelection={true}
+                selectedIds={selectedIds}
+                onSelectionChange={setSelectedIds}
+                totalItems={filteredBoxes.length}
+                currentPage={page}
+                pageSize={pageSize}
+                totalPages={totalPages}
+                onPageChange={setPage}
+                onPageSizeChange={(newSize) => {
+                  setPageSize(newSize);
+                  setPage(1);
+                }}
+                pageSizeOptions={[10, 25, 50, 100]}
+                renderBulkActions={(selectedIds) => (
+                  <AdminBulkActionsBar
+                    selectedCount={selectedIds.length}
+                    onClear={() => setSelectedIds([])}
+                    actionType={bulkAction}
+                    onActionTypeChange={setBulkAction}
+                    actions={[
+                      { value: "activate", label: "Mark active" },
+                      { value: "deactivate", label: "Mark inactive" },
+                      { value: "delete", label: "Delete selected" }
+                    ]}
+                    onApply={handleBulkAction}
+                    applyLoading={bulkSaving}
+                    applyDisabled={!bulkAction || selectedIds.length === 0}
+                  />
+                )}
               />
-            )}
-          />
+              <div className="border-t border-[#E6E6E6] px-4 py-3 bg-white">
+                <Pagination
+                  page={page}
+                  totalPages={totalPages}
+                  onPageChange={setPage}
+                  alwaysShow={true}
+                />
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="grid gap-5 lg:grid-cols-[1fr_1.2fr]">
             <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 space-y-4">

@@ -19,6 +19,14 @@ export async function listCustomerQuotes(customerId: string) {
         { customerId: customer.id },
         { customerEmail: { equals: customer.email, mode: "insensitive" } },
       ],
+      AND: [
+        {
+          OR: [
+            { deletedAt: null },
+            { status: { in: ["ACCEPTED", "CONVERTED"] } },
+          ],
+        },
+      ],
     },
     orderBy: {
       createdAt: "desc",
@@ -54,6 +62,14 @@ export async function getCustomerQuote(customerId: string, quoteId: string) {
         { customerId: customer.id },
         { customerEmail: { equals: customer.email, mode: "insensitive" } },
       ],
+      AND: [
+        {
+          OR: [
+            { deletedAt: null },
+            { status: { in: ["ACCEPTED", "CONVERTED"] } },
+          ],
+        },
+      ],
     },
     include: {
       items: {
@@ -76,6 +92,9 @@ export async function getCustomerQuote(customerId: string, quoteId: string) {
 
 export async function acceptCustomerQuote(customerId: string, quoteId: string) {
   const quote = await getCustomerQuote(customerId, quoteId);
+  if (quote.deletedAt) {
+    throw new AppError("Archived quotes cannot be accepted.", 400);
+  }
   if (quote.status === "CONVERTED" || quote.status === "ACCEPTED") {
     throw new AppError("Quote has already been accepted or converted.", 400);
   }
@@ -90,6 +109,9 @@ export async function acceptCustomerQuote(customerId: string, quoteId: string) {
 
 export async function declineCustomerQuote(customerId: string, quoteId: string) {
   const quote = await getCustomerQuote(customerId, quoteId);
+  if (quote.deletedAt) {
+    throw new AppError("Archived quotes cannot be declined.", 400);
+  }
   if (quote.status === "CONVERTED") {
     throw new AppError("Converted quotes cannot be declined.", 400);
   }

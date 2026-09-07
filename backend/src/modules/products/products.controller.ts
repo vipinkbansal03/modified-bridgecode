@@ -58,6 +58,12 @@ export const permanentDelete = asyncHandler(async (req: AuthRequest, res: Respon
   return ApiResponse.success(res, "Product permanently deleted.");
 });
 
+export const bulkPermanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const result = await ProductService.bulkPermanentDeleteProducts(ids);
+  return ApiResponse.success(res, "Bulk permanent delete processed.", result);
+});
+
 export const duplicate = asyncHandler(async (req: AuthRequest, res: Response) => {
   const product = await ProductService.duplicateProduct(req.params.id as string);
   return ApiResponse.created(res, "Product duplicated.", product);
@@ -256,9 +262,20 @@ export const deleteVariant = asyncHandler(async (req: AuthRequest, res: Response
   return ApiResponse.success(res, "Variant deleted.");
 });
 
+export const restoreVariant = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const variant = await ProductService.restoreVariant(req.params.id as string, req.params.variantId as string);
+  return ApiResponse.success(res, "Variant restored.", variant);
+});
+
 export const permanentDeleteVariant = asyncHandler(async (req: AuthRequest, res: Response) => {
   await ProductService.permanentDeleteVariant(req.params.id as string, req.params.variantId as string);
   return ApiResponse.success(res, "Variant permanently deleted.");
+});
+
+export const bulkPermanentDeleteVariants = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const result = await ProductService.bulkPermanentDeleteVariants(ids);
+  return ApiResponse.success(res, "Bulk permanent delete processed.", result);
 });
 
 export const cloneVariant = asyncHandler(async (req: AuthRequest, res: Response) => {

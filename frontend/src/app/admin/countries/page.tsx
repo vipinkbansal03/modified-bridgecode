@@ -1,11 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useState, type FormEvent, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Edit2, Filter, Plus, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { Coins, Filter, Globe, Plus, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, useToast, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, Tooltip, useToast, LoadingButton, type Column } from "@/components/admin/AdminComponents";
+import { AdminBulkActionsBar } from "@/components/admin/AdminBulkActionsBar";
+import { AdminRowActions } from "@/components/admin/AdminRowActions";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { Modal } from "@/components/ui/Modal";
 import { useAdminCountries, useAdminCurrencies, useBulkCountries } from "@/hooks/admin/useAdminHooks";
@@ -49,6 +52,14 @@ const emptyForm: CountryFormState = {
   dutyPercentage: "0",
 };
 
+const columnDefaults = {
+  name: true,
+  code: true,
+  currency: true,
+  isDefault: true,
+  status: true,
+} as const;
+
 function matchesSearch(country: Country, search: string) {
   const value = search.trim().toLowerCase();
   if (!value) return true;
@@ -78,7 +89,10 @@ export default function CountriesPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [showFilters, setShowFilters] = useState(false);
-  const [showColumns, setShowColumns] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState({ ...columnDefaults });
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState<"ENABLE" | "DISABLE" | "DELETE" | "">("");
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Country | null>(null);
   const [deleting, setDeleting] = useState<Country | null>(null);
@@ -125,8 +139,6 @@ export default function CountriesPage() {
     }
   });
 
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [selectAll, setSelectAll] = useState(false);
   const [togglingCountryId, setTogglingCountryId] = useState<string | null>(null);
 
   const { data: countries = [], isLoading, refetch } = useAdminCountries({ includeInactive: true });
@@ -249,62 +261,44 @@ export default function CountriesPage() {
     return `${defaultCountry.name} | ${defaultCountry.code.toUpperCase()} | ${defaultCountry.status}`;
   }, [defaultCountry]);
 
-  // Handle select all on current page
   useEffect(() => {
-    if (!selectAll) return;
+    setSelectedIds([]);
+  }, [page, limit, debouncedSearch, statusFilter, sortBy, sortDir]);
 
-    setSelectedIds((current) => {
-      if (current.size === paginatedCountryIds.size && Array.from(current).every((id) => paginatedCountryIds.has(id))) {
-        return current;
-      }
-
-      return new Set(paginatedCountryIds);
-    });
-  }, [selectAll, paginatedCountryIds]);
-
-  const toggleSelectAll = () => {
-    setSelectAll((current) => {
-      const next = !current;
-      if (!next) {
-        setSelectedIds(new Set<string>());
-      }
-      return next;
-    });
-  };
-
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const clearSelection = () => {
-    setSelectedIds(new Set<string>());
-    setSelectAll(false);
-  };
-
-  const handleBulkAction = async (action: "ENABLE" | "DISABLE" | "DELETE") => {
-    if (selectedIds.size === 0) {
-      showToast("No countries selected.", "error");
+  const handleBulkAction = async () => {
+    if (!bulkAction || selectedIds.length === 0) return;
+    if (bulkAction === "DELETE") {
+      setBulkDeleting(true);
       return;
     }
-    if (action === "DELETE") {
-      const hasDefault = paginatedCountries.some((c) => selectedIds.has(c.id) && c.isDefault);
-      if (hasDefault) {
-        showToast("Default country cannot be deleted.", "error");
-        return;
-      }
-    }
     try {
-      await bulkMutation.mutateAsync({ ids: Array.from(selectedIds), action });
-      showToast(`${action === "DELETE" ? "Deleted" : action === "ENABLE" ? "Enabled" : "Disabled"} ${selectedIds.size} countries.`);
-      clearSelection();
+      await bulkMutation.mutateAsync({ ids: selectedIds, action: bulkAction });
+      showToast(`${bulkAction === "ENABLE" ? "Enabled" : "Disabled"} ${selectedIds.length} countries.`);
+      setSelectedIds([]);
+      setBulkAction("");
       await refetch();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Bulk action failed."), "error");
+    }
+  };
+
+  const confirmBulkDelete = async () => {
+    const hasDefault = paginatedCountries.some((c) => selectedIds.includes(c.id) && c.isDefault);
+    if (hasDefault) {
+      showToast("Default country cannot be deleted.", "error");
+      setBulkDeleting(false);
+      return;
+    }
+    try {
+      await bulkMutation.mutateAsync({ ids: selectedIds, action: "DELETE" });
+      showToast(`Deleted ${selectedIds.length} countries.`);
+      setSelectedIds([]);
+      setBulkAction("");
+      await refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to delete countries."), "error");
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -383,90 +377,94 @@ export default function CountriesPage() {
     }
   }
 
-  const columns = [
-    ...(canUpdate
-      ? [
-          {
-            key: "select",
-            label: (
-              <input
-                type="checkbox"
-                checked={selectAll}
-                onChange={toggleSelectAll}
-                className="h-4 w-4 rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
-                aria-label="Select all"
-              />
-            ),
-            width: "40px",
-            render: (row: Country) => (
-              <input
-                type="checkbox"
-                checked={selectedIds.has(row.id)}
-                onChange={() => toggleSelect(row.id)}
-                className="h-4 w-4 rounded border-[#E6E6E6] text-[#E31E24] focus:ring-[#E31E24]"
-                aria-label={`Select ${row.name}`}
-              />
-            ),
-          },
-        ]
-      : []),
-    {
-      key: "name",
-      label: "Country",
-      render: (row: Country) => (
-        <div>
-          <div className="font-medium text-[#1A1A1A]">{row.name}</div>
-          <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">{row.isDefault ? "Default country" : "Standard country"}</div>
-        </div>
-      ),
-    },
-    { key: "code", label: "Code", render: (row: Country) => <span className="font-mono font-semibold text-[#1A1A1A]">{row.code}</span> },
-    { key: "currency", label: "Currency", render: (row: Country) => `${row.currency?.name ?? "-"} (${row.currency?.symbol ?? "-"})` },
-    { key: "isDefault", label: "Default", render: (row: Country) => (row.isDefault ? <span className="font-medium text-green-600">Default</span> : "-") },
-    { key: "status", label: "Status" },
-    ...(canUpdate || canDelete
-      ? [
-          {
-            key: "actions",
-            label: "Actions",
-            width: "110px",
-            render: (row: Country) => (
-              <div className="flex items-center gap-1.5">
-                {canUpdate && (
-                  <button
-                    type="button"
-                    onClick={() => openEdit(row)}
-                    className="flex h-7 w-7 items-center justify-center rounded border border-[#E6E6E6] text-[#6B6B6B] hover:bg-[#F2F2F2]"
-                    title="Edit country details"
-                  >
-                    <Edit2 size={13} />
-                  </button>
-                )}
-                {canDelete && (
-                  <button
-                    type="button"
-                    onClick={() => setDeleting(row)}
-                    disabled={deleting?.id === row.id}
-                    className="flex h-7 w-7 items-center justify-center rounded border border-[#F2C9C9] text-red-500 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    title={row.isDefault ? "Default country cannot be deleted" : "Deactivate country"}
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                )}
-              </div>
-            ),
-          },
-        ]
-      : []),
-  ];
+  const columns: Column<Country>[] = useMemo(
+    () => [
+      {
+        key: "name",
+        label: "Country",
+        render: (row: Country) => (
+          <div>
+            <div className="font-medium text-[#1A1A1A]">{row.name}</div>
+            <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">{row.isDefault ? "Default country" : "Standard country"}</div>
+          </div>
+        ),
+      },
+      { key: "code", label: "Code", width: "100px", render: (row: Country) => <span className="font-mono font-semibold text-[#1A1A1A]">{row.code}</span> },
+      { key: "currency", label: "Currency", render: (row: Country) => `${row.currency?.name ?? "-"} (${row.currency?.symbol ?? "-"})` },
+      { key: "isDefault", label: "Default", width: "100px", render: (row: Country) => (row.isDefault ? <span className="font-medium text-green-600">Default</span> : "-") },
+      { key: "status", label: "Status", width: "120px" },
+      ...(canUpdate || canDelete
+        ? [
+            {
+              key: "actions",
+              label: "Actions",
+              width: "110px",
+              align: "left" as const,
+              render: (row: Country) => (
+                <AdminRowActions
+                  edit={
+                    canUpdate
+                      ? {
+                          onClick: () => openEdit(row),
+                          title: "Edit country details",
+                        }
+                      : undefined
+                  }
+                  delete={
+                    canDelete
+                      ? {
+                          onClick: () => setDeleting(row),
+                          title: row.isDefault ? "Default country cannot be deleted" : "Deactivate country",
+                          disabled: row.isDefault || deleting?.id === row.id,
+                        }
+                      : undefined
+                  }
+                />
+              ),
+            },
+          ]
+        : []),
+    ],
+    [canUpdate, canDelete, deleting]
+  );
+
+  const filteredColumns = useMemo(() => {
+    return columns.filter((col) => {
+      if (col.key in visibleColumns) {
+        return visibleColumns[col.key as keyof typeof visibleColumns];
+      }
+      return true;
+    });
+  }, [columns, visibleColumns]);
 
   if (authLoading || !hasPermission("countries.view")) {
     return null;
   }
 
   return (
-    <AdminLayout title="Countries" breadcrumb={[{ label: "Countries" }]}>
+    <AdminLayout title="Countries" breadcrumb={[{ label: "Regions", href: "/admin/countries" }, { label: "Countries" }]}>
       <div className="space-y-5">
+        {/* Navigation Sub-Tabs */}
+        <div className="flex items-center gap-2 border-b border-[#E6E6E6] bg-white px-4 pt-2 rounded-t-lg shadow-2xs overflow-x-auto max-w-full scrollbar-thin">
+          <Link
+            href="/admin/countries"
+            className="flex items-center gap-2 border-b-2 border-[#E31E24] text-[#E31E24] px-3 pb-3 pt-1 text-[13.5px] font-semibold shrink-0 whitespace-nowrap cursor-pointer"
+          >
+            <Globe size={15} />
+            <span>Countries</span>
+            <span className="ml-1 rounded-full bg-[#E31E24]/10 text-[#E31E24] px-2 py-0.5 text-[11px] font-semibold">
+              {stats.total}
+            </span>
+          </Link>
+          <Link
+            href="/admin/currencies"
+            className="flex items-center gap-2 border-b-2 border-transparent text-[#666] hover:border-[#CCC] hover:text-[#1A1A1A] px-3 pb-3 pt-1 text-[13.5px] font-medium shrink-0 whitespace-nowrap transition-colors cursor-pointer"
+          >
+            <Coins size={15} />
+            <span>Currencies</span>
+          </Link>
+        </div>
+
         <AdminStatsGrid
           stats={[
             { title: "Total Countries", value: stats.total, subtitle: "All configured countries", icon: <SlidersHorizontal size={18} /> },
@@ -480,7 +478,10 @@ export default function CountriesPage() {
         <AdminListToolbar
           search={{
             value: search,
-            onChange: setSearch,
+            onChange: (val) => {
+              setSearch(val);
+              setPage(1);
+            },
             placeholder: "Search countries...",
             widthClassName: "max-w-[280px]",
           }}
@@ -489,11 +490,24 @@ export default function CountriesPage() {
             onToggle: () => setShowFilters((prev) => !prev),
             activeCount: [statusFilter].filter(Boolean).length,
           }}
+          columns={{
+            visibleColumns: visibleColumns,
+            onToggleColumn: (key) => {
+              setVisibleColumns((current) => ({
+                ...current,
+                [key]: !current[key as keyof typeof current],
+              }));
+            },
+            options: Object.keys(visibleColumns).map((key) => ({
+              key,
+              label: key === "isDefault" ? "Default" : key.charAt(0).toUpperCase() + key.slice(1),
+            })),
+          }}
           refresh={{
             onRefresh: refetch,
             isRefreshing: isLoading,
           }}
-          primaryAction={canCreate ? { onClick: openCreate, label: "Add Country" } : undefined}
+          primaryAction={canCreate ? { onClick: openCreate, label: "Add Country", icon: <Plus size={14} /> } : undefined}
           onResetFilters={() => {
             setSearch("");
             setStatusFilter("");
@@ -502,7 +516,7 @@ export default function CountriesPage() {
             setPage(1);
           }}
           filterPanel={
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 pt-2">
               <AdminSelect
                 label="Status"
                 value={statusFilter}
@@ -539,66 +553,65 @@ export default function CountriesPage() {
               <AdminSelect
                 label="Page Size"
                 value={String(limit)}
-                onChange={(event) => setLimit(Number(event.target.value))}
+                onChange={(event) => {
+                  setLimit(Number(event.target.value));
+                  setPage(1);
+                }}
                 options={[
                   { value: "10", label: "10 per page" },
                   { value: "20", label: "20 per page" },
                   { value: "50", label: "50 per page" },
+                  { value: "100", label: "100 per page" },
                 ]}
               />
             </div>
           }
         />
-          {selectedIds.size > 0 && (
-            <div className="mt-4 rounded-xl border border-dashed border-[#E31E24]/30 bg-[#FFF5F5]/30 p-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <span className="text-[13px] font-semibold text-[#E31E24]">{selectedIds.size} rows selected</span>
-                <div className="h-4 w-[1px] bg-[#E6E6E6]" />
-                <div className="flex items-center gap-2">
-                  <LoadingButton type="button" onClick={() => handleBulkAction("ENABLE")} loading={bulkMutation.isPending} loadingText="Enabling..." className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-[#E31E24] px-4 text-[13px] font-semibold text-white hover:bg-[#B5151B]">
-                    Enable
-                  </LoadingButton>
-                  <LoadingButton type="button" onClick={() => handleBulkAction("DISABLE")} loading={bulkMutation.isPending} loadingText="Disabling..." className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]">
-                    Disable
-                  </LoadingButton>
-                  <LoadingButton type="button" onClick={() => handleBulkAction("DELETE")} loading={bulkMutation.isPending} loadingText="Deleting..." className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[#F2C9C9] bg-white px-3 text-[13px] font-medium text-red-500 hover:bg-red-50">
-                    Delete
-                  </LoadingButton>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={clearSelection} className="text-[13px] font-medium text-[#6B6B6B] hover:text-[#E31E24] hover:underline">
-                  Clear selection
-                </button>
-              </div>
-            </div>
-          )}
 
-        {showColumns ? (
-          <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
-            <div className="text-[13px] font-semibold text-[#1A1A1A]">Current filters</div>
-            <div className="mt-2 flex flex-wrap gap-2 text-[12.5px] text-[#6B6B6B]">
-              <span className="rounded-full border border-[#E6E6E6] px-3 py-1">Search: {debouncedSearch.trim() || "All"}</span>
-              <span className="rounded-full border border-[#E6E6E6] px-3 py-1">Status: {statusFilter || "All"}</span>
-              <span className="rounded-full border border-[#E6E6E6] px-3 py-1">Sort: {sortBy} / {sortDir}</span>
-              <span className="rounded-full border border-[#E6E6E6] px-3 py-1">Page size: {limit}</span>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="rounded-xl border border-[#E6E6E6] bg-white">
+        <div className="rounded-xl border border-[#E6E6E6] bg-white overflow-hidden shadow-2xs">
           <DataTable<Country>
-            columns={columns}
+            title="Countries List"
+            columns={filteredColumns}
             data={paginatedCountries}
             rowKey="id"
             isLoading={isLoading}
             emptyMessage="No countries configured."
+            enableSelection={canUpdate}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+            onSelectAll={(checked) => setSelectedIds(checked ? paginatedCountries.map((c) => c.id) : [])}
+            totalItems={filteredCountries.length}
+            currentPage={safePage}
+            pageSize={limit}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            onPageSizeChange={(newLimit) => {
+              setLimit(newLimit);
+              setPage(1);
+            }}
+            pageSizeOptions={[10, 20, 50, 100]}
             onToggleStatus={canUpdate ? handleToggleStatus : undefined}
             statusLoadingId={togglingCountryId}
             isStatusDisabled={(c) => !canUpdate || (c.isDefault && c.status === "ACTIVE")}
+            renderBulkActions={(selectedIds) => (
+              <AdminBulkActionsBar
+                selectedCount={selectedIds.length}
+                onClear={() => setSelectedIds([])}
+                actionType={bulkAction}
+                onActionTypeChange={(val) => setBulkAction(val as "ENABLE" | "DISABLE" | "DELETE" | "")}
+                actions={[
+                  { value: "ENABLE", label: "Mark active" },
+                  { value: "DISABLE", label: "Mark inactive" },
+                  { value: "DELETE", label: "Delete selected" },
+                ]}
+                onApply={handleBulkAction}
+                applyLoading={bulkMutation.isPending}
+                applyDisabled={!bulkAction || selectedIds.length === 0}
+              />
+            )}
           />
-          <div className="border-t border-[#E6E6E6] px-4 py-3">
-            <Pagination page={safePage} totalPages={totalPages} onPageChange={setPage} />
+          <div className="border-t border-[#E6E6E6] px-4 py-3 bg-white">
+            <Pagination page={safePage} totalPages={totalPages} onPageChange={setPage} alwaysShow={true} />
           </div>
         </div>
       </div>
@@ -734,6 +747,18 @@ export default function CountriesPage() {
         onConfirm={handleDelete}
         onCancel={() => setDeleting(null)}
         isLoading={bulkMutation.isPending}
+        danger
+      />
+
+      <ConfirmModal
+        open={bulkDeleting}
+        title="Delete Selected Countries?"
+        message={`Are you sure you want to delete ${selectedIds.length} selected countries? Default country will not be deleted.`}
+        confirmText="Delete"
+        onConfirm={confirmBulkDelete}
+        onCancel={() => setBulkDeleting(false)}
+        isLoading={bulkMutation.isPending}
+        danger
       />
 
       {ToastComponent}

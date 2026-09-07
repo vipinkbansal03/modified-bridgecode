@@ -24,6 +24,7 @@ import {
   AdminStatsGrid,
   AdminListToolbar,
   ConfirmModal,
+  AdminDeleteModal,
   DataTable,
   Pagination,
   StatusBadge,
@@ -39,6 +40,7 @@ import {
   useCreateWarehouse,
   useUpdateWarehouse,
   useDeleteWarehouse,
+  usePermanentDeleteWarehouse,
   useAdminCountries,
 } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
@@ -58,7 +60,24 @@ type WarehouseRow = {
   gstin?: string;
   deliveryZones?: { countryId: string; states: string[] }[];
   status: "ACTIVE" | "INACTIVE";
+  deletedAt?: string | null;
   country?: { code: string; name: string };
+  dependencyCounts?: {
+    orders: number;
+    orderItems: number;
+    shipments: number;
+    inventories: number;
+    activeStock: number;
+    adjustments: number;
+  };
+  _count?: {
+    orders: number;
+    orderItems: number;
+    shipments: number;
+    inventories: number;
+  };
+  canPermanentDelete?: boolean;
+  permanentDeleteBlockReason?: string | null;
 };
 
 type WarehouseFormState = {
@@ -165,6 +184,7 @@ export default function WarehousesPage() {
   const createMutation = useCreateWarehouse();
   const updateMutation = useUpdateWarehouse(editing?.id || "");
   const deleteMutation = useDeleteWarehouse();
+  const permanentDeleteMutation = usePermanentDeleteWarehouse();
 
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
@@ -181,13 +201,13 @@ export default function WarehousesPage() {
     setBulkLoading(true);
     try {
       await Promise.all(selectedIds.map((id) => adminApi.delete(`/warehouses/${id}`)));
-      showToast(`Successfully deleted ${selectedIds.length} warehouse(s).`, "success");
+      showToast(`Successfully archived ${selectedIds.length} warehouse(s).`, "success");
       setSelectedIds([]);
       setBulkAction("");
       setShowBulkDeleteConfirm(false);
       refetch();
     } catch (error) {
-      showToast(getAdminErrorMessage(error, "Bulk action failed."), "error");
+      showToast(getAdminErrorMessage(error, "Bulk archive failed."), "error");
     } finally {
       setBulkLoading(false);
     }
@@ -331,17 +351,6 @@ export default function WarehousesPage() {
     setEditing(null);
     form.reset(emptyForm);
     setShowForm(true);
-  };
-
-  const handleDelete = async () => {
-    if (!deleting) return;
-    try {
-      await deleteMutation.mutateAsync(deleting.id);
-      showToast("Warehouse deleted successfully", "success");
-      setDeleting(null);
-    } catch (err) {
-      showToast(getAdminErrorMessage(err), "error");
-    }
   };
 
   const stats = {
@@ -823,28 +832,61 @@ export default function WarehousesPage() {
         onCancel={() => setShowDiscardConfirm(false)}
       />
 
-      {/* BULK DELETE CONFIRM MODAL */}
+      {/* BULK ARCHIVE CONFIRM MODAL */}
       <ConfirmModal
         open={showBulkDeleteConfirm}
-        title="Delete Selected Warehouses"
-        message={`Are you sure you want to delete ${selectedIds.length} selected warehouse(s)? This action cannot be undone.`}
+        title="Archive Selected Warehouses"
+        message={`Are you sure you want to archive ${selectedIds.length} selected warehouse(s)? They will be deactivated and moved to the central Archive while safely preserving all historical orders, invoices, and stock logs.`}
         danger={true}
-        confirmText="Delete Warehouses"
+        confirmText="Archive Warehouses"
         isLoading={bulkLoading}
         onConfirm={executeBulkDelete}
         onCancel={() => setShowBulkDeleteConfirm(false)}
       />
 
-      {/* SINGLE DELETE CONFIRM MODAL */}
-      <ConfirmModal
+      {/* SINGLE WAREHOUSE DELETE / ARCHIVE MODAL */}
+      <AdminDeleteModal
         open={Boolean(deleting)}
-        title="Delete Warehouse"
-        message={`Are you sure you want to delete ${deleting?.name}? This action cannot be undone.`}
-        danger={true}
-        confirmText="Delete Warehouse"
-        onConfirm={handleDelete}
-        onCancel={() => setDeleting(null)}
-        isLoading={deleteMutation.isPending}
+        onClose={() => setDeleting(null)}
+        itemName={deleting?.name}
+        itemType="Warehouse"
+        warningMessage="Choose the deletion method for this warehouse. Soft Delete is recommended to maintain commercial order history, legal tax invoice data, and shipment tracking."
+        softDeleteDescription={
+          deleting
+            ? `Deactivates ${deleting.name} and removes it from the active warehouse list. It will appear in the central Archive while safely preserving all historical orders, invoices, and stock logs.`
+            : undefined
+        }
+        permanentDeleteDescription={
+          deleting
+            ? `Physically and permanently deletes ${deleting.name} from the database. Only permitted for unused test warehouses with zero historical orders, shipments, items, stock, or adjustment logs.`
+            : undefined
+        }
+        permanentDeleteDisabled={Boolean(deleting && !deleting.canPermanentDelete)}
+        permanentDeleteDisabledReason={deleting?.permanentDeleteBlockReason || undefined}
+        onSoftDelete={async () => {
+          if (!deleting) return;
+          try {
+            await deleteMutation.mutateAsync(deleting.id);
+            showToast(`${deleting.name} archived successfully.`, "success");
+            setDeleting(null);
+            refetch();
+          } catch (err) {
+            showToast(getAdminErrorMessage(err, "Failed to archive warehouse."), "error");
+          }
+        }}
+        onPermanentDelete={async () => {
+          if (!deleting) return;
+          try {
+            await permanentDeleteMutation.mutateAsync(deleting.id);
+            showToast(`${deleting.name} permanently deleted.`, "success");
+            setDeleting(null);
+            refetch();
+          } catch (err) {
+            showToast(getAdminErrorMessage(err, "Failed to permanently delete warehouse."), "error");
+          }
+        }}
+        isSoftDeleting={deleteMutation.isPending}
+        isPermanentDeleting={permanentDeleteMutation.isPending}
       />
 
       {ToastComponent}

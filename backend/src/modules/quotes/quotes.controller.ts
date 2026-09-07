@@ -6,10 +6,24 @@ export const updateStatus = asyncHandler(async (req: AuthRequest, res: Response)
 export const updateReview = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Quote updated.", await S.updateQuoteReview(String(req.params.id), req.body)));
 export const addNote = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.created(res, "Note added.", await S.addNote(String(req.params.id), req.user!.id, req.body.note)));
 export const convertToOrder = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.created(res, "Converted to order.", await S.convertToOrder(String(req.params.id))));
-export const deleteOne = asyncHandler(async (req: AuthRequest, res: Response) => {
-  await S.deleteQuote(String(req.params.id));
-  return ApiResponse.success(res, "Quote deleted.");
+export const softDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await S.softDeleteQuote(String(req.params.id));
+  return ApiResponse.success(res, "Quote archived successfully.");
 });
+export const restore = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await S.restoreQuote(String(req.params.id));
+  return ApiResponse.success(res, "Quote restored successfully.");
+});
+export const permanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await S.permanentDeleteQuote(String(req.params.id));
+  return ApiResponse.success(res, "Quote permanently deleted.");
+});
+export const bulkPermanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const result = await S.bulkPermanentDeleteQuotes(ids);
+  return ApiResponse.success(res, "Bulk permanent delete processed.", result);
+});
+export const deleteOne = softDelete;
 export const downloadPdf = asyncHandler(async (req: AuthRequest, res: Response) => {
   const pdfBuffer = await generateQuotePdf(String(req.params.id));
   res.setHeader("Content-Type", "application/pdf");

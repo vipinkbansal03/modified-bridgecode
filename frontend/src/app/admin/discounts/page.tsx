@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Copy,
   Download,
   Plus,
   Edit2,
@@ -11,6 +12,15 @@ import {
   Trash2,
   Upload,
   X,
+  Layers,
+  CheckCircle2,
+  XCircle,
+  RotateCcw,
+  SlidersHorizontal,
+  Tag,
+  Percent,
+  Archive,
+  AlertTriangle,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -18,18 +28,25 @@ import {
   AdminInput,
   AdminSelect,
   Column,
-  ConfirmModal,
   DataTable,
   AdminStatsGrid,
   AdminListToolbar,
+  Pagination,
   StatusBadge,
   useToast,
   LoadingButton,
   AdminBulkActionsBar,
+  AdminDeleteModal,
 } from "@/components/admin/AdminComponents";
+import {
+  AdminRowActions,
+  AdminActionButton,
+} from "@/components/admin/AdminRowActions";
 import { Modal } from "@/components/ui/Modal";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
+import { cn } from "@/utils/cn";
+import { formatDate } from "@/utils/formatDate";
 import {
   useAdminCategories,
   useAdminCountries,
@@ -40,11 +57,16 @@ import {
   useAdminTiers,
   useBulkDiscounts,
   useCreateDiscount,
+  useUpdateDiscount,
+  useArchiveDiscount,
   useDeleteDiscount,
+  useRestoreDiscount,
+  usePermanentDeleteDiscount,
+  useBulkRestoreDiscounts,
+  useBulkPermanentDeleteDiscounts,
   useExportDiscounts,
   useImportDiscounts,
   usePreviewDiscountImport,
-  useUpdateDiscount,
 } from "@/hooks/admin/useAdminHooks";
 import { getAdminErrorMessage } from "@/services/adminApi";
 
@@ -81,6 +103,15 @@ type Discount = {
   categories?: Related[];
   startDate: string | null;
   endDate: string | null;
+  deletedAt?: string | null;
+  canPermanentDelete?: boolean;
+  permanentDeleteBlockReason?: string | null;
+  dependencyCounts?: {
+    countries: number;
+    products: number;
+    categories: number;
+    collections: number;
+  };
 };
 
 type FormState = {
@@ -107,6 +138,7 @@ type DiscountDashboard = {
   totalDiscounts: number;
   activeDiscounts: number;
   inactiveDiscounts: number;
+  archivedDiscounts: number;
   tierDiscounts: number;
   moqDiscounts: number;
   promotionalDiscounts: number;
@@ -239,8 +271,17 @@ export default function DiscountsPage() {
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showForm, setShowForm] = useState(false);
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Discount | null>(null);
+  const [deleteMode, setDeleteMode] = useState<"soft" | "permanent">("soft");
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteMode, setBulkDeleteMode] = useState<"soft" | "permanent">("soft");
+  const [bulkPermanentResult, setBulkPermanentResult] = useState<{
+    totalSelected: number;
+    deletedCount: number;
+    blockedCount: number;
+    deletedIds: string[];
+    blocked: Array<{ id: string; name?: string; reason: string }>;
+  } | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const { showToast, ToastComponent } = useToast();
 
@@ -274,8 +315,13 @@ export default function DiscountsPage() {
 
   const createDiscount = useCreateDiscount();
   const updateDiscount = useUpdateDiscount();
+  const archiveDiscount = useArchiveDiscount();
   const deleteDiscount = useDeleteDiscount();
+  const restoreDiscount = useRestoreDiscount();
+  const permanentDeleteDiscount = usePermanentDeleteDiscount();
   const bulkDiscounts = useBulkDiscounts();
+  const bulkRestoreDiscounts = useBulkRestoreDiscounts();
+  const bulkPermanentDeleteDiscounts = useBulkPermanentDeleteDiscounts();
   const exportDiscounts = useExportDiscounts();
   const previewDiscountImport = usePreviewDiscountImport();
   const importDiscounts = useImportDiscounts();
@@ -452,18 +498,36 @@ export default function DiscountsPage() {
     form.setValues(next);
   };
 
-  const confirmDelete = async () => {
-    if (!deleting) return;
+  const handleConfirmDelete = async (mode: "soft" | "permanent") => {
+    if (!deleteTarget) return;
     try {
-      await deleteDiscount.mutateAsync(deleting);
-      showToast("Discount deleted.");
-    } catch (error) {
+      if (mode === "permanent") {
+        await permanentDeleteDiscount.mutateAsync(deleteTarget.id);
+        showToast("Discount permanently deleted successfully.", "success");
+      } else {
+        await archiveDiscount.mutateAsync(deleteTarget.id);
+        showToast("Discount archived successfully.", "success");
+      }
+      setDeleteTarget(null);
+      setSelectedIds((prev) => prev.filter((id) => id !== deleteTarget.id));
+    } catch (err) {
       showToast(
-        getAdminErrorMessage(error, "Failed to delete discount."),
-        "error",
+        getAdminErrorMessage(
+          err,
+          mode === "permanent" ? "Failed to permanently delete discount." : "Failed to archive discount."
+        ),
+        "error"
       );
-    } finally {
-      setDeleting(null);
+    }
+  };
+
+  const handleRestore = async (discount: Discount) => {
+    try {
+      await restoreDiscount.mutateAsync(discount.id);
+      showToast("Discount restored successfully.", "success");
+      setSelectedIds((prev) => prev.filter((id) => id !== discount.id));
+    } catch (err) {
+      showToast(getAdminErrorMessage(err, "Failed to restore discount."), "error");
     }
   };
 
@@ -482,28 +546,94 @@ export default function DiscountsPage() {
     }
   };
 
-  const runBulkAction = async (action: "ENABLE" | "DISABLE" | "DELETE") => {
-    try {
-      const response = await bulkDiscounts.mutateAsync({
-        ids: selectedIds,
-        action,
-      });
-      const affected = response?.data?.affected ?? selectedIds.length;
-      showToast(
-        `${affected} discount${affected === 1 ? "" : "s"} ${action === "ENABLE" ? "activated" : action === "DISABLE" ? "paused" : "deleted"}.`,
-      );
-      setSelectedIds([]);
-    } catch (error) {
-      showToast(
-        getAdminErrorMessage(error, "Failed to run bulk action."),
-        "error",
-      );
-    } finally {
-      setBulkDeleting(false);
+  const handleBulkAction = async () => {
+    if (!bulkAction || selectedIds.length === 0) return;
+    if (bulkAction === "DELETE") {
+      setBulkDeleteMode("soft");
+      setBulkDeleting(true);
+      return;
+    }
+    if (bulkAction === "PERMANENT_DELETE") {
+      setBulkDeleteMode("permanent");
+      setBulkDeleting(true);
+      return;
+    }
+    if (bulkAction === "RESTORE") {
+      try {
+        const result = await bulkRestoreDiscounts.mutateAsync(selectedIds);
+        const payload = (result as any)?.data ?? result;
+        const restoredCount = typeof payload?.restoredCount === "number" ? payload.restoredCount : selectedIds.length;
+        const blockedCount = typeof payload?.blockedCount === "number" ? payload.blockedCount : 0;
+        if (blockedCount === 0) {
+          showToast(`Successfully restored all ${restoredCount} discount rule(s).`, "success");
+          setSelectedIds([]);
+        } else {
+          showToast(`Restored ${restoredCount} discount(s); ${blockedCount} could not be restored.`, "warning");
+        }
+        setBulkAction("");
+      } catch (err) {
+        showToast(getAdminErrorMessage(err, "Failed to restore selected discounts."), "error");
+      }
+      return;
+    }
+    if (bulkAction === "ENABLE" || bulkAction === "DISABLE") {
+      try {
+        await bulkDiscounts.mutateAsync({ ids: selectedIds, action: bulkAction });
+        showToast(bulkAction === "ENABLE" ? "Discounts activated." : "Discounts deactivated.");
+        setSelectedIds([]);
+        setBulkAction("");
+      } catch (error) {
+        showToast(getAdminErrorMessage(error, "Failed to update discounts."), "error");
+      }
     }
   };
 
-  const [bulkAction, setBulkAction] = useState<"ENABLE" | "DISABLE" | "DELETE" | "">("");
+  const handleConfirmBulkDelete = async (mode: "soft" | "permanent") => {
+    if (!selectedIds.length) return;
+    const totalSelected = selectedIds.length;
+    try {
+      if (mode === "permanent") {
+        const result = await bulkPermanentDeleteDiscounts.mutateAsync(selectedIds);
+        const payload = (result as any)?.data ?? result;
+        const deletedIds: string[] = Array.isArray(payload?.deletedIds) ? payload.deletedIds : [];
+        const blocked: Array<{ id: string; name?: string; reason: string }> = Array.isArray(payload?.blocked) ? payload.blocked : [];
+        const deletedCount = typeof payload?.deletedCount === "number" ? payload.deletedCount : deletedIds.length;
+        const blockedCount = typeof payload?.blockedCount === "number" ? payload.blockedCount : (blocked.length || Math.max(0, totalSelected - deletedCount));
+
+        if (blockedCount > 0 && deletedIds.length > 0) {
+          setSelectedIds((prev) => prev.filter((id) => !deletedIds.includes(id)));
+        } else if (deletedCount > 0 && blockedCount === 0) {
+          setSelectedIds([]);
+        }
+
+        setBulkPermanentResult({
+          totalSelected,
+          deletedCount,
+          blockedCount,
+          deletedIds,
+          blocked,
+        });
+
+        if (blockedCount === 0 && deletedCount > 0) {
+          showToast(`Successfully permanently deleted all ${deletedCount} discount rule(s).`, "success");
+        } else if (deletedCount === 0 && blockedCount > 0) {
+          showToast(`All ${blockedCount} selected discount rule(s) are protected from permanent deletion.`, "error");
+        } else {
+          showToast(`Permanently deleted ${deletedCount} rule(s); ${blockedCount} protected rule(s) preserved.`, "warning");
+        }
+      } else {
+        await bulkDiscounts.mutateAsync({ ids: selectedIds, action: "ARCHIVE" });
+        showToast(`Successfully archived ${selectedIds.length} discount rule(s).`, "success");
+        setSelectedIds([]);
+      }
+      setBulkDeleting(false);
+      setBulkAction("");
+    } catch (err) {
+      showToast(getAdminErrorMessage(err, "Failed to delete selected discounts."), "error");
+    }
+  };
+
+  const [bulkAction, setBulkAction] = useState<string>("");
 
   const handleSelectAll = async (checked: boolean) => {
     if (!checked) {
@@ -531,16 +661,6 @@ export default function DiscountsPage() {
     } catch (err) {
       showToast("Failed to select all discounts.", "error");
     }
-  };
-
-  const handleBulkAction = async () => {
-    if (!bulkAction || selectedIds.length === 0) return;
-    if (bulkAction === "DELETE") {
-      setBulkDeleting(true);
-      return;
-    }
-    await runBulkAction(bulkAction);
-    setBulkAction("");
   };
 
   const handleExport = async (selectedOnly = false) => {
@@ -624,7 +744,19 @@ export default function DiscountsPage() {
       width: "240px",
       render: (row) => (
         <div className="min-w-0 pr-3">
-          <div className="font-semibold text-[#1A1A1A] text-[13px]">{row.name}</div>
+          <button
+            type="button"
+            onClick={() => {
+              if (canUpdate) {
+                form.reset(toForm(row));
+                setShowForm(true);
+              }
+            }}
+            className="text-left font-semibold text-[#1A1A1A] hover:text-[#E31E24] text-[13px] block truncate transition-colors cursor-pointer"
+            title={row.name}
+          >
+            {row.name}
+          </button>
           <div className="mt-0.5 text-[11.5px] text-[#6B6B6B] truncate" title={scopeLabel(row)}>
             {scopeLabel(row)}
           </div>
@@ -707,8 +839,8 @@ export default function DiscountsPage() {
       width: "110px",
       render: (row) => (
         <StatusBadge
-          status={row.status}
-          interactive={canUpdate}
+          status={row.deletedAt ? "ARCHIVED" : row.status}
+          interactive={canUpdate && !row.deletedAt && status !== "ARCHIVED"}
           onClick={() => toggleStatus(row)}
           loading={updateDiscount.isPending && (updateDiscount.variables as any)?.id === row.id}
         />
@@ -717,33 +849,84 @@ export default function DiscountsPage() {
     {
       key: "actions",
       label: "Actions",
-      width: "90px",
+      width: "120px",
       align: "left",
-      render: (row) => (
-        <div className="flex items-center justify-start gap-1">
-          {canUpdate && (
-            <button
-              onClick={() => {
-                form.reset(toForm(row));
-                setShowForm(true);
-              }}
-              className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] transition-colors shadow-2xs cursor-pointer"
-              title="Edit discount"
-            >
-              <Edit2 size={13} />
-            </button>
-          )}
-          {canDelete && (
-            <button
-              onClick={() => setDeleting(row.id)}
-              className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E6E6E6] bg-white text-[#E31E24] hover:bg-[#FFF5F5] hover:border-[#F2C9C9] transition-colors shadow-2xs cursor-pointer"
-              title="Delete discount"
-            >
-              <Trash2 size={13} />
-            </button>
-          )}
-        </div>
-      ),
+      render: (row) => {
+        if (status === "ARCHIVED" || row.deletedAt) {
+          return (
+            <AdminRowActions
+              extra={
+                canUpdate ? (
+                  <AdminActionButton
+                    action={{
+                      onClick: () => handleRestore(row),
+                      title: "Restore discount",
+                    }}
+                    defaultIcon={<RotateCcw size={13} />}
+                    defaultTitle="Restore discount"
+                  />
+                ) : null
+              }
+              delete={
+                canDelete
+                  ? {
+                      onClick: () => {
+                        setDeleteTarget(row);
+                        setDeleteMode("permanent");
+                      },
+                      title: "Permanently delete discount",
+                    }
+                  : undefined
+              }
+            />
+          );
+        }
+
+        return (
+          <AdminRowActions
+            edit={
+              canUpdate
+                ? {
+                    onClick: () => {
+                      form.reset(toForm(row));
+                      setShowForm(true);
+                    },
+                    title: "Edit discount",
+                  }
+                : undefined
+            }
+            extra={
+              canCreate ? (
+                <AdminActionButton
+                  action={{
+                    onClick: () => {
+                      const cloned = toForm(row);
+                      cloned.id = undefined;
+                      cloned.name = `${cloned.name} Copy`;
+                      form.reset(cloned);
+                      setShowForm(true);
+                    },
+                    title: "Clone discount",
+                  }}
+                  defaultIcon={<Copy size={13} />}
+                  defaultTitle="Clone discount"
+                />
+              ) : null
+            }
+            delete={
+              canDelete
+                ? {
+                    onClick: () => {
+                      setDeleteTarget(row);
+                      setDeleteMode("soft");
+                    },
+                    title: "Delete discount",
+                  }
+                : undefined
+            }
+          />
+        );
+      },
     },
   ];
 
@@ -944,16 +1127,107 @@ export default function DiscountsPage() {
   );
 
   return (
-    <AdminLayout title="Discounts" breadcrumb={[{ label: "Discounts" }]}>
-      <AdminStatsGrid
-        stats={[
-          { title: "Total Discounts", value: dashboard?.totalDiscounts ?? 0, subtitle: "All discount rules", icon: <Filter size={18} />, isLoading: dashboardLoading },
-          { title: "Active Discounts", value: dashboard?.activeDiscounts ?? 0, subtitle: "Currently available", icon: <SquareCheckBig size={18} />, color: "bg-green-600", isLoading: dashboardLoading },
-          { title: "Inactive Discounts", value: dashboard?.inactiveDiscounts ?? 0, subtitle: "Paused or disabled", icon: <X size={18} />, color: "bg-gray-600", isLoading: dashboardLoading }
-        ]}
-      />
-
+    <AdminLayout title="Discounts" breadcrumb={[{ label: "Pricing", href: "/admin/pricing" }, { label: "Discounts" }]}>
       <div className="space-y-5">
+        <AdminStatsGrid
+          stats={[
+            { title: "Total Discounts", value: dashboard?.totalDiscounts ?? 0, subtitle: "All discount rules", icon: <Tag size={18} />, isLoading: dashboardLoading },
+            { title: "Active Discounts", value: dashboard?.activeDiscounts ?? 0, subtitle: "Currently available", icon: <CheckCircle2 size={18} />, color: "bg-emerald-600", isLoading: dashboardLoading },
+            { title: "Inactive Discounts", value: dashboard?.inactiveDiscounts ?? 0, subtitle: "Paused or disabled", icon: <XCircle size={18} />, color: "bg-slate-600", isLoading: dashboardLoading },
+            { title: "Promotions", value: dashboard?.promotionalDiscounts ?? 0, subtitle: "Open promotional rules", icon: <Percent size={18} />, color: "bg-amber-600", isLoading: dashboardLoading },
+          ]}
+        />
+
+        {/* Horizontal Navigation Tabs */}
+        <div className="flex items-center gap-2 border-b border-[#E6E6E6] bg-white px-4 pt-2 rounded-t-lg shadow-2xs overflow-x-auto max-w-full scrollbar-thin">
+          {[
+            { id: "", label: "All Discounts", count: dashboard?.totalDiscounts ?? 0, icon: <Layers size={15} /> },
+            { id: "ACTIVE", label: "Active", count: dashboard?.activeDiscounts ?? 0, icon: <CheckCircle2 size={15} /> },
+            { id: "INACTIVE", label: "Inactive", count: dashboard?.inactiveDiscounts ?? 0, icon: <XCircle size={15} /> },
+            { id: "ARCHIVED", label: "Archived", count: (dashboard as any)?.archivedDiscounts ?? 0, icon: <Archive size={15} /> },
+          ].map((tab) => {
+            const isActive = status === tab.id;
+            return (
+              <button
+                key={tab.id || "ALL"}
+                type="button"
+                onClick={() => {
+                  setStatus(tab.id);
+                  setPage(1);
+                  setSelectedIds([]);
+                  setBulkAction("");
+                }}
+                className={cn(
+                  "flex items-center gap-2 border-b-2 px-3 pb-3 pt-1 text-[13.5px] font-medium transition-colors cursor-pointer shrink-0 whitespace-nowrap",
+                  isActive
+                    ? "border-[#E31E24] text-[#E31E24]"
+                    : "border-transparent text-[#666] hover:border-[#CCC] hover:text-[#1A1A1A]"
+                )}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+                <span
+                  className={cn(
+                    "ml-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                    isActive
+                      ? "bg-[#E31E24]/10 text-[#E31E24]"
+                      : "bg-[#F0F0F0] text-[#666]"
+                  )}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* RECENTLY UPDATED CARD */}
+        {status !== "ARCHIVED" && (dashboard?.recentlyUpdated ?? []).length > 0 && (
+          <div className="rounded-xl border border-[#E6E6E6] bg-white p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-[13.5px] font-semibold text-[#1A1A1A]">Recently Updated</h3>
+                <p className="text-[12px] text-[#6B6B6B]">Quick access to latest modified discount rules.</p>
+              </div>
+              <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-medium text-[#6B6B6B]">
+                {dashboard?.recentlyUpdated?.length ?? 0} items
+              </span>
+            </div>
+            <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+              {(dashboard?.recentlyUpdated ?? []).slice(0, 5).map((d) => (
+                <div
+                  key={d.id}
+                  className="rounded-lg border border-[#E6E6E6] p-3 text-left transition hover:bg-[#FAFAFA] flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="truncate text-[13px] font-semibold text-[#1A1A1A]">{d.name}</div>
+                    <div className="mt-0.5 text-[11.5px] text-[#9A9A9A]">
+                      {discountValue(d)} • {d.type === "TIER" ? "Tier" : d.type === "MOQ" ? "MOQ" : "Promo"}
+                    </div>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-[#F0F0F0] flex items-center justify-between">
+                    <span className="text-[11px] text-[#6B6B6B]">
+                      {d.status === "ACTIVE" ? "Active" : "Inactive"}
+                    </span>
+                    {canUpdate && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          form.reset(toForm(d));
+                          setShowForm(true);
+                        }}
+                        className="text-[11.5px] font-medium text-[#555] hover:text-[#1A1A1A] cursor-pointer"
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <AdminListToolbar
           search={{
             value: search,
@@ -967,7 +1241,7 @@ export default function DiscountsPage() {
           filters={{
             showFilters: showFilters,
             onToggle: () => setShowFilters(!showFilters),
-            activeCount: [status, typeFilter, scopeFilter, countryFilter, sortBy !== "createdAt" ? sortBy : ""].filter(Boolean).length,
+            activeCount: [status, typeFilter, scopeFilter, countryFilter, sortBy !== "createdAt" ? sortBy : "", sortDir !== "desc" ? sortDir : ""].filter(Boolean).length,
             label: "Filters",
           }}
           columns={{
@@ -1014,86 +1288,88 @@ export default function DiscountsPage() {
                     resetForm();
                     setShowForm(true);
                   },
-                  label: "Create Discount",
+                  label: "Add Discount",
                   icon: <Plus size={14} />,
                 }
               : undefined
           }
           filterPanel={
-            <div className="flex flex-wrap items-center gap-3">
-              <select
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 pt-2">
+              <AdminSelect
+                label="Status"
                 value={status}
                 onChange={(event) => {
                   setStatus(event.target.value);
                   resetPage();
                 }}
-                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[130px]"
-              >
-                <option value="">All Statuses</option>
-                <option value="ACTIVE">Active</option>
-                <option value="INACTIVE">Inactive</option>
-              </select>
-              <select
+                options={[
+                  { value: "", label: "All Statuses" },
+                  { value: "ACTIVE", label: "Active" },
+                  { value: "INACTIVE", label: "Inactive" },
+                ]}
+              />
+              <AdminSelect
+                label="Type"
                 value={typeFilter}
                 onChange={(event) => {
                   setTypeFilter(event.target.value);
                   resetPage();
                 }}
-                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[130px]"
-              >
-                <option value="">All Types</option>
-                <option value="TIER">Tier-based</option>
-                <option value="MOQ">MOQ-based</option>
-                <option value="PROMOTIONAL">Open promotion</option>
-              </select>
-              <select
+                options={[
+                  { value: "", label: "All Types" },
+                  { value: "TIER", label: "Tier-based" },
+                  { value: "MOQ", label: "MOQ-based" },
+                  { value: "PROMOTIONAL", label: "Open promotion" },
+                ]}
+              />
+              <AdminSelect
+                label="Scope"
                 value={scopeFilter}
                 onChange={(event) => {
                   setScopeFilter(event.target.value);
                   resetPage();
                 }}
-                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[130px]"
-              >
-                <option value="">All Scopes</option>
-                <option value="PLATFORM">Platform-wide</option>
-                <option value="PRODUCT">Product</option>
-                <option value="COLLECTION">Collection</option>
-                <option value="CATEGORY">Category</option>
-              </select>
-              <select
+                options={[
+                  { value: "", label: "All Scopes" },
+                  { value: "PLATFORM", label: "Platform-wide" },
+                  { value: "PRODUCT", label: "Product" },
+                  { value: "COLLECTION", label: "Collection" },
+                  { value: "CATEGORY", label: "Category" },
+                ]}
+              />
+              <AdminSelect
+                label="Country"
                 value={countryFilter}
                 onChange={(event) => {
                   setCountryFilter(event.target.value);
                   resetPage();
                 }}
-                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[140px]"
-              >
-                <option value="">All Countries</option>
-                {options.countries.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-              <select
+                options={[
+                  { value: "", label: "All Countries" },
+                  ...options.countries,
+                ]}
+              />
+              <AdminSelect
+                label="Sort By"
                 value={String(sortBy)}
                 onChange={(event) => setSortBy(event.target.value)}
-                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[140px]"
-              >
-                <option value="createdAt">Created date</option>
-                <option value="updatedAt">Updated date</option>
-                <option value="name">Rule name</option>
-                <option value="type">Type</option>
-                <option value="status">Status</option>
-              </select>
-              <select
+                options={[
+                  { value: "createdAt", label: "Created Date" },
+                  { value: "updatedAt", label: "Updated Date" },
+                  { value: "name", label: "Rule Name" },
+                  { value: "type", label: "Type" },
+                  { value: "status", label: "Status" },
+                ]}
+              />
+              <AdminSelect
+                label="Sort Direction"
                 value={sortDir}
                 onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
-                className="h-10 rounded-md border border-[#E6E6E6] bg-white px-3 text-[13px] text-[#1A1A1A] outline-none min-w-[120px]"
-              >
-                <option value="desc">Descending</option>
-                <option value="asc">Ascending</option>
-              </select>
+                options={[
+                  { value: "desc", label: "Descending" },
+                  { value: "asc", label: "Ascending" },
+                ]}
+              />
             </div>
           }
           onResetFilters={() => {
@@ -1108,44 +1384,66 @@ export default function DiscountsPage() {
           }}
         />
 
-        <DataTable<Discount>
-          title="Discounts List"
-          columns={filteredColumns}
-          data={discounts}
-          rowKey="id"
-          isLoading={isLoading}
-          emptyMessage="No discount rules found."
-          enableSelection={true}
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-          onToggleStatus={canUpdate ? toggleStatus : undefined}
-          statusLoadingId={updateDiscount.isPending ? ((updateDiscount.variables as any)?.id ?? null) : null}
-          isStatusDisabled={() => !canUpdate}
-          totalItems={data?.pagination?.total ?? 0}
-          currentPage={page}
-          pageSize={limit}
-          totalPages={totalPages}
-          onPageChange={setPage}
-          onPageSizeChange={setLimit}
-          pageSizeOptions={[10, 20, 50, 100]}
-          onSelectAll={handleSelectAll}
-          renderBulkActions={(selectedIds) => (
-            <AdminBulkActionsBar
-              selectedCount={selectedIds.length}
-              onClear={() => setSelectedIds([])}
-              actionType={bulkAction}
-              onActionTypeChange={(val) => setBulkAction(val as any)}
-              actions={[
-                { value: "ENABLE", label: "Mark active" },
-                { value: "DISABLE", label: "Mark inactive" },
-                { value: "DELETE", label: "Delete selected" }
-              ]}
-              onApply={handleBulkAction}
-              applyLoading={bulkDiscounts.isPending}
-              applyDisabled={!bulkAction || selectedIds.length === 0}
+        {/* FULL-WIDTH DATA TABLE */}
+        <div>
+          <DataTable<Discount>
+            title="Discounts List"
+            columns={filteredColumns}
+            data={discounts}
+            rowKey="id"
+            isLoading={isLoading}
+            emptyMessage="No discount rules found."
+            enableSelection={true}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+            onToggleStatus={canUpdate && status !== "ARCHIVED" ? toggleStatus : undefined}
+            statusLoadingId={updateDiscount.isPending ? ((updateDiscount.variables as any)?.id ?? null) : null}
+            isStatusDisabled={(row) => !canUpdate || row.status === "ARCHIVED" || (row as any).deletedAt != null}
+            totalItems={data?.pagination?.total ?? 0}
+            currentPage={page}
+            pageSize={limit}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            onPageSizeChange={setLimit}
+            pageSizeOptions={[10, 20, 50, 100]}
+            onSelectAll={handleSelectAll}
+            renderBulkActions={(selectedIds) => (
+              <AdminBulkActionsBar
+                selectedCount={selectedIds.length}
+                onClear={() => setSelectedIds([])}
+                actionType={bulkAction}
+                onActionTypeChange={(val) => setBulkAction(val as any)}
+                actions={
+                  status === "ARCHIVED"
+                    ? [
+                        { value: "RESTORE", label: "Restore selected" },
+                        { value: "PERMANENT_DELETE", label: "Permanent delete selected" },
+                      ]
+                    : [
+                        { value: "ENABLE", label: "Mark active" },
+                        { value: "DISABLE", label: "Mark inactive" },
+                        { value: "DELETE", label: "Delete selected" },
+                      ]
+                }
+                onApply={handleBulkAction}
+                applyLoading={
+                  bulkDiscounts.isPending ||
+                  bulkRestoreDiscounts.isPending ||
+                  bulkPermanentDeleteDiscounts.isPending
+                }
+                applyDisabled={!bulkAction || selectedIds.length === 0}
+              />
+            )}
+          />
+          <div className="border-t border-[#E6E6E6] px-4 py-3 bg-white">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              alwaysShow={true}
             />
-          )}
-        />
+          </div>
+        </div>
       </div>
 
       {/* CREATE / EDIT DISCOUNT MODAL */}
@@ -1311,24 +1609,191 @@ export default function DiscountsPage() {
         </div>
       </Modal>
 
-      {/* CONFIRM DELETE MODALS */}
-      <ConfirmModal
-        open={!!deleting}
-        title="Delete discount?"
-        message="This discount rule will be deleted and will immediately stop applying to quotes, orders, and carts."
-        onConfirm={confirmDelete}
-        onCancel={() => setDeleting(null)}
-        isLoading={deleteDiscount.isPending}
+      {/* CONFIRM DELETE / ARCHIVE MODALS */}
+      <AdminDeleteModal
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        itemName={deleteTarget ? deleteTarget.name : undefined}
+        itemType="Discount Rule"
+        warningMessage={
+          status === "ARCHIVED" || deleteTarget?.deletedAt != null
+            ? "Permanent deletion will permanently remove this discount rule from the database and cascade remove all its product, category, collection, and country mappings. This action cannot be undone."
+            : "Choose the deletion method for this discount rule. Soft Delete (Archive) is recommended to preserve promotional history."
+        }
+        softDeleteDescription={
+          status === "ARCHIVED" || deleteTarget?.deletedAt != null
+            ? "This discount rule is already soft-deleted and stored in the central Archive."
+            : "Hides this discount rule from active pricing and checkout resolution while preserving all product, category, collection, and country mappings."
+        }
+        permanentDeleteDescription={
+          deleteTarget
+            ? `Permanently purges discount rule "${deleteTarget.name}". All association records will be cleanly removed.`
+            : undefined
+        }
+        permanentDeleteDisabled={status !== "ARCHIVED" && deleteTarget?.deletedAt == null}
+        permanentDeleteDisabledReason={
+          status !== "ARCHIVED" && deleteTarget?.deletedAt == null
+            ? "Permanent Delete is available only for archived discounts. Archive the discount first."
+            : (deleteTarget?.permanentDeleteBlockReason ?? undefined)
+        }
+        initialDeleteType={status === "ARCHIVED" || deleteTarget?.deletedAt != null ? "permanent" : "soft"}
+        softDeleteButtonText={status === "ARCHIVED" || deleteTarget?.deletedAt != null ? undefined : "Archive Discount"}
+        permanentDeleteButtonText="Permanently Delete Discount"
+        onSoftDelete={
+          status === "ARCHIVED" || deleteTarget?.deletedAt != null
+            ? () => {
+                showToast("Discount is already archived.", "info");
+                setDeleteTarget(null);
+              }
+            : () => handleConfirmDelete("soft")
+        }
+        onPermanentDelete={() => handleConfirmDelete("permanent")}
+        isSoftDeleting={archiveDiscount.isPending}
+        isPermanentDeleting={permanentDeleteDiscount.isPending}
       />
 
-      <ConfirmModal
+      {/* BULK DELETION METHOD MODAL */}
+      <AdminDeleteModal
         open={bulkDeleting}
-        title="Delete selected discounts?"
-        message={`Are you sure you want to permanently delete the ${selectedIds.length} selected discount rule(s)? This action cannot be undone.`}
-        onConfirm={() => runBulkAction("DELETE")}
-        onCancel={() => setBulkDeleting(false)}
-        isLoading={bulkDiscounts.isPending}
+        onClose={() => {
+          setBulkDeleting(false);
+          setBulkAction("");
+        }}
+        itemName={`${selectedIds.length} selected discount rule${selectedIds.length === 1 ? "" : "s"}`}
+        itemType="Discount Rules (Bulk)"
+        warningMessage={
+          status === "ARCHIVED"
+            ? "Permanent deletion will permanently remove the selected discount rules from the database and cascade remove all their mappings. This action cannot be undone."
+            : "Choose the deletion method for the selected discount rules. Soft Delete (Archive) is recommended to maintain promotional history."
+        }
+        softDeleteDescription={
+          status === "ARCHIVED"
+            ? "These discount rules are already soft-deleted and stored in the central Archive."
+            : `Archives the ${selectedIds.length} selected discount rule${selectedIds.length === 1 ? "" : "s"} from the active workspace while preserving all product, category, and collection assignments for possible restoration.`
+        }
+        permanentDeleteDescription={`Permanently purges the ${selectedIds.length} selected discount rule${selectedIds.length === 1 ? "" : "s"} from the database. Any active (non-archived) discount rules will be protected.`}
+        permanentDeleteDisabled={status !== "ARCHIVED"}
+        permanentDeleteDisabledReason="Permanent Delete is available only for archived discounts. Archive the discount first."
+        initialDeleteType={status === "ARCHIVED" ? "permanent" : "soft"}
+        softDeleteButtonText={status === "ARCHIVED" ? undefined : "Archive Discounts (Bulk)"}
+        permanentDeleteButtonText="Permanently Delete Discounts (Bulk)"
+        onSoftDelete={
+          status === "ARCHIVED"
+            ? () => {
+                showToast("Selected discounts are already archived.", "info");
+                setBulkDeleting(false);
+              }
+            : () => handleConfirmBulkDelete("soft")
+        }
+        onPermanentDelete={() => handleConfirmBulkDelete("permanent")}
+        isSoftDeleting={bulkDiscounts.isPending}
+        isPermanentDeleting={bulkPermanentDeleteDiscounts.isPending}
       />
+
+      {/* BULK PERMANENT DELETE RESULT MODAL */}
+      <Modal
+        open={Boolean(bulkPermanentResult)}
+        onClose={() => setBulkPermanentResult(null)}
+        title={
+          bulkPermanentResult
+            ? bulkPermanentResult.deletedCount === 0
+              ? "Permanent Deletion Blocked"
+              : bulkPermanentResult.blockedCount === 0
+              ? "Permanent Delete Completed"
+              : "Permanent Delete Completed (Mixed Result)"
+            : "Bulk Permanent Deletion Results"
+        }
+        subtitle={
+          bulkPermanentResult
+            ? bulkPermanentResult.deletedCount === 0
+              ? `All ${bulkPermanentResult.blockedCount || bulkPermanentResult.totalSelected} selected discount rules are protected by database integrity rules.`
+              : bulkPermanentResult.blockedCount === 0
+              ? `All ${bulkPermanentResult.totalSelected} selected discount rules were permanently purged from the database.`
+              : `${bulkPermanentResult.deletedCount} permanently deleted, ${bulkPermanentResult.blockedCount} protected records preserved.`
+            : "Summary of processed and protected records."
+        }
+        size="lg"
+        footer={
+          <div className="flex items-center justify-end w-full">
+            <button
+              type="button"
+              onClick={() => setBulkPermanentResult(null)}
+              className="rounded-md bg-[#1A1A1A] px-4 py-2 text-[13.5px] font-semibold text-white hover:bg-black transition-colors cursor-pointer shadow-2xs"
+            >
+              Close Summary
+            </button>
+          </div>
+        }
+      >
+        {bulkPermanentResult && (
+          <div className="p-5 space-y-4">
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#666] block">
+                  Selected
+                </span>
+                <span className="text-2xl font-bold text-[#1A1A1A]">
+                  {bulkPermanentResult.totalSelected ?? (bulkPermanentResult.deletedCount + bulkPermanentResult.blockedCount)}
+                </span>
+              </div>
+              <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-green-700 block">
+                  Permanently Deleted
+                </span>
+                <span className="text-2xl font-bold text-green-800">
+                  {bulkPermanentResult.deletedCount}
+                </span>
+              </div>
+              <div
+                className={cn(
+                  "rounded-lg border p-3",
+                  bulkPermanentResult.deletedCount === 0
+                    ? "border-red-200 bg-red-50 text-red-800"
+                    : "border-amber-200 bg-amber-50 text-amber-800"
+                )}
+              >
+                <span
+                  className={cn(
+                    "text-[11px] font-semibold uppercase tracking-wider block",
+                    bulkPermanentResult.deletedCount === 0 ? "text-red-700" : "text-amber-700"
+                  )}
+                >
+                  {bulkPermanentResult.deletedCount === 0 ? "Blocked / Protected" : "Protected Preserved"}
+                </span>
+                <span
+                  className={cn(
+                    "text-2xl font-bold",
+                    bulkPermanentResult.deletedCount === 0 ? "text-red-800" : "text-amber-800"
+                  )}
+                >
+                  {bulkPermanentResult.blockedCount}
+                </span>
+              </div>
+            </div>
+
+            {bulkPermanentResult.blockedCount > 0 && bulkPermanentResult.blocked.length > 0 && (
+              <div className="space-y-2">
+                <span className="text-[12.5px] font-semibold text-[#1A1A1A] block">
+                  Protected Records Detail:
+                </span>
+                <div className="max-h-52 overflow-y-auto rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] divide-y divide-[#E6E6E6]">
+                  {bulkPermanentResult.blocked.map((item) => (
+                    <div key={item.id} className="p-3 text-[12.5px] flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-semibold text-[#1A1A1A]">{item.name || item.id}</div>
+                        <div className="text-[11.5px] text-[#666] mt-0.5">{item.reason}</div>
+                      </div>
+                      <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 shrink-0">
+                        Protected
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
 
       {ToastComponent}
     </AdminLayout>

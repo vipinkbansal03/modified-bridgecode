@@ -1865,7 +1865,7 @@ export async function getProductReviews(slug: string) {
   }
 
   const reviews = await (prisma as any).productReview.findMany({
-    where: { productId: product.id, status: "APPROVED" },
+    where: { productId: product.id, status: "APPROVED", deletedAt: null },
     orderBy: { createdAt: "desc" },
   });
 
@@ -1903,7 +1903,7 @@ export async function submitProductReview(
 
   if (data.customerEmail) {
     const existing = await (prisma as any).productReview.findFirst({
-      where: { productId: product.id, customerEmail: data.customerEmail },
+      where: { productId: product.id, customerEmail: data.customerEmail, deletedAt: null },
     });
     if (existing) {
       throw new AppError("You have already submitted a review for this product.", 400);

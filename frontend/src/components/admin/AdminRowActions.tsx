@@ -85,11 +85,23 @@ export function AdminActionButton({
       >
         {content}
       </Link>
+    ) : disabled ? (
+      <span className="inline-flex cursor-not-allowed">
+        <button
+          type="button"
+          disabled
+          aria-label={ariaLabel || title}
+          className={cn(baseClasses, "pointer-events-none")}
+          tabIndex={-1}
+        >
+          {content}
+        </button>
+      </span>
     ) : (
       <button
         type="button"
         onClick={onClick}
-        disabled={disabled || loading}
+        disabled={loading}
         aria-label={ariaLabel || title}
         className={baseClasses}
       >
@@ -99,7 +111,7 @@ export function AdminActionButton({
 
   if (title) {
     return (
-      <Tooltip content={title} side="top" disabled={disabled || loading}>
+      <Tooltip content={title} side="top" disabled={loading}>
         {element}
       </Tooltip>
     );

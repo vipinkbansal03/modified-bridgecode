@@ -11,6 +11,7 @@ type TierListQuery = {
   countryId?: string;
   sortBy?: string;
   sortDir?: string;
+  deleted?: string;
 };
 
 type TierInput = {
@@ -54,6 +55,15 @@ function parseSortOrder(value: number | string | undefined) {
 function buildTierWhere(query: TierListQuery) {
   const where: Record<string, unknown> = {};
   const search = query.search?.trim();
+
+  if (query.deleted === "true") {
+    where.NOT = { deletedAt: null };
+  } else if (query.deleted === "all") {
+    // do not filter deletedAt
+  } else {
+    where.deletedAt = null;
+  }
+
   if (query.status) where.status = normalizeStatus(query.status);
   if (query.countryId) {
     const ids = query.countryId.split(",").map((s) => s.trim()).filter(Boolean);
@@ -103,7 +113,7 @@ export async function listTiers(query: TierListQuery) {
   const where = buildTierWhere(query);
   const orderBy = buildTierOrderBy(query);
 
-  const [data, total] = await Promise.all([
+  const [rawTiers, total] = await Promise.all([
     prisma.tier.findMany({
       where,
       skip,
@@ -114,17 +124,55 @@ export async function listTiers(query: TierListQuery) {
     prisma.tier.count({ where }),
   ]);
 
+  const data = rawTiers.map((tier) => {
+    const customersCount = tier._count?.customers ?? 0;
+    const pricingCount = tier._count?.pricing ?? 0;
+    const discountsCount = tier._count?.discounts ?? 0;
+    const countriesCount = tier._count?.countries ?? 0;
+
+    let canPermanentDelete = true;
+    let permanentDeleteBlockReason: string | null = null;
+
+    if (!tier.deletedAt) {
+      canPermanentDelete = false;
+      permanentDeleteBlockReason = "Permanent Delete is available only for archived tiers. Archive the tier first.";
+    } else if (customersCount > 0) {
+      canPermanentDelete = false;
+      permanentDeleteBlockReason = `Permanent deletion is blocked because ${customersCount} customer${customersCount === 1 ? " is" : "s are"} assigned to this tier. Reassign them before deleting.`;
+    } else if (pricingCount > 0) {
+      canPermanentDelete = false;
+      permanentDeleteBlockReason = `Permanent deletion is blocked because ${pricingCount} tier pricing rule${pricingCount === 1 ? " references" : "s reference"} this tier. Delete or reassign these pricing rules first.`;
+    } else if (discountsCount > 0) {
+      canPermanentDelete = false;
+      permanentDeleteBlockReason = `Permanent deletion is blocked because ${discountsCount} discount${discountsCount === 1 ? " references" : "s reference"} this tier. Remove or update these discounts first.`;
+    }
+
+    return {
+      ...tier,
+      canPermanentDelete,
+      permanentDeleteBlockReason,
+      dependencyCounts: {
+        customers: customersCount,
+        pricing: pricingCount,
+        discounts: discountsCount,
+        countries: countriesCount,
+      },
+    };
+  });
+
   return { data, total, page, limit };
 }
 
 export async function getTierDashboard() {
-  const [total, active, inactive, mappedCountries, recentlyUpdated] = await Promise.all([
-    prisma.tier.count(),
-    prisma.tier.count({ where: { status: "ACTIVE" } }),
-    prisma.tier.count({ where: { status: "INACTIVE" } }),
-    prisma.tier.count({ where: { countries: { some: { enabled: true } } } }),
+  const [total, active, inactive, archived, mappedCountries, recentlyUpdated] = await Promise.all([
+    prisma.tier.count({ where: { deletedAt: null } }),
+    prisma.tier.count({ where: { status: "ACTIVE", deletedAt: null } }),
+    prisma.tier.count({ where: { status: "INACTIVE", deletedAt: null } }),
+    prisma.tier.count({ where: { NOT: { deletedAt: null } } }),
+    prisma.tier.count({ where: { deletedAt: null, countries: { some: { enabled: true } } } }),
     prisma.tier.findMany({
       take: 5,
+      where: { deletedAt: null },
       orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
       include: tierInclude(),
     }),
@@ -134,13 +182,18 @@ export async function getTierDashboard() {
     totalTiers: total,
     activeTiers: active,
     inactiveTiers: inactive,
+    archivedTiers: archived,
     mappedCountries,
     recentlyUpdated,
   };
 }
 
-export function listTiersSimple() {
+export function listTiersSimple(options?: { includeInactive?: boolean }) {
   return prisma.tier.findMany({
+    where: {
+      deletedAt: null,
+      ...(options?.includeInactive ? {} : { status: "ACTIVE" }),
+    },
     include: { _count: { select: { customers: true, pricing: true, discounts: true, countries: true } } },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
@@ -149,7 +202,7 @@ export function listTiersSimple() {
 export async function createTier(data: TierInput) {
   const name = data.name?.trim();
   if (!name) throw new AppError("Tier name is required.", 400);
-  const existing = await prisma.tier.findUnique({ where: { name } });
+  const existing = await prisma.tier.findFirst({ where: { name, deletedAt: null } });
   if (existing) throw new AppError("A tier with this name already exists.", 409);
 
   return prisma.tier.create({
@@ -168,7 +221,7 @@ export async function updateTier(id: string, data: TierInput) {
 
   const name = data.name?.trim();
   if (name) {
-    const duplicate = await prisma.tier.findFirst({ where: { name, id: { not: id } } });
+    const duplicate = await prisma.tier.findFirst({ where: { name, deletedAt: null, id: { not: id } } });
     if (duplicate) throw new AppError("A tier with this name already exists.", 409);
   }
 
@@ -183,24 +236,64 @@ export async function updateTier(id: string, data: TierInput) {
   });
 }
 
-export async function deleteTier(id: string) {
+export async function archiveTier(id: string) {
+  const tier = await prisma.tier.findUnique({ where: { id } });
+  if (!tier) throw new AppError("Tier not found.", 404);
+  if (tier.deletedAt) throw new AppError("Tier is already archived.", 400);
+
+  return prisma.tier.update({
+    where: { id },
+    data: { deletedAt: new Date() },
+    include: { _count: { select: { customers: true, pricing: true, discounts: true, countries: true } } },
+  });
+}
+
+export async function restoreTier(id: string) {
+  const tier = await prisma.tier.findUnique({ where: { id } });
+  if (!tier) throw new AppError("Tier not found.", 404);
+  if (!tier.deletedAt) throw new AppError("Tier is not archived.", 400);
+
+  const conflict = await prisma.tier.findFirst({
+    where: { name: tier.name, deletedAt: null, id: { not: id } },
+  });
+  if (conflict) {
+    throw new AppError(`Cannot restore tier: An active tier with name "${tier.name}" already exists. Rename the active tier or modify this tier before restoring.`, 409);
+  }
+
+  return prisma.tier.update({
+    where: { id },
+    data: { deletedAt: null },
+    include: { _count: { select: { customers: true, pricing: true, discounts: true, countries: true } } },
+  });
+}
+
+export async function permanentDeleteTier(id: string) {
   const tier = await prisma.tier.findUnique({
     where: { id },
     include: { _count: { select: { customers: true, pricing: true, discounts: true, countries: true } } },
   });
   if (!tier) throw new AppError("Tier not found.", 404);
 
+  if (!tier.deletedAt) {
+    throw new AppError("Cannot permanently delete tier: Tier must be archived before it can be permanently deleted.", 400);
+  }
+
   if (tier._count.customers > 0) {
-    throw new AppError(`Cannot delete tier: ${tier._count.customers} customer${tier._count.customers === 1 ? " is" : "s are"} assigned to it.`, 400);
+    throw new AppError(`Cannot permanently delete tier: ${tier._count.customers} customer${tier._count.customers === 1 ? " is" : "s are"} assigned to it. Reassign them before deleting.`, 400);
   }
   if (tier._count.pricing > 0) {
-    throw new AppError(`Cannot delete tier: ${tier._count.pricing} tier pricing rule${tier._count.pricing === 1 ? " references" : "s reference"} it.`, 400);
+    throw new AppError(`Cannot permanently delete tier: ${tier._count.pricing} tier pricing rule${tier._count.pricing === 1 ? " references" : "s reference"} it. Delete or reassign these pricing rules first.`, 400);
   }
   if (tier._count.discounts > 0) {
-    throw new AppError(`Cannot delete tier: ${tier._count.discounts} discount${tier._count.discounts === 1 ? " references" : "s reference"} it.`, 400);
+    throw new AppError(`Cannot permanently delete tier: ${tier._count.discounts} discount${tier._count.discounts === 1 ? " references" : "s reference"} it. Remove or update these discounts first.`, 400);
   }
 
   await prisma.tier.delete({ where: { id } });
+  return { id, success: true };
+}
+
+export async function deleteTier(id: string) {
+  return archiveTier(id);
 }
 
 export async function reorderTiers(items: { id: string; sortOrder: number }[]) {
@@ -387,7 +480,7 @@ export async function importTierSpreadsheet(filePath: string) {
 
   await prisma.$transaction(async (tx) => {
     for (const [index, row] of preview.parsed.entries()) {
-      const existing = await tx.tier.findUnique({ where: { name: row.name } });
+      const existing = await tx.tier.findFirst({ where: { name: row.name, deletedAt: null } });
       const payload = {
         name: row.name,
         status: normalizeStatus(row.status) ?? Status.ACTIVE,
@@ -445,41 +538,86 @@ export async function bulkUpdateTiers(input: TierBulkInput) {
   }
 
   const action = String(input.action ?? "").toUpperCase();
-  if (!["ENABLE", "DISABLE", "DELETE"].includes(action)) {
+  if (!["ENABLE", "DISABLE", "ARCHIVE", "RESTORE", "PERMANENT_DELETE", "DELETE"].includes(action)) {
     throw new AppError("Unsupported bulk action.", 400);
   }
 
   const ids = Array.from(new Set(input.ids.map((id) => id.trim()).filter(Boolean)));
-  const rows = await prisma.tier.findMany({ where: { id: { in: ids } }, select: { id: true } });
+  const rows = await prisma.tier.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true, deletedAt: true },
+  });
   if (rows.length !== ids.length) {
     const found = new Set(rows.map((row) => row.id));
     const missing = ids.filter((id) => !found.has(id));
     throw new AppError(`Tier not found for: ${missing.join(", ")}`, 404);
   }
 
-  if (action === "DELETE") {
+  if (action === "ARCHIVE" || action === "DELETE") {
+    await prisma.tier.updateMany({
+      where: { id: { in: ids }, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
+    return {
+      action: "ARCHIVE",
+      affected: ids.length,
+      summary: { total: ids.length, succeeded: ids.length, failed: 0 },
+      results: ids.map((id) => ({ id, success: true })),
+    };
+  }
+
+  if (action === "RESTORE") {
     const results = [];
-    for (const id of ids) {
+    for (const row of rows) {
       try {
-        await deleteTier(id);
-        results.push({ id, success: true });
+        await restoreTier(row.id);
+        results.push({ id: row.id, success: true });
       } catch (error) {
-        results.push({ id, success: false, error: error instanceof Error ? error.message : "Failed to delete tier." });
+        results.push({ id: row.id, success: false, error: error instanceof Error ? error.message : "Failed to restore tier." });
       }
     }
     return {
-      action,
+      action: "RESTORE",
       results,
       summary: {
         total: ids.length,
-        succeeded: results.filter((result) => result.success).length,
-        failed: results.filter((result) => !result.success).length,
+        succeeded: results.filter((r) => r.success).length,
+        failed: results.filter((r) => !r.success).length,
       },
     };
   }
 
+  if (action === "PERMANENT_DELETE") {
+    const rowMap = new Map(rows.map((row) => [row.id, row]));
+    const results = [];
+    for (const id of ids) {
+      const row = rowMap.get(id);
+      try {
+        await permanentDeleteTier(id);
+        results.push({ id, name: row?.name || id, success: true });
+      } catch (error) {
+        results.push({ id, name: row?.name || id, success: false, error: error instanceof Error ? error.message : "Failed to permanently delete tier." });
+      }
+    }
+    const succeeded = results.filter((r) => r.success);
+    const failed = results.filter((r) => !r.success);
+    return {
+      action: "PERMANENT_DELETE",
+      results,
+      summary: {
+        total: ids.length,
+        succeeded: succeeded.length,
+        failed: failed.length,
+      },
+      deletedCount: succeeded.length,
+      blockedCount: failed.length,
+      deletedIds: succeeded.map((r) => r.id),
+      blocked: failed.map((r) => ({ id: r.id, name: r.name, reason: r.error || "Blocked" })),
+    };
+  }
+
   const status = action === "ENABLE" ? "ACTIVE" : "INACTIVE";
-  await prisma.tier.updateMany({ where: { id: { in: ids } }, data: { status } });
+  await prisma.tier.updateMany({ where: { id: { in: ids }, deletedAt: null }, data: { status } });
   return { action, affected: ids.length, status };
 }
 
@@ -496,7 +634,7 @@ export async function assertTierUsable(tierId: string | null | undefined, option
     },
   });
 
-  if (!tier) throw new AppError("Tier not found.", 404);
+  if (!tier || tier.deletedAt) throw new AppError("Tier not found.", 404);
   if (tier.status !== "ACTIVE") throw new AppError("Tier is inactive.", 400);
 
   const allowedCountryIds = tier.countries.map((mapping) => mapping.countryId);

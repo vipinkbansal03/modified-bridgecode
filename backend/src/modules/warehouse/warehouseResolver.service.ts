@@ -55,7 +55,7 @@ export async function resolveItemFulfillmentWarehouse(
       include: { warehouse: true },
     });
 
-    if (!inv || !inv.warehouse || inv.warehouse.status !== "ACTIVE") {
+    if (!inv || !inv.warehouse || inv.warehouse.status !== "ACTIVE" || inv.warehouse.deletedAt !== null) {
       throw new AppError("Selected warehouse is not available for this item.", 400);
     }
 
@@ -120,7 +120,7 @@ export async function resolveItemFulfillmentWarehouse(
   });
 
   const physicalInvs = inventories.filter(
-    (inv) => inv.warehouseId && inv.warehouse && inv.warehouse.status === "ACTIVE",
+    (inv) => inv.warehouseId && inv.warehouse && inv.warehouse.status === "ACTIVE" && !inv.warehouse.deletedAt,
   );
   const baseInv = inventories.find((inv) => inv.warehouseId === null);
 
