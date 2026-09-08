@@ -728,7 +728,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
               <Sparkles size={12} />
               Premium Configurator
             </span>
-            <h2 className="text-[clamp(24px,2.8vw,32px)] font-normal tracking-tight text-ink">
+            <h2 className="text-[clamp(24px,2.8vw,32px)] font-normal leading-tight tracking-tight text-ink">
               Build a quote-ready configuration without leaving the PDP
             </h2>
             <p className="mt-2 max-w-[620px] text-[14.5px] leading-relaxed text-steel">

@@ -474,7 +474,7 @@ export default function CategoriesPage() {
   const handlePermanentDelete = async () => {
     if (!deleting) return;
     try {
-      await permanentDeleteCategory.mutateAsync(deleting);
+      await permanentDeleteCategory.mutateAsync({ id: deleting, force: true });
       showToast("Category permanently deleted from database.");
       setDeleting(null);
       refetch();
@@ -504,7 +504,7 @@ export default function CategoriesPage() {
     if (selectedIds.length === 0) return;
     setBulkSaving(true);
     try {
-      await Promise.all(selectedIds.map((id) => permanentDeleteCategory.mutateAsync(id)));
+      await Promise.all(selectedIds.map((id) => permanentDeleteCategory.mutateAsync({ id, force: true })));
       showToast(`Successfully permanently deleted ${selectedIds.length} category(ies).`);
       setSelectedIds([]);
       setBulkAction("");

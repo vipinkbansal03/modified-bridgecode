@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
@@ -24,9 +25,10 @@ export interface ProductCardProps {
 }
 
 export function ProductCard({ id, image, title, slug, category, shortDescription, price, taxLabel = "Inclusive of all taxes", badge, ctaLabel, actionSlot }: ProductCardProps) {
+  const [imageError, setImageError] = useState(false);
   const rawImage = image?.trim() || null;
   let imageSrc: string | null = null;
-  if (rawImage) {
+  if (rawImage && !imageError) {
     if (rawImage.startsWith("data:")) {
       imageSrc = rawImage;
     } else {
@@ -49,7 +51,15 @@ export function ProductCard({ id, image, title, slug, category, shortDescription
                 imageSrc.startsWith("data:") ? (
                   <img src={imageSrc} alt={title} className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-110" />
                 ) : (
-                  <Image src={imageSrc} alt={title} fill className="object-cover transition-transform duration-300 ease-out group-hover:scale-110" sizes="(max-width: 768px) 100vw, 33vw" />
+                  <Image
+                    src={imageSrc}
+                    alt={title}
+                    fill
+                    className="object-cover transition-transform duration-300 ease-out group-hover:scale-110"
+                    sizes="(max-width: 768px) 100vw, 33vw"
+                    onError={() => setImageError(true)}
+                    unoptimized={imageSrc.startsWith("http://") || imageSrc.startsWith("https://")}
+                  />
                 )
               ) : (
                 <div className="flex h-full items-center justify-center px-4 text-center text-sm text-steel-2">

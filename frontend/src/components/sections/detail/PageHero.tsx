@@ -38,7 +38,14 @@ export function PageHero({ kicker, title, lede, heroImage, breadcrumb }: PageHer
         </div>
 
         <div className="relative mt-5.5 h-[240px] w-full overflow-hidden sm:h-[420px]">
-          <Image src={heroImage} alt={title} fill className="object-cover" sizes="100vw" />
+          <Image
+            src={heroImage}
+            alt={title}
+            fill
+            className="object-cover"
+            sizes="100vw"
+            unoptimized={heroImage?.startsWith("http://") || heroImage?.startsWith("https://")}
+          />
         </div>
       </Container>
     </section>

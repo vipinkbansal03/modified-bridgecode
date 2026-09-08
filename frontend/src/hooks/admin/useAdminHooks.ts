@@ -742,8 +742,13 @@ export const useDeleteCategory = () => {
 export const usePermanentDeleteCategory = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      adminApi.delete(`/categories/${id}/permanent`).then((r) => r.data),
+    mutationFn: (idOrPayload: string | { id: string; force?: boolean }) => {
+      const id = typeof idOrPayload === "string" ? idOrPayload : idOrPayload.id;
+      const force = typeof idOrPayload === "object" ? idOrPayload.force : true;
+      return adminApi
+        .delete(`/categories/${id}/permanent`, { params: force ? { force: "true" } : undefined })
+        .then((r) => r.data);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-categories"] });
       qc.invalidateQueries({ queryKey: ["admin-archived-categories"] });

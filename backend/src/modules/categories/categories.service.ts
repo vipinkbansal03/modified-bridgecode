@@ -263,38 +263,115 @@ export async function deleteCategory(id: string) {
   });
 }
 
-export async function permanentDeleteCategory(id: string) {
+export async function permanentDeleteCategory(id: string, options?: { force?: boolean }) {
   const category = await prisma.category.findUnique({
     where: { id },
-    select: {
-      id: true,
-      name: true,
-      _count: {
+    include: {
+      products: {
         select: {
-          products: true,
-          children: true,
-          discounts: true,
-          taxRules: true,
+          id: true,
+          title: true,
+          deletedAt: true,
+          variants: { select: { id: true } },
         },
+      },
+      children: {
+        select: { id: true, name: true },
       },
     },
   });
   if (!category) throw new AppError("Category not found.", 404);
 
-  if (category._count.products > 0) {
+  const activeProducts = category.products.filter((p) => !p.deletedAt);
+  const allVariantIds = category.products.flatMap((p) => p.variants.map((v) => v.id));
+
+  // Check if any product or variant has orders or quotes that must not be deleted
+  const [orderItemCount, quoteItemCount] = await Promise.all([
+    category.products.length > 0
+      ? prisma.orderItem.count({
+          where: {
+            OR: [
+              { productId: { in: category.products.map((p) => p.id) } },
+              ...(allVariantIds.length > 0 ? [{ variantId: { in: allVariantIds } }] : []),
+            ],
+          },
+        })
+      : 0,
+    category.products.length > 0
+      ? prisma.quoteItem.count({
+          where: {
+            OR: [
+              { productId: { in: category.products.map((p) => p.id) } },
+              ...(allVariantIds.length > 0 ? [{ variantId: { in: allVariantIds } }] : []),
+            ],
+          },
+        })
+      : 0,
+  ]);
+
+  if (orderItemCount > 0 || quoteItemCount > 0) {
     throw new AppError(
-      `Cannot permanently delete category "${category.name}": referenced by ${category._count.products} product(s). Please reassign or delete the products first.`,
+      `Cannot permanently delete category "${category.name}": contains products referenced by ${orderItemCount} order item(s) and ${quoteItemCount} quote item(s). Archiving is required for legal and tax auditing.`,
       400,
     );
   }
-  if (category._count.children > 0) {
+
+  // If there are active products and force was not requested, notify the user
+  if (!options?.force && activeProducts.length > 0) {
     throw new AppError(
-      `Cannot permanently delete category "${category.name}": it has ${category._count.children} child sub-category(ies). Please reassign or delete them first.`,
+      `Cannot permanently delete category "${category.name}": referenced by ${activeProducts.length} active product(s). Please archive or delete the products first.`,
       400,
     );
   }
 
   return prisma.$transaction(async (tx) => {
+    // 1. Unparent child categories so they don't break foreign key constraint
+    if (category.children.length > 0) {
+      await tx.category.updateMany({
+        where: { parentId: id },
+        data: { parentId: null },
+      });
+    }
+
+    // 2. Cascade delete all products under this category (and their relations)
+    for (const prod of category.products) {
+      await tx.wishlist.deleteMany({ where: { productId: prod.id } });
+      await tx.discountProduct.deleteMany({ where: { productId: prod.id } });
+      await tx.collectionProduct.deleteMany({ where: { productId: prod.id } });
+      await tx.productCountry.deleteMany({ where: { productId: prod.id } });
+      await tx.productPaymentMethod.deleteMany({ where: { productId: prod.id } });
+      await tx.productPrice.deleteMany({ where: { productId: prod.id } });
+      await tx.moqPricing.deleteMany({ where: { productId: prod.id } });
+      await tx.tierPricing.deleteMany({ where: { productId: prod.id } });
+      await tx.productReview.deleteMany({ where: { productId: prod.id } });
+      await tx.productTranslation.deleteMany({ where: { productId: prod.id } });
+      await tx.inventoryAdjustment.deleteMany({ where: { inventory: { productId: prod.id } } });
+
+      const variantIds = prod.variants.map((v) => v.id);
+      if (variantIds.length > 0) {
+        await tx.productVariantAttributeValue.deleteMany({ where: { variantId: { in: variantIds } } });
+        await tx.variantCountry.deleteMany({ where: { variantId: { in: variantIds } } });
+        await tx.variantPaymentMethod.deleteMany({ where: { variantId: { in: variantIds } } });
+        await tx.productPrice.deleteMany({ where: { variantId: { in: variantIds } } });
+        await tx.inventory.deleteMany({ where: { variantId: { in: variantIds } } });
+        await tx.productVariant.deleteMany({ where: { productId: prod.id } });
+      }
+
+      await tx.productAttributeValueSelection.deleteMany({
+        where: { productAttribute: { productId: prod.id } },
+      });
+      await tx.productAttribute.deleteMany({ where: { productId: prod.id } });
+      await tx.productPackage.deleteMany({ where: { productId: prod.id } });
+      await tx.inventory.deleteMany({ where: { productId: prod.id } });
+      await tx.productMedia.deleteMany({ where: { productId: prod.id } });
+      await tx.product.update({
+        where: { id: prod.id },
+        data: { taxRules: { set: [] } },
+      });
+      await tx.product.delete({ where: { id: prod.id } });
+    }
+
+    // 3. Clean up category relations
     await tx.categoryCountry.deleteMany({ where: { categoryId: id } });
     await tx.categoryTranslation.deleteMany({ where: { categoryId: id } });
     await tx.discountCategory.deleteMany({ where: { categoryId: id } });
@@ -835,7 +912,7 @@ export async function importCategoriesSpreadsheet(filePathOrRows: string | any[]
   };
 }
 
-export async function bulkPermanentDeleteCategories(ids: string[]) {
+export async function bulkPermanentDeleteCategories(ids: string[], options?: { force?: boolean }) {
   const deletedIds: string[] = [];
   const blocked: Array<{ id: string; name: string; reason: string }> = [];
 
@@ -849,7 +926,7 @@ export async function bulkPermanentDeleteCategories(ids: string[]) {
         blocked.push({ id, name: id, reason: "Category not found." });
         continue;
       }
-      await permanentDeleteCategory(id);
+      await permanentDeleteCategory(id, options);
       deletedIds.push(id);
     } catch (error: any) {
       const cat = await prisma.category.findUnique({

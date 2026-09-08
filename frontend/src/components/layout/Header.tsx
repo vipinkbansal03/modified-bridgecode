@@ -157,7 +157,7 @@ export function Header() {
   }, []);
 
   useEffect(() => {
-    const shouldLockScroll = megaOpen || capsOpen || mobileOpen || accountOpen;
+    const shouldLockScroll = mobileOpen;
     if (!shouldLockScroll) return;
 
     const previousOverflow = document.body.style.overflow;

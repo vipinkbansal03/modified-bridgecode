@@ -79,6 +79,7 @@ export function StorefrontBanner({
               className="object-cover"
               sizes="(min-width: 768px) 300px, 100vw"
               onError={() => setImageError(true)}
+              unoptimized={banner.image?.startsWith("http://") || banner.image?.startsWith("https://")}
             />
           </div>
         ) : (
@@ -103,6 +104,7 @@ export function StorefrontBanner({
             className="object-cover sm:hidden"
             sizes="100vw"
             onError={() => setMobileImageError(true)}
+            unoptimized={banner.mobileImage?.startsWith("http://") || banner.mobileImage?.startsWith("https://")}
           />
         )}
 
@@ -115,6 +117,7 @@ export function StorefrontBanner({
             className={`object-cover ${hasMobileImage ? "hidden sm:block" : "block"}`}
             sizes="100vw"
             onError={() => setImageError(true)}
+            unoptimized={banner.image?.startsWith("http://") || banner.image?.startsWith("https://")}
           />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-grey text-steel-2 p-6 text-center">

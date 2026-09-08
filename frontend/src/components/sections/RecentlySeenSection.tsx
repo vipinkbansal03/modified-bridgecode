@@ -89,7 +89,14 @@ export function RecentlySeenSection({ currentSlug }: RecentlySeenSectionProps) {
                 <Link key={p.slug} href={`/products/${p.slug}`} className="block w-[190px] flex-none snap-start text-ink">
                   <div className="relative mb-3 h-[150px] w-full bg-offwhite">
                     {image ? (
-                      <Image src={image} alt={p.title} fill className="object-cover" sizes="190px" />
+                      <Image
+                        src={image}
+                        alt={p.title}
+                        fill
+                        className="object-cover"
+                        sizes="190px"
+                        unoptimized={image?.startsWith("http://") || image?.startsWith("https://")}
+                      />
                     ) : (
                       <div className="flex h-full items-center justify-center px-3 text-center text-xs text-steel-2">No image</div>
                     )}

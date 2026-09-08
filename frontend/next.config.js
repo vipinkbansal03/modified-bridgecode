@@ -10,12 +10,16 @@ const nextConfig = {
       { protocol: "https", hostname: "images.unsplash.com" },
       { protocol: "https", hostname: "plus.unsplash.com" },
       { protocol: "https", hostname: "www.modortho.com" },
+      { protocol: "https", hostname: "example.com" },
+      { protocol: "http", hostname: "example.com" },
       // Allow serving product images uploaded to the Express backend
       { protocol: "http", hostname: "localhost" },
       { protocol: "http", hostname: "localhost", port: "4000" },
       { protocol: "http", hostname: "127.0.0.1" },
       { protocol: "http", hostname: "127.0.0.1", port: "4000" },
       { protocol: "https", hostname: "res.cloudinary.com" },
+      { protocol: "https", hostname: "**" },
+      { protocol: "http", hostname: "**" },
     ],
   },
 

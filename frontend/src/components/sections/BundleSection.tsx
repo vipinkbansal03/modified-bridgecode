@@ -26,7 +26,14 @@ export function BundleSection({ product }: BundleSectionProps) {
               <Link key={item.slug} href={`/products/${item.slug}`} className="min-h-[145px] rounded-md border border-line bg-offwhite p-3.5 transition hover:border-steel-2">
                 <div className="relative mb-2.5 h-[78px] w-full overflow-hidden rounded bg-grey flex items-center justify-center">
                   {item.image && typeof item.image === "string" && item.image.trim() !== "" ? (
-                    <Image src={item.image} alt={item.title} fill className="object-cover" sizes="200px" />
+                    <Image
+                      src={item.image}
+                      alt={item.title}
+                      fill
+                      className="object-cover"
+                      sizes="200px"
+                      unoptimized={item.image?.startsWith("http://") || item.image?.startsWith("https://")}
+                    />
                   ) : (
                     <ImageOff size={20} className="text-steel-2/60" />
                   )}

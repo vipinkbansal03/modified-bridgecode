@@ -37,6 +37,7 @@ export function BlogCard({ image, title, excerpt, date, url, ctaLabel = "Read mo
             className="object-cover"
             sizes="280px"
             onError={() => setImageError(true)}
+            unoptimized={image?.startsWith("http://") || image?.startsWith("https://")}
           />
         ) : (
           <div className="flex flex-col items-center justify-center gap-2 p-4 text-center text-steel-2">

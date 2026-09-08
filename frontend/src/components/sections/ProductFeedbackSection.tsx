@@ -130,7 +130,13 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
               <div className="flex items-center gap-3">
                 {thumbnail && (
                   <div className="relative h-14 w-14 flex-none overflow-hidden rounded-lg border border-[#E5E7EB] bg-white">
-                    <Image src={thumbnail} alt={product.title} fill className="object-contain p-1" />
+                    <Image
+                      src={thumbnail}
+                      alt={product.title}
+                      fill
+                      className="object-contain p-1"
+                      unoptimized={thumbnail.startsWith("http://") || thumbnail.startsWith("https://")}
+                    />
                   </div>
                 )}
                 <div className="flex-1 min-w-0">

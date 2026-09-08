@@ -112,7 +112,7 @@ export function BulkOrderPanel({ product, productId }: BulkOrderPanelProps) {
     <section className="pt-16">
       <div className="mb-7.5 max-w-[680px]">
         <span className="mb-2.5 block text-[13px] font-medium uppercase tracking-wide text-brand">B2B Ordering</span>
-        <h2 className="text-[clamp(24px,2.8vw,32px)] font-normal tracking-tight text-ink">
+        <h2 className="text-[clamp(24px,2.8vw,32px)] font-normal leading-tight tracking-tight text-ink">
           Configure quantity and order, or request a quote
         </h2>
         <p className="mt-2.5 text-[14.5px] leading-relaxed text-steel">

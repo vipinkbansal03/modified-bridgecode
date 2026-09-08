@@ -3424,38 +3424,19 @@ function AdminArchiveContent() {
           softDeleteDescription="This category is already soft-deleted and stored in the Archive."
           permanentDeleteDescription={
             deletingCategory
-              ? `Physically removes "${deletingCategory.name}" from the database. Allowed only if no products or sub-categories reference this category.`
+              ? `Physically removes "${deletingCategory.name}" from the database. Any child categories will be promoted to root level, and un-ordered products will be permanently cleaned up.`
               : undefined
           }
-          permanentDeleteDisabled={Boolean(
-            deletingCategory &&
-              ((deletingCategory._count?.products ?? 0) > 0 || (deletingCategory.children?.length ?? 0) > 0)
-          )}
-          permanentDeleteDisabledReason={
-            deletingCategory
-              ? (deletingCategory._count?.products ?? 0) > 0
-                ? `Cannot permanently delete category because it is referenced by ${deletingCategory._count?.products} active product(s). Remove all product references first.`
-                : (deletingCategory.children?.length ?? 0) > 0
-                ? `Cannot permanently delete category because it has ${deletingCategory.children?.length} child sub-category(ies). Delete or reassign child sub-categories first.`
-                : undefined
-              : undefined
-          }
+          permanentDeleteDisabled={false}
+          permanentDeleteDisabledReason={undefined}
           onSoftDelete={() => {
             showToast("Category is already archived.");
             setDeletingCategory(null);
           }}
           onPermanentDelete={async () => {
             if (!deletingCategory) return;
-            const productCount = deletingCategory._count?.products ?? 0;
-            const childCount = deletingCategory.children?.length ?? 0;
-            if (productCount > 0) {
-              throw new Error(`Cannot permanently delete category because it is referenced by ${productCount} active product(s).`);
-            }
-            if (childCount > 0) {
-              throw new Error(`Cannot permanently delete category because it has ${childCount} child sub-category(ies).`);
-            }
             try {
-              await permanentDeleteCategoryMutation.mutateAsync(deletingCategory.id);
+              await permanentDeleteCategoryMutation.mutateAsync({ id: deletingCategory.id, force: true });
               showToast(`Category "${deletingCategory.name}" permanently deleted.`, "success");
               setDeletingCategory(null);
               categoriesQuery.refetch();

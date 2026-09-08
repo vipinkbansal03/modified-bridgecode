@@ -67,7 +67,14 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
             {img.startsWith("data:") ? (
               <img src={img} alt={`${title} thumbnail ${i + 1}`} className="h-full w-full object-contain p-0.5" />
             ) : (
-              <Image src={img} alt={`${title} thumbnail ${i + 1}`} fill sizes="72px" className="object-contain p-0.5" />
+              <Image
+                src={img}
+                alt={`${title} thumbnail ${i + 1}`}
+                fill
+                sizes="72px"
+                className="object-contain p-0.5"
+                unoptimized={img?.startsWith("http://") || img?.startsWith("https://")}
+              />
             )}
           </button>
         ))}
@@ -108,6 +115,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
               sizes="(max-width: 768px) 84vw, 500px"
               className="object-contain transition-all duration-300"
               priority
+              unoptimized={safeImages[index]?.startsWith("http://") || safeImages[index]?.startsWith("https://")}
             />
           )}
           {/* <span className="pointer-events-none absolute right-3 bottom-3 flex h-8 w-8 items-center justify-center rounded-full border border-[#E5E7EB] bg-white/90 text-[#1A1A1A] shadow-2xs">

@@ -86,7 +86,7 @@ export function SimpleInquiryPanel({ product, productId }: SimpleInquiryPanelPro
     <section className="pt-16">
       <div className="mb-7.5 max-w-[680px]">
         <span className="mb-2.5 block text-[13px] font-medium uppercase tracking-wide text-brand">Pricing &amp; Availability</span>
-        <h2 className="text-[clamp(24px,2.8vw,32px)] font-normal tracking-tight text-ink">Request pricing for {product.title}</h2>
+        <h2 className="text-[clamp(24px,2.8vw,32px)] font-normal leading-tight tracking-tight text-ink">Request pricing for {product.title}</h2>
         <p className="mt-2.5 text-[14.5px] leading-relaxed text-steel">
           Specifications for this item vary by case requirement, so pricing and minimum order quantities are
           confirmed directly with our team rather than calculated online. Send a request and we&apos;ll reply with

@@ -675,7 +675,7 @@ export function DynamicVariantMatrixConfigurator({
     <section className="pt-16">
       <div className="rounded-lg border border-line bg-white p-6 sm:p-7">
         <div className="mb-6 flex flex-col gap-2 border-b border-line pb-5">
-          <h2 className="text-[clamp(24px,2.8vw,32px)] font-normal tracking-tight text-ink">
+          <h2 className="text-[clamp(24px,2.8vw,32px)] font-normal leading-tight tracking-tight text-ink">
             Order Multiple Variants In One Step
           </h2>
           <p className="max-w-[760px] text-[14.5px] leading-relaxed text-steel">

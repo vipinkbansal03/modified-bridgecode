@@ -1084,6 +1084,10 @@ export async function permanentDeleteProduct(id: string) {
     await tx.productPackage.deleteMany({ where: { productId: id } });
     await tx.inventory.deleteMany({ where: { productId: id } });
     await tx.productMedia.deleteMany({ where: { productId: id } });
+    await tx.product.update({
+      where: { id },
+      data: { taxRules: { set: [] } },
+    });
 
     return tx.product.delete({ where: { id } });
   });

@@ -127,6 +127,7 @@ export default function WishlistPage() {
                           fill
                           className="object-cover transition-transform duration-300 group-hover:scale-105"
                           sizes="(max-width: 768px) 100vw, 33vw"
+                          unoptimized={p.image?.startsWith("http://") || p.image?.startsWith("https://")}
                         />
                       ) : (
                         <div className="flex h-full items-center justify-center text-steel-2">

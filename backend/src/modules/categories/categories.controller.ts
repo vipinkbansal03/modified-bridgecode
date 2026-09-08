@@ -8,10 +8,15 @@ export const getOne = asyncHandler(async (req: AuthRequest, res: Response) => Ap
 export const create = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.created(res, "Category created.", await S.createCategory(req.body)));
 export const update = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Category updated.", await S.updateCategory(String(req.params.id), req.body)));
 export const remove = asyncHandler(async (req: AuthRequest, res: Response) => { await S.deleteCategory(String(req.params.id)); return ApiResponse.success(res, "Category deleted."); });
-export const permanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => { await S.permanentDeleteCategory(String(req.params.id)); return ApiResponse.success(res, "Category permanently deleted."); });
+export const permanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const force = req.query.force === "true" || req.body?.force === true;
+  await S.permanentDeleteCategory(String(req.params.id), { force });
+  return ApiResponse.success(res, "Category permanently deleted.");
+});
 export const bulkPermanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
   const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
-  const result = await S.bulkPermanentDeleteCategories(ids);
+  const force = req.query.force === "true" || req.body?.force === true;
+  const result = await S.bulkPermanentDeleteCategories(ids, { force });
   return ApiResponse.success(res, "Bulk permanent delete processed.", result);
 });
 export const duplicate = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.created(res, "Category duplicated.", await S.duplicateCategory(String(req.params.id))));

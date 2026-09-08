@@ -55,6 +55,7 @@ export function CategoryCard({ title, image, slug, productCount, meta }: Categor
                   className="object-cover"
                   sizes="(max-width: 768px) 100vw, 25vw"
                   onError={() => setImageError(true)}
+                  unoptimized={imageSrc.startsWith("http://") || imageSrc.startsWith("https://")}
                 />
               )
             ) : (

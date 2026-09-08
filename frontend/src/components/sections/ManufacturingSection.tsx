@@ -33,7 +33,14 @@ export function ManufacturingSection({ data }: ManufacturingSectionProps) {
               <p className="mt-5 text-[15.5px] leading-relaxed text-steel">{data.body}</p>
             </div>
             <div className="relative h-[320px] w-full overflow-hidden rounded-md">
-              <Image src={data.image} alt="" fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" />
+              <Image
+                src={data.image}
+                alt=""
+                fill
+                className="object-cover"
+                sizes="(max-width: 768px) 100vw, 50vw"
+                unoptimized={data.image?.startsWith("http://") || data.image?.startsWith("https://")}
+              />
             </div>
           </div>
         </Reveal>
