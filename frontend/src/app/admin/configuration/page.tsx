@@ -103,6 +103,11 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
   "payment.stripe_secret_key":        { group: "payments", type: "secret", isSecret: true },
   "payment.stripe_webhook_secret":    { group: "payments", type: "secret", isSecret: true },
 
+  "payment.cashfree_enabled":         { group: "payments", type: "boolean" },
+  "payment.cashfree_client_id":       { group: "payments", type: "string" },
+  "payment.cashfree_client_secret":   { group: "payments", type: "secret", isSecret: true },
+  "payment.cashfree_webhook_secret":  { group: "payments", type: "secret", isSecret: true },
+
   // ── Tax & Compliance Validation ──
   "tax.sandbox_enabled":              { group: "tax", type: "boolean" },
   "tax.sandbox_api_key":              { group: "tax", type: "string" },
@@ -395,7 +400,7 @@ export default function ConfigurationPage() {
                   </div>
                   <div>
                     <h2 className="text-[15px] font-bold text-[#1A1A1A]">Payment Gateways</h2>
-                    <p className="text-[12px] text-gray-500">Configure Razorpay for Indian UPI/NetBanking and Stripe for international multi-currency cards.</p>
+                    <p className="text-[12px] text-gray-500">Configure Razorpay for Indian UPI/NetBanking, Cashfree for Indian cards/UPI, and Stripe for international multi-currency cards.</p>
                   </div>
                 </div>
 
@@ -470,6 +475,44 @@ export default function ConfigurationPage() {
                         value={g("payment.stripe_webhook_secret")}
                         onChange={(v) => set("payment.stripe_webhook_secret", v)}
                         placeholder="whsec_..."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cashfree Sub-Section */}
+                <div className="space-y-4 rounded-lg border border-[#F0F0F0] bg-[#FAFAFA] p-5">
+                  <div className="flex items-center justify-between pb-3 border-b border-[#EBEBEB]">
+                    <div>
+                      <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Cashfree (Cards / UPI / NetBanking)</h3>
+                      <p className="text-[11.5px] text-gray-500">Cashfree Payments for Indian cards, UPI and NetBanking. Environment (sandbox/production) is set via the CASHFREE_ENV server env var.</p>
+                    </div>
+                    <SwitchRow
+                      label="Enable Cashfree"
+                      value={b("payment.cashfree_enabled")}
+                      onChange={(v) => tog("payment.cashfree_enabled", v)}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-1">
+                    <AdminInput
+                      label="CASHFREE CLIENT ID"
+                      value={g("payment.cashfree_client_id")}
+                      onChange={(e) => set("payment.cashfree_client_id", e.target.value)}
+                      placeholder="test<merchant_id>0123456789abcdef..."
+                    />
+                    <SecretInput
+                      label="CASHFREE CLIENT SECRET"
+                      value={g("payment.cashfree_client_secret")}
+                      onChange={(v) => set("payment.cashfree_client_secret", v)}
+                      placeholder="Enter Cashfree Client Secret"
+                    />
+                    <div className="md:col-span-2">
+                      <SecretInput
+                        label="CASHFREE WEBHOOK SECRET (OPTIONAL)"
+                        value={g("payment.cashfree_webhook_secret")}
+                        onChange={(v) => set("payment.cashfree_webhook_secret", v)}
+                        placeholder="Falls back to the Client Secret if empty"
                       />
                     </div>
                   </div>

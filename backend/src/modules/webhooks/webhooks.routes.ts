@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { razorpayWebhook, stripeWebhook } from "./webhooks.controller";
+import { razorpayWebhook, stripeWebhook, cashfreeWebhook } from "./webhooks.controller";
 
 const router = Router();
 
@@ -15,5 +15,6 @@ function captureRawBody(req: Request, _res: Response, next: NextFunction) {
 
 router.post("/razorpay", captureRawBody, razorpayWebhook);
 router.post("/stripe", captureRawBody, stripeWebhook);
+router.post("/cashfree", captureRawBody, cashfreeWebhook);
 
 export default router;

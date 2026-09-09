@@ -217,6 +217,15 @@ async function syncPaymentMethodsFromSettings() {
         });
       }
     }
+
+    const cashfreeEnabled = await getSettingValue("payment.cashfree_enabled");
+
+    if (cashfreeEnabled !== "") {
+      await prisma.paymentMethod.updateMany({
+        where: { code: "CASHFREE" },
+        data: { isEnabled: cashfreeEnabled === "true" },
+      });
+    }
   } catch (err) {
     // Non-blocking sync error
   }

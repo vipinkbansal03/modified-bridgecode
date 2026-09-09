@@ -1689,6 +1689,7 @@ enum PaymentStatus {
 enum PaymentProvider {
   RAZORPAY
   STRIPE
+  CASHFREE
 }
 
 enum PaymentTransactionStatus {
