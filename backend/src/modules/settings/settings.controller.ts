@@ -3,6 +3,8 @@ import { asyncHandler, ApiResponse } from "../../utils/apiResponse";
 import { AuthRequest } from "../../middleware/auth.middleware";
 import * as S from "./settings.service";
 
+import { sendTestEmailDirectly } from "../../utils/email";
+
 // Admin
 export const get = asyncHandler(async (req: AuthRequest, res: Response) =>
   ApiResponse.success(res, "Settings.", await S.getSettings(req.query.group as string | undefined))
@@ -11,6 +13,18 @@ export const get = asyncHandler(async (req: AuthRequest, res: Response) =>
 export const upsertMany = asyncHandler(async (req: AuthRequest, res: Response) =>
   ApiResponse.success(res, "Settings saved.", await S.upsertMany(req.body.settings))
 );
+
+export const testEmail = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { toEmail, provider } = req.body;
+  if (!toEmail) {
+    return ApiResponse.error(res, "Recipient email address is required.", [], 400);
+  }
+  const result = await sendTestEmailDirectly(toEmail, provider);
+  if (!result.success) {
+    return ApiResponse.error(res, result.message, [], 400);
+  }
+  return ApiResponse.success(res, result.message, result);
+});
 
 // Public
 export const publicTracking = asyncHandler(async (req: AuthRequest, res: Response) => {

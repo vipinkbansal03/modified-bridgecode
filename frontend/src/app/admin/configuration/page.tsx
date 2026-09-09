@@ -3,6 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Eye,
   EyeOff,
@@ -18,6 +19,7 @@ import {
   Database,
   Bell,
   CheckCircle2,
+  ExternalLink,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -129,20 +131,6 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
   "uploads.cloudinary_cloud_name":    { group: "uploads", type: "string" },
   "uploads.cloudinary_api_key":        { group: "uploads", type: "string" },
   "uploads.cloudinary_api_secret":     { group: "uploads", type: "secret", isSecret: true },
-
-  // ── Email Communications ──
-  "email.provider":                   { group: "email", type: "string" },
-  "email.enabled":                    { group: "email", type: "boolean" },
-  "email.smtp_host":                  { group: "email", type: "string" },
-  "email.smtp_port":                  { group: "email", type: "string" },
-  "email.smtp_user":                  { group: "email", type: "string" },
-  "email.smtp_password":              { group: "email", type: "secret", isSecret: true },
-  "email.from_name":                  { group: "email", type: "string" },
-  "email.from_email":                 { group: "email", type: "string" },
-
-  "email.resend_api_key":             { group: "email", type: "secret", isSecret: true },
-  "email.resend_from_email":          { group: "email", type: "string" },
-  "email.resend_notify_email":        { group: "email", type: "string" },
 
   // ── WhatsApp & Messaging ──
   "whatsapp.provider":                { group: "whatsapp", type: "string" },
@@ -694,111 +682,7 @@ export default function ConfigurationPage() {
                 </div>
               </div>
 
-              {/* ── 6. EMAIL COMMUNICATIONS ── */}
-              <div className="rounded-xl border border-[#E6E6E6] bg-white p-6 shadow-xs space-y-6">
-                <div className="flex items-center gap-2.5 pb-3 border-b border-[#F4F4F4]">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
-                    <Mail size={18} />
-                  </div>
-                  <div>
-                    <h2 className="text-[15px] font-bold text-[#1A1A1A]">Email & Transactional Delivery</h2>
-                    <p className="text-[12px] text-gray-500">Mailing options for automated order confirmations, PDF invoices, and RFQ quotes.</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
-                  <AdminSelect
-                    label="EMAIL SERVICE PROVIDER"
-                    value={g("email.provider") || "smtp"}
-                    onChange={(e) => set("email.provider", e.target.value)}
-                    options={[
-                      { value: "smtp", label: "SMTP (Gmail / Custom Server)" },
-                      { value: "resend", label: "Resend API (High Reliability)" },
-                    ]}
-                  />
-                  <SwitchRow
-                    label="Enable Email Service"
-                    hint="Pause or resume automated email dispatches system-wide."
-                    value={b("email.enabled")}
-                    onChange={(v) => tog("email.enabled", v)}
-                  />
-
-                  {/* SMTP fields */}
-                  {(g("email.provider") === "smtp" || !g("email.provider")) && (
-                    <div className="md:col-span-2 space-y-4 rounded-lg border border-[#F0F0F0] bg-[#FAFAFA] p-5">
-                      <h3 className="text-[13.5px] font-semibold text-[#1A1A1A]">SMTP Server Credentials</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                        <AdminInput
-                          label="SMTP HOST"
-                          value={g("email.smtp_host")}
-                          onChange={(e) => set("email.smtp_host", e.target.value)}
-                          placeholder="smtp.gmail.com"
-                        />
-                        <AdminInput
-                          label="SMTP PORT"
-                          value={g("email.smtp_port")}
-                          onChange={(e) => set("email.smtp_port", e.target.value)}
-                          placeholder="587"
-                        />
-                        <AdminInput
-                          label="EMAIL USERNAME"
-                          value={g("email.smtp_user")}
-                          onChange={(e) => set("email.smtp_user", e.target.value)}
-                          placeholder="orders@modortho.com"
-                        />
-                        <SecretInput
-                          label="EMAIL PASSWORD / APP PASSWORD"
-                          value={g("email.smtp_password")}
-                          onChange={(v) => set("email.smtp_password", v)}
-                        />
-                        <AdminInput
-                          label="SENDER FROM NAME"
-                          value={g("email.from_name")}
-                          onChange={(e) => set("email.from_name", e.target.value)}
-                          placeholder="Modern Orthodontics"
-                        />
-                        <AdminInput
-                          label="SENDER FROM EMAIL"
-                          value={g("email.from_email")}
-                          onChange={(e) => set("email.from_email", e.target.value)}
-                          placeholder="orders@modortho.com"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Resend API fields */}
-                  {g("email.provider") === "resend" && (
-                    <div className="md:col-span-2 space-y-4 rounded-lg border border-[#F0F0F0] bg-[#FAFAFA] p-5">
-                      <h3 className="text-[13.5px] font-semibold text-[#1A1A1A]">Resend API Credentials</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                        <SecretInput
-                          label="RESEND API KEY"
-                          value={g("email.resend_api_key")}
-                          onChange={(v) => set("email.resend_api_key", v)}
-                          placeholder="re_..."
-                        />
-                        <AdminInput
-                          label="FROM EMAIL"
-                          value={g("email.resend_from_email")}
-                          onChange={(e) => set("email.resend_from_email", e.target.value)}
-                          placeholder="orders@modortho.com"
-                        />
-                        <div className="md:col-span-2">
-                          <AdminInput
-                            label="INTERNAL TEAM NOTIFICATION EMAIL"
-                            value={g("email.resend_notify_email")}
-                            onChange={(e) => set("email.resend_notify_email", e.target.value)}
-                            placeholder="team@modortho.com"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* ── 7. WHATSAPP & SMS MESSAGING ── */}
+              {/* ── 6. WHATSAPP & SMS MESSAGING ── */}
               <div className="rounded-xl border border-[#E6E6E6] bg-white p-6 shadow-xs space-y-6">
                 <div className="flex items-center gap-2.5 pb-3 border-b border-[#F4F4F4]">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-green-600">
@@ -905,7 +789,7 @@ export default function ConfigurationPage() {
                 </div>
               </div>
 
-              {/* ── 8. REDIS CACHE & CACHE CONTROL ── */}
+              {/* ── 7. REDIS CACHE & CACHE CONTROL ── */}
               <div className="rounded-xl border border-[#E6E6E6] bg-white p-6 shadow-xs space-y-6">
                 <div className="flex items-center gap-2.5 pb-3 border-b border-[#F4F4F4]">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
@@ -944,7 +828,7 @@ export default function ConfigurationPage() {
                 </div>
               </div>
 
-              {/* ── 9. MASTER NOTIFICATION CHANNELS ── */}
+              {/* ── 8. MASTER NOTIFICATION CHANNELS ── */}
               <div className="rounded-xl border border-[#E6E6E6] bg-white p-6 shadow-xs space-y-6">
                 <div className="flex items-center gap-2.5 pb-3 border-b border-[#F4F4F4]">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-600">

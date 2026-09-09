@@ -1847,12 +1847,28 @@ async function main() {
     { key: "whatsapp.default_message", value: "Hello, I have a question about your products.", group: "whatsapp", label: "Default Message", type: "string" },
     { key: "whatsapp.floating_button_enabled", value: "false", group: "whatsapp", label: "Show Floating WhatsApp Button", type: "boolean" },
     // Email
+    { key: "email.provider", value: "msg91", group: "email", label: "Email Provider (msg91 / nodemailer / resend)", type: "string" },
+    { key: "email.enabled", value: "true", group: "email", label: "Enable Outgoing Emails", type: "boolean" },
+    { key: "email.msg91_auth_key", value: "", group: "email", label: "MSG91 AuthKey", type: "secret", isSecret: true },
+    { key: "email.msg91_domain", value: "", group: "email", label: "MSG91 Verified Domain", type: "string" },
     { key: "email.smtp_host", value: "", group: "email", label: "SMTP Host", type: "string" },
     { key: "email.smtp_port", value: "587", group: "email", label: "SMTP Port", type: "string" },
     { key: "email.smtp_user", value: "", group: "email", label: "SMTP Username", type: "string" },
     { key: "email.smtp_password", value: "", group: "email", label: "SMTP Password", type: "secret", isSecret: true },
-    { key: "email.from_name", value: "Modern Orthodontics", group: "email", label: "From Name", type: "string" },
-    { key: "email.from_email", value: "noreply@modortho.com", group: "email", label: "From Email", type: "string" },
+    { key: "email.from_name", value: "Modern Orthodontics", group: "email", label: "Default From Name", type: "string" },
+    { key: "email.from_email", value: "orders@modortho.com", group: "email", label: "Default From Email", type: "string" },
+    { key: "email.notify_email", value: "mayuragarwal2096@gmail.com", group: "email", label: "Notification Admin Email", type: "string" },
+    // Event-Specific Senders
+    { key: "email.events.auth.from_name", value: "Modern Orthodontics Security", group: "email", label: "Auth / Password Reset From Name", type: "string" },
+    { key: "email.events.auth.from_email", value: "auth@modortho.com", group: "email", label: "Auth / Password Reset From Email", type: "string" },
+    { key: "email.events.orders.from_name", value: "Modern Orthodontics Orders", group: "email", label: "Orders & Invoices From Name", type: "string" },
+    { key: "email.events.orders.from_email", value: "orders@modortho.com", group: "email", label: "Orders & Invoices From Email", type: "string" },
+    { key: "email.events.quotes.from_name", value: "Modern Orthodontics Quotes", group: "email", label: "Quotes / RFQ From Name", type: "string" },
+    { key: "email.events.quotes.from_email", value: "quotes@modortho.com", group: "email", label: "Quotes / RFQ From Email", type: "string" },
+    { key: "email.events.support.from_name", value: "Modern Orthodontics Support", group: "email", label: "Support & Contact From Name", type: "string" },
+    { key: "email.events.support.from_email", value: "support@modortho.com", group: "email", label: "Support & Contact From Email", type: "string" },
+    { key: "email.events.newsletter.from_name", value: "Modern Orthodontics Updates", group: "email", label: "Newsletter From Name", type: "string" },
+    { key: "email.events.newsletter.from_email", value: "newsletter@modortho.com", group: "email", label: "Newsletter From Email", type: "string" },
   ];
 
   // ─── Header CMS Menus ─────────────────────────────────────

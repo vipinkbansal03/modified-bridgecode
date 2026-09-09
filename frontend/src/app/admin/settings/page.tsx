@@ -246,13 +246,23 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
   "whatsapp.tata_sender":            { group: "whatsapp", type: "string" },
   "whatsapp.tata_bearer_token":       { group: "whatsapp", type: "secret", isSecret: true },
   // Email
-  "email.enabled":       { group: "email", type: "boolean" },
-  "email.smtp_host":     { group: "email", type: "string" },
-  "email.smtp_port":     { group: "email", type: "string" },
-  "email.smtp_user":     { group: "email", type: "string" },
-  "email.smtp_password": { group: "email", type: "secret", isSecret: true },
-  "email.from_name":     { group: "email", type: "string" },
-  "email.from_email":    { group: "email", type: "string" },
+  "email.enabled":                 { group: "email", type: "boolean" },
+  "email.country_routing_enabled": { group: "email", type: "boolean" },
+  "email.provider":                { group: "email", type: "string" },
+  "email.msg91_enabled":           { group: "email", type: "boolean" },
+  "email.smtp_enabled":            { group: "email", type: "boolean" },
+  "email.resend_enabled":          { group: "email", type: "boolean" },
+  "email.from_name":               { group: "email", type: "string" },
+  "email.from_email":              { group: "email", type: "string" },
+  "email.notify_email":            { group: "email", type: "string" },
+  "email.msg91_auth_key":          { group: "email", type: "secret", isSecret: true },
+  "email.msg91_domain":            { group: "email", type: "string" },
+  "email.smtp_host":               { group: "email", type: "string" },
+  "email.smtp_port":               { group: "email", type: "string" },
+  "email.smtp_user":               { group: "email", type: "string" },
+  "email.smtp_password":           { group: "email", type: "secret", isSecret: true },
+  "email.smtp_secure":             { group: "email", type: "boolean" },
+  "email.resend_api_key":          { group: "email", type: "secret", isSecret: true },
   // SMS Settings
   "sms.enabled":             { group: "sms", type: "boolean" },
   "sms.provider":            { group: "sms", type: "string" },
@@ -374,8 +384,29 @@ export default function SettingsPage() {
   const newestSlideRef = useRef<HTMLDivElement | null>(null);
   const [savedSettings, setSavedSettings] = useState<SettingMap>({});
   const savedLoginSlidesRef = useRef<LoginSlide[]>(DEFAULT_LOGIN_SLIDES);
+  const [testEmailAddress, setTestEmailAddress] = useState("");
+  const [testingEmail, setTestingEmail] = useState(false);
   const queryClient = useQueryClient();
   const { showToast, ToastComponent } = useToast();
+
+  const handleSendTestEmail = async (provider?: string) => {
+    if (!testEmailAddress || !testEmailAddress.includes("@")) {
+      showToast("Please enter a valid recipient email address to send test email.", "error");
+      return;
+    }
+    setTestingEmail(true);
+    try {
+      const res = await adminApi.post("/settings/test-email", {
+        toEmail: testEmailAddress.trim(),
+        provider: provider || g("email.provider") || "msg91",
+      });
+      showToast(res.data.message || "Test email sent successfully!", "success");
+    } catch (err) {
+      showToast(getAdminErrorMessage(err, "Failed to send test email."), "error");
+    } finally {
+      setTestingEmail(false);
+    }
+  };
 
   const loadSettings = useCallback(async () => {
     if (authLoading || !hasPermission("settings.view")) return;
@@ -551,13 +582,13 @@ export default function SettingsPage() {
         "auth.login_slides": JSON.stringify(loginSlides),
       };
       const settingsList = Object.entries(settingsToSave)
-        .filter(([key]) => SETTINGS_META[key] || key.startsWith("social."))
+        .filter(([key]) => SETTINGS_META[key] || key.startsWith("social.") || key.startsWith("email."))
         .map(([key, value]) => ({
           key,
           value,
-          group:    SETTINGS_META[key]?.group ?? "social",
-          type:     SETTINGS_META[key]?.type ?? "string",
-          isSecret: SETTINGS_META[key]?.isSecret ?? false,
+          group:    SETTINGS_META[key]?.group ?? (key.startsWith("email.") ? "email" : "social"),
+          type:     SETTINGS_META[key]?.type ?? (key.endsWith("_enabled") || key.endsWith(".enabled") ? "boolean" : "string"),
+          isSecret: SETTINGS_META[key]?.isSecret ?? (key.includes("password") || key.includes("auth_key") || key.includes("api_key") || key.includes("token")),
         }));
       const previousSlides = savedLoginSlidesRef.current;
       await adminApi.put("/settings", { settings: settingsList });
@@ -1406,40 +1437,420 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* ── Email / SMTP ── */}
+            {/* ── Email & Communications ── */}
             {activeTab === "email" && (
-              <div>
-                <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
-                  Configure outgoing mail server (SMTP) credentials for automated transactional emails (order invoices, RFQs, notifications). Passwords are encrypted at rest.
+              <div className="space-y-6">
+                <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
+                  Configure outgoing transactional email service, choose your active provider with 1-click toggles, map dedicated senders for specific events (forgot password, orders, quotes, support), and define country-specific sender routing. Passwords and API keys are securely encrypted at rest.
                 </div>
 
-                <FieldRow label="Enable Automated Emails">
+                {/* Section 1A: Master Automated Email Switch */}
+                <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-xs flex items-center justify-between">
+                  <div>
+                    <h3 className="text-[15px] font-bold text-[#1A1A1A]">Master Outgoing Email Service</h3>
+                    <p className="text-[12px] text-[#6B7280]">
+                      Global switch to enable or pause all outgoing emails (order updates, password resets, quotes).
+                    </p>
+                  </div>
                   <div className="flex items-center gap-3">
+                    <span className="text-xs font-semibold text-[#1A1A1A]">System Email Status:</span>
                     <Toggle value={b("email.enabled")} onChange={(v) => tog("email.enabled", v)} />
-                    <span className="text-[13px] text-[#6B6B6B]">
-                      {b("email.enabled") ? "Active (Emails will be sent using SMTP host below)" : "Disabled"}
+                    <span className={cn("text-xs font-semibold px-2.5 py-0.5 rounded-full", b("email.enabled") ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-500")}>
+                      {b("email.enabled") ? "Emails Active" : "Emails Paused"}
                     </span>
                   </div>
-                </FieldRow>
+                </div>
 
-                <FieldRow label="SMTP Host">
-                  <AdminInput value={g("email.smtp_host")} onChange={(e) => set("email.smtp_host", e.target.value)} placeholder="smtp.gmail.com" />
-                </FieldRow>
-                <FieldRow label="SMTP Port">
-                  <AdminInput value={g("email.smtp_port")} onChange={(e) => set("email.smtp_port", e.target.value)} placeholder="587" />
-                </FieldRow>
-                <FieldRow label="SMTP Username">
-                  <AdminInput value={g("email.smtp_user")} onChange={(e) => set("email.smtp_user", e.target.value)} />
-                </FieldRow>
-                <FieldRow label="SMTP Password">
-                  <SecretInput value={g("email.smtp_password")} onChange={(v) => set("email.smtp_password", v)} />
-                </FieldRow>
-                <FieldRow label="From Name">
-                  <AdminInput value={g("email.from_name")} onChange={(e) => set("email.from_name", e.target.value)} placeholder="Modern Orthodontics" />
-                </FieldRow>
-                <FieldRow label="From Email">
-                  <AdminInput type="email" value={g("email.from_email")} onChange={(e) => set("email.from_email", e.target.value)} placeholder="noreply@modortho.com" />
-                </FieldRow>
+                {/* Section 1B: Active Email Provider Selection */}
+                <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-xs space-y-4">
+                  <div className="border-b border-[#E5E7EB] pb-3">
+                    <h3 className="text-[15px] font-bold text-[#1A1A1A]">Active Email Service Provider</h3>
+                    <p className="text-[12px] text-[#6B7280]">
+                      Select the single engine that delivers your emails. Only the chosen engine is used; all other providers remain inactive.
+                    </p>
+                  </div>
+
+                  {/* Provider Dropdown */}
+                  <div>
+                    <label className="block text-[13px] font-semibold text-[#1A1A1A] mb-1.5">
+                      Choose Active Engine:
+                    </label>
+                    <AdminSelect
+                      value={g("email.provider") || "msg91"}
+                      onChange={(e) => set("email.provider", e.target.value)}
+                      options={[
+                        { value: "msg91", label: "MSG91 Email API (Default & Recommended)" },
+                        { value: "nodemailer", label: "Nodemailer SMTP (Gmail / Custom Server Relay)" },
+                        { value: "resend", label: "Resend API (Developer Email Delivery Platform)" },
+                      ]}
+                    />
+                  </div>
+
+                  {/* Active Engine Notice */}
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 text-[12.5px] text-emerald-800 flex items-center gap-2">
+                    <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+                    <span>
+                      <strong>Currently Selected: {((g("email.provider") || "msg91") === "msg91" ? "MSG91 Email API" : (g("email.provider") === "nodemailer" ? "Nodemailer SMTP" : "Resend API"))}.</strong> Only this provider will dispatch outgoing emails. Other providers are completely inactive.
+                    </span>
+                  </div>
+
+                  {/* Provider Credentials Form */}
+                  <div className="pt-2 space-y-4">
+                    {(g("email.provider") === "msg91" || !g("email.provider")) && (
+                      <div className="rounded-xl border border-[#E31E24]/20 bg-[#FAFAFA] p-4 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-gray-200 pb-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[13.5px] font-bold text-[#1A1A1A]">MSG91 API Authentication & Credentials</span>
+                              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                Selected Engine
+                              </span>
+                            </div>
+                            <p className="text-[11.5px] text-[#6B7280] mt-0.5">
+                              {g("email.msg91_enabled") !== "false"
+                                ? "● MSG91 is Enabled and will dispatch outgoing emails."
+                                : "✕ MSG91 is Disabled. Turn on the switch to start sending emails via MSG91."}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2.5 bg-white border border-gray-200 rounded-lg px-3 py-1.5 shadow-xs shrink-0">
+                            <span className="text-xs font-semibold text-[#1A1A1A]">Enable MSG91:</span>
+                            <Toggle
+                              value={g("email.msg91_enabled") !== "false"}
+                              onChange={(v) => tog("email.msg91_enabled", v)}
+                            />
+                          </div>
+                        </div>
+
+                        <FieldRow label="MSG91 AuthKey" hint="Secret AuthKey from your MSG91 Dashboard (Top-right Profile > API Keys / AuthKey)">
+                          <SecretInput value={g("email.msg91_auth_key")} onChange={(v) => set("email.msg91_auth_key", v)} placeholder="Enter your MSG91 AuthKey" />
+                        </FieldRow>
+                        <FieldRow label="Verified Sending Domain" hint="Domain verified in your MSG91 Email Channel (e.g. modortho.com or mail.modortho.com)">
+                          <AdminInput value={g("email.msg91_domain")} onChange={(e) => set("email.msg91_domain", e.target.value)} placeholder="e.g. modortho.com" />
+                        </FieldRow>
+                        <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 text-[12px] text-blue-800">
+                          <strong>Note:</strong> Make sure your sender email in Section 3 (e.g. <code>orders@modortho.com</code> or <code>auth@modortho.com</code>) belongs to your verified domain in your MSG91 control panel.
+                        </div>
+                      </div>
+                    )}
+
+                    {g("email.provider") === "nodemailer" && (
+                      <div className="rounded-xl border border-blue-200 bg-[#FAFAFA] p-4 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-gray-200 pb-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[13.5px] font-bold text-[#1A1A1A]">SMTP Server Credentials</span>
+                              <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
+                                Selected Engine
+                              </span>
+                            </div>
+                            <p className="text-[11.5px] text-[#6B7280] mt-0.5">
+                              {b("email.smtp_enabled")
+                                ? "● SMTP Nodemailer is Enabled and will dispatch outgoing emails."
+                                : "✕ SMTP is Disabled. Turn on the switch to start sending emails via SMTP."}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2.5 bg-white border border-gray-200 rounded-lg px-3 py-1.5 shadow-xs shrink-0">
+                            <span className="text-xs font-semibold text-[#1A1A1A]">Enable SMTP:</span>
+                            <Toggle
+                              value={b("email.smtp_enabled")}
+                              onChange={(v) => tog("email.smtp_enabled", v)}
+                            />
+                          </div>
+                        </div>
+
+                        <FieldRow label="SMTP Host">
+                          <AdminInput value={g("email.smtp_host")} onChange={(e) => set("email.smtp_host", e.target.value)} placeholder="smtp.gmail.com" />
+                        </FieldRow>
+                        <FieldRow label="SMTP Port">
+                          <AdminInput value={g("email.smtp_port")} onChange={(e) => set("email.smtp_port", e.target.value)} placeholder="587" />
+                        </FieldRow>
+                        <FieldRow label="SMTP Username">
+                          <AdminInput value={g("email.smtp_user")} onChange={(e) => set("email.smtp_user", e.target.value)} placeholder="user@example.com" />
+                        </FieldRow>
+                        <FieldRow label="SMTP Password">
+                          <SecretInput value={g("email.smtp_password")} onChange={(v) => set("email.smtp_password", v)} />
+                        </FieldRow>
+                        <FieldRow label="Use SSL / TLS (Port 465)" hint="Enable for SSL port 465 (leave off for STARTTLS port 587)">
+                          <div className="flex items-center gap-3">
+                            <Toggle value={b("email.smtp_secure")} onChange={(v) => tog("email.smtp_secure", v)} />
+                            <span className="text-[13px] text-[#6B6B6B]">{b("email.smtp_secure") ? "SSL Enabled (Port 465)" : "Standard (Port 587 / 25)"}</span>
+                          </div>
+                        </FieldRow>
+                      </div>
+                    )}
+
+                    {g("email.provider") === "resend" && (
+                      <div className="rounded-xl border border-purple-200 bg-[#FAFAFA] p-4 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-gray-200 pb-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[13.5px] font-bold text-[#1A1A1A]">Resend API Authentication</span>
+                              <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md">
+                                Selected Engine
+                              </span>
+                            </div>
+                            <p className="text-[11.5px] text-[#6B7280] mt-0.5">
+                              {b("email.resend_enabled")
+                                ? "● Resend API is Enabled and will dispatch outgoing emails."
+                                : "✕ Resend is Disabled. Turn on the switch to start sending emails via Resend."}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2.5 bg-white border border-gray-200 rounded-lg px-3 py-1.5 shadow-xs shrink-0">
+                            <span className="text-xs font-semibold text-[#1A1A1A]">Enable Resend:</span>
+                            <Toggle
+                              value={b("email.resend_enabled")}
+                              onChange={(v) => tog("email.resend_enabled", v)}
+                            />
+                          </div>
+                        </div>
+
+                        <FieldRow label="Resend API Key">
+                          <SecretInput value={g("email.resend_api_key")} onChange={(v) => set("email.resend_api_key", v)} placeholder="re_123456789..." />
+                        </FieldRow>
+                      </div>
+                    )}
+
+                    {/* Test Email Connection Diagnostic Tool */}
+                    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <div className="text-[13px] font-bold text-[#1A1A1A] flex items-center gap-2">
+                            <span>Test Email Connection (Live Diagnostics)</span>
+                          </div>
+                          <p className="text-[11.5px] text-[#6B7280] mt-0.5">
+                            Send a real test email using your active provider (<strong>{(g("email.provider") || "msg91").toUpperCase()}</strong>) to verify your credentials.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="email"
+                            value={testEmailAddress}
+                            onChange={(e) => setTestEmailAddress(e.target.value)}
+                            placeholder="Enter recipient email..."
+                            className="rounded-lg border border-[#E6E6E6] px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#E31E24] w-52"
+                          />
+                          <LoadingButton
+                            type="button"
+                            onClick={() => handleSendTestEmail()}
+                            loading={testingEmail}
+                            className="rounded-lg bg-[#1A1A1A] px-3 py-1.5 text-xs font-semibold text-white hover:bg-black transition-colors shrink-0"
+                          >
+                            Send Test Email
+                          </LoadingButton>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: Country-Specific Email Enable / Disable */}
+                <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-xs space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#E5E7EB] pb-3">
+                    <div>
+                      <h3 className="text-[15px] font-bold text-[#1A1A1A] flex items-center gap-2">
+                        <span>Country-Specific Email Delivery</span>
+                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-800">Multi-Country</span>
+                      </h3>
+                      <p className="text-[12px] text-[#6B7280] mt-0.5">
+                        Enable or disable outgoing transactional emails on a per-country basis (e.g. India, United States, United Kingdom, UAE).
+                      </p>
+                    </div>
+
+                    {/* Master Switch for all countries (ON by default) */}
+                    <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-lg px-3.5 py-2 shrink-0">
+                      <div className="text-right">
+                        <div className="text-xs font-bold text-[#1A1A1A]">Master Country Routing:</div>
+                        <div className="text-[11px] text-[#6B7280]">
+                          {g("email.country_routing_enabled") !== "false" ? "Active globally (Default)" : "Disabled globally"}
+                        </div>
+                      </div>
+                      <Toggle
+                        value={g("email.country_routing_enabled") !== "false"}
+                        onChange={(v) => tog("email.country_routing_enabled", v)}
+                      />
+                    </div>
+                  </div>
+
+                  {g("email.country_routing_enabled") === "false" && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-[12.5px] text-amber-800 flex items-center gap-2.5">
+                      <AlertCircle size={16} className="shrink-0 text-amber-600" />
+                      <span>
+                        <strong>Master Country Routing is currently OFF.</strong> Country-level filtering is bypassed and emails are dispatched globally via the Event Senders below.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Country Selector for scalable 20+ countries */}
+                  {countries.length > 0 ? (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-[12.5px] font-semibold text-[#1A1A1A] mb-1.5">
+                          Select Destination Country ({countries.length} active destinations):
+                        </label>
+                        <AdminSelect
+                          value={selectedCountryCode || countries[0]?.code}
+                          onChange={(e) => setSelectedCountryCode(e.target.value)}
+                          options={countries.map((c: any) => {
+                            const code = c.code.toUpperCase();
+                            const isCountryOn = g(`email.country.${code}.enabled`) !== "false";
+                            return {
+                              value: c.code,
+                              label: `${c.name} (${code}) — ${isCountryOn ? "✓ Emails Enabled" : "✕ Disabled"}`,
+                            };
+                          })}
+                        />
+                      </div>
+
+                      {/* Selected Country Toggle Card */}
+                      {(() => {
+                        const activeCountry = countries.find((c: any) => c.code === (selectedCountryCode || countries[0]?.code)) || countries[0];
+                        if (!activeCountry) return null;
+                        const code = activeCountry.code.toUpperCase();
+                        const isCountryOn = g(`email.country.${code}.enabled`) !== "false";
+                        const isMasterActive = g("email.country_routing_enabled") !== "false";
+
+                        return (
+                          <div className={cn(
+                            "rounded-xl border p-4.5 transition-colors",
+                            isCountryOn && isMasterActive
+                              ? "border-emerald-200 bg-emerald-50/25"
+                              : "border-[#E6E6E6] bg-[#FAFAFA]"
+                          )}>
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                              <div>
+                                <div className="flex items-center gap-2.5">
+                                  <h4 className="text-[14.5px] font-bold text-[#1A1A1A]">
+                                    Email Delivery for {activeCountry.name} ({code})
+                                  </h4>
+                                  <span className={cn(
+                                    "text-[11px] font-semibold px-2.5 py-0.5 rounded-full",
+                                    isCountryOn && isMasterActive
+                                      ? "bg-emerald-100 text-emerald-800"
+                                      : !isMasterActive
+                                      ? "bg-amber-100 text-amber-800"
+                                      : "bg-red-100 text-red-700"
+                                  )}>
+                                    {isCountryOn && isMasterActive
+                                      ? "● Active (Emails will be sent)"
+                                      : !isMasterActive
+                                      ? "Master Switch Off"
+                                      : "✕ Disabled (Emails paused)"}
+                                  </span>
+                                </div>
+                                <p className="text-[12px] text-[#6B7280] mt-1 leading-relaxed">
+                                  {isCountryOn
+                                    ? `Customers and dental clinics in ${activeCountry.name} will receive automated emails (Order confirmations, Password resets, RFQ quotes).`
+                                    : `Automated emails to recipients in ${activeCountry.name} are currently paused.`}
+                                </p>
+                              </div>
+
+                              <div className="flex items-center gap-3 shrink-0 bg-white border border-gray-200 rounded-lg px-3.5 py-2 shadow-xs">
+                                <span className="text-xs font-semibold text-[#1A1A1A]">Enable for {code}:</span>
+                                <Toggle
+                                  value={isCountryOn}
+                                  onChange={(v) => tog(`email.country.${code}.enabled`, v)}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-[#6B7280]">Loading active countries...</div>
+                  )}
+                </div>
+
+                {/* Section 3: Event / Purpose-Specific Email Senders */}
+                <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-xs space-y-5">
+                  <div className="border-b border-[#E5E7EB] pb-3">
+                    <h3 className="text-[15px] font-bold text-[#1A1A1A]">Event & Purpose-Specific Email Senders</h3>
+                    <p className="text-[12px] text-[#6B7280]">
+                      Specify distinct sender names and email addresses for each specific event type (e.g. security/passwords from auth@, invoices from orders@).
+                    </p>
+                  </div>
+
+                  {/* Global Fallback Sender */}
+                  <div className="rounded-lg border border-gray-200 bg-gray-50/70 p-4 space-y-3">
+                    <div className="text-[13px] font-bold text-[#1A1A1A] flex items-center gap-2">
+                      <span>🌐 Global Default Sender (Fallback)</span>
+                    </div>
+                    <FieldRow label="Default From Name" hint="Used if no specific event or country sender is configured">
+                      <AdminInput value={g("email.from_name")} onChange={(e) => set("email.from_name", e.target.value)} placeholder="Modern Orthodontics" />
+                    </FieldRow>
+                    <FieldRow label="Default From Email" hint="Default outgoing email address">
+                      <AdminInput type="email" value={g("email.from_email")} onChange={(e) => set("email.from_email", e.target.value)} placeholder="orders@modortho.com" />
+                    </FieldRow>
+                    <FieldRow label="Admin Notification Email" hint="Receives incoming RFQ quote submissions & contact form inquiries">
+                      <AdminInput type="email" value={g("email.notify_email")} onChange={(e) => set("email.notify_email", e.target.value)} placeholder="team@modortho.com" />
+                    </FieldRow>
+                  </div>
+
+                  {/* 1. Auth & Password Reset */}
+                  <div className="rounded-lg border border-amber-200 bg-amber-50/30 p-4 space-y-3">
+                    <div className="text-[13px] font-bold text-amber-900 flex items-center gap-2">
+                      <span>🔐 Forgot Password & Customer Account Authentication</span>
+                    </div>
+                    <FieldRow label="Auth From Name" hint="e.g. Modern Orthodontics Security">
+                      <AdminInput value={g("email.events.auth.from_name")} onChange={(e) => set("email.events.auth.from_name", e.target.value)} placeholder="Modern Orthodontics Security" />
+                    </FieldRow>
+                    <FieldRow label="Auth From Email" hint="Sender address for forgot password, reset links, and approval emails">
+                      <AdminInput type="email" value={g("email.events.auth.from_email")} onChange={(e) => set("email.events.auth.from_email", e.target.value)} placeholder="auth@modortho.com" />
+                    </FieldRow>
+                  </div>
+
+                  {/* 2. Orders & Invoices */}
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/30 p-4 space-y-3">
+                    <div className="text-[13px] font-bold text-emerald-900 flex items-center gap-2">
+                      <span>📦 Orders, Invoices & Order Status Updates</span>
+                    </div>
+                    <FieldRow label="Orders From Name" hint="e.g. Modern Orthodontics Orders">
+                      <AdminInput value={g("email.events.orders.from_name")} onChange={(e) => set("email.events.orders.from_name", e.target.value)} placeholder="Modern Orthodontics Orders" />
+                    </FieldRow>
+                    <FieldRow label="Orders From Email" hint="Sender address for order confirmations, shipping tracking, and invoices">
+                      <AdminInput type="email" value={g("email.events.orders.from_email")} onChange={(e) => set("email.events.orders.from_email", e.target.value)} placeholder="orders@modortho.com" />
+                    </FieldRow>
+                  </div>
+
+                  {/* 3. Quotes & RFQ */}
+                  <div className="rounded-lg border border-blue-200 bg-blue-50/30 p-4 space-y-3">
+                    <div className="text-[13px] font-bold text-blue-900 flex items-center gap-2">
+                      <span>💬 Quotes & RFQ Inquiry Proposals</span>
+                    </div>
+                    <FieldRow label="Quotes From Name" hint="e.g. Modern Orthodontics Quotes">
+                      <AdminInput value={g("email.events.quotes.from_name")} onChange={(e) => set("email.events.quotes.from_name", e.target.value)} placeholder="Modern Orthodontics Quotes" />
+                    </FieldRow>
+                    <FieldRow label="Quotes From Email" hint="Sender address for quote receipts, approved quotes, and price proposals">
+                      <AdminInput type="email" value={g("email.events.quotes.from_email")} onChange={(e) => set("email.events.quotes.from_email", e.target.value)} placeholder="quotes@modortho.com" />
+                    </FieldRow>
+                  </div>
+
+                  {/* 4. Support & Contact Us */}
+                  <div className="rounded-lg border border-indigo-200 bg-indigo-50/30 p-4 space-y-3">
+                    <div className="text-[13px] font-bold text-indigo-900 flex items-center gap-2">
+                      <span>🎧 Customer Support & Contact Us Inquiries</span>
+                    </div>
+                    <FieldRow label="Support From Name" hint="e.g. Modern Orthodontics Support">
+                      <AdminInput value={g("email.events.support.from_name")} onChange={(e) => set("email.events.support.from_name", e.target.value)} placeholder="Modern Orthodontics Support" />
+                    </FieldRow>
+                    <FieldRow label="Support From Email" hint="Sender address for contact form auto-replies and support communications">
+                      <AdminInput type="email" value={g("email.events.support.from_email")} onChange={(e) => set("email.events.support.from_email", e.target.value)} placeholder="support@modortho.com" />
+                    </FieldRow>
+                  </div>
+
+                  {/* 5. Newsletter & Announcements */}
+                  <div className="rounded-lg border border-purple-200 bg-purple-50/30 p-4 space-y-3">
+                    <div className="text-[13px] font-bold text-purple-900 flex items-center gap-2">
+                      <span>📰 Newsletter & Product Announcements</span>
+                    </div>
+                    <FieldRow label="Newsletter From Name" hint="e.g. Modern Orthodontics Updates">
+                      <AdminInput value={g("email.events.newsletter.from_name")} onChange={(e) => set("email.events.newsletter.from_name", e.target.value)} placeholder="Modern Orthodontics Updates" />
+                    </FieldRow>
+                    <FieldRow label="Newsletter From Email" hint="Sender address for welcome letters and newsletter campaigns">
+                      <AdminInput type="email" value={g("email.events.newsletter.from_email")} onChange={(e) => set("email.events.newsletter.from_email", e.target.value)} placeholder="newsletter@modortho.com" />
+                    </FieldRow>
+                  </div>
+                </div>
               </div>
             )}
 

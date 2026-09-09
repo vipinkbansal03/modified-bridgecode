@@ -77,22 +77,73 @@ export const notificationWorker = new Worker(
       if (type === "email") {
         const subject = options.subject || "Notification";
         const html = await notificationManagerService.compileEmail(message);
-        const smtp = await getSmtpTransporter();
+        const emailProvider = ((await getSettingValue("email.provider")) || process.env.EMAIL_PROVIDER || "msg91").trim().toLowerCase();
 
-        if (smtp) {
-          const fromEmail = (await getSettingValue("email.from_email")) || process.env.EMAIL_FROM || "orders@modortho.com";
-          const fromName = (await getSettingValue("email.from_name")) || process.env.FROM_NAME || "Modern Orthodontics";
-          const mailOptions = {
-            from: `"${fromName}" <${fromEmail}>`,
-            to,
+        const fromEmail = (await getSettingValue("email.from_email")) || process.env.MSG91_FROM_EMAIL || process.env.EMAIL_FROM || "orders@modortho.com";
+        const fromName = (await getSettingValue("email.from_name")) || process.env.MSG91_FROM_NAME || process.env.FROM_NAME || "Modern Orthodontics";
+
+        if (emailProvider === "nodemailer" || emailProvider === "smtp") {
+          const smtp = await getSmtpTransporter();
+          if (smtp) {
+            const mailOptions = {
+              from: `"${fromName}" <${fromEmail}>`,
+              to,
+              subject,
+              html,
+            };
+            const info = await smtp.sendMail(mailOptions);
+            providerName = "nodemailer";
+            providerReferenceId = info.messageId;
+          } else {
+            logger.info(`[SMTP MOCK] Sending email to ${to} | Subject: ${subject} | Body: ${message}`);
+          }
+        } else if (emailProvider === "resend") {
+          const { sendEmailSafely } = await import("../../utils/email");
+          await sendEmailSafely({
+            from: fromEmail,
+            fromName,
+            to: Array.isArray(to) ? to : [to],
             subject,
-            html
-          };
-          const info = await smtp.sendMail(mailOptions);
-          providerName = "nodemailer";
-          providerReferenceId = info.messageId;
+            text: message,
+            html,
+          });
+          providerName = "resend";
+          providerReferenceId = `resend_${Date.now()}`;
         } else {
-          logger.info(`[SMTP MOCK] Sending email to ${to} | Subject: ${subject} | Body: ${message}`);
+          // Default: msg91
+          const msg91AuthKey = (await getSettingValue("email.msg91_auth_key")) || process.env.MSG91_AUTH_KEY || "";
+          const msg91Domain = (await getSettingValue("email.msg91_domain")) || process.env.MSG91_DOMAIN || undefined;
+
+          if (msg91AuthKey) {
+            const payload: Record<string, any> = {
+              recipients: [{ to: [{ email: to }] }],
+              from: { name: fromName, email: fromEmail },
+              subject,
+              body: html || message,
+            };
+            if (msg91Domain) {
+              payload.domain = msg91Domain;
+            }
+
+            const response = await fetch("https://control.msg91.com/api/v5/email/send", {
+              method: "POST",
+              headers: {
+                "authkey": msg91AuthKey,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+              },
+              body: JSON.stringify(payload),
+            });
+
+            const resData = (await response.json().catch(() => null)) as any;
+            if (!response.ok || (resData && resData.status === "error")) {
+              throw new Error(`MSG91 email failed: ${resData?.message || response.statusText}`);
+            }
+            providerName = "msg91";
+            providerReferenceId = resData?.message || `msg91_${Date.now()}`;
+          } else {
+            logger.info(`[MSG91 MOCK] Sending email to ${to} | Subject: ${subject} | Body: ${message}`);
+          }
         }
       } else if (type === "whatsapp") {
         const waTemplate = options.whatsappTemplate;
