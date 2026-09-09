@@ -2,6 +2,7 @@ import { PaymentStrategy } from "./types/payment.types";
 import { CodStrategy } from "./strategies/cod.strategy";
 import { RazorpayStrategy } from "./strategies/razorpay.strategy";
 import { StripeStrategy } from "./strategies/stripe.strategy";
+import { CashfreeStrategy } from "./strategies/cashfree.strategy";
 
 export class PaymentGatewayRegistry {
   private static strategies = new Map<string, PaymentStrategy>();
@@ -27,4 +28,5 @@ export class PaymentGatewayRegistry {
 PaymentGatewayRegistry.register(new CodStrategy());
 PaymentGatewayRegistry.register(new RazorpayStrategy());
 PaymentGatewayRegistry.register(new StripeStrategy());
+PaymentGatewayRegistry.register(new CashfreeStrategy());
 

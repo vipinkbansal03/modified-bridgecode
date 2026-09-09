@@ -4,6 +4,7 @@ import Stripe from "stripe";
 import { prisma } from "../../config/database";
 import { logger } from "../../config/logger";
 import { reconcilePaymentSuccess, reconcilePaymentFailure } from "../payment/paymentReconciliation.service";
+import { getSettingValue } from "../settings/settings.service";
 
 // ─── Razorpay ────────────────────────────────────────────
 
@@ -215,6 +216,157 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
     res.json({ received: true });
   } catch (err) {
     logger.error("Stripe webhook error:", err);
+    res.status(500).json({ error: "Webhook processing failed." });
+  }
+}
+
+// ─── Cashfree ────────────────────────────────────────────
+
+export async function cashfreeWebhook(req: Request, res: Response): Promise<void> {
+  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+  const signature = req.headers["x-webhook-signature"] as string;
+  const timestamp = req.headers["x-webhook-timestamp"] as string;
+  const idempotencyKey = req.headers["x-idempotency-key"] as string;
+  const attempt = req.headers["x-webhook-attempt"] as string;
+
+  if (!rawBody || !signature || !timestamp) {
+    res.status(400).json({ error: "Missing body, signature or timestamp." });
+    return;
+  }
+
+  let secret = process.env.CASHFREE_WEBHOOK_SECRET;
+  if (!secret) {
+    const pm = await prisma.paymentMethod.findUnique({
+      where: { code: "CASHFREE" },
+      include: { configs: true },
+    });
+    if (pm) {
+      secret = pm.configs.find((c) => c.configKey === "CASHFREE_WEBHOOK_SECRET")?.configValue;
+    }
+  }
+  if (!secret) {
+    secret = await getSettingValue("payment.cashfree_webhook_secret");
+  }
+  if (!secret) {
+    secret = process.env.CASHFREE_CLIENT_SECRET || (await getSettingValue("payment.cashfree_client_secret"));
+  }
+
+  if (!secret) {
+    res.status(500).json({ error: "Cashfree webhook secret is not configured." });
+    return;
+  }
+
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(`${timestamp}${rawBody.toString("utf8")}`)
+    .digest("base64");
+
+  if (expected.length !== signature.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))) {
+    res.status(400).json({ error: "Invalid signature." });
+    return;
+  }
+
+  let event: any;
+  try {
+    event = JSON.parse(rawBody.toString("utf8"));
+  } catch {
+    res.status(400).json({ error: "Invalid payload." });
+    return;
+  }
+
+  const type = String(event?.type || "");
+  const data = event?.data || {};
+  const orderData = data?.order || {};
+  const paymentData = data?.payment || {};
+  const errorDetails = data?.error_details || {};
+  const gatewayOrderId = String(orderData?.order_id || "");
+  const gatewayPaymentId = String(paymentData?.cf_payment_id || "");
+
+  try {
+    if (type === "PAYMENT_CHARGES_WEBHOOK" || !gatewayOrderId) {
+      if (gatewayOrderId) {
+        logger.info(`Cashfree Webhook: charges event for gateway order ${gatewayOrderId}`);
+      } else {
+        logger.warn("Cashfree Webhook: event without gateway order id.");
+      }
+      res.json({ received: true });
+      return;
+    }
+
+    const tx = await prisma.paymentTransaction.findFirst({
+      where: { gatewayOrderId, provider: "CASHFREE" },
+      include: { order: { include: { currency: true } } },
+    });
+
+    if (!tx) {
+      logger.warn(`Cashfree Webhook: no payment transaction for gateway order ${gatewayOrderId}`);
+      res.json({ received: true });
+      return;
+    }
+
+    const order = tx.order;
+
+    if (type === "PAYMENT_SUCCESS_WEBHOOK" || paymentData?.payment_status === "SUCCESS") {
+      const webhookAmount = Number(orderData?.order_amount);
+      const webhookCurrency = String(orderData?.order_currency || "").toUpperCase();
+      const expectedAmount = Number(order.total);
+      const expectedCurrency = (order.currency?.code || "INR").toUpperCase();
+
+      if (Number.isNaN(webhookAmount) || Math.abs(webhookAmount - expectedAmount) > 0.01) {
+        logger.error(
+          `Cashfree Webhook: amount mismatch for order ${order.id}. Expected ${expectedAmount} ${expectedCurrency}, got ${orderData?.order_amount} ${webhookCurrency}`
+        );
+        res.status(500).json({ error: "Webhook amount validation failed." });
+        return;
+      }
+
+      if (webhookCurrency && webhookCurrency !== expectedCurrency) {
+        logger.error(
+          `Cashfree Webhook: currency mismatch for order ${order.id}. Expected ${expectedCurrency}, got ${webhookCurrency}`
+        );
+        res.status(500).json({ error: "Webhook currency validation failed." });
+        return;
+      }
+
+      await reconcilePaymentSuccess({
+        gatewayOrderId,
+        gatewayPaymentId: gatewayPaymentId || `cf_pay_captured_${Date.now()}`,
+        provider: "CASHFREE",
+        metadata: {
+          webhookEvent: type,
+          paymentStatus: paymentData?.payment_status,
+          paymentAmount: paymentData?.payment_amount,
+          paymentCurrency: paymentData?.payment_currency,
+          idempotencyKey,
+          attempt,
+        },
+      });
+      logger.info(`Cashfree Webhook: payment captured for gateway order ${gatewayOrderId}`);
+    } else if (type === "PAYMENT_FAILED_WEBHOOK" || paymentData?.payment_status === "FAILED") {
+      await reconcilePaymentFailure({
+        gatewayOrderId,
+        gatewayPaymentId,
+        errorCode: errorDetails?.error_code,
+        errorMessage: errorDetails?.error_description || paymentData?.payment_message || "Cashfree webhook reported payment failure.",
+        provider: "CASHFREE",
+      });
+      logger.info(`Cashfree Webhook: payment failed for gateway order ${gatewayOrderId}`);
+    } else if (type === "PAYMENT_USER_DROPPED_WEBHOOK" || paymentData?.payment_status === "USER_DROPPED") {
+      await reconcilePaymentFailure({
+        gatewayOrderId,
+        gatewayPaymentId,
+        errorCode: "USER_DROPPED",
+        errorMessage: paymentData?.payment_message || "Customer dropped the payment before completion.",
+        provider: "CASHFREE",
+      });
+      logger.info(`Cashfree Webhook: payment dropped for gateway order ${gatewayOrderId}`);
+    } else {
+      logger.info(`Cashfree Webhook: unhandled event type '${type}' for gateway order ${gatewayOrderId}`);
+    }
+
+    res.json({ received: true });
+  } catch (err) {
+    logger.error("Cashfree webhook error:", err);
     res.status(500).json({ error: "Webhook processing failed." });
   }
 }

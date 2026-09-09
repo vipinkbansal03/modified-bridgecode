@@ -211,6 +211,20 @@ export async function updateAdminPaymentMethodGlobal(
         isEnabled: true,
       },
     });
+  } else if (pm.code === "CASHFREE") {
+    await prisma.setting.upsert({
+      where: { key: "payment.cashfree_enabled" },
+      update: { value: isEnabled ? "true" : "false" },
+      create: {
+        key: "payment.cashfree_enabled",
+        value: isEnabled ? "true" : "false",
+        group: "payment",
+        label: "Cashfree Enabled",
+        type: "boolean",
+        isSecret: false,
+        isEnabled: true,
+      },
+    });
   }
 
   return pm;

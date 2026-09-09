@@ -13,6 +13,7 @@ import {
   type CustomerOrderSummary,
 } from "@/services/customerApi";
 import { RazorpayPaymentButton } from "@/components/checkout/RazorpayPaymentButton";
+import { CashfreePaymentButton } from "@/components/checkout/CashfreePaymentButton";
 import { PaymentCountdownTimer } from "@/components/checkout/PaymentCountdownTimer";
 import { useCart } from "@/contexts/CartContext";
 
@@ -266,27 +267,40 @@ export default function OrderPayPage() {
                       Browse Catalog to Reorder
                     </Button>
                   </div>
-                ) : (
-                  <RazorpayPaymentButton
-                    orderId={session.orderId}
-                    customerName={session.customerName}
-                    customerEmail={session.customerEmail}
-                    customerPhone={session.customerPhone || ""}
-                    buttonText="Pay Now with Razorpay"
-                    onSuccess={(verified) => {
-                      setSuccessOrder(verified);
-                      clearCart();
-                    }}
-                    onError={(msg) => {
-                      if (msg.toLowerCase().includes("expired") || msg.toLowerCase().includes("cancelled")) {
-                        setIsExpiredLocally(true);
-                        setError("Payment window has expired. Reserved warehouse stock was returned.");
-                      } else {
-                        setError(msg);
-                      }
-                    }}
-                  />
-                )}
+                ) : session.paymentMethod === "CASHFREE" ? (
+                    <CashfreePaymentButton
+                      orderId={session.orderId}
+                      buttonText="Pay Now with Cashfree"
+                      onError={(msg) => {
+                        if (msg.toLowerCase().includes("expired") || msg.toLowerCase().includes("cancelled")) {
+                          setIsExpiredLocally(true);
+                          setError("Payment window has expired. Reserved warehouse stock was returned.");
+                        } else {
+                          setError(msg);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <RazorpayPaymentButton
+                      orderId={session.orderId}
+                      customerName={session.customerName}
+                      customerEmail={session.customerEmail}
+                      customerPhone={session.customerPhone || ""}
+                      buttonText="Pay Now with Razorpay"
+                      onSuccess={(verified) => {
+                        setSuccessOrder(verified);
+                        clearCart();
+                      }}
+                      onError={(msg) => {
+                        if (msg.toLowerCase().includes("expired") || msg.toLowerCase().includes("cancelled")) {
+                          setIsExpiredLocally(true);
+                          setError("Payment window has expired. Reserved warehouse stock was returned.");
+                        } else {
+                          setError(msg);
+                        }
+                      }}
+                    />
+                  )}
               </div>
 
               <div className="flex items-center justify-center gap-1.5 text-[12px] text-steel">

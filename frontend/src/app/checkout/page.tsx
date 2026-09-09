@@ -46,6 +46,7 @@ import {
   type ShippingEstimate,
 } from "@/services/customerApi";
 import { RazorpayPaymentButton, launchRazorpayModal } from "@/components/checkout/RazorpayPaymentButton";
+import { CashfreePaymentButton, launchCashfreeCheckout } from "@/components/checkout/CashfreePaymentButton";
 import { PaymentCountdownTimer } from "@/components/checkout/PaymentCountdownTimer";
 import { AddressValidationDialog } from "@/components/ui/delivery/AddressValidationDialog";
 
@@ -225,6 +226,7 @@ export default function CheckoutPage() {
   const [pendingOrder, setPendingOrder] = useState<CustomerOrderSummary | null>(
     null,
   );
+  const [pendingPaymentCode, setPendingPaymentCode] = useState<string>("COD");
   const [availablePaymentMethods, setAvailablePaymentMethods] = useState<
     AvailablePaymentMethod[]
   >([]);
@@ -340,6 +342,7 @@ export default function CheckoutPage() {
 
         if (session.paymentStatus === "PAID") {
           setPendingOrder(null);
+          setPendingPaymentCode("COD");
           setOrder({
             id: session.orderId,
             orderNumber: session.orderNumber,
@@ -353,6 +356,7 @@ export default function CheckoutPage() {
         } else if (session.isExpired || session.status === "CANCELLED" || session.secondsRemaining <= 0) {
           setError("Payment window has expired. Reserved warehouse inventory has been released.");
           setPendingOrder(null);
+          setPendingPaymentCode("COD");
         }
       } catch (err) {
         // Silently keep current state if network glitch
@@ -930,12 +934,21 @@ export default function CheckoutPage() {
           window.location.href = paymentRes.redirectUrl;
           return;
         }
+      } else if (selectedPaymentCode === "CASHFREE") {
+        const paymentRes = await initiateCustomerPayment(created.id, selectedPaymentCode);
+        setPendingOrder(created);
+        setPendingPaymentCode("CASHFREE");
+        if (paymentRes.sdkPayload) {
+          clearCart();
+          await launchCashfreeCheckout(paymentRes.sdkPayload, paymentRes.clientScriptUrl);
+        }
       } else if (
         selectedMethod?.type === "SDK_MODAL" ||
         selectedPaymentCode === "RAZORPAY"
       ) {
         const paymentRes = await initiateCustomerPayment(created.id, selectedPaymentCode);
         setPendingOrder(created);
+        setPendingPaymentCode("RAZORPAY");
         if (paymentRes.sdkPayload) {
           await launchRazorpayModal({
             orderId: created.id,
@@ -945,6 +958,7 @@ export default function CheckoutPage() {
             sdkPayload: paymentRes.sdkPayload,
             onSuccess: (verified) => {
               setPendingOrder(null);
+              setPendingPaymentCode("COD");
               setOrder(verified);
               clearCart();
             },
@@ -2055,7 +2069,22 @@ export default function CheckoutPage() {
                       setPendingOrder(null);
                     }}
                   />
-                  <RazorpayPaymentButton
+                  {pendingPaymentCode === "CASHFREE" ? (
+                    <CashfreePaymentButton
+                      orderId={pendingOrder.id}
+                      buttonText="Retry Payment with Cashfree"
+                      onError={(errMsg) => {
+                        if (errMsg.toLowerCase().includes("expired") || errMsg.toLowerCase().includes("cancelled")) {
+                          setError("Payment window has expired. Reserved inventory has been released.");
+                          setPendingOrder(null);
+                          setPendingPaymentCode("COD");
+                        } else {
+                          setError(errMsg);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <RazorpayPaymentButton
                     orderId={pendingOrder.id}
                     customerName={form.fullName}
                     customerEmail={currentCustomer?.email ?? ""}
@@ -2064,17 +2093,20 @@ export default function CheckoutPage() {
                     onSuccess={(updated) => {
                       setOrder(updated);
                       setPendingOrder(null);
+                      setPendingPaymentCode("COD");
                       clearCart();
                     }}
                     onError={(errMsg) => {
                       if (errMsg.toLowerCase().includes("expired") || errMsg.toLowerCase().includes("cancelled")) {
                         setError("Payment window has expired. Reserved inventory has been released.");
                         setPendingOrder(null);
+                        setPendingPaymentCode("COD");
                       } else {
                         setError(errMsg);
                       }
                     }}
                   />
+                  )}
                 </div>
               ) : (
                 <div className="mt-5 space-y-2">
@@ -2089,7 +2121,9 @@ export default function CheckoutPage() {
                       ? "Processing..."
                       : selectedPaymentCode === "RAZORPAY"
                         ? "Proceed to Pay with Razorpay"
-                        : "Place Order"}
+                        : selectedPaymentCode === "CASHFREE"
+                          ? "Proceed to Pay with Cashfree"
+                          : "Place Order"}
                   </Button>
                   <div className="min-h-[20px] flex items-center justify-center text-center">
                     {!canSubmit && !isSubmitting && (
