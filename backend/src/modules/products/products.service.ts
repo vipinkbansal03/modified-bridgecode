@@ -1952,28 +1952,32 @@ export async function assignAttributes(
     });
     await tx.productAttribute.deleteMany({ where: { productId } });
 
-    const created = [];
+    const baseTime = Date.now();
+    const created: any[] = [];
+    let sortIndex = 0;
     for (const attributeConfig of attributes) {
-      const productAttribute = await tx.productAttribute.create({
+      const createdAttr = await tx.productAttribute.create({
         data: {
           productId,
           attributeId: attributeConfig.attributeId,
           required: Boolean(attributeConfig.required),
           gridAxis: attributeConfig.gridAxis ?? null,
+          createdAt: new Date(baseTime + sortIndex * 1000),
         },
       });
+      sortIndex++;
 
       const uniqueAllowedValueIds = Array.from(new Set(attributeConfig.allowedValueIds ?? []));
       if (uniqueAllowedValueIds.length) {
         await tx.productAttributeValueSelection.createMany({
           data: uniqueAllowedValueIds.map((attributeValueId) => ({
-            productAttributeId: productAttribute.id,
+            productAttributeId: createdAttr.id,
             attributeValueId,
           })),
         });
       }
 
-      created.push(productAttribute);
+      created.push(createdAttr);
     }
 
     return created;

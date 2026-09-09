@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, useRef, type ReactNode } from "react";
 import { GripVertical } from "lucide-react";
 import { cn } from "@/utils/cn";
 
@@ -27,8 +27,15 @@ export function SortableList<T extends { id: string }>({
   itemClassName,
   handleAriaLabel = "Drag to reorder",
 }: SortableListProps<T>) {
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [overId, setOverId] = useState<string | null>(null);
+  const draggingIdRef = useRef<string | null>(null);
+  const draggedElementRef = useRef<HTMLElement | null>(null);
+
+  const clearDragStyles = () => {
+    if (draggedElementRef.current) {
+      draggedElementRef.current.classList.remove("opacity-50");
+      draggedElementRef.current = null;
+    }
+  };
 
   const moveItem = (fromId: string, toId: string) => {
     if (fromId === toId) return;
@@ -47,39 +54,58 @@ export function SortableList<T extends { id: string }>({
         <div
           key={item.id}
           draggable={!disabled}
-          onDragStart={() => setDraggingId(item.id)}
+          onDragStart={(e) => {
+            clearDragStyles();
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", item.id);
+            draggingIdRef.current = item.id;
+            draggedElementRef.current = e.currentTarget;
+            const el = e.currentTarget;
+            setTimeout(() => {
+              if (draggingIdRef.current) {
+                el.classList.add("opacity-50");
+              }
+            }, 0);
+          }}
           onDragEnd={() => {
-            setDraggingId(null);
-            setOverId(null);
+            clearDragStyles();
+            draggingIdRef.current = null;
           }}
           onDragOver={(e) => {
             e.preventDefault();
-            setOverId(item.id);
+            e.dataTransfer.dropEffect = "move";
+          }}
+          onDragEnter={(e) => {
+            e.preventDefault();
+            if (draggingIdRef.current && draggingIdRef.current !== item.id) {
+              e.currentTarget.classList.add("border-[#E31E24]", "shadow-sm");
+            }
+          }}
+          onDragLeave={(e) => {
+            e.currentTarget.classList.remove("border-[#E31E24]", "shadow-sm");
           }}
           onDrop={(e) => {
             e.preventDefault();
-            if (draggingId) moveItem(draggingId, item.id);
-            setDraggingId(null);
-            setOverId(null);
+            e.currentTarget.classList.remove("border-[#E31E24]", "shadow-sm");
+            const fromId = draggingIdRef.current || e.dataTransfer.getData("text/plain");
+            clearDragStyles();
+            draggingIdRef.current = null;
+            if (fromId && fromId !== item.id) moveItem(fromId, item.id);
           }}
           className={cn(
             "flex items-stretch gap-2 rounded-lg border bg-white transition-shadow",
             rowWidthClassName,
-            draggingId === item.id && "opacity-50",
-            overId === item.id && draggingId && draggingId !== item.id && "border-[#E31E24] shadow-sm",
             disabled ? "border-[#E6E6E6]" : "border-[#E6E6E6]",
             itemClassName,
           )}
         >
           {!disabled && (
-            <button
-              type="button"
+            <div
               aria-label={handleAriaLabel}
-              className="flex shrink-0 items-center px-1.5 text-[#9A9A9A] cursor-grab active:cursor-grabbing hover:text-[#1A1A1A]"
-              onMouseDown={(e) => e.stopPropagation()}
+              className="flex shrink-0 items-center px-1.5 text-[#9A9A9A] cursor-grab active:cursor-grabbing hover:text-[#1A1A1A] select-none"
             >
               <GripVertical size={16} />
-            </button>
+            </div>
           )}
           <div className={cn(contentClassName, disabled && "pl-3")}>{renderItem(item, index)}</div>
         </div>
