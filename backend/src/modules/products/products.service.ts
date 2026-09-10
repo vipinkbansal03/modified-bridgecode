@@ -790,6 +790,7 @@ export async function getProduct(id: string) {
       media: { orderBy: { sortOrder: "asc" } },
       packages: { where: { status: "ACTIVE" }, orderBy: { sortOrder: "asc" } },
       attributes: {
+        orderBy: { createdAt: "asc" },
         include: {
           attribute: {
             include: {
@@ -1980,6 +1981,37 @@ export async function assignAttributes(
       created.push(createdAttr);
     }
 
+    // Synchronize existing variant titles to match the updated attribute sequence
+    const attributeOrderMap = new Map(attributes.map((a, idx) => [a.attributeId, idx]));
+    const existingVariants = await tx.productVariant.findMany({
+      where: { productId, deletedAt: null },
+      include: {
+        package: true,
+        attributeValues: {
+          include: { attributeValue: true },
+        },
+      },
+    });
+
+    for (const variant of existingVariants) {
+      if (!variant.attributeValues.length) continue;
+      const sortedValues = [...variant.attributeValues]
+        .sort((a, b) => {
+          const orderA = attributeOrderMap.has(a.attributeId) ? attributeOrderMap.get(a.attributeId)! : 9999;
+          const orderB = attributeOrderMap.has(b.attributeId) ? attributeOrderMap.get(b.attributeId)! : 9999;
+          return orderA - orderB;
+        })
+        .map((av) => av.attributeValue);
+
+      const newTitle = buildVariantTitle(sortedValues, variant.package?.title);
+      if (newTitle && newTitle !== variant.title) {
+        await tx.productVariant.update({
+          where: { id: variant.id },
+          data: { title: newTitle },
+        });
+      }
+    }
+
     return created;
   });
 }
@@ -2400,6 +2432,13 @@ export async function generateVariants(
           ? mapping.allowedValues.map((allowedValue) => allowedValue.attributeValueId)
           : mapping.attribute.values.map((v) => v.id),
       }));
+    } else {
+      const mappingOrder = new Map(productAttributeMappings.map((m, idx) => [m.attributeId, idx]));
+      attributeGroups.sort((a, b) => {
+        const orderA = mappingOrder.has(a.attributeId) ? mappingOrder.get(a.attributeId)! : 9999;
+        const orderB = mappingOrder.has(b.attributeId) ? mappingOrder.get(b.attributeId)! : 9999;
+        return orderA - orderB;
+      });
     }
 
     const mappedAttributeById = new Map(productAttributeMappings.map((mapping) => [mapping.attributeId, mapping]));
@@ -2582,8 +2621,15 @@ export async function createVariant(
   const product = await getProduct(productId);
   const pkg = await ensureProductPackage(productId, data.packageId);
   const values = await loadActiveAttributeValues(data.attributeValueIds);
+  const productMappings = await listProductAttributes(productId);
+  const attrOrderMap = new Map(productMappings.map((m, idx) => [m.attributeId, idx]));
+  const sortedValues = [...values].sort((a, b) => {
+    const orderA = attrOrderMap.has(a.attributeId) ? attrOrderMap.get(a.attributeId)! : 9999;
+    const orderB = attrOrderMap.has(b.attributeId) ? attrOrderMap.get(b.attributeId)! : 9999;
+    return orderA - orderB;
+  });
   const variantKey = buildVariantKey(values.map((value) => value.id), data.packageId);
-  const title = buildVariantTitle(values, pkg?.title, data.title);
+  const title = buildVariantTitle(sortedValues, pkg?.title, data.title);
 
   const existing = await prisma.productVariant.findFirst({ where: { productId, variantKey, deletedAt: null } });
   if (existing) throw new AppError("A variant with this configuration already exists.", 409);
@@ -2655,6 +2701,13 @@ export async function updateVariant(
         ...value.attributeValue,
         attributeId: value.attributeId,
       }));
+  const productMappings = await listProductAttributes(productId);
+  const attrOrderMap = new Map(productMappings.map((m, idx) => [m.attributeId, idx]));
+  const sortedValues = [...values].sort((a, b) => {
+    const orderA = attrOrderMap.has(a.attributeId) ? attrOrderMap.get(a.attributeId)! : 9999;
+    const orderB = attrOrderMap.has(b.attributeId) ? attrOrderMap.get(b.attributeId)! : 9999;
+    return orderA - orderB;
+  });
   const nextVariantKey = buildVariantKey(values.map((value) => value.id), nextPackageId);
   const duplicate = await prisma.productVariant.findFirst({
     where: { productId, variantKey: nextVariantKey, NOT: { id: variantId }, deletedAt: null },
@@ -2663,7 +2716,7 @@ export async function updateVariant(
   const updateData: Prisma.ProductVariantUncheckedUpdateInput = {
     ...(data.packageId !== undefined ? { packageId: data.packageId || null } : {}),
     ...(data.sku !== undefined ? { sku: data.sku } : {}),
-    title: buildVariantTitle(values, pkg?.title, data.title !== undefined ? data.title : existingVariant.title),
+    title: buildVariantTitle(sortedValues, pkg?.title, data.title !== undefined ? data.title : existingVariant.title),
     ...(nextVariantKey !== existingVariant.variantKey ? { variantKey: nextVariantKey } : {}),
     ...(data.moq !== undefined ? { moq: data.moq } : {}),
     ...(data.weight !== undefined ? { weight: data.weight } : {}),

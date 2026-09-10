@@ -223,14 +223,27 @@ export async function login(input: CustomerLoginInput) {
 
 export async function forgotPassword(input: ForgotPasswordInput) {
   const normalizedEmail = input.email.trim().toLowerCase();
-  const customer = await prisma.customer.findFirst({ where: { email: normalizedEmail, deletedAt: null } });
+  const customer = await prisma.customer.findFirst({
+    where: {
+      email: { equals: normalizedEmail, mode: "insensitive" },
+      deletedAt: null,
+    },
+    include: {
+      defaultCountry: { select: { code: true } },
+    },
+  });
   if (customer && customer.status === "ACTIVE") {
     const resetToken = jwt.sign(
       { id: customer.id, scope: "customer_password_reset" },
       process.env.JWT_SECRET!,
       { expiresIn: "1h" as SignOptions["expiresIn"] }
     );
-    await sendCustomerPasswordResetEmail({ email: customer.email, firstName: customer.firstName, resetToken });
+    await sendCustomerPasswordResetEmail({
+      email: customer.email,
+      firstName: customer.firstName,
+      resetToken,
+      countryCode: customer.defaultCountry?.code,
+    });
   }
 
   return { message: "If an account exists for this email, password reset instructions have been sent." };

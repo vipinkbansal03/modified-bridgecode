@@ -3946,6 +3946,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       queryClient.setQueryData(["admin-product-attributes", productId], next);
       await assignProductAttributes.mutateAsync(toProductAttributePayload(next));
       await refetchProductAttributes();
+      await refetch();
       showToast("Attribute order updated.");
     } catch (error) {
       await refetchProductAttributes();
@@ -3967,6 +3968,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       queryClient.setQueryData(["admin-product-attributes", productId], next);
       await assignProductAttributes.mutateAsync(toProductAttributePayload(next));
       await refetchProductAttributes();
+      await refetch();
       showToast("Attribute order updated.");
     } catch (error) {
       await refetchProductAttributes();
@@ -6571,11 +6573,22 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                             <td className="px-4 py-3 font-medium text-[#1A1A1A]">{variant.sku || "No SKU"}</td>
                             <td className="px-4 py-3 text-[#555]">{variant.title}</td>
                             <td className="px-4 py-3 text-[#6B6B6B] text-[12px]">
-                              {variant.attributeValues?.map((av) => (
-                                <span key={av.attributeValueId} className="mr-1 inline-block bg-[#F2F2F2] px-2 py-0.5 rounded text-[#555]">
-                                  {av.attribute?.name}: {av.attributeValue?.value}
-                                </span>
-                              )) || "—"}
+                              {variant.attributeValues && variant.attributeValues.length > 0
+                                ? [...variant.attributeValues]
+                                    .sort((a, b) => {
+                                      const idxA = mappedAttributeRows.findIndex((m) => m.attributeId === a.attributeId);
+                                      const idxB = mappedAttributeRows.findIndex((m) => m.attributeId === b.attributeId);
+                                      if (idxA === -1 && idxB === -1) return 0;
+                                      if (idxA === -1) return 1;
+                                      if (idxB === -1) return -1;
+                                      return idxA - idxB;
+                                    })
+                                    .map((av) => (
+                                      <span key={av.attributeValueId} className="mr-1 inline-block bg-[#F2F2F2] px-2 py-0.5 rounded text-[#555]">
+                                        {av.attribute?.name}: {av.attributeValue?.value}
+                                      </span>
+                                    ))
+                                : "—"}
                             </td>
                             <td className="px-4 py-3 font-medium text-[#1A1A1A]">{baseStock}</td>
                             <td className="px-4 py-3 font-medium text-[#1A1A1A]">{formattedPrice}</td>

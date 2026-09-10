@@ -64,17 +64,11 @@ export async function getEmailConfig() {
   const emailEnabled = await getSettingValue("email.enabled").catch(() => "");
   const isEnabled = emailEnabled === "" ? true : emailEnabled !== "false";
 
-  const dbProvider = await getSettingValue("email.provider").catch(() => "");
-  const provider = (dbProvider || process.env.EMAIL_PROVIDER || "msg91").trim().toLowerCase();
-
-  const dbFromName = await getSettingValue("email.from_name").catch(() => "");
-  const dbFromEmail = await getSettingValue("email.from_email").catch(() => "");
-  const dbNotify = await getSettingValue("email.notify_email").catch(() => "");
-
   const dbMsg91Key = await getSettingValue("email.msg91_auth_key").catch(() => "");
   const dbMsg91Domain = await getSettingValue("email.msg91_domain").catch(() => "");
   const dbMsg91Enabled = await getSettingValue("email.msg91_enabled").catch(() => "");
-  const msg91Enabled = dbMsg91Enabled === "" ? true : dbMsg91Enabled !== "false";
+  const msg91AuthKey = dbMsg91Key || process.env.MSG91_AUTH_KEY || "";
+  const msg91Enabled = dbMsg91Enabled !== "" ? dbMsg91Enabled !== "false" : Boolean(msg91AuthKey);
 
   const dbSmtpHost = await getSettingValue("email.smtp_host").catch(() => "");
   const dbSmtpPort = await getSettingValue("email.smtp_port").catch(() => "");
@@ -82,11 +76,33 @@ export async function getEmailConfig() {
   const dbSmtpPass = await getSettingValue("email.smtp_password").catch(() => "");
   const dbSmtpSecure = await getSettingValue("email.smtp_secure").catch(() => "");
   const dbSmtpEnabled = await getSettingValue("email.smtp_enabled").catch(() => "");
-  const smtpEnabled = dbSmtpEnabled === "true";
+  const smtpUser = dbSmtpUser || process.env.SMTP_USER || "";
+  const smtpPass = dbSmtpPass || process.env.SMTP_PASS || process.env.SMTP_PASSWORD || "";
+  const smtpHost = dbSmtpHost || process.env.SMTP_HOST || "localhost";
+  const smtpEnabled = dbSmtpEnabled !== "" ? dbSmtpEnabled === "true" : (process.env.SMTP_ENABLED !== "false" && Boolean(smtpUser && smtpPass));
 
   const dbResendKey = await getSettingValue("email.resend_api_key").catch(() => "");
   const dbResendEnabled = await getSettingValue("email.resend_enabled").catch(() => "");
-  const resendEnabled = dbResendEnabled === "true";
+  const resendApiKey = dbResendKey || process.env.RESEND_API_KEY || "";
+  const resendEnabled = dbResendEnabled !== "" ? dbResendEnabled === "true" : (process.env.RESEND_ENABLED !== "false" && Boolean(resendApiKey));
+
+  const dbProvider = await getSettingValue("email.provider").catch(() => "");
+  let provider = (dbProvider || process.env.EMAIL_PROVIDER || "").trim().toLowerCase();
+  if (!provider) {
+    if (smtpUser && smtpPass) {
+      provider = "smtp";
+    } else if (msg91AuthKey) {
+      provider = "msg91";
+    } else if (resendApiKey) {
+      provider = "resend";
+    } else {
+      provider = "smtp";
+    }
+  }
+
+  const dbFromName = await getSettingValue("email.from_name").catch(() => "");
+  const dbFromEmail = await getSettingValue("email.from_email").catch(() => "");
+  const dbNotify = await getSettingValue("email.notify_email").catch(() => "");
 
   return {
     isEnabled,
@@ -97,14 +113,14 @@ export async function getEmailConfig() {
     fromName: dbFromName || process.env.MSG91_FROM_NAME || process.env.EMAIL_FROM_NAME || process.env.FROM_NAME || "Modern Orthodontics",
     fromEmail: dbFromEmail || process.env.MSG91_FROM_EMAIL || process.env.EMAIL_FROM || "orders@modortho.com",
     notify: dbNotify || process.env.EMAIL_NOTIFY || "mayuragarwal2096@gmail.com",
-    msg91AuthKey: dbMsg91Key || process.env.MSG91_AUTH_KEY || "",
+    msg91AuthKey,
     msg91Domain: dbMsg91Domain || process.env.MSG91_DOMAIN || "",
-    smtpHost: dbSmtpHost || process.env.SMTP_HOST || "localhost",
+    smtpHost,
     smtpPort: Number(dbSmtpPort || process.env.SMTP_PORT) || 587,
-    smtpUser: dbSmtpUser || process.env.SMTP_USER || "",
-    smtpPass: dbSmtpPass || process.env.SMTP_PASS || process.env.SMTP_PASSWORD || "",
+    smtpUser,
+    smtpPass,
     smtpSecure: dbSmtpSecure === "true" || process.env.SMTP_SECURE === "true",
-    resendApiKey: dbResendKey || process.env.RESEND_API_KEY || "",
+    resendApiKey,
   };
 }
 
@@ -386,8 +402,10 @@ export async function sendEmailSafely(params: SendEmailParams): Promise<void> {
     replyTo: params.replyTo,
   };
 
+  let sent = false;
+
   if (config.provider === "nodemailer" || config.provider === "smtp") {
-    await sendNodemailerEmail(
+    sent = await sendNodemailerEmail(
       {
         host: config.smtpHost,
         port: config.smtpPort,
@@ -398,10 +416,25 @@ export async function sendEmailSafely(params: SendEmailParams): Promise<void> {
       emailParams
     );
   } else if (config.provider === "resend") {
-    await sendResendEmail(config.resendApiKey, config.notify, emailParams);
+    sent = await sendResendEmail(config.resendApiKey, config.notify, emailParams);
   } else {
     // Default: msg91
-    await sendMsg91Email(config.msg91AuthKey, config.msg91Domain || undefined, emailParams);
+    sent = await sendMsg91Email(config.msg91AuthKey, config.msg91Domain || undefined, emailParams);
+  }
+
+  // Automatic fallback: if primary provider did not send and SMTP is configured, attempt SMTP
+  if (!sent && config.provider !== "nodemailer" && config.provider !== "smtp" && config.smtpUser && config.smtpPass) {
+    logger.info(`[Email Fallback] Primary provider ${config.provider} did not deliver. Attempting fallback delivery via SMTP for "${params.subject}" to ${params.to.join(", ")}`);
+    await sendNodemailerEmail(
+      {
+        host: config.smtpHost,
+        port: config.smtpPort,
+        user: config.smtpUser,
+        pass: config.smtpPass,
+        secure: config.smtpSecure,
+      },
+      emailParams
+    );
   }
 }
 
@@ -416,23 +449,86 @@ export async function sendCustomerPasswordResetEmail(data: {
   const separator = resetBaseUrl.includes("?") ? "&" : "?";
   const resetUrl = `${resetBaseUrl}${separator}token=${encodeURIComponent(data.resetToken)}`;
 
+  const textContent = [
+    `Dear ${data.firstName || "Customer"},`,
+    "",
+    "We received a request to reset your Modern Orthodontics account password.",
+    "Use the link below to choose a new password. This link expires in 1 hour.",
+    "",
+    resetUrl,
+    "",
+    "If you did not request this, you can ignore this email.",
+    "",
+    "Modern Orthodontics Team",
+  ].join("\n");
+
+  const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset your password</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #18181b;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f4f4f5; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 560px; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e4e4e7;">
+          <tr>
+            <td style="padding: 28px 32px 20px; border-bottom: 1px solid #f4f4f5;">
+              <span style="font-size: 18px; font-weight: 700; color: #E31E24; letter-spacing: -0.5px;">MODERN ORTHODONTICS</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 32px; text-align: left;">
+              <h2 style="margin: 0 0 16px; font-size: 18px; font-weight: 600; color: #09090b;">Password Reset Request</h2>
+              <p style="margin: 0 0 16px; font-size: 14px; line-height: 24px; color: #52525b;">
+                Dear ${data.firstName || "Customer"},
+              </p>
+              <p style="margin: 0 0 24px; font-size: 14px; line-height: 24px; color: #52525b;">
+                We received a request to reset the password for your Modern Orthodontics account. Click the button below to set a new password. This link is valid for <strong>1 hour</strong>.
+              </p>
+              <table border="0" cellspacing="0" cellpadding="0" style="margin: 0 0 24px;">
+                <tr>
+                  <td align="center" style="border-radius: 8px; background-color: #E31E24;">
+                    <a href="${resetUrl}" target="_blank" style="display: inline-block; padding: 12px 28px; font-size: 14px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 8px;">
+                      Reset Password
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin: 0 0 8px; font-size: 13px; line-height: 20px; color: #71717a;">
+                Or copy and paste this link into your browser:
+              </p>
+              <p style="margin: 0 0 24px; font-size: 12px; line-height: 18px; word-break: break-all; color: #2563eb;">
+                <a href="${resetUrl}" target="_blank" style="color: #2563eb; text-decoration: underline;">${resetUrl}</a>
+              </p>
+              <p style="margin: 0; font-size: 13px; line-height: 20px; color: #71717a;">
+                If you did not request this password reset, no action is needed. Your account remains secure.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 16px 32px; background-color: #fafafa; border-top: 1px solid #f4f4f5; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #a1a1aa;">
+                &copy; Modern Orthodontics. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
   await sendEmailSafely({
     category: "auth",
     countryCode: data.countryCode,
     to: [data.email],
     subject: "Reset your Modern Orthodontics password",
-    text: [
-      `Dear ${data.firstName},`,
-      "",
-      "We received a request to reset your Modern Orthodontics account password.",
-      "Use the link below to choose a new password. This link expires in 1 hour.",
-      "",
-      resetUrl,
-      "",
-      "If you did not request this, you can ignore this email.",
-      "",
-      "Modern Orthodontics Team",
-    ].join("\n"),
+    text: textContent,
+    html: htmlContent,
   });
 }
 

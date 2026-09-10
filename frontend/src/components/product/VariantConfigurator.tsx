@@ -491,22 +491,74 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
 
   if (!variants.length) return null;
 
-  function isValueAvailable(attributeName: string, value: string) {
-    return variants.some((variant) =>
-      attributes.every((attribute) => {
-        const chosen =
-          attribute.name === attributeName
-            ? value
-            : selectedOptions[attribute.name];
-        return (
-          !chosen || variantMatchesSelection(variant, attribute.name, chosen)
-        );
-      }),
+  function getAvailableValuesForAttribute(attribute: ProductOptionAttribute, attrIndex: number) {
+    const precedingSelections = attributes
+      .slice(0, attrIndex)
+      .map((a) => ({ name: a.name, value: selectedOptions[a.name] }))
+      .filter((item) => Boolean(item.value));
+
+    const matchingVariants = variants.filter((variant) =>
+      precedingSelections.every((item) =>
+        variantMatchesSelection(variant, item.name, item.value),
+      ),
     );
+
+    const sourceVariants = matchingVariants.length > 0 ? matchingVariants : variants;
+
+    const availableValueSet = new Set(
+      sourceVariants
+        .map((v) =>
+          attribute.name === PACKAGE_ATTRIBUTE_NAME
+            ? getVariantPackageLabel(v)
+            : v.attributeCombination[attribute.name],
+        )
+        .filter((val): val is string => Boolean(val)),
+    );
+
+    return attribute.values.filter((v) => availableValueSet.has(v.value));
   }
 
   function handleOptionSelect(attributeName: string, value: string) {
-    setSelectedOptions((current) => ({ ...current, [attributeName]: value }));
+    const attrIndex = attributes.findIndex((a) => a.name === attributeName);
+    const nextSelections: Record<string, string> = {};
+
+    for (let i = 0; i < attrIndex; i++) {
+      const name = attributes[i].name;
+      nextSelections[name] = selectedOptions[name] ?? "";
+    }
+
+    nextSelections[attributeName] = value;
+
+    for (let i = attrIndex + 1; i < attributes.length; i++) {
+      const downstreamAttr = attributes[i];
+      const validDownstreamVariants = variants.filter((v) =>
+        Object.entries(nextSelections).every(([k, vVal]) =>
+          !vVal || variantMatchesSelection(v, k, vVal),
+        ),
+      );
+
+      const availableDownstreamValues = new Set(
+        validDownstreamVariants
+          .map((v) =>
+            downstreamAttr.name === PACKAGE_ATTRIBUTE_NAME
+              ? getVariantPackageLabel(v)
+              : v.attributeCombination[downstreamAttr.name],
+          )
+          .filter((val): val is string => Boolean(val)),
+      );
+
+      const currentDownstreamVal = selectedOptions[downstreamAttr.name];
+      if (currentDownstreamVal && availableDownstreamValues.has(currentDownstreamVal)) {
+        nextSelections[downstreamAttr.name] = currentDownstreamVal;
+      } else {
+        const firstAvailable = downstreamAttr.values.find((v) =>
+          availableDownstreamValues.has(v.value),
+        );
+        nextSelections[downstreamAttr.name] = firstAvailable?.value ?? "";
+      }
+    }
+
+    setSelectedOptions(nextSelections);
     setOpenDropdown(null);
     setError(null);
     setAdded(false);
@@ -743,18 +795,19 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
           {/* Compact Multi-Column Attribute Controls Grid */}
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-              {attributes.map((attribute) => {
+              {attributes.map((attribute, attrIndex) => {
                 const displayType = getAttributeDisplayType(attribute);
                 const selectedValue = selectedOptions[attribute.name];
+                const availableValues = getAvailableValuesForAttribute(attribute, attrIndex);
                 const isBinaryPill =
-                  displayType !== "DROPDOWN" && attribute.values.length <= 4;
+                  displayType !== "DROPDOWN" && availableValues.length <= 4;
 
                 return (
                   <div
                     key={attribute.id}
                     className={[
                       "rounded-lg border border-line bg-white p-3 shadow-xs transition-colors hover:border-steel-2/60",
-                      isBinaryPill && attribute.values.length > 2
+                      isBinaryPill && availableValues.length > 2
                         ? "sm:col-span-2"
                         : "",
                     ].join(" ")}
@@ -764,23 +817,18 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                         {attribute.name}
                       </label>
                       <span className="rounded-pill border border-line bg-offwhite px-2 py-0.5 text-[10px] font-semibold text-steel">
-                        {attribute.values.length} opts
+                        {availableValues.length} {availableValues.length === 1 ? "opt" : "opts"}
                       </span>
                     </div>
 
                     {isBinaryPill ? (
                       <div className="flex flex-wrap gap-1.5 pt-0.5">
-                        {attribute.values.map((value) => {
+                        {availableValues.map((value) => {
                           const active = selectedValue === value.value;
-                          const available = isValueAvailable(
-                            attribute.name,
-                            value.value,
-                          );
                           return (
                             <button
                               key={value.id}
                               type="button"
-                              disabled={!available}
                               onClick={() =>
                                 handleOptionSelect(attribute.name, value.value)
                               }
@@ -789,9 +837,6 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                                 active
                                   ? "border-brand bg-brand text-white shadow-2xs"
                                   : "border-line bg-white text-ink hover:border-brand/40 hover:text-brand",
-                                !available
-                                  ? "cursor-not-allowed bg-offwhite text-steel-2 opacity-50 border-line"
-                                  : "",
                               ].join(" ")}
                             >
                               {value.value}
@@ -813,22 +858,14 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                               Select {attribute.name}
                             </option>
                           )}
-                          {attribute.values.map((value) => {
-                            const available = isValueAvailable(
-                              attribute.name,
-                              value.value,
-                            );
-                            return (
-                              <option
-                                key={value.id}
-                                value={value.value}
-                                disabled={!available}
-                              >
-                                {value.value}{" "}
-                                {!available ? "(Unavailable)" : ""}
-                              </option>
-                            );
-                          })}
+                          {availableValues.map((value) => (
+                            <option
+                              key={value.id}
+                              value={value.value}
+                            >
+                              {value.value}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     )}

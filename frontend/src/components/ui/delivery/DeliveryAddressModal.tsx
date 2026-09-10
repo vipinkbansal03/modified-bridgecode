@@ -62,6 +62,13 @@ export function DeliveryAddressModal({
 
   const [detecting, setDetecting] = useState(false);
   const [searchingPin, setSearchingPin] = useState(false);
+  const [pincodeError, setPincodeError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setPincodeError(null);
+    }
+  }, [open]);
 
   const handleCurrentLocation = async () => {
     setDetecting(true);
@@ -271,10 +278,19 @@ export function DeliveryAddressModal({
   };
 
   const handlePincodeSearch = async (pincode: string) => {
-    if (!pincode.trim()) return;
-
-    setSearchingPin(true);
     const pinNormalized = pincode.trim();
+    if (!pinNormalized) {
+      setPincodeError("Please enter a PIN code.");
+      return;
+    }
+
+    if (!/^[1-9][0-9]{5}$/.test(pinNormalized)) {
+      setPincodeError("Invalid PIN code. Please enter a valid 6-digit PIN code.");
+      return;
+    }
+
+    setPincodeError(null);
+    setSearchingPin(true);
 
     // 1. Check local test pincodes map first for instant local testing response
     const LOCAL_PINCODES: Record<string, { city: string; state: string; area: string }> = {
@@ -308,6 +324,7 @@ export function DeliveryAddressModal({
         updatedAt: new Date().toISOString(),
       };
       setSelectedAddress(mockAddress);
+      setSelectedPincode?.(pinNormalized);
       setSearchingPin(false);
       onClose();
       return;
@@ -342,6 +359,7 @@ export function DeliveryAddressModal({
         };
 
         setSelectedAddress(mockAddress);
+        setSelectedPincode?.(pinNormalized);
         setSearchingPin(false);
         onClose();
         return;
@@ -353,7 +371,7 @@ export function DeliveryAddressModal({
     try {
       // 3. Fall back to Nominatim search geocoding
       const res2 = await fetch(
-        `https://nominatim.openstreetmap.org/search?postalcode=${pinNormalized}&format=json`
+        `https://nominatim.openstreetmap.org/search?postalcode=${pinNormalized}&countrycodes=in&format=json`
       );
       const data2 = await res2.json();
       if (data2 && data2[0]) {
@@ -394,35 +412,20 @@ export function DeliveryAddressModal({
         };
 
         setSelectedAddress(mockAddress);
+        setSelectedPincode?.(pinNormalized);
         setSearchingPin(false);
         onClose();
         return;
       }
     } catch (e) {
-      console.warn("OSM Nominatim search error, falling back to default city:", e);
+      console.warn("OSM Nominatim search error:", e);
     }
 
-    // 4. Ultimate fallback to ensure it ALWAYS works and doesn't show errors
-    const mockAddressFallback: CustomerAddress = {
-      id: `pin-${pinNormalized}`,
-      customerId: "",
-      label: `PIN ${pinNormalized}`,
-      fullName: "",
-      phone: "",
-      addressLine1: "Pincode Search",
-      addressLine2: null,
-      city: "Jaipur",
-      state: "Rajasthan",
-      postalCode: pinNormalized,
-      countryId: "",
-      country: { id: "", name: "India", code: "IN", currencyId: "", symbol: "₹" } as any,
-      isDefault: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    setSelectedAddress(mockAddressFallback);
+    // 4. If pincode is not found in any source, display error and do not accept
+    const errorMessage = "Delivery is not available for this PIN code.";
+    setPincodeError(errorMessage);
+    showToast(errorMessage, "error");
     setSearchingPin(false);
-    onClose();
   };
 
   return (
@@ -435,7 +438,12 @@ export function DeliveryAddressModal({
       <div className="space-y-6 p-6 overflow-y-auto flex-1">
         <CurrentLocationCard onClick={handleCurrentLocation} loading={detecting} />
 
-        <PincodeSearch onSearch={handlePincodeSearch} loading={searchingPin} />
+        <PincodeSearch
+          onSearch={handlePincodeSearch}
+          loading={searchingPin}
+          error={pincodeError}
+          onClearError={() => setPincodeError(null)}
+        />
 
         {isLoading ? (
           <div className="rounded-lg border border-line p-6 text-center text-sm text-steel">

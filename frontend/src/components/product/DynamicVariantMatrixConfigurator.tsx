@@ -293,20 +293,14 @@ export function DynamicVariantMatrixConfigurator({
 
   const attributes = useMemo<ProductOptionAttribute[]>(
     () =>
-      [...apiProduct.attributes]
-        .map((attribute) => ({
-          ...attribute,
-          values: [...(attribute.values ?? [])].sort(
-            (left, right) =>
-              left.sortOrder - right.sortOrder ||
-              left.value.localeCompare(right.value),
-          ),
-        }))
-        .sort(
+      [...apiProduct.attributes].map((attribute) => ({
+        ...attribute,
+        values: [...(attribute.values ?? [])].sort(
           (left, right) =>
             left.sortOrder - right.sortOrder ||
-            left.name.localeCompare(right.name),
+            left.value.localeCompare(right.value),
         ),
+      })),
     [apiProduct.attributes],
   );
 

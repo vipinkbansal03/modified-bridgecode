@@ -294,6 +294,7 @@ export async function publicGetProduct(
       ...(languageCode ? approvedProductTranslationInclude(languageCode) : {}),
       packages: { where: { status: "ACTIVE" }, orderBy: { sortOrder: "asc" } },
       attributes: {
+        orderBy: { createdAt: "asc" },
         include: {
           attribute: {
             include: {
@@ -1762,7 +1763,6 @@ async function toPublicProductDetail(
       if (variantAttributeNames.size === 0) return true;
       return variantAttributeNames.has(attribute.name);
     })
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
     : [];
 
   return {
