@@ -784,6 +784,7 @@ export default function AdminProductsPage() {
                   { value: "category", label: "Category" },
                   { value: "status", label: "Status" },
                   { value: "updatedAt", label: "Updated Date" },
+                  { value: "createdAt", label: "Created Date" },
                 ]}
               />
               <AdminSelect

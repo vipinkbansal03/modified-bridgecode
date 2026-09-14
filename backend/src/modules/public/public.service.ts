@@ -806,9 +806,19 @@ export async function submitPublicQuote(input: QuoteSubmitInput) {
   const total = roundMoney(Math.max(0, subtotal - discount));
   const quoteNumber = `QUO-${Date.now()}`;
 
+  let customerId = input.customerId ?? null;
+  if (!customerId && input.customerEmail) {
+    const matchedCustomer = await prisma.customer.findFirst({
+      where: { email: { equals: input.customerEmail, mode: "insensitive" }, deletedAt: null },
+      select: { id: true },
+    });
+    if (matchedCustomer) customerId = matchedCustomer.id;
+  }
+
   const quote = await prisma.quote.create({
     data: {
       quoteNumber,
+      customerId: customerId || undefined,
       customerName: input.customerName,
       customerEmail: input.customerEmail,
       customerPhone: input.customerPhone,
@@ -863,6 +873,15 @@ export async function submitPublicQuote(input: QuoteSubmitInput) {
       link: `/admin/quotes/${quote.id}`,
     }).catch(console.error);
   });
+
+  await prisma.activityLog.create({
+    data: {
+      action: "QUOTE_REQUESTED",
+      entityType: "Quote",
+      entityId: quote.id,
+      metadata: { quoteNumber: quote.quoteNumber, total: quote.total, customerEmail: input.customerEmail },
+    },
+  }).catch(() => {});
 
   return quote;
 }
@@ -1855,9 +1874,18 @@ function toPublicCategory(c: {
 }
 
 export async function getProductReviews(slug: string) {
+  const decodedSlug = decodeURIComponent(slug);
   const product = await prisma.product.findFirst({
-    where: { slug, deletedAt: null },
-    select: { id: true },
+    where: {
+      OR: [
+        { slug: decodedSlug },
+        { slug },
+        { id: decodedSlug },
+        { id: slug },
+      ],
+      deletedAt: null,
+    },
+    select: { id: true, slug: true },
   });
 
   if (!product) {
@@ -1894,9 +1922,18 @@ export async function submitProductReview(
     feedbackText?: string;
   }
 ) {
+  const decodedSlug = decodeURIComponent(slug);
   const product = await prisma.product.findFirst({
-    where: { slug, deletedAt: null },
-    select: { id: true },
+    where: {
+      OR: [
+        { slug: decodedSlug },
+        { slug },
+        { id: decodedSlug },
+        { id: slug },
+      ],
+      deletedAt: null,
+    },
+    select: { id: true, slug: true },
   });
 
   if (!product) throw new AppError("Product not found", 404);
@@ -1906,6 +1943,24 @@ export async function submitProductReview(
       where: { productId: product.id, customerEmail: data.customerEmail, deletedAt: null },
     });
     if (existing) {
+      if (existing.status === "PENDING") {
+        const updated = await (prisma as any).productReview.update({
+          where: { id: existing.id },
+          data: {
+            customerName: data.customerName || existing.customerName,
+            ratingQuality: Number(data.ratingQuality || existing.ratingQuality),
+            ratingPrice: Number(data.ratingPrice || existing.ratingPrice),
+            ratingOverall: Number(data.ratingOverall || existing.ratingOverall),
+            feedbackText: data.feedbackText !== undefined ? data.feedbackText : existing.feedbackText,
+          },
+        });
+        const aggregate = await getProductReviews(product.slug || slug);
+        return {
+          review: updated,
+          averageRating: aggregate.averageRating,
+          totalRatings: aggregate.totalRatings,
+        };
+      }
       throw new AppError("You have already submitted a review for this product.", 400);
     }
   }
@@ -1923,7 +1978,7 @@ export async function submitProductReview(
     },
   });
 
-  const aggregate = await getProductReviews(slug);
+  const aggregate = await getProductReviews(product.slug || slug);
 
   return {
     review,

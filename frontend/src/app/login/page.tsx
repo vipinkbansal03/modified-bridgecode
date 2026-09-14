@@ -11,6 +11,7 @@ import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { getCustomerErrorMessage } from "@/services/customerApi";
 
 import LoginSkeleton from "@/components/auth/LoginSkeleton";
+import OtpVerificationModal from "@/components/auth/OtpVerificationModal";
 
 const loginSchema = Yup.object({
   email: Yup.string()
@@ -43,13 +44,19 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { login, currentCustomer, isLoading } = useCustomerAuth();
+  const { login, verifyLoginOtp, resendOtp, currentCustomer, isLoading } = useCustomerAuth();
 
   const next = searchParams.get("returnTo");
   const returnTo = next?.startsWith("/") ? next : "/";
 
   const [showPassword, setShowPassword] = useState(false);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+  const [otpSession, setOtpSession] = useState<{
+    verificationId: string;
+    maskedPhone: string;
+    cooldownSeconds?: number;
+    debugOtp?: string;
+  } | null>(null);
   const {
     data: authSettings,
     isError: isAuthSettingsError,
@@ -89,7 +96,15 @@ function LoginForm() {
     onSubmit: async (values, helpers) => {
       helpers.setStatus("");
       try {
-        await login(values.email, values.password, returnTo);
+        const result = await login(values.email, values.password, returnTo);
+        if (result && "requiresOtp" in result && result.requiresOtp) {
+          setOtpSession({
+            verificationId: result.verificationId,
+            maskedPhone: result.maskedPhone,
+            cooldownSeconds: result.cooldownSeconds,
+            debugOtp: result.debugOtp,
+          });
+        }
       } catch (error) {
         helpers.setStatus(
           getCustomerErrorMessage(error, "Invalid email or password."),
@@ -312,6 +327,26 @@ function LoginForm() {
           </p>
         </div>
       </section>
+
+      {otpSession && (
+        <OtpVerificationModal
+          open={!!otpSession}
+          onClose={() => setOtpSession(null)}
+          maskedPhone={otpSession.maskedPhone}
+          debugOtp={otpSession.debugOtp}
+          initialCooldown={otpSession.cooldownSeconds || 60}
+          title="Sign-In Verification"
+          subtitle="Please enter the 6-digit verification code sent to your registered mobile number."
+          onVerify={async (otp) => {
+            await verifyLoginOtp(otpSession.verificationId, otp, returnTo);
+            setOtpSession(null);
+          }}
+          onResend={async () => {
+            const res = await resendOtp(otpSession.verificationId);
+            return res;
+          }}
+        />
+      )}
     </main>
   );
 }

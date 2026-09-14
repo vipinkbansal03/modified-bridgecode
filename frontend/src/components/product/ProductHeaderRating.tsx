@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Star } from "lucide-react";
+import { fetchProductReviews } from "@/hooks/api/useProducts";
 
 interface ProductHeaderRatingProps {
   slug: string;
@@ -31,14 +32,10 @@ export function ProductHeaderRating({
     // Fetch dynamic ratings from API
     async function fetchRatings() {
       try {
-        const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
-        const res = await fetch(`${API_BASE}/products/${slug}/reviews`);
-        if (res.ok) {
-          const json = await res.json();
-          if (json.data?.averageRating !== undefined && json.data?.totalRatings !== undefined) {
-            setRating(json.data.averageRating);
-            setCount(json.data.totalRatings);
-          }
+        const data = await fetchProductReviews(slug);
+        if (data?.averageRating !== undefined && data?.totalRatings !== undefined) {
+          setRating(data.averageRating);
+          setCount(data.totalRatings);
         }
       } catch {
         // Fallback to default state on network fail

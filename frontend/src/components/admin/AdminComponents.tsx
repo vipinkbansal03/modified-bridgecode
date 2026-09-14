@@ -1454,7 +1454,7 @@ export function AdminInput({
   };
 
   return (
-    <div className="space-y-1.5">
+    <div className={cn(label ? "space-y-1.5" : "")}>
       {label && (
         <label className="block text-[13px] font-medium text-[#1A1A1A]">
           {label}
@@ -1484,6 +1484,8 @@ interface AdminSelectProps extends React.SelectHTMLAttributes<HTMLSelectElement>
   label?: string;
   error?: string;
   options: { value: string; label: string }[];
+  maxMenuHeight?: number;
+  menuClassName?: string;
 }
 
 export function AdminSelect({
@@ -1491,6 +1493,8 @@ export function AdminSelect({
   error,
   options,
   className,
+  maxMenuHeight = 216,
+  menuClassName,
   ...props
 }: AdminSelectProps) {
   const { value, defaultValue, onChange, onBlur, disabled, name, id } = props;
@@ -1523,10 +1527,8 @@ export function AdminSelect({
     const spaceBelow = viewportHeight - rect.bottom - gap - edge;
     const spaceAbove = rect.top - gap - edge;
     const openUp = spaceBelow < 180 && spaceAbove > spaceBelow;
-    const maxHeight = Math.max(
-      160,
-      Math.min(320, openUp ? spaceAbove : spaceBelow),
-    );
+    const availableSpace = Math.max(120, openUp ? spaceAbove : spaceBelow);
+    const maxHeight = Math.min(maxMenuHeight, availableSpace);
     const longestLabel = options.reduce(
       (max, option) => Math.max(max, option.label.length),
       0,
@@ -1545,7 +1547,7 @@ export function AdminSelect({
       const top = rect.bottom + gap;
       setMenuStyle({ top, left, width, maxHeight });
     }
-  }, [options]);
+  }, [options, maxMenuHeight]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -1579,6 +1581,15 @@ export function AdminSelect({
     };
   }, [isOpen, updateMenuPosition]);
 
+  useEffect(() => {
+    if (isOpen && menuRef.current) {
+      const selectedEl = menuRef.current.querySelector('[aria-selected="true"]');
+      if (selectedEl && typeof (selectedEl as HTMLElement).scrollIntoView === "function") {
+        (selectedEl as HTMLElement).scrollIntoView({ block: "nearest" });
+      }
+    }
+  }, [isOpen]);
+
   const selectOption = (nextValue: string) => {
     setInternalValue(nextValue);
     setIsOpen(false);
@@ -1592,14 +1603,14 @@ export function AdminSelect({
   };
 
   return (
-    <div ref={rootRef} className="relative w-full min-w-[10rem] space-y-1.5">
+    <div ref={rootRef} className={cn("relative w-full min-w-[10rem]", label ? "space-y-1.5" : "")}>
       {label && (
         <label className="block text-[13px] font-medium text-[#1A1A1A]">
           {label}
           {props.required && <span className="text-[#E31E24] ml-1">*</span>}
         </label>
       )}
-      <input type="hidden" name={name} value={selectedValue} />
+      <input type="hidden" hidden name={name} value={selectedValue} />
       <button
         ref={buttonRef}
         id={id}
@@ -1631,7 +1642,10 @@ export function AdminSelect({
             <div
               ref={menuRef}
               role="listbox"
-              className="z-[100000] origin-top animate-admin-select-dropdown overflow-y-auto rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg"
+              className={cn(
+                "z-[100000] origin-top animate-admin-select-dropdown overflow-y-auto overscroll-contain custom-scrollbar rounded-md border border-[#E6E6E6] bg-white py-1 shadow-lg",
+                menuClassName,
+              )}
               style={{
                 position: "fixed",
                 top: menuStyle.top !== undefined ? menuStyle.top : "auto",

@@ -5,6 +5,7 @@ import { assertActiveCountry, assertSellableInCountry } from "../countries/count
 import { resolvePrice } from "../pricing/priceResolver.service";
 import { reserveOrderInventory, commitOrderReservation, releaseOrderReservation } from "../inventory/inventoryReservation.service";
 import { resolveItemFulfillmentWarehouse } from "../warehouse/warehouseResolver.service";
+import { sendOrderConfirmationEmail } from "../../utils/email";
 import Razorpay from "razorpay";
 
 export async function getAnalytics() {
@@ -344,6 +345,8 @@ export async function createAdminOrder(input: {
       currency: order.currency?.code || "INR",
       order_total: String(order.total),
       customerId: order.customerId || undefined,
+      email: order.customerEmail,
+      phone: order.customerPhone || undefined,
     }).catch(console.error);
   });
 
@@ -351,7 +354,7 @@ export async function createAdminOrder(input: {
 }
 
 export const updateStatus = async (id: string, status: string) => {
-  const existing = await prisma.order.findUnique({ where: { id }, include: { country: true, currency: true } });
+  const existing = await prisma.order.findUnique({ where: { id }, include: { items: true, country: true, currency: true } });
   if (!existing) throw new AppError("Order not found.", 404);
   
   const updated = await prisma.order.update({ where: { id }, data: { status: status as never } });
@@ -363,6 +366,28 @@ export const updateStatus = async (id: string, status: string) => {
   }
 
   if (existing.status !== status) {
+    if (status === "CONFIRMED") {
+      void sendOrderConfirmationEmail({
+        customerEmail: existing.customerEmail,
+        customerName: existing.customerName,
+        orderNumber: existing.orderNumber,
+        items: existing.items.map((it) => ({
+          title: it.title,
+          sku: it.sku || undefined,
+          quantity: it.quantity,
+          unitPrice: Number(it.unitPrice),
+          total: Number(it.total),
+        })),
+        subtotal: Number(existing.subtotal),
+        discount: Number(existing.discount || 0),
+        shippingCharge: Number(existing.shippingCharge || 0),
+        total: Number(existing.total),
+        currencySymbol: existing.currency?.symbol || "₹",
+        countryCode: existing.country?.code || undefined,
+        shippingAddress: existing.shippingAddress as Record<string, any> | null,
+      });
+    }
+
     import("../notifications/notifications.service").then(({ notificationsService }) => {
       if (status === "SHIPPED") {
         notificationsService.dispatchNotification("ORDER_SHIPPED", {
@@ -371,6 +396,18 @@ export const updateStatus = async (id: string, status: string) => {
           carrier_name: existing.shippingProvider || "Courier Partner",
           tracking_number: existing.trackingNumber || "N/A",
           customerId: existing.customerId || undefined,
+          email: existing.customerEmail,
+          phone: existing.customerPhone || undefined,
+        }).catch(console.error);
+      } else if (status === "CONFIRMED") {
+        notificationsService.dispatchNotification("ORDER_PLACED", {
+          order_number: existing.orderNumber,
+          customer_name: existing.customerName,
+          currency: existing.currency?.code || "INR",
+          order_total: String(existing.total),
+          customerId: existing.customerId || undefined,
+          email: existing.customerEmail,
+          phone: existing.customerPhone || undefined,
         }).catch(console.error);
       } else {
         notificationsService.createNotification({

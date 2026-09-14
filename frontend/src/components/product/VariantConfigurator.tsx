@@ -27,6 +27,7 @@ import { useProductWarehouses } from "@/hooks/api/useProducts";
 import { WarehouseSelectorModal } from "./WarehouseSelectorModal";
 import { DynamicVariantMatrixConfigurator } from "./DynamicVariantMatrixConfigurator";
 import { StockBadge } from "./StockBadge";
+import { WishlistButton } from "./WishlistButton";
 import type {
   ApiAttribute,
   ApiProductDetail,
@@ -1056,7 +1057,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                           type="button"
                           disabled={isSelectedOutOfStock}
                           onClick={handleAddConfiguration}
-                          className={`inline-flex items-center justify-center rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90 ${
+                          className={`inline-flex items-center justify-center rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90 cursor-pointer ${
                             isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
                           }`}
                         >
@@ -1066,7 +1067,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                           type="button"
                           disabled={isSelectedOutOfStock}
                           onClick={() => handleAddToCart(false)}
-                          className={`inline-flex items-center justify-center gap-2 rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-brand hover:bg-transparent hover:text-brand ${
+                          className={`inline-flex items-center justify-center gap-2 rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-brand hover:bg-transparent hover:text-brand cursor-pointer ${
                             isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
                           }`}
                         >
@@ -1077,51 +1078,65 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                           type="button"
                           disabled={isSelectedOutOfStock}
                           onClick={() => handleAddToCart(true)}
-                          className={`inline-flex items-center justify-center gap-2 rounded-pill bg-[#1a1a1a] px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-[#333] ${
+                          className={`inline-flex items-center justify-center gap-2 rounded-pill bg-[#1a1a1a] px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-[#333] cursor-pointer ${
                             isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
                           }`}
                         >
                           Buy Now
                         </button>
+                        <WishlistButton
+                          productId={apiProduct.id}
+                          showText={true}
+                          className="h-11 px-4 border border-line bg-white hover:border-[#E31E24] hover:text-[#E31E24] shadow-2xs text-[13px] cursor-pointer"
+                          iconSize={17}
+                        />
                       </>
                     );
                   }
 
                   return (
-                    <button
-                      type="button"
-                      disabled={isSelectedOutOfStock}
-                      onClick={() => {
-                        if (!currentVariant || isSelectedOutOfStock) return;
-                        const resolvedWh = resolveWarehouseForCart(currentVariant, quantity);
-                        addItems([
-                          {
-                            productId: apiProduct.id,
-                            productSlug: apiProduct.slug,
-                            productTitle: apiProduct.title,
-                            variantId: currentVariant.id,
-                            variantTitle: currentVariant.title,
-                            sku: currentVariant.sku,
-                            quantity,
-                            unitPrice: 0,
-                            currencyCode: selectedCurrency,
-                            currencySymbol: "$",
-                            selectedAttributes: selectedOptions,
-                            priceUnavailable: true,
-                            warehouseId: resolvedWh.finalWarehouseId,
-                            warehouseName: resolvedWh.finalWarehouseName,
-                            estimatedDeliveryDays: selectedWarehouse?.estimatedDeliveryDays,
-                            isLocalWarehouse: resolvedWh.finalIsLocal,
-                          },
-                        ]);
-                        openCart();
-                      }}
-                      className={`inline-flex items-center justify-center gap-2 rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90 ${
-                        isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
-                      }`}
-                    >
-                      {getButtonLabel("Request Quote (RFQ)")}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        disabled={isSelectedOutOfStock}
+                        onClick={() => {
+                          if (!currentVariant || isSelectedOutOfStock) return;
+                          const resolvedWh = resolveWarehouseForCart(currentVariant, quantity);
+                          addItems([
+                            {
+                              productId: apiProduct.id,
+                              productSlug: apiProduct.slug,
+                              productTitle: apiProduct.title,
+                              variantId: currentVariant.id,
+                              variantTitle: currentVariant.title,
+                              sku: currentVariant.sku,
+                              quantity,
+                              unitPrice: 0,
+                              currencyCode: selectedCurrency,
+                              currencySymbol: "$",
+                              selectedAttributes: selectedOptions,
+                              priceUnavailable: true,
+                              warehouseId: resolvedWh.finalWarehouseId,
+                              warehouseName: resolvedWh.finalWarehouseName,
+                              estimatedDeliveryDays: selectedWarehouse?.estimatedDeliveryDays,
+                              isLocalWarehouse: resolvedWh.finalIsLocal,
+                            },
+                          ]);
+                          openCart();
+                        }}
+                        className={`inline-flex items-center justify-center gap-2 rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90 cursor-pointer ${
+                          isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
+                        }`}
+                      >
+                        {getButtonLabel("Request Quote (RFQ)")}
+                      </button>
+                      <WishlistButton
+                        productId={apiProduct.id}
+                        showText={true}
+                        className="h-11 px-4 border border-line bg-white hover:border-[#E31E24] hover:text-[#E31E24] shadow-2xs text-[13px] cursor-pointer"
+                        iconSize={17}
+                      />
+                    </div>
                   );
                 })()}
               </div>

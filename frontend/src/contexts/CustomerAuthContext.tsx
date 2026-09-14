@@ -56,11 +56,25 @@ type RegisterPayload = {
   taxIdType?: string;
 };
 
+export interface OtpInitiateResponse {
+  requiresOtp: true;
+  verificationId: string;
+  maskedPhone: string;
+  cooldownSeconds: number;
+  debugOtp?: string;
+}
+
+export type LoginResult = { requiresOtp: false } | OtpInitiateResponse;
+
 interface CustomerAuthContextType {
   currentCustomer: CustomerSession | null;
   token: string | null;
   isLoading: boolean;
-  login: (email: string, password: string, redirectTo?: string) => Promise<void>;
+  login: (email: string, password: string, redirectTo?: string) => Promise<LoginResult>;
+  verifyLoginOtp: (verificationId: string, otp: string, redirectTo?: string) => Promise<void>;
+  initiateRegister: (payload: RegisterPayload) => Promise<OtpInitiateResponse>;
+  verifyRegisterOtp: (verificationId: string, otp: string, redirectTo?: string) => Promise<void>;
+  resendOtp: (verificationId: string) => Promise<{ verificationId: string; maskedPhone: string; cooldownSeconds: number; debugOtp?: string }>;
   register: (payload: RegisterPayload, redirectTo?: string) => Promise<void>;
   logout: () => void;
   setCustomer: (customer: CustomerSession) => void;
@@ -99,16 +113,52 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
       try {
         setToken(storedToken);
         setCurrentCustomer(JSON.parse(storedProfile) as CustomerSession);
+
+        customerApi
+          .get("/auth/me")
+          .then((res) => {
+            if (res.data?.data) {
+              setCurrentCustomer(res.data.data);
+              localStorage.setItem("customer_profile", JSON.stringify(res.data.data));
+            }
+          })
+          .catch((err) => {
+            if (err.response?.status === 401 || err.response?.status === 404) {
+              localStorage.removeItem("customer_token");
+              localStorage.removeItem("customer_profile");
+              setToken(null);
+              setCurrentCustomer(null);
+            }
+          });
       } catch {
         localStorage.removeItem("customer_token");
         localStorage.removeItem("customer_profile");
+        setToken(null);
+        setCurrentCustomer(null);
       }
     } else {
       localStorage.removeItem("customer_token");
       localStorage.removeItem("customer_profile");
+      setToken(null);
+      setCurrentCustomer(null);
     }
     setIsLoading(false);
   }, []);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      localStorage.removeItem("customer_token");
+      localStorage.removeItem("customer_profile");
+      setToken(null);
+      setCurrentCustomer(null);
+      router.push("/login");
+    };
+
+    window.addEventListener("customer:unauthorized", handleUnauthorized);
+    return () => {
+      window.removeEventListener("customer:unauthorized", handleUnauthorized);
+    };
+  }, [router]);
 
   const handleWishlistSync = async () => {
     try {
@@ -125,14 +175,49 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (email: string, password: string, redirectTo = "/") => {
+  const login = async (email: string, password: string, redirectTo = "/"): Promise<LoginResult> => {
     const res = await customerApi.post("/auth/login", { email, password });
+    const data = res.data.data;
+    if (data?.requiresOtp) {
+      return data as OtpInitiateResponse;
+    }
+    const { token: jwt, customer } = data as { token: string; customer: CustomerSession };
+    storeCustomerSession(jwt, customer);
+    setToken(jwt);
+    setCurrentCustomer(customer);
+    await handleWishlistSync();
+    router.push(redirectTo);
+    return { requiresOtp: false };
+  };
+
+  const verifyLoginOtp = async (verificationId: string, otp: string, redirectTo = "/") => {
+    const res = await customerApi.post("/auth/login/verify-otp", { verificationId, otp });
     const { token: jwt, customer } = res.data.data as { token: string; customer: CustomerSession };
     storeCustomerSession(jwt, customer);
     setToken(jwt);
     setCurrentCustomer(customer);
     await handleWishlistSync();
     router.push(redirectTo);
+  };
+
+  const initiateRegister = async (payload: RegisterPayload): Promise<OtpInitiateResponse> => {
+    const res = await customerApi.post("/auth/register/initiate", payload);
+    return res.data.data as OtpInitiateResponse;
+  };
+
+  const verifyRegisterOtp = async (verificationId: string, otp: string, redirectTo = "/") => {
+    const res = await customerApi.post("/auth/register/verify-otp", { verificationId, otp });
+    const { token: jwt, customer } = res.data.data as { token: string; customer: CustomerSession };
+    storeCustomerSession(jwt, customer);
+    setToken(jwt);
+    setCurrentCustomer(customer);
+    await handleWishlistSync();
+    router.push(redirectTo);
+  };
+
+  const resendOtp = async (verificationId: string) => {
+    const res = await customerApi.post("/auth/otp/resend", { verificationId });
+    return res.data.data as { verificationId: string; maskedPhone: string; cooldownSeconds: number; debugOtp?: string };
   };
 
   const register = async (payload: RegisterPayload, redirectTo = "/") => {
@@ -159,7 +244,21 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <CustomerAuthContext.Provider value={{ currentCustomer, token, isLoading, login, register, logout, setCustomer }}>
+    <CustomerAuthContext.Provider
+      value={{
+        currentCustomer,
+        token,
+        isLoading,
+        login,
+        verifyLoginOtp,
+        initiateRegister,
+        verifyRegisterOtp,
+        resendOtp,
+        register,
+        logout,
+        setCustomer,
+      }}
+    >
       {children}
     </CustomerAuthContext.Provider>
   );

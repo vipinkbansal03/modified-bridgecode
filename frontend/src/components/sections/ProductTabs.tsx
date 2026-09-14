@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import type { ProductDetail } from "@/types/product.types";
 import type { ApiProductDetail } from "@/types/api.types";
+import { fetchProductReviews } from "@/hooks/api/useProducts";
 
 interface ProductTabsProps {
   product: ProductDetail;
@@ -187,17 +188,13 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
     async function fetchReviews() {
       setLoadingReviews(true);
       try {
-        const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
-        const res = await fetch(`${API_BASE}/products/${product.slug}/reviews`);
-        if (res.ok) {
-          const json = await res.json();
-          if (json.data) {
-            setReviewsData({
-              reviews: json.data.reviews || [],
-              averageRating: json.data.averageRating ?? 5.0,
-              totalRatings: json.data.totalRatings ?? 0,
-            });
-          }
+        const data = await fetchProductReviews(product.slug);
+        if (data) {
+          setReviewsData({
+            reviews: (data.reviews as any) || [],
+            averageRating: data.averageRating ?? 5.0,
+            totalRatings: data.totalRatings ?? 0,
+          });
         }
       } catch {
         // Fallback silently

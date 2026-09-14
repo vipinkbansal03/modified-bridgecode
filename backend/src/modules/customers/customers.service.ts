@@ -245,8 +245,20 @@ export async function listCustomerAddresses(id: string) {
   });
 }
 
-export const deleteCustomer = (id: string) =>
-  prisma.customer.update({ where: { id }, data: { deletedAt: new Date() } });
+export const deleteCustomer = async (id: string) => {
+  const customer = await prisma.customer.update({
+    where: { id },
+    data: {
+      deletedAt: new Date(),
+      status: "INACTIVE",
+      refreshToken: null,
+    },
+  });
+
+  await prisma.deviceToken.deleteMany({ where: { customerId: id } }).catch(() => {});
+
+  return customer;
+};
 
 export async function restoreCustomer(id: string) {
   const customer = await prisma.customer.findUnique({

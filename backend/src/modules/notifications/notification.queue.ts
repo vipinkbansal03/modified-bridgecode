@@ -149,8 +149,26 @@ export const notificationWorker = new Worker(
         const waTemplate = options.whatsappTemplate;
         const variables = options.variables || [];
         const payloadData = options.payload || {};
+        const waProvider = ((await getSettingValue("whatsapp.provider")) || process.env.WHATSAPP_PROVIDER || "msg91").trim().toLowerCase();
 
-        if (waTemplate && waTemplate.name) {
+        if (waProvider === "msg91") {
+          const { sendMsg91WhatsAppTemplate, sendMsg91WhatsAppText } = await import("./msg91Provider");
+          if (waTemplate && waTemplate.name) {
+            const result = await sendMsg91WhatsAppTemplate(
+              to,
+              waTemplate.name,
+              waTemplate.language || "en",
+              variables,
+              payloadData
+            );
+            providerName = result.provider;
+            providerReferenceId = (result.response as any)?.messages?.[0]?.id || (result.response as any)?.request_id || `wa_${Date.now()}`;
+          } else {
+            const result = await sendMsg91WhatsAppText(to, message);
+            providerName = result.provider;
+            providerReferenceId = (result.response as any)?.request_id || `wa_${Date.now()}`;
+          }
+        } else if (waTemplate && waTemplate.name) {
           const { sendTataTemplateMessage } = await import("./tataProvider");
           const result = await sendTataTemplateMessage(
             to,
@@ -167,10 +185,17 @@ export const notificationWorker = new Worker(
           logger.info(`[WHATSAPP MOCK] No template configured. Mapped message: ${message}`);
         }
       } else if (type === "sms") {
-        // Mock SMS provider send
-        providerName = "sms-mock";
-        providerReferenceId = `sms_${Date.now()}`;
-        logger.info(`[SMS MOCK] Sending SMS to ${to} | Message: ${message}`);
+        const smsProvider = ((await getSettingValue("sms.provider")) || process.env.SMS_PROVIDER || "msg91").trim().toLowerCase();
+        if (smsProvider === "msg91") {
+          const { sendMsg91Sms } = await import("./msg91Provider");
+          const result = await sendMsg91Sms(to, message, options);
+          providerName = "msg91";
+          providerReferenceId = (result.response as any)?.request_id || (result.response as any)?.message || `sms_${Date.now()}`;
+        } else {
+          providerName = "sms-mock";
+          providerReferenceId = `sms_${Date.now()}`;
+          logger.info(`[SMS MOCK] Sending SMS to ${to} | Message: ${message}`);
+        }
       } else if (type === "push" || type === "in_app") {
         providerName = "fcm-sse";
         // Call in-app db notification

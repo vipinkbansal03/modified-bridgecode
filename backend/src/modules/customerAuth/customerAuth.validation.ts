@@ -71,8 +71,25 @@ export const updateCustomerProfileSchema = z.object({
   taxIdType: z.string().trim().nullable().optional(),
 });
 
+export const verifyLoginOtpSchema = z.object({
+  verificationId: z.string().min(1, "Verification ID is required"),
+  otp: z.string().trim().length(6, "OTP must be 6 digits"),
+});
+
+export const verifyRegisterOtpSchema = z.object({
+  verificationId: z.string().min(1, "Verification ID is required"),
+  otp: z.string().trim().length(6, "OTP must be 6 digits"),
+});
+
+export const resendOtpSchema = z.object({
+  verificationId: z.string().min(1, "Verification ID is required"),
+});
+
 export type CustomerRegisterInput = z.infer<typeof customerRegisterSchema>;
 export type CustomerLoginInput = z.infer<typeof customerLoginSchema>;
+export type VerifyLoginOtpInput = z.infer<typeof verifyLoginOtpSchema>;
+export type VerifyRegisterOtpInput = z.infer<typeof verifyRegisterOtpSchema>;
+export type ResendOtpInput = z.infer<typeof resendOtpSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 export type UpdateCustomerProfileInput = z.infer<typeof updateCustomerProfileSchema>;

@@ -21,9 +21,35 @@ export default function LogsPage() {
   ];
   return (
     <AdminLayout title="Activity Logs" breadcrumb={[{ label: "Logs" }]}>
-      <div className="mb-5 flex gap-2.5">
-        <div className="w-[200px]"><AdminSelect label="" options={[{ value: "", label: "All Entity Types" }, { value: "Product", label: "Product" }, { value: "Order", label: "Order" }, { value: "Quote", label: "Quote" }, { value: "User", label: "User" }]} value={entityType} onChange={(e) => setEntityType(e.target.value)} /></div>
-        <AdminInput className="w-[200px]" placeholder="Filter by action…" value={action} onChange={(e) => setAction(e.target.value)} />
+      <div className="mb-5 flex flex-wrap items-center gap-3">
+        <div className="w-[200px]">
+          <AdminSelect
+            options={[
+              { value: "", label: "All Entity Types" },
+              { value: "Product", label: "Product" },
+              { value: "Order", label: "Order" },
+              { value: "Quote", label: "Quote" },
+              { value: "User", label: "User" },
+            ]}
+            value={entityType}
+            onChange={(e) => {
+              setEntityType(e.target.value);
+              setPage(1);
+            }}
+            className="h-10 text-[13.5px]"
+          />
+        </div>
+        <div className="w-[220px]">
+          <AdminInput
+            placeholder="Filter by action…"
+            value={action}
+            onChange={(e) => {
+              setAction(e.target.value);
+              setPage(1);
+            }}
+            className="h-10 text-[13.5px]"
+          />
+        </div>
       </div>
       <DataTable<Log> columns={columns} data={data?.data || []} rowKey="id" isLoading={isLoading} emptyMessage="No activity logs yet." />
       <Pagination page={page} totalPages={data?.pagination?.totalPages || 1} onPageChange={setPage} />

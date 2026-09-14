@@ -204,15 +204,6 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             / {product.title}
           </nav>
 
-          <div className="mb-6 flex items-center justify-between border-b border-line pb-3">
-
-            <h6 className="text-[14.5px] font-medium text-ink">{product.title}</h6>
-            <div className="flex items-center gap-3">
-              {apiProduct?.id && <WishlistButton productId={apiProduct.id} />}
-              <ShareButton title={product.title} image={product.images?.[0]} />
-            </div>
-          </div>
-
           {/* Top Fold: Gallery Left, Header & Description Right */}
           <div className="grid grid-cols-1 gap-8 border-b border-line pb-8 sm:grid-cols-[1.1fr_1fr] items-start">
             <ProductGallery images={product.images} title={product.title} />
@@ -237,9 +228,10 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 </div>
               ) : null}
 
-              {/* Rating Header */}
-              <div className="mb-4 flex items-center gap-3">
+              {/* Rating & Share Header */}
+              <div className="mb-4 flex items-center justify-between gap-3 border-b border-line pb-3">
                 <ProductHeaderRating slug={product.slug} />
+                <ShareButton title={product.title} image={product.images?.[0]} />
               </div>
 
               {publicPrice ? (
@@ -285,7 +277,50 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 </div>
               )}
 
-              <div className="space-y-3">
+              {/* Primary Buy Box & Actions */}
+              {hasVariants ? (
+                <div className="my-5 rounded-2xl border border-line bg-[#FAFAFA] p-4 sm:p-5 space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <ConfigureButton label="Add to Cart" className="h-11 flex-1 min-w-[150px]" />
+                    {apiProduct?.id && (
+                      <WishlistButton
+                        productId={apiProduct.id}
+                        showText={true}
+                        className="h-11 px-5 border border-line bg-white hover:border-[#E31E24] hover:text-[#E31E24] shadow-2xs text-[13.5px] cursor-pointer"
+                        iconSize={18}
+                      />
+                    )}
+                  </div>
+                  <p className="text-[12.5px] text-steel flex items-center gap-1.5">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-brand shrink-0" />
+                    Select your preferred prescription, slot size, and package below to order.
+                  </p>
+                </div>
+              ) : (apiProduct?.prices?.length ?? 0) > 0 ? (
+                <div className="my-5 rounded-2xl border border-line bg-[#FAFAFA] p-4 sm:p-5">
+                  <BaseProductConfigurator apiProduct={apiProduct} />
+                </div>
+              ) : (
+                <div className="my-5 flex flex-wrap items-center gap-3">
+                  <a
+                    href="#configurator-section"
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-pill bg-brand px-6 text-[13.5px] font-semibold text-white shadow-sm transition hover:bg-brand/90"
+                  >
+                    Request Pricing
+                  </a>
+                  {apiProduct?.id && (
+                    <WishlistButton
+                      productId={apiProduct.id}
+                      showText={true}
+                      className="h-11 px-5 border border-line bg-white hover:border-[#E31E24] hover:text-[#E31E24] shadow-2xs text-[13.5px] cursor-pointer"
+                      iconSize={18}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Information & Specifications */}
+              <div className="space-y-3 pt-1">
                 <div>
                   <span className="mb-1 block text-xs uppercase tracking-wide text-steel-2 font-semibold">Information</span>
                   <p className="text-[14.5px] leading-relaxed text-steel">{product.information}</p>
@@ -297,28 +332,19 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 )}
                 <div className="flex flex-wrap items-center gap-3 pt-2">
                   <DownloadCatalogueButton catalogueUrl={product.catalogueUrl} title={product.title} />
-                  {hasVariants && (
-                    <ConfigureButton />
-                  )}
                   <ViewSpecsLink />
                 </div>
               </div>
-
-              {apiProduct && !hasVariants && (apiProduct.prices?.length ?? 0) > 0 && (
-                <div className="mt-8 pt-6 border-t border-line">
-                  <BaseProductConfigurator apiProduct={apiProduct} />
-                </div>
-              )}
             </div>
           </div>
 
-          {/* Variant Configurator Flow (First: Configurator / Matrix / Inquiry) */}
+          {/* Variant Configurator Flow / Inquiry */}
           <div id="configurator-section">
             {hasVariants ? (
               <VariantConfigurator apiProduct={apiProduct} />
-            ) : (
+            ) : (apiProduct?.prices?.length ?? 0) === 0 ? (
               <SimpleInquiryPanel product={product} productId={apiProduct?.id} />
-            )}
+            ) : null}
           </div>
 
           {/* Full Width Horizontal Tabs Section (Second) */}

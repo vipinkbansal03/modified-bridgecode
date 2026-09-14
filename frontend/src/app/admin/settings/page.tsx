@@ -238,12 +238,15 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
   "auth.login_slide_2_sub_heading": { group: "auth", type: "string" },
   "auth.login_slides":              { group: "auth", type: "json" },
   // WhatsApp
+  "whatsapp.provider":                { group: "whatsapp", type: "string" },
   "whatsapp.number":                  { group: "whatsapp", type: "string" },
   "whatsapp.default_message":         { group: "whatsapp", type: "string" },
   "whatsapp.floating_button_enabled": { group: "whatsapp", type: "boolean" },
   "whatsapp.enabled":                 { group: "whatsapp", type: "boolean" },
+  "whatsapp.msg91_auth_key":          { group: "whatsapp", type: "secret", isSecret: true },
+  "whatsapp.msg91_integrated_number": { group: "whatsapp", type: "string" },
   "whatsapp.tata_base_url":           { group: "whatsapp", type: "string" },
-  "whatsapp.tata_sender":            { group: "whatsapp", type: "string" },
+  "whatsapp.tata_sender":             { group: "whatsapp", type: "string" },
   "whatsapp.tata_bearer_token":       { group: "whatsapp", type: "secret", isSecret: true },
   // Email
   "email.enabled":                 { group: "email", type: "boolean" },
@@ -264,11 +267,15 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
   "email.smtp_secure":             { group: "email", type: "boolean" },
   "email.resend_api_key":          { group: "email", type: "secret", isSecret: true },
   // SMS Settings
-  "sms.enabled":             { group: "sms", type: "boolean" },
-  "sms.provider":            { group: "sms", type: "string" },
-  "sms.twilio_account_sid":  { group: "sms", type: "string" },
-  "sms.twilio_auth_token":   { group: "sms", type: "secret", isSecret: true },
-  "sms.twilio_phone":        { group: "sms", type: "string" },
+  "sms.enabled":              { group: "sms", type: "boolean" },
+  "sms.provider":             { group: "sms", type: "string" },
+  "sms.msg91_auth_key":       { group: "sms", type: "secret", isSecret: true },
+  "sms.msg91_sender_id":      { group: "sms", type: "string" },
+  "sms.msg91_otp_template_id": { group: "sms", type: "string" },
+  "sms.msg91_flow_id":        { group: "sms", type: "string" },
+  "sms.twilio_account_sid":   { group: "sms", type: "string" },
+  "sms.twilio_auth_token":    { group: "sms", type: "secret", isSecret: true },
+  "sms.twilio_phone":         { group: "sms", type: "string" },
   // Payments
   "payment.razorpay_enabled":    { group: "payments", type: "boolean" },
   "payment.razorpay_key_id":     { group: "payments", type: "string" },
@@ -1411,28 +1418,50 @@ export default function SettingsPage() {
                 </FieldRow>
 
                 <div className="mt-8 pt-6 border-t border-[#E6E6E6]">
-                  <h3 className="text-[14.5px] font-semibold text-[#1A1A1A] mb-4">WhatsApp Notification Service Settings (Tata BSP)</h3>
+                  <h3 className="text-[14.5px] font-semibold text-[#1A1A1A] mb-4">WhatsApp Notification Service Settings</h3>
                   
                   <FieldRow label="Enable WhatsApp Notifications">
                     <div className="flex items-center gap-3">
                       <Toggle value={b("whatsapp.enabled")} onChange={(v) => tog("whatsapp.enabled", v)} />
                       <span className="text-[13px] text-[#6B6B6B]">
-                        {b("whatsapp.enabled") ? "Active (Sends transaction alerts via Tata Telecom BSP)" : "Disabled"}
+                        {b("whatsapp.enabled") ? "Active (Sends transaction alerts to customers)" : "Disabled"}
                       </span>
                     </div>
                   </FieldRow>
 
-                  <FieldRow label="Tata Base URL">
-                    <AdminInput value={g("whatsapp.tata_base_url")} onChange={(e) => set("whatsapp.tata_base_url", e.target.value)} placeholder="https://wb.omni.tatatelebusiness.com" />
+                  <FieldRow label="Active WhatsApp Provider">
+                    <AdminSelect
+                      value={g("whatsapp.provider") || "msg91"}
+                      onChange={(e) => set("whatsapp.provider", e.target.value)}
+                      options={[
+                        { value: "msg91", label: "MSG91 WhatsApp (Recommended)" },
+                        { value: "tata", label: "Tata Tele Business (Tata BSP)" },
+                      ]}
+                    />
                   </FieldRow>
 
-                  <FieldRow label="Tata Sender / Bot ID">
-                    <AdminInput value={g("whatsapp.tata_sender")} onChange={(e) => set("whatsapp.tata_sender", e.target.value)} placeholder="1073459305848682" />
-                  </FieldRow>
-
-                  <FieldRow label="Tata Bearer Token">
-                    <SecretInput value={g("whatsapp.tata_bearer_token")} onChange={(v) => set("whatsapp.tata_bearer_token", v)} />
-                  </FieldRow>
+                  {(g("whatsapp.provider") === "msg91" || !g("whatsapp.provider")) ? (
+                    <>
+                      <FieldRow label="MSG91 AuthKey" hint="Leave blank to automatically use the MSG91 AuthKey configured under Email / SMTP">
+                        <SecretInput value={g("whatsapp.msg91_auth_key")} onChange={(v) => set("whatsapp.msg91_auth_key", v)} placeholder="Inherited from Email MSG91 AuthKey if blank" />
+                      </FieldRow>
+                      <FieldRow label="MSG91 WhatsApp Integrated Number" hint="Registered WhatsApp business phone number with country code (e.g. 919240213800)">
+                        <AdminInput value={g("whatsapp.msg91_integrated_number")} onChange={(e) => set("whatsapp.msg91_integrated_number", e.target.value)} placeholder="919240213800" />
+                      </FieldRow>
+                    </>
+                  ) : (
+                    <>
+                      <FieldRow label="Tata Base URL">
+                        <AdminInput value={g("whatsapp.tata_base_url")} onChange={(e) => set("whatsapp.tata_base_url", e.target.value)} placeholder="https://wb.omni.tatatelebusiness.com" />
+                      </FieldRow>
+                      <FieldRow label="Tata Sender / Bot ID">
+                        <AdminInput value={g("whatsapp.tata_sender")} onChange={(e) => set("whatsapp.tata_sender", e.target.value)} placeholder="1073459305848682" />
+                      </FieldRow>
+                      <FieldRow label="Tata Bearer Token">
+                        <SecretInput value={g("whatsapp.tata_bearer_token")} onChange={(v) => set("whatsapp.tata_bearer_token", v)} />
+                      </FieldRow>
+                    </>
+                  )}
                 </div>
               </div>
             )}

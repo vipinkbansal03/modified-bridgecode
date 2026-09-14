@@ -9,6 +9,7 @@ import { useCart } from "@/contexts/CartContext";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { StockBadge } from "./StockBadge";
 import { QuantityInput } from "./QuantityInput";
+import { WishlistButton } from "./WishlistButton";
 import type { ApiProductDetail } from "@/types/api.types";
 
 interface BaseProductConfiguratorProps {
@@ -190,11 +191,11 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
         </div>
       )}
 
-      <div className="flex gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={() => handleAddToCart(false)}
           disabled={isOutOfStock || isAdding}
-          className="flex flex-1 items-center justify-center gap-2 rounded-pill bg-[#1a1a1a] px-4 py-2.5 text-[13.5px] font-semibold text-white transition hover:bg-[#333] disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex flex-1 min-w-[130px] h-11 items-center justify-center gap-2 rounded-pill bg-[#1a1a1a] px-5 text-[13.5px] font-semibold text-white transition hover:bg-[#333] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-sm"
         >
           <ShoppingBag size={16} />
           {isAdding ? "Adding..." : "Add to Cart"}
@@ -202,10 +203,16 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
         <button
           onClick={() => handleAddToCart(true)}
           disabled={isOutOfStock || isAdding}
-          className="flex flex-1 items-center justify-center rounded-pill bg-brand px-4 py-2.5 text-[13.5px] font-semibold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex flex-1 min-w-[110px] h-11 items-center justify-center rounded-pill bg-brand px-5 text-[13.5px] font-semibold text-white transition hover:bg-brand/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-sm"
         >
           Buy Now
         </button>
+        <WishlistButton
+          productId={apiProduct.id}
+          showText={true}
+          className="h-11 px-5 border border-line bg-white hover:border-[#E31E24] hover:text-[#E31E24] shadow-2xs text-[13.5px] cursor-pointer"
+          iconSize={18}
+        />
       </div>
     </div>
   );

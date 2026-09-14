@@ -3,6 +3,9 @@ import { asyncHandler, ApiResponse, AppError } from "../../utils/apiResponse";
 import {
   customerLoginSchema,
   customerRegisterSchema,
+  verifyLoginOtpSchema,
+  verifyRegisterOtpSchema,
+  resendOtpSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
   updateCustomerProfileSchema,
@@ -16,10 +19,34 @@ export const register = asyncHandler(async (req: CustomerAuthRequest, res: Respo
   return ApiResponse.created(res, "Customer registered successfully.", result);
 });
 
+export const initiateRegister = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
+  const input = customerRegisterSchema.parse(req.body);
+  const result = await CustomerAuthService.initiateRegister(input);
+  return ApiResponse.success(res, "OTP sent to mobile number.", result);
+});
+
+export const verifyRegisterOtp = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
+  const input = verifyRegisterOtpSchema.parse(req.body);
+  const result = await CustomerAuthService.verifyRegisterOtp(input);
+  return ApiResponse.created(res, "Registration completed successfully.", result);
+});
+
 export const login = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
   const input = customerLoginSchema.parse(req.body);
   const result = await CustomerAuthService.login(input);
+  return ApiResponse.success(res, "Login processed.", result);
+});
+
+export const verifyLoginOtp = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
+  const input = verifyLoginOtpSchema.parse(req.body);
+  const result = await CustomerAuthService.verifyLoginOtp(input);
   return ApiResponse.success(res, "Logged in successfully.", result);
+});
+
+export const resendOtp = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
+  const input = resendOtpSchema.parse(req.body);
+  const result = await CustomerAuthService.resendAuthOtp(input);
+  return ApiResponse.success(res, "OTP resent successfully.", result);
 });
 
 export const forgotPassword = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {

@@ -437,11 +437,17 @@ export default function QuoteDetailPage() {
             />
             {isConverted && <p className="text-[12.5px] text-[#9A9A9A]">This quote has already been converted to an order, so its status is locked.</p>}
             <button
-              onClick={() => updateStatus({ id: quote.id, status: newStatus }, { onSuccess: () => setNewStatus("") })}
-              disabled={isConverted || isPending || !newStatus || newStatus === quote.status || !canUpdate}
+              onClick={() => {
+                if (newStatus === "CONVERTED") {
+                  approveAndConvert();
+                } else {
+                  updateStatus({ id: quote.id, status: newStatus }, { onSuccess: () => setNewStatus("") });
+                }
+              }}
+              disabled={isConverted || isPending || convertQuote.isPending || updateReview.isPending || !newStatus || newStatus === quote.status || !canUpdate}
               className="w-full rounded-md bg-[#111] px-4 py-2.5 text-[13.5px] font-medium text-white hover:bg-[#222] disabled:opacity-50 transition-all"
             >
-              {isConverted ? "Status Locked" : !canUpdate ? "No Edit Permission" : isPending ? "Saving..." : "Update Status"}
+              {isConverted ? "Status Locked" : !canUpdate ? "No Edit Permission" : (isPending || convertQuote.isPending || updateReview.isPending) ? "Saving..." : "Update Status"}
             </button>
           </div>
 

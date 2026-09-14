@@ -591,6 +591,8 @@ export async function listProducts(query: ProductListQuery) {
       ? [{ status: sortDir as Prisma.SortOrder }, { createdAt: "desc" }]
       : sortBy === "updatedAt"
       ? [{ updatedAt: sortDir as Prisma.SortOrder }]
+      : sortBy === "createdAt"
+      ? [{ createdAt: sortDir as Prisma.SortOrder }]
       : sortBy === "category"
       ? [{ category: { name: sortDir as Prisma.SortOrder } }, { createdAt: "desc" }]
       : isDeleted

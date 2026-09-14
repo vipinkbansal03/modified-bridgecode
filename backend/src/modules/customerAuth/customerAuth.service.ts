@@ -10,9 +10,13 @@ import {
   ensureCustomerRoleByKey,
   mapLegacyCustomerTypeToRoleKey,
 } from "../customerRoles/customerRoles.service";
+import { createAndSendOtp, verifyOtpCode, resendOtp } from "./otp.service";
 import type {
   CustomerLoginInput,
   CustomerRegisterInput,
+  VerifyLoginOtpInput,
+  VerifyRegisterOtpInput,
+  ResendOtpInput,
   ForgotPasswordInput,
   ResetPasswordInput,
   UpdateCustomerProfileInput,
@@ -182,6 +186,16 @@ export async function register(input: CustomerRegisterInput) {
       },
     });
 
+    await tx.quote.updateMany({
+      where: {
+        customerId: null,
+        customerEmail: { equals: normalizedEmail, mode: "insensitive" },
+      },
+      data: {
+        customerId: createdCustomer.id,
+      },
+    });
+
     return createdCustomer;
   });
 
@@ -198,10 +212,57 @@ export async function register(input: CustomerRegisterInput) {
     }).catch(console.error);
   });
 
+  prisma.activityLog
+    .create({
+      data: {
+        action: "CUSTOMER_REGISTERED",
+        entityType: "User",
+        entityId: customer.id,
+        metadata: { email: customer.email, firstName: customer.firstName, lastName: customer.lastName },
+      },
+    })
+    .catch(() => {});
+
   return { token, customer: toCustomerSession(customer) };
 }
 
-export async function login(input: CustomerLoginInput) {
+export async function initiateRegister(input: CustomerRegisterInput) {
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const existing = await prisma.customer.findFirst({ where: { email: normalizedEmail, deletedAt: null } });
+  if (existing) throw new AppError("A customer account with this email already exists.", 409);
+
+  const country = await resolveCountry(input.country);
+  if (!country) throw new AppError("The selected country is not available.", 400);
+
+  if (input.taxId) {
+    const nextTaxId = input.taxId.trim();
+    if (nextTaxId) {
+      const nextType = input.taxIdType || "GSTIN";
+      if (nextType === "GSTIN") {
+        const gstResult = await validateGstinWithApi(nextTaxId);
+        if (!gstResult.valid) {
+          throw new AppError(gstResult.message || "Invalid GSTIN format or verification failed.", 400);
+        }
+      }
+    }
+  }
+
+  const result = await createAndSendOtp(input.phone, "REGISTER", input);
+  return {
+    requiresOtp: true,
+    ...result,
+  };
+}
+
+export async function verifyRegisterOtp(input: VerifyRegisterOtpInput) {
+  const session = await verifyOtpCode(input.verificationId, input.otp, "REGISTER");
+  if (!session.payload) {
+    throw new AppError("Registration payload missing from verification session.", 400);
+  }
+  return register(session.payload as CustomerRegisterInput);
+}
+
+export async function initiateLogin(input: CustomerLoginInput) {
   const normalizedEmail = input.email.trim().toLowerCase();
   const customer = await prisma.customer.findFirst({
     where: { email: normalizedEmail, deletedAt: null },
@@ -217,8 +278,50 @@ export async function login(input: CustomerLoginInput) {
     throw new AppError("Your customer account is inactive.", 401);
   }
 
+  if (!customer.phone) {
+    const token = signCustomerToken(customer.id);
+    return {
+      requiresOtp: false,
+      token,
+      customer: toCustomerSession(customer),
+    };
+  }
+
+  const result = await createAndSendOtp(customer.phone, "LOGIN", { customerId: customer.id });
+  return {
+    requiresOtp: true,
+    ...result,
+  };
+}
+
+export async function verifyLoginOtp(input: VerifyLoginOtpInput) {
+  const session = await verifyOtpCode(input.verificationId, input.otp, "LOGIN");
+  const customerId = session.payload?.customerId;
+  if (!customerId) {
+    throw new AppError("Customer session invalid.", 400);
+  }
+
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId, deletedAt: null },
+    include: {
+      customerRole: { select: { id: true, key: true, name: true } },
+    },
+  });
+
+  if (!customer || customer.status !== "ACTIVE") {
+    throw new AppError("Your customer account is inactive or no longer exists.", 401);
+  }
+
   const token = signCustomerToken(customer.id);
   return { token, customer: toCustomerSession(customer) };
+}
+
+export async function resendAuthOtp(input: ResendOtpInput) {
+  return resendOtp(input.verificationId);
+}
+
+export async function login(input: CustomerLoginInput) {
+  return initiateLogin(input);
 }
 
 export async function forgotPassword(input: ForgotPasswordInput) {

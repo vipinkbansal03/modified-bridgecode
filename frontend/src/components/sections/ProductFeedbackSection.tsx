@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Star, MessageSquarePlus, X, Copy, Check, Send, LogIn, Lock } from "lucide-react";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
+import { submitProductReview } from "@/hooks/api/useProducts";
 import type { ProductDetail } from "@/types/product.types";
 
 interface ProductFeedbackSectionProps {
@@ -48,37 +49,26 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
     setErrorMessage(null);
 
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
-      const res = await fetch(`${API_BASE}/products/${product.slug}/reviews`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customerName: customerName || "Verified Buyer",
-          customerEmail: currentCustomer.email || "",
-          ratingQuality: qualityRating,
-          ratingPrice: priceRating,
-          ratingOverall: overallRating,
-          feedbackText: feedbackText.trim(),
-        }),
+      const data = await submitProductReview(product.slug || product.productCode || "", {
+        customerName: customerName || "Verified Buyer",
+        customerEmail: currentCustomer.email || "",
+        ratingQuality: qualityRating,
+        ratingPrice: priceRating,
+        ratingOverall: overallRating,
+        feedbackText: feedbackText.trim(),
       });
 
-      if (res.ok) {
-        const json = await res.json();
-        setSubmittedSuccess(true);
-        if (json.data?.averageRating !== undefined && json.data?.totalRatings !== undefined) {
-          onRatingUpdate?.(json.data.averageRating, json.data.totalRatings);
-        }
-        setTimeout(() => {
-          setIsOpen(false);
-          setSubmittedSuccess(false);
-          setFeedbackText("");
-        }, 2000);
-      } else {
-        const errJson = await res.json().catch(() => null);
-        setErrorMessage(errJson?.message || "Failed to submit feedback. Please try again.");
+      setSubmittedSuccess(true);
+      if (data?.averageRating !== undefined && data?.totalRatings !== undefined) {
+        onRatingUpdate?.(data.averageRating, data.totalRatings);
       }
-    } catch {
-      setErrorMessage("Submission error. Please check connection.");
+      setTimeout(() => {
+        setIsOpen(false);
+        setSubmittedSuccess(false);
+        setFeedbackText("");
+      }, 2500);
+    } catch (err: any) {
+      setErrorMessage(err?.message || "Failed to submit feedback. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -182,12 +172,19 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
                 <p className="text-[13.5px] text-[#4B5563]">Your valuable feedback has been submitted and is pending admin approval.</p>
               </div>
             ) : errorMessage ? (
-              <div className="my-8 text-center space-y-2">
+              <div className="my-8 text-center space-y-3">
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#FEF3C7] text-[#D97706]">
                   <MessageSquarePlus size={24} />
                 </div>
                 <h4 className="text-[16px] font-bold text-[#111827]">Notice</h4>
                 <p className="text-[13.5px] text-[#4B5563]">{errorMessage}</p>
+                <button
+                  type="button"
+                  onClick={() => setErrorMessage(null)}
+                  className="mt-2 inline-flex items-center rounded-xl bg-[#F3F4F6] px-4 py-2 text-[13px] font-semibold text-[#374151] hover:bg-[#E5E7EB] transition-colors"
+                >
+                  Try Again
+                </button>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">

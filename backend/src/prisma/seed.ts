@@ -1843,9 +1843,16 @@ async function main() {
       type: "json",
     },
     // WhatsApp
+    { key: "whatsapp.provider", value: "msg91", group: "whatsapp", label: "Active WhatsApp Provider (msg91 / tata / twilio)", type: "string" },
     { key: "whatsapp.number", value: "", group: "whatsapp", label: "WhatsApp Number (international format)", type: "string" },
     { key: "whatsapp.default_message", value: "Hello, I have a question about your products.", group: "whatsapp", label: "Default Message", type: "string" },
     { key: "whatsapp.floating_button_enabled", value: "false", group: "whatsapp", label: "Show Floating WhatsApp Button", type: "boolean" },
+    { key: "whatsapp.msg91_integrated_number", value: "", group: "whatsapp", label: "MSG91 WhatsApp Integrated Number", type: "string" },
+    // SMS
+    { key: "sms.provider", value: "msg91", group: "sms", label: "Active SMS Provider (msg91 / twilio / mock)", type: "string" },
+    { key: "sms.enabled", value: "true", group: "sms", label: "Enable SMS Verification & Notifications", type: "boolean" },
+    { key: "sms.msg91_sender_id", value: "", group: "sms", label: "MSG91 DLT Sender ID", type: "string" },
+    { key: "sms.msg91_otp_template_id", value: "", group: "sms", label: "MSG91 OTP Template ID", type: "string" },
     // Email
     { key: "email.provider", value: "msg91", group: "email", label: "Email Provider (msg91 / nodemailer / resend)", type: "string" },
     { key: "email.enabled", value: "true", group: "email", label: "Enable Outgoing Emails", type: "boolean" },

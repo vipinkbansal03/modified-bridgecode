@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { Reveal } from "@/components/ui/Reveal";
 import { WORLD_MAP_PATH } from "@/data/worldMapPath";
@@ -9,7 +11,7 @@ import type { LocationPin } from "@/types/common.types";
 import type { StaticMessageKey } from "@/i18n/staticMessages";
 
 interface LocationsSectionProps {
-  data: { subtitle: string; pins: LocationPin[] };
+  data: { subtitle: string; href?: string; pins: LocationPin[] };
 }
 
 const pinColor: Record<LocationPin["category"], string> = {
@@ -58,14 +60,18 @@ export function LocationsSection({ data }: LocationsSectionProps) {
   );
 
   return (
-    <section className="border-t border-line py-6 lg:py-[34px] bg-white">
+    <section id="locations" className="border-t border-line py-6 lg:py-[34px] bg-white">
       <Container>
         <Reveal>
           <div className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-4">
             <h2 className="leading-[1.2] text-[clamp(28px,3.4vw,40px)] font-light text-ink">{t("ui.home.ourLocations")}</h2>
-            <span className="text-sm text-steel">
-              {data.subtitle === "Find us around the globe" ? t("ui.home.findUsAroundGlobe") : data.subtitle}
-            </span>
+            <Link
+              href={data.href || "/contact"}
+              className="group inline-flex items-center gap-1.5 text-sm font-medium text-steel transition-colors hover:text-brand"
+            >
+              <span>{data.subtitle === "Find us around the globe" ? t("ui.home.findUsAroundGlobe") : data.subtitle}</span>
+              <ArrowRight size={15} className="transition-transform group-hover:translate-x-1 text-steel group-hover:text-brand" />
+            </Link>
           </div>
 
           <div className="relative mt-2.5 w-full max-w-[760px] mx-auto">
@@ -79,6 +85,7 @@ export function LocationsSection({ data }: LocationsSectionProps) {
                 aria-label={locationLabel(pin)}
                 onMouseEnter={() => setActiveId(pin.id)}
                 onFocus={() => setActiveId(pin.id)}
+                onClick={() => setActiveId(pin.id)}
                 className="absolute -translate-x-1/2 -translate-y-full cursor-pointer border-none bg-transparent p-0 transition-transform hover:scale-[1.18]"
                 style={{
                   left: `${pin.xPct}%`,
@@ -93,12 +100,14 @@ export function LocationsSection({ data }: LocationsSectionProps) {
             ))}
 
             {active && (
-              <div
-                className="pointer-events-none absolute -translate-x-1/2 -translate-y-[120%] rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink shadow-md"
+              <Link
+                href={data.href || "/contact"}
+                className="group absolute -translate-x-1/2 -translate-y-[120%] flex items-center gap-1.5 rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink shadow-md transition-all hover:border-brand hover:shadow-lg"
                 style={{ left: `${active.xPct}%`, top: `${active.yPct}%` }}
               >
-                {locationLabel(active)}
-              </div>
+                <span>{locationLabel(active)}</span>
+                <ArrowRight size={12} className="text-steel transition-transform group-hover:translate-x-0.5 group-hover:text-brand" />
+              </Link>
             )}
           </div>
 

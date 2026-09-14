@@ -626,6 +626,203 @@ export async function sendQuoteNotification(data: QuoteEmailData & { countryCode
   });
 }
 
+export interface OrderConfirmationEmailItem {
+  title: string;
+  sku?: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+export interface OrderConfirmationEmailData {
+  customerEmail: string;
+  customerName: string;
+  orderNumber: string;
+  quoteNumber?: string;
+  items?: OrderConfirmationEmailItem[];
+  subtotal: number;
+  discount?: number;
+  shippingCharge?: number;
+  total: number;
+  currencySymbol?: string;
+  countryCode?: string;
+  shippingAddress?: Record<string, any> | null;
+}
+
+export async function sendOrderConfirmationEmail(data: OrderConfirmationEmailData): Promise<void> {
+  const sym = data.currencySymbol || "₹";
+  const formatAmt = (n: number) => `${sym}${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const itemsList = (data.items || []).map((item) => {
+    const sku = item.sku ? ` [${item.sku}]` : "";
+    return `  • ${item.title}${sku} × ${item.quantity} @ ${formatAmt(item.unitPrice)} = ${formatAmt(item.total)}`;
+  }).join("\n");
+
+  const address = data.shippingAddress || {};
+  const addressParts = [
+    address.fullName || address.name,
+    address.addressLine1 || address.street || address.address,
+    address.addressLine2,
+    [address.city, address.state, address.postalCode || address.zip].filter(Boolean).join(", "),
+    address.countryCode || address.country,
+  ].filter(Boolean);
+
+  const addressText = addressParts.length > 0 ? `\nShipping Address:\n${addressParts.join("\n")}\n` : "";
+
+  const textContent = [
+    `Dear ${data.customerName},`,
+    "",
+    `Thank you for your order! Your order #${data.orderNumber} has been officially confirmed.`,
+    data.quoteNumber ? `Converted from Quote: ${data.quoteNumber}` : "",
+    "",
+    itemsList ? "Order Items:\n" + itemsList + "\n" : "",
+    `Subtotal: ${formatAmt(data.subtotal)}`,
+    data.discount ? `Discount: -${formatAmt(data.discount)}` : "",
+    data.shippingCharge ? `Shipping: ${formatAmt(data.shippingCharge)}` : "",
+    `Total Amount: ${formatAmt(data.total)}`,
+    addressText,
+    "You can review your order status and details anytime in your customer account dashboard:",
+    `${process.env.FRONTEND_URL || "http://localhost:3000"}/account/orders`,
+    "",
+    "Best regards,",
+    "Modern Orthodontics Team",
+  ].filter(Boolean).join("\n");
+
+  const itemRowsHtml = (data.items && data.items.length > 0)
+    ? data.items.map((item) => `
+      <tr>
+        <td style="padding: 10px 12px; border-bottom: 1px solid #f4f4f5; font-size: 13.5px; color: #18181b;">
+          <strong>${item.title}</strong>${item.sku ? `<br/><span style="font-size: 11.5px; color: #71717a; font-family: monospace;">SKU: ${item.sku}</span>` : ""}
+        </td>
+        <td style="padding: 10px 12px; border-bottom: 1px solid #f4f4f5; font-size: 13.5px; color: #18181b; text-align: center;">
+          ${item.quantity}
+        </td>
+        <td style="padding: 10px 12px; border-bottom: 1px solid #f4f4f5; font-size: 13.5px; color: #18181b; text-align: right;">
+          ${formatAmt(item.unitPrice)}
+        </td>
+        <td style="padding: 10px 12px; border-bottom: 1px solid #f4f4f5; font-size: 13.5px; font-weight: 600; color: #18181b; text-align: right;">
+          ${formatAmt(item.total)}
+        </td>
+      </tr>
+    `).join("")
+    : `<tr><td colspan="4" style="padding: 12px; text-align: center; color: #71717a; font-size: 13px;">Total: ${formatAmt(data.total)}</td></tr>`;
+
+  const addressHtml = addressParts.length > 0 ? `
+    <div style="margin-top: 24px; padding: 16px; background-color: #fcfcfc; border: 1px solid #e4e4e7; border-radius: 8px;">
+      <h4 style="margin: 0 0 8px; font-size: 12.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #71717a;">Shipping Address</h4>
+      <p style="margin: 0; font-size: 13.5px; line-height: 20px; color: #27272a;">${addressParts.join("<br/>")}</p>
+    </div>
+  ` : "";
+
+  const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Order Confirmation #${data.orderNumber}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #18181b;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f4f4f5; padding: 32px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e4e4e7; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+          <tr>
+            <td style="padding: 24px 32px; background-color: #ffffff; border-bottom: 2px solid #E31E24;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <span style="font-size: 19px; font-weight: 800; color: #E31E24; letter-spacing: -0.5px;">MODERN ORTHODONTICS</span>
+                  </td>
+                  <td align="right">
+                    <span style="display: inline-block; padding: 4px 10px; background-color: #dcfce7; color: #15803d; font-size: 12px; font-weight: 700; border-radius: 9999px;">CONFIRMED</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 32px;">
+              <h2 style="margin: 0 0 8px; font-size: 20px; font-weight: 700; color: #09090b;">Order Confirmation</h2>
+              <p style="margin: 0 0 20px; font-size: 14px; color: #71717a;">
+                Order <strong style="color: #18181b;">#${data.orderNumber}</strong>${data.quoteNumber ? ` (from Quote ${data.quoteNumber})` : ""}
+              </p>
+
+              <p style="margin: 0 0 20px; font-size: 14.5px; line-height: 22px; color: #3f3f46;">
+                Dear <strong>${data.customerName}</strong>,<br/>
+                Thank you for your order! Your order has been officially confirmed and is now being processed by our team.
+              </p>
+
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 20px 0; border: 1px solid #e4e4e7; border-radius: 8px; overflow: hidden;">
+                <thead style="background-color: #f9fafb;">
+                  <tr>
+                    <th style="padding: 10px 12px; font-size: 11.5px; font-weight: 600; text-transform: uppercase; color: #71717a; text-align: left; border-bottom: 1px solid #e4e4e7;">Product</th>
+                    <th style="padding: 10px 12px; font-size: 11.5px; font-weight: 600; text-transform: uppercase; color: #71717a; text-align: center; border-bottom: 1px solid #e4e4e7;">Qty</th>
+                    <th style="padding: 10px 12px; font-size: 11.5px; font-weight: 600; text-transform: uppercase; color: #71717a; text-align: right; border-bottom: 1px solid #e4e4e7;">Price</th>
+                    <th style="padding: 10px 12px; font-size: 11.5px; font-weight: 600; text-transform: uppercase; color: #71717a; text-align: right; border-bottom: 1px solid #e4e4e7;">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${itemRowsHtml}
+                </tbody>
+              </table>
+
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-top: 12px;">
+                <tr>
+                  <td style="padding: 4px 0; font-size: 13.5px; color: #71717a;">Subtotal</td>
+                  <td style="padding: 4px 0; font-size: 13.5px; font-weight: 500; color: #18181b; text-align: right;">${formatAmt(data.subtotal)}</td>
+                </tr>
+                ${data.discount ? `
+                <tr>
+                  <td style="padding: 4px 0; font-size: 13.5px; color: #16a34a;">Discount</td>
+                  <td style="padding: 4px 0; font-size: 13.5px; font-weight: 500; color: #16a34a; text-align: right;">-${formatAmt(data.discount)}</td>
+                </tr>` : ""}
+                ${data.shippingCharge ? `
+                <tr>
+                  <td style="padding: 4px 0; font-size: 13.5px; color: #71717a;">Shipping</td>
+                  <td style="padding: 4px 0; font-size: 13.5px; font-weight: 500; color: #18181b; text-align: right;">${formatAmt(data.shippingCharge)}</td>
+                </tr>` : ""}
+                <tr>
+                  <td style="padding: 10px 0 0; font-size: 16px; font-weight: 700; color: #09090b; border-top: 1px solid #e4e4e7;">Grand Total</td>
+                  <td style="padding: 10px 0 0; font-size: 17px; font-weight: 800; color: #E31E24; text-align: right; border-top: 1px solid #e4e4e7;">${formatAmt(data.total)}</td>
+                </tr>
+              </table>
+
+              ${addressHtml}
+
+              <div style="margin-top: 32px; text-align: center;">
+                <a href="${process.env.FRONTEND_URL || "http://localhost:3000"}/account/orders" target="_blank" style="display: inline-block; padding: 13px 32px; background-color: #E31E24; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
+                  View Order in Dashboard
+                </a>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 20px 32px; background-color: #fafafa; border-top: 1px solid #f4f4f5; text-align: center;">
+              <p style="margin: 0 0 4px; font-size: 12.5px; color: #71717a;">
+                Need assistance? Contact our team at <a href="mailto:orders@modortho.com" style="color: #2563eb; text-decoration: none;">orders@modortho.com</a>
+              </p>
+              <p style="margin: 0; font-size: 11.5px; color: #a1a1aa;">
+                &copy; Modern Orthodontics. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  await sendEmailSafely({
+    category: "orders",
+    countryCode: data.countryCode,
+    to: [data.customerEmail],
+    subject: `Order Confirmation — #${data.orderNumber}`,
+    text: textContent,
+    html: htmlContent,
+  });
+}
+
 export async function sendQuoteConvertedEmail(data: {
   customerEmail: string;
   customerName: string;
@@ -633,25 +830,26 @@ export async function sendQuoteConvertedEmail(data: {
   orderNumber: string;
   total: number;
   countryCode?: string;
+  items?: OrderConfirmationEmailItem[];
+  subtotal?: number;
+  discount?: number;
+  shippingCharge?: number;
+  currencySymbol?: string;
+  shippingAddress?: Record<string, any> | null;
 }): Promise<void> {
-  await sendEmailSafely({
-    category: "quotes",
+  await sendOrderConfirmationEmail({
+    customerEmail: data.customerEmail,
+    customerName: data.customerName,
+    orderNumber: data.orderNumber,
+    quoteNumber: data.quoteNumber,
+    items: data.items,
+    subtotal: data.subtotal ?? data.total,
+    discount: data.discount,
+    shippingCharge: data.shippingCharge,
+    total: data.total,
+    currencySymbol: data.currencySymbol,
+    shippingAddress: data.shippingAddress,
     countryCode: data.countryCode,
-    to: [data.customerEmail],
-    subject: `Your quote was approved - ${data.quoteNumber}`,
-    text: [
-      `Dear ${data.customerName},`,
-      "",
-      "Your quote has been approved and converted into an order.",
-      "",
-      `Quote Reference: ${data.quoteNumber}`,
-      `Order Number: ${data.orderNumber}`,
-      `Order Total: ${formatCurrency(data.total)}`,
-      "",
-      "Our team will follow up with the next steps.",
-      "",
-      "Modern Orthodontics Team",
-    ].join("\n"),
   });
 }
 

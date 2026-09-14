@@ -624,10 +624,10 @@ export default function MediaLibraryPanel({ mode = "select", value = "", initial
         {/* Right: Details Panel */}
         {detailsOpen && (
           <div
-            className={`bg-white p-4 rounded-xl border border-[#E6E6E6] shadow-xs flex flex-col gap-4 ${
+            className={`bg-white p-4 rounded-xl border border-[#E6E6E6] shadow-xs flex flex-col ${
               mode === "select"
-                ? "md:col-span-6 lg:col-span-6 xl:col-span-6"
-                : "xl:col-span-5 2xl:col-span-4 xl:sticky xl:top-6"
+                ? "md:col-span-6 lg:col-span-6 xl:col-span-6 md:sticky md:top-0 md:max-h-[calc(80vh-2rem)]"
+                : "xl:col-span-5 2xl:col-span-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-6rem)] max-h-[85vh]"
             }`}
           >
             {!selectedMedia ? (
@@ -641,7 +641,7 @@ export default function MediaLibraryPanel({ mode = "select", value = "", initial
             ) : (
               <>
                 {/* Header */}
-                <div className="flex items-center justify-between border-b border-[#F0F0F0] pb-3">
+                <div className="flex items-center justify-between border-b border-[#F0F0F0] pb-3 shrink-0">
                   <h3 className="text-[14px] font-bold text-[#1A1A1A]">Media Details</h3>
                   <div className="flex items-center gap-1.5">
                     <button
@@ -678,100 +678,113 @@ export default function MediaLibraryPanel({ mode = "select", value = "", initial
                   </div>
                 </div>
 
-                {/* Preview Box */}
-                <div className="aspect-16/10 w-full rounded-lg bg-[#F8F8F8] border border-[#E6E6E6] flex items-center justify-center overflow-hidden p-2">
-                  {isImage(selectedMedia) ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={selectedMedia.url}
-                      alt={selectedMedia.altText || selectedMedia.title || selectedMedia.originalName}
-                      className="max-h-full max-w-full object-contain"
-                    />
-                  ) : isVideo(selectedMedia) ? (
-                    <div className="flex flex-col items-center justify-center gap-2 text-[#9A9A9A]">
-                      <Video size={36} />
-                      <span className="text-[11px] font-semibold text-[#6B6B6B] truncate max-w-[200px]">
-                        {selectedMedia.originalName}
+                {/* Form with scrollable content and pinned actions */}
+                <form onSubmit={handleSaveDetails} className="flex flex-col flex-1 min-h-0">
+                  {/* Scrollable Content Area */}
+                  <div className="flex-1 overflow-y-auto overscroll-contain pr-1.5 pt-3.5 pb-1 space-y-3.5">
+                    {/* Preview Box */}
+                    <div className="aspect-16/10 w-full rounded-lg bg-[#F8F8F8] border border-[#E6E6E6] flex items-center justify-center overflow-hidden p-2 shrink-0">
+                      {isImage(selectedMedia) ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={selectedMedia.url}
+                          alt={selectedMedia.altText || selectedMedia.title || selectedMedia.originalName}
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      ) : isVideo(selectedMedia) ? (
+                        <div className="flex flex-col items-center justify-center gap-2 text-[#9A9A9A]">
+                          <Video size={36} />
+                          <span className="text-[11px] font-semibold text-[#6B6B6B] truncate max-w-[200px]">
+                            {selectedMedia.originalName}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center gap-2 text-[#9A9A9A]">
+                          <FileText size={36} />
+                          <span className="text-[11px] font-semibold text-[#6B6B6B] truncate max-w-[200px]">
+                            {selectedMedia.originalName}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Metadata Summary */}
+                    <div className="flex flex-col gap-1.5 text-[12.5px] text-[#4A4A4A] py-1 border-b border-[#F0F0F0]">
+                      <div><strong className="text-[#1A1A1A]">Name:</strong> <span className="text-[#6B6B6B] break-all">{selectedMedia.originalName}</span></div>
+                      <div><strong className="text-[#1A1A1A]">Type:</strong> <span className="text-[#6B6B6B]">{selectedMedia.type.toLowerCase()}</span></div>
+                      <div><strong className="text-[#1A1A1A]">Format:</strong> <span className="text-[#6B6B6B]">{getFormat(selectedMedia)}</span></div>
+                      <div><strong className="text-[#1A1A1A]">Size:</strong> <span className="text-[#6B6B6B]">{formatBytes(selectedMedia.size)}</span></div>
+                      <div><strong className="text-[#1A1A1A]">Added:</strong> <span className="text-[#6B6B6B]">{formatDate(selectedMedia.createdAt)}</span></div>
+                      {selectedMedia.width && selectedMedia.height ? (
+                        <div><strong className="text-[#1A1A1A]">Dimensions:</strong> <span className="text-[#6B6B6B]">{selectedMedia.width} × {selectedMedia.height} px</span></div>
+                      ) : null}
+                    </div>
+
+                    {/* Editable Metadata Fields */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-1">
+                        TITLE
+                      </label>
+                      <input
+                        type="text"
+                        value={meta.title}
+                        onChange={(e) => setMeta((prev) => ({ ...prev, title: e.target.value }))}
+                        placeholder="Display title"
+                        className="w-full h-9 px-3 rounded-md border border-[#E6E6E6] bg-white text-[13px] text-[#1A1A1A] focus:border-[#E31E24] focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-1">
+                        ALT TEXT
+                      </label>
+                      <input
+                        type="text"
+                        value={meta.altText}
+                        onChange={(e) => setMeta((prev) => ({ ...prev, altText: e.target.value }))}
+                        placeholder="Required for images"
+                        className="w-full h-9 px-3 rounded-md border border-[#E6E6E6] bg-white text-[13px] text-[#1A1A1A] focus:border-[#E31E24] focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-1">
+                        DESCRIPTION
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={meta.description}
+                        onChange={(e) => setMeta((prev) => ({ ...prev, description: e.target.value }))}
+                        placeholder="Optional notes or description"
+                        className="w-full p-2.5 rounded-md border border-[#E6E6E6] bg-white text-[13px] text-[#1A1A1A] focus:border-[#E31E24] focus:outline-none resize-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-1">
+                        TAGS
+                      </label>
+                      <input
+                        type="text"
+                        value={meta.tags}
+                        onChange={(e) => setMeta((prev) => ({ ...prev, tags: e.target.value }))}
+                        placeholder="hair, case-study, before-after"
+                        className="w-full h-9 px-3 rounded-md border border-[#E6E6E6] bg-white text-[13px] text-[#1A1A1A] focus:border-[#E31E24] focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Admin Note */}
+                    <div className="flex items-start gap-2 p-2.5 rounded-lg bg-[#FAFAFA] border border-[#EEEEEE] text-[11.5px] text-[#6B6B6B] leading-relaxed">
+                      <ImageIcon size={14} className="shrink-0 mt-0.5 text-[#9A9A9A]" />
+                      <span>
+                        Admin delete can remove this media even if references still exist in website content,
+                        SEO, or CMS blocks.
                       </span>
                     </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center gap-2 text-[#9A9A9A]">
-                      <FileText size={36} />
-                      <span className="text-[11px] font-semibold text-[#6B6B6B] truncate max-w-[200px]">
-                        {selectedMedia.originalName}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Metadata Summary */}
-                <div className="flex flex-col gap-1.5 text-[12.5px] text-[#4A4A4A] py-1 border-b border-[#F0F0F0]">
-                  <div><strong className="text-[#1A1A1A]">Name:</strong> <span className="text-[#6B6B6B] break-all">{selectedMedia.originalName}</span></div>
-                  <div><strong className="text-[#1A1A1A]">Type:</strong> <span className="text-[#6B6B6B]">{selectedMedia.type.toLowerCase()}</span></div>
-                  <div><strong className="text-[#1A1A1A]">Format:</strong> <span className="text-[#6B6B6B]">{getFormat(selectedMedia)}</span></div>
-                  <div><strong className="text-[#1A1A1A]">Size:</strong> <span className="text-[#6B6B6B]">{formatBytes(selectedMedia.size)}</span></div>
-                  <div><strong className="text-[#1A1A1A]">Added:</strong> <span className="text-[#6B6B6B]">{formatDate(selectedMedia.createdAt)}</span></div>
-                  {selectedMedia.width && selectedMedia.height ? (
-                    <div><strong className="text-[#1A1A1A]">Dimensions:</strong> <span className="text-[#6B6B6B]">{selectedMedia.width} × {selectedMedia.height} px</span></div>
-                  ) : null}
-                </div>
-
-                {/* Editable Metadata Form */}
-                <form onSubmit={handleSaveDetails} className="flex flex-col gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-1">
-                      TITLE
-                    </label>
-                    <input
-                      type="text"
-                      value={meta.title}
-                      onChange={(e) => setMeta((prev) => ({ ...prev, title: e.target.value }))}
-                      placeholder="Display title"
-                      className="w-full h-9 px-3 rounded-md border border-[#E6E6E6] bg-white text-[13px] text-[#1A1A1A] focus:border-[#E31E24] focus:outline-none"
-                    />
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-1">
-                      ALT TEXT
-                    </label>
-                    <input
-                      type="text"
-                      value={meta.altText}
-                      onChange={(e) => setMeta((prev) => ({ ...prev, altText: e.target.value }))}
-                      placeholder="Required for images"
-                      className="w-full h-9 px-3 rounded-md border border-[#E6E6E6] bg-white text-[13px] text-[#1A1A1A] focus:border-[#E31E24] focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-1">
-                      DESCRIPTION
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={meta.description}
-                      onChange={(e) => setMeta((prev) => ({ ...prev, description: e.target.value }))}
-                      placeholder="Optional notes or description"
-                      className="w-full p-2.5 rounded-md border border-[#E6E6E6] bg-white text-[13px] text-[#1A1A1A] focus:border-[#E31E24] focus:outline-none resize-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-1">
-                      TAGS
-                    </label>
-                    <input
-                      type="text"
-                      value={meta.tags}
-                      onChange={(e) => setMeta((prev) => ({ ...prev, tags: e.target.value }))}
-                      placeholder="hair, case-study, before-after"
-                      className="w-full h-9 px-3 rounded-md border border-[#E6E6E6] bg-white text-[13px] text-[#1A1A1A] focus:border-[#E31E24] focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex flex-col gap-2.5 pt-2 border-t border-[#F0F0F0]">
+                  {/* Pinned Actions Footer */}
+                  <div className="shrink-0 pt-3 border-t border-[#F0F0F0] bg-white flex flex-col gap-2.5">
                     {canEdit && (
                       <button
                         type="submit"
@@ -809,15 +822,6 @@ export default function MediaLibraryPanel({ mode = "select", value = "", initial
                     </div>
                   </div>
                 </form>
-
-                {/* Admin Note */}
-                <div className="flex items-start gap-2 p-2.5 rounded-lg bg-[#FAFAFA] border border-[#EEEEEE] text-[11.5px] text-[#6B6B6B] leading-relaxed">
-                  <ImageIcon size={14} className="shrink-0 mt-0.5 text-[#9A9A9A]" />
-                  <span>
-                    Admin delete can remove this media even if references still exist in website content,
-                    SEO, or CMS blocks.
-                  </span>
-                </div>
               </>
             )}
           </div>

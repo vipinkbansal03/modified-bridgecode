@@ -3,16 +3,103 @@ import { asyncHandler, ApiResponse } from "../../utils/apiResponse";
 import { AuthRequest } from "../../middleware/auth.middleware";
 import * as S from "./orders.service";
 import { generateInvoice } from "./invoice.service";
+import { prisma } from "../../config/database";
 
 export const list = asyncHandler(async (req: AuthRequest, res: Response) => { const r = await S.listOrders(req.query as never); return ApiResponse.paginated(res, "Orders.", r.data, { page: r.page, limit: r.limit, total: r.total }); });
-export const create = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.created(res, "Order created.", await S.createAdminOrder(req.body)));
+
+export const create = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const order = await S.createAdminOrder(req.body);
+  await prisma.activityLog.create({
+    data: {
+      userId: req.user?.id,
+      action: "ORDER_CREATED",
+      entityType: "Order",
+      entityId: order.id,
+      ipAddress: req.ip,
+      metadata: { orderNumber: order.orderNumber, total: order.total },
+    },
+  }).catch(() => {});
+  return ApiResponse.created(res, "Order created.", order);
+});
+
 export const getOne = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Order.", await S.getOrder(String(req.params.id))));
-export const updateStatus = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Updated.", await S.updateStatus(String(req.params.id), req.body.status)));
-export const updatePayment = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Updated.", await S.updatePaymentStatus(String(req.params.id), req.body.paymentStatus)));
-export const updateShipping = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Updated.", await S.updateShipping(String(req.params.id), req.body)));
-export const ship = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Order marked as shipped.", await S.shipOrder(String(req.params.id), req.body)));
-export const deliver = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Order marked as delivered.", await S.deliverOrder(String(req.params.id))));
+
+export const updateStatus = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const updated = await S.updateStatus(String(req.params.id), req.body.status);
+  await prisma.activityLog.create({
+    data: {
+      userId: req.user?.id,
+      action: `ORDER_STATUS_${req.body.status || "UPDATED"}`,
+      entityType: "Order",
+      entityId: String(req.params.id),
+      ipAddress: req.ip,
+      metadata: { status: req.body.status },
+    },
+  }).catch(() => {});
+  return ApiResponse.success(res, "Updated.", updated);
+});
+
+export const updatePayment = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const updated = await S.updatePaymentStatus(String(req.params.id), req.body.paymentStatus);
+  await prisma.activityLog.create({
+    data: {
+      userId: req.user?.id,
+      action: `ORDER_PAYMENT_${req.body.paymentStatus || "UPDATED"}`,
+      entityType: "Order",
+      entityId: String(req.params.id),
+      ipAddress: req.ip,
+      metadata: { paymentStatus: req.body.paymentStatus },
+    },
+  }).catch(() => {});
+  return ApiResponse.success(res, "Updated.", updated);
+});
+
+export const updateShipping = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const updated = await S.updateShipping(String(req.params.id), req.body);
+  await prisma.activityLog.create({
+    data: {
+      userId: req.user?.id,
+      action: "ORDER_SHIPPING_UPDATED",
+      entityType: "Order",
+      entityId: String(req.params.id),
+      ipAddress: req.ip,
+      metadata: req.body,
+    },
+  }).catch(() => {});
+  return ApiResponse.success(res, "Updated.", updated);
+});
+
+export const ship = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const order = await S.shipOrder(String(req.params.id), req.body);
+  await prisma.activityLog.create({
+    data: {
+      userId: req.user?.id,
+      action: "ORDER_SHIPPED",
+      entityType: "Order",
+      entityId: String(req.params.id),
+      ipAddress: req.ip,
+      metadata: req.body,
+    },
+  }).catch(() => {});
+  return ApiResponse.success(res, "Order marked as shipped.", order);
+});
+
+export const deliver = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const order = await S.deliverOrder(String(req.params.id));
+  await prisma.activityLog.create({
+    data: {
+      userId: req.user?.id,
+      action: "ORDER_DELIVERED",
+      entityType: "Order",
+      entityId: String(req.params.id),
+      ipAddress: req.ip,
+    },
+  }).catch(() => {});
+  return ApiResponse.success(res, "Order marked as delivered.", order);
+});
+
 export const analytics = asyncHandler(async (_req: AuthRequest, res: Response) => ApiResponse.success(res, "Analytics.", await S.getAnalytics()));
+
 export const invoice = asyncHandler(async (req: AuthRequest, res: Response) => {
   const id = String(req.params.id);
   const { buffer, filename } = await generateInvoice(id);
@@ -24,26 +111,72 @@ export const invoice = asyncHandler(async (req: AuthRequest, res: Response) => {
 export const refundCancelledOrder = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { refundMethod, transactionReference } = req.body;
   const result = await S.refundCancelledOrder(String(req.params.id), refundMethod, transactionReference);
+  await prisma.activityLog.create({
+    data: {
+      userId: req.user?.id,
+      action: "ORDER_REFUNDED",
+      entityType: "Order",
+      entityId: String(req.params.id),
+      ipAddress: req.ip,
+      metadata: { refundMethod, transactionReference },
+    },
+  }).catch(() => {});
   return ApiResponse.success(res, "Cancelled order refund processed successfully.", result);
 });
 
 export const softDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
   const result = await S.softDeleteOrder(String(req.params.id));
+  await prisma.activityLog.create({
+    data: {
+      userId: req.user?.id,
+      action: "ORDER_ARCHIVED",
+      entityType: "Order",
+      entityId: String(req.params.id),
+      ipAddress: req.ip,
+    },
+  }).catch(() => {});
   return ApiResponse.success(res, "Order soft-deleted successfully.", result);
 });
 
 export const restore = asyncHandler(async (req: AuthRequest, res: Response) => {
   const result = await S.restoreOrder(String(req.params.id));
+  await prisma.activityLog.create({
+    data: {
+      userId: req.user?.id,
+      action: "ORDER_RESTORED",
+      entityType: "Order",
+      entityId: String(req.params.id),
+      ipAddress: req.ip,
+    },
+  }).catch(() => {});
   return ApiResponse.success(res, "Order restored successfully.", result);
 });
 
 export const permanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
   const result = await S.permanentDeleteOrder(String(req.params.id));
+  await prisma.activityLog.create({
+    data: {
+      userId: req.user?.id,
+      action: "ORDER_DELETED",
+      entityType: "Order",
+      entityId: String(req.params.id),
+      ipAddress: req.ip,
+    },
+  }).catch(() => {});
   return ApiResponse.success(res, "Test order permanently deleted successfully.", result);
 });
 
 export const bulkPermanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
   const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
   const result = await S.bulkPermanentDeleteOrders(ids);
+  await prisma.activityLog.create({
+    data: {
+      userId: req.user?.id,
+      action: "ORDERS_BULK_DELETED",
+      entityType: "Order",
+      ipAddress: req.ip,
+      metadata: { count: ids.length, ids },
+    },
+  }).catch(() => {});
   return ApiResponse.success(res, "Bulk permanent delete processed.", result);
 });

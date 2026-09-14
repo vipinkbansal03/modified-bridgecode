@@ -104,6 +104,8 @@ app.get("/health", (_req, res) => {
 
 // ─── Public API Routes (no auth) ─────────────────────────
 app.use("/api", publicRoutes);
+app.use("/api/customer", publicRoutes);
+app.use(publicRoutes);
 app.use("/api", paymentMethodsRoutes);
 app.use("/api/settings", settingsRoutes); // public tracking/robots/sitemap sub-routes
 

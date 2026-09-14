@@ -5,7 +5,7 @@ import { getPagination } from "../../utils/apiResponse";
 export async function listLogs(query: { page?: string; limit?: string; entityType?: string; action?: string }) {
   const { page, limit, skip } = getPagination(query);
   const where: Prisma.ActivityLogWhereInput = {
-    ...(query.entityType ? { entityType: query.entityType } : {}),
+    ...(query.entityType ? { entityType: { equals: query.entityType, mode: "insensitive" } } : {}),
     ...(query.action ? { action: { contains: query.action, mode: "insensitive" } } : {}),
   };
 

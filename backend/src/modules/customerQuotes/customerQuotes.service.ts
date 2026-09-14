@@ -17,7 +17,7 @@ export async function listCustomerQuotes(customerId: string) {
     where: {
       OR: [
         { customerId: customer.id },
-        { customerEmail: { equals: customer.email, mode: "insensitive" } },
+        { customerId: null, customerEmail: { equals: customer.email, mode: "insensitive" } },
       ],
       AND: [
         {
@@ -60,7 +60,7 @@ export async function getCustomerQuote(customerId: string, quoteId: string) {
       id: quoteId,
       OR: [
         { customerId: customer.id },
-        { customerEmail: { equals: customer.email, mode: "insensitive" } },
+        { customerId: null, customerEmail: { equals: customer.email, mode: "insensitive" } },
       ],
       AND: [
         {

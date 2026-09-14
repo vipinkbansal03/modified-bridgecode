@@ -8,6 +8,8 @@ const router = Router();
 router.get("/", protect, requirePermission("settings.manage"), C.get);
 router.put("/", protect, requirePermission("settings.manage"), C.upsertMany);
 router.post("/test-email", protect, requirePermission("settings.manage"), C.testEmail);
+router.post("/test-sms", protect, requirePermission("settings.manage"), C.testSms);
+router.post("/test-whatsapp", protect, requirePermission("settings.manage"), C.testWhatsapp);
 
 // Public routes (no auth — mounted under /api/settings in app.ts)
 router.get("/public/tracking", C.publicTracking);

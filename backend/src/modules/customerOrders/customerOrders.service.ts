@@ -597,8 +597,19 @@ export async function createCustomerOrder(
       currency: createdOrder.currency?.code || "INR",
       order_total: String(createdOrder.total),
       customerId: createdOrder.customerId || undefined,
+      email: createdOrder.customerEmail,
+      phone: createdOrder.customerPhone || undefined,
     }).catch(console.error);
   });
+
+  await prisma.activityLog.create({
+    data: {
+      action: "ORDER_PLACED",
+      entityType: "Order",
+      entityId: createdOrder.id,
+      metadata: { orderNumber: createdOrder.orderNumber, total: createdOrder.total },
+    },
+  }).catch(() => {});
 
   return createdOrder;
 }

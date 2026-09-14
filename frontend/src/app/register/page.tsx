@@ -20,6 +20,7 @@ import {
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { getCustomerErrorMessage } from "@/services/customerApi";
 import PhoneInputField from "@/components/ui/PhoneInput";
+import OtpVerificationModal from "@/components/auth/OtpVerificationModal";
 import { isValidPhoneNumber } from "react-phone-number-input";
 import { useCountries } from "@/hooks/api/useCurrencies";
 import { worldCountries } from "@/data/world-countries";
@@ -158,8 +159,14 @@ function RadioOption({
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { register } = useCustomerAuth();
+  const { initiateRegister, verifyRegisterOtp, resendOtp } = useCustomerAuth();
   const [returnTo, setReturnTo] = useState("/");
+  const [otpSession, setOtpSession] = useState<{
+    verificationId: string;
+    maskedPhone: string;
+    cooldownSeconds?: number;
+    debugOtp?: string;
+  } | null>(null);
 
   useEffect(() => {
     const next = new URLSearchParams(window.location.search).get("returnTo");
@@ -209,60 +216,71 @@ export default function RegisterPage() {
       helpers.setStatus("");
       try { 
         const { firstName, lastName } = splitName(values.name);
-        await register(
-          {
-            firstName,
-            lastName,
-            email: values.email,
-            password: values.password,
-            phone: values.mobile,
-            customerType: values.customerType as CustomerType,
-            companyName: values.companyName,
-            website: values.website,
-            addressLine1: values.address,
-            addressLine2: values.addressLine2,
-            city: values.city,
-            state: values.state,
-            postalCode: values.zipcode,
-            country: values.country,
-            preferredPrescription: values.preferredPrescription as
-              | "MBT"
-              | "ROTH"
-              | "OTHER",
-            preferredPrescriptionOther: values.preferredPrescriptionOther,
-            preferredSlot: values.preferredSlot as "022" | "018",
-            currentPractice: values.currentPractice as
-              | "STUDENT"
-              | "ORTHODONTIST"
-              | "OTHER",
-            currentPracticeOther: values.currentPracticeOther,
-            usingModernProducts: values.usingModernProducts === "YES",
-            taxId: values.taxId || undefined,
-            taxIdType: values.taxIdType || undefined,
-          },
-          returnTo,
-        );
+        const result = await initiateRegister({
+          firstName,
+          lastName,
+          email: values.email,
+          password: values.password,
+          phone: values.mobile,
+          customerType: values.customerType as CustomerType,
+          companyName: values.companyName,
+          website: values.website,
+          addressLine1: values.address,
+          addressLine2: values.addressLine2,
+          city: values.city,
+          state: values.state,
+          postalCode: values.zipcode,
+          country: values.country,
+          preferredPrescription: values.preferredPrescription as
+            | "MBT"
+            | "ROTH"
+            | "OTHER",
+          preferredPrescriptionOther: values.preferredPrescriptionOther,
+          preferredSlot: values.preferredSlot as "022" | "018",
+          currentPractice: values.currentPractice as
+            | "STUDENT"
+            | "ORTHODONTIST"
+            | "OTHER",
+          currentPracticeOther: values.currentPracticeOther,
+          usingModernProducts: values.usingModernProducts === "YES",
+          taxId: values.taxId || undefined,
+          taxIdType: values.taxIdType || undefined,
+        });
 
-        if (values.subscribeNewsletter) {
-          localStorage.setItem("newsletter_subscribed", "true");
-          localStorage.removeItem("show_newsletter_signup_modal_once");
-          try {
-            await apiClient.post("/newsletter/subscribe", { email: values.email });
-          } catch (subscribeErr) {
-            console.error("Newsletter registration subscribe error:", subscribeErr);
-          }
-        } else {
-          localStorage.setItem("show_newsletter_signup_modal_once", "true");
+        if (result?.requiresOtp) {
+          setOtpSession({
+            verificationId: result.verificationId,
+            maskedPhone: result.maskedPhone,
+            cooldownSeconds: result.cooldownSeconds,
+            debugOtp: result.debugOtp,
+          });
         }
       } catch (error) {
         helpers.setStatus(
-          getCustomerErrorMessage(error, "Could not create account."),
+          getCustomerErrorMessage(error, "Registration failed. Please check your information."),
         );
       } finally {
         helpers.setSubmitting(false);
       }
     },
   });
+
+  const handleVerifyOtpSuccess = async (otp: string) => {
+    if (!otpSession) return;
+    await verifyRegisterOtp(otpSession.verificationId, otp, returnTo);
+    if (formik.values.subscribeNewsletter) {
+      localStorage.setItem("newsletter_subscribed", "true");
+      localStorage.removeItem("show_newsletter_signup_modal_once");
+      try {
+        await apiClient.post("/newsletter/subscribe", { email: formik.values.email });
+      } catch (subscribeErr) {
+        console.error("Newsletter registration subscribe error:", subscribeErr);
+      }
+    } else {
+      localStorage.setItem("show_newsletter_signup_modal_once", "true");
+    }
+    setOtpSession(null);
+  };
 
   useEffect(() => {
     const found = activeCountries.find((c) => c.name === formik.values.country);
@@ -766,6 +784,23 @@ export default function RegisterPage() {
           </form>
         </div>
       </section>
+
+      {otpSession && (
+        <OtpVerificationModal
+          open={!!otpSession}
+          onClose={() => setOtpSession(null)}
+          maskedPhone={otpSession.maskedPhone}
+          debugOtp={otpSession.debugOtp}
+          initialCooldown={otpSession.cooldownSeconds || 60}
+          title="Verify Your Mobile Number"
+          subtitle="Please enter the 6-digit verification code sent to your mobile number to complete registration."
+          onVerify={handleVerifyOtpSuccess}
+          onResend={async () => {
+            const res = await resendOtp(otpSession.verificationId);
+            return res;
+          }}
+        />
+      )}
     </main>
   );
 }

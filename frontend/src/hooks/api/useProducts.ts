@@ -243,3 +243,46 @@ export function useProductWarehouses(slug: string, variantId?: string, state?: s
     staleTime: STALE.short,
   });
 }
+
+// ─── Product Reviews ──────────────────────────────────────
+
+export interface ProductReviewItem {
+  id: string;
+  customerName?: string | null;
+  customerEmail?: string | null;
+  ratingQuality: number;
+  ratingPrice: number;
+  ratingOverall: number;
+  feedbackText?: string | null;
+  status: string;
+  createdAt: string;
+}
+
+export interface ProductReviewsData {
+  reviews: ProductReviewItem[];
+  averageRating: number;
+  totalRatings: number;
+}
+
+export interface SubmitProductReviewPayload {
+  customerName?: string;
+  customerEmail?: string;
+  ratingQuality?: number;
+  ratingPrice?: number;
+  ratingOverall?: number;
+  feedbackText?: string;
+}
+
+export async function fetchProductReviews(slug: string): Promise<ProductReviewsData> {
+  const res = await apiClient.get(`/products/${encodeURIComponent(slug)}/reviews`);
+  return unwrapData<ProductReviewsData>(res);
+}
+
+export async function submitProductReview(
+  slug: string,
+  payload: SubmitProductReviewPayload,
+): Promise<{ review: ProductReviewItem; averageRating: number; totalRatings: number }> {
+  const res = await apiClient.post(`/products/${encodeURIComponent(slug)}/reviews`, payload);
+  return unwrapData<{ review: ProductReviewItem; averageRating: number; totalRatings: number }>(res);
+}
+

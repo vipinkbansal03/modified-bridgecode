@@ -50,9 +50,11 @@ couponApi.interceptors.request.use((config) => {
 customerApi.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401 && typeof window !== "undefined") {
+    const isLoginEndpoint = err.config?.url?.includes("/auth/login");
+    if (err.response?.status === 401 && !isLoginEndpoint && typeof window !== "undefined") {
       localStorage.removeItem("customer_token");
       localStorage.removeItem("customer_profile");
+      window.dispatchEvent(new CustomEvent("customer:unauthorized"));
     }
     return Promise.reject(err);
   },

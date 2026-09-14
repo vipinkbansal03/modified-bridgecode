@@ -51,6 +51,7 @@
   ],
   "locations": {
     "subtitle": "Find us around the globe",
+    "href": "/contact",
     "pins": [
       { "id": "hq", "xPct": 70.0, "yPct": 58.71, "category": "hq", "label": "Manufacturing Facility — Ludhiana, India" },
       { "id": "us", "xPct": 22.21, "yPct": 51.37, "category": "export", "label": "Direct Export — United States" },

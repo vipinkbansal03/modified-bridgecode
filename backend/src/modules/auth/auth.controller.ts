@@ -3,6 +3,7 @@ import { asyncHandler, ApiResponse } from "../../utils/apiResponse";
 import { loginSchema } from "./auth.validation";
 import { loginService, getMeService } from "./auth.service";
 import { AuthRequest } from "../../middleware/auth.middleware";
+import { prisma } from "../../config/database";
 
 export const login = asyncHandler(async (req: Request, res: Response) => {
   const input = loginSchema.parse(req.body);
@@ -15,6 +16,19 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     sameSite: "strict",
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   });
+
+  await prisma.activityLog
+    .create({
+      data: {
+        userId: result.user.id,
+        action: "USER_LOGIN",
+        entityType: "User",
+        entityId: result.user.id,
+        ipAddress: req.ip,
+        metadata: { email: result.user.email, role: result.user.role },
+      },
+    })
+    .catch(() => {});
 
   return ApiResponse.success(res, "Logged in successfully.", result);
 });

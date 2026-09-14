@@ -2,9 +2,22 @@ import { Response } from "express";
 import { asyncHandler, ApiResponse, AppError } from "../../utils/apiResponse";
 import { AuthRequest } from "../../middleware/auth.middleware";
 import * as CustomersService from "./customers.service";
+import { prisma } from "../../config/database";
 
 export const create = asyncHandler(async (req: AuthRequest, res: Response) => {
   const customer = await CustomersService.createCustomer(req.body);
+  await prisma.activityLog
+    .create({
+      data: {
+        userId: req.user?.id,
+        action: "CUSTOMER_CREATED",
+        entityType: "User",
+        entityId: customer?.id,
+        ipAddress: req.ip,
+        metadata: { email: customer?.email, firstName: customer?.firstName, lastName: customer?.lastName },
+      },
+    })
+    .catch(() => {});
   return ApiResponse.created(res, "Customer created successfully.", customer);
 });
 
@@ -24,16 +37,52 @@ export const getOne = asyncHandler(async (req: AuthRequest, res: Response) => {
 
 export const update = asyncHandler(async (req: AuthRequest, res: Response) => {
   const customer = await CustomersService.updateCustomerProfile(req.params.id, req.body);
+  await prisma.activityLog
+    .create({
+      data: {
+        userId: req.user?.id,
+        action: "CUSTOMER_UPDATED",
+        entityType: "User",
+        entityId: String(req.params.id),
+        ipAddress: req.ip,
+        metadata: { email: customer?.email },
+      },
+    })
+    .catch(() => {});
   return ApiResponse.success(res, "Customer updated.", customer);
 });
 
 export const approve = asyncHandler(async (req: AuthRequest, res: Response) => {
   const customer = await CustomersService.approveCustomer(req.params.id);
+  await prisma.activityLog
+    .create({
+      data: {
+        userId: req.user?.id,
+        action: "CUSTOMER_APPROVED",
+        entityType: "User",
+        entityId: String(req.params.id),
+        ipAddress: req.ip,
+        metadata: { email: customer?.email },
+      },
+    })
+    .catch(() => {});
   return ApiResponse.success(res, "Customer approved.", customer);
 });
 
 export const reject = asyncHandler(async (req: AuthRequest, res: Response) => {
   const customer = await CustomersService.rejectCustomer(req.params.id);
+  await prisma.activityLog
+    .create({
+      data: {
+        userId: req.user?.id,
+        action: "CUSTOMER_REJECTED",
+        entityType: "User",
+        entityId: String(req.params.id),
+        ipAddress: req.ip,
+        metadata: { email: customer?.email },
+      },
+    })
+    .catch(() => {});
   return ApiResponse.success(res, "Customer rejected.", customer);
 });
 
@@ -62,11 +111,33 @@ export const listAddresses = asyncHandler(async (req: AuthRequest, res: Response
 
 export const remove = asyncHandler(async (req: AuthRequest, res: Response) => {
   await CustomersService.deleteCustomer(String(req.params.id));
+  await prisma.activityLog
+    .create({
+      data: {
+        userId: req.user?.id,
+        action: "CUSTOMER_DELETED",
+        entityType: "User",
+        entityId: String(req.params.id),
+        ipAddress: req.ip,
+      },
+    })
+    .catch(() => {});
   return ApiResponse.success(res, "Customer deleted.");
 });
 
 export const restore = asyncHandler(async (req: AuthRequest, res: Response) => {
   const customer = await CustomersService.restoreCustomer(String(req.params.id));
+  await prisma.activityLog
+    .create({
+      data: {
+        userId: req.user?.id,
+        action: "CUSTOMER_RESTORED",
+        entityType: "User",
+        entityId: String(req.params.id),
+        ipAddress: req.ip,
+      },
+    })
+    .catch(() => {});
   return ApiResponse.success(res, "Customer restored.", customer);
 });
 

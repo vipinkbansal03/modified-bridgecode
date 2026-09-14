@@ -4,8 +4,9 @@ import axios, { AxiosError, AxiosRequestConfig } from "axios";
 // Public site reads from /api/* by default (Next.js rewrites → backend).
 // Set NEXT_PUBLIC_API_URL to call the backend directly from the browser, or
 // set NEXT_PUBLIC_USE_STATIC_DATA=true to force the bundled JSON fallback.
-const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL
-  ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api(?:\/admin)?$/, "")
+const rawApiUrl = (process.env.NEXT_PUBLIC_API_URL || "").trim().replace(/\/$/, "");
+const API_ORIGIN = rawApiUrl
+  ? rawApiUrl.replace(/\/api(?:\/admin|\/customer)?$/, "")
   : "";
 
 export const API_BASE = API_ORIGIN ? `${API_ORIGIN}/api` : "/api";

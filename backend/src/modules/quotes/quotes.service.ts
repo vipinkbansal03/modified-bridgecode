@@ -248,6 +248,10 @@ export async function updateStatus(id: string, status: string) {
     throw new AppError("Converted quotes cannot be moved to another status.", 400);
   }
 
+  if (status === "CONVERTED") {
+    return convertToOrder(id);
+  }
+
   const updated = await prisma.quote.update({ where: { id }, data: { status: status as never } });
 
   if (status === "SENT") {
@@ -369,11 +373,20 @@ export async function convertToOrder(quoteId: string) {
 
   const orderNumber = `ORD-${Date.now()}`;
 
+  let customerId = quote.customerId;
+  if (!customerId && quote.customerEmail) {
+    const matchedCustomer = await prisma.customer.findFirst({
+      where: { email: { equals: quote.customerEmail, mode: "insensitive" }, deletedAt: null },
+      select: { id: true },
+    });
+    if (matchedCustomer) customerId = matchedCustomer.id;
+  }
+
   const order = await prisma.$transaction(async (tx) => {
     const createdOrder = await tx.order.create({
       data: {
         orderNumber,
-        customerId: quote.customerId,
+        customerId,
         customerName: quote.customerName,
         customerEmail: quote.customerEmail,
         customerPhone: quote.customerPhone || "",
@@ -404,7 +417,11 @@ export async function convertToOrder(quoteId: string) {
 
     await tx.quote.update({
       where: { id: quoteId },
-      data: { status: "CONVERTED", convertedOrderId: createdOrder.id },
+      data: {
+        status: "CONVERTED",
+        convertedOrderId: createdOrder.id,
+        ...(customerId && !quote.customerId ? { customerId } : {}),
+      },
     });
 
     await reserveOrderInventory(createdOrder.id, tx);
@@ -420,6 +437,8 @@ export async function convertToOrder(quoteId: string) {
       currency: currency?.code || "INR",
       order_total: String(order.total),
       customerId: order.customerId || undefined,
+      email: order.customerEmail || quote.customerEmail,
+      phone: order.customerPhone || quote.customerPhone || undefined,
     }).catch(console.error);
   });
 
@@ -428,7 +447,20 @@ export async function convertToOrder(quoteId: string) {
     customerName: quote.customerName,
     quoteNumber: quote.quoteNumber,
     orderNumber: order.orderNumber,
+    items: quote.items.map((it) => ({
+      title: it.title,
+      sku: it.sku || undefined,
+      quantity: it.quantity,
+      unitPrice: Number(it.unitPrice),
+      total: Number(it.total),
+    })),
+    subtotal: Number(quote.subtotal),
+    discount: Number(quote.discount || 0),
+    shippingCharge: Number(quote.shippingCharge || 0),
     total: Number(order.total),
+    currencySymbol: quote.currency?.symbol || "₹",
+    countryCode: quote.country?.code || undefined,
+    shippingAddress: quote.shippingAddress as Record<string, any> | null,
   });
   return order;
 }
