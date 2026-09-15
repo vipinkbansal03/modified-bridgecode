@@ -511,11 +511,69 @@ export function DynamicVariantMatrixConfigurator({
     return { totalUnits, subtotal, currencySymbol };
   }, [normalizedVariants, selectedEntries, variantPriceMap]);
 
+  function getAvailableValuesForDropdownAttribute(
+    attribute: ProductOptionAttribute,
+    attrIndex: number,
+  ) {
+    const precedingSelections = dropdownAttributes
+      .slice(0, attrIndex)
+      .map((a) => ({ id: a.id, valueId: dropdownSelections[a.id] }))
+      .filter((item) => Boolean(item.valueId));
+
+    const matchingVariants = normalizedVariants.filter((variant) =>
+      precedingSelections.every(
+        (item) => variant.selectionByAttributeId[item.id] === item.valueId,
+      ),
+    );
+
+    const sourceVariants = matchingVariants.length > 0 ? matchingVariants : normalizedVariants;
+
+    const availableValueIdSet = new Set(
+      sourceVariants
+        .map((v) => v.selectionByAttributeId[attribute.id])
+        .filter((val): val is string => Boolean(val)),
+    );
+
+    return attribute.values.filter((v) => availableValueIdSet.has(v.id));
+  }
+
   const handleDropdownChange = (attributeId: string, valueId: string) => {
-    setDropdownSelections((current) => ({
-      ...current,
-      [attributeId]: valueId,
-    }));
+    const attrIndex = dropdownAttributes.findIndex((a) => a.id === attributeId);
+    const nextSelections: Record<string, string> = {};
+
+    for (let i = 0; i < attrIndex; i++) {
+      const id = dropdownAttributes[i].id;
+      nextSelections[id] = dropdownSelections[id] ?? "";
+    }
+
+    nextSelections[attributeId] = valueId;
+
+    for (let i = attrIndex + 1; i < dropdownAttributes.length; i++) {
+      const downstreamAttr = dropdownAttributes[i];
+      const validDownstreamVariants = normalizedVariants.filter((v) =>
+        Object.entries(nextSelections).every(
+          ([k, vId]) => !vId || v.selectionByAttributeId[k] === vId,
+        ),
+      );
+
+      const availableDownstreamValueIds = new Set(
+        validDownstreamVariants
+          .map((v) => v.selectionByAttributeId[downstreamAttr.id])
+          .filter((val): val is string => Boolean(val)),
+      );
+
+      const currentDownstreamValId = dropdownSelections[downstreamAttr.id];
+      if (currentDownstreamValId && availableDownstreamValueIds.has(currentDownstreamValId)) {
+        nextSelections[downstreamAttr.id] = currentDownstreamValId;
+      } else {
+        const firstAvailable = downstreamAttr.values.find((v) =>
+          availableDownstreamValueIds.has(v.id),
+        );
+        nextSelections[downstreamAttr.id] = firstAvailable?.id ?? "";
+      }
+    }
+
+    setDropdownSelections(nextSelections);
     setFeedback(null);
   };
 
@@ -711,17 +769,27 @@ export function DynamicVariantMatrixConfigurator({
               <div
                 className={`grid gap-4 ${filterControlCount > 1 ? "md:grid-cols-2" : "grid-cols-1"}`}
               >
-                {dropdownAttributes.map((attribute) => {
+                {dropdownAttributes.map((attribute, attrIndex) => {
                   const selectedValueId =
                     dropdownSelections[attribute.id] ?? "";
+                  const availableValues = getAvailableValuesForDropdownAttribute(
+                    attribute,
+                    attrIndex,
+                  );
                   return (
                     <label
                       key={attribute.id}
                       className="block rounded-lg border border-line bg-offwhite p-4"
                     >
-                      <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
-                        {attribute.name}
-                      </span>
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
+                          {attribute.name}
+                        </span>
+                        <span className="rounded-pill border border-line bg-white px-2 py-0.5 text-[10px] font-semibold text-steel">
+                          {availableValues.length}{" "}
+                          {availableValues.length === 1 ? "opt" : "opts"}
+                        </span>
+                      </div>
                       <select
                         value={selectedValueId}
                         onChange={(event) =>
@@ -729,7 +797,7 @@ export function DynamicVariantMatrixConfigurator({
                         }
                         className="w-full rounded-lg border border-line bg-white px-4 py-3 text-[13px] text-ink outline-none transition focus:border-brand"
                       >
-                        {attribute.values.map((value) => (
+                        {availableValues.map((value) => (
                           <option key={value.id} value={value.id}>
                             {value.value}
                           </option>

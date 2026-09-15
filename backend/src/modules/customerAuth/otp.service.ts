@@ -165,7 +165,8 @@ export async function isOtpTestMode(): Promise<boolean> {
     return true;
   }
 
-  if (dbSmsEnabled === "false") {
+  // If SMS is not explicitly enabled, real SMS cannot be sent -> test mode
+  if (dbSmsEnabled !== "true") {
     return true;
   }
 
@@ -174,12 +175,17 @@ export async function isOtpTestMode(): Promise<boolean> {
     return true;
   }
 
-  // 4. If no SMS credentials exist in either DB or env, real SMS cannot physically be sent
+  // 4. Check if an SMS provider is fully configured to actually deliver an OTP
   const msg91Config = await resolveMsg91Config().catch(() => null);
-  const hasMsg91Key = Boolean(msg91Config?.authKey);
+  const hasMsg91Otp = Boolean(
+    msg91Config?.authKey && (msg91Config?.otpTemplateId || msg91Config?.flowId),
+  );
   const twilioSid = (await getSettingValue("sms.twilio_account_sid").catch(() => "")) || (await getSettingValue("twilio.account_sid").catch(() => "")) || process.env.TWILIO_ACCOUNT_SID;
+  const twilioToken = (await getSettingValue("sms.twilio_auth_token").catch(() => "")) || (await getSettingValue("twilio.auth_token").catch(() => "")) || process.env.TWILIO_AUTH_TOKEN;
+  const twilioPhone = (await getSettingValue("sms.twilio_phone").catch(() => "")) || (await getSettingValue("twilio.phone_number").catch(() => "")) || process.env.TWILIO_PHONE;
+  const hasTwilioOtp = Boolean(twilioSid && twilioToken && twilioPhone);
 
-  if (!hasMsg91Key && !twilioSid) {
+  if (!hasMsg91Otp && !hasTwilioOtp) {
     return true;
   }
 
