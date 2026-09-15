@@ -77,7 +77,10 @@ export function Header() {
     if (!categories.length) return [];
     return categories
       .map((cat) => {
-        const catProducts = products.filter((p) => p.category?.slug === cat.slug);
+        const catProducts = products
+          .filter((p) => p.category?.slug === cat.slug)
+          .slice()
+          .sort((a, b) => a.title.localeCompare(b.title));
         return {
           label: cat.title,
           href: `/products?category=${cat.slug}`,
@@ -93,43 +96,40 @@ export function Header() {
   const primaryLinks = cmsMenuToLinks(cmsPrimaryMenu);
   const capabilitiesLinks = cmsMenuToLinks(cmsCapabilitiesMenu);
   const productMegaGroups = cmsMenuToMegaGroups(cmsProductsMegaMenu);
-  const activeProductMegaUrls = useMemo(() => {
-    if (!productMegaGroups.length) return null;
-    return new Set(
-      productMegaGroups.flatMap((group) => [
-        group.href,
-        ...group.children.map((child) => child.href),
-      ]),
-    );
-  }, [productMegaGroups]);
   const storefrontProductsMegaMenu = useMemo(() => {
-    if (!activeProductMegaUrls) return dynamicMegaMenu;
-    return dynamicMegaMenu
-      .map((group) => ({
-        ...group,
-        children: group.children.filter((child) =>
-          activeProductMegaUrls.has(child.href),
-        ),
-      }))
-      .filter(
-        (group) =>
-          group.children.length > 0 && activeProductMegaUrls.has(group.href),
-      );
-  }, [activeProductMegaUrls, dynamicMegaMenu]);
+    const baseGroups =
+      productMegaGroups.length > 0 ? productMegaGroups : nav.productMegaMenu;
+    if (!baseGroups.length) return dynamicMegaMenu;
+    if (!products.length) return baseGroups;
+
+    const liveProductSlugs = new Set(products.map((p) => p.slug));
+
+    return baseGroups
+      .map((group) => {
+        const activeChildren = group.children.filter((child) => {
+          if (!child.href.startsWith("/products/")) return true;
+          const slug = child.href.replace(/^\/products\//, "").split("?")[0];
+          return liveProductSlugs.has(slug);
+        });
+        return {
+          ...group,
+          children: activeChildren.length > 0 ? activeChildren : group.children,
+        };
+      })
+      .filter((group) => group.children.length > 0);
+  }, [productMegaGroups, dynamicMegaMenu, products]);
   const ctaLink = cmsMenuToLinks(cmsCtaMenu)[0];
-  const hasCmsPrimary = cmsPrimaryMenu !== undefined;
-  const hasCmsCapabilities = cmsCapabilitiesMenu !== undefined;
+  const hasCmsPrimary = primaryLinks.length > 0;
+  const hasCmsCapabilities = capabilitiesLinks.length > 0;
   const primaryNav = hasCmsPrimary ? primaryLinks : nav.primary.slice(1);
   const capabilitiesNav = hasCmsCapabilities
     ? capabilitiesLinks
     : nav.capabilitiesMenu;
   const productsMegaNav = storefrontProductsMegaMenu.length > 0
     ? storefrontProductsMegaMenu
-    : dynamicMegaMenu.length > 0
-    ? dynamicMegaMenu
     : productMegaGroups.length > 0
     ? productMegaGroups
-    : [];
+    : nav.productMegaMenu;
   const ctaLabel = ctaLink?.label || label(nav.ctaLabel);
   const ctaHref = ctaLink?.href || nav.ctaHref;
   const mobileLinks = [
