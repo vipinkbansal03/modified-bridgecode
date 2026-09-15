@@ -237,6 +237,7 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
   "auth.login_slide_2_heading":     { group: "auth", type: "string" },
   "auth.login_slide_2_sub_heading": { group: "auth", type: "string" },
   "auth.login_slides":              { group: "auth", type: "json" },
+  "auth.otp_test_mode":             { group: "auth", type: "boolean" },
   // WhatsApp
   "whatsapp.provider":                { group: "whatsapp", type: "string" },
   "whatsapp.number":                  { group: "whatsapp", type: "string" },
@@ -1212,6 +1213,23 @@ export default function SettingsPage() {
                       {authSliderEnabled
                         ? "Slider visible on login page"
                         : "Slider hidden on login page"}
+                    </span>
+                  </div>
+                </FieldRow>
+
+                <FieldRow
+                  label="OTP Test Mode"
+                  hint="When enabled, the 6-digit verification code is displayed directly in the verification modal with a 1-click Auto-fill button, and standard code 123456 is accepted. Recommended during staging, development, and testing before live SMS credits."
+                >
+                  <div className="flex items-center gap-3">
+                    <Toggle
+                      value={b("auth.otp_test_mode")}
+                      onChange={(v) => tog("auth.otp_test_mode", v)}
+                    />
+                    <span className="text-[13px] text-[#6B6B6B]">
+                      {b("auth.otp_test_mode")
+                        ? "Active (Shows test OTP on screen & accepts 123456)"
+                        : "Disabled (Dispatches live SMS to mobile)"}
                     </span>
                   </div>
                 </FieldRow>

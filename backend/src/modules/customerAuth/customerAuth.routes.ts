@@ -8,6 +8,7 @@ router.post("/register", C.register);
 router.post("/register/initiate", C.initiateRegister);
 router.post("/register/verify-otp", C.verifyRegisterOtp);
 router.post("/login", C.login);
+router.post("/login/send-otp", C.sendLoginOtp);
 router.post("/login/verify-otp", C.verifyLoginOtp);
 router.post("/otp/resend", C.resendOtp);
 router.post("/forgot-password", C.forgotPassword);

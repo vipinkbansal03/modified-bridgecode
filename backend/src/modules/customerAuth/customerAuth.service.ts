@@ -324,6 +324,39 @@ export async function login(input: CustomerLoginInput) {
   return initiateLogin(input);
 }
 
+export async function sendLoginOtp(phone: string) {
+  const cleanPhone = phone.trim();
+  const digits = cleanPhone.replace(/\D/g, "");
+  if (!digits || digits.length < 7) {
+    throw new AppError("Please enter a valid mobile number.", 400);
+  }
+
+  const last10 = digits.slice(-10);
+  const customer = await prisma.customer.findFirst({
+    where: {
+      phone: { contains: last10 },
+      deletedAt: null,
+    },
+    include: {
+      customerRole: { select: { id: true, key: true, name: true } },
+    },
+  });
+
+  if (!customer) {
+    throw new AppError("No registered customer account found with this mobile number. Please check your number or create an account.", 404);
+  }
+
+  if (customer.status !== "ACTIVE") {
+    throw new AppError("Your customer account is currently inactive. Please contact support.", 403);
+  }
+
+  const result = await createAndSendOtp(customer.phone || cleanPhone, "LOGIN", { customerId: customer.id });
+  return {
+    requiresOtp: true,
+    ...result,
+  };
+}
+
 export async function forgotPassword(input: ForgotPasswordInput) {
   const normalizedEmail = input.email.trim().toLowerCase();
   const customer = await prisma.customer.findFirst({

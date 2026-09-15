@@ -71,6 +71,7 @@ interface CustomerAuthContextType {
   token: string | null;
   isLoading: boolean;
   login: (email: string, password: string, redirectTo?: string) => Promise<LoginResult>;
+  sendLoginOtp: (phone: string) => Promise<OtpInitiateResponse>;
   verifyLoginOtp: (verificationId: string, otp: string, redirectTo?: string) => Promise<void>;
   initiateRegister: (payload: RegisterPayload) => Promise<OtpInitiateResponse>;
   verifyRegisterOtp: (verificationId: string, otp: string, redirectTo?: string) => Promise<void>;
@@ -238,6 +239,11 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     router.push("/login");
   };
 
+  const sendLoginOtp = async (phone: string): Promise<OtpInitiateResponse> => {
+    const res = await customerApi.post("/auth/login/send-otp", { phone });
+    return res.data.data as OtpInitiateResponse;
+  };
+
   const setCustomer = (updatedCustomer: CustomerSession) => {
     setCurrentCustomer(updatedCustomer);
     localStorage.setItem("customer_profile", JSON.stringify(updatedCustomer));
@@ -250,6 +256,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
         token,
         isLoading,
         login,
+        sendLoginOtp,
         verifyLoginOtp,
         initiateRegister,
         verifyRegisterOtp,

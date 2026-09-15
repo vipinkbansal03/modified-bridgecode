@@ -46,6 +46,10 @@ export const customerLoginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+export const sendLoginOtpSchema = z.object({
+  phone: z.string().trim().min(7, "Please enter a valid mobile number"),
+});
+
 export const forgotPasswordSchema = z.object({
   email: z.string().email("Invalid email address").transform((value) => value.toLowerCase().trim()),
 });
@@ -87,6 +91,7 @@ export const resendOtpSchema = z.object({
 
 export type CustomerRegisterInput = z.infer<typeof customerRegisterSchema>;
 export type CustomerLoginInput = z.infer<typeof customerLoginSchema>;
+export type SendLoginOtpInput = z.infer<typeof sendLoginOtpSchema>;
 export type VerifyLoginOtpInput = z.infer<typeof verifyLoginOtpSchema>;
 export type VerifyRegisterOtpInput = z.infer<typeof verifyRegisterOtpSchema>;
 export type ResendOtpInput = z.infer<typeof resendOtpSchema>;

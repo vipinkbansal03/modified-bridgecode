@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ShieldCheck, RefreshCw, Smartphone } from "lucide-react";
+import { ShieldCheck, RefreshCw, Smartphone, AlertCircle, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 
@@ -162,34 +162,73 @@ export default function OtpVerificationModal({
       onClose={onClose}
       size="sm"
       hideFooter
-      panelClassName="p-6 md:p-8 rounded-2xl"
+      hideCloseButton
+      panelClassName="rounded-2xl max-w-[440px] overflow-hidden"
+      bodyClassName="p-5 sm:p-6"
     >
-      <div className="flex flex-col items-center text-center">
+      <div className="relative flex flex-col items-center text-center">
+        {/* Close Button */}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute -top-1 -right-1 p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+        >
+          <X size={18} />
+        </button>
+
         {/* Icon */}
-        <div className="w-14 h-14 rounded-full bg-red-50 text-red-600 flex items-center justify-center mb-4 shadow-inner">
-          <Smartphone className="w-7 h-7" />
+        <div className="w-12 h-12 rounded-2xl bg-red-50 text-[#E31E24] ring-4 ring-red-50/70 flex items-center justify-center mb-2.5 shadow-inner">
+          <Smartphone className="w-6 h-6" />
         </div>
 
         {/* Header */}
         <h3 className="text-xl font-bold text-gray-900 tracking-tight">{title}</h3>
-        <p className="text-sm text-gray-500 mt-2 max-w-sm">
+        <p className="text-[13px] text-gray-500 mt-1.5 max-w-xs leading-relaxed">
           {subtitle || (
             <>
-              We have sent a 6-digit verification code to{" "}
-              <span className="font-semibold text-gray-800">{maskedPhone}</span>
+              Please enter the 6-digit verification code sent to{" "}
+              <span className="inline-flex items-center gap-1 font-semibold text-gray-800 bg-gray-100 px-2 py-0.5 rounded-md font-mono text-[12.5px] mt-1">
+                {maskedPhone}
+              </span>
             </>
           )}
         </p>
 
-        {/* Development Helper Badge */}
+        {/* Test Mode Helper Banner */}
         {debugOtp && (
-          <div className="mt-3 px-3 py-1 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-800 font-mono">
-            Dev Mode Code: <span className="font-bold text-amber-900">{debugOtp}</span>
+          <div className="mt-4 w-full rounded-xl border border-amber-300 bg-amber-50/90 p-3 text-left shadow-2xs">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                <span className="text-[11.5px] font-bold text-amber-900 uppercase tracking-wide">Test Mode OTP</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const otpDigits = debugOtp.split("").slice(0, 6);
+                  setDigits(otpDigits);
+                  setError(null);
+                  handleVerify(debugOtp);
+                }}
+                className="cursor-pointer rounded-md bg-amber-600 hover:bg-amber-700 px-2.5 py-1 text-[11px] font-semibold text-white transition-colors shadow-2xs active:scale-95"
+              >
+                Auto-fill & Verify
+              </button>
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <span className="font-mono text-base font-bold tracking-widest text-amber-950 bg-white border border-amber-200 px-2.5 py-0.5 rounded-md shadow-2xs">
+                {debugOtp}
+              </span>
+              <span className="text-[11.5px] text-amber-800">
+                (Standard test code <code className="font-mono font-bold text-amber-950">123456</code> is also accepted)
+              </span>
+            </div>
           </div>
         )}
 
         {/* 6 Digit Input Group */}
-        <div className="flex justify-center items-center gap-2 sm:gap-3 my-6" onPaste={handlePaste}>
+        <div className="flex justify-center items-center gap-2 sm:gap-2.5 my-5" onPaste={handlePaste}>
           {digits.map((digit, idx) => (
             <input
               key={idx}
@@ -204,12 +243,12 @@ export default function OtpVerificationModal({
               value={digit}
               onChange={(e) => handleDigitChange(idx, e.target.value)}
               onKeyDown={(e) => handleKeyDown(idx, e)}
-              className={`w-10 h-12 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-bold rounded-xl border transition-all outline-none ${
+              className={`w-11 h-13 sm:w-12 sm:h-14 text-center font-mono text-2xl font-bold rounded-xl border transition-all outline-none ${
                 error
-                  ? "border-red-400 bg-red-50/50 text-red-900 focus:border-red-600 focus:ring-2 focus:ring-red-200"
+                  ? "border-red-400 bg-red-50/50 text-red-900 focus:border-red-600 focus:ring-4 focus:ring-red-100"
                   : digit
                     ? "border-gray-900 bg-white text-gray-900 shadow-xs"
-                    : "border-gray-200 bg-gray-50/70 text-gray-900 focus:border-red-600 focus:bg-white focus:ring-2 focus:ring-red-100"
+                    : "border-gray-200 bg-gray-50/70 text-gray-900 hover:border-gray-300 focus:border-[#E31E24] focus:bg-white focus:ring-4 focus:ring-[#E31E24]/10"
               }`}
             />
           ))}
@@ -217,19 +256,19 @@ export default function OtpVerificationModal({
 
         {/* Error Message */}
         {error && (
-          <div className="w-full text-xs text-red-600 bg-red-50 py-2 px-3 rounded-lg font-medium mb-4 text-center border border-red-100 animate-fadeIn">
-            {error}
+          <div className="w-full flex items-center justify-center gap-2 text-xs text-red-700 bg-red-50 py-2.5 px-3 rounded-xl font-medium mb-4 border border-red-200 shadow-2xs animate-fadeIn">
+            <AlertCircle size={15} className="shrink-0 text-red-600" />
+            <span>{error}</span>
           </div>
         )}
 
         {/* Actions */}
         <div className="w-full flex flex-col gap-3">
-          <Button
+          <button
             type="button"
-            variant="primary"
-            className="w-full h-11 text-base font-semibold shadow-sm justify-center"
             disabled={!isComplete || isVerifying}
             onClick={() => handleVerify()}
+            className="w-full h-11 sm:h-12 flex items-center justify-center gap-2 rounded-pill bg-[#E31E24] hover:bg-[#B5151B] disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white font-semibold text-[14px] shadow-sm transition-all active:scale-[0.98] cursor-pointer"
           >
             {isVerifying ? (
               <span className="flex items-center gap-2">
@@ -237,16 +276,16 @@ export default function OtpVerificationModal({
               </span>
             ) : (
               <span className="flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5" /> Verify & Continue
+                <ShieldCheck className="w-4.5 h-4.5" /> Verify & Continue
               </span>
             )}
-          </Button>
+          </button>
 
           {/* Resend OTP */}
-          <div className="flex items-center justify-between text-xs text-gray-500 pt-2 px-1">
+          <div className="flex items-center justify-between text-xs text-gray-500 pt-3 px-1 border-t border-gray-100 w-full mt-1">
             <span>Didn't receive the code?</span>
             {cooldown > 0 ? (
-              <span className="font-semibold text-gray-400">
+              <span className="inline-flex items-center gap-1 font-medium text-gray-400 bg-gray-50 px-2 py-0.5 rounded-md border border-gray-100">
                 Resend in <span className="font-mono text-gray-700">{cooldown}s</span>
               </span>
             ) : (
@@ -254,7 +293,7 @@ export default function OtpVerificationModal({
                 type="button"
                 onClick={handleResend}
                 disabled={isResending}
-                className="font-semibold text-red-600 hover:text-red-700 hover:underline transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                className="font-semibold text-[#E31E24] hover:text-[#B5151B] hover:underline transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
               >
                 {isResending && <RefreshCw className="w-3 h-3 animate-spin" />}
                 Resend Code

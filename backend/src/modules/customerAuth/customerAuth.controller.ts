@@ -2,6 +2,7 @@ import { Response } from "express";
 import { asyncHandler, ApiResponse, AppError } from "../../utils/apiResponse";
 import {
   customerLoginSchema,
+  sendLoginOtpSchema,
   customerRegisterSchema,
   verifyLoginOtpSchema,
   verifyRegisterOtpSchema,
@@ -35,6 +36,12 @@ export const login = asyncHandler(async (req: CustomerAuthRequest, res: Response
   const input = customerLoginSchema.parse(req.body);
   const result = await CustomerAuthService.login(input);
   return ApiResponse.success(res, "Login processed.", result);
+});
+
+export const sendLoginOtp = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {
+  const input = sendLoginOtpSchema.parse(req.body);
+  const result = await CustomerAuthService.sendLoginOtp(input.phone);
+  return ApiResponse.success(res, "OTP sent to your mobile number.", result);
 });
 
 export const verifyLoginOtp = asyncHandler(async (req: CustomerAuthRequest, res: Response) => {

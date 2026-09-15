@@ -5,10 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
 import { useFormik } from "formik";
 import * as Yup from "yup";
-import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Mail, ShieldCheck, Smartphone } from "lucide-react";
 import { useAuthPageSettings } from "@/hooks/api/useAuthPageSettings";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { getCustomerErrorMessage } from "@/services/customerApi";
+import PhoneInputField from "@/components/ui/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
 
 import LoginSkeleton from "@/components/auth/LoginSkeleton";
 import OtpVerificationModal from "@/components/auth/OtpVerificationModal";
@@ -44,10 +46,19 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { login, verifyLoginOtp, resendOtp, currentCustomer, isLoading } = useCustomerAuth();
+  const { login, sendLoginOtp, verifyLoginOtp, resendOtp, currentCustomer, isLoading } = useCustomerAuth();
 
   const next = searchParams.get("returnTo");
   const returnTo = next?.startsWith("/") ? next : "/";
+
+  const [loginMethod, setLoginMethod] = useState<"password" | "phone">("password");
+  const [phone, setPhone] = useState("");
+  const [phoneTouched, setPhoneTouched] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
+  const [phoneAcceptTerms, setPhoneAcceptTerms] = useState(false);
+  const [phoneTermsError, setPhoneTermsError] = useState("");
+  const [isSendingPhoneOtp, setIsSendingPhoneOtp] = useState(false);
+  const [phoneStatus, setPhoneStatus] = useState("");
 
   const [showPassword, setShowPassword] = useState(false);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
@@ -114,6 +125,47 @@ function LoginForm() {
       }
     },
   });
+
+  const handlePhoneSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPhoneTouched(true);
+    setPhoneStatus("");
+
+    if (!phone || !phone.trim()) {
+      setPhoneError("Mobile number is required");
+      return;
+    }
+    if (!isValidPhoneNumber(phone)) {
+      setPhoneError("Please enter a valid mobile phone number with country code");
+      return;
+    }
+    if (!phoneAcceptTerms) {
+      setPhoneTermsError("You must agree to the terms and conditions.");
+      return;
+    }
+
+    setIsSendingPhoneOtp(true);
+    try {
+      const result = await sendLoginOtp(phone);
+      if (result && "verificationId" in result) {
+        setOtpSession({
+          verificationId: result.verificationId,
+          maskedPhone: result.maskedPhone,
+          cooldownSeconds: result.cooldownSeconds,
+          debugOtp: result.debugOtp,
+        });
+      }
+    } catch (error) {
+      setPhoneStatus(
+        getCustomerErrorMessage(
+          error,
+          "No account found with this mobile number or unable to send code.",
+        ),
+      );
+    } finally {
+      setIsSendingPhoneOtp(false);
+    }
+  };
 
   if (isAuthSettingsLoading) {
     return <LoginSkeleton showHero={showHero} />;
@@ -203,118 +255,224 @@ function LoginForm() {
             </p>
           </div>
 
-          <form onSubmit={formik.handleSubmit} className="space-y-5" noValidate>
-            <div>
-              <label
-                htmlFor="email"
-                className="mb-2 block text-[13px] font-semibold text-[#1A1A1A]"
-              >
-                Email address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="Enter your email"
-                autoComplete="email"
-                value={formik.values.email}
-                onChange={formik.handleChange}
-                onBlur={formik.handleBlur}
-                className={`h-[50px] w-full rounded-md border bg-[#EEF4FF] px-4 text-[14px] text-[#1A1A1A] outline-none placeholder:text-[#9A9A9A] focus:border-[#1A1A1A] ${
-                  formik.touched.email && formik.errors.email
-                    ? "border-[#E31E24]"
-                    : "border-[#E0E0E0]"
-                }`}
-              />
-              {formik.touched.email && formik.errors.email && (
-                <p className="mt-1 text-[12px] text-[#E31E24]">
-                  {formik.errors.email}
-                </p>
-              )}
-            </div>
+          <div className="mb-6 flex rounded-xl bg-[#F4F4F6] p-1 text-[13px] font-semibold">
+            <button
+              type="button"
+              onClick={() => {
+                setLoginMethod("password");
+                setPhoneStatus("");
+              }}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 transition-all ${
+                loginMethod === "password"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-900"
+              }`}
+            >
+              <Mail size={15} />
+              <span>Email & Password</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setLoginMethod("phone");
+                formik.setStatus("");
+              }}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 transition-all ${
+                loginMethod === "phone"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-900"
+              }`}
+            >
+              <Smartphone size={15} />
+              <span>Mobile OTP</span>
+            </button>
+          </div>
 
-            <div>
-              <div className="mb-2 flex items-center justify-between gap-3">
+          {loginMethod === "password" ? (
+            <form onSubmit={formik.handleSubmit} className="space-y-5" noValidate>
+              <div>
                 <label
-                  htmlFor="password"
-                  className="block text-[13px] font-semibold text-[#1A1A1A]"
+                  htmlFor="email"
+                  className="mb-2 block text-[13px] font-semibold text-[#1A1A1A]"
                 >
-                  Password
+                  Email address
                 </label>
-                <Link
-                  href="/forgot-password"
-                  className="text-[12px] font-medium text-[#111] underline underline-offset-2"
-                >
-                  Forgot password?
-                </Link>
-              </div>
-              <div className="relative">
                 <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Enter password"
-                  autoComplete="current-password"
-                  value={formik.values.password}
+                  id="email"
+                  name="email"
+                  type="email"
+                  placeholder="Enter your email"
+                  autoComplete="email"
+                  value={formik.values.email}
                   onChange={formik.handleChange}
                   onBlur={formik.handleBlur}
-                  className={`h-[50px] w-full rounded-md border bg-[#EEF4FF] px-4 pr-10 text-[14px] text-[#1A1A1A] outline-none placeholder:text-[#9A9A9A] focus:border-[#1A1A1A] ${
-                    formik.touched.password && formik.errors.password
+                  className={`h-[50px] w-full rounded-md border bg-[#EEF4FF] px-4 text-[14px] text-[#1A1A1A] outline-none placeholder:text-[#9A9A9A] focus:border-[#1A1A1A] ${
+                    formik.touched.email && formik.errors.email
                       ? "border-[#E31E24]"
                       : "border-[#E0E0E0]"
                   }`}
                 />
-                <button
-                  type="button"
-                  title={showPassword ? "Hide Password" : "Show Password"}
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9A9A9A] hover:text-[#1A1A1A]"
+                {formik.touched.email && formik.errors.email && (
+                  <p className="mt-1 text-[12px] text-[#E31E24]">
+                    {formik.errors.email}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <label
+                    htmlFor="password"
+                    className="block text-[13px] font-semibold text-[#1A1A1A]"
+                  >
+                    Password
+                  </label>
+                  <Link
+                    href="/forgot-password"
+                    className="text-[12px] font-medium text-[#111] underline underline-offset-2"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+                <div className="relative">
+                  <input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter password"
+                    autoComplete="current-password"
+                    value={formik.values.password}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    className={`h-[50px] w-full rounded-md border bg-[#EEF4FF] px-4 pr-10 text-[14px] text-[#1A1A1A] outline-none placeholder:text-[#9A9A9A] focus:border-[#1A1A1A] ${
+                      formik.touched.password && formik.errors.password
+                        ? "border-[#E31E24]"
+                        : "border-[#E0E0E0]"
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    title={showPassword ? "Hide Password" : "Show Password"}
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9A9A9A] hover:text-[#1A1A1A]"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {formik.touched.password && formik.errors.password && (
+                  <p className="mt-1 text-[12px] text-[#E31E24]">
+                    {formik.errors.password}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-start gap-2.5 rounded-lg border border-slate-200/80 bg-slate-50 p-2.5 text-[12px] text-slate-600">
+                <ShieldCheck size={16} className="mt-0.5 shrink-0 text-slate-500" />
+                <span>
+                  Accounts with registered mobile number will receive a 6-digit OTP code for verification.
+                </span>
+              </div>
+
+              <div>
+                <label className="flex items-center gap-2 text-[12px] text-[#8A8A8A] select-none cursor-pointer">
+                  <input
+                    id="acceptTerms"
+                    name="acceptTerms"
+                    type="checkbox"
+                    checked={formik.values.acceptTerms}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    className="h-4 w-4 rounded border-[#D1D5DB]"
+                  />
+                  I agree to the terms and conditions.
+                </label>
+
+                {formik.touched.acceptTerms && formik.errors.acceptTerms && (
+                  <p className="mt-1 text-[12px] text-[#E31E24] select-none">
+                    {formik.errors.acceptTerms}
+                  </p>
+                )}
+              </div>
+
+              {formik.status && (
+                <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
+                  {formik.status}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={formik.isSubmitting || isLoading}
+                className="h-12 w-full rounded-md bg-[#E31E24] text-[14px] font-semibold text-white transition-colors hover:bg-[#B5151B] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {formik.isSubmitting || isLoading ? "Please wait..." : "Sign In"}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handlePhoneSubmit} className="space-y-5" noValidate>
+              <div>
+                <label
+                  htmlFor="phone-login"
+                  className="mb-2 block text-[13px] font-semibold text-[#1A1A1A]"
                 >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-              {formik.touched.password && formik.errors.password && (
-                <p className="mt-1 text-[12px] text-[#E31E24]">
-                  {formik.errors.password}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label className="flex items-center gap-2 text-[12px] text-[#8A8A8A] select-none cursor-pointer">
-                <input
-                  id="acceptTerms"
-                  name="acceptTerms"
-                  type="checkbox"
-                  checked={formik.values.acceptTerms}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                  className="h-4 w-4 rounded border-[#D1D5DB]"
+                  Mobile Number
+                </label>
+                <PhoneInputField
+                  value={phone}
+                  onChange={(value) => {
+                    setPhone(value ?? "");
+                    if (phoneError) setPhoneError("");
+                  }}
+                  onBlur={() => setPhoneTouched(true)}
+                  error={phoneError}
+                  touched={phoneTouched}
+                  defaultCountry="IN"
+                  placeholder="Enter registered mobile number"
+                  className="!h-[50px]"
                 />
-                I agree to the terms and conditions.
-              </label>
-
-              {formik.touched.acceptTerms && formik.errors.acceptTerms && (
-                <p className="mt-1 text-[12px] text-[#E31E24] select-none">
-                  {formik.errors.acceptTerms}
+                <p className="mt-1.5 text-[12px] text-gray-500">
+                  We will send a 6-digit one-time verification code to this mobile number.
                 </p>
-              )}
-            </div>
-
-            {formik.status && (
-              <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
-                {formik.status}
               </div>
-            )}
 
-            <button
-              type="submit"
-              disabled={formik.isSubmitting || isLoading}
-              className="h-12 w-full rounded-md bg-[#E31E24] text-[14px] font-semibold text-white transition-colors hover:bg-[#B5151B] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {formik.isSubmitting || isLoading ? "Please wait..." : "Sign In"}
-            </button>
-          </form>
+              <div>
+                <label className="flex items-center gap-2 text-[12px] text-[#8A8A8A] select-none cursor-pointer">
+                  <input
+                    id="acceptTermsPhone"
+                    name="acceptTermsPhone"
+                    type="checkbox"
+                    checked={phoneAcceptTerms}
+                    onChange={(e) => {
+                      setPhoneAcceptTerms(e.target.checked);
+                      if (e.target.checked) setPhoneTermsError("");
+                    }}
+                    className="h-4 w-4 rounded border-[#D1D5DB]"
+                  />
+                  I agree to the terms and conditions.
+                </label>
+
+                {phoneTermsError && (
+                  <p className="mt-1 text-[12px] text-[#E31E24] select-none">
+                    {phoneTermsError}
+                  </p>
+                )}
+              </div>
+
+              {phoneStatus && (
+                <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
+                  {phoneStatus}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isSendingPhoneOtp || isLoading}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-[#E31E24] text-[14px] font-semibold text-white transition-colors hover:bg-[#B5151B] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSendingPhoneOtp ? "Sending code..." : "Send Verification Code"}
+              </button>
+            </form>
+          )}
 
           <p className="mt-6 text-center text-[13px] text-[#8A8A8A]">
             Don&apos;t have an account?{" "}
