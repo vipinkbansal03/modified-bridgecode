@@ -988,6 +988,9 @@ export const useCreateAttribute = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-attributes"] });
       qc.invalidateQueries({ queryKey: ["admin-archived-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-product-filters"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["product-facets"] });
     },
   });
 };
@@ -1001,6 +1004,13 @@ export const useUpdateAttribute = () => {
       qc.invalidateQueries({ queryKey: ["admin-attributes"] });
       qc.invalidateQueries({ queryKey: ["admin-archived-attributes"] });
       qc.invalidateQueries({ queryKey: ["admin-attribute", vars.id] });
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+      qc.invalidateQueries({ queryKey: ["admin-product-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-product-filters"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["product-facets"] });
+      qc.invalidateQueries({ queryKey: ["product-filters"] });
+      qc.invalidateQueries({ queryKey: ["products", "filters-config"] });
     },
   });
 };
@@ -1013,6 +1023,12 @@ export const useDeleteAttribute = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-attributes"] });
       qc.invalidateQueries({ queryKey: ["admin-archived-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+      qc.invalidateQueries({ queryKey: ["admin-product-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-product-filters"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["product-facets"] });
+      qc.invalidateQueries({ queryKey: ["product-filters"] });
     },
   });
 };
@@ -1025,6 +1041,11 @@ export const useRestoreAttribute = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-attributes"] });
       qc.invalidateQueries({ queryKey: ["admin-archived-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+      qc.invalidateQueries({ queryKey: ["admin-product-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-product-filters"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["product-facets"] });
     },
   });
 };
@@ -1037,6 +1058,11 @@ export const usePermanentDeleteAttribute = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-attributes"] });
       qc.invalidateQueries({ queryKey: ["admin-archived-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+      qc.invalidateQueries({ queryKey: ["admin-product-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-product-filters"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["product-facets"] });
     },
   });
 };
@@ -1046,7 +1072,12 @@ export const useReorderAttributes = () => {
   return useMutation({
     mutationFn: (items: { id: string; sortOrder: number }[]) =>
       adminApi.put("/attributes/reorder", { items }).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-attributes"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-attributes"] });
+      qc.invalidateQueries({ queryKey: ["admin-product-filters"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["product-facets"] });
+    },
   });
 };
 
@@ -1127,6 +1158,10 @@ export const useCreateAttributeValue = () => {
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["admin-attributes"] });
       qc.invalidateQueries({ queryKey: ["admin-attribute", vars.attributeId] });
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+      qc.invalidateQueries({ queryKey: ["admin-product-filters"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["product-facets"] });
     },
   });
 };
@@ -1148,6 +1183,10 @@ export const useUpdateAttributeValue = () => {
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["admin-attributes"] });
       qc.invalidateQueries({ queryKey: ["admin-attribute", vars.attributeId] });
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+      qc.invalidateQueries({ queryKey: ["admin-product-filters"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["product-facets"] });
     },
   });
 };
@@ -1168,6 +1207,10 @@ export const useDeleteAttributeValue = () => {
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["admin-attributes"] });
       qc.invalidateQueries({ queryKey: ["admin-attribute", vars.attributeId] });
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+      qc.invalidateQueries({ queryKey: ["admin-product-filters"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["product-facets"] });
     },
   });
 };
@@ -1188,6 +1231,10 @@ export const usePermanentDeleteAttributeValue = () => {
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["admin-attributes"] });
       qc.invalidateQueries({ queryKey: ["admin-attribute", vars.attributeId] });
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+      qc.invalidateQueries({ queryKey: ["admin-product-filters"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["product-facets"] });
     },
   });
 };

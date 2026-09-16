@@ -48,7 +48,7 @@ export function BulkOrderFlat({ variants, productTitle, quantityMap, priceMap, o
                 value={qty}
                 onChange={(val) => onQtyChange(v.id, val)}
                 min={0}
-                max={v.inventory?.available}
+                max={v.inventory?.available && v.inventory.available > 0 ? v.inventory.available : undefined}
                 disabled={outOfStock}
               />
             </div>

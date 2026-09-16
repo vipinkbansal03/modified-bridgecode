@@ -51,17 +51,6 @@ export function validateValueForRole(role: AttributeRole, data: ValueInput) {
     throw new AppError("Dealer price must be zero or greater.", 400);
   }
 
-  if ((role === "DROPDOWN" || role === "X_GRID" || role === "Y_GRID") && countryId) {
-    const hasLegacyPricingFields = moq != null || tierPrice != null || dealerPrice != null;
-    if (!hasLegacyPricingFields) {
-      throw new AppError("Country-scoped attribute values must include at least one legacy pricing field.", 400);
-    }
-  }
-
-  if ((role === "DROPDOWN" || role === "X_GRID" || role === "Y_GRID") && gridRole && countryId) {
-    throw new AppError("Grid role and country-specific attribute pricing cannot be combined on the same value.", 400);
-  }
-
   if (role === "DROPDOWN" || role === "X_GRID" || role === "Y_GRID") {
     return;
   }

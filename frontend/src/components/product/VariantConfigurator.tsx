@@ -79,11 +79,33 @@ function variantMatchesSelection(
   variant: ApiVariant,
   attributeName: string,
   value: string,
+  attributeId?: string,
+  attributeValues?: ApiAttribute["values"],
 ) {
   if (attributeName === PACKAGE_ATTRIBUTE_NAME) {
     return getVariantPackageLabel(variant) === value;
   }
-  return variant.attributeCombination[attributeName] === value;
+  if (variant.attributeCombination && variant.attributeCombination[attributeName] === value) {
+    return true;
+  }
+  if (variant.attributeCombination) {
+    const trimmedName = attributeName.trim().toLowerCase();
+    for (const [k, v] of Object.entries(variant.attributeCombination)) {
+      if (k.trim().toLowerCase() === trimmedName && v === value) {
+        return true;
+      }
+    }
+  }
+  if (attributeId && variant.attributeValueIdsByAttributeId && attributeValues) {
+    const valId = variant.attributeValueIdsByAttributeId[attributeId];
+    if (valId) {
+      const matchingVal = attributeValues.find((av) => av.id === valId);
+      if (matchingVal && matchingVal.value === value) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function buildPackageAttribute(
@@ -297,8 +319,19 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
 
   const matchingVariants = variants.filter((variant) =>
     Object.entries(selectedOptions).every(
-      ([attributeName, value]) =>
-        !value || variantMatchesSelection(variant, attributeName, value),
+      ([attributeName, value]) => {
+        const attr = attributes.find((a) => a.name === attributeName);
+        return (
+          !value ||
+          variantMatchesSelection(
+            variant,
+            attributeName,
+            value,
+            attr?.id,
+            attr?.values,
+          )
+        );
+      },
     ),
   );
 
@@ -309,9 +342,16 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
           variant,
           attribute.name,
           selectedOptions[attribute.name] ?? "",
+          attribute.id,
+          attribute.values,
         ),
       ),
-    ) ?? null;
+    ) ??
+    (matchingVariants.length === 1
+      ? matchingVariants[0]
+      : variants.length === 1
+        ? variants[0]
+        : null);
 
   const currentAvailableStock = currentVariant
     ? (currentVariant.warehouseInventories?.length
@@ -499,9 +539,16 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
       .filter((item) => Boolean(item.value));
 
     const matchingVariants = variants.filter((variant) =>
-      precedingSelections.every((item) =>
-        variantMatchesSelection(variant, item.name, item.value),
-      ),
+      precedingSelections.every((item) => {
+        const itemAttr = attributes.find((a) => a.name === item.name);
+        return variantMatchesSelection(
+          variant,
+          item.name,
+          item.value,
+          itemAttr?.id,
+          itemAttr?.values,
+        );
+      }),
     );
 
     const sourceVariants = matchingVariants.length > 0 ? matchingVariants : variants;
@@ -533,9 +580,19 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     for (let i = attrIndex + 1; i < attributes.length; i++) {
       const downstreamAttr = attributes[i];
       const validDownstreamVariants = variants.filter((v) =>
-        Object.entries(nextSelections).every(([k, vVal]) =>
-          !vVal || variantMatchesSelection(v, k, vVal),
-        ),
+        Object.entries(nextSelections).every(([k, vVal]) => {
+          const kAttr = attributes.find((a) => a.name === k);
+          return (
+            !vVal ||
+            variantMatchesSelection(
+              v,
+              k,
+              vVal,
+              kAttr?.id,
+              kAttr?.values,
+            )
+          );
+        }),
       );
 
       const availableDownstreamValues = new Set(
@@ -890,7 +947,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                   <button
                     type="button"
                     aria-label="Decrease quantity"
-                    disabled={quantity <= 1 || currentAvailableStock <= 0}
+                    disabled={quantity <= 1 || (!currentVariant && variants.length > 0)}
                     onClick={() =>
                       setQuantity((current) => Math.max(1, current - 1))
                     }
@@ -903,7 +960,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                     inputMode="numeric"
                     pattern="[0-9]*"
                     value={quantity}
-                    disabled={currentAvailableStock <= 0}
+                    disabled={!currentVariant && variants.length > 0}
                     onChange={(event) => {
                       const raw = event.target.value.replace(/[^0-9]/g, "");
                       const num = Number(raw) || 1;
@@ -915,7 +972,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                   <button
                     type="button"
                     aria-label="Increase quantity"
-                    disabled={currentAvailableStock <= 0 || (currentAvailableStock > 0 && quantity >= currentAvailableStock)}
+                    disabled={(!currentVariant && variants.length > 0) || (currentAvailableStock > 0 && quantity >= currentAvailableStock)}
                     onClick={() =>
                       setQuantity((current) => {
                         const maxLimit = currentAvailableStock > 0 ? currentAvailableStock : 9999;

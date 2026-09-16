@@ -29,14 +29,23 @@ export interface CategoryFilterConfig {
 
 async function cleanFiltersConfig(config: ProductFilterConfig): Promise<ProductFilterConfig> {
   const activeAttributes = await prisma.attribute.findMany({
-    where: { status: "ACTIVE" },
-    select: { id: true },
+    where: { status: "ACTIVE", deletedAt: null },
+    select: { id: true, name: true, role: true },
   });
-  const activeIds = new Set(activeAttributes.map((a) => a.id));
+  const activeMap = new Map(activeAttributes.map((a) => [a.id, a]));
   
   return {
     ...config,
-    attributeFilters: (config.attributeFilters ?? []).filter((af) => activeIds.has(af.attributeId)),
+    attributeFilters: (config.attributeFilters ?? [])
+      .filter((af) => activeMap.has(af.attributeId))
+      .map((af) => {
+        const attr = activeMap.get(af.attributeId);
+        return {
+          ...af,
+          attributeName: attr?.name ?? af.attributeName,
+          displayType: (attr?.role as any) ?? af.displayType,
+        };
+      }),
   };
 }
 

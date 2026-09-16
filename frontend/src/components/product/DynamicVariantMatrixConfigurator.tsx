@@ -903,9 +903,9 @@ export function DynamicVariantMatrixConfigurator({
                                       )
                                     }
                                     min={0}
-                                    max={availableStock}
+                                    max={availableStock > 0 ? availableStock : undefined}
                                     minPositive={minPositive}
-                                    disabled={outOfStock || isPor}
+                                    disabled={!variant}
                                   />
                                   <div className="mt-1.5 text-center">
                                     <p className="text-[10px] font-bold text-ink">

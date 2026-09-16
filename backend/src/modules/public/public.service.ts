@@ -283,7 +283,15 @@ export async function publicGetProduct(
   if (!country) throw new AppError("Product not found.", 404);
 
   const product = await prisma.product.findFirst({
-    where: buildStorefrontProductWhere(country.id, { slug }),
+    where: {
+      slug,
+      status: "ACTIVE",
+      deletedAt: null,
+      OR: [
+        { countries: { some: { countryId: country.id, enabled: true } } },
+        { countries: { none: {} } },
+      ],
+    },
     include: {
       category: languageCode
         ? {

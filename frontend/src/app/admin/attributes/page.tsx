@@ -332,13 +332,13 @@ export default function AttributesPage() {
   );
 
   useEffect(() => {
-    if (editorMode !== "edit" || !editingAttribute) return;
+    if (editorMode !== "edit" || !editingAttribute || editingAttribute.id !== editingId) return;
     form.reset({
       name: editingAttribute.name,
       role: editingAttribute.role,
       status: editingAttribute.status as "ACTIVE" | "INACTIVE",
     });
-  }, [editorMode, editingAttribute]);
+  }, [editorMode, editingAttribute, editingId]);
 
   const resetEditorState = () => {
     setEditorMode(null);
@@ -363,8 +363,16 @@ export default function AttributesPage() {
   };
 
   const openEditModal = (attributeId: string) => {
+    const existing = attributes.find((a: ApiAttribute) => a.id === attributeId);
     setEditorMode("edit");
     setEditingId(attributeId);
+    if (existing) {
+      form.reset({
+        name: existing.name,
+        role: existing.role,
+        status: existing.status as "ACTIVE" | "INACTIVE",
+      });
+    }
     setRoleWarnings([]);
   };
 
