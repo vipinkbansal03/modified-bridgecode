@@ -70,7 +70,7 @@ export function Header() {
   const { data: cmsCtaMenu } = useCmsMenu("header-cta");
 
   const { data: categories = [] } = useCategories();
-  const { data: productsRes } = useProducts({ limit: 100 });
+  const { data: productsRes } = useProducts({ limit: 500 });
   const products = productsRes?.data ?? [];
 
   const dynamicMegaMenu = useMemo(() => {

@@ -42,22 +42,6 @@ function buildStorefrontProductWhere(
   const andConditions: Prisma.ProductWhereInput[] = [
     {
       OR: [
-        { hasVariants: false },
-        {
-          variants: {
-            some: {
-              status: "ACTIVE",
-              OR: [
-                { countries: { some: { countryId, enabled: true } } },
-                { countries: { none: {} } },
-              ],
-            },
-          },
-        },
-      ],
-    },
-    {
-      OR: [
         { countries: { some: { countryId, enabled: true } } },
         { countries: { none: {} } },
       ],
