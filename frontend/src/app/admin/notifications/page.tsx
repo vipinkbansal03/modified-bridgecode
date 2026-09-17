@@ -10,6 +10,7 @@ const CHANNELS = [
   { value: "all", label: "All Channels" },
   { value: "email", label: "Email" },
   { value: "whatsapp", label: "WhatsApp" },
+  { value: "sms", label: "SMS" },
   { value: "push", label: "Push Notification" },
 ];
 
@@ -86,13 +87,13 @@ export default function AdminNotificationsPage() {
     const base = "inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold border tracking-wider uppercase";
     switch (ch) {
       case "email":
-        return `${base} border-[#CDEBE3] bg-[#EAF5EC] text-[#1D7A32]`;
+        return `${base} border-blue-200 bg-blue-50 text-blue-700`;
       case "whatsapp":
         return `${base} border-[#CDEBE3] bg-[#EAF5EC] text-[#1D7A32]`;
       case "sms":
-        return `${base} border-[#E6E6E6] bg-[#FAFAFA] text-[#6B6B6B]`;
+        return `${base} border-amber-200 bg-amber-50 text-amber-700`;
       case "push":
-        return `${base} border-blue-200 bg-blue-50 text-blue-700`;
+        return `${base} border-indigo-200 bg-indigo-50 text-indigo-700`;
       case "in_app":
         return `${base} border-purple-200 bg-purple-50 text-purple-700`;
       default:

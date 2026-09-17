@@ -16,6 +16,7 @@ import {
   Cloud,
   Mail,
   MessageSquare,
+  MessageCircle,
   Database,
   Bell,
   CheckCircle2,
@@ -184,43 +185,8 @@ export default function ConfigurationPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedSettings, setSavedSettings] = useState<SettingMap>({});
-  const [testPhone, setTestPhone] = useState("");
-  const [testingSms, setTestingSms] = useState(false);
-  const [testingWhatsapp, setTestingWhatsapp] = useState(false);
   const queryClient = useQueryClient();
   const { showToast, ToastComponent } = useToast();
-
-  const handleTestSms = async () => {
-    if (!testPhone.trim()) {
-      showToast("Please enter a recipient phone number with country code to test SMS.", "error");
-      return;
-    }
-    setTestingSms(true);
-    try {
-      const res = await adminApi.post("/settings/test-sms", { phone: testPhone.trim() });
-      showToast(res.data.message || "Test SMS sent successfully!", "success");
-    } catch (err) {
-      showToast(getAdminErrorMessage(err, "Failed to send test SMS."), "error");
-    } finally {
-      setTestingSms(false);
-    }
-  };
-
-  const handleTestWhatsapp = async () => {
-    if (!testPhone.trim()) {
-      showToast("Please enter a recipient phone number with country code to test WhatsApp.", "error");
-      return;
-    }
-    setTestingWhatsapp(true);
-    try {
-      const res = await adminApi.post("/settings/test-whatsapp", { phone: testPhone.trim() });
-      showToast(res.data.message || "Test WhatsApp message sent successfully!", "success");
-    } catch (err) {
-      showToast(getAdminErrorMessage(err, "Failed to send test WhatsApp."), "error");
-    } finally {
-      setTestingWhatsapp(false);
-    }
-  };
 
   const loadSettings = useCallback(async () => {
     if (authLoading || !hasPermission("settings.view")) return;
@@ -727,210 +693,93 @@ export default function ConfigurationPage() {
                 </div>
               </div>
 
-              {/* ── 6. WHATSAPP & SMS MESSAGING ── */}
-              <div className="rounded-xl border border-[#E6E6E6] bg-white p-6 shadow-xs space-y-6">
+              {/* ── 6. COMMUNICATION & MESSAGING HUB ── */}
+              <div className="rounded-xl border border-[#E6E6E6] bg-white p-6 shadow-xs space-y-5">
                 <div className="flex items-center gap-2.5 pb-3 border-b border-[#F4F4F4]">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-green-600">
                     <MessageSquare size={18} />
                   </div>
                   <div>
-                    <h2 className="text-[15px] font-bold text-[#1A1A1A]">WhatsApp & SMS Messaging</h2>
-                    <p className="text-[12px] text-gray-500">Configure MSG91, Tata Tele Business, or Twilio for customer OTP authentication, order alerts, tracking, and messaging.</p>
+                    <h2 className="text-[15px] font-bold text-[#1A1A1A]">Communication & Messaging Hub</h2>
+                    <p className="text-[12px] text-gray-500">WhatsApp, SMS, and Email gateways and templates are managed centrally in dedicated studios.</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
-                  <AdminSelect
-                    label="ACTIVE WHATSAPP SERVICE"
-                    value={g("whatsapp.provider") || "msg91"}
-                    onChange={(e) => set("whatsapp.provider", e.target.value)}
-                    options={[
-                      { value: "msg91", label: "MSG91 WhatsApp (Recommended)" },
-                      { value: "tata", label: "Tata Tele Business (Tata BSP)" },
-                      { value: "twilio", label: "Twilio WhatsApp" },
-                    ]}
-                  />
-                  <SwitchRow
-                    label="Enable WhatsApp Service"
-                    hint="Turn WhatsApp messaging on or off across the whole platform."
-                    value={b("whatsapp.enabled")}
-                    onChange={(v) => tog("whatsapp.enabled", v)}
-                  />
-
-                  <AdminSelect
-                    label="ACTIVE SMS / OTP SERVICE"
-                    value={g("sms.provider") || "msg91"}
-                    onChange={(e) => set("sms.provider", e.target.value)}
-                    options={[
-                      { value: "msg91", label: "MSG91 SMS / OTP (Recommended)" },
-                      { value: "twilio", label: "Twilio SMS" },
-                      { value: "mock", label: "Mock / Development Console Only" },
-                    ]}
-                  />
-                  <SwitchRow
-                    label="Enable SMS Service"
-                    hint="Turn SMS verification (mobile OTP) and notifications on or off across the platform."
-                    value={b("sms.enabled")}
-                    onChange={(v) => tog("sms.enabled", v)}
-                  />
-                </div>
-
-                {/* MSG91 Unified Integration */}
-                <div className="space-y-4 rounded-lg border border-[#F0F0F0] bg-[#FAFAFA] p-5">
-                  <div className="flex items-center justify-between pb-2 border-b border-[#EBEBEB]">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* WhatsApp Hub Link */}
+                  <Link
+                    href="/admin/settings/whatsapp"
+                    className="flex flex-col justify-between p-4 rounded-xl border border-gray-200 bg-linear-to-br from-green-50/50 via-white to-white hover:border-green-400 hover:shadow-sm transition-all group cursor-pointer"
+                  >
                     <div>
-                      <h3 className="text-[13.5px] font-semibold text-[#1A1A1A]">MSG91 Unified Messaging (WhatsApp, SMS & OTP)</h3>
-                      <p className="text-[11.5px] text-gray-500 mt-0.5">Unified service for customer mobile OTP authentication, order tracking SMS, and WhatsApp alerts.</p>
-                    </div>
-                    <span className="inline-flex items-center rounded-md bg-green-50 px-2.5 py-1 text-[11px] font-semibold text-green-700 border border-green-200">
-                      Recommended Provider
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                    <SecretInput
-                      label="MSG91 AUTH KEY"
-                      value={g("sms.msg91_auth_key") || g("whatsapp.msg91_auth_key")}
-                      onChange={(v) => {
-                        set("sms.msg91_auth_key", v);
-                        set("whatsapp.msg91_auth_key", v);
-                      }}
-                      placeholder="Leave blank to use Email MSG91 AuthKey"
-                    />
-                    <AdminInput
-                      label="MSG91 WHATSAPP INTEGRATED NUMBER"
-                      value={g("whatsapp.msg91_integrated_number")}
-                      onChange={(e) => set("whatsapp.msg91_integrated_number", e.target.value)}
-                      placeholder="919240213800"
-                    />
-                    <AdminInput
-                      label="MSG91 SMS SENDER ID (DLT APPROVED)"
-                      value={g("sms.msg91_sender_id")}
-                      onChange={(e) => set("sms.msg91_sender_id", e.target.value)}
-                      placeholder="e.g. MODORT"
-                    />
-                    <AdminInput
-                      label="MSG91 OTP TEMPLATE ID"
-                      value={g("sms.msg91_otp_template_id")}
-                      onChange={(e) => set("sms.msg91_otp_template_id", e.target.value)}
-                      placeholder="Template ID from MSG91 OTP section"
-                    />
-                    <div className="md:col-span-2">
-                      <AdminInput
-                        label="MSG91 FLOW ID (OPTIONAL TRANSACTIONAL SMS)"
-                        value={g("sms.msg91_flow_id")}
-                        onChange={(e) => set("sms.msg91_flow_id", e.target.value)}
-                        placeholder="Flow ID from MSG91 Campaigns/Flow section"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Real-time Test Dispatch */}
-                  <div className="mt-4 pt-4 border-t border-[#EAEAEA]">
-                    <div className="text-[12px] font-semibold text-[#1A1A1A] mb-2">Test Outbound Delivery</div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <div className="flex-1 min-w-[240px]">
-                        <input
-                          type="tel"
-                          value={testPhone}
-                          onChange={(e) => setTestPhone(e.target.value)}
-                          placeholder="Enter test mobile number (e.g. 919876543210)"
-                          className="w-full rounded-lg border border-[#E6E6E6] bg-white px-3 py-2 text-[13px] focus:outline-none focus:ring-1 focus:ring-[#E31E24]"
-                        />
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="w-10 h-10 rounded-lg bg-green-500 text-white flex items-center justify-center shadow-xs">
+                          <MessageCircle size={20} />
+                        </div>
+                        <span className="text-[11px] font-semibold text-green-700 bg-green-100/60 px-2 py-0.5 rounded-full">
+                          Dedicated Studio
+                        </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleTestSms}
-                        disabled={testingSms || !testPhone.trim()}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#E31E24] px-3.5 py-2 text-[12px] font-medium text-[#E31E24] hover:bg-[#E31E24]/5 disabled:opacity-50 transition-colors cursor-pointer"
-                      >
-                        {testingSms ? "Sending SMS..." : "Send Test SMS OTP"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleTestWhatsapp}
-                        disabled={testingWhatsapp || !testPhone.trim()}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-green-600 px-3.5 py-2 text-[12px] font-medium text-green-700 hover:bg-green-50 disabled:opacity-50 transition-colors cursor-pointer"
-                      >
-                        {testingWhatsapp ? "Sending WhatsApp..." : "Send Test WhatsApp"}
-                      </button>
+                      <h3 className="text-[14px] font-bold text-[#1A1A1A] group-hover:text-green-700 transition-colors">WhatsApp Studio</h3>
+                      <p className="text-[12px] text-gray-500 mt-1 leading-relaxed">
+                        Configure MSG91, Tata Tele Business, Twilio, and storefront floating chat widget.
+                      </p>
                     </div>
-                  </div>
-                </div>
+                    <div className="mt-4 pt-3 border-t border-gray-100 flex items-center text-[12px] font-semibold text-green-700 group-hover:translate-x-0.5 transition-transform gap-1">
+                      <span>Open WhatsApp Studio</span>
+                      <ExternalLink size={13} />
+                    </div>
+                  </Link>
 
-                {/* Tata WhatsApp Integration */}
-                <div className="space-y-4 rounded-lg border border-[#F0F0F0] bg-[#FAFAFA] p-5">
-                  <h3 className="text-[13.5px] font-semibold text-[#1A1A1A]">Tata Tele Business API Credentials</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                    <AdminInput
-                      label="TATA BASE URL"
-                      value={g("whatsapp.tata_base_url")}
-                      onChange={(e) => set("whatsapp.tata_base_url", e.target.value)}
-                      placeholder="https://wb.omni.tatatelebusiness.com"
-                    />
-                    <AdminInput
-                      label="TATA SENDER NUMBER"
-                      value={g("whatsapp.tata_sender")}
-                      onChange={(e) => set("whatsapp.tata_sender", e.target.value)}
-                      placeholder="9240213800"
-                    />
-                    <AdminInput
-                      label="TATA BOT ID"
-                      value={g("whatsapp.tata_bot_id")}
-                      onChange={(e) => set("whatsapp.tata_bot_id", e.target.value)}
-                    />
-                    <SecretInput
-                      label="TATA BEARER TOKEN"
-                      value={g("whatsapp.tata_bearer_token")}
-                      onChange={(v) => set("whatsapp.tata_bearer_token", v)}
-                    />
-                    <AdminInput
-                      label="TATA API KEY"
-                      value={g("whatsapp.tata_api_key")}
-                      onChange={(e) => set("whatsapp.tata_api_key", e.target.value)}
-                    />
-                    <SecretInput
-                      label="TATA API SECRET"
-                      value={g("whatsapp.tata_api_secret")}
-                      onChange={(v) => set("whatsapp.tata_api_secret", v)}
-                    />
-                  </div>
-                </div>
+                  {/* SMS Hub Link */}
+                  <Link
+                    href="/admin/settings/sms"
+                    className="flex flex-col justify-between p-4 rounded-xl border border-gray-200 bg-linear-to-br from-red-50/50 via-white to-white hover:border-red-400 hover:shadow-sm transition-all group cursor-pointer"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="w-10 h-10 rounded-lg bg-[#E31E24] text-white flex items-center justify-center shadow-xs">
+                          <MessageSquare size={20} />
+                        </div>
+                        <span className="text-[11px] font-semibold text-[#E31E24] bg-red-100/60 px-2 py-0.5 rounded-full">
+                          Dedicated Studio
+                        </span>
+                      </div>
+                      <h3 className="text-[14px] font-bold text-[#1A1A1A] group-hover:text-[#E31E24] transition-colors">SMS & OTP Studio</h3>
+                      <p className="text-[12px] text-gray-500 mt-1 leading-relaxed">
+                        Manage MSG91 DLT credentials, Twilio SMS, DLT approved Sender IDs, and Flow IDs.
+                      </p>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-gray-100 flex items-center text-[12px] font-semibold text-[#E31E24] group-hover:translate-x-0.5 transition-transform gap-1">
+                      <span>Open SMS Studio</span>
+                      <ExternalLink size={13} />
+                    </div>
+                  </Link>
 
-                {/* Twilio SMS & WhatsApp */}
-                <div className="space-y-4 rounded-lg border border-[#F0F0F0] bg-[#FAFAFA] p-5">
-                  <div className="flex items-center justify-between pb-2 border-b border-[#EBEBEB]">
-                    <h3 className="text-[13.5px] font-semibold text-[#1A1A1A]">Twilio Integration (SMS & Alternative WhatsApp)</h3>
-                    <SwitchRow
-                      label="Enable Twilio"
-                      value={b("twilio.enabled")}
-                      onChange={(v) => tog("twilio.enabled", v)}
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                    <AdminInput
-                      label="TWILIO ACCOUNT SID"
-                      value={g("twilio.account_sid")}
-                      onChange={(e) => set("twilio.account_sid", e.target.value)}
-                      placeholder="AC..."
-                    />
-                    <SecretInput
-                      label="TWILIO AUTH TOKEN"
-                      value={g("twilio.auth_token")}
-                      onChange={(v) => set("twilio.auth_token", v)}
-                    />
-                    <AdminInput
-                      label="TWILIO PHONE NUMBER (SMS)"
-                      value={g("twilio.phone_number")}
-                      onChange={(e) => set("twilio.phone_number", e.target.value)}
-                      placeholder="+15076506177"
-                    />
-                    <AdminInput
-                      label="TWILIO WHATSAPP NUMBER (OPTIONAL)"
-                      value={g("twilio.whatsapp_from")}
-                      onChange={(e) => set("twilio.whatsapp_from", e.target.value)}
-                      placeholder="+14155238886"
-                    />
-                  </div>
+                  {/* Email Hub Link */}
+                  <Link
+                    href="/admin/settings/email"
+                    className="flex flex-col justify-between p-4 rounded-xl border border-gray-200 bg-linear-to-br from-purple-50/50 via-white to-white hover:border-purple-400 hover:shadow-sm transition-all group cursor-pointer"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="w-10 h-10 rounded-lg bg-purple-600 text-white flex items-center justify-center shadow-xs">
+                          <Mail size={20} />
+                        </div>
+                        <span className="text-[11px] font-semibold text-purple-700 bg-purple-100/60 px-2 py-0.5 rounded-full">
+                          Dedicated Studio
+                        </span>
+                      </div>
+                      <h3 className="text-[14px] font-bold text-[#1A1A1A] group-hover:text-purple-700 transition-colors">Email Studio</h3>
+                      <p className="text-[12px] text-gray-500 mt-1 leading-relaxed">
+                        Configure SMTP / MSG91 Email service, country-based sender email routing, and templates.
+                      </p>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-gray-100 flex items-center text-[12px] font-semibold text-purple-700 group-hover:translate-x-0.5 transition-transform gap-1">
+                      <span>Open Email Studio</span>
+                      <ExternalLink size={13} />
+                    </div>
+                  </Link>
                 </div>
               </div>
 

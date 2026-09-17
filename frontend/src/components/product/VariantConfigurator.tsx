@@ -911,11 +911,9 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                           }
                           className="w-full cursor-pointer rounded-md border border-line bg-white py-2 pl-3 pr-8 text-[12.5px] font-medium text-ink outline-none transition hover:border-steel-2 focus:border-brand focus:ring-1 focus:ring-brand"
                         >
-                          {!selectedValue && (
-                            <option value="" disabled>
-                              Select {attribute.name}
-                            </option>
-                          )}
+                          <option value="">
+                            Select {attribute.name}
+                          </option>
                           {availableValues.map((value) => (
                             <option
                               key={value.id}

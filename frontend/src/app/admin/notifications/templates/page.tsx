@@ -19,6 +19,7 @@ import { apiClient } from "@/lib/apiClient";
 
 const CHANNELS = [
   { value: "email", label: "Email", icon: Mail },
+  { value: "sms", label: "SMS", icon: MessageSquare },
   { value: "whatsapp", label: "WhatsApp", icon: Smartphone },
   { value: "push", label: "Push", icon: Bell },
 ];
@@ -206,7 +207,7 @@ export default function TemplateManagerPage() {
 
   const filteredTemplates = useMemo(() => {
     return templates.filter((t: any) => {
-      if (t.channel === "sms" || t.channel === "in_app" || t.channel === "inApp") {
+      if (t.channel === "in_app" || t.channel === "inApp") {
         return false;
       }
       const matchesType = filterType === "all" || t.type === filterType;
@@ -302,33 +303,59 @@ export default function TemplateManagerPage() {
             </div>
             <div className="bg-[#FAFAFA] border border-[#E6E6E6] px-5 py-3 rounded text-center min-w-[100px]">
               <div className="text-[10px] text-[#7A7A7A] font-bold uppercase tracking-wider">Channels</div>
-              <div className="text-[20px] font-bold text-[#1A1A1A] mt-0.5">3</div>
+              <div className="text-[20px] font-bold text-[#1A1A1A] mt-0.5">{CHANNELS.length}</div>
             </div>
           </div>
         </div>
 
         {/* Tab Headers */}
-        <div className="flex border-b border-[#E6E6E6]">
-          <button
-            onClick={() => setActiveTab("templates")}
-            className={`px-4 py-2.5 text-[13px] font-bold uppercase tracking-wider border-b-2 transition-colors ${
-              activeTab === "templates"
-                ? "border-[#1A1A1A] text-[#1A1A1A]"
-                : "border-transparent text-[#9A9A9A] hover:text-[#1A1A1A]"
-            }`}
-          >
-            Templates Editor
-          </button>
-          <button
-            onClick={() => setActiveTab("email-layouts")}
-            className={`px-4 py-2.5 text-[13px] font-bold uppercase tracking-wider border-b-2 transition-colors ${
-              activeTab === "email-layouts"
-                ? "border-[#1A1A1A] text-[#1A1A1A]"
-                : "border-transparent text-[#9A9A9A] hover:text-[#1A1A1A]"
-            }`}
-          >
-            Static Email Layout
-          </button>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#E6E6E6] gap-3">
+          <div className="flex">
+            <button
+              onClick={() => setActiveTab("templates")}
+              className={`px-4 py-2.5 text-[13px] font-bold uppercase tracking-wider border-b-2 transition-colors cursor-pointer ${
+                activeTab === "templates"
+                  ? "border-[#1A1A1A] text-[#1A1A1A]"
+                  : "border-transparent text-[#9A9A9A] hover:text-[#1A1A1A]"
+              }`}
+            >
+              Templates Editor
+            </button>
+            <button
+              onClick={() => setActiveTab("email-layouts")}
+              className={`px-4 py-2.5 text-[13px] font-bold uppercase tracking-wider border-b-2 transition-colors cursor-pointer ${
+                activeTab === "email-layouts"
+                  ? "border-[#1A1A1A] text-[#1A1A1A]"
+                  : "border-transparent text-[#9A9A9A] hover:text-[#1A1A1A]"
+              }`}
+            >
+              Static Email Layout
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 pb-2 sm:pb-0">
+            <a
+              href="/admin/settings/email?tab=templates"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 px-3 py-1.5 text-xs font-bold text-[#E31E24] transition-colors"
+            >
+              <Mail className="h-3.5 w-3.5" />
+              Open Email Studio &rarr;
+            </a>
+            <a
+              href="/admin/settings/sms?tab=templates"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 text-xs font-bold text-blue-700 transition-colors"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              Open SMS Studio &rarr;
+            </a>
+            <a
+              href="/admin/settings/whatsapp"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 hover:bg-green-100 px-3 py-1.5 text-xs font-bold text-green-700 transition-colors"
+            >
+              <Smartphone className="h-3.5 w-3.5" />
+              Open WhatsApp Studio &rarr;
+            </a>
+          </div>
         </div>
 
         {successMessage && (
@@ -515,6 +542,14 @@ export default function TemplateManagerPage() {
                     WhatsApp tips
                   </div>
                   <p className="text-[#6B6B6B] leading-relaxed">Keep phone-delivered templates short. Put the most important action in the first line.</p>
+                </div>
+
+                <div className="border border-[#E6E6E6] bg-white rounded-lg p-4 space-y-3 shadow-sm text-[12px]">
+                  <div className="flex items-center gap-1.5 font-bold text-[#1A1A1A]">
+                    <MessageSquare className="w-4 h-4 text-[#E31E24]" />
+                    SMS tips
+                  </div>
+                  <p className="text-[#6B6B6B] leading-relaxed">Keep SMS concise within 160 characters. Ensure DLT template variables match placeholders for India.</p>
                 </div>
 
                 <div className="border border-[#E6E6E6] bg-white rounded-lg p-4 space-y-3 shadow-sm text-[12px]">

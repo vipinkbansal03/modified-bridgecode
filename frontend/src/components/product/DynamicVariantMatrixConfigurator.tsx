@@ -137,13 +137,8 @@ function buildInitialDropdownSelections(
   attributes: ProductOptionAttribute[],
   variants: NormalizedVariant[],
 ) {
-  const firstVariant = variants[0];
   return attributes.reduce<Record<string, string>>((acc, attribute) => {
-    const firstMatchingValueId =
-      firstVariant?.selectionByAttributeId[attribute.id] ??
-      attribute.values[0]?.id ??
-      "";
-    if (firstMatchingValueId) acc[attribute.id] = firstMatchingValueId;
+    acc[attribute.id] = "";
     return acc;
   }, {});
 }
@@ -357,6 +352,7 @@ export function DynamicVariantMatrixConfigurator({
     () => packageOptions[0]?.id ?? "",
   );
   const [quantityMap, setQuantityMap] = useState<Record<string, number>>({});
+  const [dropdownQuantity, setDropdownQuantity] = useState<number>(1);
   const [previewPriceMap, setPreviewPriceMap] = useState<
     Record<string, number>
   >({});
@@ -393,18 +389,58 @@ export function DynamicVariantMatrixConfigurator({
     return map;
   }, [normalizedVariants]);
 
-  const filteredVariants = normalizedVariants.filter(
-    (variant) =>
-      (packageOptions.length <= 1 ||
-        (variant.package?.id ?? "") === selectedPackageId) &&
-      dropdownAttributes.every((attribute) => {
-        const selectedValueId = dropdownSelections[attribute.id];
-        return (
-          !selectedValueId ||
-          variant.selectionByAttributeId[attribute.id] === selectedValueId
-        );
-      }),
-  );
+  const allDropdownsSelected = useMemo(() => {
+    return (
+      dropdownAttributes.length === 0 ||
+      dropdownAttributes.every((attribute) => Boolean(dropdownSelections[attribute.id]))
+    );
+  }, [dropdownAttributes, dropdownSelections]);
+
+  const filteredVariants = useMemo(() => {
+    return normalizedVariants.filter(
+      (variant) =>
+        (packageOptions.length <= 1 ||
+          (variant.package?.id ?? "") === selectedPackageId) &&
+        dropdownAttributes.every((attribute) => {
+          const selectedValueId = dropdownSelections[attribute.id];
+          return (
+            !selectedValueId ||
+            variant.selectionByAttributeId[attribute.id] === selectedValueId
+          );
+        }),
+    );
+  }, [normalizedVariants, packageOptions.length, selectedPackageId, dropdownAttributes, dropdownSelections]);
+
+  const singleResolvedVariant = useMemo<NormalizedVariant | null>(() => {
+    if (!allDropdownsSelected) return null;
+    if (filteredVariants.length === 1) return filteredVariants[0];
+
+    // Check if there is a variant that specifically does not require X/Y grid attributes
+    const exactDropdownMatch = filteredVariants.find((v) => {
+      const hasX = xAxisAttributes.some((x) => Boolean(v.selectionByAttributeId[x.id]));
+      const hasY = yAxisAttributes.some((y) => Boolean(v.selectionByAttributeId[y.id]));
+      return !hasX && !hasY;
+    });
+    return exactDropdownMatch ?? null;
+  }, [allDropdownsSelected, filteredVariants, xAxisAttributes, yAxisAttributes]);
+
+  const singleResolvedPrice = singleResolvedVariant
+    ? variantPriceMap[singleResolvedVariant.id] ?? null
+    : null;
+
+  const singleResolvedUnitPrice = singleResolvedVariant && singleResolvedPrice
+    ? (previewPriceMap[singleResolvedVariant.id] ?? singleResolvedPrice.sellingPrice)
+    : 0;
+
+  const singleResolvedAvailableStock = singleResolvedVariant
+    ? (singleResolvedVariant.warehouseInventories?.length
+        ? singleResolvedVariant.warehouseInventories.reduce((sum, inv) => sum + inv.available, 0)
+        : (singleResolvedVariant.inventory?.available ?? 0))
+    : 0;
+
+  const isSingleOutOfStock = singleResolvedVariant
+    ? singleResolvedAvailableStock <= 0
+    : false;
 
   const activeRowCombinations = useMemo(() => {
     return rowCombinations.filter((rc) => {
@@ -490,16 +526,41 @@ export function DynamicVariantMatrixConfigurator({
   }, [selectedEntries, userSelected, selectedWarehouseId, warehouses]);
 
   const totals = useMemo(() => {
-    const totalUnits = selectedEntries.reduce(
-      (sum, entry) => sum + entry.quantity,
-      0,
-    );
-    const subtotal = selectedEntries.reduce(
-      (sum, entry) => sum + entry.total,
-      0,
-    );
+    if (selectedEntries.length > 0) {
+      const totalUnits = selectedEntries.reduce(
+        (sum, entry) => sum + entry.quantity,
+        0,
+      );
+      const subtotal = selectedEntries.reduce(
+        (sum, entry) => sum + entry.total,
+        0,
+      );
+      const currencySymbol =
+        selectedEntries[0]?.price.currencySymbol ??
+        variantPriceMap[normalizedVariants[0]?.id ?? ""]?.currencySymbol ??
+        (selectedCurrency === "USD"
+          ? "$"
+          : selectedCurrency === "EUR"
+            ? "€"
+            : selectedCurrency === "GBP"
+              ? "£"
+              : "₹");
+      return { totalUnits, subtotal, currencySymbol };
+    }
+
+    if (singleResolvedVariant && dropdownQuantity > 0) {
+      const currencySymbol =
+        singleResolvedPrice?.currencySymbol ??
+        variantPriceMap[normalizedVariants[0]?.id ?? ""]?.currencySymbol ??
+        (selectedCurrency === "USD" ? "$" : "₹");
+      return {
+        totalUnits: dropdownQuantity,
+        subtotal: singleResolvedUnitPrice * dropdownQuantity,
+        currencySymbol,
+      };
+    }
+
     const currencySymbol =
-      selectedEntries[0]?.price.currencySymbol ??
       variantPriceMap[normalizedVariants[0]?.id ?? ""]?.currencySymbol ??
       (selectedCurrency === "USD"
         ? "$"
@@ -508,8 +569,17 @@ export function DynamicVariantMatrixConfigurator({
           : selectedCurrency === "GBP"
             ? "£"
             : "₹");
-    return { totalUnits, subtotal, currencySymbol };
-  }, [normalizedVariants, selectedEntries, variantPriceMap]);
+    return { totalUnits: 0, subtotal: 0, currencySymbol };
+  }, [
+    normalizedVariants,
+    selectedCurrency,
+    selectedEntries,
+    singleResolvedPrice,
+    singleResolvedUnitPrice,
+    singleResolvedVariant,
+    dropdownQuantity,
+    variantPriceMap,
+  ]);
 
   function getAvailableValuesForDropdownAttribute(
     attribute: ProductOptionAttribute,
@@ -548,32 +618,36 @@ export function DynamicVariantMatrixConfigurator({
 
     nextSelections[attributeId] = valueId;
 
-    for (let i = attrIndex + 1; i < dropdownAttributes.length; i++) {
-      const downstreamAttr = dropdownAttributes[i];
-      const validDownstreamVariants = normalizedVariants.filter((v) =>
-        Object.entries(nextSelections).every(
-          ([k, vId]) => !vId || v.selectionByAttributeId[k] === vId,
-        ),
-      );
-
-      const availableDownstreamValueIds = new Set(
-        validDownstreamVariants
-          .map((v) => v.selectionByAttributeId[downstreamAttr.id])
-          .filter((val): val is string => Boolean(val)),
-      );
-
-      const currentDownstreamValId = dropdownSelections[downstreamAttr.id];
-      if (currentDownstreamValId && availableDownstreamValueIds.has(currentDownstreamValId)) {
-        nextSelections[downstreamAttr.id] = currentDownstreamValId;
-      } else {
-        const firstAvailable = downstreamAttr.values.find((v) =>
-          availableDownstreamValueIds.has(v.id),
+    if (!valueId) {
+      for (let i = attrIndex + 1; i < dropdownAttributes.length; i++) {
+        nextSelections[dropdownAttributes[i].id] = "";
+      }
+    } else {
+      for (let i = attrIndex + 1; i < dropdownAttributes.length; i++) {
+        const downstreamAttr = dropdownAttributes[i];
+        const validDownstreamVariants = normalizedVariants.filter((v) =>
+          Object.entries(nextSelections).every(
+            ([k, vId]) => !vId || v.selectionByAttributeId[k] === vId,
+          ),
         );
-        nextSelections[downstreamAttr.id] = firstAvailable?.id ?? "";
+
+        const availableDownstreamValueIds = new Set(
+          validDownstreamVariants
+            .map((v) => v.selectionByAttributeId[downstreamAttr.id])
+            .filter((val): val is string => Boolean(val)),
+        );
+
+        const currentDownstreamValId = dropdownSelections[downstreamAttr.id];
+        if (currentDownstreamValId && availableDownstreamValueIds.has(currentDownstreamValId)) {
+          nextSelections[downstreamAttr.id] = currentDownstreamValId;
+        } else {
+          nextSelections[downstreamAttr.id] = "";
+        }
       }
     }
 
     setDropdownSelections(nextSelections);
+    setQuantityMap({});
     setFeedback(null);
   };
 
@@ -590,7 +664,7 @@ export function DynamicVariantMatrixConfigurator({
   };
 
   const handleAddSelectedToCart = (isBuyNow = false) => {
-    const items = buildCartItems(
+    let items = buildCartItems(
       apiProduct,
       normalizedVariants,
       quantityMap,
@@ -602,10 +676,28 @@ export function DynamicVariantMatrixConfigurator({
       selectedWarehouse?.estimatedDeliveryDays,
       selectedWarehouse?.isLocal,
     );
+
+    if (!items.length && singleResolvedVariant && dropdownQuantity > 0 && !isSingleOutOfStock) {
+      items = buildCartItems(
+        apiProduct,
+        normalizedVariants,
+        { [singleResolvedVariant.id]: dropdownQuantity },
+        variantPriceMap,
+        warehouses || [],
+        previewPriceMap,
+        selectedWarehouse?.id,
+        selectedWarehouse?.name,
+        selectedWarehouse?.estimatedDeliveryDays,
+        selectedWarehouse?.isLocal,
+      );
+    }
+
     if (!items.length) {
       setFeedback({
         kind: "error",
-        message: "Enter quantity for at least one available variant.",
+        message: !allDropdownsSelected
+          ? "Please select an option in each dropdown above to continue."
+          : "Enter quantity or select an available variant to continue.",
       });
       return;
     }
@@ -625,7 +717,7 @@ export function DynamicVariantMatrixConfigurator({
   };
 
   const handleAddSelectedToQuote = () => {
-    const items = buildCartItems(
+    let items = buildCartItems(
       apiProduct,
       normalizedVariants,
       quantityMap,
@@ -637,10 +729,28 @@ export function DynamicVariantMatrixConfigurator({
       selectedWarehouse?.estimatedDeliveryDays,
       selectedWarehouse?.isLocal,
     );
+
+    if (!items.length && singleResolvedVariant && dropdownQuantity > 0 && !isSingleOutOfStock) {
+      items = buildCartItems(
+        apiProduct,
+        normalizedVariants,
+        { [singleResolvedVariant.id]: dropdownQuantity },
+        variantPriceMap,
+        warehouses || [],
+        previewPriceMap,
+        selectedWarehouse?.id,
+        selectedWarehouse?.name,
+        selectedWarehouse?.estimatedDeliveryDays,
+        selectedWarehouse?.isLocal,
+      );
+    }
+
     if (!items.length) {
       setFeedback({
         kind: "error",
-        message: "Enter quantity for at least one available variant.",
+        message: !allDropdownsSelected
+          ? "Please select an option in each dropdown above to continue."
+          : "Enter quantity or select an available variant to continue.",
       });
       return;
     }
@@ -795,8 +905,9 @@ export function DynamicVariantMatrixConfigurator({
                         onChange={(event) =>
                           handleDropdownChange(attribute.id, event.target.value)
                         }
-                        className="w-full rounded-lg border border-line bg-white px-4 py-3 text-[13px] text-ink outline-none transition focus:border-brand"
+                        className="w-full cursor-pointer rounded-lg border border-line bg-white px-4 py-3 text-[13px] text-ink outline-none transition focus:border-brand"
                       >
+                        <option value="">Select {attribute.name}</option>
                         {availableValues.map((value) => (
                           <option key={value.id} value={value.id}>
                             {value.value}
@@ -809,142 +920,218 @@ export function DynamicVariantMatrixConfigurator({
               </div>
             )}
 
-            <div className="overflow-hidden rounded-lg border border-line bg-white shadow-xs">
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left">
-                  <thead>
-                    <tr className="border-b border-line bg-[#F8F9FA]">
-                      <th className="sticky left-0 z-20 border-r border-line bg-[#F1F3F5] px-1.5 py-1 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-ink">
-                        <span className="text-brand">
-                          {rowAxisAttributes.map((a) => a.name).join(" + ") || "Size"}
-                        </span>
-                        <span className="mx-1 text-steel-2">/</span>
-                        <span className="text-steel">
-                          {xAxisAttributes.map((a) => a.name).join(" + ")}
-                        </span>
-                      </th>
-                      {activeColumnCombinations.map((columnCombination) => {
-                        const headerText = columnCombination.labels
-                          .map((l) => l.value.value)
-                          .join(" • ");
-                        return (
-                          <th
-                            key={columnCombination.key}
-                            className="min-w-[65px] border-r border-line bg-[#F8F9FA] px-1 py-1 text-center text-[10px] font-bold text-ink last:border-r-0"
-                          >
-                            <div className="inline-flex flex-col items-center">
-                              <span className="rounded-md bg-red-50 px-1 py-0.5 text-[9.5px] font-bold text-brand border border-red-100/60 leading-tight">
-                                {headerText}
-                              </span>
-                            </div>
-                          </th>
-                        );
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeRowCombinations.map((rowCombination) => (
-                      <tr
-                        key={rowCombination.key}
-                        className="border-b border-line hover:bg-slate-50/50 transition-colors last:border-b-0"
-                      >
-                        <th className="sticky left-0 z-10 border-r border-line bg-[#F8F9FA] px-1.5 py-1.5 text-left font-bold text-ink text-[10.5px] whitespace-nowrap shadow-xs">
-                          {rowCombination.labels.map((l) => l.value.value).join(" • ") || "All"}
-                        </th>
-                        {activeColumnCombinations.map((columnCombination) => {
-                          const variant = variantLookup.get(
-                            buildVariantLookupKey(
-                              {
-                                ...dropdownSelections,
-                                ...rowCombination.selection,
-                                ...columnCombination.selection,
-                              },
-                              selectedPackageId,
-                            ),
-                          );
-                          const price = variant
-                            ? variantPriceMap[variant.id]
-                            : null;
-                          const availableStock = variant?.warehouseInventories
-                            ? variant.warehouseInventories.reduce((sum, inv) => sum + inv.available, 0)
-                            : (variant?.inventory?.available ?? 0);
-                          const outOfStock =
-                            !variant || availableStock === 0;
-                          const quantity = variant
-                            ? (quantityMap[variant.id] ?? 0)
-                            : 0;
-                          const minPositive = Math.max(1, variant?.moq ?? 1);
-                          const displayUnitPrice =
-                            variant && price
-                              ? (previewPriceMap[variant.id] ?? price.sellingPrice)
-                              : null;
-                          const isPor = !price || price.sellingPrice <= 0;
-
-                          return (
-                            <td
-                              key={columnCombination.key}
-                              className="align-middle border-r border-line px-1 py-1 text-center last:border-r-0"
-                            >
-                              {variant ? (
-                                <div
-                                  className={`mx-auto flex flex-col items-center justify-center rounded-md p-0.5 transition-all ${
-                                    quantity > 0
-                                      ? "bg-red-50/70 ring-1 ring-brand/30"
-                                      : "bg-white"
-                                  } ${outOfStock || isPor ? "opacity-60" : ""}`}
-                                >
-                                  <QuantityInput
-                                    size="xs"
-                                    value={quantity}
-                                    onChange={(nextQuantity) =>
-                                      handleQuantityChange(
-                                        variant.id,
-                                        nextQuantity,
-                                      )
-                                    }
-                                    min={0}
-                                    max={availableStock > 0 ? availableStock : undefined}
-                                    minPositive={minPositive}
-                                    disabled={!variant}
-                                  />
-                                  <div className="mt-1.5 text-center">
-                                    <p className="text-[10px] font-bold text-ink">
-                                      {isPor ? (
-                                        <span className="text-[10.5px] font-semibold text-brand">
-                                          Price Upon Request
-                                        </span>
-                                      ) : price && displayUnitPrice != null ? (
-                                        formatMoney(
-                                          price.currencySymbol,
-                                          displayUnitPrice,
-                                        )
-                                      ) : (
-                                        "N/A"
-                                      )}
-                                    </p>
-                                    {outOfStock ? (
-                                      <span className="text-[10px] font-semibold text-red-500">
-                                        Out of stock
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="py-2 text-center text-[11px] font-medium text-steel-2">
-                                  
-                                </div>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {!allDropdownsSelected && dropdownAttributes.length > 0 && (
+              <div className="rounded-lg border border-dashed border-line bg-offwhite p-6 text-center text-[13.5px] text-steel">
+                Please select an option in each dropdown above to view available variants and pricing.
               </div>
-            </div>
+            )}
 
-            {filteredVariants.length === 0 && (
+            {singleResolvedVariant && (
+              <div className="rounded-lg border border-brand/25 bg-[#FFFBFB] p-5 shadow-2xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-pill bg-brand px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                        Selected Variant
+                      </span>
+                      <StockBadge
+                        status={singleResolvedVariant.inventory?.status}
+                        available={singleResolvedAvailableStock}
+                      />
+                    </div>
+                    <h3 className="mt-1.5 text-[16px] font-bold text-ink">
+                      {singleResolvedVariant.title}
+                    </h3>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      {singleResolvedVariant.sku && (
+                        <span className="text-[12px] text-steel">
+                          SKU: {singleResolvedVariant.sku}
+                        </span>
+                      )}
+                      {selectedWarehouse && (
+                        <span className="rounded-pill border border-line bg-white px-2 py-0.5 text-[11px] text-steel">
+                          Ships from: {selectedWarehouse.name}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:items-end gap-2">
+                    <div className="sm:text-right">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-steel-2">
+                        Unit Price
+                      </span>
+                      <p className="text-[20px] font-bold text-ink">
+                        {singleResolvedPrice && singleResolvedUnitPrice > 0
+                          ? formatMoney(singleResolvedPrice.currencySymbol, singleResolvedUnitPrice)
+                          : "Price Upon Request"}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] font-semibold text-steel">Qty:</span>
+                      <QuantityInput
+                        size="sm"
+                        value={dropdownQuantity}
+                        onChange={(nextQty) => setDropdownQuantity(Math.max(1, nextQty))}
+                        min={1}
+                        max={singleResolvedAvailableStock > 0 ? singleResolvedAvailableStock : undefined}
+                        disabled={isSingleOutOfStock}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeRowCombinations.length > 0 && activeColumnCombinations.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-bold uppercase tracking-[0.14em] text-ink">
+                    Matrix Grid (Size Combinations)
+                  </span>
+                  <span className="text-[11.5px] text-steel">
+                    Enter quantities directly in cells to order multiple sizes at once
+                  </span>
+                </div>
+                <div className="overflow-hidden rounded-lg border border-line bg-white shadow-xs">
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-left">
+                      <thead>
+                        <tr className="border-b border-line bg-[#F8F9FA]">
+                          <th className="sticky left-0 z-20 border-r border-line bg-[#F1F3F5] px-1.5 py-1 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-ink">
+                            <span className="text-brand">
+                              {rowAxisAttributes.map((a) => a.name).join(" + ") || "Size"}
+                            </span>
+                            <span className="mx-1 text-steel-2">/</span>
+                            <span className="text-steel">
+                              {xAxisAttributes.map((a) => a.name).join(" + ")}
+                            </span>
+                          </th>
+                          {activeColumnCombinations.map((columnCombination) => {
+                            const headerText = columnCombination.labels
+                              .map((l) => l.value.value)
+                              .join(" • ");
+                            return (
+                              <th
+                                key={columnCombination.key}
+                                className="min-w-[65px] border-r border-line bg-[#F8F9FA] px-1 py-1 text-center text-[10px] font-bold text-ink last:border-r-0"
+                              >
+                                <div className="inline-flex flex-col items-center">
+                                  <span className="rounded-md bg-red-50 px-1 py-0.5 text-[9.5px] font-bold text-brand border border-red-100/60 leading-tight">
+                                    {headerText}
+                                  </span>
+                                </div>
+                              </th>
+                            );
+                          })}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeRowCombinations.map((rowCombination) => (
+                          <tr
+                            key={rowCombination.key}
+                            className="border-b border-line hover:bg-slate-50/50 transition-colors last:border-b-0"
+                          >
+                            <th className="sticky left-0 z-10 border-r border-line bg-[#F8F9FA] px-1.5 py-1.5 text-left font-bold text-ink text-[10.5px] whitespace-nowrap shadow-xs">
+                              {rowCombination.labels.map((l) => l.value.value).join(" • ") || "All"}
+                            </th>
+                            {activeColumnCombinations.map((columnCombination) => {
+                              const variant = variantLookup.get(
+                                buildVariantLookupKey(
+                                  {
+                                    ...dropdownSelections,
+                                    ...rowCombination.selection,
+                                    ...columnCombination.selection,
+                                  },
+                                  selectedPackageId,
+                                ),
+                              );
+                              const price = variant
+                                ? variantPriceMap[variant.id]
+                                : null;
+                              const availableStock = variant?.warehouseInventories
+                                ? variant.warehouseInventories.reduce((sum, inv) => sum + inv.available, 0)
+                                : (variant?.inventory?.available ?? 0);
+                              const outOfStock =
+                                !variant || availableStock === 0;
+                              const quantity = variant
+                                ? (quantityMap[variant.id] ?? 0)
+                                : 0;
+                              const minPositive = Math.max(1, variant?.moq ?? 1);
+                              const displayUnitPrice =
+                                variant && price
+                                ? (previewPriceMap[variant.id] ?? price.sellingPrice)
+                                : null;
+                              const isPor = !price || price.sellingPrice <= 0;
+
+                              return (
+                                <td
+                                  key={columnCombination.key}
+                                  className="align-middle border-r border-line px-1 py-1 text-center last:border-r-0"
+                                >
+                                  {variant ? (
+                                    <div
+                                      className={`mx-auto flex flex-col items-center justify-center rounded-md p-0.5 transition-all ${
+                                        quantity > 0
+                                          ? "bg-red-50/70 ring-1 ring-brand/30"
+                                          : "bg-white"
+                                      } ${outOfStock || isPor ? "opacity-60" : ""}`}
+                                    >
+                                      <QuantityInput
+                                        size="xs"
+                                        value={quantity}
+                                        onChange={(nextQuantity) =>
+                                          handleQuantityChange(
+                                            variant.id,
+                                            nextQuantity,
+                                          )
+                                        }
+                                        min={0}
+                                        max={availableStock > 0 ? availableStock : undefined}
+                                        minPositive={minPositive}
+                                        disabled={!variant}
+                                      />
+                                      <div className="mt-1.5 text-center">
+                                        <p className="text-[10px] font-bold text-ink">
+                                          {isPor ? (
+                                            <span className="text-[10.5px] font-semibold text-brand">
+                                              Price Upon Request
+                                            </span>
+                                          ) : price && displayUnitPrice != null ? (
+                                            formatMoney(
+                                              price.currencySymbol,
+                                              displayUnitPrice,
+                                            )
+                                          ) : (
+                                            "N/A"
+                                          )}
+                                        </p>
+                                        {outOfStock ? (
+                                          <span className="text-[10px] font-semibold text-red-500">
+                                            Out of stock
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="py-2 text-center text-[11px] font-medium text-steel-2">
+                                      
+                                    </div>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {allDropdownsSelected && filteredVariants.length === 0 && (
               <div className="flex items-start gap-2 rounded-lg border border-[#E7C9B5] bg-[#FBF2EB] px-4 py-3 text-brand">
                 <AlertCircle size={16} className="mt-0.5 shrink-0" />
                 <p className="text-[13px]">
@@ -955,140 +1142,180 @@ export function DynamicVariantMatrixConfigurator({
             )}
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2 items-start">
-            <div className="rounded-lg border border-line bg-offwhite p-5">
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-white text-brand">
-                  <Layers3 size={18} />
-                </div>
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
-                    Selected Variants
-                  </p>
-                  <p className="text-[14px] text-steel">
-                    {selectedEntries.length
-                      ? `${selectedEntries.length} line${selectedEntries.length === 1 ? "" : "s"} ready`
-                      : "Nothing selected yet"}
-                  </p>
-                </div>
-              </div>
+          {(() => {
+            const hasOrderableItems =
+              selectedEntries.length > 0 ||
+              Boolean(singleResolvedVariant && dropdownQuantity > 0 && !isSingleOutOfStock);
 
-              {selectedEntries.length ? (
-                <div className="space-y-3 max-h-[360px] overflow-y-auto pr-2 custom-scrollbar">
-                  {selectedEntries.map((entry) => (
-                    <div
-                      key={entry.variant.id}
-                      className="rounded-lg border border-line bg-white p-4"
-                    >
+            return (
+              <div className="grid gap-6 md:grid-cols-2 items-start">
+                <div className="rounded-lg border border-line bg-offwhite p-5">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-white text-brand">
+                      <Layers3 size={18} />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
+                        Selected Variants
+                      </p>
+                      <p className="text-[14px] text-steel">
+                        {selectedEntries.length
+                          ? `${selectedEntries.length} line${selectedEntries.length === 1 ? "" : "s"} ready`
+                          : singleResolvedVariant && dropdownQuantity > 0
+                            ? "1 configured variant ready"
+                            : "Nothing selected yet"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {selectedEntries.length ? (
+                    <div className="space-y-3 max-h-[360px] overflow-y-auto pr-2 custom-scrollbar">
+                      {selectedEntries.map((entry) => (
+                        <div
+                          key={entry.variant.id}
+                          className="rounded-lg border border-line bg-white p-4"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-[13.5px] font-semibold text-ink">
+                                {entry.variant.title}
+                              </p>
+                              <p className="mt-1 text-[12px] text-steel">
+                                {entry.quantity} x{" "}
+                                {formatMoney(
+                                  entry.price.currencySymbol,
+                                  entry.resolvedUnitPrice,
+                                )}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleQuantityChange(entry.variant.id, 0)
+                              }
+                              aria-label={`Remove ${entry.variant.title}`}
+                              title="Remove variant"
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-red-100 text-brand transition hover:border-red-200 hover:bg-red-50"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : singleResolvedVariant && dropdownQuantity > 0 ? (
+                    <div className="rounded-lg border border-line bg-white p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-[13.5px] font-semibold text-ink">
-                            {entry.variant.title}
+                            {singleResolvedVariant.title}
                           </p>
                           <p className="mt-1 text-[12px] text-steel">
-                            {entry.quantity} x{" "}
+                            {dropdownQuantity} x{" "}
                             {formatMoney(
-                              entry.price.currencySymbol,
-                              entry.resolvedUnitPrice,
+                              totals.currencySymbol,
+                              singleResolvedUnitPrice,
                             )}
                           </p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleQuantityChange(entry.variant.id, 0)
-                          }
-                          aria-label={`Remove ${entry.variant.title}`}
-                          title="Remove variant"
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-red-100 text-brand transition hover:border-red-200 hover:bg-red-50"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <QuantityInput
+                            size="xs"
+                            value={dropdownQuantity}
+                            onChange={(next) => setDropdownQuantity(Math.max(1, next))}
+                            min={1}
+                            max={singleResolvedAvailableStock > 0 ? singleResolvedAvailableStock : undefined}
+                            disabled={isSingleOutOfStock}
+                          />
+                        </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-lg border border-dashed border-line bg-white px-4 py-6 text-[13px] leading-relaxed text-steel">
-                  Enter quantities directly in the matrix to stage multiple
-                  variants at once.
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-lg border border-line bg-white p-5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
-                Order Summary
-              </p>
-              <div className="mt-4 space-y-2 text-[14px] text-steel">
-                <div className="flex items-center justify-between">
-                  <span>Variant lines</span>
-                  <span className="font-semibold text-ink">
-                    {selectedEntries.length}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Total units</span>
-                  <span className="font-semibold text-ink">
-                    {totals.totalUnits}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between border-t border-line pt-3 text-[16px]">
-                  <span className="font-semibold text-ink">Subtotal</span>
-                  <span className="font-semibold text-ink">
-                    {formatMoney(totals.currencySymbol, totals.subtotal)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-5 space-y-3">
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleAddSelectedToCart(false)}
-                    disabled={selectedEntries.length === 0}
-                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-pill bg-[#1a1a1a] px-4 py-3 text-[13px] font-semibold text-white transition hover:bg-[#333] disabled:cursor-not-allowed disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A]"
-                  >
-                    <ShoppingBag size={15} />
-                    {selectedEntries.length === 0 ? "Select Variants" : "Add To Cart"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleAddSelectedToCart(true)}
-                    disabled={selectedEntries.length === 0}
-                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-pill bg-brand px-4 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A]"
-                  >
-                    Buy Now
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleAddSelectedToQuote}
-                  disabled={selectedEntries.length === 0}
-                  className="inline-flex w-full items-center justify-center rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand disabled:cursor-not-allowed disabled:border-line disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A]"
-                >
-                  {selectedEntries.length === 0 ? "Select Variants" : "Add Selected To Quote"}
-                </button>
-              </div>
-
-              {feedback && (
-                <div
-                  className={`mt-4 flex items-start gap-2 rounded-lg px-4 py-3 ${
-                    feedback.kind === "success"
-                      ? "border border-[#D7E4D9] bg-[#F5F8F4] text-[#355246]"
-                      : "border border-[#E7C9B5] bg-[#FBF2EB] text-brand"
-                  }`}
-                >
-                  {feedback.kind === "success" ? (
-                    <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
                   ) : (
-                    <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                    <div className="rounded-lg border border-dashed border-line bg-white px-4 py-6 text-[13px] leading-relaxed text-steel">
+                      Select options in the dropdowns or enter quantities in the matrix to stage variants.
+                    </div>
                   )}
-                  <p className="text-[13px]">{feedback.message}</p>
                 </div>
-              )}
-            </div>
-          </div>
+
+                <div className="rounded-lg border border-line bg-white p-5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
+                    Order Summary
+                  </p>
+                  <div className="mt-4 space-y-2 text-[14px] text-steel">
+                    <div className="flex items-center justify-between">
+                      <span>Variant lines</span>
+                      <span className="font-semibold text-ink">
+                        {selectedEntries.length > 0
+                          ? selectedEntries.length
+                          : singleResolvedVariant && dropdownQuantity > 0
+                            ? 1
+                            : 0}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Total units</span>
+                      <span className="font-semibold text-ink">
+                        {totals.totalUnits}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-line pt-3 text-[16px]">
+                      <span className="font-semibold text-ink">Subtotal</span>
+                      <span className="font-semibold text-ink">
+                        {formatMoney(totals.currencySymbol, totals.subtotal)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleAddSelectedToCart(false)}
+                        disabled={!hasOrderableItems}
+                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-pill bg-[#1a1a1a] px-4 py-3 text-[13px] font-semibold text-white transition hover:bg-[#333] disabled:cursor-not-allowed disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A]"
+                      >
+                        <ShoppingBag size={15} />
+                        {!hasOrderableItems ? "Select Options" : "Add To Cart"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAddSelectedToCart(true)}
+                        disabled={!hasOrderableItems}
+                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-pill bg-brand px-4 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A]"
+                      >
+                        Buy Now
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddSelectedToQuote}
+                      disabled={!hasOrderableItems}
+                      className="inline-flex w-full items-center justify-center rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand disabled:cursor-not-allowed disabled:border-line disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A]"
+                    >
+                      {!hasOrderableItems ? "Select Options" : "Add Selected To Quote"}
+                    </button>
+                  </div>
+
+                  {feedback && (
+                    <div
+                      className={`mt-4 flex items-start gap-2 rounded-lg px-4 py-3 ${
+                        feedback.kind === "success"
+                          ? "border border-[#D7E4D9] bg-[#F5F8F4] text-[#355246]"
+                          : "border border-[#E7C9B5] bg-[#FBF2EB] text-brand"
+                      }`}
+                    >
+                      {feedback.kind === "success" ? (
+                        <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
+                      ) : (
+                        <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                      )}
+                      <p className="text-[13px]">{feedback.message}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </section>

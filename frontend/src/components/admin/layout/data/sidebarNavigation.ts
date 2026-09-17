@@ -105,8 +105,10 @@ export const sidebarSections: SidebarSection[] = [
         subItems: [
           { label: "History Logs", href: "/admin/notifications" },
           { label: "Routing Rules", href: "/admin/notifications/manager" },
-          { label: "Message Templates", href: "/admin/notifications/templates" },
-          { label: "WhatsApp Templates", href: "/admin/whatsapp/templates" },
+          { label: "Template Studio", href: "/admin/notifications/templates" },
+          { label: "Email Studio", href: "/admin/settings/email" },
+          { label: "SMS Studio", href: "/admin/settings/sms" },
+          { label: "WhatsApp Studio", href: "/admin/settings/whatsapp" },
         ],
       },
     ],

@@ -14,6 +14,7 @@ import { Mail, MessageSquare, Smartphone, Bell, Save, Check, Pencil, Users } fro
 
 const CHANNEL_OPTIONS = [
   { key: "whatsapp", label: "WhatsApp", hint: "Short direct message on WhatsApp", icon: Smartphone },
+  { key: "sms", label: "SMS", hint: "Transactional SMS & mobile OTP", icon: MessageSquare },
   { key: "email", label: "Email", hint: "Formal message with subject and details", icon: Mail },
   { key: "push", label: "Push", hint: "Browser or device notification", icon: Bell },
 ];
@@ -207,7 +208,7 @@ export default function NotificationManagerPage() {
             </div>
             <div className="bg-[#FAFAFA] border border-[#E6E6E6] px-5 py-3 rounded text-center min-w-[100px]">
               <div className="text-[10px] text-[#7A7A7A] font-bold uppercase tracking-wider">Channels</div>
-              <div className="text-[20px] font-bold text-[#1A1A1A] mt-0.5">5</div>
+              <div className="text-[20px] font-bold text-[#1A1A1A] mt-0.5">{CHANNEL_OPTIONS.length}</div>
             </div>
           </div>
         </div>
@@ -249,7 +250,7 @@ export default function NotificationManagerPage() {
               <p className="text-[11px] text-[#6B6B6B] mt-0.5">These are the channels that are also available across the system.</p>
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {CHANNEL_OPTIONS.map((ch) => {
               const key = ch.key === "inApp" ? "inApp" : ch.key;
               const active = channelAvailability[key] !== false;
@@ -316,14 +317,14 @@ export default function NotificationManagerPage() {
                       <h3 className="text-[13px] font-bold text-[#1A1A1A] uppercase tracking-wider">{role}</h3>
                     </div>
                     <p className="text-[11px] text-[#6B6B6B] mb-4">Choose which channels are available for the {role} role.</p>
-                    <div className="flex gap-2">
-                      {["whatsapp", "email"].map((ch) => {
+                    <div className="flex flex-wrap gap-2">
+                      {["whatsapp", "sms", "email", "push"].map((ch) => {
                         const active = currentChs[ch] === true;
                         return (
                           <button
                             key={ch}
                             onClick={() => handleRoleChannelToggle(role, ch)}
-                            className={`px-2.5 py-1 text-[10px] font-bold uppercase border rounded transition-all flex items-center gap-1.5 ${
+                            className={`px-2.5 py-1 text-[10px] font-bold uppercase border rounded transition-all flex items-center gap-1.5 cursor-pointer ${
                               active
                                 ? "bg-[#1A1A1A] text-white border-transparent"
                                 : "bg-white text-[#6B6B6B] border-[#E6E6E6] hover:bg-[#FAFAFA]"
@@ -344,7 +345,7 @@ export default function NotificationManagerPage() {
             <button
               onClick={handleSaveChannelSettings}
               disabled={savingSettings}
-              className="flex items-center gap-2 px-5 py-2 bg-[#1A1A1A] hover:bg-[#333] text-white text-[11px] font-bold uppercase tracking-wider rounded transition-colors"
+              className="flex items-center gap-2 px-5 py-2 bg-[#1A1A1A] hover:bg-[#333] text-white text-[11px] font-bold uppercase tracking-wider rounded transition-colors cursor-pointer"
             >
               <Save className="w-3.5 h-3.5" />
               Save Role Delivery Rules
@@ -370,6 +371,7 @@ export default function NotificationManagerPage() {
                     <th className="px-6 py-3.5 text-[10px] font-bold text-[#9A9A9A] uppercase tracking-wider">Notification</th>
                     <th className="px-6 py-3.5 text-[10px] font-bold text-[#9A9A9A] uppercase tracking-wider">Status</th>
                     <th className="px-4 py-3.5 text-[10px] font-bold text-[#9A9A9A] uppercase tracking-wider text-center">WhatsApp</th>
+                    <th className="px-4 py-3.5 text-[10px] font-bold text-[#9A9A9A] uppercase tracking-wider text-center">SMS</th>
                     <th className="px-4 py-3.5 text-[10px] font-bold text-[#9A9A9A] uppercase tracking-wider text-center">Email</th>
                     <th className="px-4 py-3.5 text-[10px] font-bold text-[#9A9A9A] uppercase tracking-wider text-center">Push</th>
                     <th className="px-6 py-3.5 text-[10px] font-bold text-[#9A9A9A] uppercase tracking-wider">Send To</th>
@@ -379,11 +381,11 @@ export default function NotificationManagerPage() {
                 <tbody className="divide-y divide-[#E6E6E6]">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={9} className="px-6 py-10 text-center text-[12px] text-[#9A9A9A]">Loading configuration table...</td>
+                      <td colSpan={10} className="px-6 py-10 text-center text-[12px] text-[#9A9A9A]">Loading configuration table...</td>
                     </tr>
                   ) : configs.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-6 py-10 text-center text-[12px] text-[#9A9A9A]">No configurations.</td>
+                      <td colSpan={10} className="px-6 py-10 text-center text-[12px] text-[#9A9A9A]">No configurations.</td>
                     </tr>
                   ) : (
                     configs.map((config: any) => {
@@ -411,6 +413,14 @@ export default function NotificationManagerPage() {
                               type="checkbox"
                               checked={channels.whatsapp === true}
                               onChange={() => handleCheckboxToggle(config, "whatsapp", channels.whatsapp === true)}
+                              className="rounded border-[#cccccc] text-[#1A1A1A] focus:ring-0 cursor-pointer"
+                            />
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            <input
+                              type="checkbox"
+                              checked={channels.sms === true}
+                              onChange={() => handleCheckboxToggle(config, "sms", channels.sms === true)}
                               className="rounded border-[#cccccc] text-[#1A1A1A] focus:ring-0 cursor-pointer"
                             />
                           </td>
